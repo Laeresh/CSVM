@@ -424,7 +424,7 @@ internal static class ZeppelinSuites
                 (name, scope) => name.Equals("multiplayer1zep", System.StringComparison.OrdinalIgnoreCase)
                     ? resolvedHost
                     : name.Equals("cargobay", System.StringComparison.OrdinalIgnoreCase) ? resolvedBay : null,
-                nets, ctx.PlaneName, SpawnPlane,
+                nets, ctx.PlaneName, (d, p, l, pi) => SpawnPlane(d, p, l, pi),
                 (name, _) => { animPlays.Add(name); return 1; }, (_, _) => { });
             ctx.Same(1, gens.LiveCount, $"the generator is live (host + IAZep net resolve)");
 
@@ -499,7 +499,7 @@ internal static class ZeppelinSuites
             capped = new AiGeneratorRuntime(new[] { cappedDef },
                 (name, scope) => name.Equals("multiplayer1zep", System.StringComparison.OrdinalIgnoreCase)
                     ? resolvedHost2 : null,
-                nets, ctx.PlaneName, SpawnPlane, (name, _) => 1, (_, _) => { });
+                nets, ctx.PlaneName, (d, p, l, pi) => SpawnPlane(d, p, l, pi), (name, _) => 1, (_, _) => { });
             for (int i = 0; i < 60 * 30; i++)
                 capped.SimStep(dt);
             ctx.Same(1, spawned.Count - before,

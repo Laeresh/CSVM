@@ -1084,6 +1084,28 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         ApplyResetStatesWithin(subtree);
     }
 
+    /// <summary>Indexes a further copy of a chapter library root built after the bootstrap (a
+    /// spawned surface vehicle): by name only, since every copy carries the same compiled indices
+    /// and the by-index map holds one claimant; then registers the destructible pools of every
+    /// definition now anchored within it and applies their RESET_STATE, the two halves of
+    /// bootstrap pass 1 a late hull needs. Returns the pools registered on it.</summary>
+    public List<DestructibleRegistry.Instance> IndexSpawnedCopy(Node3D subtree)
+    {
+        IndexWorld(subtree, indexByPointer: false);
+        _resolver.ClearFindCache();
+        var pools = new List<DestructibleRegistry.Instance>();
+        foreach (var def in _program.Defs)
+        {
+            if (!def.Destructible)
+                continue;
+            foreach (var a in Anchors(def))
+                if (a != null && (a == subtree || subtree.IsAncestorOf(a)))
+                    pools.Add(_destructibles.Register(def, a, def.Health));
+        }
+        ApplyResetStatesWithin(subtree);
+        return pools;
+    }
+
     /// <summary>Indexes a subtree built from ANOTHER archive: its stamped node indices are shifted
     /// by <paramref name="indexOffset"/> into this chapter's cross-archive block, so a compiled
     /// symbol table binds them (<see cref="AircraftStage.PointerBaseOf"/>). No RESET_STATE pass

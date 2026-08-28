@@ -204,6 +204,7 @@ public static class SuiteCatalog
         "campaign-zeppelin-wakeup",
         "campaign-squad-wakeup",
         "campaign-set-ai-net",
+        "campaign-surface-vehicles",
         "campaign-player-death",
         "alpha-cutout-ray-census",
         "zeppelin-identity",
@@ -963,7 +964,8 @@ public static class SuiteCatalog
             + "min_ai_active_dist floor, the CLI-airframe fallback a parameterless generator "
             + "takes installs no injector, and over C1/M04 eairg32's misspelt 'Eairg32_params' "
             + "resolves the decoded empty launch (nothing built, no airframe) while eairg31's "
-            + "label resolves its block",
+            + "label resolves its block, and over C2/M01 eshipg31's 'Eshipg31_params' resolves a "
+            + "surface launch of the patrolboat hull",
             GeneratorRosterParams));
         into.Add(new TestHarness.Suite("campaign-bomber-formation",
             "CM02's three netted bombers (BL-498) spawned from C3/M05's own aiv roster into its "
@@ -1218,6 +1220,18 @@ public static class SuiteCatalog
             + "stays out of combat, taking nothing on its own airframe and going quiet when it is "
             + "downed",
             CampaignSetAiSuites.CampaignSetAiNet));
+
+        into.Add(new TestHarness.Suite("campaign-surface-vehicles",
+            "a mode ship roster block or generator launch builds a hull, not an aircraft: CM08's "
+            + "four patrolboat blocks in C1B's built world sit on the water at their authored "
+            + "spots on their Patrolboat nets, deactivated and hidden until woken, count for DEDG "
+            + "only once woken, start their wake emitters on their own pt_emitter nodes, drive "
+            + "their nets under the scripted-path law at the taxi speed with their height pinned "
+            + "to the water, and die once through the chapter's destructible pool; CM12's "
+            + "eshipg31 launch resolves a surface launch off Eshipg31_params, builds patrolboat_eg0 "
+            + "on the host's first take-off point kilometres from the world origin, runs the path "
+            + "westward at the taxi speed, and never asks for an aircraft",
+            SurfaceVehicleSuites.CampaignSurfaceVehicles));
 
         // BL-491: a campaign mission had three endings and none of them was the player dying, so
         // the aircraft could be lost and the mission flew on.

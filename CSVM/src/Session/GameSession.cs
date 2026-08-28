@@ -214,6 +214,9 @@ public partial class GameSession : Node3D
     // DriveSimSteps before the AI planes it spawns into AiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
     private ZeppelinRuntime? _zeppelins;
+    // The mission's surface vehicles (a mode ship roster block, a boat generator's launch):
+    // built with the roster on a chapter world, stepped after the generators that launch them.
+    private SurfaceVehicleRuntime? _surfaceVehicles;
     // The active Instant Action mission's director: the mission runtime, the wave state and (as
     // the deepening proceeds) the sequencing (see InstantActionDirector). Built at the top of
     // StartSession — null outside a mission, which is what keeps every other session mode
@@ -2233,8 +2236,12 @@ public partial class GameSession : Node3D
         if (_campaign is { } campaignRoster)
         {
             int grafted = 0;
+            var surfaceVehicles = EnsureSurfaceVehicles(state);
             state.What += campaignRoster.BuildRoster(new CampaignDirector.RosterInputs
             {
+                SpawnSurface = surfaceVehicles != null
+                    ? (plan, pos, forward) => surfaceVehicles.Spawn(plan, pos, forward)
+                    : null,
                 ChapterZrdrPath = worldBindings.ChapterZrdrPath,
                 MissionZrdrPath = state.MissionZrdrPath,
                 ZrdrPath = state.ZrdrPath,
@@ -2409,10 +2416,11 @@ public partial class GameSession : Node3D
             var generatorTemplates = CampaignRosterPlan.GeneratorTemplates(
                 state.MissionZrdrPath, VehicleDefs.Load(state.ZrdrPath), chapterNets);
             float generatorActiveDist = MinAiActiveDist();
+            var generatorSurface = EnsureSurfaceVehicles(state);
 
             // The template's own fields, applied the way the campaign roster applies them, then
             // its accent so a generated pilot is heard as the block the mission authored.
-            FlightController? SpawnFromGenerator(EnemyGeneratorDef def, Vector3 pos, Vector3 look,
+            LaunchedVehicle SpawnFromGenerator(EnemyGeneratorDef def, Vector3 pos, Vector3 look,
                 AiPilot pilot)
             {
                 // The decoded launch name: one counter across the mission's generators, so a
@@ -2426,7 +2434,19 @@ public partial class GameSession : Node3D
                         // the runtime counts the launch anyway. Never an airframe in its place.
                         GD.Print($"egen: '{def.Node}' params '{def.VehicleParams}' names no " +
                                  "roster block: the launch builds nothing");
-                        return null;
+                        return default;
+                    case GeneratorLaunch.Surface:
+                        // A hull off a ship generator: never an airframe in its place. With no
+                        // surface runtime on this stage the launch is the counted empty one.
+                        var hull = plan!;
+                        if (generatorSurface == null)
+                        {
+                            GD.Print($"egen: '{def.Node}' params '{def.VehicleParams}' names the hull " +
+                                     $"'{hull.Def}', which this stage cannot build: the launch builds nothing");
+                            return default;
+                        }
+                        return new LaunchedVehicle(null, generatorSurface.Spawn(hull, pos, look - pos,
+                            EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(hull.Name), ordinal)));
                     case GeneratorLaunch.Airframe:
                         // ⚠ shippedSkins: a generated aircraft is the mission's enemy, so it
                         // keeps its own textures rather than the player militia's default.
@@ -2563,6 +2583,7 @@ public partial class GameSession : Node3D
             Turrets = _turretEmplacements,
             Generators = _generators,
             Zeppelins = _zeppelins,
+            SurfaceVehicles = _surfaceVehicles,
             // A6/BL-458: the campaign's danger-zone gates are chapter-world geometry, so the
             // tracker needs the built gamez to resolve its dzpathN subtrees.
             Gamez = state.Gamez,
@@ -3314,6 +3335,7 @@ public partial class GameSession : Node3D
             // Generators step before the AI-plane loop below: a spawn appends to AiPlanes, which
             // must not happen while that list is being enumerated (the new plane ticks next step).
             _generators?.SimStep(dt);
+            _surfaceVehicles?.SimStep(dt);
             // AI aircraft step after the player rigs — the tree order their _PhysicsProcess
             // callbacks take on a realtime clock, since they spawn after every rig is built.
             foreach (var ai in AiPlanes)
@@ -3411,6 +3433,25 @@ public partial class GameSession : Node3D
         }
 
         GD.Print(sb.ToString());
+    }
+
+    // The surface-vehicle runtime, built once on the first roster or generator that can need one
+    // and only where a chapter world exists to copy a hull out of. Null on a bare stage.
+    private SurfaceVehicleRuntime? EnsureSurfaceVehicles(BuildState state)
+    {
+        if (_surfaceVehicles != null)
+        {
+            return _surfaceVehicles;
+        }
+        if (state.Gamez is not { } gamez || state.WorldScene is not { } scene
+            || state.WorldRuntime is not { } runtime || _worldRoot == null)
+        {
+            return null;
+        }
+        _surfaceVehicles = new SurfaceVehicleRuntime(gamez, scene, runtime,
+            VehicleDefs.Load(state.ZrdrPath), runtime.WorldRoot ?? _worldRoot);
+        _worldRoot.AddChild(_surfaceVehicles);
+        return _surfaceVehicles;
     }
 
     // player.json's activation floor, on the same lazily loaded skills table the spawner reads;

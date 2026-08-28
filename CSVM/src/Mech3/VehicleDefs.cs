@@ -18,6 +18,10 @@ public sealed class VehicleDefs
     /// <summary>The <c>mode</c> that flies the escort law when the block is netless.</summary>
     public const string WingmanMode = "wingman";
 
+    /// <summary>The <c>mode</c> of a surface vehicle: a hull on the water with no airframe, driven
+    /// by the scripted-path law rather than the flight model (docs/org/flightModel.md).</summary>
+    public const string ShipMode = "ship";
+
     private readonly Dictionary<string, ZrdrDict> _defs = new(StringComparer.OrdinalIgnoreCase);
 
     private VehicleDefs()
@@ -135,6 +139,48 @@ public sealed class VehicleDefs
                 return name[1..];
         }
         return null;
+    }
+
+    /// <summary>The def's <c>start_anims</c>, the nearest authored list up the <c>kind_of</c>
+    /// chain: the animations a spawned vehicle plays as it enters the world (a boat's wake).
+    /// Empty when nothing up the chain authors one.</summary>
+    public IReadOnlyList<string> StartAnimsOf(string def)
+    {
+        foreach (var d in Chain(def))
+        {
+            if (d.List("start_anims") is { } list)
+            {
+                var names = new List<string>();
+                foreach (var entry in list)
+                {
+                    if (entry is string name && name.Length > 0)
+                        names.Add(name);
+                }
+                return names;
+            }
+        }
+        return Array.Empty<string>();
+    }
+
+    /// <summary>The def's <c>injure_anims</c> ladder, the nearest authored one up the chain:
+    /// <c>(fraction, anim)</c> pairs, each played once as the vehicle's health falls through its
+    /// fraction (docs/formats/vehicle.md). Empty when nothing up the chain authors one.</summary>
+    public IReadOnlyList<(float Fraction, string Anim)> InjureAnimsOf(string def)
+    {
+        foreach (var d in Chain(def))
+        {
+            if (d.List("injure_anims") is { } list)
+            {
+                var ladder = new List<(float, string)>();
+                foreach (var entry in list)
+                {
+                    if (entry is List<object?> { Count: >= 2 } pair && pair[0] is float f && pair[1] is string anim)
+                        ladder.Add((f, anim));
+                }
+                return ladder;
+            }
+        }
+        return Array.Empty<(float, string)>();
     }
 
     private string? PlayerNodeOf(string playerDef) =>

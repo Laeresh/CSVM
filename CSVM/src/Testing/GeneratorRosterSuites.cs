@@ -23,6 +23,10 @@ internal static class GeneratorRosterSuites
     private const string TypoGenerator = "eairg32";
     private const string ResolvedGenerator = "eairg31";
 
+    private const string ShipChapter = "C2";
+    private const string ShipMission = "M01";
+    private const string ShipGenerator = "eshipg31";
+
     internal static void GeneratorRosterParams(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -149,5 +153,29 @@ internal static class GeneratorRosterSuites
         ctx.Check(CampaignRosterPlan.ResolveGeneratorLaunch(templates, null, out _)
                   == GeneratorLaunch.Airframe,
             $"a generator with no params label keeps the CLI airframe");
+        CheckSurfaceLabel(ctx, defs);
+    }
+
+    // C2/M01's eshipg31 names Eshipg31_params, the disabled patrolboat_eg0 block: a mode ship def
+    // resolves the fourth launch shape, a hull, and never the airframe fallback.
+    private static void CheckSurfaceLabel(TestContext ctx, VehicleDefs defs)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ShipChapter, ShipMission);
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, ShipChapter);
+        ctx.RequireData(missionZrdr, $"{ShipChapter}/{ShipMission} zrdr");
+        ctx.RequireData(chapterZrdr, $"{ShipChapter} zrdr");
+        var templates = CampaignRosterPlan.GeneratorTemplates(missionZrdr, defs,
+            AiNets.Load(chapterZrdr));
+        GeneratorLaunch? kind = null;
+        RosterSpawnPlan? plan = null;
+        foreach (var def in EnemyGenerators.Load(missionZrdr))
+        {
+            if (def.Node.Equals(ShipGenerator, System.StringComparison.OrdinalIgnoreCase))
+            {
+                kind = CampaignRosterPlan.ResolveGeneratorLaunch(templates, def.VehicleParams, out plan);
+            }
+        }
+        ctx.Check(kind == GeneratorLaunch.Surface && plan is { Surface: true, Def: "patrolboat", AiDef: null },
+            $"{ShipGenerator}'s params label resolves a surface launch of the patrolboat hull ({kind}, '{plan?.Def}')");
     }
 }

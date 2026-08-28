@@ -2489,29 +2489,6 @@ usual.
   decode page, and the steady-hand roll itself is not in question, only what a failed roll does.
   *Cross-refs:* `BL-557` (the other open TTK cause), `docs/org/aiControlLaw.md`.
 
-- `BL-564` `[Bug]` **CM12 (C2/M01): the `eshipg31` generator launches Bloodhawks at the world
-  origin instead of patrol boats at the pirate ship.** *Evidence:* a flown CM12 session
-  (`.scratch/logs/menu-20260827-215135.log`): the wave
-  arrives as `ai17_player_bhawk`, `ai18_player_bhawk`, `ai19_player_bhawk`, tracked by the target
-  HUD at 7.6 km from the player, and two of the three ram terrain `g34586` within seconds at
-  `pos=(5,5,-109)`, the world origin; the third patrols `M2Patrol1`, a water net, and is shot down
-  later. Two causes. (1) The generator's `vehicle.params` label `Eshipg31_params` resolves to the
-  roster block `patrolboat_eg0` (def 4, `patrolboat`, a surface vehicle), which
-  `CampaignRosterPlan.Build` reports in `Skipped` rather than planning, so `GeneratorTemplates`
-  has no entry and `GameSession.SpawnFromGenerator` falls back to `SessionSpec.GeneratorsPlane`,
-  `player_bhawk`. The mission's boats are the `patrolboat_eg0..5` that OBJECTIVE58-63 and
-  OBJECTIVE70 move between `M2GoosePatrol` and `M2PatrolStop`. (2) The host node `eshipg31` is a
-  model-less group node with a zero local translation whose geometry sits at its node bbox,
-  about (-5892, 10, -4412); `AiGeneratorRuntime.Spawn` drops at `Host.GlobalPosition`, which is
-  (0, 0, 0). *Fix shape:* decode the original's launch position for a generator whose host has no
-  model (`FUN_00452450`: the node's world matrix, or its bbox centre) and use that; then decide
-  what a surface-vehicle launch is in CSVM (a boat on a water net, not an aircraft), or at least
-  refuse the fallback airframe for a surface def so a boat generator launches nothing rather than
-  fighters. *⚠ Traps:* the three Bloodhawks are group 3 and never count toward "Destroy all
-  enemy fighters" (`DEDG [1, 0]`); killing them is not progress. Do not "fix" (1) by handing the
-  generator a fighter def. *Cross-refs:* `docs/formats/mission-entities/enemy-generators.md`
-  (launch placement and the take-off run from a surface host).
-
 - `BL-565` `[Fidelity]` **`DEDG`'s decoded side effect, widening every counted member's engagement
   volume to 9,000 m, is not applied.** *Evidence:* `docs/formats/objectives.md`'s `DEDG` row and
   `FUN_00465850`: each tick an awake `DEDG` objective raises every live member of the watched
@@ -2570,22 +2547,6 @@ usual.
   is decoded verbatim and stays; do not "fix" it as part of this. Do not flatten the net.
   *Cross-refs:* `BL-529`'s closing commit (`git log --grep=BL-529`), `docs/org/flightModel.md`,
   `docs/formats/mission-entities.md` "Route ends and stop points".
-
-- `BL-577` `[Bug]` **CM08 (C1B/M03): the patrol boats never spawn.** *Evidence (traced):*
-  reported at the controls: no boats. `aiv.zrd` carries four enabled roster blocks
-  `patrolboat_1..4` (defs 37 to 39, positions at `y = 0` such as `(-7614.8, 0, -5556.5)`,
-  `-90` yaw, nets `Patrolboat1..4`), and `objectives.zrd` wakes them by `WAKEUP_ENEMIES
-  [patrolboat_1, patrolboat_2, patrolboat_3, patrolboat_4]` (line 164) and moves them between
-  nets (lines 241 to 253). `CampaignRosterPlan.Build` reports a surface-vehicle block in
-  `Skipped` (`'{def}' ({mode}) has no player airframe`, `CampaignRoster.cs`) and never spawns it,
-  so the wake finds nothing; CSVM has no runtime for a roster surface vehicle at all. The same gap
-  is what makes C2/M01's boat generator launch fighters (`BL-564`). *Fix shape:* a surface
-  vehicle runtime for roster blocks: spawn the def on its net at water height, drive it along the
-  net with the scripted-path follower's law (`docs/org/flightModel.md`), and give it the turret
-  and destructible wiring the `patrolboat-*` mis_anim defs (`ptboat_50damage`, `ptboat_75damage`,
-  `emit_ptsplash*`) expect; then the generator case in `BL-564` is the same runtime launched.
-  *⚠ Traps:* do not spawn a boat as an aircraft with a low ceiling. *Cross-refs:* `BL-564`,
-  `BL-531` (the scripted-path follower), `docs/formats/ai-rosters.md`.
 
 ## Tooling, platform & docs
 

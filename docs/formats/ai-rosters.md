@@ -99,8 +99,11 @@ by its positional header label when the mission later credits that generator. Th
 name resolves to its `vehicle.json` def by stripping trailing `_N` ordinals (`blakepeace_2_1` →
 `blakepeace_2`), and the def's `mode` plus slot 0 decide the fork above. Read at spawn: slots 0–7,
 the twelve volume slots 8–19 (over the net's own, see [ai-nets.md](ai-nets.md)), 20, 21, 22–30,
-31, 32, 33, 34, 40 and 65. A surface vehicle (`mode ship`) has no player airframe and is reported
-rather than spawned.
+31, 32, 33, 34, 40 and 65. A surface vehicle (`mode ship`: `patrolboat_N`, `t_truck_N`) has no
+player airframe and is built as a hull instead, a copy of the chapter's library-root model of the
+def placed on the water at the block's spot and driven along its net by the scripted-path law
+(`Session/SurfaceVehicleRuntime.cs`); C1B/M03's four `patrolboat_1..4` are the shipped roster case,
+C2/M01's `patrolboat_eg0` the generator-template one.
 
 ### `group` is a cohort id, not a formation
 

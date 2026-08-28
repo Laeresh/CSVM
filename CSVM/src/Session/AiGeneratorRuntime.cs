@@ -7,12 +7,23 @@ using Godot;
 
 namespace CSVM.Session;
 
+/// <summary>What one generator launch built: an aircraft, a surface vehicle, or nothing (the
+/// decoded empty launch). A bare <see cref="FlightController"/> converts, so an aircraft-only
+/// spawner keeps its shape.</summary>
+public readonly record struct LaunchedVehicle(FlightController? Aircraft, SurfaceVehicle? Vessel)
+{
+    public bool IsEmpty => Aircraft == null && Vessel == null;
+
+    public static implicit operator LaunchedVehicle(FlightController? aircraft) => new(aircraft, null);
+}
+
 /// <summary>Runs a mission's enemy generators (M4 B6 + F20): each loaded
 /// <see cref="EnemyGeneratorDef"/> gets a <see cref="GeneratorCycle"/> and spawns AI aircraft
 /// through the handed roster callback as its waves come due, dropping at the origin node's live
 /// position in the authored drop attitude and patrolling the cyclic net pick through
 /// <see cref="AiNetFollower"/>; a surface host's launch first flies its take-off path under
-/// <see cref="PathFollower"/>. A generator whose host or whole nets list fails to resolve is
+/// <see cref="PathFollower"/>, and a launch that builds a <see cref="SurfaceVehicle"/> runs that
+/// path as a hull and joins its net. A generator whose host or whole nets list fails to resolve is
 /// dropped at load, never loaded inert (docs/formats/mission-entities.md). Every load drop, door
 /// transition and spawn prints an <c>egen:</c> line. <see cref="GeneratorCycle.DoorOpen"/>
 /// drives the authored door anims; <see cref="NotifyHostDied"/> is F18's seam.
@@ -47,7 +58,7 @@ public sealed partial class AiGeneratorRuntime : Node
     private readonly List<LiveGenerator> _live = new();
     private readonly List<TakeOffRun> _runs = new();
     private readonly string _planeName;
-    private readonly Func<EnemyGeneratorDef, Vector3, Vector3, AiPilot, FlightController?> _spawn;
+    private readonly Func<EnemyGeneratorDef, Vector3, Vector3, AiPilot, LaunchedVehicle> _spawn;
     private readonly Func<string, Node3D, int>? _playAnim;
     private readonly Action<string, Node3D>? _stopAnim;
     private readonly Func<AiNet, Func<Vector3?>?>? _trailerTarget;
@@ -58,7 +69,7 @@ public sealed partial class AiGeneratorRuntime : Node
     /// hypothetical.</param>
     public AiGeneratorRuntime(IReadOnlyList<EnemyGeneratorDef> defs,
         Func<string, Node3D?, Node3D?>? resolveNode, IReadOnlyList<AiNet> chapterNets,
-        string planeName, Func<EnemyGeneratorDef, Vector3, Vector3, AiPilot, FlightController?> spawn,
+        string planeName, Func<EnemyGeneratorDef, Vector3, Vector3, AiPilot, LaunchedVehicle> spawn,
         Func<string, Node3D, int>? playAnim = null, Action<string, Node3D>? stopAnim = null,
         Func<AiNet, Func<Vector3?>?>? trailerTarget = null)
     {
@@ -395,7 +406,29 @@ public sealed partial class AiGeneratorRuntime : Node
         var pilot = AiPilot.HoldingCourse(pos, pos + forward);
         pilot.Patrol = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai),
             trailerTarget: _trailerTarget?.Invoke(net));
-        var controller = _spawn(gen.Def, pos, pos + drop, pilot);
+        var launched = _spawn(gen.Def, pos, pos + drop, pilot);
+        if (launched.Vessel is { } vessel)
+        {
+            // A hull runs the host's take-off path and joins its net where the path ends; it is
+            // never held under the aircraft run below, which ends in a climb-out.
+            gen.SpawnCount++;
+            LaunchOrdinal++;
+            vessel.Destroyed += _ => gen.Cycle.SpawnRemoved();
+            var run = new List<Vector3>();
+            if (gen.LaunchPath is { } points)
+            {
+                for (int i = 1; i < points.Count; i++)
+                {
+                    run.Add(points[i].GlobalPosition);
+                }
+            }
+            vessel.Launch(run, net);
+            GD.Print($"egen: '{gen.Def.Node}' spawn #{gen.SpawnCount}: surface vehicle '{vessel.Name}' launched at " +
+                     $"({pos.X:0},{pos.Y:0},{pos.Z:0}) down {run.Count} path point(s) onto net '{net.Name}', " +
+                     $"active {gen.Cycle.Active}/{gen.Def.MaxActive}, params '{gen.Def.VehicleParams}'");
+            return;
+        }
+        var controller = launched.Aircraft;
         if (controller == null)
         {
             if (gen.Def.VehicleParams != null)

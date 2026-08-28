@@ -37,6 +37,7 @@ public sealed class CampaignDirector
     private readonly HashSet<string> _gapsLogged = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FlightController> _roster = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, SurfaceVehicle> _vessels = new(StringComparer.OrdinalIgnoreCase);
     private World? _world;
     private ScriptedPathVehicles? _paths;
 
@@ -109,8 +110,12 @@ public sealed class CampaignDirector
     public ScriptedPathVehicles? Paths => _paths;
 
     /// <summary>The spawned roster, by block name, empty until <see cref="BuildRoster"/> has run.
-    /// The player's own block is not in it.</summary>
+    /// The player's own block is not in it, nor is a surface vehicle (<see cref="Vessels"/>).</summary>
     public IReadOnlyDictionary<string, FlightController> Roster => _roster;
+
+    /// <summary>The roster's surface vehicles, by block name: the <c>mode ship</c> blocks a
+    /// <see cref="RosterInputs.SpawnSurface"/> built. Generator launches are not in it.</summary>
+    public IReadOnlyDictionary<string, SurfaceVehicle> Vessels => _vessels;
 
     /// <summary>The story position being flown.</summary>
     public int Seq => _mission.Seq;
@@ -248,6 +253,12 @@ public sealed class CampaignDirector
                 fwd = -nodes[0].GlobalTransform.Basis.Z;
             }
 
+            if (spawn.Surface)
+            {
+                PlaceSurface(spawn, pos, fwd, inputs);
+                continue;
+            }
+
             var pilot = AiPilot.HoldingCourse(pos, pos + fwd);
             if (spawn.Net is { } net)
             {
@@ -304,7 +315,7 @@ public sealed class CampaignDirector
         int escorts = 0;
         foreach (var (name, spawn) in _rosterPlans)
         {
-            if (!spawn.Escorts || _roster[name].Pilot is not { } pilot)
+            if (!spawn.Escorts || !_roster.TryGetValue(name, out var escort) || escort.Pilot is not { } pilot)
             {
                 continue;
             }
@@ -318,7 +329,7 @@ public sealed class CampaignDirector
             escorts++;
         }
 
-        if (_roster.Count == 0)
+        if (_roster.Count == 0 && _vessels.Count == 0)
         {
             return "";
         }
@@ -327,9 +338,10 @@ public sealed class CampaignDirector
         {
             inert += spawn.Inert ? 1 : 0;
         }
-        GD.Print($"campaign: roster spawned {_roster.Count} of {blocks.Count} block(s): " +
-                 $"{escorts} escort(s), {inert} deactivated, {_paths?.Count ?? 0} on a path");
-        return $" + {_roster.Count} roster aircraft";
+        GD.Print($"campaign: roster spawned {_roster.Count + _vessels.Count} of {blocks.Count} block(s): " +
+                 $"{escorts} escort(s), {inert} deactivated, {_paths?.Count ?? 0} on a path, " +
+                 $"{_vessels.Count} surface vehicle(s)");
+        return $" + {_roster.Count} roster aircraft" + (_vessels.Count > 0 ? $" + {_vessels.Count} surface vehicle(s)" : "");
     }
 
     /// <summary>The world phase: binds the graph to the built world's runtimes. Called by
@@ -480,6 +492,35 @@ public sealed class CampaignDirector
         return placed;
     }
 
+    // A mode ship block: a hull on the water from the surface-vehicle runtime, on its authored
+    // net from the spot the block authors. A stage with no such runtime reports it, as the
+    // aircraft path reports a block it cannot spawn.
+    private void PlaceSurface(RosterSpawnPlan spawn, Vector3 pos, Vector3 fwd, RosterInputs inputs)
+    {
+        if (inputs.SpawnSurface is not { } spawnSurface)
+        {
+            GD.Print($"campaign: roster '{spawn.Name}' ({spawn.Def}, {spawn.Mode}) not spawned: no surface-vehicle runtime on this stage");
+            return;
+        }
+        if (spawnSurface(spawn, pos, fwd) is not { } vessel)
+        {
+            return;
+        }
+        _vessels[spawn.Name] = vessel;
+        _rosterPlans[spawn.Name] = spawn;
+        if (spawn.Net is { } net)
+        {
+            vessel.Patrol(net);
+        }
+        GD.Print($"campaign: roster '{spawn.Name}' ({spawn.Def} hull, {spawn.Mode}) " +
+                 $"team={spawn.Team?.ToString() ?? "-"} group={spawn.Group} " +
+                 (spawn.Net is { } n ? $"net='{n.Name}#{n.Id}'"
+                     : spawn.MissingNetId is { } missing ? $"net #{missing} MISSING from this chapter"
+                     : "no net") +
+                 (spawn.Inert ? " DEACTIVATED" : "") +
+                 $" spawn=({vessel.Position.X:0},{vessel.Position.Y:0.##},{vessel.Position.Z:0})");
+    }
+
     // The wingman's aircraft and fit off the profile, for the mission that has one. Resolved here
     // rather than by the launch shell because the profile is already open here; BuildRoster is
     // the consumer.
@@ -616,6 +657,11 @@ public sealed class CampaignDirector
     private FlightController? Commanded(string name) =>
         _roster.TryGetValue(name, out var rig) ? rig : null;
 
+    // The hull a clause names: a roster block's, or a generator launch's through the runtime,
+    // since a boat generator's launches are what C2/M01's SET_AI_NET clauses address.
+    private SurfaceVehicle? CommandedVessel(string name) =>
+        _vessels.TryGetValue(name, out var vessel) ? vessel : _world?.SurfaceVehicles?.ByName(name);
+
     /// <summary>What <see cref="BuildRoster"/> reads from the session's build: the data paths,
     /// the first human, the net trailer resolver, the world's node lookup, and the two delegates
     /// <c>GameSession</c> keeps private behaviour behind (the spawner and the voice
@@ -639,6 +685,11 @@ public sealed class CampaignDirector
         public Func<string, IReadOnlyList<Node3D>>? FindNodes;
         public SpawnRosterAircraft Spawn = null!;
 
+        /// <summary>Builds a <c>mode ship</c> block's hull at a spot facing a direction
+        /// (<c>Session/SurfaceVehicleRuntime.cs</c>). Null on a stage with no chapter world, which
+        /// reports the block rather than spawning an aircraft in its place.</summary>
+        public Func<RosterSpawnPlan, Vector3, Vector3, SurfaceVehicle?>? SpawnSurface;
+
         /// <summary>Grafts the block's authored marker scaffolding onto the rig it just spawned
         /// (<c>Mech3/RosterMarkers.cs</c>). Null in a build with no world runtime, which leaves a
         /// chapter's additions to a vehicle unreachable exactly as they were before.</summary>
@@ -657,6 +708,7 @@ public sealed class CampaignDirector
         public TurretEmplacementRuntime? Turrets;
         public AiGeneratorRuntime? Generators;
         public ZeppelinRuntime? Zeppelins;
+        public SurfaceVehicleRuntime? SurfaceVehicles;
         public WorldSounds? Sounds;
         public ProjectilePool? Projectiles;
         public Func<Vector3>? ListenerPosition;
@@ -693,6 +745,8 @@ public sealed class CampaignDirector
 
         public AnimRuntime? Runtime => _in.Runtime;
 
+        public SurfaceVehicleRuntime? SurfaceVehicles => _in.SurfaceVehicles;
+
         public int Shots => _in.Projectiles?.CannonRoundsFired ?? 0;
 
         public int Hits => _in.Projectiles?.CannonHits ?? 0;
@@ -710,7 +764,7 @@ public sealed class CampaignDirector
             // Null while no roster is spawned keeps every DEDG false rather than reading an empty
             // world as "the group is wiped out", which would win a mission on its first tick. A
             // deactivated member is dead to DEDG (docs/formats/objectives.md, the DEDG row).
-            if (_owner._roster.Count == 0)
+            if (_owner._roster.Count == 0 && _owner._vessels.Count == 0)
             {
                 _owner.Gap("DEDG", $"group {group} has no spawned aiv roster to count");
                 return null;
@@ -718,8 +772,15 @@ public sealed class CampaignDirector
             int alive = 0;
             foreach (var (name, plan) in _owner._rosterPlans)
             {
-                var rig = _owner._roster[name];
-                if (plan.Group == group && !rig.Crashed && !rig.Inert)
+                if (plan.Group != group)
+                {
+                    continue;
+                }
+                if (_owner._roster.TryGetValue(name, out var rig) && !rig.Crashed && !rig.Inert)
+                {
+                    alive++;
+                }
+                else if (_owner._vessels.TryGetValue(name, out var vessel) && !vessel.IsDestroyed && !vessel.Inert)
                 {
                     alive++;
                 }
@@ -755,12 +816,25 @@ public sealed class CampaignDirector
                 int matching = 0;
                 foreach (var (name, plan) in _owner._rosterPlans)
                 {
-                    if (plan.Group != group || !_owner._roster.TryGetValue(name, out var rig) || rig.Inert)
+                    if (plan.Group != group)
+                    {
+                        continue;
+                    }
+                    Vector3 where;
+                    if (_owner._roster.TryGetValue(name, out var rig) && !rig.Inert)
+                    {
+                        where = rig.WorldPosition;
+                    }
+                    else if (_owner._vessels.TryGetValue(name, out var vessel) && !vessel.Inert)
+                    {
+                        where = vessel.Position;
+                    }
+                    else
                     {
                         continue;
                     }
 
-                    bool memberInside = rig.WorldPosition.DistanceSquaredTo(reference.Value) <= spec.Radius * spec.Radius;
+                    bool memberInside = where.DistanceSquaredTo(reference.Value) <= spec.Radius * spec.Radius;
                     if (memberInside == spec.Approaching)
                     {
                         matching++;
@@ -795,7 +869,7 @@ public sealed class CampaignDirector
             // The partner of BOTH deactivated flags (docs/formats/objectives.md): the roster's,
             // which puts an inert aircraft back in play at its spawn pose, and a zeppelin record's,
             // which puts a hidden airship into the world. A name is one or the other, never both.
-            int aircraft = 0, zeppelins = 0;
+            int aircraft = 0, zeppelins = 0, vessels = 0;
             foreach (var name in names)
             {
                 if (_owner._roster.TryGetValue(name, out var rig) && _owner._rosterPlans.TryGetValue(name, out var plan)
@@ -804,19 +878,23 @@ public sealed class CampaignDirector
                     rig.Activate(plan.Position, plan.Position + plan.Forward);
                     aircraft++;
                 }
+                else if (_owner._vessels.TryGetValue(name, out var vessel) && vessel.Wake())
+                {
+                    vessels++;
+                }
                 else if (_in.Zeppelins?.Wake(name) == true)
                 {
                     zeppelins++;
                 }
             }
-            if (aircraft + zeppelins > 0)
+            if (aircraft + zeppelins + vessels > 0)
             {
                 GD.Print($"campaign: WAKEUP_ENEMIES activated {aircraft} of {names.Count} named " +
-                         $"aircraft and woke {zeppelins} zeppelin(s)");
+                         $"aircraft, {vessels} surface vehicle(s), and woke {zeppelins} zeppelin(s)");
             }
             else if (names.Count > 0)
             {
-                _owner.Gap("WAKEUP_ENEMIES", $"'{names[0]}' and {names.Count - 1} more name no deactivated roster aircraft or zeppelin");
+                _owner.Gap("WAKEUP_ENEMIES", $"'{names[0]}' and {names.Count - 1} more name no deactivated roster aircraft, surface vehicle or zeppelin");
             }
         }
 
@@ -944,6 +1022,12 @@ public sealed class CampaignDirector
             {
                 if (_owner.Commanded(name) is not { } rig)
                 {
+                    if (_owner.CommandedVessel(name) is { } vessel)
+                    {
+                        vessel.Team = team;
+                        set++;
+                        continue;
+                    }
                     unmatched.Add(name);
                     continue;
                 }
@@ -971,6 +1055,15 @@ public sealed class CampaignDirector
             {
                 if (_owner.Commanded(name) is not { } rig || rig.Pilot is not { } pilot)
                 {
+                    // A hull takes the same clause: its route restarts from where it is.
+                    if (_owner.CommandedVessel(name) is { } vessel
+                        && AiNets.ByName(_owner._chapterNets, netName) is { } water)
+                    {
+                        vessel.Patrol(water);
+                        moved++;
+                        GD.Print($"campaign: SET_AI_NET '{name}' (hull) onto '{water.Name}#{water.Id}'");
+                        continue;
+                    }
                     unmatched.Add(name);
                     continue;
                 }

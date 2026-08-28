@@ -5360,8 +5360,14 @@ accent, builds a `deactivated` block inert, places a `taxiPath` block held on it
 (`PlaceOnPath`: re-pinned through `FlightController.PlaceHeld` each tick, `Activate`d at the
 handoff speed), and logs one `campaign: roster '<name>'` line per block. A block whose
 `primary_target` is not spawned holds its course; a leader that dies later is `AiPilot`'s own
-fallback. `Roster` is the spawned map by block name; the player's block is skipped, a surface
-vehicle (`mode ship`) has no airframe and is reported, not spawned.
+fallback. `Roster` is the spawned map by block name; the player's block is skipped. A surface
+vehicle (`mode ship`) plans as a hull and goes to `RosterInputs.SpawnSurface` instead of the
+aircraft spawner (`PlaceSurface`): built by `Session/SurfaceVehicleRuntime.cs` at the block's spot,
+put on its authored net, kept in `Vessels` by block name (never in `Roster`), and reported when
+the stage has no such runtime. The hulls take the same directives as the aircraft where they
+apply: `WAKEUP_ENEMIES` wakes one, `SET_AI_NET` and `SET_AI_TEAM` reach a roster hull or a
+generator's launch (`CommandedVessel`, through the runtime), and `DEDG` and the group form of
+`TRAVELERS` count a woken, undestroyed hull as a live member of its group.
 `HoldForCutscene(bool)` is callback 20's objectives half: a held director advances no dormancy
 timer or reminder fuse while a cutscene owns the session (`Session/CutsceneController.cs`).
 The player's own death is the graph's fourth ending, in the original's two stages: the aircraft's
@@ -5381,7 +5387,9 @@ wingman"). `Volumes` is the net's set overlaid by the block's own; `ApplyVolumes
 onto an `AiModeMachine` and floors activation at `min_ai_active_dist`. The profile's wingman
 airframe replaces the block's own for the named block (`wingman_1`), taking the `w<plane>` def for
 its stats; a def that is no `kind_of` variant of its airframe flies the plain base def, with the
-block's own def still deciding the mode. `ResolveLeader` is the second-pass lookup (`player` = the
+block's own def still deciding the mode. A def with no airframe whose mode is `ship` plans as a
+`Surface` hull (`PlaneNode` is then the def, the chapter's library-root model; no `AiDef`), and
+`SpawnFor` refuses such a plan; any other airframe-less def is `Skipped`. `ResolveLeader` is the second-pass lookup (`player` = the
 first human). The `handover` argument is the airframe-swap counterpart of the wingman override:
 in the two missions that resolve `wingman_4`, that block flies the PLAYER's airframe and paint from
 mission start, because the swap is about to hand it that aeroplane. An `enabled 0` block is
@@ -5390,8 +5398,9 @@ excluded from the initial roster and
 its positional header label; `GeneratorTemplates` is the whole mission's map of those, keyed by
 that label, and `GameSession` builds it on any run with the generators on rather than only a
 campaign one, since the parameter blocks are mission data. `ResolveGeneratorLaunch` is the
-three-way read of that map for one launch: the block the label names, the CLI airframe when no
-label is authored, or `GeneratorLaunch.Empty` when the label names no block. Empty is the decoded
+four-way read of that map for one launch: the block the label names (`Template`), the same block
+when it is a hull (`Surface`, C2/M01's `Eshipg31_params` naming `patrolboat_eg0`), the CLI
+airframe when no label is authored, or `GeneratorLaunch.Empty` when the label names no block. Empty is the decoded
 shape, not a gap: `FUN_00451bf0` then spawns the generator's `vehicle.type` (unauthored in every
 shipped file), finds no def for the empty name and still reports a launch, so nothing is built and
 the launch is counted. C1/M04's `eairg32` (`Eairg32_params` against a label table spelling
@@ -5411,6 +5420,46 @@ follower and writes its pose onto the body, or hands it to the caller's `setPose
 pose a simulation of its own owns (a held `FlightController`). A finished vehicle raises its handoff
 callback with the speed the path left it at and leaves the registry, so nothing keeps overwriting
 the flight model's pose. The law is `Flight/PathFollower.cs` and the route `Mech3/ScriptedPath.cs`.
+
+## src/Session/SurfaceVehicleRuntime.cs
+Builds and steps a mission's surface vehicles, the `mode ship` blocks (`patrolboat`, `t_truck`)
+that have no player airframe: `Spawn(plan, position, forward, nodeName)` copies the chapter's
+library-root model of the def (`SceneBuilder.BuildSubtree`, colliders and all, so a weapon hit and
+a ram reach it through the world mask), parents it under the world root at the authored spot with
+its height read off the water (a downward probe on the world mask carried past any other surface
+it meets first, since a ship generator's launch point sits under the host's own deck; no water hit
+keeps the authored height), and indexes it on the world runtime through
+`AnimRuntime.IndexSpawnedCopy`, which is what lets the chapter's own `patrolboat` definitions
+(the reader files `patrol_boat_destroy`, `ptboat_damage`, `ptboat_wake`) anchor on every copy and
+register its destructible pool. A def with no library root in the chapter is logged and builds
+nothing. Stepped from `_PhysicsProcess` on a realtime clock or `GameSession.DriveSimSteps`
+after the generators, like them. `GameSession` builds one lazily (`EnsureSurfaceVehicles`) for
+the roster phase and the generator block, only where a chapter world exists; `CampaignDirector`
+reaches it through `RosterInputs.SpawnSurface` and `WorldInputs.SurfaceVehicles`. Observability:
+one `surface: '<name>' … built at (…) water=…` line per hull. Pinned by `campaign-surface-vehicles`.
+
+## src/Session/SurfaceVehicle.cs
+One built hull: no pilot, no flight model, no `FlightController`. Its movement is
+`Flight/PathFollower.cs`, the scripted-path law (docs/org/flightModel.md "The scripted-path
+follower"), over an unbounded route (`SurfaceRoute`): the generator's take-off run first, then a
+lazily extended walk of the net's edges from the node nearest the run's end (a random onward
+edge, never straight back unless that is the only one), so the follower never reaches its final
+leg, which is the aircraft climb-out and not a patrol. The follower steers in the plane; the
+hull's height is pinned to the water it was placed on, whatever the net's nodes author, since a
+net is a route and not a waterline. `Patrol(net)` is the roster assignment and the `SET_AI_NET`
+arm (the route restarts from where the hull is), `Launch(run, net)` the generator's. A block's
+`deactivated` builds it `Inert`: hidden, its pool `Dormant` (no target), its follower frozen;
+`Wake()` (the `WAKEUP_ENEMIES` arm) shows it, arms the pool, releases the follower and plays the
+def's `start_anims` (the wake puffers on `pt_emitter1/2`) through `AnimRuntime.PlayWithin`, which
+a hull built active plays at once. Damage is the pool the chapter's definition registered on the
+root (`HEALTH 20`; `Team` and `Owner` written from the block so the aim assist and `rating_biases`
+see it): `Step` plays each `injure_anims` rung once as the pool's fraction falls through it, and
+on `Destroyed` raises the event once, stops the follower and leaves the parts to the death
+sequence (the sinking, the debris motions, the slick). ⚠ Nothing here writes a child's transform:
+the death's `ObjectMotion`s own those through `MotionSet`'s channel rule, and the hull root is the
+only node this class poses. The turret nodes the model carries (`healthy/turret/gun/firepoint`)
+are built but not driven: no `ai.zrd` entry names a patrol boat, and its `weapons` gunnery is the
+AI mode machine's (`BL-523`), not this class's.
 
 ## src/Session/CutsceneController.cs
 The host a story mission's intro definition raises its `CALLBACK` codes to, and the session state
@@ -5523,7 +5572,11 @@ generator authors no `vehicle.params` at all. A label that names no block return
 runtime books that as the decoded empty launch: `LaunchOrdinal` advances and the `max_active` slot
 stays taken by nothing (the original never frees it, so C1/M04's `eairg32` blocks itself after
 four), never an airframe in the block's place. C5/M04's `dantezep` is the one shipped case whose
-block authors the nitro slot.
+block authors the nitro slot. The spawn callback returns a `LaunchedVehicle` (an aircraft, a
+`SurfaceVehicle`, or neither; a bare `FlightController` converts): a hull off a ship generator
+(`GeneratorLaunch.Surface`, C2/M01's `eshipg31`) is booked like an aircraft launch, its
+`Destroyed` frees the `max_active` slot, and it is handed its host's take-off path and net
+(`SurfaceVehicle.Launch`) BEFORE the aircraft take-off run, which it never enters.
 `UseInstantActionLaunches(hostNode, release)` plus the same credit are F12's arm: the
 objective zeppelin's generator goes onto the wave-credit budget and its launches RELEASE an
 already-built (inert) wave member through the caller's hook instead of spawning a fresh aircraft —

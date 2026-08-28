@@ -2707,6 +2707,11 @@ so it is the one every shipped path vehicle needs, and `vehicle.json` has no fie
 take.
 The roster spawner calls `ScriptedPathVehicles.Place`, so C1/M04 really does put four aeroplanes on
 `pp1`–`pp4` and its `START_TAXI` chain really does release them.
+A surface vehicle (`mode ship`, the patrol boats) is driven by the same law for its whole life
+(`Session/SurfaceVehicle.cs`): the follower steers it over an unbounded route, a generator's
+take-off run and then a walk of its net's edges, so it never reaches the final leg's acceleration
+and climb-out, and its height is pinned to the water rather than taken from the route. The 40 mph
+taxi speed is the only speed it has; the def's own `rates` are not consumed.
 ⚠ Ground blow's own emitter test reads `+0xcc`, so a spawned vehicle put
 on a path stops repelling the player the moment it completes the path; ground blow shipped
 without the registry filter (its player probe simply excludes aircraft), so whether a path-driven

@@ -116,7 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — CM08 (C1B/M03) and CM09 (C1/M04)
 
 21. ☐ `BL-576`: the Pandora pitches steeply up and down along the Klondike net
-22. ☐ `BL-577` + `BL-564`: no runtime for a roster or generator surface vehicle, so the patrol boats never spawn
+22. ☑ `BL-577` + `BL-564`: no runtime for a roster or generator surface vehicle, so the patrol boats never spawn
 23. ☑ `BL-580`: `eairg32`'s launch falls back to a `player_bhawk` on a misspelt parameter block
 24. ☑ `BL-582`: a `[parent, child]` objective target is flattened into two bare names
 25. ☑ `BL-581`: the docking objective is never reached after the radio tower goes down
@@ -886,38 +886,87 @@ zeppelin motion suites unchanged where the law is unchanged>`
 **⚠ Traps.** The initial-pitch clamp that never fires (`ZeppelinMotion.cs`) is decoded verbatim
 and stays. Do not flatten the net.
 
-## C22 ☐ `BL-577` + `BL-564`: no runtime for a roster or generator surface vehicle, so the patrol boats never spawn
+## C22 ☑ `BL-577` + `BL-564`: no runtime for a roster or generator surface vehicle, so the patrol boats never spawn
 
 **Goal.** CM08's `patrolboat_1..4` spawn on their nets at water height, drive them, take damage and
 die as their `patrolboat-*` defs expect; CM12's `eshipg31` launches patrol boats at the pirate
 ship, not Bloodhawks at the world origin.
 
 **Evidence (confidence: traced).** `aiv.zrd` carries four enabled `patrolboat_1..4` blocks at
-`y = 0` on nets `Patrolboat1..4`; `objectives.zrd` wakes them (line 164) and moves them (241 to
-253). `CampaignRosterPlan.Build` reports a surface-vehicle block in `Skipped` (`'{def}' ({mode})
-has no player airframe`) and never spawns it. In CM12 `Eshipg31_params` resolves to
-`patrolboat_eg0`, also skipped, so `GameSession.SpawnFromGenerator` falls back to
-`SessionSpec.GeneratorsPlane`; and the host `eshipg31` is a model-less group node with a zero
-local translation whose geometry sits at its bbox, so `AiGeneratorRuntime.Spawn` drops at
-`(0,0,0)`. `<TODO: re-verify still-open against the code>`
+`y = 0` on nets `Patrolboat1a..4a` (the `a` variants; OBJECTIVE10's `SET_AI_NET` later moves them
+to `Patrolboat1..4`); `objectives.zrd` wakes them (line 164) and moves them (241 to 253).
+`CampaignRosterPlan.Build` reported a surface-vehicle block in `Skipped` (`'{def}' ({mode}) has
+no player airframe`) and never spawned it. In CM12 `Eshipg31_params` resolves to
+`patrolboat_eg0`, which after C23 was the counted empty launch (nothing built, no
+`player_bhawk`). Re-verified against the code: the roster half was open as described; the
+origin half of `BL-564` was already gone, since A6's take-off path places every surface launch
+on `esg31_aip0` (see the decode below).
 
-**Approach.** A surface vehicle runtime for roster blocks: spawn the def on its net at water
-height, drive it with the scripted-path follower's law (`docs/org/flightModel.md`), and give it
-the turret and destructible wiring the `patrolboat-*` mis_anim defs (`ptboat_50damage`,
-`ptboat_75damage`, `emit_ptsplash*`) expect; the generator case is the same runtime launched.
-Decode the original's launch position for a model-less generator host (`FUN_00452450`: the
-node's world matrix or its bbox centre). At minimum, refuse the fallback airframe for a surface
-def so a boat generator launches nothing rather than fighters.
+**Approach.** Landed. `Session/SurfaceVehicleRuntime.cs` builds a `mode ship` block as a copy of
+the chapter's library-root hull (`SceneBuilder.BuildSubtree`, colliders included) at the block's
+spot with its height read off the water by a probe carried past the host's own deck, and
+indexes it through the new `AnimRuntime.IndexSpawnedCopy` (by name, never by compiled index,
+since four copies share one index space), which anchors the chapter's `patrolboat` reader
+definitions on every copy and registers each hull's destructible pool (`HEALTH 20`).
+`Session/SurfaceVehicle.cs` drives the hull with `PathFollower`, the scripted-path law, over an
+unbounded route (a generator's take-off run, then a walk of the net's edges) so the aircraft
+final-leg climb-out never comes, with the height pinned to the water; `deactivated` builds it
+hidden, dormant and frozen until `WAKEUP_ENEMIES`, whose wake plays the def's `start_anims`
+(`emit_ptsplash1/2` on `pt_emitter1/2`); `injure_anims` play once per rung as the pool falls;
+the pool reaching zero raises `Destroyed` once and stops the hull, the death sequence owning its
+parts. `CampaignRosterPlan` plans a `Surface` hull for an airframe-less `ship` def (`PlaneNode` is
+the def), `SpawnFor` refuses it, and `ResolveGeneratorLaunch` returns the fourth kind
+`GeneratorLaunch.Surface`; `CampaignDirector.PlaceSurface` spawns it through
+`RosterInputs.SpawnSurface`, keeps it in `Vessels`, and `WAKEUP_ENEMIES`, `SET_AI_NET`,
+`SET_AI_TEAM`, `DEDG` and the group `TRAVELERS` all count or command a hull (a generator's
+launch through `WorldInputs.SurfaceVehicles`). `AiGeneratorRuntime`'s spawn callback now returns
+`LaunchedVehicle` (aircraft, hull or neither; a bare `FlightController` converts), and a hull is
+booked like an aircraft, handed the host's path and net, and never enters `StartTakeOffRun`.
+Decode (`FUN_00451bf0`): the host matrix (`FUN_004cf200`) is read only on the zeppelin branch;
+a surface host always launches on waypoint 0 of its `<base>_aip` path, and the no-path branch is
+unreachable past the loader's two-point drop, so a model-less host is no special case and the
+bbox centre is read by nothing. `eshipg31`'s `esg31_aip0..5` carry the world translation
+themselves, `(-5888.8, 0.02, -4408.0)` westward to `(-6141.7, -0.04, -4435.7)`. Not landed, and
+named as such: the boat's `turret/gun/firepoint` nodes are built but not fired, since no `ai.zrd`
+entry names a patrol boat and its `weapons` gunnery is the AI mode machine's (`BL-523`).
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** Opus-sized as executed: the runtime sits at the meeting of five modules
+(roster plan, director, generators, anim runtime indexing, scene building) and the decode had to
+overturn half the item's own evidence.
 
-**Verify.** Headless CM08 open shows four boats spawned on their nets at water height and the
-wake reaching them; headless CM12 launches no `player_bhawk` from `eshipg31`. `<TODO: the roster
-suite to extend and the ram-terrain check at the origin>`
+**Verify.** New `campaign-surface-vehicles` suite: over C1B/M03's built world (collision on) the
+four blocks build hulls at their authored spots with `y = 0` off the water probe, 9.4 km from the
+origin, on `Patrolboat1a..4a`, deactivated and hidden with a 20 HP pool and their own
+`pt_emitter1`; DEDG over group 3 reads 0 inert and 4 woken; a held hull does not move; the wake
+starts 16 `wake_emit*` emitters over the four; 20 s of driving moves each 275 to 337 m at the
+taxi speed with `y = 0` held; a hit through `AnimRuntime.DamageAt` destroys one, reported once,
+stopped where it died, DEDG down to 3. Over C2/M01's world `Eshipg31_params` resolves
+`GeneratorLaunch.Surface`, the credited generator builds `patrolboat_eg0` within 1 m of
+`esg31_aip0` and 7.4 km from the origin (the ram-terrain check), asks for no aircraft, runs no
+aircraft take-off run, and drives 289 m west in 20 s. `generator-roster-params` carries the
+engine-free Surface resolution; `CampaignRosterPlanTests` the plan and the four-way resolve.
+Headless CM12 (`--campaign=<copy>:11 --wake-generators --screenshot= --frames=1200`): three
+`surface vehicle 'patrolboat_eg0..2' launched at (-5889,0,-4408) down 5 path point(s) onto net
+'M2Patrol1'` lines, `water=-0.03`, no `player_bhawk_eg*`, no ram at the origin. Headless CM08
+(`--campaign=<copy>:7 --screenshot= --frames=12600`, 210 s): the four hulls built at
+`water=0` on their nets, `roster spawned 13 of 15 block(s) … 4 surface vehicle(s)`; the wake
+itself does not show in that run because OBJECTIVE6 (dormant 180 s) kills OBJECTIVE8 (dormant
+181 s) unless the player has destroyed the power hut first, so the headless open never reaches
+`WAKEUP_ENEMIES`; the suite drives the wake directly. Run in the foreground:
+`campaign-surface-vehicles`, `campaign-roster`, `generator-roster-params`,
+`generator-takeoff-run`, `zeppelin-launch`, `instant-action-zeppelin`, `hangar-door-wake`,
+`campaign-submarine`, `campaign-set-ai-net`, `campaign-squad-wakeup`, `campaign-objectives`,
+`campaign-zeppelin-wakeup`, `scripted-path` all pass; `dotnet test` 2524/2524.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not spawn a boat as an aircraft with a low ceiling, and do not hand `eshipg31` a
 fighter def. CM12's three Bloodhawks are group 3 and never count toward "Destroy all enemy
-fighters"; killing them is not progress.
+fighters"; killing them is not progress. A test world's puffer factory is retired with the build
+(the harness's archive intent), so a hull woken in a suite needs `ctx.EmitterFactory`; a
+session's textures outlive the build and the wake builds there. Do not read the hull's height
+off its net: `Patrolboat*` nodes are a route, and a probe that stops at the first surface reads
+the host ship's deck (17 m) over a launch point.
 
 ## C23 ☑ `BL-580`: `eairg32`'s launch falls back to a `player_bhawk` on a misspelt parameter block
 

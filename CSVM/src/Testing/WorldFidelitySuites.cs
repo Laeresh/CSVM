@@ -109,7 +109,7 @@ internal static class WorldFidelitySuites
                 {
                     launchedDef = def;
                     launchedAt = pos;
-                    return null;
+                    return default(LaunchedVehicle);
                 });
             ctx.Same(0, generators.RequireWakeupCredits("cargozep1"),
                 $"an unrelated mission host does not gate the submarine generator");
@@ -488,7 +488,7 @@ internal static class WorldFidelitySuites
                 (plane, pos, look, pilot) =>
                 {
                     spawns.Add((clock, pos));
-                    return null;
+                    return default(LaunchedVehicle);
                 },
                 (name, host) => runtime.PlayWithin(host, name, applyReset: false).Count,
                 (name, host) => runtime.StopWithin(host, name));
