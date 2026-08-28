@@ -271,7 +271,7 @@ manifest found every raw-pixel hash, `sim_frame`, size and adapter string bit-id
 count, with the measured wall time falling from ~88 s serial to ~49 s (2), ~41 s (3) and ~29 s (4) —
 4 was chosen as the fastest count that stayed bit-identical on the one machine measured. Pass
 `-GoldenWorkers 1` for the serial reference path; a hash that moves under a higher count on a different
-machine is a disproof of that count there; it does not need to change the default (docs/PLAN-fast-verification.md C21).
+machine is a disproof of that count there; it does not need to change the default (docs/plans/PLAN-fast-verification.md C21).
 
 **The hitch stage is opt-in (`-Hitch`), not part of the retained landing gate.** The milestone that
 shortened this run names what the full gate retains — build, units, all engine suites, goldens —

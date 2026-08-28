@@ -1,8 +1,13 @@
 # Fast development verification
 
-**ACTIVE PLAN** (written 2026-08-28). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE (2026-08-28).** All eight items landed: the `-Quick` lane with exact `-Suite` and
+`-UnitFilter` selection (A1), the parallel eight-chapter unit census (A2), world-build phase
+attribution in the engine report (B11), the per-run `DecodeCache` (B12), four weighted engine
+shards (B13), four concurrent golden workers (C21), the opt-in `-Hitch` stage (C22) and the
+checked-in stage budgets with one documented workflow (C23). The full landing gate went from
+383 s to about 115 s on the development machine with every stage green and every golden hash
+unchanged; `-Quick` runs in about 30 s. Kept in `docs/plans/` for its measurements and the two
+premises the data overturned (the 203.7 s "world build" figure and the parallel-golden worry).
 
 This plan shortens CSVM's edit-test loop without weakening the complete landing gate. It adds an
 explicit quick confidence layer, improves targeted selection, removes the largest measured serial
@@ -753,7 +758,8 @@ same way the serial path always has, then reverted and confirmed by `git diff`:
   evidence preserved under `.scratch/goldens-failures/<timestamp>/`, while the other 15 shots
   completed and read `ok` — `0 moved, 1 broken of 16 [c1-crash]`, exit 1.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The closing full `RunTests.ps1 -Hitch` on the finished tree: goldens 16/16
+hash-identical in 29.1 s over 4 workers on the same adapter, exit 0.
 
 ## C22 ☑ Set the hitch check's isolated cadence
 
@@ -821,7 +827,9 @@ awareness: inject: hitch fired on frame 300, expected 300` and the stage row rea
 16.5s ...; 1 awareness item(s)`, still exit 0 -- a broken detector stays visible without gating
 the run, exactly as the awareness contract requires.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The closing full `RunTests.ps1 -Hitch`: the stage ran last, read `TODO` with the
+clean run silent and the inject run tripping once at frame 300 (62.73 ms), 16.4 s, exit 0; the
+three plain full runs before it printed the stage as SKIP with its cadence line.
 
 ## C23 ☑ Ratchet the full verification budget and documentation
 
@@ -940,4 +948,8 @@ index-versus-parser reconciliation per flag, says 138. Nothing in this plan touc
 registrations and the engine stage reports 153/153, and no live document states a unit-test count,
 so the stage's own 2506 has nothing to drift against.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The closing full `RunTests.ps1 -Hitch` on the finished tree with nothing else on
+the machine: build 6.0 s [10], units 2506/2506 in 15.9 s [30], engine 153/153 in 66.9 s [100]
+over 4 shards (slowest 64.0 s, errors clean), goldens 16/16 hash-identical in 29.1 s [50] over
+4 workers, hitch clean in 16.4 s [30], 134.3 s total [180], every stage inside its budget,
+exit 0. The plan opened at 383.3 s for the same gate.
