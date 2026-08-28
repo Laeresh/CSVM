@@ -739,6 +739,19 @@ deliberate:
   real enemy roster spawn's `ShippedSkins` reading resolved it to no scheme at all: that null has to
   carry too, or the rebuild falls back to the player's own default livery.
 
+- **965's rebuild flies the Blue Streak build in the Blake Aviation scheme.** The case's tables
+  (40/30 with both twin bytes, two hardpoints of six, 20 armour across, the injector bit) are the
+  special-plane template for airframe 3 (`docs/org/hangar.md`), so CSVM assembles the rebuild
+  from `CampaignProgression.AwardBuild(3)` (`AirframeSwapCode.AwardAirframe`) rather than the
+  stock fit, and the same swap onto `player_bhawk` with no build stays a stock Bloodhawk with no
+  injector. The livery is not in the executable: `pbloodhawk` authors no `paint_pattern`, and
+  `FUN_0047c210` skips the scheme record outright when the pattern string is empty
+  (`0x0047db0c`; the `player_fortune` branch that copies the launched plane's scheme from
+  `0x0071db08` is never reached), so what the original draws is whatever state the airframe's
+  key textures are in and is not decodable statically. CSVM wears `blakebloodhawk`'s authored
+  scheme (`AirframeSwapCode.LiveryDef`), the hangar's own faction and the livery seen at the
+  controls, pending judgement there.
+
 ⚠ **967's hide has to outlive the reveal of code 914.** In `C3/M05` the capture definition raises
 967 from the same sequence that calls `wingwalk`, and `wingwalk_parent-wingwalk` brackets its own
 19.25 s motion with **913 then 914**: the captured aircraft is parked by 913, hidden by 967 while it

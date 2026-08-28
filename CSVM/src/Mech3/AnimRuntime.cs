@@ -1642,6 +1642,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             Count("Start(invalidated)");
             return;
         }
+        // The node-state prerequisite is the data's own fork: CM07's hangar drop calls both camera
+        // legs and lets hdrop_direction's state pick one, so an unmet leg is skipped in silence,
+        // the way the hull-death gate is.
+        if (!NodePrerequisitesMet(def, anchor))
+        {
+            Count("Start(prerequisite unmet)");
+            return;
+        }
         // ⚠ Do not tear down the live resources on a restart; the new instance re-establishes them
         // idempotently, and tearing down rebuilds every one of them instead. A caller that wants
         // them cleared calls Stop directly.
@@ -3411,6 +3419,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         var parts = _conditions.OrderByDescending(kv => kv.Value.True + kv.Value.False)
             .Select(kv => $"{kv.Key} {kv.Value.True}✓/{kv.Value.False}✗");
         Log.Info("anim", $"anim: conditions evaluated (lod {QualityLod}): {string.Join(", ", parts)}");
+    }
+
+    // Every REQUIRED node prerequisite reads the state it asks for. Active is what
+    // OBJECT_ACTIVE_STATE writes, the subtree's visibility. A path that resolves to no node
+    // passes: the optional entries and MINIMUM_TO_SATISFY are parsed, not enforced.
+    private bool NodePrerequisitesMet(AnimDefinition def, Node3D? anchor)
+    {
+        foreach (var prereq in def.PrereqNodes)
+        {
+            if (!prereq.Required)
+                continue;
+            foreach (var node in ResolveScoped(new List<string>(prereq.Path), def, anchor))
+                if (IsInstanceValid(node) && node.Visible != prereq.Active)
+                    return false;
+        }
+        return true;
     }
 
     private void Count(string kind) =>

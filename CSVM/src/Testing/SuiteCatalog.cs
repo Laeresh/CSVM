@@ -194,6 +194,7 @@ public static class SuiteCatalog
         "landings-hookup-airframe",
         "landings-hangar-drop-gate",
         "campaign-airframe-swap",
+        "campaign-hangar-handover",
         "campaign-wingwalk-camera",
         "campaign-cutscene-skip",
         "roster-spawn-names",
@@ -1103,6 +1104,20 @@ public static class SuiteCatalog
             + "everywhere else, revealed 100 m off the old nose at -45 degrees on the player's own "
             + "heading with the sums measured off the hull it was given",
             AirframeSwapSuites.AirframeSwap));
+
+        // BL-574/BL-575: the hangar hand-over gave a stock Bloodhawk in the pilot's own paint, and
+        // both camera legs of the drop ran at once because their node-state prerequisite was
+        // parsed away.
+        into.Add(new TestHarness.Suite("campaign-hangar-handover",
+            "CM07's hangar drop over that mission's BUILT world, played through the runtime on a "
+            + "realtime clock: each camera leg and its twin carry opposite node-state "
+            + "prerequisites on hdrop_direction, exactly one of each pair starts and it is the one "
+            + "the sensor's state picks, the two legs after the hand-over start, and the 965 the "
+            + "drop raises rebuilds the player on the Blue Streak build the special-plane template "
+            + "carries -- twin 40 over twin 30, one pylon a wing, 20 armour a zone, the nitrous "
+            + "injector -- in the Blake Aviation livery rather than the paint flown in, while a "
+            + "plain swap onto the same node stays a stock Bloodhawk with no injector",
+            AirframeSwapSuites.HangarHandover));
 
         // BL-542: the capture cutscene's camera rides the wing walk's moving frame, and that frame
         // is posed onto the aeroplane the capture belongs to.

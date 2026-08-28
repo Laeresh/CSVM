@@ -110,7 +110,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ `BL-571`: a carried turret's death fire, and the turret, stay where the turret died
 12. ☑ `BL-572`: an objective marker labels the raw node name instead of the original's verb and proper name
 13. ☑ `BL-573`: the AA guns damage themselves firing at a barrier
-14. ☐ `BL-574` + `BL-575`: the hangar hand-over gives a stock Bloodhawk and plays no animation
+14. ☑ `BL-574` + `BL-575`: the hangar hand-over gives a stock Bloodhawk and plays no animation
 15. ☑ `BL-526`: the rope ladder never deploys (a native per-mission switch to decode)
 
 ### Wave C — CM08 (C1B/M03) and CM09 (C1/M04)
@@ -722,33 +722,56 @@ kill it. One burst still deals a destructible one share per collider body it car
 has ten), where the original's hit buffer holds one entry per node; that over-count is not this
 item's and is left for its own entry.
 
-## B14 ☐ `BL-574` + `BL-575`: the hangar hand-over gives a stock Bloodhawk and plays no animation
+## B14 ☑ `BL-574` + `BL-575`: the hangar hand-over gives a stock Bloodhawk and plays no animation
 
 **Goal.** CM07's hangar cutscene animates (doors, lift, the drop) and hands the player the Blue
 Streak build (engine 4 nitrous, twin 40 and twin 30 guns, 1/1 hardpoints) in the livery the
 original draws.
 
-**Evidence (confidence: traced to the swap, lead-only on the livery and the animations).** The
-log: `EXECUTION_BY_RANGE reached - starting hangar_drop at 67 m`, `airframe swap: P1 is now flying
-'player_bhawk'`, `4 call(s) retargeted onto a named node`, and no line for the hangar's own motion
-or a cutscene hold. `AirframeSwapCodes` maps code 965 to `pbloodhawk`/`player_bhawk` and
-`FlightRoster.SwapPlayerAirframe` assembles it through the ordinary player build with the shared
-paint stream. The Blue Streak template is `docs/org/hangar.md`'s `0x0061a9b8`. Not traced: which
-defs `hangar_drop` calls and whether they are among the `431 reader def(s) superseded by this
-mission's compiled manifest` (A2's drop) or run on nodes the cutscene reparents.
-`<TODO: re-verify still-open against the code>`
+**Evidence (confidence: decoded for the build and the fork, the livery open).** Case `0x3c5` of
+`FUN_0047e080` is `FUN_0047fd50(pbloodhawk, player_bhawk)` followed by the Blue Streak's tables
+written by hand: `DAT_0062ae28` 40/30 with both twin bytes at `DAT_0062ae58/59`, two hardpoints
+of six, `FUN_0047bd90` 20 armour on all four sections, and `player+0x946` the injector, which is
+the airframe-3 template at `0x0061a9b8` field for field. CSVM's swap assembled the stock fit
+because `AirframeSwapRequest` carried no build. The livery is not in the executable:
+`pbloodhawk` authors no `paint_pattern`, and `FUN_0047c210` skips the scheme record when the
+pattern string is empty (`0x0047db0c`), so the `player_fortune` branch that copies the launched
+plane's scheme from `0x0071db08` (written by `FUN_00417090` off the profile's selected plane) is
+never reached; what the original draws is whatever state the airframe's key textures are in.
+The animation half was a parser gap, not a superseded def or a reparented node: `hangar_drop`
+calls `hdplayer1` and `hdplayer1b` (and `hdchute1`/`hdchute1b`) together, and each carries an
+`ACTIVATION_PREREQUISITE` on `hdrop_direction`, one INACTIVE and its twin ACTIVE, so the
+direction sensor picks one camera leg. `CompiledAnim` only read the `{"Animation"}` prerequisite
+shape and dropped the `Parent`/`Object` node form, and nothing enforced it, so both legs ran two
+SI scripts on `player` and `camera1` at once (the polish-4 D-item's wiring contract, now landed).
 
-**Approach.** Decode what swap code 965 builds in the original (the template at `0x0061a9b8` or a
-stock def) and which skin it draws (the swap code's own skin set, `blake*` in the faction table,
-or the cutscene's captured rig); have the hand-over assemble `CustomPlaneBuild` from
-`CampaignProgression.AwardBuild`'s template with `Nitro.Installed` in that livery. For the
-animations, read `hangar_drop`'s call list from `extracted/C1/M02/mis_anim`, run headless with
-`--debug-anim` to the hangar, and trace the first callee that does not start.
+**Approach.** Parse the node-state prerequisite on both front-ends into
+`AnimDefinition.PrereqNodes` and refuse `AnimRuntime.Start` while a REQUIRED entry is unmet;
+give `AirframeSwapCode` an `AwardAirframe` (965 is 3) that `FlightRoster.RunSwap` resolves through
+`CampaignProgression.AwardBuild` into the swap request's `Build`, which `HumanFlightAdapter`
+assembles by the custom-plane path (engine override, injector, guns, pylons, armour), and a
+`LiveryDef` (`blakebloodhawk`) whose `PaintScheme.ForDef` scheme the rebuild wears.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** Blake Aviation for the livery: the case sends no scheme of its own,
+the hangar is Blake's, and it is the livery seen at the controls; switching it is the one
+`AirframeSwapCodes.BlueStreakLiveryDef` constant if D31 says otherwise. The prerequisite gate
+enforces REQUIRED entries only; optional entries and `MINIMUM_TO_SATISFY` over nodes are parsed
+and left to the zeppelin runtime's own reading.
 
-**Verify.** `<TODO: the swap suite asserting the post-swap build and skin; the anim log showing
-every hangar_drop callee starting; D31 judges the livery>`
+**Verify.** `campaign-hangar-handover` (new) plays `hangar_drop` over C1/M02's built world on a
+realtime clock: the two legs carry opposite prerequisites, exactly one of each pair starts and it
+is the one the sensor's state picks, `hdplayer2`/`hdplayer3` start, the swap lands at 4.38 s on
+`pbloodhawk` with the injector, 40x2 over 30x2, two pylons, 20 armour a zone and the `blake`
+scheme, and a plain swap onto the same node stays stock with no injector. Foreground:
+`campaign-hangar-handover` PASS; `campaign-airframe-swap`, `campaign-cutscene-skip`,
+`campaign-cutscene`, `landings-hangar-drop-gate`, `landings-hookup-airframe`,
+`dropoff-chuteman-stage`, `dropoff-placement`, `intro-aircraft-stage`, `zeppelin-damage`,
+`campaign-zeppelins`, `campaign-wingwalk-camera`, `landings-wingwalk-gate`, `cutscene-letterbox`
+13/13 PASS; units 2518/2518. A headless CM07 flight to the hangar cannot arm the drop by itself
+(`hangar3_doors` is called by the fuel depot's death in the chapter's `fueltruck.zrd`), so the
+runtime path is the suite's. D31 judges the livery and the drop at the controls.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not give the stock Bloodhawk nitro, and do not touch the post-mission grant
 (`BL-528`), which is correct. The swap itself works and must stay.

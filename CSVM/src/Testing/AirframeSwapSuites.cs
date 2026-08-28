@@ -23,6 +23,14 @@ internal static class AirframeSwapSuites
     private const int Cm02Seq = 1;
     private const string StartPlane = "player_bhawk";
 
+    // CM07's story position, the code its hangar drop raises, and the airframe the drop is flown
+    // in on: the campaign's own starting Devastator, so the Bloodhawk it hands over is a change.
+    private const int Cm07Seq = 6;
+    private const int HangarSwapCode = 965;
+    private const string HangarStartPlane = "player_pfighter";
+
+    private const string DirectionSensor = "hdrop_direction";
+
     // Where the rig is flown from, and how close the replacement has to land to it. The tolerances
     // are a swap's, not a simulation's: the aircraft is rebuilt at the pose the outgoing one held,
     // so the two readings differ only by the spawn placement's own rounding.
@@ -40,6 +48,16 @@ internal static class AirframeSwapSuites
     // what the capture's called definition raises its reveal behind.
     private const float StepDt = 1f / 60f;
     private const float PlayBudgetS = 30f;
+
+    // The drop's fork: each pair is one camera leg and its twin, told apart by the direction
+    // sensor's active state alone; the tail runs after the swap with no prerequisite.
+    private static readonly (string Leg, string Twin)[] HangarLegs =
+    {
+        ("hdplayer1", "hdplayer1b"),
+        ("hdchute1", "hdchute1b"),
+    };
+
+    private static readonly string[] HangarTail = { "hdplayer2", "hdplayer3" };
 
     /// <summary>Drives the swap CM02 authors against CM02's own built world: the code comes out of
     /// the mission's compiled definitions, the rig off the session's roster, and the replacement is
@@ -73,6 +91,310 @@ internal static class AirframeSwapSuites
 
         ctx.WriteArtifact($"test-airframe-swap-{chapter}-{folder}.txt", report.ToString());
         ctx.Note($"drove the swap {chapter}/{folder} authors against that mission's own world");
+    }
+
+    /// <summary>Plays CM07's hangar drop over that mission's built world on a realtime clock: the
+    /// drop's two camera legs fork on <c>hdrop_direction</c>'s state, so exactly one of each pair
+    /// starts, and the 965 it raises rebuilds the player on the Blue Streak build in the Blake
+    /// livery rather than on a stock Bloodhawk in the pilot's own paint.</summary>
+    internal static void HangarHandover(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm07Seq)
+            ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm07Seq}");
+        string chapter = mission.ChapterFolder.ToUpperInvariant();
+        string folder = mission.MissionFolder.ToUpperInvariant();
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+
+        var report = new StringBuilder();
+        report.AppendLine($"seq {Cm07Seq} -> {chapter}/{folder}");
+        CheckBlueStreakTemplate(ctx, report);
+        ctx.CutsceneRoots = true;
+        try
+        {
+            ctx.WithWorld(chapter, collision: false, folder,
+                world => DriveHangar(ctx, world, chapter, report));
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+        }
+
+        ctx.WriteArtifact($"test-hangar-handover-{chapter}-{folder}.txt", report.ToString());
+        ctx.Note($"played the hangar drop {chapter}/{folder} authors against that mission's own world");
+    }
+
+    // What 965's case writes by hand, read off the code table and the award template it names:
+    // the two have to agree, or the hangar would hand over one Blue Streak and the debrief award
+    // another.
+    private static void CheckBlueStreakTemplate(TestContext ctx, StringBuilder report)
+    {
+        var code = AirframeSwapCodes.For(HangarSwapCode);
+        ctx.Check(code is { AwardAirframe: AirframeSwapCodes.BlueStreakAirframe },
+            $"code {HangarSwapCode} names the Blue Streak's airframe template, the build its own case writes over the stock Bloodhawk");
+        ctx.Check(AirframeSwapCodes.For(966) is { AwardAirframe: null }
+                  && AirframeSwapCodes.For(967) is { AwardAirframe: null },
+            $"and the other two codes hand over the stock fit, the way their cases do");
+        var build = CampaignProgression.AwardBuild(AirframeSwapCodes.BlueStreakAirframe);
+        ctx.Check(build != null, $"the special-plane table carries that template");
+        if (build == null)
+        {
+            return;
+        }
+
+        report.AppendLine($"template: engine {build.Engine}, pylons {build.LeftHardpoints}/{build.RightHardpoints}, " +
+            $"armour {build.ArmourNose}/{build.ArmourTail}/{build.ArmourLeftWing}/{build.ArmourRightWing}, " +
+            $"guns {string.Join(",", build.Guns.Select(g => g.Calibre is { } c ? $"{30 + (10 * c)}{(g.Twin ? "x2" : "")}" : "-"))}");
+        ctx.Check(CustomPlaneBuild.HasNitrous(build),
+            $"whose engine {build.Engine} is a nitrous tier, the injector 965 alone sets");
+        ctx.Check(build.LeftHardpoints == 1 && build.RightHardpoints == 1,
+            $"with one pylon a wing, the two hardpoints of six the case writes");
+        ctx.Check(build.Guns[0] is { Calibre: 1, Twin: true } && build.Guns[1] is { Calibre: 0, Twin: true },
+            $"and a twin 40 over a twin 30, the 40/30 gun table with both twin bytes set");
+        ctx.Check(build.ArmourNose * CustomPlaneBuild.ArmourUnitScale == 20
+                  && build.ArmourRightWing * CustomPlaneBuild.ArmourUnitScale == 20,
+            $"at 20 armour a zone, the one number the case writes to all four sections");
+    }
+
+    private static void DriveHangar(TestContext ctx, TestWorld world, string chapter, StringBuilder report)
+    {
+        (string Anim, int Code, string Root)? drop = null;
+        foreach (var call in SwapCallsIn(world.Session.Program))
+        {
+            if (call.Code == HangarSwapCode)
+            {
+                drop = call;
+            }
+        }
+
+        ctx.Check(drop != null, $"the mission's compiled program authors callback {HangarSwapCode}");
+        if (drop == null)
+        {
+            return;
+        }
+
+        report.AppendLine($"'{drop.Value.Root}-{drop.Value.Anim}' authors callback {drop.Value.Code}");
+        CheckLegPrerequisites(ctx, world, report);
+        WithStagedHangar(ctx, world, chapter,
+            staged => PlayTheDrop(ctx, world, staged, drop.Value, report));
+    }
+
+    // The fork as the data authors it: each camera leg is gated on the direction sensor, one on
+    // it active and its twin on it inactive, so the runtime has something to read.
+    private static void CheckLegPrerequisites(TestContext ctx, TestWorld world, StringBuilder report)
+    {
+        foreach (var (leg, twin) in HangarLegs)
+        {
+            var legDef = First(world.Session.Program.ByAnimName(leg));
+            var twinDef = First(world.Session.Program.ByAnimName(twin));
+            ctx.Check(legDef != null && twinDef != null, $"'{leg}' and '{twin}' are both defined for this mission");
+            if (legDef == null || twinDef == null)
+            {
+                continue;
+            }
+
+            report.AppendLine($"'{leg}' prerequisites: {Describe(legDef.PrereqNodes)}; '{twin}': {Describe(twinDef.PrereqNodes)}");
+            ctx.Check(legDef.PrereqNodes.Count == 1 && legDef.PrereqNodes[0] is { Required: true, Active: false }
+                      && string.Equals(legDef.PrereqNodes[0].Path[^1], DirectionSensor, StringComparison.OrdinalIgnoreCase),
+                $"'{leg}' requires '{DirectionSensor}' inactive");
+            ctx.Check(twinDef.PrereqNodes.Count == 1 && twinDef.PrereqNodes[0] is { Required: true, Active: true }
+                      && string.Equals(twinDef.PrereqNodes[0].Path[^1], DirectionSensor, StringComparison.OrdinalIgnoreCase),
+                $"and '{twin}' requires it active, so the two legs cannot both run");
+        }
+    }
+
+    private static string Describe(IReadOnlyList<AnimNodePrereq> prereqs) =>
+        prereqs.Count == 0 ? "none"
+            : string.Join(", ", prereqs.Select(p => $"{string.Join("/", p.Path)}={(p.Active ? "active" : "inactive")}{(p.Required ? "" : " (optional)")}"));
+
+    // The drop as a flown session runs it: the mission's own definition played through the runtime
+    // on a realtime clock with the cutscene host answering, every callee start recorded.
+    private static void PlayTheDrop(TestContext ctx, TestWorld world, HangarStaged staged,
+        (string Anim, int Code, string Root) drop, StringBuilder report)
+    {
+        var (roster, rig, before, cutscene) = staged;
+        var savedClock = GameClock.Current;
+        var savedHost = world.Runtime.CallbackHost;
+        var savedStarted = world.Runtime.OnInstanceStarted;
+        var started = new List<string>();
+        try
+        {
+            var clock = new GameClock { Mode = GameClock.RunMode.Realtime };
+            GameClock.Current = clock;
+            cutscene.BindWorld(world.Runtime);
+            cutscene.HostDefinitions(ClosureOf(world, drop.Anim));
+            cutscene.BindRigs(new[] { rig }, () => roster.AiAircraft);
+            cutscene.SwapAirframe = order => roster.RunSwap(rig, order, handsOver: false);
+            world.Runtime.CallbackHost = cutscene.Host;
+            world.Runtime.OnInstanceStarted = (def, anchor) =>
+            {
+                savedStarted?.Invoke(def, anchor);
+                if (def.AnimName is { } name)
+                {
+                    started.Add(name);
+                }
+            };
+            bool sensorActive = SensorActive(world);
+            report.AppendLine($"'{DirectionSensor}' active={sensorActive} before the drop");
+            world.Runtime.Play(drop.Anim);
+
+            bool swapped = false;
+            float swappedAtS = -1f;
+            for (int i = 0; i < (int)(PlayBudgetS / StepDt); i++)
+            {
+                clock.BeginFrame(StepDt);
+                world.Runtime.Advance(StepDt);
+                cutscene.Tick();
+                rig.Controller?._PhysicsProcess(StepDt);
+                if (!swapped && !ReferenceEquals(rig.Controller, before))
+                {
+                    swapped = true;
+                    swappedAtS = i * StepDt;
+                }
+            }
+
+            report.AppendLine($"played '{drop.Anim}' for {PlayBudgetS:0} s: codes {string.Join(",", cutscene.Codes)}, " +
+                $"swapped={swapped} at {swappedAtS:0.##} s, started [{string.Join(",", started)}]");
+            CheckLegs(ctx, started, sensorActive, report);
+            ctx.Check(swapped, $"playing '{drop.Anim}' reaches callback {drop.Code} through the runtime");
+            var after = rig.Controller;
+            ctx.Check(after != null, $"and the swap built an aircraft");
+            if (after == null)
+            {
+                return;
+            }
+
+            report.AppendLine(Describe("before", before));
+            report.AppendLine(Describe("after", after));
+            CheckBlueStreakFit(ctx, before, after, report);
+            CheckStockStaysStock(ctx, roster, rig, report);
+        }
+        finally
+        {
+            world.Runtime.OnInstanceStarted = savedStarted;
+            world.Runtime.CallbackHost = savedHost;
+            GameClock.Current = savedClock;
+        }
+    }
+
+    // Exactly one leg of each pair, the one whose prerequisite the sensor's state satisfies, plus
+    // the two legs after the swap that carry no prerequisite at all.
+    private static void CheckLegs(TestContext ctx, IReadOnlyList<string> started, bool sensorActive,
+        StringBuilder report)
+    {
+        foreach (var (leg, twin) in HangarLegs)
+        {
+            bool legRan = started.Contains(leg, StringComparer.OrdinalIgnoreCase);
+            bool twinRan = started.Contains(twin, StringComparer.OrdinalIgnoreCase);
+            ctx.Check(legRan != twinRan,
+                $"exactly one of '{leg}' and '{twin}' starts (leg={legRan}, twin={twinRan}), the fork the direction sensor authors");
+            ctx.Check(twinRan == sensorActive,
+                $"and it is the one the sensor's state picks ('{DirectionSensor}' active={sensorActive})");
+        }
+
+        foreach (var name in HangarTail)
+        {
+            ctx.Check(started.Contains(name, StringComparer.OrdinalIgnoreCase),
+                $"'{name}' starts, the drop's choreography after the hand-over");
+        }
+    }
+
+    // What 965 hands the player: the Blue Streak build in the Blake livery, not the stock
+    // Bloodhawk in the pilot's own paint.
+    private static void CheckBlueStreakFit(TestContext ctx, FlightController before, FlightController after,
+        StringBuilder report)
+    {
+        var wanted = AirframeSwapCodes.For(HangarSwapCode)!.Value;
+        ctx.Check(after.Loadout is { } fit && string.Equals(fit.Def.Def, wanted.Def, StringComparison.OrdinalIgnoreCase),
+            $"the player is flying '{wanted.Def}'");
+        ctx.Check(!before.Nitro.Installed && after.Nitro.Installed,
+            $"with the nitrous injector the aircraft flown in did not have");
+        var guns = after.Loadout?.Def.Guns ?? new List<GunSpec>();
+        report.AppendLine($"guns: {string.Join(", ", guns.Select(g => $"{g.Caliber} cal x{g.Markers.Count}"))}; " +
+            $"hardpoints {after.Loadout?.Hardpoints.Count ?? 0}; " +
+            $"armour {string.Join("/", (after.Damage?.Parts.Values ?? Enumerable.Empty<PlaneDamage.PartState>()).Select(p => p.Def.MaxArmor.ToString("0")))}; " +
+            $"livery '{after.Scheme?.Label ?? "-"}' painted={after.Painter != null}");
+        ctx.Check(guns.Count == 2 && guns[0].Caliber == 40 && guns[1].Caliber == 30,
+            $"a 40 over a 30, the gun table 965 writes");
+        ctx.Check(guns.Count == 2 && guns[0].Markers.Count == 2 && guns[1].Markers.Count == 2,
+            $"both twinned");
+        ctx.Check(after.Loadout?.Hardpoints.Count == 2,
+            $"two pylons, one a wing, rather than the stock Bloodhawk's own table");
+        ctx.Check(after.Damage != null && after.Damage.Parts.Count == 4
+                  && after.Damage.Parts.Values.All(p => Mathf.IsEqualApprox(p.Def.MaxArmor, 20f)),
+            $"and 20 armour on each of the four zones");
+        var livery = PaintScheme.ForDef(ctx.ZrdrPath, AirframeSwapCodes.BlueStreakLiveryDef);
+        ctx.Check(livery != null && after.Scheme != null && after.Painter != null
+                  && string.Equals(after.Scheme.Pattern, livery.Pattern, StringComparison.OrdinalIgnoreCase)
+                  && after.Scheme.Color1 == livery.Color1 && after.Scheme.Color2 == livery.Color2,
+            $"painted in '{AirframeSwapCodes.BlueStreakLiveryDef}'s own scheme, the Blake Aviation livery");
+        ctx.Check(before.Scheme == null || !string.Equals(before.Scheme.Pattern, livery?.Pattern, StringComparison.OrdinalIgnoreCase),
+            $"which is not the paint the aircraft flown in wore ('{before.Scheme?.Label ?? "-"}')");
+    }
+
+    // The trap: the build is 965's, not the airframe's. A plain swap onto the same node hands
+    // over a stock Bloodhawk with no injector and its own hardpoint table.
+    private static void CheckStockStaysStock(TestContext ctx, FlightRoster roster, PlayerRig rig,
+        StringBuilder report)
+    {
+        var wanted = AirframeSwapCodes.For(HangarSwapCode)!.Value;
+        var stock = roster.SwapPlayerAirframe(rig, wanted.PlaneNode);
+        var stockFit = StockLoadouts.Load().For(wanted.Def);
+        report.AppendLine($"stock rebuild: nitro={stock.Nitro.Installed} hardpoints={stock.Loadout?.Hardpoints.Count ?? 0} " +
+            $"(stock table {stockFit?.Hardpoints?.Count ?? 0})");
+        ctx.Check(!stock.Nitro.Installed,
+            $"a swap onto '{wanted.PlaneNode}' with no build of its own installs no injector, so the nitrous is the Blue Streak's and never the airframe's");
+        ctx.Check(stock.Loadout?.Hardpoints.Count == (stockFit?.Hardpoints?.Count ?? 0),
+            $"and flies the stock hardpoint table");
+    }
+
+    private static bool SensorActive(TestWorld world)
+    {
+        foreach (var node in world.Runtime.FindNodes(DirectionSensor))
+        {
+            return node.Visible;
+        }
+
+        return true;
+    }
+
+    private static AnimDefinition? First(IReadOnlyList<AnimDefinition> defs) =>
+        defs.Count > 0 ? defs[0] : null;
+
+    // One staged hangar: the mission's own world and a flown human rig on the campaign's own
+    // starting airframe, so the swap has a different aircraft to replace.
+    private static void WithStagedHangar(TestContext ctx, TestWorld world, string chapter,
+        Action<HangarStaged> leg)
+    {
+        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
+        var pool = new ProjectilePool(textures, null, null);
+        ctx.Host.AddChild(pool);
+        var pane = new SubViewport();
+        ctx.Host.AddChild(pane);
+        var rig = new PlayerRig { Index = 0, Camera = ctx.Camera, HudParent = pane, Viewport = pane };
+        var rigs = new[] { rig };
+        FlightRoster? roster = null;
+        var cutscene = new CutsceneController();
+        ctx.Host.AddChild(cutscene);
+        try
+        {
+            roster = BuildRoster(ctx, world, chapter, textures, pool, rigs, HangarStartPlane);
+            roster.BuildPlayers(rigs);
+            var before = rig.Controller ?? throw new InvalidOperationException("no rig was built");
+            leg(new HangarStaged(roster, rig, before, cutscene));
+        }
+        finally
+        {
+            var live = rig.Controller;
+            roster?.ClearMembership();
+            live?.Free();
+            cutscene.Free();
+            pane.Free();
+            pool.Free();
+            textures.Dispose();
+        }
     }
 
     // The decoded table against the shipped stat data: each code's def/node pair has to be the pair
@@ -573,9 +895,10 @@ internal static class AirframeSwapSuites
     }
 
     private static FlightRoster BuildRoster(TestContext ctx, TestWorld world, string chapter,
-        TextureArchive textures, ProjectilePool pool, IReadOnlyList<PlayerRig> rigs)
+        TextureArchive textures, ProjectilePool pool, IReadOnlyList<PlayerRig> rigs,
+        string plane = StartPlane)
     {
-        var spec = SessionSpec.Parse(new[] { $"--plane={StartPlane}" });
+        var spec = SessionSpec.Parse(new[] { $"--plane={plane}" });
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var resources = new AircraftAssemblyResources
         {
@@ -647,6 +970,14 @@ internal static class AirframeSwapSuites
         FlightController Captured,
         FlightController Wingman,
         ProjectilePool Pool);
+
+    // The actors one staged hangar hands its leg: the roster and rig, the aircraft flown in, and
+    // the host.
+    private sealed record HangarStaged(
+        FlightRoster Roster,
+        PlayerRig Rig,
+        FlightController Before,
+        CutsceneController Cutscene);
 
     // One start, high enough over the mission's own terrain that the aircraft is flying rather than
     // resolving a ground contact on the frame the swap rebuilds it.

@@ -158,6 +158,11 @@ public sealed class AnimArchive
     }
 }
 
+/// <summary>One node-state activation prerequisite: the node <paramref name="Path"/> names must
+/// read <paramref name="Active"/> for the definition to start. An optional entry counts toward
+/// <see cref="AnimDefinition.PrereqMinToSatisfy"/> and is parsed but not enforced.</summary>
+public sealed record AnimNodePrereq(IReadOnlyList<string> Path, bool Active, bool Required);
+
 /// <summary>
 /// One ANIMATION_DEFINITION — the UNIFIED model both front-ends produce (the compiled
 /// archives via <see cref="AnimArchive"/>, the zrdr readers via <see cref="AnimDefs"/>).
@@ -194,6 +199,12 @@ public sealed class AnimDefinition
     /// <summary>The ACTIVATION_PREREQUISITE ANIMATION_LIST names (see
     /// <see cref="PrereqMinToSatisfy"/>).</summary>
     public readonly List<string> PrereqAnims = new();
+
+    /// <summary>The ACTIVATION_PREREQUISITE node-state form: a node path and the active state it
+    /// must read for this definition to start. Compiled as a run of <c>Parent</c> entries closed
+    /// by one <c>Object</c> leaf; reader <c>REQUIRED [OBJECT_ACTIVE_LIST [[path...]]]</c>. CM07's
+    /// hangar drop forks its camera legs on it (docs/formats/anim-definitions.md).</summary>
+    public readonly List<AnimNodePrereq> PrereqNodes = new();
 
     public string Name = "";              // the world node(s) this def anchors to
     public string? AnimName;              // ANIMATION_NAME — what startanims/CALL_ANIMATION use
@@ -282,9 +293,23 @@ public sealed class AnimDefinition
             def.NodeList.Add(r.Str("name") ?? "");
         // The activation prerequisite (zeppelin hull deaths): min-to-satisfy over an anim list.
         def.PrereqMinToSatisfy = (int)(d.Num("activ_prereq_min_to_satisfy") ?? 0f);
+        // The node-state form is a path: Parent entries accumulate until the Object leaf closes
+        // them, and the leaf alone carries the required state.
+        var path = new List<string>();
         foreach (var prereq in d.Objects("activ_prereqs"))
+        {
             if (prereq.Obj("Animation")?.Str("name") is { } prereqName)
                 def.PrereqAnims.Add(prereqName);
+            else if (prereq.Obj("Parent")?.Str("name") is { } parentName)
+                path.Add(parentName);
+            else if (prereq.Obj("Object") is { } leaf && leaf.Str("name") is { } leafName)
+            {
+                path.Add(leafName);
+                def.PrereqNodes.Add(new AnimNodePrereq(path.ToArray(), leaf.Bool("active"),
+                    leaf.Bool("required")));
+                path.Clear();
+            }
+        }
         if (d.Obj("reset_state") is { } reset)
             def.ResetState = AnimSequence.Parse(reset);
         foreach (var seq in d.Objects("sequences"))

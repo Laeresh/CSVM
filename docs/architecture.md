@@ -813,7 +813,10 @@ and the SI-script pool — `Script(index)` parses lazily, ordered by `metadata.j
 (ptr = flat node index, shifted quat labels, half-angle cubics): docs/formats/anim-definitions.md.
 The `unknown_seq` destruction slot parses into `AnimDefinition.DeathSlot`, deliberately OFF
 `Sequences` (bootstrap and the sequence-walking derivations never see it); only
-`AnimRuntime.RunDeathSequence` dispatches it (`BL-276`, docs/formats/destructibles.md).
+`AnimRuntime.RunDeathSequence` dispatches it (`BL-276`, docs/formats/destructibles.md). The
+`ACTIVATION_PREREQUISITE` node-state form (a run of `Parent` entries closed by an `Object` leaf
+carrying `active`/`required`) parses into `AnimDefinition.PrereqNodes` beside the anim-list form's
+`PrereqAnims`; `AnimDefs` reads the reader spelling into the same list.
 
 ## src/Mech3/AnimDefs.cs
 The zrdr front-end: ANIMATION_DEFINITIONS reader files normalized into CompiledAnim's
@@ -902,7 +905,11 @@ in cell space and the two axes run opposite ways; both are in docs/formats/inter
 ## src/Mech3/AnimRuntime.cs
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP,
 startanims, a safety net), then dispatch-table event playback; an unhandled event kind is counted,
-never fatal. Also hosts the destructible-damage entries (`DamageAt`/`CollideDamageAt`/
+never fatal. `Start` refuses a definition whose REQUIRED node-state prerequisite is unmet
+(`NodePrerequisitesMet`, the node's visibility against `AnimDefinition.PrereqNodes`), counted as
+`Start(prerequisite unmet)` and otherwise silent like the hull-death gate: CM07's hangar drop calls
+both of each camera leg pair and lets `hdrop_direction`'s state pick one. Optional entries and
+`MINIMUM_TO_SATISFY` over nodes are parsed, not enforced. Also hosts the destructible-damage entries (`DamageAt`/`CollideDamageAt`/
 `ApplyDamageStages`/`RunDeathSequence`/`ResetDestructible`) and the world-effects runtime
 (`PlayEffectAt` over a hidden template stage). **A routed call's spelling decides whether its
 effect rides the site.** The world runtime's `CallAnimation` arm hands a death's effect call to
@@ -5617,8 +5624,11 @@ definition's root node resolved through `AiNamed`, hidden, and what is left of i
 `ShippedSkins` (a null scheme that reading produced still carries, rather than falling back to the
 player's own default paint) and the hand-over of the outgoing aeroplane to `wingman_4` where the
 mission resolves that name. It answers an `AirframeSwapResult` naming the aircraft it hid, because
-the cutscene that raised the code may be holding that aircraft too. The livery carry is undecoded in
-the executable; decode and the four deliberate divergences: `docs/formats/anim-definitions/cutscenes.md`.
+the cutscene that raised the code may be holding that aircraft too. A code carrying an
+`AwardAirframe` (965) rebuilds on that special-plane template through `CustomPlaneBuild` instead of
+the stock fit, so the injector and the template's guns, pylons and armour land on the replacement,
+and one carrying a `LiveryDef` wears that def's authored scheme. The livery carry is undecoded in
+the executable; decode and the deliberate divergences: `docs/formats/anim-definitions/cutscenes.md`.
 
 ## src/Session/FlightRosterInputs.cs
 The grouped construction facts accepted by `FlightRoster`: copied `FlightRosterPolicy`, immutable
@@ -5646,6 +5656,9 @@ it never receives `SessionSpec` or publishes a partially configured controller t
 Player order remains load-bearing for the shared paint and spawn streams. A `swap.ShippedSkins`
 scheme (an airframe hand-over's captured rig) is drawn as-is, null included, ahead of the default/
 custom paint fallback, so a captured rig with no scheme is not silently repainted the pilot's own.
+A swap's `Build` stands in for the pilot's own custom plane on that assembly, which is how 965's
+Blue Streak reaches the engine override, the injector, the fit and the armour by the one path a
+bought plane takes.
 `BuildDamageVisuals` is also the common first phase for AI damage; `WorldEffectsFactory.BuildFlightCrashRuntime`
 supplies the optional second phase once a controller is in the tree.
 ## src/Session/EffectCatalogue.cs

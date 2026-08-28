@@ -359,7 +359,11 @@ executable's data.
 **Only the Blue Streak carries a nitrous engine.** Engine ids 3 to 5 are the three tiers with the
 injector and its 4 is the middle one; the other four templates take id 1, a plain Lvl-2 engine. A
 stock Bloodhawk has no injector at all, so the nitrous is the Blue Streak's own build and never a
-property of the airframe.
+property of the airframe. The in-mission hand-over agrees: C1/M02's callback 965
+(`FUN_0047e080`, case `0x3c5`) rebuilds the player on `pbloodhawk` and then writes this row's fit
+by hand, 40/30 with both twin bytes, two hardpoints of six, 20 armour on all four sections and
+the injector bit at `player+0x946`, which is the same build the debrief award copies whole
+([`../formats/anim-definitions/cutscenes.md`](../formats/anim-definitions/cutscenes.md)).
 
 The paint is one authoring shared by all five, byte for byte: pattern 4, swatch rows 1, 26 and 26
 at shade variants 8, 0 and 9, and decals 40 (nose), 8 (tail) and 7 (wing).
