@@ -1534,7 +1534,9 @@ record's own team over the guns standing on that hull),
 wrap-aware directed yaw clamp + pitch clamp, bounded slew (3.0/s), pose written onto the PARTS
 nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution cone, cached
 1–2 s world-only line of sight, `FIRE_RATE` redraw. `PlatformOf`/`PlatformColliderRids` are what
-keep an emplacement's own mounting section out of its line-of-sight ray.
+keep an emplacement's own mounting section out of its line-of-sight ray, and the same set rides
+each of its rounds as the pool's `ownerBodies`, so the flak neither strikes nor splashes the gun
+that fired it while a neighbouring gun's burst still lands (`turret-self-fire`).
 A carried gunner's line of sight runs through `WorldBlocksLine`, a static method mirroring
 `FlightController.WorldBlocksLine`'s exact call shape against the `IWorldQuery` `BuildCarried`
 hands the constructor (a `GodotWorldQuery` over the host); `_host` itself stays for what it alone
@@ -1848,6 +1850,11 @@ per-muzzle assist at spawn time (target scan → constant-velocity intercept →
 1° scatter), decoded in [org/aim-assist.md](org/aim-assist.md) and built in `AimAssist.cs`
 (`BL-342`). It is a **launch-direction** assist: nothing steers a round in flight, so it belongs
 at the fire call, not in this file's integrator.
+`Spawn`'s optional `ownerBodies` is the original's owner node for a round nobody's aircraft fired
+(a world emplacement's own mount): the hit ray excludes those bodies and the splash gather skips
+them, the same way a pilot's own airframe is excluded through the shooter id
+(`org/ordnanceTypes.md` "Half two, the splash"). Nothing else is exempt from splash: a neighbouring
+gun's burst, or a rocket into the pit, still kills the gun.
 `Spawn`'s optional `aimDir` is how it arrives — a world direction the CALLER computed
 (`FlightController.AssistedGunDirection`); omitted, `Spawn` still uses the muzzle axis, which is
 what every rig, the bench and the rockets pass. Only the round's velocity uses it — the muzzle flash still rides

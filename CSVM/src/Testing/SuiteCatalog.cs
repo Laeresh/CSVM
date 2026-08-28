@@ -84,6 +84,7 @@ public static class SuiteCatalog
         "flight-roster-transaction",
         "inert-aircraft",
         "world-turrets",
+        "turret-self-fire",
         "carried-turrets",
         "graze-bounce",
         "ai-spawn-jitter",
@@ -482,6 +483,11 @@ public static class SuiteCatalog
             "and the one no suite or golden uses), skip " +
             "same-team targets, join the aim-assist candidate list, and go permanently quiet " +
             "when the emplacement's own destructible dies", WorldTurrets));
+        into.Add(new TestHarness.Suite("turret-self-fire",
+            "C1's five aagun emplacements, each woken alone and fired at a plane parked low on " +
+            "eight bearings so the line of fire crosses the fort's own structures: no gun ever " +
+            "takes damage from its own rounds, whether by a muzzle-side strike on its own mount " +
+            "or by its burst's splash, while a neighbour's burst still reaches it", TurretSelfFire));
         into.Add(new TestHarness.Suite("carried-turrets",
             "a carried turret gunner (C9a) builds from ai.zrd + the vehicle def's thirdp mount, " +
             "poses at its arc centre, tracks and fires on a hostile plane inside DETECTION_RANGE " +

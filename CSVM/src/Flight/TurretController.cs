@@ -528,9 +528,11 @@ public sealed class TurretController
         // rounds spread. Same uniform-polar cone as the player assist's launch scatter.
         var dir = AimAssist.Scatter(aimWorld, Mathf.DegToRad(Def.InaccuracyDeg), _rng);
         // ⚠ Pass team explicitly. A world emplacement has no shooter id, so the shooter-id default
-        // reads its rounds as neutral in the aim assist's ordnance candidate list.
+        // reads its rounds as neutral in the aim assist's ordnance candidate list. Its own mount
+        // rides along as the round's owner: the flak must not strike or splash the gun firing it.
         _pool.Spawn(Weapon, fp.GlobalTransform, PlatformVelocity,
-            _host?.PlayerIndex ?? ProjectilePool.NoShooter, fp, dir, team: _team);
+            _host?.PlayerIndex ?? ProjectilePool.NoShooter, fp, dir, team: _team,
+            ownerBodies: _host == null ? PlatformColliderRids() : null);
         if (_host == null && !_firstShotLogged)
         {
             _firstShotLogged = true; // verification breadcrumb: WHICH emplacements actually engage

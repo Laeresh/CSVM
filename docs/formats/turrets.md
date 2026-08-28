@@ -319,6 +319,15 @@ the firing spell. Once firing stops, the loop ends within 0.5 seconds. A playbac
 that restarts `chaingun.wav` as a non-looped one-shot at each projectile preserves the ballistic
 rate but turns the audible firing spell into isolated shots.
 
+**A gun's own rounds do not hurt it.** The splash gather clears the round's owner node's
+intersect bit for the whole gather ([org/ordnanceTypes.md](../org/ordnanceTypes.md) "Half two, the
+splash"), so a flak bursting beside the emplacement that fired it reaches every neighbour and never
+the shooter. Which node an emplacement's round names as its owner is not decoded; the remake uses
+the gun's own mounting section, the set its line-of-sight ray already excludes, for both the hit
+ray and the splash. Measured before that exclusion: a flak bursting 12 m over its own pit dealt the
+gun four splash shares at once (one per collider body of the destructible, -8.18/-8.04/-8/-7.36 of
+its 10), and a strike on the fort's barrier beside the gun the -10/-9.64 pair the CM07 sortie logged.
+
 **`INACCURACY` perturbs the shot, not the barrel.** The scatter cone is applied to the fire
 direction *after* the aim solution and after the model nodes have been written, so the turret is
 seen to aim true and the rounds spread. It is a half-angle in degrees, 2.5–15.0 across the 42.

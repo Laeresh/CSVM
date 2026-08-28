@@ -860,6 +860,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`git log --grep=BL-517`), `docs/formats/mission-entities.md`,
   `docs/formats/anim-definitions/cutscenes.md` "The name is what resolves". *Playtest after fix:* `CAP-46`.
 
+- `BL-586` `[Bug]` **One burst deals a world destructible one splash share per collider body it
+  carries.** *Evidence (traced):* the C1 aagun carries ten collider bodies, and one flak bursting
+  over its own pit dealt `-8.18/-8.04/-8/-7.36`, one share per body (the `turret-self-fire`
+  trace), where the original's hit buffer holds one entry per node (`FUN_004cb420`). *Fix
+  shape:* dedupe `ProjectilePool.ApplyDamage`'s world candidates per resolved destructible,
+  keeping the nearest body's share; needs a `DamageSink`-side key, since the pool cannot resolve
+  destructibles itself. *Cross-refs:* `docs/org/ordnanceTypes.md`, `turret-self-fire`,
+  `BL-573`'s closing commit (`git log --grep=BL-573`).
+
 ## Flight model & collision physics
 
 
@@ -2672,21 +2681,6 @@ usual.
   an objective display line built from those message ids, and keep the node name for the debug
   tag only. *⚠ Traps:* `BL-397` is the marker's bracket
   range rule and not this. *Cross-refs:* `BL-397`, `docs/formats/markers.md`, `docs/org/targeting.md`.
-
-- `BL-573` `[Bug]` **CM07 (C1/M02): the AA guns damage themselves, one blowing itself up while
-  firing at the barrier in front of it.** *Evidence (lead-only):* reported at the controls: an AA
-  gun exploded on its own while shooting at a barrier. The sortie log shows `aagun32` taking four
-  hits in a row with no player round near it (`damage: -10 on aagun32 HP 30→20 [stage 0]`,
-  `-9.58`, `-9.2`, `-10 ... DESTROYED — death sequence run`), then `aagun33`, `aagun34` and
-  `aagun36` taking the same `-10`, `-9.58` pair; the identical decrements across four guns read as
-  one weapon's rounds, the guns' own, bursting on the obstruction and splashing the shooter. Not
-  traced: whether the flak's burst damage excludes its own shooter in `crimson.exe`, and whether
-  the original's gun fires at all when a structure blocks its line. *Fix shape:* trace which
-  shooter id lands those hits (`--debug` hit logging on the turret pool), then decode the flak
-  burst's damage application for a self-exclusion and the turret fire gate for a line-of-fire
-  test; apply what the decode says. *⚠ Traps:* do not exclude turrets from splash wholesale, a
-  rocket into a gun pit must still kill it. *Cross-refs:* `BL-516` (turret waking), `BL-514`,
-  `docs/org/weaponImpact.md`.
 
 - `BL-574` `[Bug]` **CM07 (C1/M02): the hangar hand-over gives the player a stock Bloodhawk in the
   ordinary player paint and without nitro, where the original hands over the Blue Streak in Blake

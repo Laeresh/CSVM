@@ -847,13 +847,14 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     /// <summary>Fires one round of <paramref name="weapon"/> from the muzzle transform, along
-    /// <paramref name="aimDir"/> or the muzzle axis when none is given, carrying as much of
-    /// <paramref name="inheritVel"/> as <see cref="InheritedAtLaunch"/> allows. <c>CANNON_SPREAD</c>
-    /// is the aim assist's acceptance cone, not a scatter. Drops the round silently if the pool is
-    /// full. <paramref name="shooterId"/> is the near-miss cue's self-exclusion, <paramref name="team"/>
-    /// stamps the round once, and <paramref name="target"/> is what it holds (null: none).</summary>
+    /// <paramref name="aimDir"/> or the muzzle axis, carrying what <see cref="InheritedAtLaunch"/>
+    /// allows of <paramref name="inheritVel"/>. Drops the round silently if the pool is full.
+    /// <paramref name="shooterId"/> is the near-miss cue's self-exclusion, <paramref name="team"/>
+    /// stamps the round once, <paramref name="target"/> is what it holds, and <paramref name="ownerBodies"/>
+    /// is a world gunner's own mount, which its rounds neither strike nor splash (org/ordnanceTypes.md).</summary>
     public void Spawn(WeaponDef weapon, Transform3D muzzle, Vector3 inheritVel, int shooterId = NoShooter,
-        Node3D? muzzleAnchor = null, Vector3? aimDir = null, int? team = null, object? target = null)
+        Node3D? muzzleAnchor = null, Vector3? aimDir = null, int? team = null, object? target = null,
+        Godot.Collections.Array<Rid>? ownerBodies = null)
     {
         // The launch bark: only rockets/ordnance carry a FIRE.SOUND — every cannon's is
         // null in the data (LOOPED_SOUND_NAME covers continuous gunfire instead), so this is a
@@ -945,6 +946,7 @@ public sealed partial class ProjectilePool : Node3D
                 HitHalf = hitBox.Size * 0.5f,
                 Shooter = shooterId,
                 Team = team ?? AimAssist.TeamOfPilot(shooterId),
+                Owner = ownerBodies is { Count: > 0 } ? ownerBodies : null,
                 Inherited = inherited,
                 Target = target,
             };
@@ -1129,7 +1131,7 @@ public sealed partial class ProjectilePool : Node3D
                     _ray.To = next;
                     // Per-shot owner exclusion on the SHARED query object: set for this round's
                     // shooter, reset right after — a leaked Exclude shields the next round's target.
-                    _ray.Exclude = ExcludeFor(p.Shooter);
+                    _ray.Exclude = ExcludeFor(p.Shooter, p.Owner);
                     var hit = space.IntersectRay(_ray);
                     _ray.Exclude = NoExclude;
                     if (hit.Count > 0)
@@ -1156,7 +1158,7 @@ public sealed partial class ProjectilePool : Node3D
                 if (hitDistSq < float.PositiveInfinity)
                 {
                     NearMissPass(prev, hitPoint, p.Shooter);
-                    Impact(p.Weapon, hitPoint, hitCollider, hitNormal, hitShape, p.Shooter, p.Team);
+                    Impact(p.Weapon, hitPoint, hitCollider, hitNormal, hitShape, p.Shooter, p.Team, p.Owner);
                     RetireRound(ref p);
                     continue;
                 }
@@ -1169,7 +1171,7 @@ public sealed partial class ProjectilePool : Node3D
                     NearMissPass(prev, fusePoint, p.Shooter);
                     var fuseNormal = towardHull.LengthSquared() > 1e-8f
                         ? towardHull.Normalized() : Vector3.Zero;
-                    Impact(p.Weapon, fusePoint, fused, fuseNormal, -1, p.Shooter, p.Team);
+                    Impact(p.Weapon, fusePoint, fused, fuseNormal, -1, p.Shooter, p.Team, p.Owner);
                     RetireRound(ref p);
                     continue;
                 }
@@ -1907,7 +1909,7 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal, int shapeIdx = -1,
-        int shooter = NoShooter, int team = AimAssist.NeutralTeam)
+        int shooter = NoShooter, int team = AimAssist.NeutralTeam, Godot.Collections.Array<Rid>? owner = null)
     {
         // A cannon round only ever reaches Impact through the direct-hit ray, so this one guard
         // covers the decode's three hit sites without distinguishing them.
@@ -1938,7 +1940,7 @@ public sealed partial class ProjectilePool : Node3D
                      $"({point.X:0},{point.Y:0},{point.Z:0}) on {collider?.GetParent()?.Name}/{collider?.Name}" +
                      $" fx={outcome.EffectName ?? "-"} snd={outcome.Sound ?? "-"} standin={outcome.StandIn}");
         }
-        Apply(weapon, surface, outcome, point, collider, normal, shapeIdx, shooter, team);
+        Apply(weapon, surface, outcome, point, collider, normal, shapeIdx, shooter, team, owner);
     }
 
     // Perform a resolved impact: the effect, the stand-in burst, the sound and the damage.
@@ -1948,7 +1950,7 @@ public sealed partial class ProjectilePool : Node3D
     // carry). `team` is the round's own stamp, which the beeper's tag gate tests the victim against.
     private void Apply(WeaponDef weapon, int surface, in ImpactOutcome outcome, Vector3 point,
         Node? collider, Vector3 normal, int shapeIdx = -1, int shooter = NoShooter,
-        int team = AimAssist.NeutralTeam)
+        int team = AimAssist.NeutralTeam, Godot.Collections.Array<Rid>? owner = null)
     {
         // The impact sprites face the struck surface (SurfaceBasis(normal)) rather than a fixed world
         // plane — a supplier distinct from the muzzle flash's plane basis (both feed Sprite.Orient).
@@ -1995,7 +1997,7 @@ public sealed partial class ProjectilePool : Node3D
         if (collider is AircraftBody plane && shapeIdx >= 0)
             plane.TakeProjectileHit(weapon, point, shapeIdx, shooter);
         else
-            ApplyDamage(weapon, outcome, point, normal, collider is AircraftBody ? null : collider, shooter);
+            ApplyDamage(weapon, outcome, point, normal, collider is AircraftBody ? null : collider, shooter, owner);
     }
 
     // The nearest live flyout the segment from→to passes through, or null. Kept in the pool rather
@@ -2243,7 +2245,7 @@ public sealed partial class ProjectilePool : Node3D
         {
             var toHull = fused != null ? fused.GlobalPosition - at : Vector3.Zero;
             var normal = toHull.LengthSquared() > 1e-8f ? toHull.Normalized() : Vector3.Zero;
-            Impact(p.Weapon, at, fused, normal, shooter: p.Shooter, team: p.Team);
+            Impact(p.Weapon, at, fused, normal, shooter: p.Shooter, team: p.Team, owner: p.Owner);
         }
         RetireRound(ref p);
     }
@@ -2375,7 +2377,7 @@ public sealed partial class ProjectilePool : Node3D
     // because the original's hit buffer holds both; planes are struck through their own part
     // model, destructibles through DamageSink, and neither is ever handed to the other's path.
     private void ApplyDamage(WeaponDef weapon, in ImpactOutcome outcome, Vector3 point, Vector3 normal,
-        Node? struck, int shooter)
+        Node? struck, int shooter, Godot.Collections.Array<Rid>? owner = null)
     {
         float fullDamage = outcome.Damage;
         float radius = outcome.BlastRadius;
@@ -2406,7 +2408,7 @@ public sealed partial class ProjectilePool : Node3D
         if (!AircraftDamageDiscarded(weapon))
             GatherAircraftCandidates(point, radiusSq, shooter);
         if (space != null && DamageSink != null)
-            GatherWorldCandidates(space, point, radius, struck);
+            GatherWorldCandidates(space, point, radius, struck, owner);
         _blastCandidates.Sort(ByDistance);
 
         int accepted = 0;
@@ -2465,11 +2467,13 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    // Every world body the blast sphere overlaps except the struck one, scored from the nearest
-    // point on its own collision shape (NearestBlastPoint, BL-239). The struck body's contact
-    // point is the burst, so its own share is the full figure already dealt.
+    // Every world body the blast sphere overlaps except the struck one and the round's own owner
+    // bodies, scored from the nearest point on its own collision shape (NearestBlastPoint). The
+    // struck body's contact point is the burst, so its own share is the full figure already dealt;
+    // the owner is the original's shooter node with its intersect bit cleared for the gather, so an
+    // emplacement's flak bursting beside it never splashes the gun that fired it.
     private void GatherWorldCandidates(PhysicsDirectSpaceState3D space, Vector3 point, float radius,
-        Node? struck)
+        Node? struck, Godot.Collections.Array<Rid>? owner = null)
     {
         ConfigureSphereQuery(radius, point);
         var hits = space.IntersectShape(_proximityQuery, MaxBlastBodies);
@@ -2481,6 +2485,8 @@ public sealed partial class ProjectilePool : Node3D
             if (body == struck || body is not Node3D body3D)
                 continue;
             var rid = (Rid)hit["rid"];
+            if (owner != null && owner.Contains(rid))
+                continue;
             int shapeIndex = hit["shape"].AsInt32();
             var nearPoint = NearestBlastPoint(space, point, radius, body3D, rid, hits, shapeIndex);
             _blastCandidates.Add(new BlastCandidate
@@ -2851,9 +2857,9 @@ public sealed partial class ProjectilePool : Node3D
 
     // The exclusion list a round's hit ray carries: its shooter's own registered body,
     // so identity — not weapon — is what keeps a pilot's rounds off their own airframe (the same
-    // reading the near-miss cue uses). An unowned round (NoShooter) excludes
-    // nothing and can hit any plane.
-    private Godot.Collections.Array<Rid> ExcludeFor(int shooter)
+    // reading the near-miss cue uses), or a world gunner's own mount bodies. An unowned round
+    // (NoShooter, no owner) excludes nothing and can hit any plane.
+    private Godot.Collections.Array<Rid> ExcludeFor(int shooter, Godot.Collections.Array<Rid>? owner)
     {
         if (shooter != NoShooter)
         {
@@ -2863,7 +2869,7 @@ public sealed partial class ProjectilePool : Node3D
                     return a.ExcludeSelf;
             }
         }
-        return NoExclude;
+        return owner ?? NoExclude;
     }
 
     private float RandRange(float a, float b) => a + _rng.Randf() * (b - a);
@@ -3070,6 +3076,8 @@ public sealed partial class ProjectilePool : Node3D
         public float Age;        // s since launch — drives the roll angle
         public int Shooter;      // who fired it (PlayerIndex); NoShooter when nobody owns it
         public int Team;         // stamped at spawn from the shooter's own Team (B7), not re-derived
+        public Godot.Collections.Array<Rid>? Owner; // the world bodies that fired it (an emplacement's
+                                                    // own mount): out of its hit ray and its splash
     }
 
     private struct Sprite

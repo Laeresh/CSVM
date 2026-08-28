@@ -854,6 +854,151 @@ internal static class AiSuites
         });
     }
 
+    // The C1 fort's AA guns firing past their own structures: every aagun woken ALONE, a hostile
+    // plane parked low on eight bearings so the line of fire crosses the fort, and every DamageAt on
+    // an aagun node attributed to the only rounds in flight, the gun's own. The trace behind the
+    // shooter-exclusion rule: a gun must never take its own burst, a neighbour's burst still lands.
+    internal static void TurretSelfFire(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+
+        ctx.WithWorld("C1", collision: true, "M02", world =>
+        {
+            var textures = new TextureArchive(texturesPath);
+            ProjectilePool? pool = null;
+            FlightController? target = null;
+            Session.TurretEmplacementRuntime? emplacements = null;
+            try
+            {
+                var hits = new List<(string Victim, float Damage, Node? Struck)>();
+                var live = new ProjectilePool(textures, null, null);
+                pool = live;
+                live.DamageSink = (node, dmg) =>
+                {
+                    var inst = world.Runtime.Destructibles.Resolve(node);
+                    if (inst != null && AnimRuntime.NameOf(inst.Anchor).StartsWith("aagun"))
+                        hits.Add((AnimRuntime.NameOf(inst.Anchor), dmg, node));
+                    return world.Runtime.DamageAt(node, dmg);
+                };
+                ctx.Host.AddChild(live);
+                var runtime = emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                    (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
+                    world.Runtime.WorldRoot);
+                var guns = runtime.Emplacements.Where(t => t.Label.StartsWith("MSG_TUR_AAA@aagun")).ToList();
+                ctx.Same(5, guns.Count, $"C1 places the five aagun emplacements");
+                foreach (var g in guns)
+                    g.Def.InaccuracyDeg = 0f;
+
+                var st = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+                var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                target = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(st.DestroyableParts),
+                    PlayerIndex = 0,
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    AllowPause = false,
+                };
+                target.AddChild(model);
+                var start = guns[0].WorldPosition + new Vector3(0f, 200f, 300f);
+                target.Setup(new FlightModel(st), ctx.Camera, new CamParams(), start, guns[0].WorldPosition);
+                ctx.Host.AddChild(target);
+                target.PlaceHeld(start, guns[0].WorldPosition);
+
+                void Step(int frames)
+                {
+                    for (int i = 0; i < frames; i++)
+                    {
+                        runtime.SimStep(1f / 60f);
+                        live.SimStep(1f / 60f);
+                    }
+                }
+
+                var space = ctx.Host.GetWorld3D().DirectSpaceState;
+                int selfHits = 0, neighbourHits = 0, totalShots = 0;
+                foreach (var gun in guns)
+                {
+                    string own = gun.Label[(gun.Label.IndexOf('@') + 1)..];
+                    // The muzzle against the gun's own body: a round leaving from inside its
+                    // mount's collider would strike that mount on its first step.
+                    var muzzle = gun.Firepoints[0].GlobalPosition;
+                    var probe = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                        muzzle, muzzle + gun.BarrelWorldDir * 30f, CollisionLayers.World));
+                    int bodies = gun.Site!.FindChildren("*", "CollisionObject3D", true, false).Count;
+                    ctx.Note($"{own}: site visible={gun.Site.Visible} colliders={bodies} destructible={(world.Runtime.Destructibles.Resolve(gun.Site) is { } gi ? AnimRuntime.NameOf(gi.Anchor) : "-")}; muzzle probe 30 m along the barrel hits {(probe.Count > 0 ? ((Node)probe["collider"].Obj).GetParent()?.Name : "nothing")}");
+
+                    gun.SetActivated(true);
+                    // Bearings 0-7: 300 m out and low. Bearing 8: the strafing pass, the plane
+                    // hanging 12 m over the pit, so the flak's own burst falls inside its radius.
+                    for (int b = 0; b < 9; b++)
+                    {
+                        float ang = Mathf.DegToRad(b * 45f);
+                        var pos = b < 8
+                            ? gun.WorldPosition + new Vector3(Mathf.Cos(ang) * 300f, 25f, Mathf.Sin(ang) * 300f)
+                            : gun.WorldPosition + new Vector3(6f, 12f, 6f);
+                        target.PlaceHeld(pos, pos + Vector3.Forward);
+                        target.Damage!.Reset();
+                        int shotsBefore = gun.ShotsFired;
+                        int hitsBefore = hits.Count;
+                        Step(240);
+                        int shots = gun.ShotsFired - shotsBefore;
+                        totalShots += shots;
+                        var these = hits.Skip(hitsBefore).ToList();
+                        int self = these.Count(h => h.Victim == own);
+                        int others = these.Count - self;
+                        selfHits += self;
+                        neighbourHits += others;
+                        if (these.Count > 0 || b == 0 || b == 8)
+                            ctx.Note($"{own} bearing {b * 45}: shots={shots} gate={gun.Gate} target-inplay={target.InPlay} self-hits={self} neighbour-hits={others} {string.Join(" ", these.Select(h => $"{h.Victim}:-{h.Damage:0.##}@{h.Struck?.GetParent()?.Name}/{h.Struck?.Name}"))}");
+                    }
+                    gun.SetActivated(false);
+                }
+                ctx.Check(totalShots > 0, $"the woken guns fired across the sweep shots={totalShots}");
+                ctx.Check(selfHits == 0,
+                    $"no gun takes damage from its own rounds self-hits={selfHits} (neighbour hits {neighbourHits})");
+
+                // The able-to-fail pair on one gun pit, the same flak dropped straight into it from
+                // 15 m: owned by another gun it still kills (a rocket into a gun pit must), owned
+                // by the pit's own gun it deals nothing.
+                target.PlaceHeld(start + new Vector3(0f, 0f, 20000f), start);
+                var pit = guns[0];
+                string pitName = pit.Label[(pit.Label.IndexOf('@') + 1)..];
+                var drop = new Transform3D(Basis.Identity, pit.WorldPosition + Vector3.Up * 15f);
+                var dropDir = new Vector3(0.05f, -1f, 0f).Normalized(); // off the pose's up axis
+                int before = hits.Count;
+                live.Spawn(pit.Weapon, drop, Vector3.Zero, ProjectilePool.NoShooter, null, dropDir,
+                    team: pit.Team, ownerBodies: guns[1].PlatformColliderRids());
+                Step(30);
+                int byNeighbour = hits.Skip(before).Count(h => h.Victim == pitName);
+                ctx.Check(byNeighbour > 0,
+                    $"{pitName} takes a neighbour's flak dropped into its pit hits={byNeighbour}");
+                before = hits.Count;
+                live.Spawn(pit.Weapon, drop, Vector3.Zero, ProjectilePool.NoShooter, null, dropDir,
+                    team: pit.Team, ownerBodies: pit.PlatformColliderRids());
+                Step(30);
+                int byItself = hits.Skip(before).Count(h => h.Victim == pitName);
+                ctx.Same(0, byItself,
+                    $"…and nothing from its own flak dropped at the same spot");
+            }
+            finally
+            {
+                pool?.Free();
+                target?.Free();
+                emplacements?.Free();
+                textures.Dispose();
+            }
+        });
+    }
+
     // The AI actor seam against real engine state on manual sim steps. A human rig is built and stepped
     // first, so the AI plane demonstrably joins a RUNNING sim, with an AiPilot for input, no camera, no
     // HUD and IsHumanPiloted false. It pins presence as a hit target, ticking along its ordered course,

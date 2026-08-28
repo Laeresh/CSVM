@@ -109,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ `BL-571`: a carried turret's death fire, and the turret, stay where the turret died
 12. ☐ `BL-572`: an objective marker labels the raw node name instead of the original's verb and proper name
-13. ☐ `BL-573`: the AA guns damage themselves firing at a barrier
+13. ☑ `BL-573`: the AA guns damage themselves firing at a barrier
 14. ☐ `BL-574` + `BL-575`: the hangar hand-over gives a stock Bloodhawk and plays no animation
 15. ☑ `BL-526`: the rope ladder never deploys (a native per-mission switch to decode)
 
@@ -546,29 +546,47 @@ targets, plus the flown check in D31>`
 **⚠ Traps.** `BL-397` is the marker's bracket range rule and not this. The format is a
 recollection until decoded; do not build the exact layout from it.
 
-## B13 ☐ `BL-573`: the AA guns damage themselves firing at a barrier
+## B13 ☑ `BL-573`: the AA guns damage themselves firing at a barrier
 
 **Goal.** CM07's AA guns do what the original's do when a structure blocks their line: they do not
 blow themselves up.
 
-**Evidence (confidence: lead-only).** The log shows `aagun32` taking four hits with no player
-round near it (`-10`, `-9.58`, `-9.2`, `-10 ... DESTROYED`), then `aagun33`, `aagun34` and
-`aagun36` taking the same `-10`, `-9.58` pair; identical decrements across four guns read as one
-weapon's rounds bursting on the obstruction and splashing the shooter. Not traced: whether the flak
-burst excludes its shooter in `crimson.exe`, and whether the gun fires at all with a structure in
-its line. `<TODO: re-verify still-open against the code>`
+**Evidence (confidence: traced).** Traced in the `turret-self-fire` suite on the C1/M02 world: an
+emplacement's round carried no owner at all (`NoShooter`, which excludes nothing), so a flak
+striking the fort's barrier beside `aagun3x` dealt the gun `-10` (its own body struck by the ray)
+and `-9.64` (its burst's splash on a second collider of the same destructible), and a burst 12 m
+over its own pit dealt it four splash shares at once, `-8.18/-8.04/-8/-7.36`, one per collider body
+of the destructible. That is the sortie's pattern. The IA1 world reproduces none of it because the
+aagun destructibles carry no colliders there; the mission world is what has to be built. The
+line-of-fire gate is not the cause: the guns fire only when the world ray to the target is clear,
+and the strike lands on the barrier because the target is low behind it, which the original's own
+LOS test (player-scoped, cached 1 to 2 s) would allow just as well.
 
-**Approach.** Trace which shooter id lands those hits (`--debug` hit logging on the turret pool),
-then decode the flak burst's damage application for a self-exclusion and the turret fire gate for
-a line-of-fire test (`docs/org/weaponImpact.md`); apply what the decode says.
+**Approach.** Decode rule applied: the original clears the round's owner node's intersect bit for
+the whole splash gather (`FUN_005aca30`, `docs/org/ordnanceTypes.md` "Half two, the splash"), so a
+shooter never takes its own burst. An emplacement's round now rides `ProjectilePool.Spawn`'s
+`ownerBodies`, its own mounting section (`PlatformColliderRids`, the set its line-of-sight ray
+already excludes), out of both the hit ray and the splash gather. Nothing else is exempt: a
+neighbour's burst or a rocket into the pit still kills the gun. Which node the original names as
+an emplacement round's owner was not read this session (the bridge's dynamic decompile tools were
+not callable from this harness); the mounting section is the smallest set that separates a gun
+from its neighbours.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** Routine.
 
-**Verify.** `<TODO: headless CM07 with the turrets woken shows no self-attributed damage on
-aagun32..36; name the suite>`
+**Verify.** `turret-self-fire`: C1/M02, each of the five aaguns woken alone, a hostile plane parked
+low on eight bearings plus one strafing pose over the pit, zero self-attributed hits across the
+sweep (was 12 on the unfixed build), then the able-to-fail pair on one pit: a flak owned by the
+neighbouring gun dropped into the pit damages it, the same flak owned by the pit's own gun deals
+nothing. `world-turrets`, `carried-turrets`, `blast-neighbor-shape`, `blast-curve-cover-cap` and the
+units stay green.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not exclude turrets from splash wholesale; a rocket into a gun pit must still
-kill it.
+kill it. One burst still deals a destructible one share per collider body it carries (the aagun
+has ten), where the original's hit buffer holds one entry per node; that over-count is not this
+item's and is left for its own entry.
 
 ## B14 ☐ `BL-574` + `BL-575`: the hangar hand-over gives a stock Bloodhawk and plays no animation
 

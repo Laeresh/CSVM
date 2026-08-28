@@ -43,6 +43,7 @@
     "flight-roster-transaction": 2.721,
     "inert-aircraft": 0.706,
     "world-turrets": 3.428,
+    "turret-self-fire": 4.2,
     "carried-turrets": 0.646,
     "graze-bounce": 0.774,
     "ai-spawn-jitter": 0.945,
