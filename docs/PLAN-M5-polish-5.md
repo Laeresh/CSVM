@@ -103,7 +103,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☐ `BL-568`: the Pandora starts moored in the dry dock instead of flying in
 5. ☐ `BL-512` + `BL-578`: `ObjectMotion`'s `rnd_xz` makes the Barracuda and the CM08 tanker jump
 6. ☐ `BL-522` + `BL-527`: a surface generator's launch does not fly its take-off run, so the fighters die on the deck
-7. ☐ `BL-569` + `BL-579`: a cutscene called from a start anim fires at bootstrap with no camera (CM04 and CM09)
+7. ☑ `BL-569` + `BL-579`: a cutscene called from a start anim fires at bootstrap with no camera (CM04 and CM09)
 
 ### Wave B — CM06 (C1C/M01) and CM07 (C1/M02)
 
@@ -411,7 +411,7 @@ the launch by borrowing it, do not add a spawn-height offset beyond the decoded 
 give the aircraft a starting speed (the zero velocity is decoded). No blanket spawn lift
 (`BL-457`).
 
-## A7 ☐ `BL-569` + `BL-579`: a cutscene called from a start anim fires at bootstrap with no camera (CM04 and CM09)
+## A7 ☑ `BL-569` + `BL-579`: a cutscene called from a start anim fires at bootstrap with no camera (CM04 and CM09)
 
 **Goal.** CM04 opens on `cgzep_camera`'s view of the cargo zeppelin going down, and CM09 opens on
 `mission_intro_animation`'s hangar scene followed by the player and wingmen flying down to the
@@ -427,18 +427,47 @@ root not parented at bootstrap)` says the chain fired during bootstrap. CM09's
 handoff line, and its `snd_scene1` fires at `(0,0,0)` at bootstrap. `generic_intro` is not in either
 start list, so the path `BL-548`/`BL-583` exercise is never entered. CM09's list also names
 `pure_panic`, a C1/M02 hangar def this mission does not compile.
-`<TODO: re-verify still-open against the code>`
+Re-verified against the code and two headless probes, and the two halves split. CM04 (traced to
+code): `CutsceneController.Hosts` answered only for `IntroAnims` plus the landings/`cutscenes\`
+closure, `cgzep_camera` is in neither, and `WorldSession.BootstrapsCutscene` read the start LIST
+rather than its call closure, so C3/M03 built no `player` marker; the probe's census shows
+`Callback(20)×1, Callback(11)×1, Callback(14)×1, Callback(913)×1, Callback(2)×1` counted as
+"not yet acted on", the HUD up and the cockpit view. CM09 (disproved as a code defect): the
+headless probe prints `cutscene: 'mission_intro_animation' has the session`, the letterbox is up
+at 10 s over the pirate zeppelin's start pose and at 50 s the player's Bloodhawk is flying down
+over the water on `playerthruclouds`. The sortie log carried no cutscene line because the
+`cutscene:` lines are `GD.Print` and the file sink takes `Log.*` only, so their absence was not
+evidence. `snd_scene1` at `(0, 0, 0)` is the at-node's pose being composed before the world root
+is in the tree at bootstrap, a sound-position artefact and not a scene-timing one; CM04's
+`snd_IntrosceneHAch4` composes to `cargozep1`'s real position the same way. `pure_panic` is
+defined only by C1/M02's `hangar_panic.zrd`, which M04's `mis_anim.zrd` does not list, and the
+same dead name sits in C1/IA1's and C1/MP1's `startanims.zrd`; the original's loader finds no
+definition and plays nothing.
 
 **Approach.** Settle how the original runs a `camera1`-object cutscene called from a start anim
 (the registration sites `docs/formats/anim-definitions/cutscenes.md` lists) and route both through
 the cutscene runner with the world held. Run CM09 headless with `--debug-anim` and read the def's
 event log against the def. Whether the original plays `pure_panic` in CM09 is part of the question.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** Host by name, and read the start list's closure. The decode already on
+record (`FUN_0046c370` starts each start anim with no `FUN_004ee160` host, and the new-mission
+start enters the cutscene state imperatively) covers a called definition the same as a listed one,
+so `cgzep_camera` joins `CutsceneController.IntroAnims` beside the two intros, and
+`WorldSession.BootstrapsCutscene` walks `program.Subset(program.StartAnims).Defs` instead of the
+list, which is what stands up `camera1`, the bars and the `player` marker for C3/M03 before the
+bind. No code-based rule: `player_setup` authors the same nine codes on a `camera1` root. The
+Ghidra bridge exposed no decompile tool in this session, so nothing beyond the existing decode
+was re-read in `crimson.exe`.
 
 **Verify.** Headless CM04 and CM09 opens show a cutscene hold and handoff line for the named def,
 the one-shot sounds positioned in-tree, and the skip working; the `campaign-*` cutscene suites
-unchanged. `<TODO: the suite to extend>`
+unchanged. `campaign-cutscene` extended with `OpeningSceneCalledFromStartAnim`: over C3/M03's
+built world with cutscene roots, the `player` marker and `camera1` exist, playing
+`calldestroy_the_cargozep` hands the session to `cgzep_camera` with 20 first, the world held, the
+player out of flight, the AI parked, the chrome off and a skip armed; `destroy_the_cargozep` is in
+that same call closure, so the destruction has one call to play from; the skip ends the scene.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** The cargo zeppelin's destruction already runs (fireballs, `tntbox`/`gasbag`
 deactivation); do not run it a second time under the camera. `BL-548`'s deferred `--pos=` handoff

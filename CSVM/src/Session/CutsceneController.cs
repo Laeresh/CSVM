@@ -43,11 +43,14 @@ public sealed partial class CutsceneController : Node
     /// figure (BL-452).</summary>
     public const float CardOverscan = 0.02f;
 
-    /// <summary>The bespoke C1/M04 intro, and the one the other twelve story missions share. ⚠ The
+    /// <summary>The definitions a story mission's start list plays as its opening movie: the
+    /// bespoke C1/M04 intro, the one the other twelve share, and C3/M03's cargo zeppelin camera,
+    /// which no list names (its start anim <c>calldestroy_the_cargozep</c> calls it). ⚠ The
     /// authored codes do NOT identify a cutscene on their own: Instant Action's own
     /// <c>player_setup</c> raises the same nine, and what the original does with them there is
     /// undecoded (docs/formats/anim-definitions/cutscenes.md).</summary>
-    public static readonly string[] IntroAnims = { "mission_intro_animation", "generic_intro" };
+    public static readonly string[] IntroAnims =
+        { "mission_intro_animation", "generic_intro", "cgzep_camera" };
 
     /// <summary>Raised whenever the world hold changes, so the session can suspend the mission
     /// director alongside its own per-step world update (code 20 stops both).</summary>
@@ -182,7 +185,8 @@ public sealed partial class CutsceneController : Node
         return Mathf.RadToDeg(2f * Mathf.Atan(half / dist));
     }
 
-    /// <summary>Is this one of the two story-mission intro definitions?</summary>
+    /// <summary>Is this one of the story-mission opening definitions (<see cref="IntroAnims"/>)?
+    /// </summary>
     public static bool IsIntro(string? animName) =>
         animName != null && Array.IndexOf(IntroAnims, animName) >= 0;
 

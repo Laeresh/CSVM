@@ -841,7 +841,9 @@ public static class SuiteCatalog
             + "codes reach the host through the runtime's own dispatch, the world and the "
             + "objectives update stop while callback 20 holds them, the vehicle-death codes are "
             + "declined, and the definition's end hands off with every piece of cutscene state put "
-            + "back",
+            + "back; and C3/M03's opening scene, which no start list names, is reached through its "
+            + "start anim's call: the world build stages its camera and player marker, the host "
+            + "takes its codes, the destruction runs under it once, and the skip it arms ends it",
             CampaignCutscene));
         into.Add(new TestHarness.Suite("cutscene-letterbox",
             "the letterbox bars are data (D32): the chapter ships the node switched off as its "

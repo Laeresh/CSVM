@@ -4449,8 +4449,9 @@ before the build's sound archive closes; without it a campaign mission's `WAKEUP
 `Options.CallbackHost` is installed on the runtime BEFORE the bind, since a bootstrapped intro
 raises its codes the instant it starts, and `Options.CutsceneRoots` builds the two roots the
 `world1` walk never reaches (`camera1`, and the `letterbox` bars, switched off) — only for a
-mission whose start-anims name one of `CutsceneController.IntroAnims` or that arms an approach
-trigger, so every other session's node census is exactly what it was. The synthetic `camera1`
+mission whose start-anims reach one of `CutsceneController.IntroAnims` through their
+`CALL_ANIMATION` closure (`BootstrapsCutscene`; C3/M03's is called, not listed) or that arms an
+approach trigger, so every other session's node census is exactly what it was. The synthetic `camera1`
 carries the gamez name and INDEX metadata a scene-built node would, because every compiled
 cutscene binds it through its symbol table and an unbuilt claim makes the runtime drop the event.
 `BuildCompositionFrames` stands up the same-shaped third case beside them, data-driven off the bound
@@ -5386,7 +5387,11 @@ the four `RestoreCodes` raises. ⚠ The gate is not a convenience: every definit
 player's airframe or re-places the pilot is one the original arms no skip on, so a skip can never
 drop one.
 ⚠ `IntroAnims` is the scope, and it is a NAME test: Instant Action's `player_setup` authors the same
-nine codes, so a code test would give every mission a letterbox and a suspended world. Decode:
+nine codes, so a code test would give every mission a letterbox and a suspended world. The list is
+the three definitions a story mission's start list plays as its opening movie: the two intros and
+C3/M03's `cgzep_camera`, which no start list names (its start anim `calldestroy_the_cargozep`
+calls it first and the zeppelin's destruction half a second later, so the destruction plays under
+the camera from that one call and the host re-issues nothing). Decode:
 `docs/formats/anim-definitions/cutscenes.md`.
 
 ## src/Session/GeneratorCycle.cs

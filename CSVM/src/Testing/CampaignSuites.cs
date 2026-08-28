@@ -33,6 +33,18 @@ internal static class CampaignSuites
 
     private const string IntroAnim = "mission_intro_animation";
 
+    // The one story mission whose opening cutscene no start list names: the start anim calls it,
+    // and the zeppelin's destruction it frames is that start anim's later call.
+    private const string CalledChapter = "C3";
+
+    private const string CalledMission = "M03";
+
+    private const string CalledFrom = "calldestroy_the_cargozep";
+
+    private const string CalledAnim = "cgzep_camera";
+
+    private const string CalledDestruction = "destroy_the_cargozep";
+
     // BL-458: the mission whose SECONDARY (OBJECTIVE3, IDENTITY SECONDARY 11) and OBJECTIVE11
     // both gate on DANGER_ZONES_COMPLETED (dzpath1, dzpath4) — the worked case that was
     // unreachable before a campaign session armed its own dzpathN gates.
@@ -464,7 +476,8 @@ internal static class CampaignSuites
         });
 
         CutsceneHoldsObjectives(ctx);
-        ctx.Note($"hosted {IntroChapter}/{IntroMission}'s '{IntroAnim}' from its first code to the handoff");
+        OpeningSceneCalledFromStartAnim(ctx);
+        ctx.Note($"hosted {IntroChapter}/{IntroMission}'s '{IntroAnim}' from its first code to the handoff, and {CalledChapter}/{CalledMission}'s '{CalledAnim}' from its start anim to the skip");
     }
 
     /// <summary>The bars are data: the shared <c>letterbox</c> definition switches the node on and
@@ -677,6 +690,65 @@ internal static class CampaignSuites
         director.HoldForCutscene(false);
         director.Step(1f);
         ctx.Check(director.Graph!.Elapsed > 0f, $"and runs again once the cutscene hands off");
+    }
+
+    // C3/M03 opens on a cutscene no start list names: `calldestroy_the_cargozep` is the start anim,
+    // and its first event calls `cgzep_camera`. Both gates have to read the start list's call
+    // closure, the session's (the camera, the bars and the `player` marker stood up before the
+    // bind) and the host's (the called definition's codes answered rather than counted).
+    private static void OpeningSceneCalledFromStartAnim(TestContext ctx)
+    {
+        var host = new CutsceneController();
+        ctx.Host.AddChild(host);
+        ctx.CutsceneRoots = true;
+        try
+        {
+            ctx.WithWorld(CalledChapter, collision: false, CalledMission, world =>
+            {
+                var startAnims = world.Session.Program.StartAnims;
+                ctx.Check(!startAnims.Contains(CalledAnim) && startAnims.Contains(CalledFrom),
+                    $"'{CalledAnim}' is in no start list; '{CalledFrom}' is, and calls it");
+                ctx.Check(world.Session.Aircraft?.PlayerMarker != null,
+                    $"the world build read the start list's call closure and staged the '{AircraftStage.PlayerNode}' marker the called definition is rooted on");
+                ctx.Check(world.Runtime.FindNodes(CutsceneController.CameraNode).Count > 0,
+                    $"and stood up '{CutsceneController.CameraNode}' for its camera path");
+
+                var stage = new Node3D { Name = "CalledCutsceneStage" };
+                var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+                runtime.CallbackHost = host.Host;
+                ctx.Host.AddChild(stage);
+                ctx.Host.AddChild(runtime);
+                try
+                {
+                    runtime.Bind(stage, world.Session.Program.Subset(CalledFrom));
+                    host.BindWorld(runtime);
+                    runtime.Play(CalledFrom);
+                    ctx.Check(host.Playing && host.Anim == CalledAnim,
+                        $"playing the start anim hands the session to '{CalledAnim}' through the runtime's own dispatch");
+                    ctx.Same(CutsceneController.CodeHoldsWorld, host.Codes.Count > 0 ? host.Codes[0] : 0,
+                        $"whose first code holds the world");
+                    ctx.Check(host.HoldsWorld && host.OutOfFlight && host.AiParked && host.Presenting && host.Skippable,
+                        $"so the world is held, the player is out of flight, the AI is parked, the chrome is off and a skip is armed");
+                    // The destruction reaches this runtime through the start anim's closure and
+                    // nothing else, so the host has no call of its own to issue. A bare stage
+                    // anchors it on nothing, so its running state is not read here.
+                    ctx.Check(runtime.Handles(CalledDestruction),
+                        $"'{CalledDestruction}' is in the same start anim's call closure, which is the one call it plays under the camera from");
+                    ctx.Check(host.Skip() && !host.Playing && !host.HoldsWorld && !host.OutOfFlight,
+                        $"and the skip the hold armed ends the scene and hands the session back");
+                }
+                finally
+                {
+                    runtime.Free();
+                    stage.Free();
+                }
+            });
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+            host.Free();
+        }
     }
 
     // Runs the loss fuse the mission authors: nothing is satisfied, OBJECTIVE19 wakes at its 300 s

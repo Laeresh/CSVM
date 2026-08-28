@@ -398,14 +398,16 @@ public sealed class WorldSession
         return s;
     }
 
-    // Does this mission bootstrap one of the story-mission intros? ⚠ Ask by name, not by the
-    // callback codes: Instant Action's own `player_setup` authors the same nine, so a code test
-    // would give every mission in the install a cutscene camera and a held world.
+    // Does this mission bootstrap one of the story-mission opening cutscenes? Read over the start
+    // list's whole CALL_ANIMATION closure, not the list alone: C3/M03's `cgzep_camera` is reached
+    // from its start anim `calldestroy_the_cargozep` and appears in no list. ⚠ Ask by name, not
+    // by the callback codes: Instant Action's own `player_setup` authors the same nine, so a code
+    // test would give every mission in the install a cutscene camera and a held world.
     private static bool BootstrapsCutscene(AnimProgram program)
     {
-        foreach (string name in program.StartAnims)
+        foreach (var def in program.Subset(program.StartAnims).Defs)
         {
-            if (Session.CutsceneController.IsIntro(name))
+            if (Session.CutsceneController.IsIntro(def.AnimName))
             {
                 return true;
             }

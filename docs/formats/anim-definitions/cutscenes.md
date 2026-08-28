@@ -602,6 +602,20 @@ description of the cutscene's shape** (what is hidden, when the simulation stops
 returns), which is what a cutscene player has to reproduce. They are not a set of messages that
 must be delivered to an existing listener.
 
+The same path reaches a definition the start list never names. C3/M03's `NEW_GAME_START` lists
+`calldestroy_the_cargozep` (root `cargozep1`, no callbacks of its own), whose one sequence calls
+`cgzep_camera` at once, `movebridge1`/`movebridge2`, and `destroy_the_cargozep` 0.5 s later.
+`player-cgzep_camera` (root `player`, objects `player`, `cockpit1`, `camera1`) is the mission's
+opening movie: it calls `letterbox`, deactivates `player` and `cockpit1`, raises 20, 11, 14, 913
+and 2, and flies `camera1` on five SI scripts (`campath1`..`campath5`, absolute world keyframes
+beside `cargozep1`, no reparent) under `snd_IntrosceneHAch4`; its `RESET_STATE` restores both
+nodes and raises 1, 10 and 914. Nothing in `FUN_0046c370`'s start registers a host on the called
+instance either, so the reading above covers it unchanged. CSVM hosts it by name beside the two
+intros (`CutsceneController.IntroAnims`), and reads the start list's call closure rather than the
+list when deciding to stand up `camera1`, the bars and the `player` marker
+(`WorldSession.BootstrapsCutscene`). ⚠ The zeppelin's destruction is that start anim's own later
+call and plays under the camera from it; the host issues no second call.
+
 ## `CALLBACK` code reference
 
 The mission-script host `FUN_0047e080`. Counts are occurrences in the loose `zrdr` readers of this
@@ -870,7 +884,13 @@ M04's intro is spread over three readers, all listed by its `mis_anim.zrd`:
   `scene2`, stops it 12.4 s after that event, and branches on which airframe the player is flying
   (`check_balmoral` → `check_warhawk` → `drop_planes`).
 - `scenes.zrd` holds the beats. Five of them call `letterbox`.
-- `startanims.zrd` puts `mission_intro_animation` in `NEW_GAME_START`.
+- `startanims.zrd` puts `mission_intro_animation` in `NEW_GAME_START`. Both of its sections also
+  name `pure_panic`, the C1/M02 hangar-crowd definition (`hangar_panic.zrd`, root
+  `hangar_panic_scream`); no M04 reader file lists that reader, so the mission's compiled archive
+  holds no such definition and the loader's lookup finds nothing. The same dead name sits in
+  C1/IA1's and C1/MP1's `startanims.zrd`, which is the shape of a copied template rather than of
+  an intent. The original plays nothing for it in M04, and neither does CSVM
+  (`undefined here: [pure_panic]` in the start-anims log line).
 
 The zeppelin's two visible jumps are the cuts between those beats, and its disappearance is the last
 beat deactivating it; the smooth phase between them is

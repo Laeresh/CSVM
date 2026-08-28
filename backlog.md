@@ -2650,23 +2650,6 @@ usual.
   the record's position to the path start; the record's seat is data and the script is what flies
   it. *Cross-refs:* `BL-529`, `docs/org/objectMotion.md`, `docs/formats/anim-definitions.md`.
 
-- `BL-569` `[Bug]` **CM04 (C3/M03)'s opening cutscene does not play: `calldestroy_the_cargozep`'s
-  camera never takes the view.** *Evidence:* at the controls the mission opens in the cockpit with
-  no cutscene. `NEW_GAME_START` runs `calldestroy_the_cargozep`, which calls
-  `destroy_the_cargozep` (the cargo zeppelin's scripted destruction, with `snd_IntrosceneHAch4`)
-  and `cgzep_camera` (`player-cgzep_camera.json`, `OnCall`, objects `player`, `cockpit1`,
-  `camera1`: a cutscene camera over the player's aircraft). The sortie log has no cutscene line for
-  this mission, and `one-shot SOUND 'snd_IntrosceneHAch4' positioned by out-of-tree ancestor
-  composition ... (world root not parented at bootstrap)` says the chain fired during bootstrap,
-  before the world was in the tree, rather than as the mission's opening scene. `generic_intro` is
-  not in M03's start list, so the cutscene path `BL-548` and the trigger latch (`BL-583`) exercise
-  is never entered here. *Fix shape:* settle how the original runs a `camera1`-object cutscene
-  called from a start anim (the registration sites `docs/formats/anim-definitions/cutscenes.md`
-  lists) and route `cgzep_camera` through the cutscene runner with the world held, so the player
-  watches the cargo zeppelin go down and the skip works. *⚠ Traps:* the destruction itself already
-  runs (fireballs, `tntbox`/`gasbag` deactivation); do not run it a second time under the camera.
-  *Cross-refs:* `BL-548`, `BL-583`, `docs/formats/anim-definitions/cutscenes.md`.
-
 - `BL-572` `[Fidelity]` **A campaign objective's marker labels the raw node name in the team
   colour (`peoplehook`, `pzhookpoint`, `workersvoyagezep`) instead of the original's objective
   marker.** *Evidence (lead-only):* reported at the controls in CM06 (C1C/M01): objective markers
@@ -2792,26 +2775,6 @@ usual.
   *⚠ Traps:* do not special-case the tanker; the `ObjectMotion` semantics are shared with the
   Barracuda and the airships. *Cross-refs:* `BL-512`, `BL-531`, `BL-568` (the Pandora's own
   scripted motion), `docs/org/objectMotion.md`.
-
-- `BL-579` `[Bug]` **CM09 (C1/M04): the intro cutscene does not play correctly.** *Evidence
-  (lead-only):* reported at the controls. The mission's `NEW_GAME_START` list runs
-  `mission_intro_animation` (`camera1-mission_intro_animation.json`, `OnCall`, root `camera1`,
-  objects `player`, `piratezep`, `cockpit1`, `interior`, the hangar `front_door_*` and five
-  `bullet*` nodes: a hangar-interior camera scene with the Pandora), and the log shows it in the
-  start list (`start anims [pzep_engines_start, train_on_track, mission_intro_animation],
-  undefined here: [pure_panic]`) but no cutscene hold or handoff line for it, and the scene's
-  one-shot `snd_scene1` is `positioned by out-of-tree ancestor composition at (0, 0, 0) (world
-  root not parented at bootstrap)`, so at least its sound fires during bootstrap rather than in
-  the scene. `pure_panic` is a C1/M02 hangar def the list names and this mission does not
-  compile; whether the original plays it here is part of the question. What the original shows,
-  from the user's recollection: the standard generic intro first, then the player's aircraft and
-  the wingmen flying down out of the sky to the mission's start point, which is what
-  `mission_intro_animation`'s `player` object motion over the `bullet*` path nodes authors; CSVM
-  opens at the start point with neither. *Fix shape:* run `--campaign=<CM09>` headless with `--debug-anim` and read
-  `mission_intro_animation`'s event log against the def; `BL-569` (C3/M03's opening scene fired
-  at bootstrap with no camera) is the same class and may be the same fix. *⚠ Traps:* `BL-548`'s
-  deferred `--pos=` handoff is for `generic_intro`; this mission's intro is its own def.
-  *Cross-refs:* `BL-569`, `BL-548`, `docs/formats/anim-definitions/cutscenes.md`.
 
 - `BL-581` `[Bug]` **CM09 (C1/M04): with the radio tower down and every aircraft killed, the
   Pandora's Defend marker clears and the mission does not go on to the docking.** *Evidence
