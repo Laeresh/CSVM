@@ -752,7 +752,17 @@ internal static class AiSuites
                         $"the same call with the flag cleared stows them again (the b=0 arm)");
                 }
 
-                // The stand-in wakes it — explicit, counted, logged — and it engages.
+                // The stand-in wakes it — explicit, counted, logged — and it engages once its site is
+                // shown: support\c1\ia1.gw switches aagun32 and piratezep off, and a switched-off site
+                // is out of the world however awake its gunner is (SetTargetActive is the mission's on).
+                Step(120);
+                ctx.Check(!aagun.Alive && aagun.ShotsFired == 0,
+                    $"an awake gun on a site the .gw switched off stays dead and silent alive={aagun.Alive} shots={aagun.ShotsFired}");
+                world.Runtime.SetTargetActive(aagun.Site!, true);
+                foreach (var hull in world.Runtime.FindNodes("piratezep"))
+                {
+                    world.Runtime.SetTargetActive(hull, true);
+                }
                 int woken = runtime.WakeAll();
                 ctx.Same(runtime.Count - 15, woken, $"--wake-turrets stand-in wakes every dormant emplacement");
                 float before = Combined(target);
