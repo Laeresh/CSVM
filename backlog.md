@@ -835,6 +835,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   system and the decode page records the sight and the assist as deliberately disagreeing already.
   *Cross-refs:* `docs/org/aim-assist.md`, `docs/org/ordnanceTypes.md`, `ProjectilePool.Ballistics`.
 
+- `BL-597` `[Bug]` **CM08 (C1B/M03): the Pandora does not halt exactly over the tanker and plays no
+  hangar animation there.** *Evidence:* reported at the controls against the original: the Pandora
+  holds level along Klondike1 now, but its armed stop lands short of or past the tanker, and the
+  original plays a sequence over it (the hangar door opens, a person descends on a rope and
+  ascends again) that the remake never starts. *Fix shape:* the node capture rule recorded in C21's
+  closing commit (`git log --grep=C21`: capture fires when along-edge progress plus
+  `max(sqrt(edge[7]), 125 m)` reaches the edge length, so an armed hold engages 125 m or more short
+  of the node) decides the stop; find the tanker sequence in `extracted/C1B/M03/mis_anim/` and what
+  calls it (an objective completion action, or a zeppelin node arrival) and why the caller never
+  fires. *Cross-refs:* `ZeppelinMotion`, `docs/formats/mission-entities.md` "Steering",
+  `zeppelin-pandora-dead-end`.
+
+- `BL-598` `[Bug]` **CM08 (C1B/M03): the patrol boats take hits but cannot be targeted.** *Evidence:*
+  reported at the controls: the four boats C22's surface launch wakes at 181 s drive their nets and
+  rounds hit them, but the targeting HUD never brackets one and the aim assist never snaps to one.
+  *Fix shape:* `SurfaceVehicleRuntime' s hull is neither an aircraft rig nor a world turret, so
+  `TargetSelection` and `AimAssist`'s candidate lists (vehicles, turrets, structures) do not see it;
+  decide which list the original puts a surface vehicle in (its targets record and the HUD class)
+  and register the hull there. *Cross-refs:* `SurfaceVehicle`, `TargetHud`, `AimAssist.AddStructures`,
+  `BL-523` (their gunnery).
+
 - `BL-586` `[Bug]` **One burst deals a world destructible one splash share per collider body it
   carries.** *Evidence (traced):* the C1 aagun carries ten collider bodies, and one flak bursting
   over its own pit dealt `-8.18/-8.04/-8/-7.36`, one share per body (the `turret-self-fire`

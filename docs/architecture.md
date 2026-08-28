@@ -911,20 +911,27 @@ never fatal. `Start` refuses a definition whose REQUIRED node-state prerequisite
 both of each camera leg pair and lets `hdrop_direction`'s state pick one. Optional entries and
 `MINIMUM_TO_SATISFY` over nodes are parsed, not enforced. Also hosts the destructible-damage entries (`DamageAt`/`CollideDamageAt`/
 `ApplyDamageStages`/`RunDeathSequence`/`ResetDestructible`) and the world-effects runtime
-(`PlayEffectAt` over a hidden template stage). **A routed call's spelling decides whether its
-effect rides the site.** The world runtime's `CallAnimation` arm hands a death's effect call to
-the world-effects runtime through `ExternalEffect` with the site's world point, the site node
-(the callee's `INPUT_NODE`) and whether the call was `WITH_NODE`; `PlayEffectAt` then places the
-pooled copy with `TemplateStage.PlaceFollowing` for a `WITH_NODE` call and `PlaceOn` for an
-`AT_NODE` one. The original delivers the live node under the first spelling and a position taken
-once under the second (`docs/org/sequences.md`), so a zeppelin gun ring's `large_30sec_fire`
-(`WITH_NODE doublecannon4`) burns on the hull as it flies on, while the same death's `AT_NODE`
-fireballs and debris stay where the ring died. A world-fixed site reads identically under both.
-The emitter itself is untouched: `EmitterDirector.Tick` reads its host, the placed copy's node,
-which the follow has already moved that frame. Regression: the `turret-death-fire-follows-hull`
-suite (a real C1/M04 ring killed with the hand-off wired to a real effects stage, the hull moved
-as `ZeppelinRuntime.Place` moves it) beside `turret-death-effect-world-anchor`, which covers the
-un-routed `PUFFER_STATE` on the world runtime. **A pool-slot checkout returns its copies to their
+(`PlayEffectAt` over a hidden template stage). **A death's callee rides its call site.** The
+world runtime's `CallAnimation` arm hands a death's effect call to the world-effects runtime
+through `ExternalEffect` with the site's world point, the site node (the callee's `INPUT_NODE`)
+and a follow flag that is set whenever the call resolved a site; `PlayEffectAt` then places the
+pooled copy with `TemplateStage.PlaceFollowing`. The un-routed half (a library-root callee such
+as `dblcannon_flying_parts`, placed by the world runtime itself) takes the same follow while
+`_deathCallDepth` is open, through `PlaceFollowing` or `PlaceAt(follow: true)`; the debris pieces
+integrate in the root's frame (`MotionRuntime`), so re-placing the root each frame carries their
+flight along with the hull. `AT_NODE` and `WITH_NODE` are not told apart here: at the original's
+controls a zeppelin gun ring's whole death (its `large_30sec_fire`, its `AT_NODE` fireballs and
+its flying parts) moves with the hull as it flies on, and the decode does not contradict that
+(`docs/org/sequences.md`, the CALL_ANIMATION section). A world-fixed site reads identically
+with or without the follow, and relocating calls outside a death (a damage stage's panel tear on
+a flying aircraft) keep their one-time placement. The emitter itself is untouched:
+`EmitterDirector.Tick` reads its host, the placed copy's node, which the follow has already moved
+that frame. Regression: `ring-death-effects-follow-hull` (a real C1C/M01 piratezep ring killed on
+the hull, then the hull moved as `ZeppelinRuntime.Place` moves it: the routed fireball's fed
+position and the flying-parts copy's root both move by the ring's displacement, the piece adding
+only its own few metres of flight) and `turret-death-fire-follows-hull` (the C1/M04 ring's routed
+fire), beside `turret-death-effect-world-anchor`, which covers the un-routed `PUFFER_STATE` on the
+world runtime. **A pool-slot checkout returns its copies to their
 spawn state** (`ResetCheckedOutCopies`, run by `PlayEffectAt` between `TakeNextSlot`/`PlaceOn` and
 `Start`): for every def the played anim reaches through CALL_ANIMATION (`AnimProgram.Subset`, memoized
 per anim name), on the anchors sitting in the slot(s) the call took, it takes the three steps
@@ -1192,7 +1199,8 @@ tier: applied to the first alone it only hands the same foreign copy to the next
 ## src/Mech3/Anim/TemplateStage.cs
 The effect-template stage as one module (`TemplateStage<TNode>`): pool-slot arithmetic (`SlotOf`,
 `TakeNextSlot`, `RootsFor`, the `AssignCallerSlot` caller-slot claim), template placement
-(`PlaceAt`/`PlaceOn`, and `PlaceFollowing` for a copy that must keep riding a moving call site:
+(`PlaceAt`/`PlaceOn`, and `PlaceFollowing`, also reached as `PlaceAt(follow: true)`, for a copy
+that must keep riding a moving call site, a death's callee on a carried node:
 the root is placed once and then re-placed by `FollowSites`, every frame from `AnimRuntime.Advance`
 before the emitters read their hosts, at the site's live pose plus the offset the placement had in
 the site's own frame; a fresh `PlaceOn` of that root, a hide through `Reveal`, or a freed site ends

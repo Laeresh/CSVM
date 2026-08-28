@@ -145,10 +145,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>Hands a named effect to the world-effects runtime instead of starting it locally,
     /// passing the call-site world point, the resolved call-site node (the callee's INPUT_NODE) and
-    /// whether the call was WITH_NODE, so the effect rides that node instead of holding the point.
-    /// Returns true when it took the effect, so the local Start is skipped. Set on the WORLD
-    /// runtime, whose puffer factory is gone after the build and which would render nothing; null
-    /// everywhere else, where CALL_ANIMATION starts the callee locally.</summary>
+    /// whether the effect rides that node (true for every call that resolved a site, so a carried
+    /// site's death effects move with the hull, docs/architecture.md). Returns true when it took the
+    /// effect, so the local Start is skipped. Set on the WORLD runtime, whose puffer factory is gone
+    /// after the build; null everywhere else, where CALL_ANIMATION starts the callee locally.</summary>
     public Func<string, Vector3, Node3D?, bool, bool>? ExternalEffect;
 
     /// <summary>Stops a named effect on the external runtime <see cref="ExternalEffect"/> routes to
@@ -1331,7 +1331,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// onto it (<paramref name="orient"/> as the basis when given) and starts the definition.
     /// <paramref name="inputNode"/> is the callee's INPUT_NODE (a damage sputter emits on the damaged
     /// object, whose <c>NodeActive</c> gate reads it); with <paramref name="follow"/> the placed copy
-    /// keeps riding that node (a WITH_NODE call on a carried site). ⚠ Give an input-governed def no
+    /// keeps riding that node (a death's call on a carried site). ⚠ Give an input-governed def no
     /// TTL; its lifetime is authored. Others take <paramref name="ttl"/>, or <see cref="EffectTtl"/> at 0.</summary>
     public bool PlayEffectAt(string animName, Vector3 worldPoint, Node3D? inputNode = null,
         float ttl = 0f, Basis? orient = null, bool follow = false)
@@ -2493,7 +2493,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     // ⚠ Honour the call's own target node. That re-anchoring is the data's
                     // template-instancing mechanism, and ignoring it runs every call site on the
                     // CALLER's anchor instead of where the data put it.
-                    var (siteNode, siteOffset, withNode) = CallTargetSite(ev, def, anchor);
+                    var (siteNode, siteOffset) = CallTargetSite(ev, def, anchor);
                     var callAnchor = siteNode ?? anchor;
                     // The world runtime cannot render an effect template, its puffer factory being
                     // torn down after the build, so a death's effect call goes to the world-effects
@@ -2503,8 +2503,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         var siteXform = callAnchor.GlobalTransform;
                         // ⚠ Use VisualOriginOf, not the raw origin; an absolute-modelled target's
                         // node origin is the map corner. The site node rides along as the callee's
-                        // INPUT_NODE, and a WITH_NODE call's effect keeps following it.
-                        if (ExternalEffect(callName, VisualOriginOf(callAnchor) + siteXform.Basis * siteOffset, siteNode, withNode))
+                        // INPUT_NODE and the effect follows it (a ring's death fireballs move with the hull).
+                        if (ExternalEffect(callName, VisualOriginOf(callAnchor) + siteXform.Basis * siteOffset, siteNode, siteNode != null))
                         {
                             // ⚠ Count the dropped hold rather than passing over it. A routed call
                             // leaves no instance here to wait on, and this is the one scope
@@ -2591,13 +2591,24 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             // template's own root, so re-anchoring alone emits at the gamez origin.
                             if (relocate)
                             {
+                                // A death's callee rides its call site: a carried ring's debris
+                                // moves with the hull (the pieces integrate in the root's frame,
+                                // docs/architecture.md). Other relocating calls hold their placement.
+                                bool rides = _deathCallDepth > 0;
                                 if (ownCopy != null)
+                                {
                                     // Level a repeat call's copy exactly as PlaceAt would level the
                                     // first one; the library-root pool has never levelled.
-                                    _templateStage.PlaceOn(new[] { (Node3D?)ownCopy }, wantSite,
-                                        libraryCopy == null && LevelsTemplate(target));
+                                    bool level = libraryCopy == null && LevelsTemplate(target);
+                                    if (rides)
+                                        _templateStage.PlaceFollowing(new[] { (Node3D?)ownCopy }, callAnchor!, wantSite, level);
+                                    else
+                                        _templateStage.PlaceOn(new[] { (Node3D?)ownCopy }, wantSite, level);
+                                }
                                 else
-                                    _templateStage.PlaceAt(target, callAnchor!, siteOffset);
+                                {
+                                    _templateStage.PlaceAt(target, callAnchor!, siteOffset, follow: rides);
+                                }
                             }
                             Start(target, startAnchor);
                             // ⚠ Reveal the mesh too, after Start. On a stage that hides its
@@ -2972,23 +2983,21 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // ⚠ Resolve the target in the CALLER's namespace; that is where it is written. A
     // named-but-unresolvable target falls back to the caller's anchor rather than dropping the
     // call, and is counted, because silently mis-placing an effect is what this method prevents.
-    private (Node3D? Node, Vector3 Offset, bool WithNode) CallTargetSite(AnimEvent ev, AnimDefinition def, Node3D? anchor)
+    private (Node3D? Node, Vector3 Offset) CallTargetSite(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
         string? targetName = null;
         Vector3 offset = Vector3.Zero;
-        bool withNode = false;
-        if (ev.Data.Obj("parameters")?.Union() is { Value: Dictionary<string, object?> p } union)
+        // AT_NODE and WITH_NODE both resolve here; the placement does not tell them apart
+        // (docs/org/sequences.md, the CALL_ANIMATION section).
+        if (ev.Data.Obj("parameters")?.Union() is { Value: Dictionary<string, object?> p })
         {
             var atNode = new AnimData(p);
             targetName = atNode.Str("node");
             offset = atNode.Vec3("position"); // absent → zero
-            // WITH_NODE hands the callee the live node, AT_NODE a position taken once
-            // (docs/org/sequences.md); the routed effect follows the site only under the first.
-            withNode = union.Tag == "WithNode";
         }
         targetName ??= ev.Data.Str("operand_node");
         if (targetName == null)
-            return (null, Vector3.Zero, false);
+            return (null, Vector3.Zero);
 
         var resolved = Resolve(targetName, def, anchor);
         if (resolved != null)
@@ -3004,7 +3013,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // every frame, so an unconditional line here would bury the log.
         if (DebugMotions && _retargetsLogged.Add($"{ev.Data.Str("name")}|{targetName}|{def.AnimName}"))
             Log.Debug("anim", $"anim: retarget '{ev.Data.Str("name")}' onto '{targetName}' ({(resolved != null ? resolved.GetMeta(NameMeta).AsString() : "UNRESOLVED")}) [caller {def.AnimName}]");
-        return (resolved, offset, withNode);
+        return (resolved, offset);
     }
 
     // Whether def's placed root should level to world axes (LevelPlacedTemplateNames) rather than

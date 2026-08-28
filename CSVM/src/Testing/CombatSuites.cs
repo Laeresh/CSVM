@@ -982,6 +982,116 @@ internal static class CombatSuites
         });
     }
 
+    // The whole of a carried ring's death on the moving hull, as the controls report it against the
+    // original: the AT_NODE fireballs (routed to the effects stage) and the flying-parts debris (the
+    // world runtime's own library copy) must move with the hull over the next frames, not stand in
+    // the air where the ring died. C1C/M01's piratezep doublecannon4 carries both calls.
+    internal static void RingDeathEffectsFollowHull(TestContext ctx)
+    {
+        ctx.WithWorld("C1C", collision: false, mission: "M01", world =>
+        {
+            var runtime = world.Runtime;
+            var host = runtime.FindNodes("piratezep").FirstOrDefault();
+            var ring = host == null ? null : runtime.FindNodes("doublecannon4", host).FirstOrDefault();
+            ctx.Check(host != null && ring != null, $"piratezep and its doublecannon4 ring resolve in the C1C/M01 world");
+            if (host == null || ring == null)
+            {
+                return;
+            }
+            var registry = runtime.Destructibles;
+            var inst = registry.Resolve(ring)
+                       ?? registry.Resolve(runtime.FindNodes("healthy", ring).FirstOrDefault());
+            ctx.Check(inst != null, $"the ring carries its compiled destroy def pool hp={inst?.MaxHealth ?? 0f:0}");
+            if (inst == null)
+            {
+                return;
+            }
+            var factory = new CountingEmitterFactory();
+            EffectStageSuiteHelper.WithEffectStage(ctx, world, "large_fireball", new[] { "flame_ball_01" },
+                (stage, effects, _) =>
+                {
+                    var previous = runtime.ExternalEffect;
+                    var routed = new List<string>();
+                    runtime.ExternalEffect = (name, pt, node, follow) =>
+                    {
+                        routed.Add($"{name}{(follow ? "+follow" : "")}");
+                        return effects.Handles(name) && effects.PlayEffectAt(name, pt, node, follow: follow);
+                    };
+                    try
+                    {
+                        Vector3 SiteNow() => AnimRuntime.VisualOriginOf(ring);
+                        runtime.DamageAt(inst.Anchor, inst.MaxHealth + 1f);
+                        ctx.Check(inst.Status == DestructibleRegistry.State.Destroyed, $"the ring dies status={inst.Status}");
+                        // The first large_fireball call sits 0.1 s into destroy_dbl_cannon, so
+                        // the death runs a few frames before the fireball is routed.
+                        for (int i = 0; i < 30 && !routed.Contains("large_fireball+follow"); i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                            effects.Advance(1f / 60f);
+                        }
+                        runtime.Advance(1f / 60f);
+                        effects.Advance(1f / 60f);
+                        var fireball = factory.Built.FirstOrDefault(e => e.Key == "fierypuffer");
+                        ctx.Check(fireball is { Sustaining: true },
+                            $"the death routed large_fireball AT_NODE to the effects stage and its fierypuffer emits built=[{string.Join(",", factory.Built.Select(e => e.Key))}] routed=[{string.Join(",", routed)}]");
+                        var siteA = SiteNow();
+                        // The debris: the library copy of zep_can_dstry1.flt placed on the ring.
+                        var debris = runtime.FindNodes("zep_can_dstry1.flt")
+                            .Where(n => n.GlobalTransform.Origin.DistanceTo(siteA) < 5f)
+                            .OrderBy(n => n.GlobalTransform.Origin.DistanceTo(siteA))
+                            .FirstOrDefault();
+                        ctx.Check(debris != null,
+                            $"dblcannon_flying_parts placed its copy on the ring copies=[{string.Join(",", runtime.FindNodes("zep_can_dstry1.flt").Select(n => n.GlobalTransform.Origin.DistanceTo(siteA).ToString("0")))}] m away");
+                        var part = debris == null ? null : runtime.FindNodes("part1", debris).FirstOrDefault();
+                        ctx.Check(part != null, $"the copy carries its part1 debris piece");
+                        if (fireball == null || debris == null || part == null)
+                        {
+                            return;
+                        }
+                        var fedA = fireball.LastPos;
+                        var debrisA = debris.GlobalTransform.Origin;
+                        var partA = part.GlobalTransform.Origin;
+                        ctx.Check(fedA.DistanceTo(siteA) < 5f,
+                            $"the fireball starts on the ring fed=({fedA.X:0},{fedA.Y:0},{fedA.Z:0}) site=({siteA.X:0},{siteA.Y:0},{siteA.Z:0})");
+
+                        // The zeppelin flies on and yaws: one GlobalTransform write on the hull
+                        // root, exactly ZeppelinRuntime.Place's shape, then a few more frames.
+                        var xf = host.GlobalTransform;
+                        xf.Basis = new Basis(Vector3.Up, Mathf.DegToRad(35f)) * xf.Basis;
+                        xf.Origin += new Vector3(400f, 0f, -300f);
+                        host.GlobalTransform = xf;
+                        for (int i = 0; i < 3; i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                            effects.Advance(1f / 60f);
+                        }
+                        var siteB = SiteNow();
+                        var moved = siteB - siteA;
+                        ctx.Check(moved.Length() > 100f,
+                            $"the ring actually moved with the hull (test sanity) by {moved.Length():0} m");
+                        var fedB = fireball.LastPos;
+                        ctx.Check((fedB - siteB).DistanceTo(fedA - siteA) < 0.5f,
+                            $"the fireball rides the hull: fed moved ({(fedB - fedA).X:0},{(fedB - fedA).Y:0},{(fedB - fedA).Z:0}) against the ring's ({moved.X:0},{moved.Y:0},{moved.Z:0})");
+                        var debrisB = debris.GlobalTransform.Origin;
+                        ctx.Check((debrisB - debrisA).DistanceTo(moved) < 0.5f,
+                            $"the debris root rides the hull: moved ({(debrisB - debrisA).X:0},{(debrisB - debrisA).Y:0},{(debrisB - debrisA).Z:0}) against the ring's ({moved.X:0},{moved.Y:0},{moved.Z:0})");
+                        // The piece flies its own ballistic step on top of the hull's move: a few
+                        // metres of launch over three frames, never the 500 m the hull made.
+                        var partB = part.GlobalTransform.Origin;
+                        float ownFlight = (partB - partA - moved).Length();
+                        ctx.Check(ownFlight < 10f,
+                            $"part1 carries the hull's move plus its own {ownFlight:0.0} m of flight (moved ({(partB - partA).X:0},{(partB - partA).Y:0},{(partB - partA).Z:0}))");
+                        ctx.Check(stage.GetChildren().OfType<Node3D>().Any(),
+                            $"the placed copy is still the stage's own pooled root (nothing was reparented)");
+                    }
+                    finally
+                    {
+                        runtime.ExternalEffect = previous;
+                    }
+                }, factory);
+        });
+    }
+
     // The incoming-fire near-miss cue's wiring, with its able-to-fail baseline: a real round from
     // another pilot flying past registers a pass, the same round fired by the target's own identity
     // registers none, and a round a hundred metres wide of the aircraft registers none either, so a

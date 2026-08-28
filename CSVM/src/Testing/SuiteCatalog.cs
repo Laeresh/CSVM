@@ -139,6 +139,7 @@ public static class SuiteCatalog
         "trail-world-anchor",
         "turret-death-effect-world-anchor",
         "turret-death-fire-follows-hull",
+        "ring-death-effects-follow-hull",
         "damage-template-pool",
         "damage-staging-pool",
         "cockpit-panel-staging",
@@ -694,6 +695,8 @@ public static class SuiteCatalog
             "a carried turret's death fire, anchored on TurretController.Site under a moving/rotating hull, follows the hull between ticks rather than freezing at the pose it started at (BL-514)", TurretDeathEffectWorldAnchor));
         into.Add(new TestHarness.Suite("turret-death-fire-follows-hull",
             "a zeppelin gun ring's death fire, routed WITH_NODE to the world-effects stage, moves with the ring as the hull flies on instead of holding the point it was placed at", TurretDeathFireFollowsHull));
+        into.Add(new TestHarness.Suite("ring-death-effects-follow-hull",
+            "a C1C/M01 gun ring killed on the moving hull: its AT_NODE fireball and its flying-parts debris move with the hull over the next frames instead of standing where the ring died", RingDeathEffectsFollowHull));
         into.Add(new TestHarness.Suite("damage-template-pool",
             "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)", DamageTemplatePool));
         into.Add(new TestHarness.Suite("damage-staging-pool",

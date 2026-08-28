@@ -86,7 +86,7 @@ public sealed class TemplateStage<TNode>
     private readonly List<(AnimDefinition Def, TNode? Anchor)> _hidesPending = new();
 
     // Placed roots that re-place themselves on a live call site every frame (PlaceFollowing): a
-    // WITH_NODE call on a carried node. The offset is the site's own frame, so a yawing hull
+    // death's call on a carried node. The offset is the site's own frame, so a yawing hull
     // carries the fire around with it. A re-placement or a hide of the root ends the follow.
     private readonly List<(TNode Root, TNode Site, Vector3 LocalOffset)> _follows = new();
 
@@ -318,8 +318,9 @@ public sealed class TemplateStage<TNode>
 
     /// <summary>Moves an effect template's own root(s) to a call site so its puffers emit there
     /// instead of at the template's gamez origin — the remake's stand-in for the original's
-    /// per-call template copy. Pooled, only the call's own slot moves. Docs: architecture.md.</summary>
-    public void PlaceAt(AnimDefinition callee, TNode site, Vector3 offset)
+    /// per-call template copy. Pooled, only the call's own slot moves. With <paramref name="follow"/>
+    /// the root keeps riding the site (<see cref="PlaceFollowing"/>). Docs: architecture.md.</summary>
+    public void PlaceAt(AnimDefinition callee, TNode site, Vector3 offset, bool follow = false)
     {
         // An airframe-scoped NAME is a live scene node, never a staged template — placing it
         // would TopLevel-pin the aircraft itself (see _placeExempt). Resolution is untouched:
@@ -327,7 +328,11 @@ public sealed class TemplateStage<TNode>
         if (!string.IsNullOrEmpty(callee.Name) && _placeExempt.Contains(callee.Name))
             return;
         var xf = _transformOf(site);
-        PlaceOn(RootsFor(callee, site), xf.Origin + xf.Basis * offset, _levels(callee));
+        var origin = xf.Origin + xf.Basis * offset;
+        if (follow)
+            PlaceFollowing(RootsFor(callee, site), site, origin, _levels(callee));
+        else
+            PlaceOn(RootsFor(callee, site), origin, _levels(callee));
     }
 
     /// <summary>Places the given root(s) at an absolute world origin, with <paramref name="orient"/>
@@ -359,7 +364,7 @@ public sealed class TemplateStage<TNode>
     /// <summary>Places the root(s) at <paramref name="origin"/> as <see cref="PlaceOn"/> does, then
     /// keeps them there RELATIVE to <paramref name="site"/>: <see cref="FollowSites"/> re-places each
     /// root every frame at the site's live pose plus the offset the origin had in the site's frame.
-    /// The <c>WITH_NODE</c> placement for a site that moves (a zeppelin's gun ring); a site that
+    /// The placement for a death's effects on a site that moves (a zeppelin's gun ring); a site that
     /// never moves reads exactly as a <see cref="PlaceOn"/>. The root's basis is left as placed;
     /// only the site's translation and yaw carry the offset (docs/architecture.md).</summary>
     public void PlaceFollowing(IEnumerable<TNode?> roots, TNode site, Vector3 origin, bool level = false)

@@ -578,6 +578,29 @@ the callee's anchor. CSVM instead makes the call site the callee's Start anchor
 difference; it was investigated as a candidate cause of C3/M02's balloon kill-chain symptoms and
 confirmed to drive none of them, since none reproduced on the current build.
 
+### Where the callee's site pose lives, and what the decode leaves open
+
+The callee's own root carries none of the site pose. `FUN_004edf80` (and its siblings
+`FUN_004edc50`, `FUN_004ed730`, `FUN_004eddd0`) zero the callee's main root when the instance is a
+world-attached template copy (`+0x9c` bit `0x100`, set by `FUN_004ed600` for a root whose type is
+neither 1 nor 2): translation `(0, 0, 0)` through `FUN_004d1d50` at `004edfbe` (an Object3d root)
+or `FUN_004d2710` at `004edfe3` (a Camera root), rotation zeroed through `FUN_004d1a30` at
+`004edfd8` or `FUN_004d2490` at `004edffd`. The
+site reaches the callee only as `+0x7c` (node) and `+0x80..+0x88` (position), and the events that
+place things read them at their own dispatch: the `OBJECT_TRANSLATE_STATE` handler resolves index
+`-200` to `+0x7c`/`+0x80` at `004e8e23`–`004e8e59`, and the `PUFFER_STATE` handler chooses its base
+by flag bits (`0x2`: the `+0x7c` node, `0x10`: the `+0x80` position, `0x40`: the second pair at
+`+0x8c`/`+0x90`) at `004eaf47`–`004eb1fc`, then converts to a world position through
+`FUN_004cf490` and rewrites the event's own fields as literal (`004eafe2`, `004eb094`). Which of
+those bits an `AT_NODE` or a `WITH_NODE` call sets, and whether anything re-reads the live node
+after that conversion, is not pinned down; the CALL handler's own flag word (`004eb38a`, tested for
+`0x1`/`0x2`/`0x4`/`0x8` at `004eb43d`–`004eb4a3`) is read off a different struct offset than the
+parser's `+0x2e` byte, and the two were not reconciled. The remake therefore takes the controls'
+reading: a zeppelin gun ring's whole death (fire, fireballs, flying parts) moves with the hull in
+the original, and `AnimRuntime` follows the call site for every death call regardless of spelling.
+Nothing above contradicts that; a reading that settles the flag bits would refine it, not reverse
+the placement of a template root.
+
 ### The restart refusal is keyed on the callee's own run state, with no anchor in it
 
 `FUN_004ed8c0(callee, anchor)` decides the whole question, and `CALL_ANIMATION` always reaches it
