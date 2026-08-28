@@ -193,6 +193,7 @@ public static class SuiteCatalog
         "campaign-objective-markers",
         "campaign-objective-target-path",
         "campaign-objective-labels",
+        "campaign-race-chain",
         "landings-approach-trigger",
         "landings-wingwalk-gate",
         "landings-train-pickup-gate",
@@ -1064,6 +1065,15 @@ public static class SuiteCatalog
             + "reader search path and label 'Zeppelin [Disable] -' over 'Worker's Voyage' in red and "
             + "'[Dock] -' over each docking hook's proper name in blue, the node key kept as identity",
             CampaignObjectiveLabels));
+
+        into.Add(new TestHarness.Suite("campaign-race-chain",
+            "the Hollywood race (C2/M03) over its own files: against the BUILT chapter world the "
+            + "first site's marker stands on the seaplane hangar the zone runs through (a group "
+            + "node at the world origin, its parts carrying the coordinates) beside dz1, and "
+            + "headless over the real graph a player flying dzpath1, 2 and 3 in order with every "
+            + "racer alive completes OBJECTIVE17, 18 and 19 with no racer-death DEDG firing, while "
+            + "a racer dying afterwards fires its DEDG and kills the rest of the chain",
+            CampaignRaceSuites.CampaignRaceChain));
 
         // BL-467: nothing read landings.zrd, so no mission could ever play the cutscene an
         // ANIM_STATE objective waits on.

@@ -5323,7 +5323,11 @@ a mission that only ever REMOVES its sites would offer nothing. One `ObjectiveSi
 as long as the mission flags it, since the selection is held by source identity; its position and
 labels are re-read every frame, which is what tracks a site under a moving node. `PointFor` prefers
 the bare `TRAVELERS` point of the objective that edits a target over the world node of the same
-name, because C3/M01's village node stands at the world origin. A site is keyed by
+name, because C3/M01's village node stands at the world origin. A site on a world node is marked
+at `SiteAnchor`: the node's own position for a placed node, and for a group node standing at the
+world origin that draws nothing itself the centre of its built meshes, a `door`-named leaf pair
+winning over the whole (the stunt mode's aperture rule), because C2's `sghangar` is such a group
+and its parts carry the coordinates. A site is keyed by
 `ObjectiveTarget.Key`, and `ResolveTarget` walks a path one name at a time with `FindNodes` scoped
 to the node before, so `piratezep/rock_zeppelin` is the hull's own child and a bare name is the
 first global match; `targets.zrd` is looked up by the whole key first (a path-authored entry
@@ -5333,7 +5337,8 @@ whole key. The marker's verb, proper name and colour all come off that table thr
 Hook` in blue), and a site whose key finds no entry falls back to its node name, which is what a
 table loaded from the wrong scope looks like. `GameSession` binds it through
 `FlightRoster.SetTargetObjectives`. Pinned by `campaign-objective-markers`,
-`campaign-objective-target-path` and `campaign-objective-labels`.
+`campaign-objective-target-path`, `campaign-objective-labels` and `campaign-race-chain` (the
+hangar anchor, and C2/M03's race chain of per-zone objectives with a racer-death DEDG each).
 
 ## src/Session/ObjectiveGraph.cs
 The objectives runtime over a parsed script, pure state over `Step` calls in the shape of

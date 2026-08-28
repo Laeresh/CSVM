@@ -132,6 +132,49 @@ public sealed class ObjectiveSites
         return node;
     }
 
+    /// <summary>Where a resolved site node's marker stands: the node's own position for a placed
+    /// node, and for a group node standing at the world origin that draws nothing itself the
+    /// centre of its parts, read off the built meshes. ⚠ Do not read such a node's position.
+    /// C2's seaplane hangar (<c>sghangar</c>) is a group at the world origin whose door leaves and
+    /// body carry the world coordinates, 8 km from it. A <c>door</c>-named leaf pair wins over the
+    /// whole, since a fly-through site means the aperture (the stunt mode's own rule).</summary>
+    public static Vector3 SiteAnchor(Node3D node)
+    {
+        if (node is MeshInstance3D || HasOwnMesh(node) || !node.GlobalPosition.IsZeroApprox())
+        {
+            return node.GlobalPosition;
+        }
+
+        var boxes = new List<(string Name, Aabb Box)>();
+        CollectMeshBoxes(node, node.Name, boxes);
+        if (boxes.Count == 0)
+        {
+            return node.GlobalPosition;
+        }
+
+        int doors = 0;
+        foreach (var box in boxes)
+        {
+            if (IsDoorLeaf(box.Name))
+            {
+                doors++;
+            }
+        }
+
+        Aabb? merged = null;
+        foreach (var box in boxes)
+        {
+            if (doors >= 2 && !IsDoorLeaf(box.Name))
+            {
+                continue;
+            }
+
+            merged = merged?.Merge(box.Box) ?? box.Box;
+        }
+
+        return merged!.Value.GetCenter();
+    }
+
     /// <summary>Appends this frame's live sites, each as an objective-flagged candidate the pool
     /// files on the Enemy cycle. Every site is rebuilt from its live source, so a site under a
     /// moving node moves with it and a completed site is simply not offered again.</summary>
@@ -201,13 +244,46 @@ public sealed class ObjectiveSites
         return false;
     }
 
+    private static bool HasOwnMesh(Node3D node)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is MeshInstance3D { Mesh: not null })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // One world-frame box per drawing node under `node`, named for the gamez node that owns the
+    // mesh (the mesh instance itself is always called "mesh").
+    private static void CollectMeshBoxes(Node3D node, string owner, List<(string Name, Aabb Box)> into)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is MeshInstance3D { Mesh: not null } mi)
+            {
+                into.Add((owner, mi.GlobalTransform * mi.GetAabb()));
+            }
+            else if (child is Node3D c3d)
+            {
+                CollectMeshBoxes(c3d, c3d.Name, into);
+            }
+        }
+    }
+
+    private static bool IsDoorLeaf(string name) =>
+        name.Contains("door", StringComparison.OrdinalIgnoreCase);
+
     // A message key resolves to itself when unknown, which is right for a readout and wrong for a
     // marker; a whitespace-only value is how a mission clears a label, so both read as absent.
     private string Text(string? key) =>
         string.IsNullOrWhiteSpace(key) ? "" : _messages.Get(key).Trim();
 
     private Vector3? Where(string key) =>
-        PointFor(_director.Script, key) ?? Resolve(key)?.GlobalPosition;
+        PointFor(_director.Script, key) ?? (Resolve(key) is { } node ? SiteAnchor(node) : null);
 
     // Cached: FindNodes walks the world index by name and this runs once per pane per frame.
     // ⚠ Re-resolve an invalid or detached node rather than caching the miss. `piratezep` is
