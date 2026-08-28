@@ -300,19 +300,8 @@ public sealed partial class ZeppelinRuntime : Node
         return true;
     }
 
-    public override void _PhysicsProcess(double delta)
-    {
-        float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
-        if (dt <= 0f)
-        {
-            return;   // the session drives SimStep itself this frame (see GameClock.PhysicsDt)
-        }
-        SimStep(dt);
-    }
-
     /// <summary>One step of every active motion, written onto the world nodes, then the damage
-    /// poll. Public for the same reason the generators' is: a fixed or halted clock has the
-    /// session drive it.</summary>
+    /// poll.</summary>
     public void SimStep(float dt)
     {
         _sinceLog += dt;

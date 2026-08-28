@@ -54,18 +54,7 @@ public sealed partial class IncomingFire : Node
 
     public void AddTarget(FlightController controller) => _targets.Add(controller);
 
-    public override void _PhysicsProcess(double delta)
-    {
-        float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
-        if (dt <= 0f)
-        {
-            return;   // the session drives SimStep itself this frame (see GameClock.PhysicsDt)
-        }
-        SimStep(dt);
-    }
-
-    /// <summary>One step of the burst clock: fires at each target in turn. Public for the same
-    /// reason the pool's is — a fixed or halted clock has the session drive it.</summary>
+    /// <summary>One session-simulation step of the burst clock: fires at each target in turn.</summary>
     public void SimStep(float dt)
     {
         if (_targets.Count == 0)
