@@ -1157,8 +1157,12 @@ public static class SuiteCatalog
             + "the sensor's state picks, the two legs after the hand-over start, and the 965 the "
             + "drop raises rebuilds the player on the Blue Streak build the special-plane template "
             + "carries -- twin 40 over twin 30, one pylon a wing, 20 armour a zone, the nitrous "
-            + "injector -- in the Blake Aviation livery rather than the paint flown in, while a "
-            + "plain swap onto the same node stays a stock Bloodhawk with no injector",
+            + "injector -- in its shipped blo_* skins with no scheme over them (the blue-grey "
+            + "body and yellow wingtips of the original), while a plain swap onto the same node "
+            + "stays a stock Bloodhawk with no injector; the flown aeroplane rides the drop in "
+            + "view: the hangar-floor Bloodhawk prop shows for the first leg and goes at the "
+            + "swap, and after it the rig is drawn on the player marker, wearing the staged "
+            + "undercarriage, as the lift leg moves that marker",
             AirframeSwapSuites.HangarHandover));
 
         // BL-542: the capture cutscene's camera rides the wing walk's moving frame, and that frame

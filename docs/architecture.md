@@ -4533,16 +4533,19 @@ before the build's sound archive closes; without it a campaign mission's `WAKEUP
 raises its codes the instant it starts, and `Options.CutsceneRoots` builds the two roots the
 `world1` walk never reaches (`camera1`, and the `letterbox` bars, switched off) — only for a
 mission whose start-anims reach one of `CutsceneController.IntroAnims` through their
-`CALL_ANIMATION` closure (`BootstrapsCutscene`; C3/M03's is called, not listed) or that arms an
-approach trigger, so every other session's node census is exactly what it was. The synthetic `camera1`
+`CALL_ANIMATION` closure (`BootstrapsCutscene`; C3/M03's is called, not listed), that arms an
+approach trigger, or whose own mission list names a cutscene definition (`MissionCutsceneAnims`,
+CM07's hangar drop), so every other session's node census is exactly what it was. The synthetic `camera1`
 carries the gamez name and INDEX metadata a scene-built node would, because every compiled
 cutscene binds it through its symbol table and an unbuilt claim makes the runtime drop the event.
 `BuildCompositionFrames` stands up the same-shaped third case beside them, data-driven off the bound
 program: a bodiless, childless gamez library root the program names as an `OBJECT_ADD_CHILD` parent
 is the frame a cutscene composes its shot in (two in this install, CM02's `wingwalk_parent` and
 CM07's `carney_pickup_parent`). It is built `TopLevel` — see docs/org/objectMotion.md's re-home rule.
-`Options.PlanesGamezPath` feeds `AircraftStage` beside those roots, for a mission that bootstraps an
-intro alone: the archive is opened nowhere else in this build, so no other session pays for it.
+`Options.PlanesGamezPath` feeds `AircraftStage` beside those roots, under the same gate: every
+mission that plays a cutscene, because a mid-mission definition poses the flown aeroplane on the
+same `player` marker an intro does and with no stage the pilot is held undrawn for the whole
+sequence. The archive is opened nowhere else in this build, so no other session pays for it.
 
 ## src/Mech3/AircraftStage.cs
 The aircraft-archive subtrees a story-mission intro, a chuteman-carrying drop cutscene or a
@@ -4554,11 +4557,14 @@ mid-mission drop's own definition (e.g. C3/M01's `tdchute`) reparents and activa
 `FigureNodes` (`rope_ladder`, `pickup_cpilot`) under a switched-off holder rather than switched off
 themselves, because nothing ever activates the wing-walking pilot: it is the capture's own
 `OBJECT_ADD_CHILD` into the shot that draws him, which is what the original gets from a library
-root its `world1` walk never reaches. All carry a rebased gamez index (`PointerBaseOf`: the chapter's node count rounded up to the
+root its `world1` walk never reaches, and `PropNodes` (`anim_bloodhawk`, the Bloodhawk on the
+hangar floor while the pilot parachutes in; `bloodhawk_gear`, the undercarriage the flown aeroplane
+wears on the lift), built switched off the way `chuteman` is because the hangar drop's own legs
+add and activate them (`Props`). All carry a rebased gamez index (`PointerBaseOf`: the chapter's node count rounded up to the
 next multiple of 2500), which is what makes a compiled definition's cross-archive symbol table
-bind them instead of claiming a name with no node. Built only for a mission whose start-anims name
-an intro (the same gate as before; a mid-mission drop with no intro of its own is not staged here,
-a named gap), so every other session's node census is exactly what it was. `StageFlown` puts the FLOWN aircraft's own airframe subtree in the runtime's node table under the same rebase, run when the rigs are built and again after an airframe swap: that is what makes a hookup definition's per-airframe branches decidable, since each tests one `player_<airframe>` node's active bit and then poses that airframe's own hook, wing fold and mount offset. The pose half is
+bind them instead of claiming a name with no node. Built for every mission that plays a cutscene
+(`WorldSession`'s intro, approach-trigger or mission-list gate), so every other session's node
+census is exactly what it was. `StageFlown` puts the FLOWN aircraft's own airframe subtree in the runtime's node table under the same rebase, run when the rigs are built and again after an airframe swap: that is what makes a hookup definition's per-airframe branches decidable, since each tests one `player_<airframe>` node's active bit and then poses that airframe's own hook, wing fold and mount offset. The pose half is
 `Session/CutsceneController.cs`; the decode is
 `docs/formats/anim-definitions/cutscenes.md`.
 
@@ -5540,9 +5546,20 @@ the codes are recorded once), which is where a definition's authored calls and c
 CM07's hangar drop clears its objective node through a `CALL_ANIMATION` there and nowhere else. It
 also retracts the bars, returns `camera1` to the runtime's world root (a definition composes itself by
 reparenting it) and parks it at the origin, which other definitions pose against.
+A re-placement (951) the ending definition authors in that same `RESET_STATE` is raised at the
+handoff too, ahead of the restore codes, since the reset walk suppresses callbacks: CM07's hangar
+drop leaves the pilot on the lift in front of the open doors rather than back on the approach. The
+staged archive props (`AircraftStage.Props`) are switched off again at the handoff, because the
+reset's own `OBJECT_DELETE_CHILD` detaches one to the world root, where the original's walk no
+longer reaches it but this scene still draws it.
 It also owns when player 1's flown airframe reaches the runtime's node table
 (`AircraftStage.StageFlown`), from `BindRigs` and again after a swap, which is what lets a hookup
-definition resolve that aeroplane's own hook, wings and mount offset.
+definition resolve that aeroplane's own hook, wings and mount offset. `BindRigs` with no cutscene
+playing also re-asserts the `player` marker ACTIVE: `player_setup`, on every mission's start list,
+switches that node off in its sequence and back on in the `RESET_STATE` its `RESET_TIME` 0
+schedules at its end, a schedule this runtime does not run, and a marker left off is exactly a
+mid-mission drop that holds the pilot undrawn for its whole length (the flown vehicle's node is
+active once gameplay starts). An intro still playing at that point keeps its own hidden state.
 Skip is any key (not Escape) or pad button, and is offered only where the original offers it:
 `Skippable` is the original's active-cutscene slot, armed by code 20 and cleared at the handoff, so
 a definition that never holds the world is played out and the key press falls through to the rest of
@@ -5770,8 +5787,10 @@ mission resolves that name. It answers an `AirframeSwapResult` naming the aircra
 the cutscene that raised the code may be holding that aircraft too. A code carrying an
 `AwardAirframe` (965) rebuilds on that special-plane template through `CustomPlaneBuild` instead of
 the stock fit, so the injector and the template's guns, pylons and armour land on the replacement,
-and one carrying a `LiveryDef` wears that def's authored scheme. The livery carry is undecoded in
-the executable; decode and the deliberate divergences: `docs/formats/anim-definitions/cutscenes.md`.
+and one carrying `ShippedSkins` (965) is drawn in the airframe's shipped skin textures with no
+scheme composited over them, the state the original's vehicle build leaves a def with no
+`paint_pattern` in. 967's livery carry is undecoded in the executable; decode and the deliberate
+divergences: `docs/formats/anim-definitions/cutscenes.md`.
 Two more things `RunSwap` does, both the original's: every AI pilot holding the outgoing aircraft
 as its escort leader or its standing quarry is re-pointed onto the replacement (`RepointHolders`,
 the rebuild's `TargetVehicle` walk; the outgoing node is freed, so a holder left on it steers on

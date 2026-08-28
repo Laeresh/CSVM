@@ -159,6 +159,7 @@ internal sealed class HumanFlightAdapter
             CockpitPanel = CockpitGauges.Bind(planeBuilder),
             Scheme = scheme,
             Painter = planeBuilder.Painter,
+            ShippedSkins = swap is { ShippedSkins: true },
         };
         if (verbose && controller.Cockpit != null)
             GD.Print($"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");

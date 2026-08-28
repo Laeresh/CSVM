@@ -276,6 +276,14 @@ public sealed partial class CutsceneController : Node
         StageFlownAirframe();
         if (!Playing)
         {
+            // ⚠ The flown vehicle's node is ACTIVE once gameplay starts: `player_setup` switches
+            // `player` off and its end-of-definition reset (unrun here) back on. Left off, a later
+            // drop holds the pilot undrawn for its whole length (docs/architecture.md).
+            if (_playerMarker != null)
+            {
+                _playerMarker.Visible = true;
+            }
+
             return;
         }
 
@@ -478,6 +486,25 @@ public sealed partial class CutsceneController : Node
         if (Anim != null && _runtime?.RunResetStateEvents(Anim) > 0)
         {
             GD.Print($"cutscene: '{Anim}' ran its authored RESET_STATE at the handoff");
+        }
+
+        // The staged archive props go back to their switched-off base state. The reset's own
+        // OBJECT_DELETE_CHILD detaches one to the world root, where the original's walk no longer
+        // reaches it but this scene still draws it (the hangar undercarriage, left at the origin).
+        if (_aircraft != null)
+        {
+            foreach (var prop in _aircraft.Props.Values)
+            {
+                AnimRuntime.SetSubtreeActive(prop, false);
+            }
+        }
+
+        // A re-placement authored in that same block is raised here, since the reset walk above
+        // suppresses callbacks. ⚠ Before the restore codes: the hand-back reads the target it sets.
+        if (Anim != null && ResetStateAuthors(Anim, CodeReplacePlayer))
+        {
+            _codes.Add(CodeReplacePlayer);
+            Act(CodeReplacePlayer);
         }
 
         foreach (int code in RestoreCodes)
@@ -839,6 +866,33 @@ public sealed partial class CutsceneController : Node
             if (raiser != Anim && _runtime!.AnimStateOf(raiser) == AnimRunning)
             {
                 return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Does any definition of this name author the code in its RESET_STATE?
+    private bool ResetStateAuthors(string animName, int code)
+    {
+        if (_runtime == null)
+        {
+            return false;
+        }
+
+        foreach (var def in _runtime.DefsFor(animName))
+        {
+            if (def.ResetState == null)
+            {
+                continue;
+            }
+
+            foreach (var ev in def.ResetState.Events)
+            {
+                if (ev.Kind == "Callback" && (int)(ev.Data.Num("value") ?? -1f) == code)
+                {
+                    return true;
+                }
             }
         }
 

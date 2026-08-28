@@ -287,15 +287,16 @@ public sealed class WorldSession
             }
         }
         bool intro = BootstrapsCutscene(animProgram);
-        if (o.CutsceneRoots && (intro || s.Landings.Count > 0))
+        bool cutscenes = intro || s.Landings.Count > 0 || s.MissionCutsceneAnims.Count > 0;
+        if (o.CutsceneRoots && cutscenes)
         {
             BuildCutsceneRoots(root, gamez, builder, animProgram);
         }
 
-        // The two aircraft an intro animates live in the shared archive, not the chapter gamez, so
-        // only a mission that bootstraps one pays for them. Before the bind, like the cutscene
-        // roots: an intro starts inside the animation bootstrap.
-        if (o.CutsceneRoots && intro && o.PlanesGamezPath is { Length: > 0 } planesPath)
+        // ⚠ Every cutscene, not an intro alone: a mid-mission definition poses the flown aeroplane
+        // on the same `player` marker, and with no stage the pilot is held undrawn throughout.
+        // Before the bind, like the roots above (docs/architecture.md).
+        if (o.CutsceneRoots && cutscenes && o.PlanesGamezPath is { Length: > 0 } planesPath)
         {
             var planesGamez = o.Decode == null ? GameZ.Load(planesPath) : o.Decode.Gamez(planesPath);
             s.Aircraft = AircraftStage.Build(root, gamez.Nodes.Count, planesGamez, textures);

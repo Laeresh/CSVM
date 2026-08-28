@@ -316,15 +316,12 @@ public sealed class FlightRoster
             : null;
         // The captured rig's own scheme rides the rebuild (undecoded in the executable, so this is
         // the user's own controls reading) with its ShippedSkins reading, since a real enemy spawn
-        // resolves to no scheme at all and null must beat default; 965 wears its livery def's.
-        var livery = order.Airframe.LiveryDef is { } liveryDef
-            ? PaintScheme.ForDef(_zrdrPath, liveryDef)
-            : null;
+        // resolves to no scheme at all and null must beat default; 965 draws its shipped skins.
         var build = order.Airframe.AwardAirframe is { } awardAirframe
             ? CampaignProgression.AwardBuild(awardAirframe)
             : null;
-        var replacement = SwapPlayerAirframe(rig, order.Airframe.PlaneNode, captured?.Scheme ?? livery,
-            captured?.ShippedSkins ?? false, build);
+        var replacement = SwapPlayerAirframe(rig, order.Airframe.PlaneNode, captured?.Scheme,
+            captured?.ShippedSkins ?? order.Airframe.ShippedSkins, build);
         RepointHolders(outgoing, replacement);
         var hidden = CarryCapturedDamage(captured, rig.Controller?.Damage);
         if (captured != null && AirframeHandover.CarriesCapturedGroup(order.Airframe))

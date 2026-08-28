@@ -10,10 +10,13 @@ namespace CSVM.Session;
 /// <c>UI.PlanePickerRoster.AirframeNode</c>), so a swap needs no table of its own.
 /// <c>AwardAirframe</c> names the special-plane template the code's own case writes by hand
 /// (965 fits the Blue Streak: twin 40 and twin 30, two pylons, 20 armour a zone, the injector),
-/// null for a code that hands over the stock fit. <c>LiveryDef</c> is the vehicle def whose
-/// scheme the rebuild wears; null draws the pilot's own paint.</summary>
+/// null for a code that hands over the stock fit. <c>ShippedSkins</c> says the rebuild draws the
+/// airframe's shipped skin textures with no scheme composited over them, which is what the
+/// original does for a def that authors no <c>paint_pattern</c> (965's <c>pbloodhawk</c>: the
+/// vehicle build skips the scheme outright on the empty pattern string); false draws the pilot's
+/// own paint.</summary>
 public readonly record struct AirframeSwapCode(int Code, string Def, string PlaneNode,
-    int? AwardAirframe = null, string? LiveryDef = null);
+    int? AwardAirframe = null, bool ShippedSkins = false);
 
 /// <summary>One swap as the mission-script host raises it: the airframe the code names, and the
 /// node the raising definition is rooted on, which is the aircraft the capture animation belongs
@@ -59,12 +62,11 @@ public static class AirframeSwapCodes
     /// <summary>The Blue Streak's airframe id in the special-plane template array.</summary>
     public const int BlueStreakAirframe = 3;
 
-    /// <summary>The vehicle def whose scheme 965's rebuild wears.</summary>
-    public const string BlueStreakLiveryDef = "blakebloodhawk";
-
     private static readonly AirframeSwapCode[] All =
     {
-        new(965, "pbloodhawk", "player_bhawk", BlueStreakAirframe, BlueStreakLiveryDef),
+        // ⚠ ShippedSkins, not a scheme: the Blue Streak's blue-grey body and yellow wingtips ARE
+        // the unpainted blo_* skins, the state the original leaves them in.
+        new(965, "pbloodhawk", "player_bhawk", BlueStreakAirframe, ShippedSkins: true),
         new(966, "pwarhawk", "player_warhawk"),
         new(967, "pbalmoral", "player_balmoral"),
     };

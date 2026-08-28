@@ -59,6 +59,10 @@ internal static class AirframeSwapSuites
 
     private static readonly string[] HangarTail = { "hdplayer2", "hdplayer3" };
 
+    // The Bloodhawk's shipped skin textures the unpainted rebuild draws: wing and fin carry the
+    // yellow-olive stripe, the fuselage top the blue-grey body.
+    private static readonly string[] BloodhawkSkins = { "blo_wing", "blo_fin", "blo_fusalagetop" };
+
     /// <summary>Drives the swap CM02 authors against CM02's own built world: the code comes out of
     /// the mission's compiled definitions, the rig off the session's roster, and the replacement is
     /// read for the named airframe's own stock fit, hardpoint table and armour rather than the
@@ -95,8 +99,9 @@ internal static class AirframeSwapSuites
 
     /// <summary>Plays CM07's hangar drop over that mission's built world on a realtime clock: the
     /// drop's two camera legs fork on <c>hdrop_direction</c>'s state, so exactly one of each pair
-    /// starts, and the 965 it raises rebuilds the player on the Blue Streak build in the Blake
-    /// livery rather than on a stock Bloodhawk in the pilot's own paint.</summary>
+    /// starts, and the 965 it raises rebuilds the player on the Blue Streak build in its shipped
+    /// skins rather than on a stock Bloodhawk in the pilot's own paint; the flown aeroplane is
+    /// drawn on the staged <c>player</c> marker through the lift leg, with the undercarriage.</summary>
     internal static void HangarHandover(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -214,16 +219,20 @@ internal static class AirframeSwapSuites
     private static void PlayTheDrop(TestContext ctx, TestWorld world, HangarStaged staged,
         (string Anim, int Code, string Root) drop, StringBuilder report)
     {
-        var (roster, rig, before, cutscene) = staged;
+        var (roster, rig, before, cutscene, textures) = staged;
         var savedClock = GameClock.Current;
         var savedHost = world.Runtime.CallbackHost;
         var savedStarted = world.Runtime.OnInstanceStarted;
         var started = new List<string>();
+        var aircraft = world.Session.Aircraft;
+        ctx.Check(aircraft is { PlayerMarker: not null },
+            $"the mission's world stages the aircraft archive's '{AircraftStage.PlayerNode}' marker, the node the drop poses the flown aeroplane on");
+        var ride = new HangarRide(aircraft);
         try
         {
             var clock = new GameClock { Mode = GameClock.RunMode.Realtime };
             GameClock.Current = clock;
-            cutscene.BindWorld(world.Runtime);
+            cutscene.BindWorld(world.Runtime, aircraft);
             cutscene.HostDefinitions(ClosureOf(world, drop.Anim));
             cutscene.BindRigs(new[] { rig }, () => roster.AiAircraft);
             cutscene.SwapAirframe = order => roster.RunSwap(rig, order, handsOver: false);
@@ -253,6 +262,10 @@ internal static class AirframeSwapSuites
                     swapped = true;
                     swappedAtS = i * StepDt;
                 }
+
+                bool liftLeg = started.Contains(HangarRide.LiftLeg, StringComparer.OrdinalIgnoreCase)
+                    && !started.Contains(HangarRide.AfterLift, StringComparer.OrdinalIgnoreCase);
+                ride.Sample(rig.Controller, swapped, cutscene.Playing && liftLeg, cutscene.Playing);
             }
 
             report.AppendLine($"played '{drop.Anim}' for {PlayBudgetS:0} s: codes {string.Join(",", cutscene.Codes)}, " +
@@ -268,7 +281,8 @@ internal static class AirframeSwapSuites
 
             report.AppendLine(Describe("before", before));
             report.AppendLine(Describe("after", after));
-            CheckBlueStreakFit(ctx, before, after, report);
+            CheckBlueStreakFit(ctx, before, after, textures, report);
+            CheckRide(ctx, ride, cutscene, report);
             CheckStockStaysStock(ctx, roster, rig, report);
         }
         finally
@@ -301,10 +315,10 @@ internal static class AirframeSwapSuites
         }
     }
 
-    // What 965 hands the player: the Blue Streak build in the Blake livery, not the stock
+    // What 965 hands the player: the Blue Streak build in its shipped skins, not the stock
     // Bloodhawk in the pilot's own paint.
     private static void CheckBlueStreakFit(TestContext ctx, FlightController before, FlightController after,
-        StringBuilder report)
+        TextureArchive textures, StringBuilder report)
     {
         var wanted = AirframeSwapCodes.For(HangarSwapCode)!.Value;
         ctx.Check(after.Loadout is { } fit && string.Equals(fit.Def.Def, wanted.Def, StringComparison.OrdinalIgnoreCase),
@@ -325,13 +339,81 @@ internal static class AirframeSwapSuites
         ctx.Check(after.Damage != null && after.Damage.Parts.Count == 4
                   && after.Damage.Parts.Values.All(p => Mathf.IsEqualApprox(p.Def.MaxArmor, 20f)),
             $"and 20 armour on each of the four zones");
-        var livery = PaintScheme.ForDef(ctx.ZrdrPath, AirframeSwapCodes.BlueStreakLiveryDef);
-        ctx.Check(livery != null && after.Scheme != null && after.Painter != null
-                  && string.Equals(after.Scheme.Pattern, livery.Pattern, StringComparison.OrdinalIgnoreCase)
-                  && after.Scheme.Color1 == livery.Color1 && after.Scheme.Color2 == livery.Color2,
-            $"painted in '{AirframeSwapCodes.BlueStreakLiveryDef}'s own scheme, the Blake Aviation livery");
-        ctx.Check(before.Scheme == null || !string.Equals(before.Scheme.Pattern, livery?.Pattern, StringComparison.OrdinalIgnoreCase),
-            $"which is not the paint the aircraft flown in wore ('{before.Scheme?.Label ?? "-"}')");
+        ctx.Check(wanted.ShippedSkins && after.ShippedSkins && after.Scheme == null && after.Painter == null,
+            $"drawn in the airframe's shipped skins with no scheme composited over them, the state the original leaves the Blue Streak's textures in");
+        ctx.Check(before.Scheme != null || before.Painter != null,
+            $"where the aircraft flown in wore the pilot's paint ('{before.Scheme?.Label ?? "-"}')");
+        var onModel = after.PlaneModel is { } model ? SurfaceTextures(model) : new HashSet<Texture2D>();
+        var found = new List<string>();
+        foreach (string skin in BloodhawkSkins)
+        {
+            // The archive caches one texture per name, so the instance a surface samples IS the
+            // one Find answers, and the shipped skin being drawn is a reference test.
+            if (textures.Find(skin) is { } archived && onModel.Contains(archived))
+            {
+                found.Add(skin);
+            }
+        }
+
+        report.AppendLine($"shipped skins on the model: [{string.Join(",", found)}] of [{string.Join(",", BloodhawkSkins)}], " +
+            $"{onModel.Count} distinct texture(s) sampled");
+        ctx.Check(found.Count == BloodhawkSkins.Length,
+            $"and the model's surfaces sample the archive's own {string.Join("/", BloodhawkSkins)} (the blue-grey body and the yellow-olive wingtip stripe), so the skins the original shows are the ones loaded");
+    }
+
+    private static HashSet<Texture2D> SurfaceTextures(Node3D root)
+    {
+        var textures = new HashSet<Texture2D>();
+        var stack = new Stack<Node>();
+        stack.Push(root);
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            if (node is MeshInstance3D mesh && mesh.Mesh is { } geometry)
+            {
+                for (int i = 0; i < geometry.GetSurfaceCount(); i++)
+                {
+                    if (mesh.GetActiveMaterial(i) is ShaderMaterial shader
+                        && shader.GetShaderParameter("albedo_tex").As<Texture2D>() is { } texture)
+                    {
+                        textures.Add(texture);
+                    }
+                }
+            }
+
+            foreach (var child in node.GetChildren())
+            {
+                stack.Push(child);
+            }
+        }
+
+        return textures;
+    }
+
+    // The flown aeroplane rides the drop in view, the way the clip shows it: the hangar-floor
+    // Bloodhawk prop is on for the first camera leg and off from the swap, and through the lift
+    // leg the rebuilt rig is drawn on the `player` marker, wearing the staged undercarriage, while
+    // that marker moves.
+    private static void CheckRide(TestContext ctx, HangarRide ride, CutsceneController cutscene,
+        StringBuilder report)
+    {
+        report.AppendLine(ride.Describe());
+        ctx.Check(ride.PropShownBeforeSwap, $"the hangar-floor Bloodhawk prop ('anim_bloodhawk') is drawn under world1 before the swap");
+        ctx.Check(ride.PropShownAfterSwap == 0, $"and switched off from the swap on ({ride.PropShownAfterSwap} frame(s) still drawn)");
+        ctx.Check(ride.LiftFrames > 0, $"the lift leg '{HangarRide.LiftLeg}' ran with the rebuilt rig present ({ride.LiftFrames} frame(s))");
+        ctx.Check(ride.LiftFrames > 0 && ride.RigHiddenOnLift == 0,
+            $"the rig is drawn on every one of them ({ride.RigHiddenOnLift} frame(s) undrawn)");
+        ctx.Check(ride.LiftFrames > 0 && ride.RigOffMarker == 0,
+            $"and sits on the '{AircraftStage.PlayerNode}' marker's pose on every one ({ride.RigOffMarker} frame(s) off it by over {HangarRide.MarkerTolerance} m)");
+        ctx.Check(ride.LiftFrames > 0 && ride.GearOffMarker == 0,
+            $"wearing '{HangarRide.GearNode}' under that marker ({ride.GearOffMarker} frame(s) without it)");
+        ctx.Check(ride.LiftTravel > HangarRide.MinLiftTravel,
+            $"while the marker travels {ride.LiftTravel:0.#} m over the leg, the lift the clip shows");
+        ctx.Check(!cutscene.Playing, $"and the definition ends within the budget, handing the aeroplane back");
+        ctx.Check(!cutscene.Playing && !ride.PropsDrawnAfterHandoff,
+            $"with both props switched off again at the handoff, so the detached undercarriage is not left drawn at the origin");
+        ctx.Check(ride.HandoffDistance is { } handoff && handoff < HangarRide.HandoffTolerance,
+            $"and the pilot flies out of where the drop left the marker ({ride.HandoffDistance?.ToString("0.#") ?? "-"} m off it), the 951 its RESET_STATE authors, rather than from the approach");
     }
 
     // The trap: the build is 965's, not the airframe's. A plain swap onto the same node hands
@@ -383,7 +465,7 @@ internal static class AirframeSwapSuites
             roster = BuildRoster(ctx, world, chapter, textures, pool, rigs, HangarStartPlane);
             roster.BuildPlayers(rigs);
             var before = rig.Controller ?? throw new InvalidOperationException("no rig was built");
-            leg(new HangarStaged(roster, rig, before, cutscene));
+            leg(new HangarStaged(roster, rig, before, cutscene, textures));
         }
         finally
         {
@@ -971,13 +1053,14 @@ internal static class AirframeSwapSuites
         FlightController Wingman,
         ProjectilePool Pool);
 
-    // The actors one staged hangar hands its leg: the roster and rig, the aircraft flown in, and
-    // the host.
+    // The actors one staged hangar hands its leg: the roster and rig, the aircraft flown in, the
+    // host, and the chapter archive the rebuild's skins come out of.
     private sealed record HangarStaged(
         FlightRoster Roster,
         PlayerRig Rig,
         FlightController Before,
-        CutsceneController Cutscene);
+        CutsceneController Cutscene,
+        TextureArchive Textures);
 
     // One start, high enough over the mission's own terrain that the aircraft is flying rather than
     // resolving a ground contact on the frame the swap rebuilds it.
@@ -995,5 +1078,105 @@ internal static class AirframeSwapSuites
 
             return starts;
         }
+    }
+
+    // The per-frame record of the drop's ride, sampled after the cutscene host has posed the rig.
+    // The lift leg is the window between the two tail starts, read off the start record rather
+    // than the runtime's state, so the sample cannot miss a leg that ends within the frame.
+    private sealed class HangarRide
+    {
+        public const string PropNode = "anim_bloodhawk";
+        public const string GearNode = "bloodhawk_gear";
+        public const string LiftLeg = "hdplayer2";
+        public const string AfterLift = "hdplayer3";
+        public const float MarkerTolerance = 0.5f;
+        public const float MinLiftTravel = 1f;
+        public const float HandoffTolerance = 10f;
+
+        private readonly Node3D? _marker;
+        private readonly Node3D? _prop;
+        private readonly Node3D? _gear;
+        private Vector3? _liftStart;
+        private Vector3 _liftEnd;
+
+        public HangarRide(AircraftStage? aircraft)
+        {
+            _marker = aircraft?.PlayerMarker;
+            _prop = aircraft != null && aircraft.Props.TryGetValue(PropNode, out var prop) ? prop : null;
+            _gear = aircraft != null && aircraft.Props.TryGetValue(GearNode, out var gear) ? gear : null;
+        }
+
+        public bool PropShownBeforeSwap { get; private set; }
+
+        public int PropShownAfterSwap { get; private set; }
+
+        public int LiftFrames { get; private set; }
+
+        public int RigHiddenOnLift { get; private set; }
+
+        public int RigOffMarker { get; private set; }
+
+        public int GearOffMarker { get; private set; }
+
+        public float LiftTravel => _liftStart is { } start ? start.DistanceTo(_liftEnd) : 0f;
+
+        /// <summary>How far the rig sat from the marker on the first frame after the handoff, or
+        /// null while the definition is still playing.</summary>
+        public float? HandoffDistance { get; private set; }
+
+        /// <summary>Whether either prop is still drawn once the drop has handed off: the reset's
+        /// own child detach must leave the undercarriage at the origin undrawn.</summary>
+        public bool PropsDrawnAfterHandoff =>
+            (_prop != null && _prop.IsVisibleInTree()) || (_gear != null && _gear.IsVisibleInTree());
+
+        public void Sample(FlightController? rig, bool swapped, bool liftLeg, bool playing)
+        {
+            bool propShown = _prop != null && _prop.IsVisibleInTree();
+            if (!swapped)
+            {
+                PropShownBeforeSwap |= propShown;
+            }
+            else if (propShown)
+            {
+                PropShownAfterSwap++;
+            }
+
+            // The first frame after the handoff: the aeroplane flies out of where the definition
+            // left the marker, one flight step on.
+            if (swapped && !playing && HandoffDistance == null && _marker != null && rig != null)
+            {
+                HandoffDistance = rig.GlobalTransform.Origin.DistanceTo(AnimRuntime.WorldTransform(_marker, out _).Origin);
+            }
+
+            if (!swapped || !liftLeg || _marker == null || rig == null)
+            {
+                return;
+            }
+
+            LiftFrames++;
+            var pose = AnimRuntime.WorldTransform(_marker, out _);
+            _liftStart ??= pose.Origin;
+            _liftEnd = pose.Origin;
+            if (rig.PlaneModel is not { } model || !model.IsVisibleInTree())
+            {
+                RigHiddenOnLift++;
+            }
+
+            if (rig.GlobalTransform.Origin.DistanceTo(pose.Origin) > MarkerTolerance)
+            {
+                RigOffMarker++;
+            }
+
+            if (_gear == null || _gear.GetParent() != _marker || !_gear.IsVisibleInTree())
+            {
+                GearOffMarker++;
+            }
+        }
+
+        public string Describe() =>
+            $"ride: prop shown before swap={PropShownBeforeSwap}, after={PropShownAfterSwap} frame(s); " +
+            $"lift leg {LiftFrames} frame(s), rig undrawn {RigHiddenOnLift}, off marker {RigOffMarker}, " +
+            $"gear off marker {GearOffMarker}, marker travel {LiftTravel:0.##} m, props drawn after handoff {PropsDrawnAfterHandoff}, " +
+            $"handoff distance {HandoffDistance?.ToString("0.##") ?? "-"} m";
     }
 }
