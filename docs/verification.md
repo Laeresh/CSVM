@@ -48,6 +48,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
   quantity.** `obj+0x16c` looked like angular velocity, but `FUN_0053fbf0` consumes it as a
   quaternion half-angle: the matrix turns by twice the stored vector. Comparing the accumulator
   alone left pitch, yaw and roll exactly half-strength while every local value appeared correct.
+- **METHOD-27** — **A count over CSVM's own scene structure is not a count over the original's;
+  name the parent before reading the number as a count of objects.** One flak over a C1 aagun dealt
+  four splash shares of distinct magnitude, which reads as four objects hit, and the destructible
+  carries ten collider bodies. Printing each struck body's PARENT showed two nodes, each split into
+  a `col` and a `col_buildings` body by `SceneBuilder.AttachCollision`'s per-surface-class carve, so
+  half the count was an artefact of a CSVM construction the original has no counterpart for and the
+  other half was correct behaviour. Distinct values are not distinct objects: a per-body sum, hit
+  count or candidate count is a claim about the port's scene graph until the grouping is shown.
 
 ## DIAG — chasing a symptom
 

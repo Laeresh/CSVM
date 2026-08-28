@@ -58,6 +58,13 @@ internal static class WorldCollision
         return true;
     }
 
+    /// <summary>The world object one collider body stands for. <see cref="SceneBuilder"/> carves a
+    /// mesh node's collision into one body PER SURFACE CLASS, so sibling bodies under one node are
+    /// one object; a body it did not build (a clutter region, a plane hull, a suite's bare plate)
+    /// stands for itself. Callers that must count objects rather than bodies key on this.</summary>
+    public static Node OwnerOf(Node body) =>
+        body.HasMeta(SceneBuilder.SurfaceIdMeta) && body.GetParent() is { } parent ? parent : body;
+
     /// <summary>Re-derives every tracked collider under <paramref name="node"/>. Used by the fade
     /// channel, which changes an ancestor state Godot emits no signal for.</summary>
     public static void SyncSubtree(Node node)

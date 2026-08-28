@@ -490,7 +490,11 @@ owning node is visible in the scene tree and no ancestor is faded out. `Track` (
 collider-bearing node as it is built) binds it to the node's `VisibilityChanged` — which Godot
 propagates to descendants — plus `TreeEntered`, because a world is assembled and bootstrapped while
 still detached, where visibility writes emit nothing. `SetFaded` is the second input: an
-`OBJECT_OPACITY_*` fade is a shader parameter visibility knows nothing about.
+`OBJECT_OPACITY_*` fade is a shader parameter visibility knows nothing about. `OwnerOf` reads the
+same relation backwards, naming the world object a collider body stands for: `SurfaceIdMeta` marks
+the per-surface-class bodies `SceneBuilder` carved from one mesh node, so they answer their shared
+parent, and anything else answers itself. Callers that must count objects rather than bodies
+(`ProjectilePool.ApplyDamage`'s splash shares) key on it.
 
 ## src/Mech3/PlaneBuilder.cs
 Builds one aircraft from its GameZ subtree (shaded, cullBackfaces: true — interior lattice must be
@@ -2279,8 +2283,13 @@ bounds cached per shape RID in `_shapeBounds`), never a node origin: a chapter m
 sits at ground level, so a ray to it ends on the terrain and every building reads as covered, an
 origin-parked root's is the world origin, and a clutter region body (`Clutter.BuildSolidCollision`,
 `MapEdgeExtender`) has server-side shapes with no `CollisionShape3D` owner at all, on which the
-`ShapeFindOwner` / `ShapeOwnerGetTransform` pair errors and returns identity. At most
-`MaxBlastTargets` 32 candidates take damage per burst, the original's hit-buffer size; when more
+`ShapeFindOwner` / `ShapeOwnerGetTransform` pair errors and returns identity. A burst deals one
+share per world OBJECT, not per collider body: the original's buffer holds one entry per collidable
+node, while `SceneBuilder.AttachCollision` splits one node into a body per surface class, so the
+nearest-first walk keeps the first body of each `WorldCollision.OwnerOf` group and skips its
+siblings (the struck node's group seeded as already spent, since it took the full figure). Bodies
+`SceneBuilder` did not build stand for themselves, so genuinely separate parts keep separate shares.
+At most `MaxBlastTargets` 32 candidates take damage per burst, the original's hit-buffer size; when more
 are inside the radius the pool prints one `blast limit:` line naming the weapon, the burst and how
 many were dropped (Decision 9 of PLAN-ordnance-types: never silent; not "cap", which this repo
 uses for captures). `MaxBlastBodies` 4096 is only the raw sphere
