@@ -150,15 +150,15 @@ Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 | `build` | `dotnet build CSVM/CSVM.sln`. A failure stops the run — nothing downstream can say anything about a tree that does not compile |
 | `units` | `dotnet test CSVM/CSVM.sln` (the `CSVM.Tests` xUnit project), `--no-build` since the build stage just produced the binaries. Counts are read from a TRX log in `.scratch/testresults/`, never scraped from the localized console summary. A FAILED units stage does not stop the run — only a failed `build` does — so `engine`, `goldens` and `hitch` still launch and are scored from their own reports; the summary row for `units` still reads `FAIL` |
 | `engine` | Godot with `--run-tests` — windowed (never `--headless`: no shaders compile there, so a clean error screen would prove nothing — LOG-8) and with `--log-file`, which is what lets the harness screen native engine `ERROR:` lines. `--run-tests` implies `--det` by itself. The full catalog runs in `-Shards` concurrent processes (below); each launch has its own five-minute watchdog, and a timeout kills that launch, fails the stage with exit 124 and leaves the partial log while the other shards still report. Counts and failing suite names come from the shard reports, each deleted before the run so a dead run cannot be scored from the last one's numbers |
-| `goldens` | The golden-image tripwire: one Godot per shot in `analysis/goldens/manifest.json`, each a pinned `--det` capture with `--screenshot=` and `--log-file=` appended, compared as **md5 of the raw pixel buffer** the engine prints on its `[core] shot pixmd5=… size=… gpu=…` line (never the PNG's encoded bytes — SHOT-6). ~53 s for 11 shots |
+| `goldens` | The golden-image tripwire: one Godot per shot in `analysis/goldens/manifest.json`, each a pinned `--det` capture with `--screenshot=` and `--log-file=` appended, compared as **md5 of the raw pixel buffer** the engine prints on its `[core] shot pixmd5=… size=… gpu=…` line (never the PNG's encoded bytes — SHOT-6). `-GoldenWorkers <n>` (default 4) launches up to that many shots at once in registry-order batches; each keeps its own process, log, `.out`/`.err` and PNG. ~30 s for 16 shots at the default, ~88 s at `-GoldenWorkers 1` (serial) |
 | `perf` | `-Perf` only: every scenario in `analysis/perf/scenarios.json` under `--det --perf --no-vsync --mute`, medians appended to the git-ignored `perf-history.jsonl`. ~88 s for 5 scenarios. It measures and records; it never judges (below) |
 | `hitch` | `-Hitch` only, and always last: two scripted Godot launches reporting `HitchMonitor`/`HitchSidecar` health — a clean `--frames=180` run should stay silent, and `--hitch-inject=50@300 --frames=310` should trip once on frame 300 with a full 120-entry ring and matching sidecar record. Results are awareness-only and never fail the run; off by default even in a full run, and a run without `-Hitch` names its cadence in `not checked:` |
 
 Switches: **`-Suite <name>[,<name>]`** (exact in-engine suite names), **`-Filter <substring>`**
 (engine suite names only — `-Filter weapons` runs `weapons-defs` + `weapons-fire`),
 **`-UnitFilter <expr>`** (straight into `dotnet test --filter`), **`-Shards <n>`**, **`-Quick`**, **`-SkipUnits`**,
-**`-SkipEngine`**, **`-SkipGoldens`**, **`-RegenGoldens`**, **`-Hitch`**, **`-SkipHitch`**, **`-Perf`**
-(+ `-PerfLabel`, `-PerfCompare`, `-PerfFilter`, `-PerfIterations`, `-PerfFrames`).
+**`-SkipEngine`**, **`-SkipGoldens`**, **`-RegenGoldens`**, **`-GoldenWorkers <n>`**, **`-Hitch`**,
+**`-SkipHitch`**, **`-Perf`** (+ `-PerfLabel`, `-PerfCompare`, `-PerfFilter`, `-PerfIterations`, `-PerfFrames`).
 
 **Selection is exact or substring, and a miss is a failure.** `-Suite` and `-Filter` compose into
 the harness's own term grammar on `--run-tests=` (`suite:<name>` exact, `tier:<name>` a checked-in
@@ -242,6 +242,20 @@ re-renders every shot and rewrites `manifest.json` in place; the emitter round-t
 byte-identically, so the diff is exactly the hash lines that moved. Regeneration is deliberate and
 never automatic — see `docs/verification.md` GOLD-1 for when it is the right answer and when it is
 covering up a defect, and `analysis/goldens/README.md` for the shot set.
+
+**Golden shots launch concurrently, `-GoldenWorkers` of them at a time (default 4).** Shots run in
+registry-order batches: a batch of up to `-GoldenWorkers` shots is started together through the same
+`Start-Godot`/`Wait-Godot` pair the engine stage's shards use, each with its own per-shot watchdog, and
+the whole batch is awaited before the next one starts. Concurrency changes only how many launches are
+in flight; every shot still gets its own process, its own `--log-file`, its own `.out`/`.err`, and its
+own PNG, and the silent-death `--verbose` retry (BL-039) runs afterward, serially, over whichever shots
+died silently in their batch — never inside a batch, so a flaky retry never competes with fresh
+launches for the GPU. An A/B of 1/2/3/4 workers, three repeats each, over the complete 16-shot
+manifest found every raw-pixel hash, `sim_frame`, size and adapter string bit-identical at every
+count, with the measured wall time falling from ~88 s serial to ~49 s (2), ~41 s (3) and ~29 s (4) —
+4 was chosen as the fastest count that stayed bit-identical on the one machine measured. Pass
+`-GoldenWorkers 1` for the serial reference path; a hash that moves under a higher count on a different
+machine is a disproof of that count there; it does not need to change the default (docs/PLAN-fast-verification.md C21).
 
 **The hitch stage is opt-in (`-Hitch`), not part of the retained landing gate.** The milestone that
 shortened this run names what the full gate retains — build, units, all engine suites, goldens —

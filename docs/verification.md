@@ -357,7 +357,11 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **LOG-12** — **Automated instruments must return their verdict in the exit code.**
 - **LOG-13** — **Do not overlap engine probes.** The one exception is `RunTests.ps1`'s own engine
   shards, which overlap by design: each carries its own `--log-file`, report, scratch directory and
-  watchdog, and the stray-Godot sweep is scoped to the launching process. What still does not
+  watchdog, and the stray-Godot sweep is scoped to the launching process. The golden stage's own
+  `-GoldenWorkers` (default 4) is the same exception again: each concurrent shot still carries its
+  own process, log, `.out`/`.err` and PNG, so nothing about the identity check changes — an A/B of
+  1/2/3/4 workers, three repeats each, found every raw-pixel hash, `sim_frame`, size and adapter
+  bit-identical at every count (`PLAN-fast-verification.md` C21). What still does not
   isolate is a suite whose store is deliberately outside `.scratch/` — two concurrent
   `RunTests.ps1` invocations fail `campaign-loop`, which reads a `user://` profile an earlier
   process wrote. `RunTests.ps1`'s hitch stage (`-Hitch`) applies the same rule to itself: it is the

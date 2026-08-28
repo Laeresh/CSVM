@@ -25,10 +25,13 @@
                prints it; a PNG's encoded bytes are not the picture). Runs as its own scripted
                pass rather than as an in-engine suite because the --run-tests harness completes
                inside one _Ready call and never yields a frame, so it cannot photograph anything.
-               A mismatch names the shot and leaves the actual PNG and that shot's engine log in
-               .scratch/goldens/. Each shot is launched under a per-shot timeout
-               ($EngineTimeoutSec); a shot that exceeds it is killed, reported as FAIL, and has its
-               evidence preserved -- it never silently hangs the suite (BL-320).
+               Up to -GoldenWorkers shots launch at once (default 4, measured bit-identical against
+               serial), each still with its own process, log, .out/.err and PNG; the silent-death
+               retry runs after the whole batch, serially. A mismatch names the shot and leaves the
+               actual PNG and that shot's engine log in .scratch/goldens/. Each shot is launched
+               under a per-shot timeout ($EngineTimeoutSec); a shot that exceeds it is killed,
+               reported as FAIL, and has its evidence preserved -- it never silently hangs the
+               suite (BL-320).
       perf     -Perf only. Every scenario in analysis/perf/scenarios.json, run under
                --det --perf --no-vsync for a fixed number of SIM frames (never wall seconds --
                the fixed clock advances one sim step per rendered frame, so a frame count is an
@@ -111,6 +114,17 @@
     Deliberately a separate switch and never automatic: the rewritten file is the review artifact,
     so a moved hash has to be explained in the commit that moves it.
 
+.PARAMETER GoldenWorkers
+    How many golden shots launch at once. Default 4: an A/B of 1/2/3/4 workers, three repeats each,
+    found the complete 16-shot manifest bit-identical (raw-pixel hash, sim_frame, size, adapter) at
+    every count with no GPU/driver contention observed on the machine measured, and 4 was the
+    fastest of them (~29s against ~87s serial). Shots run in registry-order batches of this size;
+    a shot's own process, log, .out/.err and PNG stay exactly as unique as the serial path, and the
+    silent-death --verbose retry still happens, serially, after the whole batch has reported. Pass
+    1 for the serial reference path. This was measured on one machine only, so a hash that moves
+    under N>1 elsewhere is a disproof for THAT machine, not a tuning problem to chase
+    (docs/PLAN-fast-verification.md C21).
+
 .PARAMETER Hitch
     Run the hitch-detector check (two scripted Godot launches probing HitchMonitor/HitchSidecar).
     Off by default, even in a full run: the check is awareness-only, never changes the exit code,
@@ -188,6 +202,10 @@
 .EXAMPLE
     $env:CSVM_DATA_ROOT = 'Z:\Crimson Skies'; .\RunTests.ps1
     The same run from a git worktree, reading the primary tree's data and Godot.
+
+.EXAMPLE
+    .\RunTests.ps1 -GoldenWorkers 1 -SkipUnits -SkipEngine
+    The golden stage serial -- the reference path an A/B compares against.
 #>
 
 [CmdletBinding()]
@@ -201,6 +219,7 @@ param(
     [switch]$SkipEngine,
     [switch]$SkipGoldens,
     [switch]$RegenGoldens,
+    [int]$GoldenWorkers = 4,
     [switch]$Hitch,
     [switch]$SkipHitch,
     [switch]$Perf,
@@ -942,6 +961,7 @@ if ($SkipGoldensNow) {
     Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "no manifest at $GoldenManifest"
     Add-Unchecked "the golden-image shots did not run: no manifest at $GoldenManifest"
 } else {
+    $goldenWorkerCount = [Math]::Max(1, $GoldenWorkers)
     Write-Stage-Banner $(if ($RegenGoldens) { "goldens (regenerating)" } else { "goldens" })
     # Every launch here carries the .scratch\goldens output path, an argument nothing but this
     # stage passes -- so the kill cannot reach a live playtest or a hand-run capture.
@@ -951,6 +971,9 @@ if ($SkipGoldensNow) {
     }
     if (-not (Test-Path $GoldenDir)) {
         $null = New-Item -ItemType Directory -Path $GoldenDir
+    }
+    if ($goldenWorkerCount -gt 1) {
+        Write-Host "  $goldenWorkerCount workers" -ForegroundColor DarkGray
     }
 
     # .NET's reader, not Get-Content: PS 5.1 decodes a BOM-less file as the system ANSI codepage,
@@ -965,6 +988,76 @@ if ($SkipGoldensNow) {
     # exit-1 must leave something behind instead of being overwritten by the next shot or run.
     $failureRoot  = $null
     $failureStamp = Get-Date -Format "yyyyMMdd-HHmmss"
+
+    # One process, one log, one .out/.err and one PNG per shot, whatever $goldenWorkerCount is --
+    # concurrency only changes how many of these launch at once, never their identity.
+    function Get-GoldenShotArguments {
+        param($State, [bool]$Verbose)
+        $shotArgs = @($State.Shot.args) + @("--frames=$([int]$State.Shot.frame)", "--screenshot=$($State.Png)")
+        $godotArgs = @("--path", $ProjectDir, "--log-file", $State.Log)
+        if ($Verbose) {
+            # Godot's own engine flag, so it must sit before the "--" that hands the rest to the
+            # game's arg parser -- inside $shotArgs it would just be an unread user arg.
+            $godotArgs += "--verbose"
+        }
+        return ($godotArgs + @("res://scenes/Main.tscn", "--") + $shotArgs)
+    }
+
+    # Reads one attempt's outcome off its own log/PNG (SHOT-10: --screenshot exits 0 even when the
+    # save fails, so the file's existence is the only proof it wrote anything) and files BL-039/
+    # BL-320 evidence exactly as the serial path always has. Mutates $script:failureRoot because
+    # this function is called from both the batch loop and the serial retry loop below, and the
+    # evidence folder must be the same one either way.
+    function Resolve-GoldenAttempt {
+        param($State)
+        # BL-320: a timeout is deterministic, not the transient silent-exit-1 BL-039 guards
+        # against -- retrying a hung shot with --verbose just doubles its wall-clock. Preserve the
+        # evidence and let the no-PNG block in the final pass report it once.
+        if ($State.ShotCode -eq 124) {
+            if ($script:failureRoot -eq $null) {
+                $script:failureRoot = Join-Path $ScratchDir "goldens-failures\$failureStamp"
+            }
+            Save-GoldenFailureEvidence -FailureDir $script:failureRoot -ShotName $State.Shot.name `
+                -Attempt $State.Attempt -ShotLog $State.Log -Png $State.Png
+            $State.TimedOut = $true
+            return
+        }
+        $hasPng = Test-Path $State.Png
+        $hash = ""; $size = ""; $gpu = ""; $simFrame = -1
+        if ($hasPng -and (Test-Path $State.Log)) {
+            foreach ($line in (Get-Content -Path $State.Log)) {
+                if ($line -match 'shot pixmd5=(\w+) size=(\S+) gpu=(.*)$') {
+                    $hash = $Matches[1]; $size = $Matches[2]; $gpu = $Matches[3].Trim()
+                }
+                if ($line -match 'screenshot saved: .* sim_frame=(\d+)') {
+                    $simFrame = [int]$Matches[1]
+                }
+            }
+        }
+        $State.Hash = $hash; $State.Size = $size; $State.Gpu = $gpu; $State.SimFrame = $simFrame
+
+        # BL-039: a golden shot exiting nonzero with no PNG at all, silently, is the unreproduced
+        # symptom this item exists for -- not the instant concurrent-run collision (LOG-13,
+        # ~0.9s), which this loop's own Stop-StrayGodots already guards against. One retry with
+        # the engine's own --verbose before giving up, and every attempt's evidence is preserved.
+        $silentDeath = ((-not $hasPng) -and $State.ShotCode -ne 0)
+        if ($silentDeath) {
+            if ($script:failureRoot -eq $null) {
+                $script:failureRoot = Join-Path $ScratchDir "goldens-failures\$failureStamp"
+            }
+            Save-GoldenFailureEvidence -FailureDir $script:failureRoot -ShotName $State.Shot.name `
+                -Attempt $State.Attempt -ShotLog $State.Log -Png $State.Png
+            $lastLine = Get-LastLogLine -Path $State.Log
+            Add-Content -Path (Join-Path $script:failureRoot "report.txt") -Value (
+                "$($State.Shot.name) attempt $($State.Attempt) : exit=$($State.ShotCode) png=$hasPng " +
+                "last-log-line: $lastLine")
+            if ($State.Attempt -eq 1) {
+                $State.NeedsRetry = $true
+            }
+        }
+    }
+
+    $states = @()
     foreach ($shot in @($manifest.shots)) {
         $png = Join-Path $GoldenDir "$($shot.name).png"
         $shotLog = Join-Path $GoldenDir "$($shot.name).log"
@@ -973,116 +1066,85 @@ if ($SkipGoldensNow) {
                 Remove-Item -Path $stale -Force
             }
         }
-
-        $attempt = 1
-        $verbose = $false
-        $hash = ""; $size = ""; $gpu = ""; $simFrame = -1
-        while ($true) {
-            $shotArgs = @($shot.args) + @("--frames=$([int]$shot.frame)", "--screenshot=$png")
-            $godotArgs = @("--path", $ProjectDir, "--log-file", $shotLog)
-            if ($verbose) {
-                # Godot's own engine flag, so it must sit before the "--" that hands the rest to
-                # the game's arg parser -- inside $shotArgs it would just be an unread user arg.
-                $godotArgs += "--verbose"
-            }
-            $ErrorActionPreference = "Continue"
-            $shotCode = Invoke-Godot ($godotArgs + @("res://scenes/Main.tscn", "--") + $shotArgs) `
-                                      -TimeoutSec $EngineTimeoutSec
-            $ErrorActionPreference = "Stop"
-
-            # BL-320: a timeout is deterministic, not the transient silent-exit-1 BL-039 guards
-            # against -- retrying a hung shot with --verbose just doubles its wall-clock (every
-            # hung shot would then eat $EngineTimeoutSec twice). Short-circuit: preserve the
-            # evidence, break out, and let the no-PNG block below report it once.
-            if ($shotCode -eq 124) {
-                if ($failureRoot -eq $null) {
-                    $failureRoot = Join-Path $ScratchDir "goldens-failures\$failureStamp"
-                }
-                Save-GoldenFailureEvidence -FailureDir $failureRoot -ShotName $shot.name `
-                    -Attempt $attempt -ShotLog $shotLog -Png $png
-                break
-            }
-
-            # SHOT-10: --screenshot exits 0 even when the save fails, so the file's existence is
-            # the only proof it wrote anything.
-            $hasPng = Test-Path $png
-            $hash = ""; $size = ""; $gpu = ""; $simFrame = -1
-            if ($hasPng -and (Test-Path $shotLog)) {
-                foreach ($line in (Get-Content -Path $shotLog)) {
-                    if ($line -match 'shot pixmd5=(\w+) size=(\S+) gpu=(.*)$') {
-                        $hash = $Matches[1]; $size = $Matches[2]; $gpu = $Matches[3].Trim()
-                    }
-                    if ($line -match 'screenshot saved: .* sim_frame=(\d+)') {
-                        $simFrame = [int]$Matches[1]
-                    }
-                }
-            }
-
-            # BL-039: a golden shot exiting nonzero with no PNG at all, silently, is the
-            # unreproduced symptom this item exists for -- not the instant concurrent-run
-            # collision (LOG-13, ~0.9s), which this loop's own Stop-StrayGodots already guards
-            # against. One retry with the engine's own --verbose before giving up, and every
-            # attempt's evidence is preserved -- it used to be overwritten by the very next shot.
-            $silentDeath = ((-not $hasPng) -and $shotCode -ne 0)
-            if ($silentDeath) {
-                if ($failureRoot -eq $null) {
-                    $failureRoot = Join-Path $ScratchDir "goldens-failures\$failureStamp"
-                }
-                Save-GoldenFailureEvidence -FailureDir $failureRoot -ShotName $shot.name `
-                    -Attempt $attempt -ShotLog $shotLog -Png $png
-                $lastLine = Get-LastLogLine -Path $shotLog
-                Add-Content -Path (Join-Path $failureRoot "report.txt") -Value (
-                    "$($shot.name) attempt $attempt : exit=$shotCode png=$hasPng " +
-                    "last-log-line: $lastLine")
-                if ($attempt -eq 1) {
-                    $retried += $shot.name
-                    Write-Host "  RETRY $($shot.name): exited $shotCode with no PNG -- re-running with --verbose" -ForegroundColor DarkYellow
-                    $attempt++
-                    $verbose = $true
-                    continue
-                }
-            }
-            break
+        $states += [pscustomobject]@{
+            Shot = $shot; Png = $png; Log = $shotLog
+            Attempt = 1; ShotCode = -1; Launch = $null; NeedsRetry = $false; TimedOut = $false
+            Hash = ""; Size = ""; Gpu = ""; SimFrame = -1
         }
+    }
 
-        if (-not (Test-Path $png)) {
-            if ($shotCode -eq 124) {
-                $detail = "$($shot.name): timed out after ${EngineTimeoutSec}s (Godot exited 124) -- see $shotLog"
+    # First pass: every shot's attempt 1, in registry-order batches of $goldenWorkerCount. At the
+    # default of 1 this is exactly the old serial loop, one launch, one wait, repeat.
+    for ($i = 0; $i -lt $states.Count; $i += $goldenWorkerCount) {
+        $batch = $states[$i..([Math]::Min($i + $goldenWorkerCount - 1, $states.Count - 1))]
+        $ErrorActionPreference = "Continue"
+        foreach ($state in $batch) {
+            $state.Launch = Start-Godot -Arguments (Get-GoldenShotArguments -State $state -Verbose $false)
+        }
+        # Each shot keeps its own per-launch watchdog even inside a batch, so one hung shot fails
+        # only itself and its batch-mates still report.
+        foreach ($state in $batch) {
+            $state.ShotCode = Wait-Godot -Launch $state.Launch -TimeoutSec $EngineTimeoutSec
+        }
+        $ErrorActionPreference = "Stop"
+        foreach ($state in $batch) {
+            Resolve-GoldenAttempt -State $state
+        }
+    }
+
+    # Second pass: the silent-death retry, serially and with --verbose, exactly as the plan
+    # requires -- a batch's worth of concurrent launches is not where a flaky retry should run.
+    foreach ($state in ($states | Where-Object { $_.NeedsRetry })) {
+        $retried += $state.Shot.name
+        Write-Host "  RETRY $($state.Shot.name): exited $($state.ShotCode) with no PNG -- re-running with --verbose" -ForegroundColor DarkYellow
+        $state.Attempt = 2
+        $ErrorActionPreference = "Continue"
+        $state.ShotCode = Invoke-Godot (Get-GoldenShotArguments -State $state -Verbose $true) -TimeoutSec $EngineTimeoutSec
+        $ErrorActionPreference = "Stop"
+        Resolve-GoldenAttempt -State $state
+    }
+
+    # Final classification, identical to the serial path's own per-shot checks.
+    foreach ($state in $states) {
+        $shot = $state.Shot
+        if (-not (Test-Path $state.Png)) {
+            if ($state.TimedOut) {
+                $detail = "$($shot.name): timed out after ${EngineTimeoutSec}s (Godot exited 124) -- see $($state.Log)"
             } else {
-                $detail = "$($shot.name): no PNG written (Godot exited $shotCode) -- see $shotLog"
+                $detail = "$($shot.name): no PNG written (Godot exited $($state.ShotCode)) -- see $($state.Log)"
             }
             if ($failureRoot) { $detail = "$detail; evidence preserved in $failureRoot" }
             $broken += $detail
-            Write-Host "  FAIL $($shot.name): no PNG at $png" -ForegroundColor Red
+            Write-Host "  FAIL $($shot.name): no PNG at $($state.Png)" -ForegroundColor Red
             continue
         }
-        if ($hash.Length -eq 0) {
-            $broken += "$($shot.name): no 'shot pixmd5=' line -- see $shotLog"
+        if ($state.Hash.Length -eq 0) {
+            $broken += "$($shot.name): no 'shot pixmd5=' line -- see $($state.Log)"
             Write-Host "  FAIL $($shot.name): the run printed no pixel hash" -ForegroundColor Red
             continue
         }
-        $adapters[$gpu] = 1
+        $adapters[$state.Gpu] = 1
         # A shot that photographed a different sim frame is a clock regression, not a pixel one,
         # and reads as neither if it is folded into the hash compare.
-        if ($simFrame -ne [int]$shot.frame) {
-            $broken += "$($shot.name): captured sim_frame=$simFrame, manifest says $([int]$shot.frame)"
-            Write-Host "  FAIL $($shot.name): sim_frame=$simFrame, expected $([int]$shot.frame)" -ForegroundColor Red
+        if ($state.SimFrame -ne [int]$shot.frame) {
+            $broken += "$($shot.name): captured sim_frame=$($state.SimFrame), manifest says $([int]$shot.frame)"
+            Write-Host "  FAIL $($shot.name): sim_frame=$($state.SimFrame), expected $([int]$shot.frame)" -ForegroundColor Red
             continue
         }
-        if ($size -ne $manifest.size) {
-            $broken += "$($shot.name): rendered $size, manifest hashes are $($manifest.size)"
-            Write-Host "  FAIL $($shot.name): rendered $size, expected $($manifest.size)" -ForegroundColor Red
+        if ($state.Size -ne $manifest.size) {
+            $broken += "$($shot.name): rendered $($state.Size), manifest hashes are $($manifest.size)"
+            Write-Host "  FAIL $($shot.name): rendered $($state.Size), expected $($manifest.size)" -ForegroundColor Red
             continue
         }
-        if ($hash -eq $shot.hash) {
-            Write-Host "  ok   $($shot.name)  $hash" -ForegroundColor DarkGray
+        if ($state.Hash -eq $shot.hash) {
+            Write-Host "  ok   $($shot.name)  $($state.Hash)" -ForegroundColor DarkGray
         } else {
-            $moved += "$($shot.name) $($shot.hash) -> $hash ($png)"
+            $moved += "$($shot.name) $($shot.hash) -> $($state.Hash) ($($state.Png))"
             $color = if ($RegenGoldens) { "DarkYellow" } else { "Red" }
-            Write-Host "  MOVED $($shot.name): $($shot.hash) -> $hash" -ForegroundColor $color
-            Write-Host "        actual image: $png" -ForegroundColor $color
+            Write-Host "  MOVED $($shot.name): $($shot.hash) -> $($state.Hash)" -ForegroundColor $color
+            Write-Host "        actual image: $($state.Png)" -ForegroundColor $color
         }
-        $shot.hash = $hash
+        $shot.hash = $state.Hash
     }
     $watch.Stop()
     if ($retried.Count -gt 0) {
@@ -1113,7 +1175,9 @@ if ($SkipGoldensNow) {
         }
         Add-Unchecked "goldens were REGENERATED, not checked -- review the manifest diff and name the moved shots in the commit"
     } elseif ($moved.Count -eq 0 -and $broken.Count -eq 0) {
-        Add-Stage -Name "goldens" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail "$shotCount shot(s) hash-identical; gpu $liveGpu"
+        $passDetail = "$shotCount shot(s) hash-identical; gpu $liveGpu"
+        if ($goldenWorkerCount -gt 1) { $passDetail = "$passDetail; $goldenWorkerCount workers" }
+        Add-Stage -Name "goldens" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail $passDetail
     } else {
         $names = @($moved | ForEach-Object { ($_ -split ' ')[0] }) + @($broken | ForEach-Object { ($_ -split ':')[0] })
         Add-Stage -Name "goldens" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds `

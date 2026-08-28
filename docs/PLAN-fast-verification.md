@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Remaining stages and final contract
 
-21. ☐ Prove or reject parallel golden rendering
+21. ☑ Prove or reject parallel golden rendering
 22. ☑ Set the hitch check's isolated cadence
 23. ☐ Ratchet the full verification budget and documentation
 
@@ -682,7 +682,7 @@ the start of the plan, exit 0.
 
 # Wave C — Remaining stages and final contract
 
-## C21 ☐ Prove or reject parallel golden rendering
+## C21 ☑ Prove or reject parallel golden rendering
 
 **Goal.** Determine whether two or more simultaneous golden launches reduce the 93.1-second stage
 without changing raw pixels, frame identity, adapter reporting, or failure evidence.
@@ -702,6 +702,58 @@ sizes, adapters, exit codes, and total wall. Inject one moved hash, one missing 
 
 **⚠ Traps.** Deterministic simulation does not guarantee deterministic concurrent driver behavior.
 A faster run with flaky hashes is a disproof, not a tuning problem.
+
+**Landed.** `RunTests.ps1` gained `-GoldenWorkers <n>` (default 4). The stage still cleans and lays
+out per-shot state exactly as before, then launches shots in registry-order batches of that size
+through the same `Start-Godot`/`Wait-Godot` split the engine stage's shards already use: a batch's
+worth of processes are started together, each with its own per-shot `$EngineTimeoutSec` watchdog,
+and the whole batch is awaited before the next one starts. Every shot keeps its own process, its
+own `--log-file`, its own `.out`/`.err` and its own PNG, whatever the worker count — concurrency
+only changes how many of those are in flight, never their identity. The silent-death `--verbose`
+retry (BL-039) runs afterward and serially, over whichever shots died silently in their own batch,
+so a flaky retry never competes with a fresh launch for the GPU. `-RegenGoldens` writes the
+manifest from the same per-shot state either way, so its canonical shape and round-trip identity
+are unaffected by the worker count.
+
+**Measured** (`$env:CSVM_DATA_ROOT="Z:\CSVM"`, `.\RunTests.ps1 -SkipUnits -SkipEngine -GoldenWorkers N`,
+nothing else on the test desktop, one binary throughout, three repeats per row):
+
+| Workers | Wall (3 runs) | Hash-identical every run | Adapter |
+|---:|---|---|---|
+| 1 (serial) | 88.4s / 88.2s / 88.1s | yes, 16/16 all three runs | NVIDIA GeForce RTX 5080 / 1.4.341, unchanged |
+| 2 | 49.2s / 49.3s / 49.4s | yes, 16/16 all three runs | unchanged |
+| 3 | 41.5s / 41.4s / 41.5s | yes, 16/16 all three runs | unchanged |
+| 4 | 29.9s / 30.0s / 29.7s | yes, 16/16 all three runs | unchanged |
+
+Every run reported the same 16 raw-pixel hashes, the same `sim_frame` per shot, the same
+`1280x720` size and the same adapter string as the serial reference — no GPU or driver contention
+was observed at any tested count on this machine. A `-RegenGoldens` run at 4 workers rewrote
+`manifest.json` with 0 hashes changed (`git diff` empty against the pre-experiment file), so the
+canonical-shape and round-trip guarantee holds under concurrency too.
+
+**Chosen default: 4.** It is the fastest of the four counts measured, all of which stayed
+bit-identical, and it matches B13's own engine-shard default rather than introducing a second
+number to reason about. Confidence on this item stays lead-only in the sense the plan names: this
+is one machine's GPU and driver, not a sweep across hardware, so a hash that moves under
+`-GoldenWorkers 4` elsewhere is a disproof of that count on that machine, not evidence against the
+mechanism here — `-GoldenWorkers 1` remains the serial reference for re-checking it.
+
+**Injected cases**, all run at `-GoldenWorkers 4` to prove the concurrent path isolates evidence the
+same way the serial path always has, then reverted and confirmed by `git diff`:
+
+- **Moved hash.** `viewer-bhawk`'s manifest hash was temporarily set to a wrong value. The stage
+  reported `MOVED viewer-bhawk: deadbeef… -> 0f50dc5b…` and failed, while all 15 other shots read
+  `ok` with their own manifest hashes — `1 moved, 0 broken of 16 [viewer-bhawk]`, exit 1.
+- **Missing PNG.** One shot's `Png` path was temporarily pointed at a subdirectory the engine never
+  creates (`CaptureDirector.Tick`'s save path does not `Directory.CreateDirectory` first, unlike the
+  F12 ad-hoc `SaveScreenshot`). The stage reported `c3-island: no PNG written (Godot exited 0)` and
+  failed, while the other 15 shots stayed `ok` — `0 moved, 1 broken of 16 [c3-island]`, exit 1.
+- **Timeout.** One shot's `Wait-Godot` call was temporarily given a 2-second timeout instead of the
+  real watchdog. The stage reported `c1-crash: timed out after …s (Godot exited 124)` with its
+  evidence preserved under `.scratch/goldens-failures/<timestamp>/`, while the other 15 shots
+  completed and read `ok` — `0 moved, 1 broken of 16 [c1-crash]`, exit 1.
+
+**Verified.** <pending orchestrator run>
 
 ## C22 ☑ Set the hitch check's isolated cadence
 
