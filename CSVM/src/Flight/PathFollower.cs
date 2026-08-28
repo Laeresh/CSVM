@@ -6,9 +6,9 @@ namespace CSVM.Flight;
 /// <summary>
 /// The engine's SECOND movement law: a placed vehicle driven along an authored waypoint path
 /// instead of through <see cref="FlightModel"/>. The two are exclusive, and the dispatcher picks
-/// between them before any flight law runs, so nothing here is a steering input. Reaching the last
-/// waypoint clears <see cref="Following"/>, which is the handoff back to the flight model. Pure
-/// state and maths, so a test drives it with no engine. Decode and constants:
+/// between them before any flight law runs, so nothing here is a steering input. Reaching the final
+/// leg's steering target clears <see cref="Following"/>, which is the handoff back to the flight
+/// model. Pure state and maths, so a test drives it with no engine. Decode and constants:
 /// <c>docs/org/flightModel.md</c>, "The scripted-path follower".
 /// </summary>
 public sealed class PathFollower
@@ -35,11 +35,15 @@ public sealed class PathFollower
     /// binary but not identified as any authored quantity.</summary>
     public const float ClimbGain = 83.3f;
 
-    /// <summary>How far past the last waypoint the final leg's steering target sits, so the
-    /// vehicle stops turning and flies the runway heading out.</summary>
+    /// <summary>How far from the waypoint BEHIND the final leg its steering target sits, measured
+    /// along the leg: the vehicle flies the runway heading out to that point, and reaching it,
+    /// not the last waypoint, is the handoff. ⚠ On a run whose final leg is shorter than this the
+    /// vehicle flies past its last waypoint, which is what gives an airfield launch its climb-out
+    /// (docs/org/flightModel.md "The scripted-path follower").</summary>
     public const float FinalLegOvershoot = 300f;
 
-    /// <summary>Remaining distance along the leg direction at which the leg is finished.</summary>
+    /// <summary>Remaining distance along the leg direction, to the steering target, at which the
+    /// leg is finished.</summary>
     public const float LegAdvanceDistance = 5f;
 
     /// <summary>The ride height movement classes other than 0 and 4 take. ⚠ Classes 0 and 4 (the
@@ -75,8 +79,8 @@ public sealed class PathFollower
     /// <summary>The waypoint being flown toward. The last one is the final leg.</summary>
     public int Leg { get; private set; }
 
-    /// <summary>Whether the path still owns this vehicle. It goes false once, on reaching the last
-    /// waypoint, and that is the handoff to the flight model. ⚠ A separate flag from
+    /// <summary>Whether the path still owns this vehicle. It goes false once, on reaching the final
+    /// leg's steering target, and that is the handoff to the flight model. ⚠ A separate flag from
     /// <see cref="Frozen"/>: folding the two together cannot express "placed and waiting", which is
     /// what most authored path vehicles spend a mission in.</summary>
     public bool Following { get; private set; }
@@ -89,11 +93,16 @@ public sealed class PathFollower
     /// aircraft classes read a vehicle-type field this project has not identified.</summary>
     public float RideHeight { get; init; }
 
+    /// <summary>The pitch of the vehicle's motion, radians, positive climbing: the bearing to the
+    /// steering target's height, which is what lifts a launch on its final leg.</summary>
+    public float Pitch { get; private set; }
+
     /// <summary>Whether the vehicle is on its last leg, where it accelerates and climbs out.</summary>
     public bool OnFinalLeg => Leg >= _waypoints.Count - 1;
 
     /// <summary>The point the vehicle is steering at this instant: the leg's waypoint raised by the
-    /// ride height, or, on the final leg, a point past it that also rises with speed.</summary>
+    /// ride height, or, on the final leg, the point <see cref="FinalLegOvershoot"/> along the leg
+    /// from the waypoint behind, raised with speed.</summary>
     public Vector3 SteerTarget
     {
         get
@@ -104,7 +113,8 @@ public sealed class PathFollower
                 return target;
             }
 
-            target += LegDirection * FinalLegOvershoot;
+            var behind = _waypoints[Leg - 1];
+            target = behind + (Direction(behind, target) * FinalLegOvershoot);
             float over = (Speed * ClimbSpeedInverse) - ClimbSpeedFraction;
             if (over > 0f)
             {
@@ -112,18 +122,6 @@ public sealed class PathFollower
             }
 
             return target;
-        }
-    }
-
-    // The leg's own straight line, from the waypoint behind to the one ahead. Both the steering
-    // overshoot and the finish test are measured along it, never along the bearing to the target.
-    private Vector3 LegDirection
-    {
-        get
-        {
-            var leg = _waypoints[Leg] - _waypoints[Leg - 1];
-            leg.Y = 0f;
-            return leg.LengthSquared() > 0f ? leg.Normalized() : Vector3.Forward;
         }
     }
 
@@ -144,21 +142,17 @@ public sealed class PathFollower
         Speed = OnFinalLeg ? Speed + (FinalLegAcceleration * dt) : TaxiSpeed;
 
         // It barely advances while turning hard: a full-rate turn stops the vehicle dead, which is
-        // what keeps a taxiing aeroplane on the tarmac through a corner.
+        // what keeps a taxiing aeroplane on the tarmac through a corner. The motion is pitched at
+        // the target's height over the horizontal distance to it, the yaw being the heading.
         float step = Speed * (1f - Mathf.Abs(turn)) * dt;
-        var forward = new Vector3(-Mathf.Sin(Heading), 0f, -Mathf.Cos(Heading));
-        var moved = Position + (forward * step);
-        // Altitude is the one part the decode does not pin: the target's height is what the climb
-        // term raises, so the vehicle is taken to it over the horizontal distance still to run.
-        float remaining = new Vector2(target.X - Position.X, target.Z - Position.Z).Length();
-        moved.Y = remaining > step && step > 0f
-            ? Position.Y + ((target.Y - Position.Y) * (step / remaining))
-            : target.Y;
-        Position = moved;
+        Pitch = Mathf.Atan2(to.Y, new Vector2(to.X, to.Z).Length());
+        float flat = Mathf.Cos(Pitch);
+        var direction = new Vector3(-Mathf.Sin(Heading) * flat, Mathf.Sin(Pitch), -Mathf.Cos(Heading) * flat);
+        Position += direction * step;
 
-        var end = _waypoints[Leg];
-        var legDir = LegDirection;
-        if (new Vector3(end.X - Position.X, 0f, end.Z - Position.Z).Dot(legDir) > LegAdvanceDistance)
+        // The finish is measured to the steering target along the leg, so a final leg ends at its
+        // overshoot point and not at the last waypoint.
+        if ((target - Position).Dot(Direction(_waypoints[Leg - 1], target)) > LegAdvanceDistance)
         {
             return;
         }
@@ -171,5 +165,11 @@ public sealed class PathFollower
         {
             Leg++;
         }
+    }
+
+    private static Vector3 Direction(Vector3 from, Vector3 to)
+    {
+        var leg = to - from;
+        return leg.LengthSquared() > 0f ? leg.Normalized() : Vector3.Forward;
     }
 }

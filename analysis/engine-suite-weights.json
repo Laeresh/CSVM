@@ -127,6 +127,7 @@
     "partition-areas": 1.156,
     "scripted-path": 1.440,
     "generator-takeoff-run": 2.907,
+    "generator-launch-climb-out": 4.0,
     "wingman-station": 5.289,
     "wingman-engage": 1.161,
     "campaign-objectives-hud": 2.126,

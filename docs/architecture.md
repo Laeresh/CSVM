@@ -184,7 +184,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/SpectatorCamera.cs` — the `--freecam`/`--anim-lab` observation camera: RMB-look + WASD/QE, no roll; `Frame`/`FollowNode` track an object, `F`/pad `X` re-locks onto one.
 - `src/Flight/OrbitLock.cs` — the re-lock rule behind that key: nearest first, then outward, engine-free.
 - `src/Flight/FlightModel.cs` — the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, calibrated control rates.
-- `src/Flight/PathFollower.cs` — the second movement law: a placed vehicle driven along an authored waypoint path instead of through the flight model, handing itself back at the last waypoint.
+- `src/Flight/PathFollower.cs` — the second movement law: a placed vehicle driven along an authored waypoint path instead of through the flight model, handing itself back at the final leg's 300 m point.
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/ThrottleSlamSmoke.cs` — a large throttle jump streams dark exhaust trail smoke for a few seconds; a single notch or a decrease shows nothing.
 - `src/Flight/FuelTank.cs` — the flown tank: burns with the lever, and a dry one freezes the throttle lever where it stands. Engine-free.
@@ -3104,11 +3104,13 @@ picks between them before any flight law runs, so nothing here is a steering inp
 maths, driven by `Session/ScriptedPathVehicles.cs`. Holds two independent flags, `Following` (the
 path owns this vehicle) and `Frozen` (it is placed and waiting), because folding them together
 cannot express the state most authored path vehicles spend a mission in. Every constant is decoded,
-not tuned. What is NOT pinned by the decode, and is this port's own choice: the altitude between
-waypoints (the follower is taken to the target's height over the horizontal distance still to run),
-and the ride height, which for the aircraft movement classes reads a vehicle-type field this project
-has not identified. Law, constants and both gaps: [`org/flightModel.md`](org/flightModel.md), "The
-scripted-path follower".
+not tuned. The final leg steers at, and ENDS at, the decoded point 300 m along the leg from the
+waypoint behind it, raised with speed, so a run whose final leg is shorter than that flies past its
+last waypoint climbing (`FinalLegOvershoot`; the motion's `Pitch` is the bearing to that target's
+height, exposed for whoever poses the vehicle). What is NOT pinned by the decode: the ride height,
+which for the aircraft movement classes reads a vehicle-type field this project has not identified.
+Law, constants and the gap: [`org/flightModel.md`](org/flightModel.md), "The scripted-path
+follower".
 
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies
@@ -5589,13 +5591,17 @@ net pick through `AiNetFollower` (`SpawnedNet`). A surface host instead launches
 `<base>_aip<n>` take-off path, whose absence is a third load drop, and then FLIES that path: the
 launched aircraft is held (`FlightController.Held`, no flight integration and no collision, so a
 launch standing on its own deck is never a ram) and driven by a `PathFollower` over the path
-nodes' live positions (`LiveWaypoints`, so a run off a still-driving hull stays on it), nose down
-the current leg with the leg's own climb as pitch, until the last point, where `Activate` drops it
-into the flight model at the speed the run reached with the decoded 1.0 lever and its patrol net
+nodes' live positions (`LiveWaypoints`, so a run off a still-driving hull stays on it), nose along
+the follower's own motion (the leg's climb, then the final leg's climb-out), until the final leg's
+decoded 300 m point, well past a short strip's last point, where `ReleaseHeld` drops it into the
+flight model at the speed and climb the run reached with the decoded 1.0 lever and its patrol net
 reseated where it arrived (`StepRuns`, the same shape as `CampaignDirector.PlaceOnPath`'s roster
 taxi; `RunningCount` counts the runs in flight). Runs step BEFORE the cycles each `SimStep`, so a
 launch this step first moves on the next. Pinned by the `generator-takeoff-run` suite over
-C1/M02's `eairg31`; the launch pose alone by `campaign-submarine`. `LaunchOrdinal` numbers
+C1/M02's `eairg31` (hand-off about 250 m past the last point, 54 m up, 53 m/s) and by
+`generator-launch-climb-out`, the same launch flown on by its pilot for 30 s over the real
+airfield with the world's colliders up, alive and above the field; the launch pose alone by
+`campaign-submarine`. `LaunchOrdinal` numbers
 every launch for the decoded `%s_eg%d` instance name. Door transitions play the authored or
 node-name-defaulted `open_anim`/`close_anim` (`EnemyGenerators.DefaultDoorAnim`; an unauthored
 close is the open, as in the loader) through host-scoped hooks (`AnimRuntime.PlayWithin`/

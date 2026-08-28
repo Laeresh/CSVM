@@ -525,16 +525,13 @@ public sealed partial class AiGeneratorRuntime : Node
 
         public bool Ended { get; set; }
 
-        /// <summary>The follower's yaw with the current leg's own climb as pitch: the follower
-        /// keeps a heading only, and a deck run that climbs authors its pitch in the points.</summary>
+        /// <summary>The follower's own motion direction, yaw and pitch: a deck run that climbs
+        /// authors its pitch in the points, and the final leg's climb-out raises it further.</summary>
         public Vector3 Nose
         {
             get
             {
-                int leg = Mathf.Clamp(Follower.Leg, 1, _waypoints.Count - 1);
-                var along = _waypoints[leg] - _waypoints[leg - 1];
-                float flat = new Vector2(along.X, along.Z).Length();
-                float pitch = flat > 1e-6f ? Mathf.Atan2(along.Y, flat) : 0f;
+                float pitch = Follower.Pitch;
                 float heading = Follower.Heading;
                 return new Vector3(-Mathf.Sin(heading) * Mathf.Cos(pitch), Mathf.Sin(pitch),
                     -Mathf.Cos(heading) * Mathf.Cos(pitch));

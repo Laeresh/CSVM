@@ -178,7 +178,8 @@ work.
 - the path is kept on the aircraft at `+0xc8` with the flag at `+0xcc` and the leg index zeroed
   at `+0xd0`, which is the take-off run it then flies under the scripted-path follower
   (`FUN_0048a110`, docs/org/flightModel.md "The scripted-path follower": 40 mph along the run,
-  accelerating and climbing out on the final leg, the flag cleared at the last point), and which
+  accelerating and climbing out on the final leg, the flag cleared at the final leg's 300 m point,
+  past a short strip's last waypoint), and which
   also suppresses the net-nearest-node snap an ordinary activation makes (`FUN_004b0f40`), so the
   run places the aircraft and the net takes over where the run ends.
 
@@ -242,7 +243,8 @@ so launches are Peacemakers configured from that template and appear at the subm
 CSVM resolves a surface host's take-off path at load, drops the generator when it is shorter than
 two points, and launches on the decoded pose: point 0 plus 0.2 m, nose on point 1, at rest with
 the throttle open. An aircraft then flies the take-off **run** under the scripted-path follower
-and is handed to the flight model at the last point; a hull runs the same points and joins its
+and is handed to the flight model at the final leg's 300 m point, climbing; a hull runs the same
+points and joins its
 net where they end (`Session/SurfaceVehicle.cs`).
 
 CSVM applies the decoded capacity check when `capacity > 0`. Campaign generators named by a

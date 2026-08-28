@@ -168,6 +168,7 @@ public static class SuiteCatalog
         "partition-areas",
         "scripted-path",
         "generator-takeoff-run",
+        "generator-launch-climb-out",
         "wingman-station",
         "wingman-engage",
         "campaign-objectives-hud",
@@ -843,16 +844,22 @@ public static class SuiteCatalog
             "the second movement law (BL-361) over C1's authored pp1 takeoff path: a placed " +
             "vehicle sits frozen on its first waypoint however long the mission runs, START_TAXI " +
             "releases it onto a 40 mph taxi, the final leg accelerates past that speed and lifts " +
-            "it off the strip, and reaching the last waypoint hands it back at the speed it " +
-            "reached",
+            "it off the strip, and reaching the final leg's decoded 300 m point hands it back at " +
+            "the speed it reached",
             ScriptedPathTaxi));
         into.Add(new TestHarness.Suite("generator-takeoff-run",
             "a surface generator's launch flies its take-off run (BL-522) over C1/M02's eairg31: " +
             "the launched aircraft is held on the run from the decoded launch pose, passes every " +
-            "eag31_aip point in order at the taxi law's speeds, and at the last point is released " +
-            "into the flight model above the taxi speed with the lever open, its patrol net " +
+            "eag31_aip point in order at the taxi law's speeds, and at the final leg's decoded " +
+            "300 m overshoot point, well past the last point and climbing, is released into the " +
+            "flight model well above the taxi speed with the lever open, nose up, its patrol net " +
             "reseated where it arrived",
             GeneratorTakeOffRun));
+        into.Add(new TestHarness.Suite("generator-launch-climb-out",
+            "the same eairg31 launch on C1/M02's real airfield with the world's colliders up, " +
+            "flown by its own pilot for 30 s after the hand-off: the Peacemaker is alive with no " +
+            "ram and no crash, never came back down to the strip, and ends above the field",
+            GeneratorLaunchClimbOut));
         into.Add(new TestHarness.Suite("wingman-station",
             "the D34 campaign wingman (BL-362): the decoded netless mode-wingman escort law as " +
             "geometry (both body-frame stations, the rolled-leader frame, the 106.68/259.08 m " +
