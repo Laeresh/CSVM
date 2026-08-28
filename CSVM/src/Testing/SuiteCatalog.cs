@@ -175,6 +175,7 @@ public static class SuiteCatalog
         "campaign-cutscene",
         "cutscene-letterbox",
         "intro-aircraft-stage",
+        "intro-wingmen",
         "dropoff-chuteman-stage",
         "dropoff-placement",
         "hangar-door-wake",
@@ -916,6 +917,12 @@ public static class SuiteCatalog
             + "airship, the flown airframe is drawn on the 'player' marker while callback 11 holds "
             + "the pilot out of flight, and the drop's launch cue fires",
             IntroAircraftStage));
+        into.Add(new TestHarness.Suite("intro-wingmen",
+            "the wingman C1/M04's shipped intro shows beside the player, over its BUILT world: "
+            + "'playerdrop' and 'playerthruclouds' each run their 'pfighterNN' definition, and the "
+            + "aircraft archive's 'piratefighter' prop is drawn, posed off the origin and inside the "
+            + "cutscene camera's frustum through the launch and the dive",
+            IntroWingmanSuites.IntroWingmen));
 
         // BL-540: the aircraft archive's 'chuteman' subtree never joined the world build, so a
         // mid-mission drop-off's own definition claimed a symbol with a null binding, the same

@@ -4565,10 +4565,13 @@ sequence. The archive is opened nowhere else in this build, so no other session 
 ## src/Mech3/AircraftStage.cs
 The aircraft-archive subtrees a story-mission intro, a chuteman-carrying drop cutscene or a
 wing-walk capture animates, staged into a chapter world before the animation bind: `piratefighter`
-built from the shared aircraft archive as a prop with no pilot and switched off until the intro
-activates it, a bodiless `player` marker the flown aircraft is posed onto, `chuteman`'s parachutist
-subtree (`chutemanparent` → `pilot`/`stamp`), switched off the same way `piratefighter` is until a
-mid-mission drop's own definition (e.g. C3/M01's `tdchute`) reparents and activates it, and
+built from the shared aircraft archive as a prop with no pilot, drawn in the archive's own shipped
+state (ACTIVE) because no definition switches it on: `generic_intro`'s `gi_pfighter1` re-asserts
+that state and parents it under the airship, while C1/M04's `pfighter11`..`pfighter13` only fly it
+on SI scripts, so a prop built switched off leaves that intro's wingman out of the launch and the
+dive; a bodiless `player` marker the flown aircraft is posed onto; `chuteman`'s parachutist
+subtree (`chutemanparent` → `pilot`/`stamp`), switched off (the shared `chuteman.zrd` RESET_STATE)
+until a mid-mission drop's own definition (e.g. C3/M01's `tdchute`) reparents and activates it; and
 `FigureNodes` (`rope_ladder`, `pickup_cpilot`) under a switched-off holder rather than switched off
 themselves, because nothing ever activates the wing-walking pilot: it is the capture's own
 `OBJECT_ADD_CHILD` into the shot that draws him, which is what the original gets from a library

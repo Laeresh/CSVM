@@ -349,7 +349,15 @@ Two aircraft, both from the aircraft archive rather than the chapter's gamez.
 
 CSVM stages both, from the aircraft archive, only for a mission that bootstraps an intro
 (`Mech3/AircraftStage.cs`). `piratefighter` is built as a prop with no pilot and no flight model,
-switched off until `gi_pfighter1` activates it; `player` is a bodiless marker, since the aeroplane
+drawn in the archive's own shipped state: the node is ACTIVE in `planes.zbd`, the shared
+`piratefighter` reader def's `RESET_STATE` asserts its children's states and never its own, and
+`gi_pfighter1`'s `OBJECT_ACTIVE_STATE [piratefighter, true]` re-asserts what already holds. That
+is what C1/M04's own intro relies on: its `pfighter11`..`pfighter13` (called by `scene1`,
+`playerdrop` and `playerthruclouds`) set the children, call `wing_lights_blink`, and fly the prop
+on an SI script, with no activation and no `OBJECT_ADD_CHILD` at all, so a prop built switched
+off shows that intro's launch and dive with the wingman missing. Where a script leaves it is where
+it stays after the handoff (`pfighter13` ends 95 m over the water past the dive), in this engine
+and the original alike. `player` is a bodiless marker, since the aeroplane
 it stands for is the one the pilot flies and that model belongs to the flown `FlightController`.
 Every staged node's compiled pointer is rebased onto the chapter's own base, so the definition's
 symbol table binds the names it addresses. `OBJECT_ACTIVE_STATE [player, false]` stays callback 11's
@@ -374,7 +382,8 @@ aircraft-archive node **2288** (a parentless `Object3d`, model-less, one child `
 at 2291) — the same archive `player`/`piratefighter` come from, addressed the same way: C3's base
 7500 makes the compiled def's symbol table read `chuteman` 9788, `chutemanparent` 9789, `pilot`
 9790, `stamp` 9791, each exactly `2288..2291 + 7500`. The shared `chuteman.zrd` reader ships the
-node `INACTIVE` as its own `RESET_STATE`, the same base state `piratefighter` ships in.
+node `INACTIVE` as its own `RESET_STATE`, which is where it differs from `piratefighter`: that
+node ships ACTIVE and no `RESET_STATE` touches it.
 
 Before `BL-540`, `AircraftStage` staged `player`/`piratefighter` alone, so `chuteman`'s subtree
 never joined the runtime's node table: the drop's own definition claimed a symbol with a null

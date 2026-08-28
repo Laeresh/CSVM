@@ -66,9 +66,9 @@ public sealed class AircraftStage
     /// </summary>
     public Node3D? PlayerMarker { get; private set; }
 
-    /// <summary>The staged <c>piratefighter</c> subtree, built switched off: the intro's own
-    /// <c>gi_pfighter1</c> is what activates it. Null when the archive carries no such node.
-    /// </summary>
+    /// <summary>The staged <c>piratefighter</c> subtree, drawn from the build in the archive's own
+    /// shipped state: no definition switches it on, its SI scripts only pose it. Null when the
+    /// archive carries no such node.</summary>
     public Node3D? Prop { get; private set; }
 
     /// <summary>The staged <c>chuteman</c> subtree, built switched off: a mid-mission drop's own
@@ -127,12 +127,15 @@ public sealed class AircraftStage
         // the world's own SceneBuilder reads the chapter gamez's meshes and materials, which none of
         // these subtrees' model indices address.
         var scene = new SceneBuilder(planesGamez, textures, cullBackfaces: true);
+        // ⚠ Drawn in the archive's own shipped state (ACTIVE), never forced off: C1/M04's
+        // pfighter11..13 fly it on SI scripts and nothing in that mission activates or parents it,
+        // so a prop built switched off leaves the wingman out of the launch and the dive.
         if (planesGamez.FindByName(PropNode) is { } prop
             && scene.BuildSubtree(prop, collisionSkip: _ => true) is { } builtProp)
         {
             builtProp.Transform = Transform3D.Identity;
             Rebase(builtProp, pointerBase);
-            AnimRuntime.SetSubtreeActive(builtProp, false);
+            AnimRuntime.SetSubtreeActive(builtProp, prop.Active);
             worldRoot.AddChild(builtProp);
             stage.Prop = builtProp;
         }
