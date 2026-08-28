@@ -2366,8 +2366,14 @@ usual.
   wingman onto the chapter's first net, has no callers. The remaining fly-away path in CSVM is
   `AiPilot.FlyPatrol`'s netless arm reading `TargetHeadingDeg` and `TargetAltitude` after
   `FlyPursuit` has overwritten them, so a pilot with no net and no leader holds the last bearing to
-  a dead target.
-  *Cross-refs:* `BL-524`, `docs/org/aiPilot.md`.
+  a dead target. A third symptom from the take-off run: a launch handed off at the end of its
+  `<base>_aip*` path (27 m/s, 2 to 3 m over the strip) dies within about 2 s with a wing into the
+  apron (`AI ram into a5/col`, CM07's eg0/eg1/eg3, eg2 survives), because `Patrol.Reseat` picks
+  the nearest node and the patrol law banks toward it at once while the flight model reaches
+  100 m/s inside 170 m; the original's launched aircraft skips the net-nearest snap
+  (`FUN_004b0f40`) and heads for whatever the spawner left, which is undecoded. The first turn
+  after a ground launch is this machine's.
+  *Cross-refs:* `BL-524`, `docs/org/aiPilot.md`, `BL-522`'s closing commit (`git log --grep=BL-522`).
 
 - `BL-550` `[Feature]` **The AI's altitude floor is enforced at one site in CSVM and at three in
   the original: the manoeuvre veto and the mode-5 global disable are both missing.** *Evidence:*
