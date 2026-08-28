@@ -57,7 +57,8 @@ prior run.
 **The AI mode machine (`BL-523`, `BL-550`, `BL-558`, `BL-565`, `BL-566`) is out of scope.** It is
 one decode of `AiModeMachine`'s source routines, heavier than any item here, and it gets its own
 run; an item that touches the machine on its way (A6's launch release, C22's boat AI) takes only
-what its own symptom needs and hands anything deeper back to `BL-523`.
+what its own symptom needs and hands anything deeper back to `BL-523`. E41 is the one
+exception: it enters the machine's two danger-zone modes, and only those, under a decoded rule.
 
 ## Decisions (2026-08-28)
 
@@ -763,8 +764,9 @@ condition), and the run reads the ribbon's route polyline classified by material
 **Model recommendation.** `<TODO: not settled this session>`
 
 **Verify.** A unit test driving a tagged net node into the two modes and out again on a fixture
-polyline; a headless CM13 run whose `[ai]` mode lines show every racer entering mode 5 once per
-zone in course order; then the user flies CM13 and judges whether the racers fly the zones and
+polyline; a headless CM13 run whose log shows every racer entering mode 5 once per zone in course
+order (the mode machine logs no transitions today, so that `Log.Info` line is part of the item);
+then the user flies CM13 and judges whether the racers fly the zones and
 the race is winnable, with their eyes outranking the log.
 
 **⚠ Traps.** Do not invent the entry condition (the prohibition on `AiModeMachine` stands until
