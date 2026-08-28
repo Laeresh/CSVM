@@ -68,6 +68,8 @@ behind [sounds.md](sounds.md)'s `MUSIC` groups).
   `Persist.NNN` and `Mission.NNN` carry.
 - [campaign-sequence.md](campaign-sequence.md) — the campaign's 24-mission order, its mission ids,
   and the progression rule.
+  - [Campaign mission lookup](campaign-missions.md) — the `CM01`-`CM24` ↔ `C<n>/M0<n>` ↔ `seq`
+    table, both directions.
 
 ### Presentation and UI
 

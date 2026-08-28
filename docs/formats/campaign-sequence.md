@@ -11,7 +11,7 @@ needs.
 
 - [Conceptual model](#conceptual-model)
 - [`cm_sequence.zrd` record layout](#cm_sequencezrd-record-layout)
-- [The 24-mission table](#the-24-mission-table)
+- [The 24-mission table](#the-24-mission-table), in [campaign-missions.md](campaign-missions.md)
 - [Mission ids](#mission-ids)
 - [Progression: what advances Next Mission](#progression-what-advances-next-mission)
 - [Per-mission lookups](#per-mission-lookups)
@@ -73,40 +73,10 @@ Derive an act's story position from `seq / 5`, never from `area`.
 
 ## The 24-mission table
 
-`Long name` is `IDS_MISSIONLONGNAME + seq`; the act prefix shown there is part of the string.
-`Wing` is the `wingman` flag. `Save id` is the `Persist.NNN` / `Mission.NNN` suffix
-(see [Mission ids](#mission-ids)).
-
-| seq | Act | Act mission | Folder | Save id | Briefing state | Narration wav | Long name (3450+seq) | Short name (3480+seq) | Wing |
-|---:|---|---:|---|---:|---|---|---|---|---|
-| 0 | Hawaii | 1 | `C3/M01` | 601 | `brief_c61` | `c1-HA-m1` | Hawaii - The Lost Treasure of Sir Francis Drake | The Lost Treasure | yes |
-| 1 | Hawaii | 2 | `C3/M05` | 605 | `brief_c65` | `c1-HA-m5` | Hawaii - The Great British Bomber Heist | The Bomber Heist | no |
-| 2 | Hawaii | 3 | `C3/M02` | 602 | `brief_c62` | `c1-HA-m2` | Hawaii - Nathan Zachary & The Secret Invasion | The Secret Invasion | yes |
-| 3 | Hawaii | 4 | `C3/M03` | 603 | `brief_c63` | `c1-HA-m3` | Hawaii - Nathan Zachary & The Sinister Sub | The Sinister Sub | yes |
-| 4 | Hawaii | 5 | `C3/M04` | 604 | `brief_c64` | `c1-HA-m4` | Hawaii - The Union Jack's Revenge | Union Jack's Revenge | yes |
-| 5 | Northwest | 1 | `C1C/M01` | 301 | `brief_c31` | `c2-NW-m1` | Northwest - Nathan Zachary & The Red Menace | The Red Menace | no |
-| 6 | Northwest | 2 | `C1/M02` | 102 | `brief_c12` | `c2-NW-m2` | Northwest - Nathan Zachary & The Pilfered Prototype | The Pilfered Prototype | no |
-| 7 | Northwest | 3 | `C1B/M03` | 203 | `brief_c23` | `c2-NW-m3` | Northwest - Nathan Zachary & The Petrol Pit | The Petrol Plot | yes |
-| 8 | Northwest | 4 | `C1/M04` | 104 | `brief_c14` | `c2-NW-m4` | Northwest - Peril for Paladin Blake | Peril for Blake | yes |
-| 9 | Northwest | 5 | `C1/M05` | 105 | `brief_c15` | `c2-NW-m5` | Northwest - Nathan Zachary & Mercy's Errand | Mercy's Errand | yes |
-| 10 | Hollywood | 1 | `C2/M02` | 402 | `brief_c42` | `c3-HW-m1` | Hollywood - Nathan Zachary & The Stolen Starlet | The Stolen Starlet | yes |
-| 11 | Hollywood | 2 | `C2/M01` | 401 | `brief_c41` | `c3-HW-m2` | Hollywood - The Great Plane Robbery | The Great Plane Robbery | yes |
-| 12 | Hollywood | 3 | `C2/M03` | 403 | `brief_c43` | `c3-HW-m3` | Hollywood - Nathan Zachary & The Nefarious Trap | The Nefarious Trap | yes |
-| 13 | Hollywood | 4 | `C2B/M04` | 504 | `brief_c54` | `c3-HW-m4` | Hollywood - Nathan Zachary & The Clash of Dreadnaughts | Clash of Dreadnaughts | yes |
-| 14 | Hollywood | 5 | `C2/M05` | 405 | `brief_c45` | `c3-HW-m5` | Hollywood - The Fight for the FIGAROA | Fight for the FIGAROA | yes |
-| 15 | Colorado | 1 | `C4/M01` | 701 | `brief_c71` | `c4-RM-m1` | Rocky Mountains - Raid on the Rocky Express | Raid on the Rocky Express | no |
-| 16 | Colorado | 2 | `C4/M02` | 702 | `brief_c72` | `c4-RM-m2` | Rocky Mountains - Nathan Zachary & The Pirate's Duel | The Pirate's Duel | no |
-| 17 | Colorado | 3 | `C4/M03` | 703 | `brief_c73` | `c4-RM-m3` | Rocky Mountains - Deceit at Devil's Horn | Deceit at Devil's Horn | no |
-| 18 | Colorado | 4 | `C4/M04` | 704 | `brief_c74` | `c4-RM-m4` | Rocky Mountains - Rescue the Black Swan | Rescue the Black Swan | no |
-| 19 | Colorado | 5 | `C4/M05` | 705 | `brief_c75` | `c4-RM-m5` | Rocky Mountains - Nathan Zachary & The Unholy Alliance | The Unholy Alliance | yes |
-| 20 | Manhattan | 1 | `C5/M01` | 801 | `brief_c81` | `c5-MH-m1` | Manhattan - Death on the Docks | Death on the Docks | no |
-| 21 | Manhattan | 2 | `C5/M02` | 802 | `brief_c82` | `c5-MH-m2` | Manhattan - Nathan Zachary & The Runaway Witness | The Runaway Witness | yes |
-| 22 | Manhattan | 3 | `C5/M03` | 803 | `brief_c83` | `c5-MH-m3` | Manhattan - Nathan Zachary & The Criminal Exodus | The Criminal Exodus | yes |
-| 23 | Manhattan | 4 | `C5/M04` | 804 | `brief_c84` | `c5-MH-m4` | Manhattan - Battle over Broadway | Battle over Broadway | yes |
-
-The table accounts for every `M0n` folder that ships: `C1` (3), `C1B` (1), `C1C` (1), `C2` (4),
-`C2B` (1), `C3` (5), `C4` (5), `C5` (4) sum to 24, each used exactly once. The `IA1` and `MP1`-`MP3`
-folders alongside them belong to Instant Action and multiplayer and are not part of this sequence.
+**The table lives in [campaign-missions.md](campaign-missions.md)**, which maps each `CM` ordinal
+to its `seq`, storage address, save id, act, briefing state, narration wav and display names, and
+carries the reverse folder-to-`CM` index. It is a separate page because naming a mission is a
+lookup every piece of campaign work needs, well before anything on this page.
 
 `area` names the act as `COLORADO`, the scrapbook data calls it "Skyhaven", and the player-facing
 string (`IDS_MISSIONAREA`, id 1223) calls it "Rocky Mountains". All three name act 4.
@@ -131,19 +101,13 @@ narration filename.
 
 ## Naming a mission in a report
 
-**`CM01` to `CM24`, the campaign ordinal, one-based.** `CM01` is the first mission flown and `CM24`
-the last. Use it in reports, backlog entries, commit messages and at the controls; give the storage
-address alongside it the first time a piece of work names a mission, as `CM01 (C3/M01)`, so the
-files it points at are one lookup away.
-
-Three collisions this avoids, which is why the prefix is `CM` and not something shorter. A bare
-`M02` is the mission folder inside an act, and those folders are not in play order, so `M02` and the
-second mission of the campaign are different missions. `C3` is a world folder, not an act. And a
-bare number in prose reads as whichever numbering the reader has in mind.
+**`CM01` to `CM24`, the campaign ordinal, one-based.** The notation and the collisions it avoids
+are in [campaign-missions.md](campaign-missions.md), which is also where a `CM` resolves to a
+folder.
 
 ⚠ **`CM` is one-based and `seq` is zero-based, so `CM02` is `seq` 1.** They differ by one everywhere
-they meet: the profile's stored position, `--campaign=<profile>:<seq>`, and the table above are all
-`seq`. Convert once, at the edge that reads a human's number, and never carry both conventions in
+they meet: the profile's stored position, `--campaign=<profile>:<seq>`, and the lookup table's own
+index column are all `seq`. Convert once, at the edge that reads a human's number, and never carry both conventions in
 the same function.
 
 ## Progression: what advances Next Mission
