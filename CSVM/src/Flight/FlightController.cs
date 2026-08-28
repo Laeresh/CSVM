@@ -1481,7 +1481,12 @@ public partial class FlightController : Node3D
             bool sweeping = onSweepStep && !_lifecycle.CollisionGraceActive;
             ContactReport contact = default;
             Node? hitBody = null;
-            bool hit = sweeping && SweepAirframe(prev, step, out contact, out hitBody);
+            // A human rig sweeps the airframe hulls; an AI rig sweeps its def's collision probes,
+            // the original's shape (see SweepProbes): one origin point on every AI def, so its
+            // wings clip through a slot the hull cannot pass, the CM13 racers' dzpath2 arch first.
+            bool hit = sweeping && (IsHumanPiloted
+                ? SweepAirframe(prev, step, out contact, out hitBody)
+                : SweepProbes(prev, step, out contact, out hitBody));
             if (!hit && sweeping)
                 hit = CenterRayContact(prev, probeEnd, step, len, out contact, out hitBody);
             // No contact means the boxes cleared the whole motion, which is where they are drawn.
@@ -3307,6 +3312,46 @@ public partial class FlightController : Node3D
             StruckIsAircraft = (report.Collider as AircraftBody)?.Rig != null,
         };
         return true;
+    }
+
+    // The original's contact test (FUN_0048d7f0): each of the def's collision probes is carried
+    // from the pose the sweep runs from to this frame's pose and the earliest strike along the
+    // motion wins (docs/formats/vehicle.md "Collision probes": the player defs author six, every
+    // AI def resolves basic_airplane's single origin probe, which is what lets the CM13 racers
+    // thread the 9.7 m dbase arch on dzpath2). A def with no probe list reports nothing, and the
+    // centre ray behind it stands.
+    private bool SweepProbes(Vector3 from, Vector3 motion, out ContactReport contact, out Node? hitBody)
+    {
+        contact = default;
+        hitBody = null;
+        if (Stats?.CollisionProbes is not { Count: > 0 } probes)
+            return false;
+        float len = motion.Length();
+        if (len < 1e-4f)
+            return false;
+        float best = float.MaxValue;
+        foreach (var probe in probes)
+        {
+            var offset = _model.Attitude * probe;
+            var start = from + offset;
+            if (!World.Ray(start, start + motion, CollisionLayers.WorldAndAircraft, Body?.ExcludeSelf, out var report))
+                continue;
+            float fraction = start.DistanceTo(report.Position) / len;
+            if (fraction >= best)
+                continue;
+            best = fraction;
+            hitBody = report.Collider;
+            contact = new ContactReport
+            {
+                Impact = report.Position,
+                Normal = report.Normal.LengthSquared() > 1e-6f ? report.Normal : -motion / len,
+                Part = Mathf.Abs(probe.X) > 1f ? "wing" : "center",
+                ColliderName = report.Collider is { } body ? $"{body.GetParent()?.Name}/{body.Name}" : "",
+                StopFraction = fraction,
+                StruckIsAircraft = (report.Collider as AircraftBody)?.Rig != null,
+            };
+        }
+        return best < float.MaxValue;
     }
 
     // The anti-tunnelling backstop, filling the same report off the centre ray alone: no box

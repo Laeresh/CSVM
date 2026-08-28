@@ -933,6 +933,19 @@ reports the node it just reached (`ArrivedNode`), `AiPilot` takes the node-tag e
 re-seats the follower. Measured on C2/M03 (`--campaign=<copy>:12`, 150 s): all six racers enter
 `dzpath1` then `dzpath2` in course order, each through approach, lock and exit.
 
+⚠ **The rail runs under the original's collision, and that collision is one point for an AI.**
+`FUN_00490590` moves the rail position through the sweep `FUN_0048d7f0` like any step, and a
+positive severity reaches `FUN_0048d2c0` and its AI doom rule, so nothing exempts a rail run
+from a wall. What lets the racers through `dzpath2`'s `dbase` arch (a 9.7 m slot at the rail's
+18 to 20 m height, the route vertex `(-6035.9, 18, -3825)` inside it) is the contact shape:
+the sweep carries the def's `collision` probes, and every AI def resolves `basic_airplane`'s
+single origin probe (docs/formats/vehicle.md "Collision probes"), so the wings never touch the
+posts. The rail's roll is the second derivative's lateral part normalised whatever its size,
+which on that near-straight stretch wanders between 6° and 63° and never reaches the knife
+edge the slot would need; the original does not need one. A hull-swept AI rams the arch's
+front face with a wingtip at `(-6038, 23, -3848)` every time, which is what the
+`campaign-racers` suite holds against with the world's colliders up.
+
 Not ported: the proximity roll (it needs the `+0xba` hit flag the mode machine does not carry;
 `DangerZoneRibbon.ProximityRangeM` and `HasFreeLane` are its admission terms, kept for it), the
 target release at the lock (CSVM's gunner target is the host's), the altitude-floor bypass on the

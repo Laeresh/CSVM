@@ -332,6 +332,13 @@ public sealed class PlaneStats
     /// undecoded.</summary>
     public List<(float Frac, string Anim)> VehicleInjureAnims = new();
 
+    /// <summary>The def's <c>collision</c> probes, plane-frame metres, nearest def in the damage
+    /// chain (docs/formats/vehicle.md "Collision probes"): the six-point airframe on a player
+    /// def, and basic_airplane's single origin probe on every AI def, since no AI def authors
+    /// its own. The original's contact test carries exactly these points, so an AI aircraft's
+    /// wings never touch anything.</summary>
+    public List<Vector3> CollisionProbes = new();
+
     /// <summary>The def's <c>turrets</c> block — the host→gunner link the carried half of
     /// <c>ai.zrd</c> is looked up through (empty on the six non-turret airframes). Both viewpoint
     /// rigs are parsed; carried AI gunner construction consumes only the <c>thirdp</c> entries.</summary>
@@ -593,6 +600,17 @@ public sealed class PlaneStats
                 if (item is List<object?> { Count: >= 2 } entry
                     && entry[0] is float frac && entry[1] is string anim)
                     stats.VehicleInjureAnims.Add((frac, anim));
+            break;
+        }
+
+        foreach (var d in damageChain)
+        {
+            if (d.List("collision") is not { } probeList)
+                continue;
+            foreach (var item in probeList)
+                if (item is List<object?> { Count: >= 3 } p
+                    && p[0] is float px && p[1] is float py && p[2] is float pz)
+                    stats.CollisionProbes.Add(new Vector3(px, py, pz));
             break;
         }
 

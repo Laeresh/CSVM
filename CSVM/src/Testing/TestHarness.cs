@@ -850,6 +850,24 @@ public sealed class TestContext
             _worlds.Remove(chapter);
             DisposalSeconds += TimeDestroy(cached);
         }
+        // One physics space: a cached chapter's colliders would stand inside the new world's
+        // airspace (C1's scenery met C2/M03's racers), so a collidable build evicts every cached
+        // collidable world first; the suites that want one back rebuild it.
+        if (collision)
+        {
+            var evicted = new List<string>();
+            foreach (var (key, w) in _worlds)
+            {
+                if (w.Collision)
+                    evicted.Add(key);
+            }
+            foreach (var key in evicted)
+            {
+                var w = _worlds[key];
+                _worlds.Remove(key);
+                DisposalSeconds += TimeDestroy(w);
+            }
+        }
         var world = BuildWorld(chapter, collision, mission ?? Mission);
         if (defaultMission && chapter == Chapter)
         {

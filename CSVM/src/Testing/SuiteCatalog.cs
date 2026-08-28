@@ -19,6 +19,7 @@ using static CSVM.Testing.CampaignBriefingRepaintSuites;
 using static CSVM.Testing.CampaignHudSuites;
 using static CSVM.Testing.CampaignLoopSuites;
 using static CSVM.Testing.CampaignMarkerSuites;
+using static CSVM.Testing.CampaignRacerSuites;
 using static CSVM.Testing.CampaignRosterSuites;
 using static CSVM.Testing.CampaignSuites;
 using static CSVM.Testing.CampaignZeppelinSuites;
@@ -190,6 +191,7 @@ public static class SuiteCatalog
         "campaign-loop",
         "campaign-zeppelins",
         "campaign-danger-zones",
+        "campaign-racers",
         "campaign-objective-markers",
         "campaign-objective-target-path",
         "campaign-objective-labels",
@@ -1042,6 +1044,13 @@ public static class SuiteCatalog
             + "completion, and the director's real NotifyDangerZoneCompleted path completes the "
             + "SECONDARY (OBJECTIVE3) and OBJECTIVE11 the way a flown mission would",
             CampaignDangerZoneObjectives));
+        into.Add(new TestHarness.Suite("campaign-racers",
+            "CM13's six hafury racers spawned from C2/M03's own aiv roster into its built world "
+            + "with the colliders up: each resolves basic_airplane's single origin collision probe "
+            + "(the decoded AI contact shape, so its wings clip through the dbase arch dzpath2 "
+            + "threads at rail height), and over the flown run every racer flies dzpath1 and then "
+            + "dzpath2 on rails end to end, returns to its net and never rams anything",
+            CampaignRacers));
 
         // BL-468: the objective-target store had no consumer, so a flown mission never showed the
         // player where its sites were.

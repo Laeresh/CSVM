@@ -2607,7 +2607,10 @@ neutral on the authored values and the window binding on all of them), the `cras
 — the collision restitution's ceiling), the `engine_sound` def name with its
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
 records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per-part
-`injure_anims`), and the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
+`injure_anims`), the def-level `VehicleInjureAnims`, and the `collision` probe list as
+`CollisionProbes` (nearest def in the damage chain: the player def's six points, or
+`basic_airplane`'s single origin probe on every AI load, which is the shape `FlightController`'s
+AI sweep carries). Schema: docs/formats/vehicle.md.
 Two flavours of one airframe: `Load` resolves everything down the player chain, `LoadForAi` takes
   ONLY the damage model (pair, parts, def-level ladder) from the AI def's own chain — the player
   def's name minus its leading `p`, validated — and leaves `DefName`, dynamics, turrets and the
@@ -3381,9 +3384,12 @@ check, both turret/AI lines of sight) — goes through the one `IWorldQuery` bou
 (`GodotWorldQuery`, the sole adapter over `DirectSpaceState`); mask world+aircraft with its own
 `Body` (`AircraftBody`, built in `_Ready` from the same boxes) excluded by RID, so another plane
 is solid and a mid-air resolves through the same contact rules as terrain; `Crash`/`Respawn`
-toggle the body's hittability. Contact detection is two fillers of one `ContactReport` (see that
-entry): `SweepAirframe` from the sweep, and `CenterRayContact` from the anti-tunnelling centre ray
-when no box reached the obstacle. Deciding what that contact does is
+toggle the body's hittability. Contact detection is three fillers of one `ContactReport` (see that
+entry): `SweepAirframe` from the hull sweep on a human rig, `SweepProbes` on an AI rig (the def's
+`PlaneStats.CollisionProbes` carried along the motion as rays, the earliest strike winning, which
+is the original's contact test and resolves to ONE origin point on every AI def, so an AI's wings
+clip through a slot a hull cannot pass, the CM13 racers' `dzpath2` arch among them), and
+`CenterRayContact` from the anti-tunnelling centre ray when neither reached the obstacle. Deciding what that contact does is
 `AircraftContactResolver`'s (see that entry); this node builds the `ContactConditions`, hands over
 a `ContactEffects` for the applying, and performs the `ContactOutcome` (the struck rig's share and
 both grace windows, the HUD flash, the un-embed push, `Crash` on a fatal fate). Arming the struck
@@ -4780,7 +4786,9 @@ thread-safe: the probe owns it for one report. Which instrument drives each unre
 scene-tree host, and `WithWorld` — the chapter-world builder over `WorldSession`; the
 mission-override form `WithWorld(chapter, collision, mission, body)` builds a chapter at another
 mission and never caches it, since the cache is keyed by chapter alone — `zeppelin-damage` wants
-C1 at M04), the
+C1 at M04; a collidable build evicts every cached collidable world first, since one physics space
+holds them all and a cached chapter's scenery would stand inside the new world's airspace, which is
+how C1's scenery met C2/M03's racers), the
 PASS/FAIL/SKIP table, `test-report.json` in `TestContext.ScratchDir`, and the process exit code.
 `Select` is the pure selector over the flag's value — comma-separated terms, `suite:` exact, `tier:`
 a `SuiteCatalog` tier, anything else a substring — returning registry order and reporting every term
@@ -4996,7 +5004,11 @@ story rectangles, the scripted-path follower over C1's own takeoff path, the mis
 the generator's hangar doors over C1/M04, and the `FOG_STATE` event over its intro), plus
 `AlphaCutoutRaySuites` (the BL-477 census: what actually stops a weapon ray short of C3/M01's cargo
 zeppelin's slung tanks, as first-collider node names over a sphere of aspects) and
-`AirframeColliderSuites` (the collision hulls measured against the mesh they came from). They depend on
+`AirframeColliderSuites` (the collision hulls measured against the mesh they came from) and
+`CampaignRacerSuites` (CM13's six racers spawned from C2/M03's roster into its collidable world,
+flying `dzpath1` and `dzpath2` on rails end to end with the mission's opening stepped through the
+director, so the propane tanks hung in `dzpath1`'s gate are blown before anyone reaches them, and
+nobody rams the `dbase` arch). They depend on
 `TestHarness` through
 `TestContext`; shared fixtures are separate focused modules, not an all-purpose suite helper.
 
