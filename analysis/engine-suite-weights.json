@@ -61,6 +61,7 @@
     "zeppelin-launch": 0.773,
     "zeppelin-damage": 3.190,
     "zeppelin-broadside": 3.427,
+    "zeppelin-cannon-burnout": 8.890,
     "damage-stages": 0.067,
     "damage-hd": 1.089,
     "stop-sequence": 0.014,

@@ -76,7 +76,9 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   suffix since events reference nodes by index); light/puffer/dynamic-sound 44 bytes;
   static-sound refs **40 bytes** = one garbage-padded name field (the garbage runs past
   byte 32); **activation prereqs (48 B) ARE used** (contra the survey note): object
-  prereqs carry `active` ∈ {0,1,2} and real pointers, `min_to_satisfy` up to the count;
+  prereqs carry a two-bit state word (`active_raw` ∈ {0,1,2}: bit 0 ACTIVE_LIST 1 /
+  INACTIVE_LIST 0, bit 1 the def's LOCAL_NODES_ONLY scope, written by `FUN_0051d7b0`; mech3ax's
+  `active` reads 2 as true, which is wrong) and real pointers, `min_to_satisfy` up to the count;
   anim refs 72 B — `ref_ty` **1 = CALL_ANIMATION with LOCAL_NAME** (name + local_name
   halves, both garbage-padded), 0 = plain CALL_ANIMATION. Object/node name fields use MW/PM's
   `Default_node_name` padding convention, with zero-padded and garbage exceptions.

@@ -41,6 +41,7 @@ using static CSVM.Testing.TargetingSuites;
 using static CSVM.Testing.WingmanSuites;
 using static CSVM.Testing.WorldAndToolSuites;
 using static CSVM.Testing.WorldFidelitySuites;
+using static CSVM.Testing.ZeppelinCannonBurnoutSuites;
 using static CSVM.Testing.ZeppelinIdentitySuites;
 using static CSVM.Testing.ZeppelinSuites;
 namespace CSVM.Testing;
@@ -102,6 +103,7 @@ public static class SuiteCatalog
         "zeppelin-launch",
         "zeppelin-damage",
         "zeppelin-broadside",
+        "zeppelin-cannon-burnout",
         "damage-stages",
         "damage-hd",
         "stop-sequence",
@@ -624,6 +626,15 @@ public static class SuiteCatalog
             "idle window, an F18-destroyed cannon thins the next volley to 5, a " +
             "cannon_inaccuracy clone shows real scatter, and the zeppelin-vs-zeppelin arm " +
             "rand()-picks only the target's IN-ARC gasbags on constructed geometry", ZeppelinBroadsideSuite));
+        into.Add(new TestHarness.Suite("zeppelin-cannon-burnout",
+            "the animation-authored zeppelin kill on C1/M04's hk_zep (no zeppelin record): its " +
+            "sabotaged broadside doors are deployed from t=0, real gun rounds destroy one door and " +
+            "DamageAt two more, each door's WeaponHit death calls its gasbag burn, the burn " +
+            "switches the panels off and calls the finisher whose REQUIRED OBJECT_INACTIVE_LIST " +
+            "prerequisite reads those panels (compiled active_raw 2 = inactive, bit 1 is the " +
+            "local-nodes scope), three finishers satisfy finish_locklear, lockleargoesdown brings " +
+            "the hull down and the primary completes off lkgasbag05/panelleft1",
+            ZeppelinCannonBurnout));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",

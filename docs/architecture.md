@@ -815,8 +815,13 @@ The `unknown_seq` destruction slot parses into `AnimDefinition.DeathSlot`, delib
 `Sequences` (bootstrap and the sequence-walking derivations never see it); only
 `AnimRuntime.RunDeathSequence` dispatches it (`BL-276`, docs/formats/destructibles.md). The
 `ACTIVATION_PREREQUISITE` node-state form (a run of `Parent` entries closed by an `Object` leaf
-carrying `active`/`required`) parses into `AnimDefinition.PrereqNodes` beside the anim-list form's
-`PrereqAnims`; `AnimDefs` reads the reader spelling into the same list.
+carrying `active_raw`/`required`) parses into `AnimDefinition.PrereqNodes` beside the anim-list
+form's `PrereqAnims`; `AnimDefs` reads the reader spelling into the same list. ⚠ The leaf's state
+is bit 0 of `active_raw`, never mech3ax's `active`: the word is two flags, bit 0 the
+ACTIVE/INACTIVE list and bit 1 the def's LOCAL_NODES_ONLY scope (`FUN_0051d7b0`), so the 726
+local INACTIVE entries (every `finish*gasbag*` panel finisher) compile as 2, which mech3ax reports
+active. Read as active, the finisher never starts after its burn switched the panels off, and no
+anim-authored zeppelin (C1/M04's `hk_zep`) can burn out and sink.
 
 ## src/Mech3/AnimDefs.cs
 The zrdr front-end: ANIMATION_DEFINITIONS reader files normalized into CompiledAnim's

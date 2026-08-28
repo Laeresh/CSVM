@@ -301,7 +301,8 @@ public sealed class AnimDefinition
         // The activation prerequisite (zeppelin hull deaths): min-to-satisfy over an anim list.
         def.PrereqMinToSatisfy = (int)(d.Num("activ_prereq_min_to_satisfy") ?? 0f);
         // The node-state form is a path: Parent entries accumulate until the Object leaf closes
-        // them, and the leaf alone carries the required state.
+        // them. ⚠ The leaf's state is bit 0 of `active_raw`, never mech3ax's `active`: bit 1 is
+        // the LOCAL_NODES_ONLY scope, so a local INACTIVE entry is 2 (compiled-archives.md).
         var path = new List<string>();
         foreach (var prereq in d.Objects("activ_prereqs"))
         {
@@ -312,8 +313,10 @@ public sealed class AnimDefinition
             else if (prereq.Obj("Object") is { } leaf && leaf.Str("name") is { } leafName)
             {
                 path.Add(leafName);
-                def.PrereqNodes.Add(new AnimNodePrereq(path.ToArray(), leaf.Bool("active"),
-                    leaf.Bool("required")));
+                bool active = leaf.Num("active_raw") is { } raw
+                    ? ((int)raw & 1) == 1
+                    : leaf.Bool("active");
+                def.PrereqNodes.Add(new AnimNodePrereq(path.ToArray(), active, leaf.Bool("required")));
                 path.Clear();
             }
         }
