@@ -606,6 +606,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
   and 0.00 px at 10 km with heading 0. Fly it, rotate it, take consecutive frames, keep a control
   region that shares the transform but carries no drive.
 
+- **INSTR-31** — **A cache or fixture that hands a suite the WRONG subject is invisible to any
+  assertion that holds on both subjects; prove the key with an identity test, never with the
+  catalog.** Measured on `DecodeCache`: keying the chapter document on its file name alone (every
+  chapter's is `gamez.zip`) made all eight chapters resolve to C1, and `collision-visibility` — the
+  one suite that builds all eight — still reported PASS in 17.29 s, because "no enabled collider
+  under an invisible node" is true of C1 eight times. The `Assert.NotSame` unit test failed
+  immediately. A green catalog is evidence about the assertions, not about which world they ran on.
+
 ## SRC — sources and documents
 
 - **SRC-1** — **Validate whether bytes are meaningful before numeric sanity checks.**

@@ -86,6 +86,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
 - `src/Mech3/AircraftStage.cs` — stages the two aircraft-archive subtrees a story-mission intro animates into a chapter world's animation node table, at that chapter's cross-archive pointer base.
 - `src/Mech3/SessionArchives.cs` — `OpenFor(ArchiveIntent)` opens the five archives a chapter build needs and the matching `WorldSession.Options` lifetime flags, so `GameSession`, the anim lab and the test harness open the same five without hand-setting the flags.
+- `src/Mech3/DecodeCache.cs` — the opt-in store of decoded, read-only world inputs (`GameZ`, `AnimProgram`) keyed by their source paths, so a process building one chapter many times decodes it once.
 - `src/Mech3/EmptyStage.cs` — the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/WavCues.cs` — the RIFF `cue ` chunk of a WAV, as times in seconds (zip or dir): the briefing narration's marker points, which is the only clock a reveal script does not carry itself. Times come back ascending because a `WaitForMarker` number indexes them by sample offset and 13 of the 24 briefing wavs store their points out of that order. Kept apart from `SoundArchive`, which decodes to a Godot stream, so a menu page needing only timings stays engine-free. Decode: `docs/formats/briefing.md`.
@@ -824,7 +825,9 @@ Merges the compiled + reader front-ends for one mission — load both, prefer co
 keep the remainder — plus `StartAnims`; `ScriptFor` resolves an event slot to its archive SI script.
 The mission-scope gate against the compiled manifest (a library, not a full roster) is decode
 knowledge: docs/formats/anim-definitions.md. Which world ENTITIES a mission shows is MissionSetup
-plus the interp boot script, not this file.
+plus the interp boot script, not this file. `Defs`, `StartAnims` and `MissionLibrarySkipped` are
+`IReadOnlyList` over private backing lists: one program is already shared by every runtime `Subset`
+binds from it, and may be shared by several world builds (`DecodeCache`).
 
 ## src/Mech3/TextureCycler.cs
 Runs the gamez material `cycle` flipbooks (water, surf, wakes, crowds) by swapping `albedo_tex`;
@@ -4392,7 +4395,9 @@ they are testable. `SessionMode` is closed — Menu/Fly/Viewer/Freecam/AnimLab �
 
 ## src/Mech3/WorldSession.cs
 Builds one chapter world and binds its `AnimProgram` — the world+anim half of a session build;
-`Build` returns Root, Runtime, Program, Builder, Clutter, CloudDeck and Lights.
+`Build` returns Root, Runtime, Program, Builder, Clutter, CloudDeck and Lights. `Options.Decode`
+(null by default) is where the `AnimProgram` and the aircraft archive come from when the caller
+holds a `DecodeCache`; both are then shared and read-only.
 `Options.EmitterFactory` (null → the real `Anim.PufferEmitterFactory` over this build's texture
 archive and `EffectsParent`) is read once, here, and never reassigned after `Build` returns — a
 caller supplies its own to observe emitter lifetime with no GPU (`CSVM.Testing.CountingEmitterFactory`
@@ -4448,7 +4453,21 @@ them alongside the `WorldSession.Options.TexturesOutliveBuild`/`SoundsOutliveBui
 `TestHarness.BuildWorld` used to hand-write (`BL-241`'s own fix note: the harness forgot
 `TexturesOutliveBuild`). `StartupProfile.Mark`/`Record` calls are unconditional here, same as
 `WorldSession.Build`'s own phases — a no-op with no session under measurement, which is what lets
-the test harness drive the same code blind.
+the test harness drive the same code blind. The optional `decode` argument makes only the returned
+`Gamez` a shared read-only instance (`DecodeCache`); the other four are always this call's own.
+
+## src/Mech3/DecodeCache.cs
+The decoded inputs a world build can reuse, keyed by the absolute paths they were decoded from:
+`Gamez(path)` and `Anim(shared, chapterZrdr, missionZrdr, chapterAnim, missionAnim)`. The paths are
+the whole key because they already carry data root, chapter and mission; collision, mute, the
+emitter factory and the prewarm list all act after the decode, on objects this never holds. It
+owns nothing disposable and nothing Godot — the texture and sound archives keep their
+`ArchiveIntent` lifetimes, and scene nodes, runtimes and worlds are never stored.
+**Everything handed back is shared and read-only by contract**, which is why `AnimProgram`'s three
+collections are `IReadOnlyList`; `GameZ` has no such enforcement, so its one in-place writer
+(`EffectCycles.Apply`) has to stay idempotent over a constant input, which it is. Callers are
+serial by construction (`AnimArchive`'s SI-script pool is an unsynchronised lazy dictionary). An
+instance lives as long as its holder: the harness keeps one per run, a game session keeps none.
 
 ## src/Mech3/EmptyStage.cs
 The `--stage=empty` test stage: a flat collidable 20 km ground plane under a 100 m grid, standing in
@@ -4617,10 +4636,13 @@ for the next `WithWorld` build — a suite sets it, on a chapter other than `Cha
 default-chapter world built before the set is never reused in its place. `BuildWorld` opens its
 archives through `SessionArchives.OpenFor(ArchiveIntent.Suite, …)`, then `using`s the returned
 `Textures`/`Sounds` itself — `OpenFor` states the (both-false) lifetime flags, it does not own the
-disposal. `TestWorld` also carries the parsed `Gamez` past the build (not disposable, unlike the
-texture archive) so a suite can build real geometry of its own from it — the effect-template stage
-`effect-template-mesh` needs. Engine-error allowlisting and pass/fail policy: `ErrorAllowlist`,
-in code. Windowed-run rule: verification.md LOG-8.
+disposal. One `DecodeCache` per run rides both that call and `WorldSession.Options.Decode`, so the
+58 builds of a full catalog decode 8 chapter gamez and 16 programs rather than 58 of each; every
+`Gamez`/`Program` a suite reads is therefore shared and read-only. `TestWorld` also carries the
+parsed `Gamez` past the build (not disposable, unlike the texture archive) so a suite can build
+real geometry of its own from it — the effect-template stage `effect-template-mesh` needs.
+Engine-error allowlisting and pass/fail policy: `ErrorAllowlist`, in code. Windowed-run rule:
+verification.md LOG-8.
 
 **B11's phase attribution** (`test-report.json` schema 2). `BuildWorld` installs a private
 `StartupProfile` as `Current` for the span of one build (restored in a `finally`, so a thrown build

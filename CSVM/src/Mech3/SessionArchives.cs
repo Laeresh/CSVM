@@ -50,12 +50,13 @@ public sealed class SessionArchives
     /// timing each into <see cref="StartupProfile"/> exactly as <c>WorldSession.Build</c>'s own
     /// phases do, unconditionally even under the test harness's no-op <c>Record</c>.
     /// ⚠ The sound archive is scoped to the build and the texture archive is not; deliberate,
-    /// see <see cref="ArchiveIntent"/>. Never normalise the two to match.</summary>
+    /// see <see cref="ArchiveIntent"/>. Never normalise the two to match. A non-null
+    /// <paramref name="decode"/> shares the <see cref="Gamez"/> alone (<see cref="DecodeCache"/>).</summary>
     public static SessionArchives OpenFor(ArchiveIntent intent, string gamezPath, string texturesPath,
-        string soundsPath, string zrdrPath, bool mute)
+        string soundsPath, string zrdrPath, bool mute, DecodeCache? decode = null)
     {
         long mark = StartupProfile.Mark();
-        var gamez = GameZ.Load(gamezPath);
+        var gamez = decode == null ? GameZ.Load(gamezPath) : decode.Gamez(gamezPath);
         StartupProfile.Record("gamez", mark);
 
         mark = StartupProfile.Mark();

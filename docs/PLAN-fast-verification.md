@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Engine isolation and throughput
 
 11. ☑ Attribute world-build time at its internal boundaries
-12. ☐ Cache immutable decoded world inputs where the profile earns it
+12. ☑ Cache immutable decoded world inputs where the profile earns it
 13. ☐ Isolate engine suites and run balanced shards
 
 ### Wave C — Remaining stages and final contract
@@ -372,7 +372,7 @@ already keeps, not a second independently-collected figure.
 
 **Verified.** <pending orchestrator run>
 
-## B12 ☐ Cache immutable decoded world inputs where the profile earns it
+## B12 ☑ Cache immutable decoded world inputs where the profile earns it
 
 **Goal.** Repeated world builds reuse expensive immutable decode results while each suite receives
 fresh mutable Godot/runtime state.
@@ -394,6 +394,136 @@ All 148 suites and engine-error screening must remain equivalent.
 
 **⚠ Traps.** Do not cache scene nodes, runtimes, texture archives with expired lifetimes, or a world
 whose previous suite mutated objectives, visibility, damage, emitters, or roster state.
+
+**The per-phase split B11 left open.** A temporary per-build log line over `StartupProfile.Phases`
+(reverted, confirmed by `git diff`) split the full catalog's 58 builds by raw phase name. The
+23.46 s of archive/decode is two phases and only two:
+
+| Raw phase | Seconds | What it is | Distinct keys in the catalog |
+|---|---:|---|---:|
+| `gamez` | 11.32 | `GameZ.Load` (`SessionArchives.OpenFor`) | 8 chapters |
+| `anim` | 11.72 | `AnimProgram.Load` (`WorldSession.Build`) | 16 chapter+mission pairs |
+| `zrdr` | 0.38 | `MissionSetup.Load` + the sound def/group load | — |
+| `textures` | 0.04 | `new TextureArchive` — the constructor only indexes the zip | — |
+
+By chapter (decode seconds / builds): C1 8.50/19, C3 9.21/23, C2 1.42/4, C5 1.36/3, C4 1.31/3,
+C1C 0.59/2, C1B 0.58/2, C2B 0.48/2. The catalog is a C1+C3 workload; the other six chapters are
+2.7 s of decode between them. Two-thirds of the remaining build cost is runtime construction
+(`world` 37.34 s, `bind` 22.23 s, `clutter` 2.89 s), which is per-world by nature and out of scope
+here. Charging each distinct key one decode and every repeat nothing predicted a 18.23 s ceiling,
+9.65 s of it `gamez` and 8.58 s `anim`.
+
+**What is immutable, and what is not.** `TextureArchive` and `SoundArchive` are disposable and
+lifetime-bound to a build (`ArchiveIntent`), so neither is cached; nothing scene-side, runtime-side
+or world-side is either. Of the two phases that matter:
+
+- **`AnimProgram` — immutable after load, and now read-only by type.** Nothing in `CSVM/src` or
+  `CSVM.Tests` writes a program, an `AnimDefinition`, a sequence or an event after `Load` returns;
+  every write is inside a parser on an object it just built. Per-play state lives in
+  `AnimRuntime`-owned tables keyed BY the def (`_invalidated`, `_everStarted`, `_inputGoverned`,
+  `_washGates`, `_checkoutClosure`), never ON it — which is why one program can already be bound by
+  a world runtime and several `Subset` stages at once. The `List` fields A2 warned about are the
+  real hazard, so `Defs`, `StartAnims` and `MissionLibrarySkipped` became `IReadOnlyList` over
+  private backing lists; that cost exactly one call site (`LandingApproachSuites.cs`, which used
+  `List.Contains`).
+- **`GameZ` — immutable in practice, not by type, with one in-place writer.**
+  `EffectCycles.Apply` overwrites `CycleTextures`/`CycleSpeed`/`CycleLooping` on the materials it
+  resolves. It is safe to share through because it `Clear()`s before writing and its source is the
+  install-wide `effects.zrd`, so a second application over a shared instance writes the same values.
+  `MissionSetup.BindPartitions` was the other suspect and does not touch the gamez: the resolved
+  node indices land in the per-mission `MissionSetup`, so mission differences cannot leak through a
+  shared chapter document. `WorldBuilder`, `SceneBuilder`, `ClutterBuilder`, `AircraftStage`,
+  `GameSession` and every `TestWorld.Gamez` consumer hold it `readonly` and only read. Its own lazy
+  memo fields (`_parent`, `_placed`, `_markerGizmo`) are unsynchronised, which is why the contract
+  is single-threaded rather than merely read-only.
+
+**Landed.** `CSVM/src/Mech3/DecodeCache.cs` is an instance-scoped store keyed by the absolute paths
+a decode reads: `Gamez(path)` and `Anim(shared, chapterZrdr, missionZrdr, chapterAnim, missionAnim)`.
+The paths are the whole key because they already carry data root, chapter and mission, and the
+options that do not change what is decoded are deliberately absent from it — collision reaches
+`WorldBuilder` after the decode, mute gates only the sound archive (never cached), and the emitter
+factory and prewarm list act on the built runtime. It is opt-in: `SessionArchives.OpenFor` takes an
+optional `decode` and `WorldSession.Options.Decode` defaults to null, so a game session retains no
+chapter it has left and only the harness holds an instance (one per run, covering
+`GameZ.Load` for the chapter and for `AircraftStage`'s planes archive, plus `AnimProgram.Load`).
+`test-report.json` and the totals line carry `decodeCacheHits`/`decodeCacheMisses`, so a run shows
+the cache hit rather than only that the wall time moved.
+
+**Measured** (`$env:CSVM_DATA_ROOT="Z:\CSVM"`, warm, full catalog
+`.\RunTests.ps1 -SkipUnits -SkipGoldens -SkipHitch`, one run per row, no other engine work on the
+machine). Rows 2 and 4 are the A/B pair: same tree, the cache switched off at its two call sites
+and back on, so the only variable is the cache.
+
+| Run | `binary.md5` | Suite wall | Build | Decode | Hits/misses | Engine stage | Verdict |
+|---|---|---:|---:|---:|---|---:|---|
+| Baseline, cache absent | `c1c98578bc4741cb7b444d2f10fd04b7` | 245.27 s | 107.83 s | 23.46 s | — | 251.0 s | 153/153, errors clean |
+| Adjacent baseline, cache off | `e88a63c4bdd6e562ff1234ff945e81dd` | 243.49 s | 107.09 s | 23.36 s | 0/0 | 248.7 s | 153/153, errors clean |
+| Cache on | `8d5f9d3e70c901d7df095d4e95c82cd6` | 227.88 s | 89.16 s | 5.26 s | 102/25 | 234.7 s | 153/153, errors clean |
+| Cache on, shipping shape | `9f1cac8af741dc4a8fe7d8ee61ffe8e8` | 227.82 s | 88.89 s | 5.23 s | 102/25 | 234.8 s | 153/153, errors clean |
+
+Four distinct binaries, four distinct hashes (METHOD-6). Same-build spread is 0.7 % across the two
+cache-off runs and 0.03 % across the two cache-on runs, against B11's ~1 % figure. The decode phase
+falls 23.36 → 5.23 s, a drop of 18.13 s against the 18.23 s predicted from the key counts, so the
+mechanism is confirmed and not merely correlated (PERF-3/PERF-5). Suite wall falls 15.67 s (6.4 %)
+and the engine stage 13.9 s (5.6 %); the gap between 18.13 s of decode and 15.67 s of wall is
+`rest` reading 133.69 s against 136.20 s, inside its own 133.7–136.4 s band across the four runs.
+25 misses is exactly the distinct-key count the split predicted: 8 chapter gamez + 16 programs + 1
+shared aircraft archive. The complete `.\RunTests.ps1` on the shipping binary
+(`19b91809d089fa5e4c9ecb537e4d4dc0`) is green end to end: build 0.8 s, units 2490/2490 in 17.8 s,
+engine 153/153 in 235.2 s with errors clean and the same 102/25, goldens 16/16 hash-identical in
+87.9 s (`manifest.json` unmodified in the working tree, GOLD-9), hitch clean/inject as expected in
+16.5 s, 358.2 s total against A1's verified 383.3 s, exit 0.
+
+**Key discrimination.** `CSVM.Tests/DecodeCacheTests.cs` proves hit/miss identity directly: a
+repeated key returns the same instance and counts a hit, and a changed data root, chapter or
+mission each returns a different instance and counts a miss (the anim half needs no install, since
+`AnimProgram.Load` tolerates absent paths, which is what lets data root be varied at all). The
+`gamez` half runs against the install and separates C1 from C3. Collision and mute are proved
+absent from the key from the other direction, since they must NOT miss: `collision-visibility`
+builds all eight chapters with collision forced on after `destructible-census` built them without
+it, and its decode reads 0.04 s (8 hits, 0 misses) while both suites stay green; mute never reaches
+a cached call at all, because it gates only `sounds`/`zrdr`.
+
+**⚠ A wrong key does not necessarily go red in the engine catalog.** Keying `Gamez` on the file
+name alone (every chapter's is `gamez.zip`) was the able-to-fail control. It failed the identity
+unit test at once (`Assert.NotSame() Failure: Values are the same instance`), but
+`collision-visibility` — the one suite that builds all eight chapters — still reported PASS in
+17.29 s with `decode_hits=7`, having built C1 eight times: its assertion holds vacuously on a world
+it was not meant to be looking at. The identity test is the guard on the key, not the catalog.
+
+**⚠ For B13.** Sharding erodes this win, because a shard sees fewer repeats of its own chapters.
+Round-robining the same 58 builds over N processes and recharging each process's first use of a key
+gives 18.23 s saved at 1 shard, 14.44 s at 2, 12.52 s at 3 and 12.37 s at 4 — and at 4 shards that
+12.37 s is spread across four processes, so about 3 s comes off the critical path. Weighting shards
+by measured suite wall matters more than the cache does.
+
+**⚠ For B13: the balancer's weights.** From the cache-on report, 227.82 s of suite wall over 153
+suites; greedy longest-first division gives a max shard of 122.6 s at 2, 81.8 s at 3, 61.3 s at 4
+and 40.9 s at 6, each within 0.1 s of the arithmetic floor, so no single suite is the pacer at any
+useful shard count and membership can be chosen freely. `rest` (manual simulation plus assertions)
+is 136.20 s, 59.8 % of the wall, and its top 20 suites are 55.6 % of it — the campaign and landing
+families, which fly aircraft for seconds at a time:
+
+| Suite | Wall | Build | `rest` |
+|---|---:|---:|---:|
+| `campaign-roster` | 9.86 s | 2.15 s | 7.68 s |
+| `campaign-bomber-formation` | 8.12 s | 1.72 s | 6.38 s |
+| `wingman-station` | 5.62 s | 0.00 s | 5.62 s |
+| `player-destroy-choreography` | 4.69 s | 0.00 s | 4.69 s |
+| `landings-wingwalk-gate` | 6.81 s | 2.17 s | 4.63 s |
+| `loadout-bind` | 4.59 s | 0.00 s | 4.59 s |
+| `campaign-cutscene-skip` | 6.43 s | 2.18 s | 4.23 s |
+| `campaign-set-ai-net` | 5.91 s | 1.68 s | 4.22 s |
+| `campaign-squad-wakeup` | 5.71 s | 1.69 s | 4.01 s |
+| `campaign-airframe-swap` | 6.19 s | 2.17 s | 4.01 s |
+
+The two seven-world censuses (`collision-visibility` 11.09 s, `destructible-census` 9.38 s) are the
+longest suites by wall but are almost all build, and they are also the pair whose ordering the cache
+now rewards: whichever runs second pays 0.04 s of decode instead of 3.44 s. Putting them in the same
+shard is worth about 3 s; splitting them costs it. `emitter-lifetime` must still run before the
+shared C1 world is cached, unchanged by this item.
+
+**Verified.** <pending orchestrator run>
 
 ## B13 ☐ Isolate engine suites and run balanced shards
 

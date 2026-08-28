@@ -173,7 +173,8 @@ public static class TestHarness
         double totalWallSeconds = results.Sum(r => r.Seconds);
         string totalsLine = FormatTotalsLine(totalWallSeconds, totalWorldsBuilt, totalBuildSeconds,
             totals, totalDisposalSeconds, finalDisposalSeconds, totalRestSeconds, totalOverrunSeconds);
-        Log.Info("test", $"{totalsLine}");
+        var (decodeHits, decodeMisses) = ctx.DecodeCounts;
+        Log.Info("test", $"{totalsLine} decode_hits={decodeHits} decode_misses={decodeMisses}");
 
         var screen = ScreenEngineLog(out string? logPath);
         int pass = results.Count(r => r.Status == SuiteStatus.Pass);
@@ -459,7 +460,9 @@ public static class TestHarness
         json.AppendLine($"    \"disposalSeconds\": {Sec(phases.DisposalSeconds)},");
         json.AppendLine($"    \"finalDisposalSeconds\": {Sec(phases.FinalDisposalSeconds)},");
         json.AppendLine($"    \"restSeconds\": {Sec(phases.RestSeconds)},");
-        json.AppendLine($"    \"overrunSeconds\": {Sec(phases.OverrunSeconds)}");
+        json.AppendLine($"    \"overrunSeconds\": {Sec(phases.OverrunSeconds)},");
+        json.AppendLine($"    \"decodeCacheHits\": {ctx.DecodeCounts.Hits},");
+        json.AppendLine($"    \"decodeCacheMisses\": {ctx.DecodeCounts.Misses}");
         json.AppendLine("  },");
         json.AppendLine("  \"suites\": [");
         for (int i = 0; i < results.Count; i++)
@@ -633,6 +636,11 @@ public sealed class TestContext
 
     private readonly Dictionary<string, TestWorld> _worlds = new();
 
+    // One run builds the same chapter and the same chapter+mission many times, so the two
+    // expensive decodes are paid once each. Sound and pixel state are deliberately absent from it:
+    // see DecodeCache for what it holds and the read-only contract that binds every user.
+    private readonly DecodeCache _decode = new();
+
     public required string RepoRoot { get; init; }
     public required string DataRoot { get; init; }
     public required string Chapter { get; init; }
@@ -681,6 +689,10 @@ public sealed class TestContext
 
     /// <summary>The scratch directory every artifact this run writes must stay inside.</summary>
     public string ScratchDir => Path.Combine(RepoRoot, ".scratch");
+
+    /// <summary>How the decode store answered this run: reported so a warm-cache A/B shows the
+    /// hits happened rather than only that the wall time moved.</summary>
+    internal (int Hits, int Misses) DecodeCounts => (_decode.Hits, _decode.Misses);
 
     /// <summary>Records a check. A false verdict fails the suite but does not stop it — the rest of
     /// the checks still run, so one report names every broken thing rather than the first.</summary>
@@ -827,7 +839,7 @@ public sealed class TestContext
             // The archives are this scope's: WorldSession clears the puffer factory and the sound
             // loader after its bootstrap precisely so they can close here.
             var archives = SessionArchives.OpenFor(ArchiveIntent.Suite, gamezPath, texturesPath,
-                SoundsPath, ZrdrPath, Mute);
+                SoundsPath, ZrdrPath, Mute, _decode);
             using var textures = archives.Textures;
             using var sounds = archives.Sounds;
 
@@ -849,6 +861,7 @@ public sealed class TestContext
                     CutsceneRoots = CutsceneRoots,
                     LandingTriggers = CutsceneRoots,
                     PlanesGamezPath = PlanesGamezPath,
+                    Decode = _decode,
                     TexturesOutliveBuild = archives.TexturesOutliveBuild,
                     SoundsOutliveBuild = archives.SoundsOutliveBuild,
                 },

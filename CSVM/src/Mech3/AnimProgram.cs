@@ -17,24 +17,31 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class AnimProgram
 {
-    /// <summary>Every definition, compiled-preferred, in load order.</summary>
-    public readonly List<AnimDefinition> Defs = new();
-
-    /// <summary>The mission's NEW_GAME_START animation names, in order (startanims.json).
-    /// Order matters — C1/IA1 runs hangar3_doors then mp_hangar3_open over the same doors,
-    /// and the last write wins.</summary>
-    public readonly List<string> StartAnims = new();
-
-    /// <summary>Reader defs a loaded compiled manifest supersedes, so were not instantiated
-    /// (diagnostics): mission-scope defs the manifest does not list, and the shared/chapter
-    /// NAME1 multi-target defs the compiler expands per instance instead. They load, anchor and
-    /// register only on a reader-only extraction, where no compiled form exists.</summary>
-    public readonly List<string> MissionLibrarySkipped = new();
+    private readonly List<AnimDefinition> _defs = new();
+    private readonly List<string> _startAnims = new();
+    private readonly List<string> _missionLibrarySkipped = new();
 
     private readonly Dictionary<string, List<AnimDefinition>> _byAnimName =
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly HashSet<string> _seen = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Every definition, compiled-preferred, in load order. Read-only by type as well as
+    /// by convention: one program is shared by every runtime bound from it, and may be shared by
+    /// several world builds (<see cref="DecodeCache"/>), so a write here would reach all of
+    /// them.</summary>
+    public IReadOnlyList<AnimDefinition> Defs => _defs;
+
+    /// <summary>The mission's NEW_GAME_START animation names, in order (startanims.json).
+    /// Order matters — C1/IA1 runs hangar3_doors then mp_hangar3_open over the same doors,
+    /// and the last write wins.</summary>
+    public IReadOnlyList<string> StartAnims => _startAnims;
+
+    /// <summary>Reader defs a loaded compiled manifest supersedes, so were not instantiated
+    /// (diagnostics): mission-scope defs the manifest does not list, and the shared/chapter
+    /// NAME1 multi-target defs the compiler expands per instance instead. They load, anchor and
+    /// register only on a reader-only extraction, where no compiled form exists.</summary>
+    public IReadOnlyList<string> MissionLibrarySkipped => _missionLibrarySkipped;
 
     public int CompiledCount { get; private set; }
     public int ReaderCount { get; private set; }
@@ -80,7 +87,7 @@ public sealed class AnimProgram
                 // form must not anchor zeppelin sub-parts the loaded mission never authors.
                 if (haveMissionManifest && def.MultiTargets.Count > 0)
                 {
-                    program.MissionLibrarySkipped.Add($"{def.AnimName} (NAME1)");
+                    program._missionLibrarySkipped.Add($"{def.AnimName} (NAME1)");
                     continue;
                 }
                 program.Add(def, compiled: false);
@@ -91,7 +98,7 @@ public sealed class AnimProgram
         {
             if (haveMissionManifest && !missionManifest.Contains(KeyOf(def)))
             {
-                program.MissionLibrarySkipped.Add($"{def.Name}/{def.AnimName}");
+                program._missionLibrarySkipped.Add($"{def.Name}/{def.AnimName}");
                 continue;
             }
             program.Add(def, compiled: false);
@@ -197,7 +204,7 @@ public sealed class AnimProgram
         var key = KeyOf(def);
         if (!_seen.Add(key))
             return;
-        Defs.Add(def);
+        _defs.Add(def);
         if (compiled) CompiledCount++; else ReaderCount++;
         if (!string.IsNullOrEmpty(def.AnimName))
         {
@@ -270,7 +277,7 @@ public sealed class AnimProgram
                         && outer[i + 1] is List<object?> list)
                         foreach (var entry in list)
                             if (entry is List<object?> { Count: > 0 } e && e[0] is string name)
-                                StartAnims.Add(name);
+                                _startAnims.Add(name);
         }
         catch (Exception)
         {

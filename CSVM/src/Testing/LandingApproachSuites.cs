@@ -1005,7 +1005,7 @@ internal static class LandingApproachSuites
         {
             foreach (var def in world.Session.Program.ByAnimName(name))
             {
-                if (def.ByRange && !world.Session.Program.StartAnims.Contains(name))
+                if (def.ByRange && !System.Linq.Enumerable.Contains(world.Session.Program.StartAnims, name))
                 {
                     return def;
                 }
