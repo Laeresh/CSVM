@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
@@ -468,9 +469,11 @@ internal static class AnimationAndEffectsSuites
                     // The IMPACT_FORCE gate itself: one armed runtime, one body, the authored flag
                     // the only difference. ⚠ High above the surface, not at the rest pose, or the
                     // column tier stops both launches on the same polygon and they read alike.
-                    elsewhere.GlobalPosition = new Vector3(0f, surfaceY + DropHeight, 0f);
                     float LaunchY(bool impactForce)
                     {
+                        // Re-placed per launch: a launch integrates from the LIVE pose, so without
+                        // this the second body would start where the first one's 0.2 s left it.
+                        elsewhere.GlobalPosition = new Vector3(0f, surfaceY + DropHeight, 0f);
                         MotionRuntime.Create(runtime, elsewhere, Body(flagged: false, impactForce: impactForce),
                             Authored)?.Seek(0.2f);
                         return elsewhere.GlobalPosition.Y;
@@ -715,6 +718,78 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(scaled.IsEqualApprox(expected),
                 $"a longer third triple moves the body not one metre further end={scaled}");
             ctx.Note($"cruise end {first} against the authored placement 1600 m along +Z");
+        });
+    }
+
+    // ---- a chain of OBJECT_MOTION events on one placed node: the Barracuda's drive -------------
+
+    // C3/M03's `sub_movement` is the install's clearest chain: a reset placement 17.8 km from the
+    // hull's gamez pose (the map origin), a surfacing FromTo, three vector-form drive legs and a
+    // closing FromTo 1.2 m past where the legs end. The original integrates every leg from the
+    // node's live translation, so the hull never leaves its line. ⚠ A launch seeded from the
+    // authored rest pose plays the whole drive at the map origin and snaps back into the bay.
+    internal static void BarracudaDrive(TestContext ctx)
+    {
+        const float Tick = 1f / 30f;
+        const float DriveSeconds = 62f;     // 10 s surfacing, 44 s of drive, 6 s of settling, slack
+        const float StepLimitM = 10f;       // 40 m/s is 1.3 m per tick; a re-seat is kilometres
+        const float EndToleranceM = 3f;
+        var bay = new Vector3(-12032f, 0f, -11516.288f);
+        var start = new Vector3(-12032f, -38f, -13197.5f);
+
+        ctx.WithWorld("C3", collision: false, "M03", world =>
+        {
+            var runtime = world.Runtime;
+            var hulls = runtime.FindNodes("barracuda");
+            ctx.Same(1, hulls.Count, $"C3/M03 builds one barracuda node");
+            if (hulls.Count != 1)
+            {
+                return;
+            }
+            var hull = hulls[0];
+            var started = runtime.Play("sub_movement");
+            ctx.Check(started.Count > 0, $"sub_movement starts ({started.Count} instance(s))");
+            var placed = hull.GlobalPosition;
+            ctx.Check(placed.DistanceTo(start) < 1f,
+                $"the reset places the hull at its authored start placed={placed} start={start}");
+
+            var trace = new StringBuilder();
+            var last = placed;
+            float maxStep = 0f, maxStepAt = 0f;
+            Vector3 maxStepFrom = placed, maxStepTo = placed;
+            int steps = (int)(DriveSeconds / Tick);
+            for (int i = 1; i <= steps; i++)
+            {
+                runtime.Advance(Tick);
+                var now = hull.GlobalPosition;
+                float step = now.DistanceTo(last);
+                if (step > maxStep)
+                {
+                    maxStep = step;
+                    maxStepAt = i * Tick;
+                    maxStepFrom = last;
+                    maxStepTo = now;
+                }
+                if (i % 30 == 0)
+                {
+                    trace.AppendLine($"t={i * Tick:0.0} pos=({now.X:0.0},{now.Y:0.00},{now.Z:0.0}) step={step:0.00}");
+                }
+                last = now;
+            }
+
+            var end = hull.GlobalPosition;
+            var basis = hull.GlobalTransform.Basis.Orthonormalized();
+            float yaw = basis.GetEuler(EulerOrder.Yxz).Y;
+            var nose = -basis.Z;
+            ctx.Check(maxStep < StepLimitM,
+                $"the hull never jumps: largest step {maxStep:0.0} m at t={maxStepAt:0.0} s from {maxStepFrom} to {maxStepTo}");
+            ctx.Check(end.DistanceTo(bay) < EndToleranceM,
+                $"the drive ends in the bay end={end} authored={bay} off by {end.DistanceTo(bay):0.00} m");
+            ctx.Check(end.Z > start.Z + 1000f,
+                $"the drive ran along +Z from the start, not out to sea end.Z={end.Z:0.0} start.Z={start.Z:0.0}");
+            trace.AppendLine($"end=({end.X:0.0},{end.Y:0.00},{end.Z:0.0}) yaw={yaw:0.000} rad nose={nose}");
+            ctx.WriteArtifact("test-barracuda-drive.txt", trace.ToString());
+            ctx.Note($"largest step {maxStep:0.00} m, end {end}, yaw {Mathf.RadToDeg(yaw):0.0} deg, nose (local -Z) points {nose}");
         });
     }
 

@@ -1054,9 +1054,9 @@ namespace but ARE independently owned — their own entries below.
 tiers and how they pick a surface, the landing response, the termination model, and the retired
 readings (the spherical elevation, the ÷`run_time` tumble, `DebrisTune`, `no_altitude` as a second
 terrain test). Read it before changing a mechanism here; only what this engine adds is below.
-`MotionRuntime`'s launch seeds from the node's authored rest pose, since a shared effect template's
-children are re-homed by nothing between calls.
-Three nodes are exempt: see org/objectMotion.md, "The re-home rule".
+`MotionRuntime`'s launch seeds from the node's LIVE pose and a chain of events on one node
+continues leg from leg (org/objectMotion.md, "A launch starts from the node's live pose"); what
+keeps a repeat from compounding is the reset and checkout bookkeeping, never the launch.
 `RangeLaunchDirection` is the launch decode's ONE
 expression and `TumbleAxis` the tumble's; `ProjectilePool`'s gun-casing ejection reads the same
 `gunshell` event through both (INSTR-3), because two spellings of the maths is how they disagree —

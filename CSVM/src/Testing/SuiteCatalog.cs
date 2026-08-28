@@ -123,6 +123,7 @@ public static class SuiteCatalog
         "ground-contact",
         "forward-rotation",
         "launch-direction-cache",
+        "barracuda-drive",
         "self-ref-launch",
         "nulled-launch",
         "destructible-census",
@@ -658,6 +659,8 @@ public static class SuiteCatalog
             "an OBJECT_MOTION tumble turns at the authored RATE about its own launch direction's horizontal perpendicular, scaled by that direction's length — a vector-translation launch about its compiled direction, and not at all when that is zero", ForwardRotation));
         into.Add(new TestHarness.Suite("launch-direction-cache",
             "a vector-form OBJECT_MOTION's third triple is the compiled launch DIRECTION the tumble reads back, not a random spread: two bodies fly the identical path and end exactly where initial × run_time puts them", LaunchDirectionCache));
+        into.Add(new TestHarness.Suite("barracuda-drive",
+            "a chain of OBJECT_MOTION events on one placed node integrates every leg from the node's live pose: C3/M03's sub_movement drives the Barracuda 1680 m along +Z from its reset placement with no frame-to-frame jump and ends within metres of its closing FromTo in the bay", BarracudaDrive));
         into.Add(new TestHarness.Suite("self-ref-launch",
             "an OBJECT_MOTION naming the MAIN_ROOT_NODE sentinel launches the node its def was invoked on, taking that node over from whatever was driving it", SelfRefLaunch));
         into.Add(new TestHarness.Suite("nulled-launch",

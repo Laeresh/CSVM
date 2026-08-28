@@ -82,6 +82,7 @@
     "ground-contact": 0.017,
     "forward-rotation": 0.003,
     "launch-direction-cache": 0.010,
+    "barracuda-drive": 8.0,
     "self-ref-launch": 3.432,
     "nulled-launch": 0.023,
     "destructible-census": 8.603,

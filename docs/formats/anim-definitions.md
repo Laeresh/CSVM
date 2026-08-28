@@ -179,9 +179,9 @@ rotation-only; every ballistic use is `ON_CALL`/`WEAPON_HIT`, fired by a crash o
 So the rotation half runs through the lightweight `AnimRuntime.SpinMotion` (unchanged — the
 ambient world boots byte-for-byte the same), and the ballistic/scale/tumble half is **implemented
 ** through `AnimRuntime.MotionRuntime`, a full rigid body in the node's parent frame,
-seeded from its **authored rest** pose for a launch and from its live pose otherwise (: a
-shared effect template's children are never re-homed between calls, so seeding a launch from the
-live pose walked every repeat explosion's debris further from the blast than the one before):
+seeded from the node's **live** pose (the original's update adds each step to the node's own
+translation and writes no start position, so a chain of events on one node continues leg from
+leg; a pooled effect copy is returned to its spawn pose by the checkout, not by the launch):
 
 - `TRANSLATION.initial` is the launch **velocity** (a crash piece leaves at y=10 m/s); `rnd_xz` is
   the compiled launch **direction**, the cache the tumble reads back, and **not a random spread**:

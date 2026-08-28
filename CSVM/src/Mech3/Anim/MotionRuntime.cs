@@ -321,28 +321,13 @@ internal sealed class MotionRuntime : IAnimMotion
         m._tumbleAccel = fwd?.Num("delta") ?? 0f;
         m._spinRate = data.Obj("xyz_rotation")?.Vec3("initial") ?? Vector3.Zero;
 
-        // A ballistic launch seeds from the node's AUTHORED rest pose, not the live one.
-        // ⚠ Three exceptions keep the live pose instead (docs/architecture.md, src/Mech3/Anim/):
-        // a placed template root, a contact-landing continuation, a takeover.
-        bool seedsFromRest = m._hasBallistic && !target.TopLevel && !continuesLanding
-                             && !rt.Motions.DrivesTransform(target);
-        if (seedsFromRest)
-        {
-            m._heldOrigin = rest.Origin;
-            m._heldRot = rest.Basis.Orthonormalized();
-        }
-
-        // Which of the four conditions above decided the seed, and the authored pose a live-pose
-        // seed declined. A pooled copy relaunching from its last flight's END pose is invisible
-        // without this: the drift only reads once the pool wraps onto the same copy (BL-511).
+        // ⚠ Do not re-seat a launch on the authored rest pose; that teleported the Barracuda to the
+        // map origin between its surfacing FromTo and its drive. The original integrates from the
+        // node's live translation and writes no start position (docs/org/objectMotion.md).
         if (rt.DebugMotions && m._hasBallistic)
         {
-            string seed = seedsFromRest ? "rest"
-                : target.TopLevel ? "live:toplevel"
-                : continuesLanding ? "live:landing-resume"
-                : "live:takeover";
             var host = target.GetParent() as Node3D;
-            Utils.Log.Info("anim", $"anim: launch seed '{target.Name}' {seed} at {m._heldOrigin} (authored {rest.Origin}) under '{host?.Name}' {host?.Transform.Origin} rot {host?.Transform.Basis.GetEuler()} toplevel={target.TopLevel}");
+            Utils.Log.Info("anim", $"anim: launch seed '{target.Name}' live at {m._heldOrigin} (authored {rest.Origin}) under '{host?.Name}' {host?.Transform.Origin} rot {host?.Transform.Basis.GetEuler()} toplevel={target.TopLevel}");
         }
 
         // Nothing to drive → no motion (a bare gravity/bounce stub, handled by the caller).
@@ -593,11 +578,7 @@ internal sealed class MotionRuntime : IAnimMotion
     // The ballistic origin at time t, in the node's parent frame; factored out because the sweep
     // needs both ends of the step it is about to take. Measured from _ballisticStart rather than
     // 0, since a contact the body survives re-bases the launch at the surface.
-    private Vector3 BallisticOrigin(float t)
-    {
-        float e = t - _ballisticStart;
-        return _heldOrigin + _v0 * e + 0.5f * e * e * _accel;
-    }
+    private Vector3 BallisticOrigin(float t) => LaunchLaw.Origin(_heldOrigin, _v0, _accel, t - _ballisticStart);
 
     // The BOUNCE_SEQUENCE branch a contact selects, from the surface it struck. Water is the only
     // distinction drawn, and only where the block authors one; a null `water` branch falls back
