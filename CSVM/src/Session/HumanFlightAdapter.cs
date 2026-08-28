@@ -226,6 +226,10 @@ internal sealed class HumanFlightAdapter
                 // The gun aim assist's structure candidates (B4): the world's
                 // destructibles, when this session built a world at all.
                 controller.Destructibles = _world.WorldRuntime?.Destructibles;
+                // The HUD bracket's and the gun aim assist's vehicle candidates, on the same
+                // list the aircraft roster feeds: the mission's surface vehicles, when this
+                // session built any.
+                controller.SurfaceVehicles = _world.SurfaceVehicles;
                 controller.InfiniteAmmo = _policy.InfiniteAmmo;
                 controller.AmmoCapOverride = _policy.AmmoCap;
                 controller.AutoFire = _policy.AutoFire;

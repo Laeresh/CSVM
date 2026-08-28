@@ -1942,6 +1942,10 @@ public partial class GameSession : Node3D
             Textures = state.Textures,
             ZrdrPath = state.ZrdrPath,
         };
+        // Ensured here, before the roster reads it, rather than left to the later mode-ship/
+        // generator spawn sites: those cache-check the same field, so this only moves WHEN the
+        // runtime is first built, not whether it is built twice.
+        var surfaceVehicleRuntime = EnsureSurfaceVehicles(state);
         var worldBindings = new FlightWorldBindings
         {
             Ambience = _ambience,
@@ -1953,6 +1957,7 @@ public partial class GameSession : Node3D
             WorldScene = state.WorldScene,
             WorldRuntime = state.WorldRuntime,
             WorldEffects = worldEffects,
+            SurfaceVehicles = surfaceVehicleRuntime,
             TouchdownDefs = _worldEffectsFactory.TouchdownDefs,
             CrashProgram = state.CrashProgram,
             Sounds = state.Sounds,

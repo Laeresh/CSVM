@@ -327,6 +327,12 @@ public partial class FlightController : Node3D
     /// the scan nothing: that pass simply iterates an empty list.</summary>
     public DestructibleRegistry? Destructibles;
 
+    /// <summary>The mission's surface vehicles, when this session built any — on the SAME candidate
+    /// list the aircraft roster feeds (`VehicleList`, docs/org/aim-assist.md "The four lists": the
+    /// decoded list holds "aircraft and AI ground/sea vehicles"), never the structure or turret one.
+    /// Null in every build with no world or no hull spawned, which costs the scan nothing.</summary>
+    public SurfaceVehicleRuntime? SurfaceVehicles;
+
     /// <summary>Draw the collision probe — the swept ray plus the airframe boxes the
     /// crash test sweeps each physics frame — in green (red on the impact frame).</summary>
     public bool DebugCollision;
@@ -2148,6 +2154,7 @@ public partial class FlightController : Node3D
         {
             _aimCandidates.Clear();
             Projectiles.CollectAircraft(_aimCandidates);
+            SurfaceVehicles?.CollectVehicles(_aimCandidates);
             Projectiles.CollectTurrets(_aimCandidates);
             Projectiles.CollectFusedOrdnance(_aimCandidates);
             if (Destructibles != null)
@@ -2657,6 +2664,7 @@ public partial class FlightController : Node3D
             // keeps the clear cleared rather than an optimisation.
             _targetScan.Clear();
             Projectiles.CollectAircraft(_targetScan);
+            SurfaceVehicles?.CollectVehicles(_targetScan);
             Projectiles.CollectTurrets(_targetScan);
             // The fourth pool (E19): a TARGETABLE round in flight is selectable, which is why a
             // torpedo can be locked and shot at. The pool itself reads the admission byte.

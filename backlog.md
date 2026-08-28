@@ -855,15 +855,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fires. *Cross-refs:* `ZeppelinMotion`, `docs/formats/mission-entities.md` "Steering",
   `zeppelin-pandora-dead-end`.
 
-- `BL-598` `[Bug]` **CM08 (C1B/M03): the patrol boats take hits but cannot be targeted.** *Evidence:*
-  reported at the controls: the four boats C22's surface launch wakes at 181 s drive their nets and
-  rounds hit them, but the targeting HUD never brackets one and the aim assist never snaps to one.
-  *Fix shape:* `SurfaceVehicleRuntime`'s hull is neither an aircraft rig nor a world turret, so
-  `TargetSelection` and `AimAssist`'s candidate lists (vehicles, turrets, structures) do not see it;
-  decide which list the original puts a surface vehicle in (its targets record and the HUD class)
-  and register the hull there. *Cross-refs:* `SurfaceVehicle`, `TargetHud`, `AimAssist.AddStructures`,
-  `BL-523` (their gunnery).
-
 - `BL-586` `[Bug]` **One burst deals a world destructible one splash share per collider body it
   carries.** *Evidence (traced):* the C1 aagun carries ten collider bodies, and one flak bursting
   over its own pit dealt `-8.18/-8.04/-8/-7.36`, one share per body (the `turret-self-fire`
@@ -872,6 +863,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   keeping the nearest body's share; needs a `DamageSink`-side key, since the pool cannot resolve
   destructibles itself. *Cross-refs:* `docs/org/ordnanceTypes.md`, `turret-self-fire`,
   `BL-573`'s closing commit (`git log --grep=BL-573`).
+
+- `BL-605` `[Bug]` **A surface vehicle's aim-assist candidate carries zero velocity, so the lead
+  solver never leads a moving boat.** *Evidence (traced):*
+  `SurfaceVehicleRuntime.CollectVehicles` adds each hull with `Vector3.Zero` for velocity, where
+  `ProjectilePool.CollectAircraft` passes the rig's own; the aim assist's lead term is therefore
+  zero on a boat driving its net at the taxi speed, and the gun snaps to where the hull is rather
+  than where it will be. *Fix shape:* expose the `PathFollower`'s current velocity on
+  `SurfaceVehicle` and feed it through `CollectVehicles`. *⚠ Traps:* the candidate list membership
+  itself is settled and must not move (`VehicleList`, `docs/org/aim-assist.md` "The four lists");
+  this is the velocity field alone. Whether the original leads a surface vehicle at all is the
+  first question, not the magnitude. *Cross-refs:* `AimAssist.Scan`, `BL-523` (the boats' own
+  gunnery, a separate item).
 
 ## Flight model & collision physics
 

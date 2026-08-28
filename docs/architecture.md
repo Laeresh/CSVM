@@ -1493,7 +1493,9 @@ radians via `ConeCosFor`). Survivors rank by `alignment − distance × dist_fac
 B5 rotates the winner world→local into the slot's target field. Proven in the `aim-assist` suite,
 every gate with its able-to-fail baseline.
 `AimCandidateSet` keeps the four lists **separately** and deliberately: `Vehicles` (the live
-`FlightController`s), `Turrets` (fed since M4 C9a by `ProjectilePool.CollectTurrets` — every
+`FlightController`s, joined by every built `SurfaceVehicle` through
+`SurfaceVehicleRuntime.CollectVehicles` — the decoded `VehicleList` holds "aircraft and AI
+ground/sea vehicles" alike, docs/org/aim-assist.md "The four lists"), `Turrets` (fed since M4 C9a by `ProjectilePool.CollectTurrets` — every
 registered aircraft's carried gunners, on their host's team), `Structures`
 (`AddStructures(DestructibleRegistry)` — an **approximation** of the original's `targets.zrd`
 `MStructList`, recorded as one; `MissionTargets` is not the analogue, it holds objective display
@@ -5526,7 +5528,13 @@ nothing. Stepped from `_PhysicsProcess` on a realtime clock or `GameSession.Driv
 after the generators, like them. `GameSession` builds one lazily (`EnsureSurfaceVehicles`) for
 the roster phase and the generator block, only where a chapter world exists; `CampaignDirector`
 reaches it through `RosterInputs.SpawnSurface` and `WorldInputs.SurfaceVehicles`. Observability:
-one `surface: '<name>' … built at (…) water=…` line per hull. Pinned by `campaign-surface-vehicles`.
+one `surface: '<name>' … built at (…) water=…` line per hull. `CollectVehicles(AimCandidateSet)`
+appends every built hull to the SAME candidate list the aircraft roster feeds — never the
+structure or turret one, the decoded rule (docs/org/aim-assist.md "The four lists") — with an
+inert hull present but not live, the shape a crashed pilot already takes; `GameSession` wires the
+runtime onto every rig's `FlightController.SurfaceVehicles` through `FlightWorldBindings`, and
+`StepTargeting`/`ApplyFireOutcome` read it beside `CollectAircraft` for the HUD bracket and the
+gun aim assist alike. Pinned by `campaign-surface-vehicles`.
 
 ## src/Session/SurfaceVehicle.cs
 One built hull: no pilot, no flight model, no `FlightController`. Its movement is

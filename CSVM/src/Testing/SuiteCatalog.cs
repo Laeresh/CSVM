@@ -1311,9 +1311,10 @@ public static class SuiteCatalog
             + "spots on their Patrolboat nets, deactivated and hidden until woken, count for DEDG "
             + "only once woken, start their wake emitters on their own pt_emitter nodes, drive "
             + "their nets under the scripted-path law at the taxi speed with their height pinned "
-            + "to the water, and die once through the chapter's destructible pool; CM12's "
-            + "eshipg31 launch resolves a surface launch off Eshipg31_params, builds patrolboat_eg0 "
-            + "on the host's first take-off point kilometres from the world origin, runs the path "
+            + "to the water, land on the HUD's Enemy cycle and the gun aim assist's VehicleList "
+            + "once woken, and die once through the chapter's destructible pool; CM12's eshipg31 "
+            + "launch resolves a surface launch off Eshipg31_params, builds patrolboat_eg0 on the "
+            + "host's first take-off point kilometres from the world origin, runs the path "
             + "westward at the taxi speed, and never asks for an aircraft",
             SurfaceVehicleSuites.CampaignSurfaceVehicles));
 

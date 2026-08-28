@@ -120,7 +120,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — Damage share and target class
 
 31. ☐ `BL-586`: one burst deals a world destructible one splash share per collider body it carries
-32. ☐ `BL-598`: CM08's patrol boats take hits but cannot be targeted or aim-assisted
+32. ☑ `BL-598`: CM08's patrol boats take hits but cannot be targeted or aim-assisted
 
 ## Dependency and parallelism notes
 
@@ -536,7 +536,52 @@ check `FUN_004cb420` before choosing. A destructible whose bodies are genuinely 
 parts must not be collapsed by the same key; establish that the resolved destructible is the right
 granularity rather than assuming it.
 
-## D32 ☐ `BL-598`: CM08's patrol boats take hits but cannot be targeted or aim-assisted
+## D32 ☑ `BL-598`: CM08's patrol boats take hits but cannot be targeted or aim-assisted
+
+**Landed.** Re-verified open against the code: `AimCandidateSet` fed only `Vehicles` (aircraft, via
+`ProjectilePool.CollectAircraft`), `Turrets` (carried gunners plus world emplacements) and
+`Structures` (`DestructibleRegistry`); no collector walked `SurfaceVehicleRuntime.Vessels`, so a
+patrol boat's hull was in none of the three.
+
+The decode: `docs/org/aim-assist.md` "The four lists" already names `DAT_0071dabc` /
+`FUN_004729b0` (net registration string `s_VehicleList_00627414`) as **`VehicleList` — "aircraft
+and AI ground/sea vehicles"**, walked by `FUN_004897c0` as the per-plane sim pass; `TargetRef`'s
+own class model (`docs/org/targeting.md` "The class model", `FUN_004b5cd0`) independently confirms
+it: with neither the `otherTarget` nor `objectiveTarget` mission flag set, only a `TargetVehicle`
+or `TargetProjectile` can be classified Enemy/Ally at all (`TargetRef.Classify`'s
+`kind is not (Vehicle or Ordnance)` gate) — a `Structure` or `Turret` candidate with neither flag is
+not selectable, which is why routing a boat through `AddStructures`/`subParts` (the zeppelin
+sub-part path) would have landed it on no cycle rather than the Enemy one. `VehicleList` is not "the
+aircraft list stood in for convenience": it is the original's own list for a ground/sea AI vehicle,
+and the aircraft roster happens to be the other thing on it.
+
+**What changed.** `SurfaceVehicleRuntime.CollectVehicles(AimCandidateSet)` appends every built hull
+as a vehicle candidate (team off the block, `Live` = woken and not destroyed, no velocity — nothing
+here reads the follower's speed yet, a candidate for a follow-up). `FlightController` carries a
+`SurfaceVehicles` field beside `Destructibles`, wired by `GameSession` through `FlightWorldBindings`
+(`AiFlightAssembler`/`HumanFlightAdapter`), and `StepTargeting`/`ApplyFireOutcome` call it beside
+`CollectAircraft`, so a hull reaches both the HUD's candidate pool and the player's own gun aim
+assist. `SelectRankedTarget` (the AI gunner's own acquisition, `BL-523`'s territory) is untouched:
+it already filters to `c.Source is FlightController`, so it would have ignored a boat regardless.
+
+**Verified.** <pending orchestrator run>
+
+Suites (foreground, `$env:CSVM_DATA_ROOT="Z:\CSVM"`):
+`.\RunTests.ps1 -Suite "campaign-surface-vehicles,target-pool,target-selection,aim-assist,targeting-candidates" -SkipUnits -SkipGoldens`
+— all pass. `campaign-surface-vehicles` is extended with a direct, no-flight assertion (preferred
+per the plan's TODO: candidate-list membership needs no flight): after `Wake()`, a woken hull is
+confirmed `Live` on `AimCandidateSet.Vehicles`, lands on `TargetPool.Enemy` (the HUD's cycle) under
+the player's team, and is the winning candidate of `AimAssist.Scan` from a muzzle behind it (the
+gun aim assist). `.\RunTests.ps1 -Quick` is also green (226 units, 13 engine suites).
+`dotnet build` is 0 warnings; `CheckCommentCaps.ps1 -Summary` is clean.
+
+**Not verified.** A live CM08 flight past 181 s with the HUD actually drawing a bracket and the
+tracer visibly bending onto a boat — the suite proves candidate-list membership and the scan's
+winner, not the on-screen draw. Flying it is straightforward
+(`--chapter=C1B --mission=M03 --pos=<near a woken boat> --target=nearest` after 181 s of sim time)
+but was not run here, since the suite settles the mechanism the goal names.
+
+### Original approach (kept for reference)
 
 **Goal.** A surface vehicle is a target like the other target classes: the HUD brackets it and the
 aim assist snaps to it.
