@@ -130,6 +130,17 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave F — the CM02 capture (found on D31's way in)
 
 42. ☑ `BL-588`: CM02 is lost 20 s after the player captures the last bomber, because the swap leaves group 5 empty and every holder of the old rig dangling
+43. ☑ `BL-590`: the Barracuda teleports between its surfacing and its drive, because a launch was re-seated on the authored rest pose
+44. ☑ `BL-591`: the Pandora fires on the player in CM04; the broadside engage flag (COMPLETED_ZEPCANNONS) decoded, closes `BL-567` and `CAP-46`
+45. ☑ `BL-592`: CM06's docking cutscene hands flight back when its first callee ends and teleports the player when the row runs out
+46. ☑ `BL-593`: a gun ring's death fireballs and debris stand still while the hull sails on; B11's AT_NODE/WITH_NODE split withdrawn
+47. ☑ `BL-594`: CM07's launched Peacemakers strike the strip two seconds after hand-off; the take-off run ends 300 m past its last waypoint, climbing
+48. ☑ `BL-596`: the hangar hand-over plays without the aeroplane, and the Blue Streak's livery is the unpainted shipped skins (yellow wingtips)
+49. ☑ `BL-595`: no rope ladder, the passenger hangs in the air, no flare; the ALL_NAMES SI-script form decoded and the caboose choreography plays
+50. ☑ `BL-600`: CM09's intro shows no wingman on the launch and the dive; the piratefighter prop keeps the archive's shipped state
+51. ☑ `BL-599`: the Promised Land no longer burns out (regression from B14); the compiled prerequisite state is bit 0 of active_raw
+52. ☑ `BL-602`: CM13's first zone marker sits at the world origin; an origin-standing group site anchors on its built meshes, the race chain pinned
+53. ☐ `BL-601`: CM13's racers ram the hangar on dzpath2 (`<TODO: agent in flight>`)
 
 ## Dependency and parallelism notes
 
@@ -1239,19 +1250,21 @@ its wave, and record the verdicts in this plan under D31. Reopen with a new id m
   snap, and which way its nose faces against the bay opening is the open half (A5); its fighters
   fly the deck run and lift off instead of dying on the deck, and their first turn after lift-off
   is judged separately (A6; a wing into the apron on the first bank is `BL-523`); fly abeam the
-  Pandora inside cannon range and note whether its hatches open and rounds come at you (A3; the
-  decode says they do, `CAP-46` asks the same of the original).
+  Pandora inside cannon range: its hatches stay shut and no round comes at you (A3, F44; the
+  engage flag is never raised in this mission).
 - CM06 (C1C/M01): the three objective markers read `Zeppelin [Disable] -` over `Worker's Voyage`
   in red, `[Dock] -` over `Worker's Voyage Docking Hook` in blue and `[Dock] -` over `Pandora
-  Docking Hook` in blue (B12); shoot a gun ring off the Workers' Voyage: its fire rides the hull
-  while the ring's debris and fireballs stay where it died, which is authored (B11).
+  Docking Hook` in blue (B12); shoot a gun ring off a moving hull: its fire, fireballs
+  and debris all ride the hull (B11, F46).
 - CM07 (C1/M02): no AA gun destroys itself firing at the barrier (B13); the hangar hand-over
   animates (doors, lift, the drop) and hands over the Blue Streak build (nitro, twin 40 and twin
-  30, two pylons) in Blake Aviation livery, the livery being the one open choice (B14); flying
+  30, two pylons) in its shipped `blo_*` skins, unpainted, the blue-grey body with yellow
+  wingtips (B14, F48; `pbloodhawk` authors no `paint_pattern`); flying
   level inside 100 m of the staged ladder sensor deploys the rope ladder and banking past 45
   degrees retracts it (B15; a ladder hanging tilted with the aircraft is the unbuilt `ladder_roll`,
-  not the switch); the airfield's launches fly the strip and lift off (A6), and `eairg32` launches
-  nothing at all after four counted empty launches (C23).
+  not the switch); the airfield's launches fly the strip, climb out over the field and live (A6, F47); both
+  `eairg31` and `eairg32` launch Peacemakers here, since C1/M02's `egen.zrd` names
+  `Eairg31_params` for both (C23's counted empty launch is C1/M04's `eairg32`, judged in CM09).
 - CM08 (C1B/M03): the Pandora holds a near-level pitch along Klondike1 (C21); the tanker sits and
   rolls with no jump (A5, not reproduced headless, so re-check); destroy the power hut inside
   180 s so OBJECTIVE5 completes before OBJECTIVE6, then four patrol boats wake on the water at
@@ -1415,3 +1428,159 @@ the capture cutscene and a walk that dropped it there would complete `DEDG [5, 0
 the hold lifts. The group carry is 967's alone; 966 reads no captured vehicle. The suite runs
 `RunSwap` directly rather than through the cutscene host, so the player is never held inert in
 it; the flown path is where that state is exercised (`campaign-airframe-swap`).
+
+## F43 ☑ `BL-590`: the Barracuda teleports between its surfacing and its drive
+
+**Goal.** The Barracuda surfaces, drives its authored 1680 m along +Z at 40 m/s and settles in the bay with no jump.
+
+**Evidence (confidence: traced).** At the controls the sub jumped miles away and back. `MotionRuntime.Create` re-seated every ballistic launch on the authored rest pose unless top-level, landing-resume or takeover; the barracuda's gamez node is authored at the map origin and the mission RESET_STATE moves it by `PoseTranslate`, so each drive leg seeded at (0,0,0). The original (`FUN_004e8fa0`) copies authored velocity and delta into live slots on the first tick, writes no position, and every tick adds dt x live velocity to the node's own translation (`FUN_004d27d0` / `FUN_004d1e50`) in the parent frame, unrotated by yaw; a chained ObjectMotion continues from the current position.
+
+**Approach.** `MotionRuntime` seeds from the live transform (rest only as the non-finite fallback); the law is `LaunchLaw.Origin`. Yaw pi puts the nose on world +Z, the drive direction, so the hull faces into the bay away from the opening it entered.
+
+**Model recommendation.** A single session per item, each in its own worktree off the plan branch.
+
+**Verify.** Suite `barracuda-drive` (largest step 1.33 m, end (-12032, 0, -11516.288), yaw -180); `MotionChainTests` (3 facts); headless CM04 seeds at z -13197.5, -13157.5, -11557.5, each leg from the previous end.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** The rest re-home was added for `BL-511` (a pooled copy relaunching from its last end pose); `effect-pool-reset` and `effect-pool-spawn-pose` stay green because the pool re-resets the copy on checkout. `ground-contact` relied on the re-home and now re-places its node per launch.
+## F44 ☑ `BL-591`: the Pandora fires on the player in CM04
+
+**Goal.** The broadside deploys and fires only when the mission script engages it, as the original does.
+
+**Evidence (confidence: traced).** Flown in the original (`CAP-46`): the Pandora never opens on the aircraft. The static decode of the target chain was right too; the whole fire routine sits behind a flag it did not trace. Zeppelin byte +0xc is the COMPLETED_ZEPCANNONS flag: zeroed by `FUN_004bd460`, never written by the record parser, written only by `FUN_0046a0b0`; `FUN_004bf9d0` selects the fire pass `FUN_004c0250` when set, else `FUN_004c03a0`, which only retracts a ready cannon. Only C2B/M04, C4/M05 and C5/M04 author the directive.
+
+**Approach.** `ZeppelinBroadside.CannonsEngaged` (default off; a ready cannon retracts while clear), `ZeppelinRuntime.SetCannonsEngaged`, `CampaignDirector.CompletedZepcannons` writes the flag. `BL-567` deleted, `CAP-46` removed.
+
+**Model recommendation.** A single session per item, each in its own worktree off the plan branch.
+
+**Verify.** `zeppelin-broadside` opens on the real C3/M03 world: the player 300 m abeam for 30 s, no hatch, no `wep_28`, then the same hull engaged deploys the port six and fires; the zeppelin-vs-zeppelin legs unchanged.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** The engage flag is per zeppelin record; CM09's Promised Land is not a record (F51) and its doors are opened by anims, so the disengaged retract never touches it. `cannon_fire_range` (+0x14) has no reader on the decoded fire path while the remake still gates on it (objectives.md gap list).
+## F45 ☑ `BL-592`: CM06's docking cutscene hands flight back early and teleports the player at its end
+
+**Goal.** The player stays held from the hookup to the row's last raiser and is placed once, by the handoff code.
+
+**Evidence (confidence: traced).** The row `anim[wv_initiate_hookup] node[wv_manual_land]` authors no CALLBACK itself; it calls wv_hookup_player (2 and 11, then a 7.3 s script), wv_drop_copilot, wv_hookup_state and last wv_unhook_player (1 then 951 after its own script). `CutsceneController` booked the episode to the first raiser and restored when that definition ended at 7.3 s; the row's trailing WAIT is dropped as a last event, so the row ended then too, and the unhook's 951 at 9.9 s opened a fresh episode whose restore staged the aeroplane onto the marker. The original's rule (cutscenes.md code table): the held flag is set by 11 and cleared by 1, and no definition ending touches it.
+
+**Approach.** The landings slot owns the episode (`CutsceneController.Own` from `LandingApproachRuntime.Start`); the raisers are the call closure's defs that author a Callback; Tick restores only when the row has ended and none is still running; `ResumeAt` places at once when not Held.
+
+**Model recommendation.** A single session per item, each in its own worktree off the plan branch.
+
+**Verify.** Suite `landings-docking-hold` (released at 9.95 s on the handoff code, 0 m off the marker, biggest step 1.52 m); 15 cutscene and landing suites.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** CM06's hookup never activates the player marker, so the aeroplane is undrawn until 951 (the `BL-482` limit); a 951 raised into an episode whose row already ended is still booked as a fresh episode, which no shipped data now reaches.
+## F46 ☑ `BL-593`: a gun ring's death fireballs and debris stand still while the hull sails on
+
+**Goal.** A death's callee rides its call site: the fireballs and debris of a ring shot off a moving hull move with the hull.
+
+**Evidence (confidence: traced).** Reported against the original. B11 read AT_NODE as a position taken once and WITH_NODE as the live node. `FUN_004edf80` (the CALL_ANIMATION start) zeroes a world-attached template callee's root at the call and passes the site only as node +0x7c and position +0x80; the events consume those by flag bits whose mapping onto the parser's AT_NODE/WITH_NODE bits (`FUN_00515c00`, +0x2e) is unreconciled, and neither large_fireball nor dblcannon_flying_parts references INPUT_NODE, so the static read cannot place the effect either way. The controls' reading stands.
+
+**Approach.** `AnimRuntime`: a routed ExternalEffect call follows whenever a site resolved; the un-routed relocate path places following while a death call is in flight; `TemplateStage.PlaceAt` gains a follow flag. Debris bodies are not reparented, so re-placing the root carries the pieces. The Workers' Voyage carries no doublecannon ring; the ring with debris is piratezep/blackswanzep doublecannon4/5.
+
+**Model recommendation.** A single session per item, each in its own worktree off the plan branch.
+
+**Verify.** Suite `ring-death-effects-follow-hull` (hull moved 500 m and 35 degrees: the fireball's fed position, the debris root and part1 all move by the ring's displacement; red on exactly those three checks with the follows off); 16 effect and zeppelin suites. Golden `c1-destroy-effects` moves and is re-pinned in the verification commit.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** Damage-stage panel tears and other relocating calls are unchanged: only a death call in flight follows. The AT_NODE/WITH_NODE bit mapping stays open in `docs/org/sequences.md`.
+## F47 ☑ `BL-594`: CM07's launched Peacemakers strike the strip two seconds after hand-off
+
+**Goal.** A launched aircraft is handed to the AI climbing at 53 m/s, 300 m past its last waypoint, and lives.
+
+**Evidence (confidence: traced).** `a3`/`a5` in the ram lines are the airstrip's terrain tiles; each launch struck the strip 130 to 160 m along the runway, a wing into the surface on the AI's first bank, because A6 handed over at the last waypoint at 27 m/s and 1 m AGL. `FUN_0048a110`: on the final leg the steering target is `wp[leg] + normalize(wp[leg+1] - wp[leg]) * 300` from the waypoint behind the leg plus the speed climb term; the leg-advance test is measured against that replaced target and the flag clear at 0x0048a863 follows it; the motion is pitched at the target. The docs had this as "not pinned, chosen here".
+
+**Approach.** `PathFollower`: the final-leg target, the finish test and the pitch as decoded, pitch exposed; `AiGeneratorRuntime.TakeOffRun` uses the follower's pitch. Hand-off on the real rig 247 m past the last point at (-5553,214,-4128), 53.8 m/s. C1/M02's egen.zrd names Eairg31_params for both eairg31 and eairg32, so both launch here; the misspelt block is C1/M04's (C23).
+
+**Model recommendation.** A single session per item, each in its own worktree off the plan branch.
+
+**Verify.** Suite `generator-launch-climb-out` (30 s flown after release: lowest y 213.5, slowest 53.8 m/s, mode Patrol); headless CM07 with --wake-generators over 3600 frames: no AI ram, no _eg downed.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** The ram rule (`local_11`) was reading correctly and killing a real ground strike; do not soften it. `BL-523`'s first-turn paragraph about eg0/eg1/eg3 is superseded and removed.
+## F48 ☑ `BL-596`: the hangar hand-over plays without the aeroplane; the Blue Streak's livery
+
+**Goal.** The player rides the lift and drop in the Bloodhawk, on its undercarriage, and flies out in the shipped blo_* skins with the yellow wingtips the original draws.
+
+**Evidence (confidence: traced).** Three stacked causes: `WorldSession` built the AircraftStage only for a mission whose start list bootstraps an intro (C1/M02 has none), so code 11 held the pilot inert and undrawn; camera1-player_setup sets `player` INACTIVE in its callback sequence and ACTIVE again in a RESET_STATE on RESET_TIME 0 that CSVM never runs; the props (anim_bloodhawk, bloodhawk_gear) were never staged and the drop's RESET_STATE 951 was suppressed. The livery: `pbloodhawk` authors no paint_pattern and `FUN_0047c210` skips the whole scheme composite on the empty string, so the original draws the shipped skins (CM07.mkv 2:56 to 3:03); no shipped scheme produces them.
+
+**Approach.** `WorldSession` builds the stage for any mission with an intro, approach triggers or mission cutscene anims; `AircraftStage` stages the two props off; `CutsceneController.BindRigs` re-asserts the marker and `Restore` raises an authored RESET_STATE 951 before the restore codes; `AirframeSwapCode.ShippedSkins` replaces LiveryDef. B14's open livery choice is closed by the data.
+
+**Model recommendation.** A single session per item, each in its own worktree off the plan branch.
+
+**Verify.** `campaign-hangar-handover` extended (rig drawn on the marker within 0.5 m with the gear under it over the 56 m lift, both props off at the handoff, Scheme and Painter null, the surfaces sample blo_wing/blo_fin/blo_fusalagetop); 14 cutscene suites.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** CSVM does not run a definition's RESET_STATE at its end on RESET_TIME 0 (1651 defs carry it); the `BindRigs` re-assert covers the `player` node only and the general schedule stays undecoded.
+## F49 ☑ `BL-595`: no rope ladder, the passenger hangs in the air, no flare
+
+**Goal.** The person stands on the caboose and rides it, waves with a lit flare in the track loop's open phases, the ladder drops on the level approach inside 100 m, and the pickup cutscene climbs him aboard.
+
+**Evidence (confidence: traced).** `caboosepickup` had no live instance: its only motion is OBJECT_MOTION_SI_SCRIPT in the ROOT/ALL_NAMES form, never handled (count u32, then 76-byte records of an embedded e12 event with a 1-based node index and a script index); the same form drives caboosewave, waveloop, hit_the_deck, get_up and cabpkup_ladder. `SequenceRunner` marked a runner done when its cursor passed the last event, so no WAIT held. The staged copy stayed TopLevel after OBJECT_ADD_CHILD, so it hung at the call site. pickup_timing reached the switch only through the symbol table, which the by-index map never held; the flare's add-child could not build its library root from a re-entered instance. pickup_timing is started by the chapter's train_on_track at load, phased with the track loop, and the sensor restart re-phased it. CM07.mkv at 0:24 and 0:30 agrees.
+
+**Approach.** `CompiledAnim` decodes the form (`AllNamesKind`), `PoseChannel.HandleMotionSiScriptAllNames` plays it; a sequence holds for its last event's run time; adoption clears TopLevel onto the parent's frame; `NameResolver.SoleStagedCopy` answers a claimed-but-unbuilt index with the one live copy carrying it; the timing starter is removed from the trigger. F53: a claim made from inside a staged copy narrows to that copy, since F48's stage parks the archive's pickup_cpilot figure whose hand claims the same index.
+
+**Model recommendation.** A single session per item, each in its own worktree off the plan branch.
+
+**Verify.** Suite `landings-train-pickup-ride` (passenger under caboose, 94.2 m travelled with 0 m offset, waveloop live in the 12.36 s phase, ballflare visible with flaretrail emitting, drop_ladder Deployed by callback 123, caboosepickup live for the 2.2 s climb with the WAIT held); 27 anim, effect and cutscene suites.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** The `SequenceRunner` hold lengthens every instance whose last event is timed; the effect census suites are the guard. The rope-ladder rungs hang off the airframe's `ladder_pos`, which the harness rig lacks, so the suite cannot see them; that stays with the controls.
+## F50 ☑ `BL-600`: CM09's intro shows no wingman on the launch and the dive
+
+**Goal.** The archive's piratefighter prop flies the launch and the dive beside the player, as the data animates it.
+
+**Evidence (confidence: traced).** `playerdrop` (pfighter12) and `playerthruclouds` (pfighter13) fly the `piratefighter` prop with SI scripts and never activate or parent it (only generic_intro's gi_pfighter1 does both); the archive node ships ACTIVE, so the original draws it from load. `AircraftStage.Build` built the prop switched off "until gi_pfighter1 activates it".
+
+**Approach.** The prop keeps the archive's own state; in a mission that bootstraps an intro it sits at the origin until the first script poses it and stays where the last leaves it. The roster's Devastators are parked by callback 913 through the cutscene, in the original and here alike.
+
+**Model recommendation.** A single session per item, each in its own worktree off the plan branch.
+
+**Verify.** Suite `intro-wingmen` (playerdrop: drawn, posed and framed on 118 of 118 frames, moved 85.1 m; playerthruclouds: 631 of 631, moved 1172.3 m, best angle 8 degrees off camera1); 5 cutscene and roster suites.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** It is one wingman, since the data animates one prop; the three roster Devastators appear at the handoff as before.
+## F51 ☑ `BL-599`: the Promised Land no longer burns out and sinks (regression from B14)
+
+**Goal.** Shooting the open broadside doors burns the gasbags, three finishers bring the hull down and the primary completes, as on main.
+
+**Evidence (confidence: traced).** The hull (`hk_zep`) is not a zeppelin record; its kill is animation-authored: a door's death calls its gasbag burn, the burn calls `finished_lkgasbag0N`, three finishers satisfy `finish_locklear` (MINIMUM_TO_SATISFY 3 of 4), which calls the last gasbags and `lockleargoesdown`; OBJECTIVE30 completes off `INACTIVE1 [lkgasbag05, panelleft1]`. The finishers carry REQUIRED OBJECT_INACTIVE_LIST entries with LOCAL_NODES_ONLY; `FUN_0051d7b0` writes the leaf's word as bit 0 = active/inactive and bit 1 = local scope, so a local INACTIVE entry is raw 2, which mech3ax's `active` field reports as true. B14 read that field and refused every finisher. 726 of the 749 shipped compiled node prerequisites are raw 2. The sortie log could not show it: `AnimRuntime.DamageAt` logs its first 12 hits per session.
+
+**Approach.** `CompiledAnim` takes `(active_raw & 1)` when the raw word is present. The doors are deployed from t=0 by the OnStartup temp_hkzep_lbroad* calls; no broadside AI is involved.
+
+**Model recommendation.** A single session per item, each in its own worktree off the plan branch.
+
+**Verify.** Suite `zeppelin-cannon-burnout` over C1/M04's real world (hatches at -2.356 rad by 5 s, lbroad4 destroyed by 30 real rounds, every burn and finisher started, the hull dropped 42.8 m, OBJECTIVE30 at 42.2 s; red at the three finishers before the fix); `CompiledPrereqTests` over raw 0/1/2/3; 17 zeppelin, turret and objective suites.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** B14's gate itself stands; only the leaf read changed. Reproduce headless rather than reading the damage sink for a late kill.
+## F52 ☑ `BL-602`: CM13's first zone marker sits at the world origin; zone 3 does not count
+
+**Goal.** The first marker sits on the hangar mouth, and the race chain is pinned end to end.
+
+**Evidence (confidence: traced).** `sghangar` is a group node with no transform whose children carry the world coordinates; `ObjectiveSites.Where` used its GlobalPosition, the origin 8 km away (`FUN_004b5fb0` confirms the marker takes the entity's own position). Zone 3: OBJECTIVE28 is `DEDG [3, 0]` on racer group 3 with KILL 9, 17..24, 42 and NAP 49 (INSTANTLOSS) 15 s, one such block per racer group; it fired correctly at 38.0 s when hafury_4 rammed the hangar (F53's `BL-601`), so the evaluator is unchanged.
+
+**Approach.** `ObjectiveSites.SiteAnchor`: a node with its own mesh or off the origin keeps GlobalPosition; an origin-standing group that draws nothing anchors on the centre of its built meshes with a door-named leaf pair winning (the stunt mode's aperture rule). C1/M04's placed rock_zeppelin site is untouched.
+
+**Model recommendation.** A single session per item, each in its own worktree off the plan branch.
+
+**Verify.** Suite `campaign-race-chain` (sghangar's anchor within 150 m of dz1 and the offered site marked there; over the real graph dzpath1..3 complete 17, 18, 19 in order with none of 28..33 firing, then group 3 dead fires 28); 6 objective suites.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** The unrestricted version of the anchor rule moved the rock_zeppelin site 22 m and failed `campaign-objective-target-path`; the origin restriction is what scopes it.
+## F53 
+☐
+ `BL-601`: CM13's racers ram the hangar on dzpath2
+
+`<TODO: agent in flight; the section is written on its landing>`
