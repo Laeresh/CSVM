@@ -934,7 +934,7 @@ internal static class AiSuites
                     var probe = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
                         muzzle, muzzle + gun.BarrelWorldDir * 30f, CollisionLayers.World));
                     int bodies = gun.Site!.FindChildren("*", "CollisionObject3D", true, false).Count;
-                    ctx.Note($"{own}: site visible={gun.Site.Visible} colliders={bodies} destructible={(world.Runtime.Destructibles.Resolve(gun.Site) is { } gi ? AnimRuntime.NameOf(gi.Anchor) : "-")}; muzzle probe 30 m along the barrel hits {(probe.Count > 0 ? ((Node)probe["collider"].Obj).GetParent()?.Name : "nothing")}");
+                    ctx.Note($"{own}: site visible={gun.Site.Visible} colliders={bodies} destructible={(world.Runtime.Destructibles.Resolve(gun.Site) is { } gi ? AnimRuntime.NameOf(gi.Anchor) : "-")}; muzzle probe 30 m along the barrel hits {(probe.Count > 0 ? (probe["collider"].Obj as Node)?.GetParent()?.Name : "nothing")}");
 
                     gun.SetActivated(true);
                     // Bearings 0-7: 300 m out and low. Bearing 8: the strafing pass, the plane
