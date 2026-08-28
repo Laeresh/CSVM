@@ -111,7 +111,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☐ `BL-572`: an objective marker labels the raw node name instead of the original's verb and proper name
 13. ☐ `BL-573`: the AA guns damage themselves firing at a barrier
 14. ☐ `BL-574` + `BL-575`: the hangar hand-over gives a stock Bloodhawk and plays no animation
-15. ☐ `BL-526`: the rope ladder never deploys (a native per-mission switch to decode)
+15. ☑ `BL-526`: the rope ladder never deploys (a native per-mission switch to decode)
 
 ### Wave C — CM08 (C1B/M03) and CM09 (C1/M04)
 
@@ -555,31 +555,50 @@ every hangar_drop callee starting; D31 judges the livery>`
 **⚠ Traps.** Do not give the stock Bloodhawk nitro, and do not touch the post-mission grant
 (`BL-528`), which is correct. The swap itself works and must stay.
 
-## B15 ☐ `BL-526`: the rope ladder never deploys (a native per-mission switch to decode)
+## B15 ☑ `BL-526`: the rope ladder never deploys (a native per-mission switch to decode)
 
 **Goal.** The decode of the original's ladder switch is recorded under `docs/org/` far enough
 that a CSVM equivalent can be built, and if it fits this run, the ladder deploys in CM07 when the
 player is level and close.
 
 **Evidence (confidence: traced in the decompile).** `drop_ladder`'s one xref is inside
-`FUN_004735b0`, a hardcoded C1/M02 mission-init function resolving `drop_ladder`/`retract_ladder`
-into a heap object (`DAT_0071c324`) that the world tick `FUN_004897c0` drives every frame, gated on
-an attitude test (`0.707 < player_field[100]`, cos 45°) and a proximity/membership test
-(`FUN_00471690`), calling deploy or retract through the switch object's vtable; never through
-`CALL_ANIMATION`, `pickups.zrd` or `landings.zrd`. Not an event-kind handler.
-`<TODO: re-verify still-open against the code>`
+`FUN_004735b0`, which is the ordinary per-mission initialiser (`FUN_00464680` calls it for every
+mission under `StructsMissionInit`), not a C1/M02-only function; only the authored data is
+mission-specific. It resolves `drop_ladder`/`retract_ladder` into a 20-byte heap object
+(`DAT_0071c324`, stored at `0x00475517`) whose state word is 0 retracted, 1 deployed, 2 deploying,
+3 retracting, and registers the object as both definitions' `CALLBACK` host (`FUN_004ee160`); the
+vtable thunks at `0x00445660`/`0x00445680` accept code 123 only and write state 1 / state 0. The
+world tick tail (`0x00489dc3`-`0x00489e21`) runs outside a cutscene with the player alive:
+`player+0x190` is row 1, Y of the orientation matrix at `+0x180`, the aircraft's own up axis
+dotted with world up (`flightModel.md` "Bank coupling"), so `0.707 <` it is "within 45 degrees of
+upright" on bank and pitch together. `FUN_00471690` walks the global list at `0x0071c268` of
+`{node, radius²}` entries, passing when the node is active (`+0x24 & 4`) and the player's position
+is within the radius; `FUN_00471830` fills that list from `pickups.zrd` at mission load, and
+nothing else in the image reads it. Deploy (`FUN_004455e0`) starts the drop only from state 0,
+retract (`FUN_00445620`) only from state 1, and a transient state holds until the definition's
+own `CALLBACK 123` lands it. Full decode: `docs/org/ladderSwitch.md`.
 
-**Approach.** Decode `FUN_00471690`'s membership test and `player_field[100]`'s exact meaning;
-write them up as the ladder switch's rule. Then, if the rule is small, model it as a per-mission
-native gameplay object evaluated every tick, calling the existing `drop_ladder`/`retract_ladder`
-defs. A docs-only landing with the build handed back to the backlog is an acceptable outcome.
+**Landed.** `LadderSwitch` (`src/Session/LadderSwitch.cs`) is the rule and the state machine,
+engine-free; `LadderSwitchRuntime` (`src/Session/LadderSwitchRuntime.cs`) flies it against the
+built world every frame, off the same `pickups.zrd` sensors the landings trigger already loads,
+starts the definitions as mission triggers and takes the runtime's `CALLBACK` host slot, chaining
+to the cutscene host. `GameSession` builds and binds it beside `LandingApproachRuntime`. Not
+built: the `ladder_roll` counter-rotation that keeps the ladder plumb under a pitched or rolled
+aircraft (recorded on the page under "Not built"). Unit tests `LadderSwitchTests` cover the
+attitude gate, the sensor sphere, the transition order, the silent flip without definitions and
+the settle callback.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** medium.
 
-**Verify.** `<TODO: depends on whether code lands; at minimum the decode page and D31's flown
-pickup>`
+**Verify.** `LadderSwitchTests` (5). Flown: in CM07, level within 100 m of the caboose's
+`ladder_pickup_sensor` after `trigger_copilot` stages it, the ladder drops (`ladder: started
+'drop_ladder'` in the log); banked past 45 degrees or outside the sphere once deployed, it
+retracts. Judged on D31's flown pickup.
+**Verified.** <pending orchestrator run>
 
-**⚠ Traps.** `BL-035`'s dropped kinds play no role; do not build this as an anim event.
+**⚠ Traps.** `BL-035`'s dropped kinds play no role; do not build this as an anim event. Do not
+teach the cutscene host code 123: it is the switch's settle signal, and the switch answers it
+first.
 
 # Wave C — CM08 (C1B/M03) and CM09 (C1/M04)
 

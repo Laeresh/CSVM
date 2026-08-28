@@ -2518,27 +2518,6 @@ usual.
   `AnimRuntime`: the prerequisite is data-authored and general, and a docking-only patch would leave
   the gasbag/cargo/chute defs carrying the same shape unfixed. *Cross-refs:* `BL-458`.
 
-- `BL-526` `[Bug]` **CM07 (C1/M02): the rope ladder never deploys.** *Evidence:* reported at the
-  controls: the pickup's rope ladder does not appear, so the pickup step cannot be flown.
-  Re-verified against the code and the decompile: not a dropped `AnimRuntime` event kind. `player`'s
-  `drop_ladder` def (`C1/M02/zrdr/ladder.zrd`) does its visible work (`OBJECT_ADD_CHILD`,
-  `OBJECT_ACTIVE_STATE`, `OBJECT_MOTION_SI_SCRIPT`) with kinds the runtime already handles,
-  unconditionally, before its trailing `CALLBACK[123]`, which is one of the two gap codes
-  `docs/formats/anim-definitions/cutscenes.md` already names as reaching no case in the
-  mission-script host; `BL-035`'s dropped kinds play no role. No `.zrd` file in C1/M02 or the shared
-  chapter `landings.zrd` ever authors a `CALL_ANIMATION[drop_ladder]`. The string `"drop_ladder"`
-  has exactly one xref in the exe, inside `FUN_004735b0`, a hardcoded C1/M02-specific mission-init
-  function: it resolves `drop_ladder`/`retract_ladder` into a small heap object (`DAT_0071c324`)
-  that the main world tick `FUN_004897c0` drives every frame, outside a cutscene, gated on an
-  attitude test (`0.707 < player_field[100]`, cos 45°) and a proximity/membership test
-  (`FUN_00471690`) against the object's own switch list, calling the deploy or retract through the
-  switch object's own vtable, never through `CALL_ANIMATION`, `pickups.zrd` or `landings.zrd`.
-  *Fix shape:* not an event-kind handler. This is a bespoke, per-mission native gameplay object
-  (an attitude-and-proximity-gated ladder switch, evaluated every tick) CSVM has never modeled;
-  decoding `FUN_00471690`'s membership test and `player_field[100]`'s exact meaning is the
-  prerequisite before a CSVM equivalent can be built. *Cross-refs:* the CM07 pickup fix
-  (`2aa7d77d`, the train pickup cutscene, which covers `pickups.zrd`/`landings.zrd` but not this).
-
 - `BL-527` `[Bug]` **CM07 (C1/M02): the second patrol, a single Peacemaker, spawns under the ground.**
   *Evidence:* reported at the controls: the aircraft appears below the terrain. Not a roster
   placement: `aiv.zrd`'s four enabled `blakepeace_2_1`..`_4` blocks are the whole formation-roster

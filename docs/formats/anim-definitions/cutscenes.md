@@ -499,6 +499,13 @@ the mission's `pickup_timing` definition. Its authored sequence opens
 `agent_approach_cone/land_on` 13.46 seconds later, synchronised with the ladder pickup window;
 the ordinary `landings.zrd` test then owns the final approach and cutscene start.
 
+The same sensor is the rope ladder's gate. The exe's own reader of `pickups.zrd`
+(`FUN_00471830`) builds the sensor list the native ladder switch tests every frame, and nothing
+else in the image reads that list; the switch, its attitude gate and the `CALLBACK 123` both
+ladder definitions raise to settle it are decoded in [`../../org/ladderSwitch.md`](../../org/ladderSwitch.md).
+Starting `pickup_timing` off the sensor is the port's reconstruction; the original's own starter
+for that definition is not traced.
+
 #### The hookup poses the flown airframe's own parts
 
 A zeppelin hookup is one definition for eleven aeroplanes, and everything that differs between them

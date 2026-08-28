@@ -229,6 +229,8 @@ public partial class GameSession : Node3D
     private CutsceneController? _cutscene;
     // The landings.zrd approach trigger, built and bound alongside the cutscene host it feeds.
     private LandingApproachRuntime? _landings;
+    // The rope-ladder switch, bound with the landings trigger off the same pickup sensors.
+    private LadderSwitchRuntime? _ladder;
     // The world AA emplacements: built with the rigs whenever a chapter world and the
     // shared pool exist, stepped in DriveSimSteps after the zeppelins (slung mounts read the
     // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
@@ -490,6 +492,8 @@ public partial class GameSession : Node3D
             {
                 _landings = new LandingApproachRuntime();
                 AddChild(_landings);
+                _ladder = new LadderSwitchRuntime();
+                AddChild(_ladder);
             }
         }
 
@@ -1056,6 +1060,8 @@ public partial class GameSession : Node3D
         {
             _cutscene.HostDefinitions(session.LandingCutsceneAnims);
             _landings.Bind(session.Runtime, session.Landings, _cutscene,
+                () => _rigs.Count > 0 ? _rigs[0].Controller : null, session.Pickups);
+            _ladder?.Bind(session.Runtime, _cutscene,
                 () => _rigs.Count > 0 ? _rigs[0].Controller : null, session.Pickups);
         }
         // The screen wash. Set here rather than inside WorldSession for the same reason the
@@ -2256,6 +2262,8 @@ public partial class GameSession : Node3D
                 && state.WorldRuntime is { } landingWorld && state.Landings is { } landingRows)
             {
                 _landings.Bind(landingWorld, landingRows, _cutscene,
+                    () => _rigs.Count > 0 ? _rigs[0].Controller : null, state.Pickups);
+                _ladder?.Bind(landingWorld, _cutscene,
                     () => _rigs.Count > 0 ? _rigs[0].Controller : null, state.Pickups);
             }
         }
