@@ -215,6 +215,8 @@ the player controls during development are in `docs/controls.md`. **change them 
 
 **The cross-cutting gotchas that bite constantly live in [`docs/formats/gotchas.md`](docs/formats/gotchas.md)** —  **Read it before writing any reader, transform, or shader code.**
 
+**Never work out which campaign mission `CM17` is: [`docs/formats/campaign-missions.md`](docs/formats/campaign-missions.md) is the `CM01`-`CM24` ↔ `C<n>/M0<n>` ↔ `seq` lookup, both directions.**
+
 Full validated format documentation lives in **`docs/formats/`** — one page per format family. **`README.md` there is the index + the shared reader conventions; start there** rather than duplicating its table here. **Rule: new decodes land with their docs page in the same change.**
 
 ## Agent skills
