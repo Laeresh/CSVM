@@ -33,6 +33,29 @@ public enum MissionOutcome
     Lost = 2,
 }
 
+/// <summary>What one objective just did to the four-state machine.</summary>
+public enum ObjectiveTransitionKind
+{
+    /// <summary>Entered <see cref="ObjectiveState.Awake"/>: its dormancy ran out, its nap ran
+    /// out, or another objective's wake list named it.</summary>
+    Woke,
+
+    /// <summary>Entered <see cref="ObjectiveState.Napping"/> on a timer, completed flag cleared.</summary>
+    Napped,
+
+    /// <summary>Its conditions read true and its completion actions ran.</summary>
+    Completed,
+
+    /// <summary>Killed by another objective's completion; it never ticks again.</summary>
+    Killed,
+
+    /// <summary>Slept permanently by another objective's completion.</summary>
+    Slept,
+
+    /// <summary>Retired by its own deadline.</summary>
+    Expired,
+}
+
 /// <summary>
 /// The seam the graph reaches the world through: the conditions it cannot answer itself, and the
 /// wake/completion actions that touch world objects. A method returning <c>null</c> means "this
@@ -114,6 +137,14 @@ public readonly record struct ObjectiveWoke(
 public readonly record struct ObjectiveCompleted(
     int Number, string? SoundGroup, string? ClassSoundGroup, ObjectiveIdentity? Identity);
 
+/// <summary>One state transition, for the log: which objective, what it did, the objective whose
+/// completion caused it (0 for the graph's own timers and an outside wake), the mission time, and
+/// the nap length for <see cref="ObjectiveTransitionKind.Napped"/>. <c>Gated</c> says the
+/// objective carries a <c>TICK_DEPENDS_ON_OBJ</c> whose dependency is not awake right now, so a
+/// nap it just entered is held rather than counting.</summary>
+public readonly record struct ObjectiveTransition(
+    int Number, ObjectiveTransitionKind Kind, int Source, float Elapsed, float Seconds, bool Gated);
+
 /// <summary>One row of the player-visible objectives display: unique <c>priority</c> is the row
 /// key and the sort key, the message key is its label, and the row is marked when an objective of
 /// that priority completes.</summary>
@@ -138,6 +169,7 @@ public sealed class ObjectiveGraph
     private readonly HashSet<string> _otherTargets = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _helpLabels = new(StringComparer.OrdinalIgnoreCase);
     private int _scan;
+    private int _source;
     private MissionOutcome _pending;
     private float _wrapUp;
     private bool _playerLost;
@@ -163,6 +195,11 @@ public sealed class ObjectiveGraph
 
     /// <summary>Fired as an objective completes, after its completion actions and chaining.</summary>
     public event Action<ObjectiveCompleted>? Completed;
+
+    /// <summary>Fired on every state transition, wake and completion included, in the order they
+    /// happen. The engine side turns these into the sortie log's objective lines; the graph itself
+    /// logs nothing.</summary>
+    public event Action<ObjectiveTransition>? Transitioned;
 
     /// <summary>Fired once, when the wrap-up delay after a win or loss has run out.</summary>
     public event Action<MissionOutcome>? MissionEnded;
@@ -415,6 +452,7 @@ public sealed class ObjectiveGraph
         if (live.Def.Deadline is { } deadline && Elapsed >= deadline)
         {
             live.State = ObjectiveState.Retired;
+            Note(live, ObjectiveTransitionKind.Expired, 0f);
             RunWakeList(live.Def.WakeWhenSleep);
             return;
         }
@@ -423,9 +461,14 @@ public sealed class ObjectiveGraph
         {
             live.State = ObjectiveState.Napping;
             live.NapRemaining = live.Def.NapDuration ?? 0f;
+            Note(live, ObjectiveTransitionKind.Napped, live.NapRemaining);
             RunWakeList(live.Def.WakeWhenSleep);
         }
     }
+
+    private void Note(Live live, ObjectiveTransitionKind kind, float seconds) =>
+        Transitioned?.Invoke(new ObjectiveTransition(
+            live.Def.Number, kind, _source, Elapsed, seconds, !Ticks(live)));
 
     // TICK_DEPENDS_ON_OBJ gates the WHOLE objective: it is only ticked, tested or completed while
     // the dependency is AWAKE, not merely alive and not merely complete.
@@ -559,8 +602,11 @@ public sealed class ObjectiveGraph
         live.Complete = true;
         live.State = ObjectiveState.Retired;
         live.Zones.Clear();
+        Note(live, ObjectiveTransitionKind.Completed, 0f);
         RunCompletionActions(def);
+        _source = def.Number;
         RunChaining(def);
+        _source = 0;
         string? classSound = MarkRow(def);
         Completed?.Invoke(new ObjectiveCompleted(
             def.Number, def.CompletedSoundGroup, classSound, def.Identity));
@@ -660,6 +706,7 @@ public sealed class ObjectiveGraph
             {
                 killed.Alive = false;
                 killed.State = ObjectiveState.Retired;
+                Note(killed, ObjectiveTransitionKind.Killed, 0f);
             }
         }
 
@@ -671,6 +718,7 @@ public sealed class ObjectiveGraph
             // The only path that clears another objective's completed flag, and with it the only
             // way a completed objective ever runs again.
             napped.Complete = false;
+            Note(napped, ObjectiveTransitionKind.Napped, nap.Seconds);
         }
 
         foreach (int target in def.SleepWhenComplete)
@@ -678,6 +726,7 @@ public sealed class ObjectiveGraph
             if (Target(target) is { Alive: true } slept)
             {
                 slept.State = ObjectiveState.Retired;
+                Note(slept, ObjectiveTransitionKind.Slept, 0f);
                 if (slept.Def.SleepAnim is { } anim)
                 {
                     _world.WakeAnim(anim, null);
@@ -754,6 +803,7 @@ public sealed class ObjectiveGraph
         }
 
         MarkRowAwake(def);
+        Note(live, ObjectiveTransitionKind.Woke, 0f);
         Woke?.Invoke(new ObjectiveWoke(def.Number, def.WakeSoundGroup, def.Identity));
     }
 

@@ -102,7 +102,12 @@ authored by any shipped file:
 
 `TICK_DEPENDS_ON_OBJ [n]` gates the whole objective: it is only ticked, tested, or completed
 while objective `n` is **awake** (state 1), not merely alive (`FUN_0046a490` gate at
-0x46a5e6).
+0x46a5e6). The nap countdown (state 2, `+0x5cc` accumulating against `+0x5d8`) sits behind
+that gate too, so a nap another objective puts a gated objective into is **held**, not dropped:
+`FUN_0046b160` sets state 2, zeroes the timer and clears the completed flag regardless of the
+gate, and the timer only starts counting once `n` is awake. C1/M04's 18 and 19 (both gated on
+29, which 28's `DEDG [2, 2]` wakes) are the shipped case: their naps of 20 wait for 29, and the
+Paladin Blake squad arrives 30 s or 90 s after that, whichever route the radio tower chose.
 
 ### Completion conditions
 

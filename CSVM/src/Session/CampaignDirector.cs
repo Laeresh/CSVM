@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -340,6 +341,7 @@ public sealed class CampaignDirector
             : null;
         Graph = new ObjectiveGraph(Script, _world);
         Graph.MissionEnded += OnMissionEnded;
+        Graph.Transitioned += OnObjectiveTransition;
         _dangerZones = inputs.Gamez is { } gamez
             ? CampaignDangerZones.Load(Script, gamez, _missionZrdrPath)
             : null;
@@ -522,6 +524,17 @@ public sealed class CampaignDirector
         {
             Music.NoteCombat();
         }
+    }
+
+    // The sortie log's objective lines: one per graph transition, through the file sink, so a
+    // stalled chain can be read back from the log rather than re-flown.
+    private void OnObjectiveTransition(ObjectiveTransition t)
+    {
+        string kind = t.Kind.ToString().ToLowerInvariant();
+        string by = t.Source > 0 ? $" by {t.Source}" : "";
+        string nap = t.Kind == ObjectiveTransitionKind.Napped ? $" for {t.Seconds:0.#}s" : "";
+        string gated = t.Gated ? " (held: TICK_DEPENDS_ON_OBJ dependency not awake)" : "";
+        Log.Info("campaign", $"objective {t.Number} {kind}{by}{nap} at {t.Elapsed:0.0}s{gated}");
     }
 
     private void OnMissionEnded(MissionOutcome outcome)

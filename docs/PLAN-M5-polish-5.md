@@ -119,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☐ `BL-577` + `BL-564`: no runtime for a roster or generator surface vehicle, so the patrol boats never spawn
 23. ☑ `BL-580`: `eairg32`'s launch falls back to a `player_bhawk` on a misspelt parameter block
 24. ☑ `BL-582`: a `[parent, child]` objective target is flattened into two bare names
-25. ☐ `BL-581`: the docking objective is never reached after the radio tower goes down
+25. ☑ `BL-581`: the docking objective is never reached after the radio tower goes down
 
 ### Wave D — the sortie
 
@@ -824,7 +824,7 @@ offered, it stands on the node inside `piratezep`, and its category is the `MSG_
 identity string (`TargetRef.Name`, what `--target=` matches) is now the key, so a path-authored
 site is addressed as `piratezep/rock_zeppelin`.
 
-## C25 ☐ `BL-581`: the docking objective is never reached after the radio tower goes down
+## C25 ☑ `BL-581`: the docking objective is never reached after the radio tower goes down
 
 **Goal.** With the Promised Land destroyed, CM09 goes on to the docking whether the radio tower
 fell inside `OBJECTIVE16`'s window or not; the graph's wake, nap, complete and kill transitions
@@ -838,20 +838,29 @@ the one where the Paladin Blake squad (`blakebloodhawk_1/2/3/8`, group 1, woken 
 window the route is 15 kills 16, naps 17 (16 s), 17 naps 19 (3 s), 19 naps 20 for 90 s; 18 and 19
 carry `TICK_DEPENDS_ON_OBJ 29`, and `ObjectiveGraph.Ticks` holds such an objective entirely while
 29 is not `Awake` (29 is dormant until 28 wakes it). No `[campaign]` objective line exists in the
-sink, so the sortie cannot settle it. `<TODO: re-verify still-open against the code>`
+sink, so the sortie cannot settle it. Re-verified against the code and the binary: the graph half
+is a disproof. `FUN_0046a490`'s nap countdown (state 2) sits behind the same awake gate as the
+scan, and `FUN_0046b160` (the nap) sets state 2, zeroes the timer and clears the completed flag
+regardless of the gate, so a nap landing on a gated objective is held, not dropped, and resumes
+when the dependency wakes. That is what `ObjectiveGraph.Ticks` already does. Driven headless on
+the shipped C1/M04 script, the tower-down route reaches 20 (the squad wake) 90 s after 19 wakes,
+which is 3 s after 29 wakes, and the 30/42/43/44 chain naps 31 in once groups 1, 2 and 5 read
+empty. The stall is therefore in the world seam, not the graph: `DEDG` never reading a group as
+empty, or `WAKEUP_ENEMIES` not putting the parked `blakebloodhawk_1/2/3/8` into play.
 
-**Approach.** First route the graph's transitions through `Log.Info("campaign", ...)`. Then
-reproduce headless: complete 15 inside 16's window, then 23/24/28 (a Promised Land hatch down,
-group 2 to two), and assert 20 wakes 90 s after 19. Fix `Ticks`' interaction with a nap that lands
-on a gated objective per the decode (`docs/formats/objectives.md`'s `TICK_DEPENDS_ON_OBJ` row):
-whether a nap timer set while 29 was dormant is dropped rather than resumed, or 19's nap of 20
-never starts because 19 is gated when 17 wakes it.
+**Approach.** The graph raises `Transitioned` on every state change and `CampaignDirector` logs
+each as `[campaign] objective N woke|napped|completed|killed|slept|expired [by M] [for Ns] at Ts`,
+with a `(held: TICK_DEPENDS_ON_OBJ dependency not awake)` suffix on a nap the gate is holding.
+The reproduction is `ObjectiveGraphTests.C1_M04_reaches_the_squad_wake_with_the_tower_down_inside_the_distress_window`
+over a fake world with settable group counts. No change to `Ticks`.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** None: the graph implements the decode as it stands.
 
-**Verify.** The headless reproduction above as an objective-graph unit test; a headless CM09 log
-carrying the objective transitions. `<TODO: the fixture that drives the graph without the
-engine>`
+**Verify.** The unit test above; the D31 CM09 sortie log now carries the objective lines, and the
+first line to read is whether `objective 28 completed` (group 2 down to two) and
+`objective 42 completed` (group 1 empty) appear at all, which points at `GroupLiveCount` if not.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** `BL-563` stays a separate fix (landed on main). The marker clearing is not the bug.
 

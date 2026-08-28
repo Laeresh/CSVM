@@ -2747,43 +2747,6 @@ usual.
   Barracuda and the airships. *Cross-refs:* `BL-512`, `BL-531`, `BL-568` (the Pandora's own
   scripted motion), `docs/org/objectMotion.md`.
 
-- `BL-581` `[Bug]` **CM09 (C1/M04): with the radio tower down and every aircraft killed, the
-  Pandora's Defend marker clears and the mission does not go on to the docking.** *Evidence
-  (chain decoded, stall cause open):* reported at the controls. The "Defend rock_zeppelin"
-  marker is authored: `OBJECTIVE23` (live from the start) completes when one of the Promised
-  Land's `destroy_hkzep_*broad*` anims goes `INVALID`, adds `[piratezep, rock_zeppelin]` as the
-  objective target with help label `MSG_OBJ_DEFEND` ("Defend"), naps `OBJECTIVE24` (25 s, wakes
-  `blakebloodhawk_9..13`), and `OBJECTIVE25` (`DEDG [2, 0]`) removes that target once group 2 is
-  dead. The radio tower is `OBJECTIVE15`/`33`
-  (`INACTIVE1 rtwr_healthy`); destroyed in time it kills `OBJECTIVE16` and routes through 17 to
-  19 (90 s) to `OBJECTIVE20`, otherwise 16 routes through 18 (30 s) to the same 20, which wakes
-  `blakebloodhawk_1/2/3/8`: the squad arrives either way, only later with the tower down. The
-  docking (`OBJECTIVE31`, primary 2, `pzhookpoint`) is reached only through `OBJECTIVE30`
-  (primary 1, `INACTIVE1 [lkgasbag05, panelleft1]`, the Promised Land destroyed) waking
-  `OBJECTIVE42` (`DEDG [1, 0]`, ticking on 40), then 43 (`DEDG [2, 0]`), then 44 (`DEDG [5, 0]`).
-  The Promised Land was destroyed in both flights, so primary 1 is met and the stall is a `DEDG`
-  group never reading empty, and the flight that stalled is the one where the Paladin Blake
-  squad (`blakebloodhawk_1/2/3/8`, group 1, woken only by `OBJECTIVE20`) never arrived: with
-  four deactivated members, `DEDG [1, 0]` cannot complete (`BL-563` makes a deactivated member
-  count as alive, and even without that the four are alive-but-parked). The squad's two routes
-  differ only in timing: with the tower still up, `OBJECTIVE16` (15 s after 14) kills 15 and 17,
-  wakes 18, and 18 naps 20 for 30 s; with the tower down inside that window, 15 kills 16, naps
-  17 (16 s), 17 naps 19 (3 s), and 19 naps 20 for 90 s. Both 18 and 19 carry
-  `TICK_DEPENDS_ON_OBJ 29`, and `ObjectiveGraph.Ticks` holds such an objective entirely while
-  29 is not `Awake`; 29 is dormant until 28 (`DEDG [2, 2]`, woken by 24) wakes it. So the
-  90 s leg through 19 is where to look: whether a nap timer set on 19 while 29 was still
-  dormant is dropped rather than resumed, or whether 19's own nap of 20 never starts because
-  19 is gated when 17 wakes it. Objective transitions are not in the file log at all (no
-  `[campaign]` objective line exists in the sink), which is why this cannot be settled from the
-  sortie. *Fix shape:* first route the graph's wake, nap, complete and kill transitions through
-  `Log.Info("campaign", ...)` so a sortie log carries them; then reproduce headless: complete 15
-  inside 16's window, then 23/24/28 (a Promised Land hatch down, group 2 to two), and assert 20
-  wakes 90 s after 19; fix `Ticks`' interaction with a nap that lands on a gated objective per
-  the decode (`docs/formats/objectives.md`'s `TICK_DEPENDS_ON_OBJ` row). `BL-563` stays a
-  separate fix. *⚠ Traps:* the Defend marker clearing is correct behaviour (`OBJECTIVE25`), not
-  the bug.
-  *Cross-refs:* `BL-563`, `BL-565`, `docs/formats/objectives.md`.
-
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
@@ -2794,6 +2757,22 @@ usual.
   `thirdparty/sdl/joystick/SDL_joystick.c` `SDL_PrivateJoystickForceRecentering` for the `int i`
   fix before removing. Side effect while active: DirectInput-only controllers (non-XInput
   sticks without an SDL HIDAPI driver) are invisible in-game.
+
+- `BL-581` `[Bug]` **CM09 (C1/M04): with the radio tower down and every aircraft killed, the
+  mission does not go on to the docking.** *Evidence (graph disproved, world side open):* reported
+  at the controls. The objective graph closes the chain: driven headless on the shipped script,
+  the tower-down route reaches 20 (the Paladin Blake squad wake) 90 s after 19 wakes, 30 wakes
+  42, and 42/43/44 nap 31 (the docking) once groups 1, 2 and 5 read empty; a nap landing on a
+  `TICK_DEPENDS_ON_OBJ`-gated objective is held and resumed, as the original does
+  (`FUN_0046a490`/`FUN_0046b160`, `docs/formats/objectives.md`). What stalls is on the world
+  side: `DEDG` never reading group 1 (or 2/5) empty through `GroupLiveCount`, or `WAKEUP_ENEMIES`
+  not putting the parked `blakebloodhawk_1/2/3/8` into play. *Fix shape:* the sortie log now
+  carries every transition as `[campaign] objective N woke|napped|completed|killed` lines; if
+  `objective 28 completed` never appears, group 2 never read at most two, and if `objective 42
+  completed` never appears after 20 woke, group 1 never read empty. Fix the world read that log
+  names. *⚠ Traps:* the Defend marker clearing (`OBJECTIVE25`) is correct; `BL-563` is a
+  separate landed fix; the graph needs no change. *Cross-refs:* `BL-563`, `BL-565`,
+  `docs/formats/objectives.md`, the closing commit of the graph half (`git log --grep=BL-581`).
 
 - `BL-584` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` is not same-build stable inside the
   parallel unit stage.** *Evidence (seen once, mechanism lead-only):* the full `RunTests.ps1` unit

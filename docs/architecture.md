@@ -5254,6 +5254,13 @@ The read model D33 consumes is `Rows` (one row per unique `IDENTITY` priority, a
 priority the row key and the sort key), `ObjectiveTargets`/`OtherTargets`/`HelpLabels`, and the
 `Woke`/`Completed`/`TargetsChanged`/`MissionEnded` events; wake and complete events carry the
 `WAKEUP_SOUND_GROUP` / `COMPLETED_SOUND_GROUP` names, which is also how D37 sees the music groups.
+`Transitioned` fires on every state change (woke, napped, completed, killed, slept, expired) with
+the objective whose completion caused it, the mission time, the nap length, and whether the
+objective is held by a `TICK_DEPENDS_ON_OBJ` dependency that is not awake; `CampaignDirector`
+turns it into the sortie log's `objective N ...` lines. A held nap does not count down: that is the
+decoded gate, not a defect, and `CSVM.Tests/ObjectiveGraphTests.cs` drives the shipped C1/M04 chain
+(tower down inside the distress window, through the held nap to the squad wake and the docking)
+to pin it.
 `CompletedMask` is bit-per-row, so bit 0 is the lowest priority and therefore the primary objective
 the profile's merge gates on (docs/formats/saved-games.md).
 The fourth ending, the player's own death, is `NotifyPlayerLost` then `EndAfterPlayerLost`: the
@@ -5270,7 +5277,9 @@ the sibling of `InstantActionDirector`: a plain sealed class that builds no node
 `TryCreate` loads the profile and the script on the same "a failure warns and flies without a
 mission" contract `InstantActionDirector.TryCreate` has. `Attach(WorldInputs)` arms the graph once
 every runtime a directive can touch is up and applies the chapter's persist log; `Step(dt)` is
-called from BOTH of `GameSession`'s drive paths. Mission end records the attempt through
+called from BOTH of `GameSession`'s drive paths. Every graph transition is one
+`[campaign] objective N woke|napped|completed|killed|slept|expired [by M] [for Ns] at Ts` line
+through `Log.Info`, so the file sink carries the chain a sortie report is about. Mission end records the attempt through
 `CampaignProgression`, merges `CampaignPersistLog.Capture` into the profile, saves it, writes any
 aircraft award's build into `CustomPlaneStore` (`SaveAwardedBuilds`, which is where the cabin's
 launch looks a plane's fit up by name), and raises
