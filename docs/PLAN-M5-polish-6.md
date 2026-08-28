@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☐ `BL-536`: every collection in flight is a gen1 collection pausing 24 to 29 ms about every 12 s
 22. ☐ `BL-562`: the physics tick costs about 39 ms late in CM11, so the sim runs at half wall time
-23. ☐ `BL-584`: `PerfSampleTests.AScopeAllocatesNothing` is not same-build stable in the parallel unit stage
+23. ❌ `BL-584`: `PerfSampleTests.AScopeAllocatesNothing` is not same-build stable in the parallel unit stage
 
 ### Wave D — Damage share and target class
 
