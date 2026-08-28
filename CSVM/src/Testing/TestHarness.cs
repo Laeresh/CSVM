@@ -32,6 +32,13 @@ public enum SuiteStatus
 /// </summary>
 public static class TestHarness
 {
+    /// <summary>The <c>test-report.json</c> schema, bumped when a field's meaning changes or one is
+    /// removed; a reader keys off this before a field name, the same rule the golden manifest's
+    /// own <c>schema</c> follows. 1 was the unversioned shape; 2 adds the phase-attribution block;
+    /// 3 adds the <c>shard</c> block and per-suite <c>index</c>, and moves a sharded run's report
+    /// out of <c>.scratch/</c> into the shard's own subdirectory.</summary>
+    public const int ReportSchema = 3;
+
     /// <summary>The engine errors this project currently emits that are not the harness's to fix.
     /// Every entry names the open item that owns it; when that item lands, the entry is deleted and
     /// the cap does the rest.</summary>
@@ -51,41 +58,71 @@ public static class TestHarness
 
     private static readonly List<Suite> Registry = new();
 
+    /// <summary>The registry, built on first use. ⚠ Keep the lock: the engine reaches this from one
+    /// thread, but xUnit runs test classes in parallel, and two concurrent first uses left the list
+    /// holding null entries.</summary>
     public static IReadOnlyList<Suite> All
     {
         get
         {
-            if (Registry.Count == 0)
+            lock (Registry)
             {
-                SuiteCatalog.RegisterAll(Registry);
+                if (Registry.Count == 0)
+                {
+                    SuiteCatalog.RegisterAll(Registry);
+                }
+                return Registry;
             }
-            return Registry;
         }
     }
 
-    /// <summary>Runs every registered suite whose name contains <paramref name="filter"/> (empty =
-    /// all), prints the table, writes <c>.scratch/test-report.json</c>, and returns the process exit
-    /// code: 0 when nothing failed, 1 otherwise. A skipped suite is not a failure.</summary>
+    /// <summary>Runs the suites <paramref name="filter"/> selects (empty = all), prints the table,
+    /// writes <c>.scratch/test-report.json</c>, and returns the process exit code: 0 when nothing
+    /// failed, 1 otherwise. A skipped suite is not a failure; a selector term that matched nothing
+    /// is, and nothing runs in that case.</summary>
     public static int Run(TestContext ctx, string filter)
     {
         // Numbers in a committed report must read the same on every machine.
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
-        var selected = All.Where(s => filter.Length == 0
-            || s.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+        var shard = SuiteShards.Parse(filter, out string terms, out string? shardError);
+        if (shardError != null)
+        {
+            Log.Error("test", $"run-tests {shardError}");
+            return 1;
+        }
+        var selected = Select(All, terms, out var unmatched);
         var results = new List<SuiteResult>();
         Log.Info("test", $"run-tests suites={selected.Count}/{All.Count} filter='{filter}' chapter={ctx.Chapter} mission={ctx.Mission}");
+        if (unmatched.Count > 0)
+        {
+            Log.Error("test", $"run-tests selector matched nothing: {string.Join(", ", unmatched)}; registered: {string.Join(", ", All.Select(s => s.Name))}");
+            return 1;
+        }
         if (selected.Count == 0)
         {
             Log.Error("test", $"run-tests filter '{filter}' matched no suite of {string.Join(", ", All.Select(s => s.Name))}");
             return 1;
         }
 
+        // Sharding narrows an already-valid selection, so it runs AFTER the miss checks above: an
+        // empty shard is a legitimate division of a small set, an empty selector is a typo.
+        var plan = PlanShard(ctx, shard, ref selected);
+        var order = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < All.Count; i++)
+        {
+            order[All[i].Name] = i;
+        }
+
+        var totals = new PhaseAttribution.Categorized();
+        double totalBuildSeconds = 0, totalDisposalSeconds = 0, totalRestSeconds = 0, totalOverrunSeconds = 0;
+        int totalWorldsBuilt = 0;
         foreach (var suite in selected)
         {
             ctx.Failures.Clear();
             ctx.Notes.Clear();
             ctx.Counts.Clear();
+            ctx.ResetForSuite();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             SuiteStatus status;
             string detail = suite.What;
@@ -107,19 +144,60 @@ public static class TestHarness
                 Log.Error("test", $"suite threw name={suite.Name}", e);
             }
             watch.Stop();
+            double wallSeconds = watch.Elapsed.TotalSeconds;
+            double buildSeconds = ctx.WorldBuildSeconds;
+            double disposalSeconds = ctx.DisposalSeconds;
+            double restSeconds = PhaseAttribution.Rest(wallSeconds, buildSeconds, disposalSeconds);
+            double overrunSeconds = PhaseAttribution.Overrun(wallSeconds, buildSeconds, disposalSeconds);
             results.Add(new SuiteResult
             {
                 Name = suite.Name,
+                Index = order[suite.Name],
                 Status = status,
-                Seconds = watch.Elapsed.TotalSeconds,
+                Seconds = wallSeconds,
                 Detail = detail,
                 Failures = ctx.Failures.ToList(),
                 Notes = ctx.Notes.ToList(),
                 Counts = new Dictionary<string, long>(ctx.Counts),
+                WorldsBuilt = ctx.WorldsBuilt,
+                BuildSeconds = buildSeconds,
+                ArchiveDecodeSeconds = ctx.WorldBuildPhases.ArchiveDecodeMs / 1000.0,
+                SoundPrepSeconds = ctx.WorldBuildPhases.SoundPrepMs / 1000.0,
+                RuntimeConstructionSeconds = ctx.WorldBuildPhases.RuntimeConstructionMs / 1000.0,
+                OtherBuildSeconds = ctx.WorldBuildPhases.OtherMs / 1000.0,
+                DisposalSeconds = disposalSeconds,
+                RestSeconds = restSeconds,
+                OverrunSeconds = overrunSeconds,
             });
-            Log.Info("test", $"suite {suite.Name} {status.ToString().ToUpperInvariant()} in {watch.Elapsed.TotalSeconds:0.00}s");
+            totals += ctx.WorldBuildPhases;
+            totalBuildSeconds += buildSeconds;
+            totalDisposalSeconds += disposalSeconds;
+            totalRestSeconds += restSeconds;
+            totalOverrunSeconds += overrunSeconds;
+            totalWorldsBuilt += ctx.WorldsBuilt;
+            // One line per suite: the phase breakdown rides on the existing verdict line rather
+            // than adding one, and only for a suite that actually built a world — a no-world suite
+            // has nothing to attribute (the ⚠ trap this item names: chatter on the timing path).
+            string phaseSuffix = ctx.WorldsBuilt > 0
+                ? $" worlds={ctx.WorldsBuilt} build={buildSeconds:0.00}s"
+                  + $" (decode={ctx.WorldBuildPhases.ArchiveDecodeMs / 1000.0:0.00}s"
+                  + $" sound={ctx.WorldBuildPhases.SoundPrepMs / 1000.0:0.00}s"
+                  + $" rt={ctx.WorldBuildPhases.RuntimeConstructionMs / 1000.0:0.00}s"
+                  + $" other={ctx.WorldBuildPhases.OtherMs / 1000.0:0.00}s)"
+                  + $" disposal={disposalSeconds:0.00}s rest={restSeconds:0.00}s"
+                : "";
+            Log.Info("test", $"suite {suite.Name} {status.ToString().ToUpperInvariant()} in {wallSeconds:0.00}s{phaseSuffix}");
         }
+        var releaseWatch = System.Diagnostics.Stopwatch.StartNew();
         ctx.ReleaseWorlds();
+        releaseWatch.Stop();
+        double finalDisposalSeconds = releaseWatch.Elapsed.TotalSeconds;
+
+        double totalWallSeconds = results.Sum(r => r.Seconds);
+        string totalsLine = FormatTotalsLine(totalWallSeconds, totalWorldsBuilt, totalBuildSeconds,
+            totals, totalDisposalSeconds, finalDisposalSeconds, totalRestSeconds, totalOverrunSeconds);
+        var (decodeHits, decodeMisses) = ctx.DecodeCounts;
+        Log.Info("test", $"{totalsLine} decode_hits={decodeHits} decode_misses={decodeMisses}");
 
         var screen = ScreenEngineLog(out string? logPath);
         int pass = results.Count(r => r.Status == SuiteStatus.Pass);
@@ -129,11 +207,49 @@ public static class TestHarness
         // errors row — it never counts as a pass, but it never fails the run either.
         bool screenFailed = screen is { Ok: false };
 
+        var phaseTotals = new PhaseTotals(totals, totalBuildSeconds, totalDisposalSeconds,
+            finalDisposalSeconds, totalRestSeconds, totalOverrunSeconds, totalWorldsBuilt, totalWallSeconds);
         Log.Raw(FormatTable(results, screen, logPath));
-        WriteReport(ctx, results, screen, logPath);
+        WriteReport(ctx, results, screen, logPath, phaseTotals, filter, plan);
         string errors = screen == null ? "unscreened" : screen.Ok ? "clean" : "UNEXPECTED";
         Log.Info("test", $"run-tests pass={pass} fail={fail} skip={skip} errors={errors}");
         return fail > 0 || screenFailed ? 1 : 0;
+    }
+
+    /// <summary>The suites a <c>--run-tests=</c> spec selects, in registry order and deduplicated.
+    /// Comma-separated terms, unioned: <c>suite:&lt;name&gt;</c> exact, <c>tier:&lt;name&gt;</c> a
+    /// checked-in tier, anything else a name substring. A term that selects nothing lands in
+    /// <paramref name="unmatched"/> instead of quietly narrowing the run. Pure, so a selector can
+    /// be proved outside the engine.</summary>
+    public static IReadOnlyList<Suite> Select(IReadOnlyList<Suite> suites, string spec,
+        out IReadOnlyList<string> unmatched)
+    {
+        var missed = new List<string>();
+        unmatched = missed;
+        if (spec.Trim().Length == 0)
+        {
+            return suites;
+        }
+        var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string raw in spec.Split(','))
+        {
+            string term = raw.Trim();
+            if (term.Length == 0)
+            {
+                continue;
+            }
+            var hits = MatchTerm(suites, term);
+            if (hits.Count == 0)
+            {
+                missed.Add(term);
+                continue;
+            }
+            foreach (var hit in hits)
+            {
+                wanted.Add(hit.Name);
+            }
+        }
+        return suites.Where(s => wanted.Contains(s.Name)).ToList();
     }
 
     /// <summary>Classifies a run's log lines: how many engine error lines there were, how many the
@@ -187,6 +303,50 @@ public static class TestHarness
             OverCap = overCap,
             AllowedCounts = counts,
         };
+    }
+
+    // Narrows an already-valid selection to one shard and tags the context, so every artifact this
+    // process writes lands under .scratch/<tag>/ instead of over a sibling shard's.
+    private static ShardPlan PlanShard(TestContext ctx, ShardSpec? shard, ref IReadOnlyList<Suite> selected)
+    {
+        int total = selected.Count;
+        if (shard is not { } s || s.Count < 2)
+        {
+            return new ShardPlan(1, 1, total, "", Array.Empty<string>());
+        }
+        var weights = SuiteShards.Load(Path.Combine(ctx.RepoRoot, "analysis", "engine-suite-weights.json"));
+        var unweighted = SuiteShards.Unweighted(selected.Select(x => x.Name), weights);
+        selected = SuiteShards.Plan(selected, x => x.Name, weights, s.Count)[s.Index - 1];
+        // Beside this shard's own engine log, which the launcher already made unique per run: that
+        // is what keeps two concurrent RunTests.ps1 invocations from writing one another's reports.
+        string root = Path.GetDirectoryName(EngineLogPath() ?? "") ?? "";
+        ctx.ShardScratch = Path.Combine(
+            root.Length > 0 ? root : Path.Combine(ctx.RepoRoot, ".scratch"),
+            $"shard{s.Index}of{s.Count}");
+        Log.Info("test", $"run-tests shard={s.Index}/{s.Count} suites={selected.Count}/{total} unweighted={unweighted.Count} weights='{weights.Source}' scratch={ctx.ScratchDir}");
+        return new ShardPlan(s.Index, s.Count, total, weights.Source, unweighted);
+    }
+
+    private static List<Suite> MatchTerm(IReadOnlyList<Suite> suites, string term)
+    {
+        const string exact = "suite:";
+        const string tier = "tier:";
+        if (term.StartsWith(exact, StringComparison.OrdinalIgnoreCase))
+        {
+            string name = term[exact.Length..];
+            return suites.Where(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+        if (term.StartsWith(tier, StringComparison.OrdinalIgnoreCase))
+        {
+            var names = SuiteCatalog.Tier(term[tier.Length..]);
+            if (names == null)
+            {
+                return new List<Suite>();
+            }
+            var set = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            return suites.Where(s => set.Contains(s.Name)).ToList();
+        }
+        return suites.Where(s => s.Name.Contains(term, StringComparison.OrdinalIgnoreCase)).ToList();
     }
 
     // The engine log Godot's `--log-file` is writing, or null when launched without it. Error
@@ -247,6 +407,23 @@ public static class TestHarness
         }
     }
 
+    // Plain string.Format, not Log's FormattableString overload: this one line sums several
+    // already-rounded figures rather than naming one check, so it does not belong in the
+    // Check/Note vocabulary the rest of the harness's logging goes through.
+    private static string FormatTotalsLine(double wallSeconds, int worldsBuilt, double buildSeconds,
+        PhaseAttribution.Categorized build, double disposalSeconds, double finalDisposalSeconds,
+        double restSeconds, double overrunSeconds)
+    {
+        return string.Format(CultureInfo.InvariantCulture,
+            "phase totals wall={0:0.00}s worlds={1} build={2:0.00}s "
+            + "(decode={3:0.00}s sound={4:0.00}s rt={5:0.00}s other={6:0.00}s) "
+            + "disposal={7:0.00}s final_disposal={8:0.00}s rest={9:0.00}s overrun={10:0.00}s",
+            wallSeconds, worldsBuilt, buildSeconds,
+            build.ArchiveDecodeMs / 1000.0, build.SoundPrepMs / 1000.0,
+            build.RuntimeConstructionMs / 1000.0, build.OtherMs / 1000.0,
+            disposalSeconds, finalDisposalSeconds, restSeconds, overrunSeconds);
+    }
+
     private static string FormatTable(List<SuiteResult> results, StderrScreen? screen, string? logPath)
     {
         var sb = new StringBuilder();
@@ -304,24 +481,55 @@ public static class TestHarness
     };
 
     private static void WriteReport(TestContext ctx, List<SuiteResult> results,
-        StderrScreen? screen, string? logPath)
+        StderrScreen? screen, string? logPath, PhaseTotals phases, string selector, ShardPlan plan)
     {
         var json = new StringBuilder();
         json.AppendLine("{");
+        json.AppendLine($"  \"schema\": {ReportSchema},");
+        json.AppendLine($"  \"binary\": {{\"path\": {Quote(BinaryPath(ctx))}, \"md5\": {Quote(BinaryMd5(ctx))}}},");
+        json.AppendLine($"  \"selector\": {Quote(selector)},");
+        json.AppendLine($"  \"shard\": {{\"index\": {plan.Index}, \"count\": {plan.Count}, "
+                        + $"\"selectedTotal\": {plan.SelectedTotal}, \"weights\": {Quote(plan.WeightsSource)}, "
+                        + $"\"unweighted\": [{string.Join(", ", plan.Unweighted.Select(Quote))}]}},");
         json.AppendLine($"  \"chapter\": {Quote(ctx.Chapter)},");
         json.AppendLine($"  \"mission\": {Quote(ctx.Mission)},");
         json.AppendLine($"  \"dataRoot\": {Quote(ctx.DataRoot)},");
         json.AppendLine($"  \"passed\": {results.Count(r => r.Status == SuiteStatus.Pass)},");
         json.AppendLine($"  \"failed\": {results.Count(r => r.Status == SuiteStatus.Fail)},");
         json.AppendLine($"  \"skipped\": {results.Count(r => r.Status == SuiteStatus.Skip)},");
+        json.AppendLine("  \"phaseTotals\": {");
+        json.AppendLine($"    \"wallSeconds\": {Sec(phases.WallSeconds)},");
+        json.AppendLine($"    \"worldsBuilt\": {phases.WorldsBuilt},");
+        json.AppendLine($"    \"buildSeconds\": {Sec(phases.BuildSeconds)},");
+        json.AppendLine($"    \"archiveDecodeSeconds\": {Sec(phases.Build.ArchiveDecodeMs / 1000.0)},");
+        json.AppendLine($"    \"soundPrepSeconds\": {Sec(phases.Build.SoundPrepMs / 1000.0)},");
+        json.AppendLine($"    \"runtimeConstructionSeconds\": {Sec(phases.Build.RuntimeConstructionMs / 1000.0)},");
+        json.AppendLine($"    \"otherBuildSeconds\": {Sec(phases.Build.OtherMs / 1000.0)},");
+        json.AppendLine($"    \"disposalSeconds\": {Sec(phases.DisposalSeconds)},");
+        json.AppendLine($"    \"finalDisposalSeconds\": {Sec(phases.FinalDisposalSeconds)},");
+        json.AppendLine($"    \"restSeconds\": {Sec(phases.RestSeconds)},");
+        json.AppendLine($"    \"overrunSeconds\": {Sec(phases.OverrunSeconds)},");
+        json.AppendLine($"    \"decodeCacheHits\": {ctx.DecodeCounts.Hits},");
+        json.AppendLine($"    \"decodeCacheMisses\": {ctx.DecodeCounts.Misses}");
+        json.AppendLine("  },");
         json.AppendLine("  \"suites\": [");
         for (int i = 0; i < results.Count; i++)
         {
             var r = results[i];
             json.AppendLine("    {");
             json.AppendLine($"      \"name\": {Quote(r.Name)},");
+            json.AppendLine($"      \"index\": {r.Index},");
             json.AppendLine($"      \"status\": {Quote(r.Status.ToString().ToLowerInvariant())},");
-            json.AppendLine($"      \"seconds\": {r.Seconds.ToString("0.000", CultureInfo.InvariantCulture)},");
+            json.AppendLine($"      \"seconds\": {Sec(r.Seconds)},");
+            json.AppendLine($"      \"worldsBuilt\": {r.WorldsBuilt},");
+            json.AppendLine($"      \"buildSeconds\": {Sec(r.BuildSeconds)},");
+            json.AppendLine($"      \"archiveDecodeSeconds\": {Sec(r.ArchiveDecodeSeconds)},");
+            json.AppendLine($"      \"soundPrepSeconds\": {Sec(r.SoundPrepSeconds)},");
+            json.AppendLine($"      \"runtimeConstructionSeconds\": {Sec(r.RuntimeConstructionSeconds)},");
+            json.AppendLine($"      \"otherBuildSeconds\": {Sec(r.OtherBuildSeconds)},");
+            json.AppendLine($"      \"disposalSeconds\": {Sec(r.DisposalSeconds)},");
+            json.AppendLine($"      \"restSeconds\": {Sec(r.RestSeconds)},");
+            json.AppendLine($"      \"overrunSeconds\": {Sec(r.OverrunSeconds)},");
             json.AppendLine($"      \"detail\": {Quote(r.Detail)},");
             json.AppendLine($"      \"counts\": {{{string.Join(", ", r.Counts.Select(kv => $"{Quote(kv.Key)}: {kv.Value}"))}}},");
             json.AppendLine($"      \"failures\": [{string.Join(", ", r.Failures.Select(Quote))}],");
@@ -356,6 +564,35 @@ public static class TestHarness
         Log.Info("test", $"report file={path}");
     }
 
+    private static string Sec(double seconds) => seconds.ToString("0.000", CultureInfo.InvariantCulture);
+
+    // The DLL this process actually loaded, matched by the SAME fixed path RunTests.ps1's perf
+    // stage hashes as $PerfDll — not Assembly.GetExecutingAssembly().Location, which Godot's own
+    // Mono host returns empty for (confirmed live: every report before this fix wrote "").
+    private static string BinaryPath(TestContext ctx) =>
+        Path.Combine(ctx.RepoRoot, "CSVM", ".godot", "mono", "temp", "bin", "Debug", "CSVM.dll");
+
+    private static string BinaryMd5(TestContext ctx)
+    {
+        string path = BinaryPath(ctx);
+        if (path.Length == 0 || !File.Exists(path))
+        {
+            return "";
+        }
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var md5 = System.Security.Cryptography.MD5.Create();
+            return Convert.ToHexString(md5.ComputeHash(stream)).ToLowerInvariant();
+        }
+        catch (IOException)
+        {
+            // Godot still has the file mapped for execution; a locked-out hash is reported as
+            // empty rather than failing the whole report over an identity nicety.
+            return "";
+        }
+    }
+
     private static string Quote(string s)
     {
         var sb = new StringBuilder("\"");
@@ -382,6 +619,20 @@ public static class TestHarness
         }
         return sb.Append('"').ToString();
     }
+
+    /// <summary>The run-wide sums <see cref="WriteReport"/> needs, computed once in <see cref="Run"/>
+    /// rather than re-derived from <c>results</c> there (<see cref="SuiteResult"/> already holds the
+    /// per-suite figures these are sums of).</summary>
+    /// <summary>Which shard this process ran, of how many, out of how big a selection — written
+    /// into the report so an aggregator can prove the shards cover the selection exactly once
+    /// rather than assuming they did.</summary>
+    private readonly record struct ShardPlan(int Index, int Count, int SelectedTotal,
+        string WeightsSource, IReadOnlyList<string> Unweighted);
+
+    private readonly record struct PhaseTotals(
+        PhaseAttribution.Categorized Build, double BuildSeconds, double DisposalSeconds,
+        double FinalDisposalSeconds, double RestSeconds, double OverrunSeconds, int WorldsBuilt,
+        double WallSeconds);
 
     public sealed record Suite(string Name, string What, Action<TestContext> Body);
 }
@@ -431,7 +682,23 @@ public sealed class TestContext
     internal readonly List<string> Notes = new();
     internal readonly Dictionary<string, long> Counts = new();
 
+    // The current suite's world-build attribution: reset by ResetPhaseAttribution() at the top of
+    // every suite in Run(), the same lifetime Failures/Notes/Counts already have.
+    internal PhaseAttribution.Categorized WorldBuildPhases;
+    internal double WorldBuildSeconds;
+    internal double DisposalSeconds;
+    internal int WorldsBuilt;
+
+    // Set by TestHarness.Run once the shard term is parsed, before any suite starts. Null on a
+    // serial run, which keeps writing straight into .scratch/ as it always has.
+    internal string? ShardScratch;
+
     private readonly Dictionary<string, TestWorld> _worlds = new();
+
+    // One run builds the same chapter and the same chapter+mission many times, so the two
+    // expensive decodes are paid once each. Sound and pixel state are deliberately absent from it:
+    // see DecodeCache for what it holds and the read-only contract that binds every user.
+    private readonly DecodeCache _decode = new();
 
     public required string RepoRoot { get; init; }
     public required string DataRoot { get; init; }
@@ -479,8 +746,14 @@ public sealed class TestContext
     /// exactly as an interactive session's do.</summary>
     public required Camera3D Camera { get; init; }
 
-    /// <summary>The scratch directory every artifact this run writes must stay inside.</summary>
-    public string ScratchDir => Path.Combine(RepoRoot, ".scratch");
+    /// <summary>The scratch directory every artifact this run writes must stay inside. A sharded
+    /// run gets a directory of its own beside its engine log, so neither a sibling shard nor a
+    /// concurrent run can overwrite its report or its per-suite artifacts.</summary>
+    public string ScratchDir => ShardScratch ?? Path.Combine(RepoRoot, ".scratch");
+
+    /// <summary>How the decode store answered this run: reported so a warm-cache A/B shows the
+    /// hits happened rather than only that the wall time moved.</summary>
+    internal (int Hits, int Misses) DecodeCounts => (_decode.Hits, _decode.Misses);
 
     /// <summary>Records a check. A false verdict fails the suite but does not stop it — the rest of
     /// the checks still run, so one report names every broken thing rather than the first.</summary>
@@ -543,6 +816,23 @@ public sealed class TestContext
     public void WithWorld(string chapter, bool collision, Action<TestWorld> body) =>
         WithWorld(chapter, collision, mission: null, body);
 
+    /// <summary>Builds a world nothing else will ever see and frees it when <paramref name="body"/>
+    /// returns: never read from the shared cache, never written to it. What a suite whose build
+    /// options differ from every other suite's needs, so its choices cannot ride into a later
+    /// suite's world — an installed <see cref="EmitterFactory"/> above all.</summary>
+    public void WithPrivateWorld(string chapter, bool collision, Action<TestWorld> body)
+    {
+        var world = BuildWorld(chapter, collision, Mission);
+        try
+        {
+            body(world);
+        }
+        finally
+        {
+            DisposalSeconds += TimeDestroy(world);
+        }
+    }
+
     /// <summary>The mission-override form: builds the chapter at a mission other than the
     /// run's own (the zeppelin damage suite wants C1 at M04, where <c>piratezep</c> is live).
     /// An overridden-mission world is never cached — the cache is keyed by chapter alone, so
@@ -558,7 +848,7 @@ public sealed class TestContext
                 return;
             }
             _worlds.Remove(chapter);
-            cached.Destroy();
+            DisposalSeconds += TimeDestroy(cached);
         }
         var world = BuildWorld(chapter, collision, mission ?? Mission);
         if (defaultMission && chapter == Chapter)
@@ -573,8 +863,24 @@ public sealed class TestContext
         }
         finally
         {
-            world.Destroy();
+            DisposalSeconds += TimeDestroy(world);
         }
+    }
+
+    /// <summary>Clears everything a suite may leave behind on this context: the build knobs and the
+    /// world-build/disposal attribution. Called once per suite in <see cref="TestHarness.Run"/>, the
+    /// same lifetime <see cref="Failures"/>/<see cref="Notes"/>/<see cref="Counts"/> already have.
+    /// ⚠ Keep the knob resets: they are what makes a suite's verdict independent of which suite ran
+    /// before it, and therefore of which shard it landed in.</summary>
+    internal void ResetForSuite()
+    {
+        EmitterFactory = null;
+        ExtraPrewarmSoundNames = null;
+        CutsceneRoots = false;
+        WorldBuildPhases = default;
+        WorldBuildSeconds = 0;
+        DisposalSeconds = 0;
+        WorldsBuilt = 0;
     }
 
     internal void ReleaseWorlds()
@@ -586,6 +892,16 @@ public sealed class TestContext
         _worlds.Clear();
     }
 
+    // Times one Destroy() call. Never attributed to a suite when it happens outside one (the
+    // shared cache's own teardown after every suite has run — TestHarness.Run times that itself,
+    // as the run's finalDisposalSeconds, since no single suite owns a world every suite shared).
+    private static double TimeDestroy(TestWorld world)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        world.Destroy();
+        return watch.Elapsed.TotalSeconds;
+    }
+
     private TestWorld BuildWorld(string chapter, bool collision, string mission)
     {
         string gamezPath = SessionPaths.ChapterGamez(DataRoot, chapter);
@@ -593,47 +909,71 @@ public sealed class TestContext
         RequireData(gamezPath, $"chapter {chapter} gamez");
         RequireData(texturesPath, $"chapter {chapter} textures");
 
-        var stage = new Node3D { Name = $"TestWorld_{chapter}" };
-        Host.AddChild(stage);
-        // The archives are this scope's: WorldSession clears the puffer factory and the sound
-        // loader after its bootstrap precisely so they can close here.
-        var archives = SessionArchives.OpenFor(ArchiveIntent.Suite, gamezPath, texturesPath,
-            SoundsPath, ZrdrPath, Mute);
-        using var textures = archives.Textures;
-        using var sounds = archives.Sounds;
-
-        var session = WorldSession.Build(
-            new WorldSession.Options
-            {
-                DataRoot = DataRoot,
-                Chapter = chapter,
-                Mission = mission,
-                ZrdrPath = ZrdrPath,
-                InterpPath = InterpPath,
-                MissionZrdrPath = SessionPaths.MissionZrdr(DataRoot, chapter, mission),
-                EffectsParent = stage,
-                PlayerPosition = () => Camera.GlobalPosition,
-                Collision = collision,
-                RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
-                EmitterFactory = EmitterFactory,
-                ExtraPrewarmNames = ExtraPrewarmSoundNames,
-                CutsceneRoots = CutsceneRoots,
-                LandingTriggers = CutsceneRoots,
-                PlanesGamezPath = PlanesGamezPath,
-                TexturesOutliveBuild = archives.TexturesOutliveBuild,
-                SoundsOutliveBuild = archives.SoundsOutliveBuild,
-            },
-            archives.Gamez, textures, sounds, archives.SoundDefs, archives.SoundGroups);
-        stage.AddChild(session.Root);
-        session.Runtime.ManualAdvance = true;
-        return new TestWorld
+        var buildWatch = System.Diagnostics.Stopwatch.StartNew();
+        // A private StartupProfile the shared build code's own Mark/Record calls still reach —
+        // docs/architecture.md on why Current is otherwise left null here.
+        var profile = new StartupProfile("test-suite", bootMs: 0);
+        var previousProfile = StartupProfile.Current;
+        StartupProfile.Current = profile;
+        try
         {
-            Chapter = chapter,
-            Collision = collision,
-            Session = session,
-            Stage = stage,
-            Gamez = archives.Gamez,
-        };
+            var stage = new Node3D { Name = $"TestWorld_{chapter}" };
+            Host.AddChild(stage);
+            // The archives are this scope's: WorldSession clears the puffer factory and the sound
+            // loader after its bootstrap precisely so they can close here.
+            var archives = SessionArchives.OpenFor(ArchiveIntent.Suite, gamezPath, texturesPath,
+                SoundsPath, ZrdrPath, Mute, _decode);
+            using var textures = archives.Textures;
+            using var sounds = archives.Sounds;
+
+            var session = WorldSession.Build(
+                new WorldSession.Options
+                {
+                    DataRoot = DataRoot,
+                    Chapter = chapter,
+                    Mission = mission,
+                    ZrdrPath = ZrdrPath,
+                    InterpPath = InterpPath,
+                    MissionZrdrPath = SessionPaths.MissionZrdr(DataRoot, chapter, mission),
+                    EffectsParent = stage,
+                    PlayerPosition = () => Camera.GlobalPosition,
+                    Collision = collision,
+                    RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
+                    EmitterFactory = EmitterFactory,
+                    ExtraPrewarmNames = ExtraPrewarmSoundNames,
+                    CutsceneRoots = CutsceneRoots,
+                    LandingTriggers = CutsceneRoots,
+                    PlanesGamezPath = PlanesGamezPath,
+                    Decode = _decode,
+                    TexturesOutliveBuild = archives.TexturesOutliveBuild,
+                    SoundsOutliveBuild = archives.SoundsOutliveBuild,
+                },
+                archives.Gamez, textures, sounds, archives.SoundDefs, archives.SoundGroups);
+            stage.AddChild(session.Root);
+            session.Runtime.ManualAdvance = true;
+
+            return new TestWorld
+            {
+                Chapter = chapter,
+                Collision = collision,
+                Session = session,
+                Stage = stage,
+                Gamez = archives.Gamez,
+            };
+        }
+        finally
+        {
+            // Restored even on a thrown build: a leaked Current would silently misattribute every
+            // later suite's phases (or a real session's, if one ever ran after in the same
+            // process) to this build's profile instead of its own.
+            StartupProfile.Current = previousProfile;
+            buildWatch.Stop();
+            // The outer stopwatch, not profile's own clock, is what "other" closes against: it is
+            // the one wall time TestHarness.Run also attributes to this suite.
+            WorldBuildPhases += PhaseAttribution.Categorize(profile.Phases, buildWatch.Elapsed.TotalMilliseconds);
+            WorldBuildSeconds += buildWatch.Elapsed.TotalSeconds;
+            WorldsBuilt++;
+        }
     }
 }
 
@@ -641,12 +981,45 @@ public sealed class TestContext
 public sealed class SuiteResult
 {
     public required string Name { get; init; }
+
+    /// <summary>This suite's position in the registry. Carried into the report so shard reports
+    /// merge back into registry order without the merger holding a copy of the catalog.</summary>
+    public int Index { get; init; }
+
     public required SuiteStatus Status { get; init; }
     public required double Seconds { get; init; }
     public string Detail { get; init; } = "";
     public IReadOnlyList<string> Failures { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
     public IReadOnlyDictionary<string, long> Counts { get; init; } = new Dictionary<string, long>();
+
+    /// <summary>How many <see cref="TestContext.WithWorld(string, bool, Action{TestWorld})"/> calls
+    /// actually built (rather than reused) a world during this suite.</summary>
+    public int WorldsBuilt { get; init; }
+
+    /// <summary>Wall time this suite spent inside <c>BuildWorld</c>, summed over every world it
+    /// built. <c>ArchiveDecodeSeconds + SoundPrepSeconds + RuntimeConstructionSeconds +
+    /// OtherBuildSeconds == BuildSeconds</c> (the same identity <see cref="PhaseAttribution"/>
+    /// states per build, summed).</summary>
+    public double BuildSeconds { get; init; }
+    public double ArchiveDecodeSeconds { get; init; }
+    public double SoundPrepSeconds { get; init; }
+    public double RuntimeConstructionSeconds { get; init; }
+    public double OtherBuildSeconds { get; init; }
+
+    /// <summary>Wall time this suite spent freeing a world it built and did not hand to the shared
+    /// cache (<see cref="TestContext.WithWorld(string, bool, string?, Action{TestWorld})"/>'s
+    /// non-cached path). The shared cache's own teardown happens once, after every suite, and is
+    /// reported only in the run's totals (<c>finalDisposalSeconds</c>), never against one suite.</summary>
+    public double DisposalSeconds { get; init; }
+
+    /// <summary>What is left of <see cref="Seconds"/> once build and disposal are subtracted:
+    /// manual simulation plus assertion work. See <see cref="PhaseAttribution.Rest"/>.</summary>
+    public double RestSeconds { get; init; }
+
+    /// <summary>How far <c>BuildSeconds + DisposalSeconds</c> overran <see cref="Seconds"/> — zero
+    /// on a clean measurement. See <see cref="PhaseAttribution.Overrun"/>.</summary>
+    public double OverrunSeconds { get; init; }
 }
 
 /// <summary>A native engine error the run is known to emit and that no suite here caused. Each

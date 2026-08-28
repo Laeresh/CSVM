@@ -23,7 +23,9 @@ internal static class PufferSuites
         ctx.EmitterFactory = fake;
         try
         {
-            ctx.WithWorld(chapter, collision: false, world =>
+            // ⚠ Private, never the shared cache: this world is built with a fake emitter factory, and
+            // a cached one would hand that fake to every later suite on this chapter.
+            ctx.WithPrivateWorld(chapter, collision: false, world =>
             {
                 var runtime = world.Runtime;
                 DestructibleRegistry.Instance? tank = null;

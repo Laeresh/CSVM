@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -203,11 +204,35 @@ public static class SuiteCatalog
         "airframe-hull-coverage",
     };
 
+    // The suites `--run-tests=tier:quick` runs: one representative per failure surface, checked in
+    // here rather than inferred from a diff, every name also in Names. The selection rule is in
+    // docs/tooling.md; the tier is partial and the full catalog stays the landing gate.
+    public static readonly IReadOnlyList<string> QuickTier = new[]
+    {
+        "puffer-modes",
+        "loadout-bind",
+        "weapons-fire",
+        "air-to-air",
+        "ai-actor",
+        "instant-action",
+        "damage-stages",
+        "damage-hd",
+        "effect-template-mesh",
+        "collision-visibility",
+        "target-selection",
+        "campaign-objectives",
+        "music-states",
+    };
+
+    /// <summary>The suite names a tier holds, or null when no tier carries that name (which a
+    /// selector must treat as a miss, not as an empty selection).</summary>
+    public static IReadOnlyList<string>? Tier(string name) =>
+        name.Equals("quick", StringComparison.OrdinalIgnoreCase) ? QuickTier : null;
+
     internal static void RegisterAll(List<TestHarness.Suite> into)
     {
-        // ⚠ Keep this registered first. It is the only suite installing a fake IEmitterFactory, and
-        // WithWorld caches one world per chapter, so it must build the shared C1 world while the fake is
-        // in effect; damage-hd's collision:true immediately after forces the real rebuild for everyone.
+        // Registration order is presentation only: no suite here depends on running after another,
+        // which is what lets any subset of this registry run in a process of its own.
         into.Add(new TestHarness.Suite("emitter-lifetime",
             "a destructible's death starts a PUFFER_STATE emitter and BL-236's own retirement rule stops it", EmitterLifetime));
         into.Add(new TestHarness.Suite("puffer-modes",

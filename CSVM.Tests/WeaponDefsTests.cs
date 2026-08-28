@@ -10,6 +10,7 @@ namespace CSVM.Tests;
 /// key-paired-with-null class flags, the nested <c>FIRE</c>/<c>FLYOUT</c>/<c>IMPACT</c>
 /// bindings, and the unhandled-key tripwire. Input is <c>fixtures/zrdr/weapons.json</c>.
 /// </summary>
+[Trait("Tier", "Quick")]
 public class WeaponDefsTests
 {
     [Fact]

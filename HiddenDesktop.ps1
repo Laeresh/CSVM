@@ -89,6 +89,14 @@ public class CSVMHiddenDesktop
     /// caller forever. 0xFFFFFFFF (INFINITE) preserves the unbounded wait.</summary>
     public static int Run(string exe, string cmdLine, string cwd, string outPath, string errPath, uint timeoutMs)
     {
+        return Wait(Start(exe, cmdLine, cwd, outPath, errPath), timeoutMs);
+    }
+
+    /// <summary>Starts the process on the hidden desktop and returns its handle WITHOUT waiting, so
+    /// several can be in flight at once. The caller must pass the handle to <see cref="Wait"/>,
+    /// which closes it.</summary>
+    public static IntPtr Start(string exe, string cmdLine, string cwd, string outPath, string errPath)
+    {
         if (_desk == IntPtr.Zero) { throw new InvalidOperationException("hidden desktop not open"); }
 
         SECURITY_ATTRIBUTES sa = new SECURITY_ATTRIBUTES();
@@ -112,19 +120,26 @@ public class CSVMHiddenDesktop
         CloseHandle(hOut); CloseHandle(hErr); CloseHandle(hIn);
         if (!ok) { throw new Exception("CreateProcess failed, win32 error " + err); }
 
+        CloseHandle(pi.hThread);
+        return pi.hProcess;
+    }
+
+    /// <summary>Waits for a handle from <see cref="Start"/> and returns the exit code, 124 on
+    /// timeout. Closes the handle either way, so it is called exactly once per start.</summary>
+    public static int Wait(IntPtr process, uint timeoutMs)
+    {
         uint code;
-        if (WaitForSingleObject(pi.hProcess, timeoutMs) == 0x102 /* WAIT_TIMEOUT */)
+        if (WaitForSingleObject(process, timeoutMs) == 0x102 /* WAIT_TIMEOUT */)
         {
-            TerminateProcess(pi.hProcess, 124);
-            WaitForSingleObject(pi.hProcess, 5000);   // let the kill land before the caller reads streams
+            TerminateProcess(process, 124);
+            WaitForSingleObject(process, 5000);   // let the kill land before the caller reads streams
             code = 124;
         }
         else
         {
-            GetExitCodeProcess(pi.hProcess, out code);
+            GetExitCodeProcess(process, out code);
         }
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
+        CloseHandle(process);
         return (int)code;
     }
 }
@@ -157,6 +172,36 @@ function Invoke-OnHiddenDesktop {
     )
     $timeoutMs = if ($TimeoutSec -gt 0) { [uint32]($TimeoutSec * 1000) } else { [uint32]::MaxValue }
     return [CSVMHiddenDesktop]::Run($Exe, $CommandLine, $WorkingDirectory, $StdOut, $StdErr, $timeoutMs)
+}
+
+<#
+.SYNOPSIS
+Starts an executable on the hidden desktop WITHOUT waiting, returning its process handle. The
+caller must hand that handle to Wait-OnHiddenDesktop exactly once. Several concurrent launches on
+the one desktop are fine: a desktop is a namespace for windows, not a serializing resource.
+#>
+function Start-OnHiddenDesktop {
+    param(
+        [Parameter(Mandatory=$true)][string]$Exe,
+        [Parameter(Mandatory=$true)][string]$CommandLine,
+        [Parameter(Mandatory=$true)][string]$WorkingDirectory,
+        [Parameter(Mandatory=$true)][string]$StdOut,
+        [Parameter(Mandatory=$true)][string]$StdErr
+    )
+    return [CSVMHiddenDesktop]::Start($Exe, $CommandLine, $WorkingDirectory, $StdOut, $StdErr)
+}
+
+<#
+.SYNOPSIS
+Waits for a handle from Start-OnHiddenDesktop and returns its exit code (124 on timeout).
+#>
+function Wait-OnHiddenDesktop {
+    param(
+        [Parameter(Mandatory=$true)][IntPtr]$Process,
+        [int]$TimeoutSec = 0
+    )
+    $timeoutMs = if ($TimeoutSec -gt 0) { [uint32]($TimeoutSec * 1000) } else { [uint32]::MaxValue }
+    return [CSVMHiddenDesktop]::Wait($Process, $timeoutMs)
 }
 
 <#

@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "readme": "Wall-time budgets for RunTests.ps1's stages. They are AWARENESS thresholds, never verdicts: a stage over budget prints an 'over budget' marker and NEVER changes the exit code, because this is a workstation and load the script cannot see must not turn a correct tree red. The numbers live here rather than in RunTests.ps1's help so the help can name this file instead of figures that would drift out of it.",
+  "rule": "Each budget is the slowest of three back-to-back warm runs on the development machine, plus 50 percent, rounded up to the next 5 seconds, with a 10 second floor so a sub-second stage is not tripped by ordinary process startup. A stage this file does not name is printed without a budget. Re-measure the same way and rewrite this file when the numbers stop describing the machine.",
+  "measured": {
+    "conditions": "warm, CSVM_DATA_ROOT at the primary tree, nothing else on the test desktop, engine at the default 4 shards and goldens at the default 4 workers",
+    "full": {
+      "runs": 3,
+      "build": [6.1, 0.8, 0.7],
+      "units": [16.3, 15.8, 16.7],
+      "engine": [66.3, 66.3, 66.4],
+      "goldens": [30.7, 29.1, 29.3],
+      "hitch": [16.4, 16.5, 16.5],
+      "total": [119.3, 112.0, 113.2],
+      "totalWithHitch": [128.0, 129.7]
+    },
+    "quick": {
+      "runs": 3,
+      "build": [0.7, 0.7, 0.7],
+      "units": [1.9, 1.9, 1.9],
+      "engine": [27.9, 27.9, 27.8],
+      "total": [30.6, 30.5, 30.4]
+    }
+  },
+  "lanes": {
+    "full": {
+      "what": "the complete landing gate: build, units, every engine suite, goldens. The total was set from the four-stage gate; an opt-in -Hitch run adds its own budgeted stage and measured 128.0 to 129.7 seconds, still inside this total.",
+      "requires": ["build", "units", "engine", "goldens"],
+      "total": 180,
+      "stages": {
+        "build": 10,
+        "units": 30,
+        "engine": 100,
+        "goldens": 50,
+        "hitch": 30
+      }
+    },
+    "quick": {
+      "what": "RunTests.ps1 -Quick: build, the quick unit tier, the quick engine tier",
+      "requires": ["build", "units", "engine"],
+      "total": 50,
+      "stages": {
+        "build": 10,
+        "units": 10,
+        "engine": 45
+      }
+    }
+  },
+  "notes": [
+    "The total is compared only when the lane's own 'requires' stages all ran. A run that skipped a stage prints its total without a budget rather than against one that describes a different amount of work.",
+    "The perf stage carries no budget on purpose. It records rather than judges, and a committed wall-time number for it would be the threshold verification METHOD-3 and PERF-5 rule out; its verdict comes from a paired A/B (-PerfCompare) against a freshly measured same-build band.",
+    "The engine stage's 300 second per-launch watchdog in RunTests.ps1 is a separate thing and is not a budget: it kills a hung launch and fails the stage, where these numbers only print."
+  ]
+}

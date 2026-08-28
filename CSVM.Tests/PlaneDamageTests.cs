@@ -11,6 +11,7 @@ namespace CSVM.Tests;
 /// unabsorbed leftover draining the whole pair directly through the wrapper loop. Values are
 /// the stock Bloodhawk's (20 hp / 20 armor per zone) and the weapons data's 30-calibre ammo
 /// matrix — AP `wep_32` 4.5 armor / 1.5 health, dum-dum `wep_31` 1.5 / 4.5.</summary>
+[Trait("Tier", "Quick")]
 public class PlaneDamageTests
 {
     [Fact]

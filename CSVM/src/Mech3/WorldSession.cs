@@ -212,8 +212,11 @@ public sealed class WorldSession
         var chapterZrdrPath = SessionPaths.ChapterZrdr(o.DataRoot, o.Chapter);
         var (chapterAnimPath, missionAnimPath) =
             AnimProgram.ArchivePaths(o.DataRoot, o.Chapter, o.Mission);
-        var animProgram = AnimProgram.Load(o.ZrdrPath, chapterZrdrPath, o.MissionZrdrPath,
-            chapterAnimPath, missionAnimPath);
+        var animProgram = o.Decode == null
+            ? AnimProgram.Load(o.ZrdrPath, chapterZrdrPath, o.MissionZrdrPath,
+                chapterAnimPath, missionAnimPath)
+            : o.Decode.Anim(o.ZrdrPath, chapterZrdrPath, o.MissionZrdrPath,
+                chapterAnimPath, missionAnimPath);
         StartupProfile.Record("anim", mark);
         s.Program = animProgram;
         if (o.LandingTriggers)
@@ -294,7 +297,8 @@ public sealed class WorldSession
         // roots: an intro starts inside the animation bootstrap.
         if (o.CutsceneRoots && intro && o.PlanesGamezPath is { Length: > 0 } planesPath)
         {
-            s.Aircraft = AircraftStage.Build(root, gamez.Nodes.Count, GameZ.Load(planesPath), textures);
+            var planesGamez = o.Decode == null ? GameZ.Load(planesPath) : o.Decode.Gamez(planesPath);
+            s.Aircraft = AircraftStage.Build(root, gamez.Nodes.Count, planesGamez, textures);
         }
         // The emitter pool has to be in the tree before the bootstrap builds into it.
         if (animRuntime.Sounds is { } worldSounds)
@@ -563,6 +567,12 @@ public sealed class WorldSession
         public required string ZrdrPath { get; init; }
         public required string InterpPath { get; init; }
         public required string MissionZrdrPath { get; init; }
+
+        /// <summary>Where this build takes its <see cref="AnimProgram"/> and its aircraft archive
+        /// from, when the caller has one. Null (the default) loads both fresh, so a session that
+        /// leaves a chapter retains nothing of it. See <see cref="DecodeCache"/> for what a
+        /// non-null value makes shared, and the read-only contract that binds.</summary>
+        public DecodeCache? Decode { get; init; }
 
         /// <summary>The shared aircraft archive, for <see cref="AircraftStage"/>. Read only when
         /// this mission bootstraps an intro; every other session leaves it unopened, so its node

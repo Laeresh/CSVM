@@ -12,6 +12,7 @@ namespace CSVM.Tests;
 /// that clears a completed flag, the awake-gate of <c>TICK_DEPENDS_ON_OBJ</c>, and the display
 /// rows the mask is built from. Every claim is docs/formats/objectives.md's.
 /// </summary>
+[Trait("Tier", "Quick")]
 public class ObjectiveGraphTests
 {
     [Fact]

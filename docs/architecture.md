@@ -86,6 +86,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
 - `src/Mech3/AircraftStage.cs` — stages the two aircraft-archive subtrees a story-mission intro animates into a chapter world's animation node table, at that chapter's cross-archive pointer base.
 - `src/Mech3/SessionArchives.cs` — `OpenFor(ArchiveIntent)` opens the five archives a chapter build needs and the matching `WorldSession.Options` lifetime flags, so `GameSession`, the anim lab and the test harness open the same five without hand-setting the flags.
+- `src/Mech3/DecodeCache.cs` — the opt-in store of decoded, read-only world inputs (`GameZ`, `AnimProgram`) keyed by their source paths, so a process building one chapter many times decodes it once.
 - `src/Mech3/EmptyStage.cs` — the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/WavCues.cs` — the RIFF `cue ` chunk of a WAV, as times in seconds (zip or dir): the briefing narration's marker points, which is the only clock a reveal script does not carry itself. Times come back ascending because a `WaitForMarker` number indexes them by sample offset and 13 of the 24 briefing wavs store their points out of that order. Kept apart from `SoundArchive`, which decodes to a Godot stream, so a menu page needing only timings stays engine-free. Decode: `docs/formats/briefing.md`.
@@ -307,6 +308,7 @@ instead.
 - `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a verdict, shared with the suites.
 - `src/Testing/EnvelopeMargins.cs` — one flight scenario's distance from every term that could bound it, plus which decoded branches it drove; the parity ledger's coverage half.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
+- `src/Testing/SuiteShards.cs` — the `shard:<index>/<count>` term and the deterministic weighted division behind it, over the measured weights in `analysis/engine-suite-weights.json`.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
 - `src/Testing/SuiteCatalog.cs` — the ordered registry of the in-engine suites; domain scenario bodies live in `*Suites.cs` modules, while `SuiteConstants` holds their shared golden inputs. Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
@@ -824,7 +826,9 @@ Merges the compiled + reader front-ends for one mission — load both, prefer co
 keep the remainder — plus `StartAnims`; `ScriptFor` resolves an event slot to its archive SI script.
 The mission-scope gate against the compiled manifest (a library, not a full roster) is decode
 knowledge: docs/formats/anim-definitions.md. Which world ENTITIES a mission shows is MissionSetup
-plus the interp boot script, not this file.
+plus the interp boot script, not this file. `Defs`, `StartAnims` and `MissionLibrarySkipped` are
+`IReadOnlyList` over private backing lists: one program is already shared by every runtime `Subset`
+binds from it, and may be shared by several world builds (`DecodeCache`).
 
 ## src/Mech3/TextureCycler.cs
 Runs the gamez material `cycle` flipbooks (water, surf, wakes, crowds) by swapping `albedo_tex`;
@@ -4392,7 +4396,9 @@ they are testable. `SessionMode` is closed — Menu/Fly/Viewer/Freecam/AnimLab �
 
 ## src/Mech3/WorldSession.cs
 Builds one chapter world and binds its `AnimProgram` — the world+anim half of a session build;
-`Build` returns Root, Runtime, Program, Builder, Clutter, CloudDeck and Lights.
+`Build` returns Root, Runtime, Program, Builder, Clutter, CloudDeck and Lights. `Options.Decode`
+(null by default) is where the `AnimProgram` and the aircraft archive come from when the caller
+holds a `DecodeCache`; both are then shared and read-only.
 `Options.EmitterFactory` (null → the real `Anim.PufferEmitterFactory` over this build's texture
 archive and `EffectsParent`) is read once, here, and never reassigned after `Build` returns — a
 caller supplies its own to observe emitter lifetime with no GPU (`CSVM.Testing.CountingEmitterFactory`
@@ -4448,7 +4454,21 @@ them alongside the `WorldSession.Options.TexturesOutliveBuild`/`SoundsOutliveBui
 `TestHarness.BuildWorld` used to hand-write (`BL-241`'s own fix note: the harness forgot
 `TexturesOutliveBuild`). `StartupProfile.Mark`/`Record` calls are unconditional here, same as
 `WorldSession.Build`'s own phases — a no-op with no session under measurement, which is what lets
-the test harness drive the same code blind.
+the test harness drive the same code blind. The optional `decode` argument makes only the returned
+`Gamez` a shared read-only instance (`DecodeCache`); the other four are always this call's own.
+
+## src/Mech3/DecodeCache.cs
+The decoded inputs a world build can reuse, keyed by the absolute paths they were decoded from:
+`Gamez(path)` and `Anim(shared, chapterZrdr, missionZrdr, chapterAnim, missionAnim)`. The paths are
+the whole key because they already carry data root, chapter and mission; collision, mute, the
+emitter factory and the prewarm list all act after the decode, on objects this never holds. It
+owns nothing disposable and nothing Godot — the texture and sound archives keep their
+`ArchiveIntent` lifetimes, and scene nodes, runtimes and worlds are never stored.
+**Everything handed back is shared and read-only by contract**, which is why `AnimProgram`'s three
+collections are `IReadOnlyList`; `GameZ` has no such enforcement, so its one in-place writer
+(`EffectCycles.Apply`) has to stay idempotent over a constant input, which it is. Callers are
+serial by construction (`AnimArchive`'s SI-script pool is an unsynchronised lazy dictionary). An
+instance lives as long as its holder: the harness keeps one per run, a game session keeps none.
 
 ## src/Mech3/EmptyStage.cs
 The `--stage=empty` test stage: a flat collidable 20 km ground plane under a 100 m grid, standing in
@@ -4501,7 +4521,11 @@ shader this project generates reads it instead of Godot's `TIME`.
 The always-on startup timing report: one `[perf] startup mode=… <subject> total=… boot=… <phases…>
 rest=… first_frame=…` line per session build. `Mark()`/`Record(phase, mark)` are ambient statics over
 `Current`, so the shared build code (`WorldSession`, which the test harness also drives) records blind.
-Reading pitfalls for `boot`/`rest`: verification.md PERF-16/17.
+Reading pitfalls for `boot`/`rest`: verification.md PERF-16/17. `Phases` is a read-only view of the
+same accumulator for a caller that wants to aggregate the recorded spans without emitting the line
+(`TestContext.BuildWorld` installs its own private instance as `Current` for exactly this — never the
+one a real session would install, so a suite's phases and a session's `[perf] startup` line can never
+mix) — see `src/Testing/PhaseAttribution.cs` below.
 
 ## src/Utils/HitchMonitor.cs
 The always-on frame-hitch detector, ticked from `Launcher._Process` in every
@@ -4604,16 +4628,72 @@ scene-tree host, and `WithWorld` — the chapter-world builder over `WorldSessio
 mission-override form `WithWorld(chapter, collision, mission, body)` builds a chapter at another
 mission and never caches it, since the cache is keyed by chapter alone — `zeppelin-damage` wants
 C1 at M04), the
-PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code. `TestContext.
+PASS/FAIL/SKIP table, `test-report.json` in `TestContext.ScratchDir`, and the process exit code.
+`Select` is the pure selector over the flag's value — comma-separated terms, `suite:` exact, `tier:`
+a `SuiteCatalog` tier, anything else a substring — returning registry order and reporting every term
+that matched nothing, which `Run` refuses before any suite starts. `SuiteShards` handles the one
+term that divides rather than selects; `Run` applies it AFTER the miss checks, so an empty shard is
+a legitimate division and an empty selector is still a typo. A sharded run's `ScratchDir` moves
+beside its `--log-file`, which is what keeps concurrent shards (and concurrent runs) off each
+other's report and artifacts. `TestContext.
 EmitterFactory` (mutable, default null) forwards straight into `WorldSession.Options.EmitterFactory`
-for the next `WithWorld` build — a suite sets it, on a chapter other than `Chapter` so a cached
-default-chapter world built before the set is never reused in its place. `BuildWorld` opens its
+for the next `WithWorld` build. `WithPrivateWorld` is what a suite installing one uses: never read
+from the shared cache and never written to it, freed when the body returns, so no build option a
+suite chose can ride into a later suite's world. `BuildWorld` opens its
 archives through `SessionArchives.OpenFor(ArchiveIntent.Suite, …)`, then `using`s the returned
 `Textures`/`Sounds` itself — `OpenFor` states the (both-false) lifetime flags, it does not own the
-disposal. `TestWorld` also carries the parsed `Gamez` past the build (not disposable, unlike the
-texture archive) so a suite can build real geometry of its own from it — the effect-template stage
-`effect-template-mesh` needs. Engine-error allowlisting and pass/fail policy: `ErrorAllowlist`,
-in code. Windowed-run rule: verification.md LOG-8.
+disposal. One `DecodeCache` per run rides both that call and `WorldSession.Options.Decode`, so the
+58 builds of a full catalog decode 8 chapter gamez and 16 programs rather than 58 of each; every
+`Gamez`/`Program` a suite reads is therefore shared and read-only. `TestWorld` also carries the
+parsed `Gamez` past the build (not disposable, unlike the texture archive) so a suite can build
+real geometry of its own from it — the effect-template stage `effect-template-mesh` needs.
+Engine-error allowlisting and pass/fail policy: `ErrorAllowlist`, in code. Windowed-run rule:
+verification.md LOG-8.
+
+**B11's phase attribution** (`test-report.json` schema 2). `BuildWorld` installs a private
+`StartupProfile` as `Current` for the span of one build (restored in a `finally`, so a thrown build
+cannot leak it onto a later suite or a real session), so `WorldSession.Build`'s and
+`SessionArchives.OpenFor`'s own `Mark`/`Record` calls — the same ones a real session's `[perf]
+startup` line reads — land on it with no second instrumentation invented for the harness.
+`PhaseAttribution.Categorize` buckets those phases into archive/decode, sound preparation and
+runtime/world construction against the *outer* wall-clock stopwatch `BuildWorld` keeps of its own
+(not the profile's internal clock), so the four figures it returns always sum to exactly what
+`TestContext.WorldBuildSeconds` attributes to the suite — no second clock to drift against the
+first. `TestContext.ResetForSuite` clears that accumulator, and the three build knobs
+(`EmitterFactory`, `ExtraPrewarmSoundNames`, `CutsceneRoots`), once per suite in `Run`, the same
+lifetime `Failures`/`Notes`/`Counts` already have; disposing a world a suite built (not the shared
+cache's own end-of-run teardown, reported only as the run's `finalDisposalSeconds`) is timed the
+same way. What is left of a suite's wall time once build and disposal are subtracted is `rest`:
+manual simulation plus assertion work, floored at zero, with any stopwatch overrun reported
+separately rather than folded silently into a healthy-looking zero. The console line stays one line
+per suite (a no-world suite prints no phase suffix at all) plus one totals line after the loop;
+`test-report.json` carries the same figures per suite and as run totals, plus the run's `selector`
+and the loaded `CSVM.dll`'s own path/MD5 (`binary`, read from the fixed
+`<repo>/CSVM/.godot/mono/temp/bin/Debug/CSVM.dll` `RunTests.ps1`'s own perf stage hashes as
+`$PerfDll` — not `Assembly.GetExecutingAssembly().Location`, which Godot's Mono host returns empty),
+so a report can be matched to the exact build and suite set that produced it.
+
+## src/Testing/SuiteShards.cs
+Godot-free and pure (`CSVM.Tests` proves it without the engine): the `shard:<index>/<count>` term
+and the division behind it. `Parse` lifts that term out of a `--run-tests=` value and hands the rest
+back as the selector, treating a malformed or out-of-range one as an error rather than as a full
+run. `Plan` divides an already-selected list longest-unit-first onto the lightest shard, ties broken
+on the item's own position, and returns each shard in the input's order, so one tree always divides
+the same way. `SuiteWeights` is `analysis/engine-suite-weights.json`: per-suite measured seconds, a
+default for a suite the file does not name (`Unweighted` reports those), and `Groups`, the sets a
+shard may not split. A missing or unreadable file weighs every suite the same, because an even
+division is still a correct one.
+
+## src/Testing/PhaseAttribution.cs
+Godot-free and pure (`CSVM.Tests` proves it without the engine): buckets a `StartupProfile`'s raw
+phase names — `gamez`/`textures`/`anim`/`zrdr` as archive/decode, `sounds`/`prewarm` as sound
+preparation, `world`/`clutter`/`bind` as runtime/world construction — into `Categorized`, with
+whatever a build's own wall-clock time does not cover landing in `OtherMs` rather than vanishing.
+`Rest`/`Overrun` do the suite-level arithmetic: `wall − build − disposal`, clamped at zero, with the
+clamped shortfall reported by `Overrun` instead of a falsely healthy zero. Both `zrdr` phases (a
+mission's `MissionSetup.Load` inside `WorldSession.Build`, and the sound-def/group load inside
+`SessionArchives.OpenFor`) share one name by `StartupProfile`'s own same-name-accumulates rule; both
+are decode, so the shared archive/decode bucket is correct either way.
 
 ## src/Testing/CountingEmitterFactory.cs
 `IEmitterFactory` for a suite: `Create` always succeeds and hands back a `CountingEmitter` — no
@@ -4633,9 +4713,11 @@ emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/SuiteCatalog.cs
 The ordered registry of the in-engine assertion suites. Scenario bodies are grouped by domain in
-the `*Suites.cs` modules; `Names` is the registry-order test surface and the count's one home. It preserves the original
-suite order, including `emitter-lifetime` first, because that suite installs the shared C1 world's
-fake emitter factory. The suites cover plane/loadout bindings (stock and, since M3 B4,
+the `*Suites.cs` modules; `Names` is the registry-order test surface and the count's one home.
+Registration order is presentation only: no suite depends on running after another, which is what
+lets any subset of this registry run in a process of its own. `QuickTier` is the checked-in
+membership of `--run-tests=tier:quick`, resolved through `Tier(name)`, and holds one representative
+per failure surface rather than the cheapest rows. The suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
 build from ai.zrd + the thirdp mount, arc-centre rest pose, track/fire/hit under the host's
 shooter id, bored-window fire suppression with live tracking, the nearer-end-stop park, YAW [0,0]

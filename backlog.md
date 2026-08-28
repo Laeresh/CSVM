@@ -2965,6 +2965,19 @@ usual.
   fix before removing. Side effect while active: DirectInput-only controllers (non-XInput
   sticks without an SDL HIDAPI driver) are invisible in-game.
 
+- `BL-584` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` is not same-build stable inside the
+  parallel unit stage.** *Evidence (seen once, mechanism lead-only):* the full `RunTests.ps1` unit
+  stage reported it red once (`Expected: 0, Actual: 3984` bytes) on a tree whose only difference
+  from six green runs was PowerShell and documentation edits; it then passed three times alone and
+  on every later complete run. An allocation assertion measured with `GC.GetAllocatedBytesForCurrentThread`
+  or similar shares a process with fourteen concurrent test classes, so another class's work on
+  the same thread pool thread, or a tiered-JIT recompile landing mid-scope, can charge bytes to
+  it. *Fix shape:* pin the measurement to the current thread and warm the scope once before the
+  asserted call, or move the test to a non-parallel collection and say why. *⚠ Traps:* do not
+  widen the assertion to a tolerance; zero allocations is the contract `PerfSample` makes, and a
+  tolerance would hide a real regression. *Cross-refs:* `docs/verification.md` PERF rules,
+  `docs/plans/PLAN-fast-verification.md` C23.
+
 ## Misc
 
 - `BL-072` `[Feature]` **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`

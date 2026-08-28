@@ -47,6 +47,12 @@ public sealed class StartupProfile
     /// (<c>chapter=C1</c>, <c>plane=player_bhawk</c>) — the line's scenario identity.</summary>
     public string Subject { get; set; } = "";
 
+    /// <summary>The recorded phases in the order first seen, for a reader that wants to aggregate
+    /// or categorize them (<see cref="Testing.PhaseAttribution"/>) without emitting the line.
+    /// Never calls <see cref="EndBuild"/> itself, so a caller timing the build with its own
+    /// stopwatch (the test harness's per-world-build watch) can read the phases mid-build.</summary>
+    public IReadOnlyDictionary<string, double> Phases => _phases;
+
     /// <summary>Opens a phase measurement; hand the returned mark to <see cref="Record"/>.</summary>
     public static long Mark() => Stopwatch.GetTimestamp();
 

@@ -341,6 +341,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **PERF-17** — **`StartupProfile`'s `rest` term is `build − Σ(phases)`, real uninstrumented work
   — on a probe run it also holds whatever the probe itself did before the build closed, not only
   build overhead.**
+- **PERF-18** — **A verification-time budget is an awareness threshold, never a verdict: it may
+  print, it may not change an exit code.** METHOD-3 and PERF-5 already say a committed wall-time
+  number lies as the machine drifts, so a budget that gated would fail correct code on a busy
+  workstation and, worse, teach the reader to re-run until it passes. `RunTests.ps1`'s budgets
+  (`analysis/verification-budgets.json`) are set at the slowest of three back-to-back warm runs plus
+  50 %, and a stage past one prints `over budget` beside a summary whose exit code is unchanged. The
+  budget's job is to make a verification-time regression visible in the run that caused it; deciding
+  whether it is one is still a paired A/B against a freshly measured same-build band.
 
 ## LOG — logs, error censuses, and exit codes
 
@@ -355,7 +363,19 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **LOG-10** — **Error allowlists need narrow patterns, caps, and actual counts.**
 - **LOG-11** — **Capture native engine errors outside C#.**
 - **LOG-12** — **Automated instruments must return their verdict in the exit code.**
-- **LOG-13** — **Do not overlap engine probes.**
+- **LOG-13** — **Do not overlap engine probes.** The one exception is `RunTests.ps1`'s own engine
+  shards, which overlap by design: each carries its own `--log-file`, report, scratch directory and
+  watchdog, and the stray-Godot sweep is scoped to the launching process. The golden stage's own
+  `-GoldenWorkers` (default 4) is the same exception again: each concurrent shot still carries its
+  own process, log, `.out`/`.err` and PNG, so nothing about the identity check changes — an A/B of
+  1/2/3/4 workers, three repeats each, found every raw-pixel hash, `sim_frame`, size and adapter
+  bit-identical at every count (`PLAN-fast-verification.md` C21). What still does not
+  isolate is a suite whose store is deliberately outside `.scratch/` — two concurrent
+  `RunTests.ps1` invocations fail `campaign-loop`, which reads a `user://` profile an earlier
+  process wrote. `RunTests.ps1`'s hitch stage (`-Hitch`) applies the same rule to itself: it is the
+  LAST stage in a run, launched only after every engine, golden and perf Godot process in that
+  invocation has already exited, so the frame-time evidence `HitchMonitor`/`HitchSidecar` report
+  is never taken beside contaminating load (PERF-12/13/14).
 - **LOG-14** — **Read every field in a multi-metric row.**
 - **LOG-15** — **When an error lacks identity, log candidate state at the failure boundary.**
 - **LOG-16** — **A census printed at the end of setup cannot report a runtime miss** 
@@ -605,6 +625,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
   0.02 px at the origin, 0.7 px at 10 km and 2.7 px at 20 km under `--direction=-0.743,0,-0.669`,
   and 0.00 px at 10 km with heading 0. Fly it, rotate it, take consecutive frames, keep a control
   region that shares the transform but carries no drive.
+
+- **INSTR-31** — **A cache or fixture that hands a suite the WRONG subject is invisible to any
+  assertion that holds on both subjects; prove the key with an identity test, never with the
+  catalog.** Measured on `DecodeCache`: keying the chapter document on its file name alone (every
+  chapter's is `gamez.zip`) made all eight chapters resolve to C1, and `collision-visibility` — the
+  one suite that builds all eight — still reported PASS in 17.29 s, because "no enabled collider
+  under an invisible node" is true of C1 eight times. The `Assert.NotSame` unit test failed
+  immediately. A green catalog is evidence about the assertions, not about which world they ran on.
 
 ## SRC — sources and documents
 

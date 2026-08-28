@@ -17,6 +17,7 @@ namespace CSVM.Tests;
 /// rounds' sim step produce the same straight line. They are tripwires — a data or loadout change
 /// that makes an accelerating weapon gun-reachable fails them.</para>
 /// </summary>
+[Trait("Tier", "Quick")]
 public class BallisticsTests
 {
     private static string SharedZrdr =>

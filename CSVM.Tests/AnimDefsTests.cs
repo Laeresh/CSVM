@@ -10,6 +10,7 @@ namespace CSVM.Tests;
 /// into the same event model the compiled archives produce, including the two places where the
 /// reader and the compiler disagree on units. Input is <c>fixtures/zrdr/demo_anims.json</c>.
 /// </summary>
+[Trait("Tier", "Quick")]
 public class AnimDefsTests
 {
     [Theory]

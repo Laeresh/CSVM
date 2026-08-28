@@ -100,7 +100,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `ExtractAssets.ps1` — bulk ZBD extractor (`unzbd cs <mode>` per type, fork build, idempotent). Details: `docs/tooling.md`.
 - `ExtractRof.ps1` — extractor for the non-ZBD half: the `.rof` UI archives + DLL string tables → `extracted/rof/`. Details: `docs/tooling.md`.
 - `RunGame.ps1` / `RunDev.ps1` — play and dev launch scripts (build + Godot; dev one prompts). Details: `docs/tooling.md`.
-- `RunTests.ps1` — one command, one exit code: build → `dotnet test` → `--run-tests` → goldens → perf (`-Perf`, A/B'd via the git-ignored `perf-history.jsonl`). Details: `docs/tooling.md`.
+- `RunTests.ps1` — one command, one exit code: build → `dotnet test` → `--run-tests` (`-Shards`, default 4) → goldens (`-GoldenWorkers`, default 4) → perf (`-Perf`, A/B'd via the git-ignored `perf-history.jsonl`) → hitch (`-Hitch`, opt-in and last). Details: `docs/tooling.md`.
 - `ExportRelease.ps1` — builds, headless-imports, and exports the "Windows Desktop" release preset to `.scratch/export/CSVM.exe`; checks the export templates are installed and creates `.scratch/export/` if missing before starting. Details: `docs/tooling.md`.
 - `RunProbe.ps1` — **every ad-hoc scripted Godot launch goes through this** (`--screenshot=`, `--dump-*`, one-off `--run-tests=`): hidden desktop + streams redirected to files, so nothing flashes on screen or prints over the calling terminal. Never invoke the Godot exe directly for a probe. Details: `docs/tooling.md`.
 - `HiddenDesktop.ps1` — dot-sourced by `RunTests.ps1`: runs every launch on a separate Windows desktop so no test window ever appears on screen. Details: `docs/tooling.md`.
@@ -110,6 +110,8 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `tools/` — downloaded binaries (git-ignored): pinned mech3ax v0.6.1, the mech3ax fork, the Godot 4.7 .NET editor.
 - `analysis/` — **committed** read-only analysis scripts + their `FINDINGS.md`, one dir per question. For instruments whose result `docs/` cites, because `.scratch/` is swept. No game data in them, ever.
 - `analysis/goldens/manifest.json` — the golden-image tripwire: 16 pinned `--det` shots as command line + raw-pixel md5. Hashes only, never pixels.
+- `analysis/verification-budgets.json` — `RunTests.ps1`'s per-stage and total wall-time budgets, the measured distribution behind them, and the rule that set them. Awareness thresholds; they never change the exit code.
+- `analysis/engine-suite-weights.json` — the measured per-suite engine weights the shard planner divides the catalog by, so one tree shards the same way every run.
 - `docs/tooling.md` — the extraction pipeline, the launch scripts, and the fork's remotes/branches/sync procedure.
 - `docs/architecture.md` — per-module purpose + still-binding constraints for `CSVM/src`, one `##` entry each. **Read a module's entry before changing it.**
 - `docs/formats/` — the public reader-format reference, one page per format family; `README.md` is the index + shared reader conventions.
@@ -124,15 +126,23 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 
 ### Development verification loop
 
-- **During an edit, run the smallest red/green surface.** For an engine suite use
-  `.\RunTests.ps1 -Filter <suite> -SkipUnits -SkipGoldens -SkipHitch`; for a unit use
-  `dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter "FullyQualifiedName~<test>"`.
-- **Broad development confidence uses `.\RunTests.ps1 -Quick` after
-  [`PLAN-fast-verification` A1](docs/PLAN-fast-verification.md) lands.** While A1 is open, the flag
-  does not exist; use the targeted commands above and do not advertise or invoke it.
+- **During an edit, run the smallest red/green surface.** For one engine suite use
+  `.\RunTests.ps1 -Suite <suite> -SkipUnits -SkipGoldens` (exact name; `-Filter` is still the
+  substring form); for a unit use
+  `dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter "FullyQualifiedName~<test>"`, or
+  `.\RunTests.ps1 -UnitFilter "FullyQualifiedName~<test>" -SkipEngine -SkipGoldens` for the same
+  filter with the summary block. Both loops measure about 3 seconds warm. The hitch check is opt-in
+  (`-Hitch`), so nothing has to be passed to keep it out of them.
+- **Broad development confidence is `.\RunTests.ps1 -Quick`:** build, the checked-in quick unit
+  tier and quick engine tier, no goldens and no hitch, with every omitted surface printed as a
+  `not checked:` line. A selector or filter matching nothing fails its stage rather than passing
+  empty.
 - **Before landing any change under `CSVM/`, run the complete `.\RunTests.ps1`.** Targeted and quick
   runs are partial by design and never satisfy that landing gate. `CSVM.Tests/`-only,
   documentation, and tooling changes do not require the full run.
+- **Every stage prints its wall time against a budget from `analysis/verification-budgets.json`.**
+  An `over budget` marker is awareness only and never changes the exit code, because a busy
+  workstation must not fail correct code; `docs/tooling.md` holds the rule that set the numbers.
 
 ## Godot project (`CSVM/`)
 
@@ -163,7 +173,7 @@ Highest-traffic modules, so the common cases skip the index: `GameSession.cs` (s
 
 **Flight is the default.** Any content arg builds a *flight* unless `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4. `--viewer` gives the static inspection view, where the livery / mesh labs live. The damage lab now lives in both — F5 in `--viewer` drives a parked plane's visuals, F5 in `--fly` drives the flown plane's real HP — so `--fly` is redundant except with `--damage=`, which picks the parked viewer unless flight was asked for by name. A bare launch (no content arg) shows the launchscreen.
 
-The day-to-day 29 of 133 — 133 is both the parser's accepted-flag count and `docs/cli.md`'s flag-index count, kept equal on purpose. **[`docs/cli.md`](docs/cli.md) opens with an index of all of them, grouped**, and each flag's bullet there is the **description of record** — the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, the data-path overrides, and the deprecated `--campos`/`--spawn-at`/`--spawn-dir` spellings of the placement pair.
+The day-to-day 29 of 138 — 138 is both the parser's accepted-flag count and `docs/cli.md`'s flag-index count, kept equal on purpose. **[`docs/cli.md`](docs/cli.md) opens with an index of all of them, grouped**, and each flag's bullet there is the **description of record** — the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, the data-path overrides, and the deprecated `--campos`/`--spawn-at`/`--spawn-dir` spellings of the placement pair.
 
 ⚠ **These rows are glosses, not the spec: a behaviour change edits the `cli.md` bullet, and a row here only when the gloss went wrong.**  Adding a row is rarely right — the index is one file away.
 
@@ -229,9 +239,9 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1 through 5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI (aircraft that patrol, engage, evade and die, turrets, zeppelins, pilot voice), and all four Instant Action mission types plus the 2–4-player splitscreen Dogfight deathmatch are playable and scored. M5 added the single-player campaign: per-profile progression across the cabin, briefing and flight-check screens, and missions that run their authored `objectives.zrd` choreography with intro cutscenes, letterbox and campaign wingmen.
 
-**Active plan:** [`PLAN-fast-verification`](docs/PLAN-fast-verification.md), Wave A.
-Next: `A1` (the explicit quick lane and exact selectors), then `A2` (the unit-test wall).
-The sortie follow-ups remain in `backlog.md`; `PT-84` and `BL-120`/`PT-53` remain owed playtests.
+**Active plan:** none; `PLAN-fast-verification` is complete and indexed in `docs/plans/plans.md`.
+Next: the D32 sortie follow-ups in `backlog.md` (`BL-567` to `BL-583`), or a new plan via `/new-plan`.
+`PT-84` and `BL-120`/`PT-53` remain owed playtests.
 
 Use the targeted/quick development loop above, then verify landed code with the complete
 **`.\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.
