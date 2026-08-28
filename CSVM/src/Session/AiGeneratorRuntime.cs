@@ -358,6 +358,16 @@ public sealed partial class AiGeneratorRuntime : Node
         var controller = _spawn(gen.Def, pos, pos + drop, pilot);
         if (controller == null)
         {
+            if (gen.Def.VehicleParams != null)
+            {
+                // The decoded empty launch (a params label naming no block): the original
+                // reports it as a launch, so the ordinal advances and the max_active slot
+                // stays taken by nothing until the generator blocks itself.
+                LaunchOrdinal++;
+                GD.Print($"egen: '{gen.Def.Node}' launch counted, nothing built, " +
+                         $"active {gen.Cycle.Active}/{gen.Def.MaxActive}");
+                return;
+            }
             gen.Cycle.SpawnRemoved();   // the slot was counted before the spawn could fail
             return;
         }

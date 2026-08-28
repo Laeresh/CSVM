@@ -18,6 +18,11 @@ internal static class GeneratorRosterSuites
     private const string Mission = "M04";
     private const string NitroBlock = "stihellhound_5_7";
 
+    private const string TypoChapter = "C1";
+    private const string TypoMission = "M04";
+    private const string TypoGenerator = "eairg32";
+    private const string ResolvedGenerator = "eairg31";
+
     internal static void GeneratorRosterParams(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -47,6 +52,7 @@ internal static class GeneratorRosterSuites
         ctx.Check(plan.Name == NitroBlock,
             $"the generator's '{parameter}' resolves to the roster block {NitroBlock}");
         ctx.Check(plan.Nitro, $"the block's slot 34 plans an installed nitro injector");
+        CheckUnresolvedLabel(ctx, defs);
         var skills = AiSkills.Load(ctx.ZrdrPath);
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
@@ -112,5 +118,36 @@ internal static class GeneratorRosterSuites
             pool.Free();
             textures.Dispose();
         }
+    }
+
+    // C1/M04 ships the one label that names no block: eairg32's 'Eairg32_params' against a label
+    // table spelling 'Earig32_params'. Its sibling eairg31 resolves, and a parameterless
+    // generator keeps the CLI airframe, so the three launch shapes are seen apart.
+    private static void CheckUnresolvedLabel(TestContext ctx, VehicleDefs defs)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, TypoChapter, TypoMission);
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, TypoChapter);
+        ctx.RequireData(missionZrdr, $"{TypoChapter}/{TypoMission} zrdr");
+        ctx.RequireData(chapterZrdr, $"{TypoChapter} zrdr");
+        var templates = CampaignRosterPlan.GeneratorTemplates(missionZrdr, defs,
+            AiNets.Load(chapterZrdr));
+        var launches = new Dictionary<string, (GeneratorLaunch Kind, RosterSpawnPlan? Plan)>(
+            System.StringComparer.OrdinalIgnoreCase);
+        foreach (var def in EnemyGenerators.Load(missionZrdr))
+        {
+            var kind = CampaignRosterPlan.ResolveGeneratorLaunch(
+                templates, def.VehicleParams, out var launchPlan);
+            launches[def.Node] = (kind, launchPlan);
+        }
+
+        ctx.Check(launches.TryGetValue(TypoGenerator, out var typo)
+                  && typo.Kind == GeneratorLaunch.Empty && typo.Plan == null,
+            $"{TypoGenerator}'s misspelt params label builds nothing, not an airframe");
+        ctx.Check(launches.TryGetValue(ResolvedGenerator, out var sibling)
+                  && sibling.Kind == GeneratorLaunch.Template && sibling.Plan != null,
+            $"{ResolvedGenerator}'s params label resolves its roster block");
+        ctx.Check(CampaignRosterPlan.ResolveGeneratorLaunch(templates, null, out _)
+                  == GeneratorLaunch.Airframe,
+            $"a generator with no params label keeps the CLI airframe");
     }
 }

@@ -918,8 +918,10 @@ public static class SuiteCatalog
             + "vehicle.params label 'Miles' resolves to the disabled block stihellhound_5_7 with "
             + "no campaign profile in the run, the aircraft it launches carries that block's "
             + "nitro slot and its own authored name, its volumes reach the machine under the "
-            + "min_ai_active_dist floor, and the CLI-airframe fallback a parameterless generator "
-            + "takes installs no injector",
+            + "min_ai_active_dist floor, the CLI-airframe fallback a parameterless generator "
+            + "takes installs no injector, and over C1/M04 eairg32's misspelt 'Eairg32_params' "
+            + "resolves the decoded empty launch (nothing built, no airframe) while eairg31's "
+            + "label resolves its block",
             GeneratorRosterParams));
         into.Add(new TestHarness.Suite("campaign-bomber-formation",
             "CM02's three netted bombers (BL-498) spawned from C3/M05's own aiv roster into its "

@@ -2883,22 +2883,6 @@ usual.
   deferred `--pos=` handoff is for `generic_intro`; this mission's intro is its own def.
   *Cross-refs:* `BL-569`, `BL-548`, `docs/formats/anim-definitions/cutscenes.md`.
 
-- `BL-580` `[Bug]` **CM09 (C1/M04): `eairg32`'s launch falls back to a `player_bhawk` because the
-  data misspells its parameter block.** *Evidence (traced):* the sortie log shows
-  `player_bhawk_eg1` launched beside `blakepeace_2_eg0` and pursued as an enemy Bloodhawk; that is
-  `SessionSpec.GeneratorsPlane`, the fallback `GameSession.SpawnFromGenerator` takes when
-  `CampaignRosterPlan.GeneratorTemplates` has no entry. `egen.zrd` names the block
-  `Eairg32_params` (line 54) while `aiv.zrd`'s label table spells it `Earig32_params` (slot 31),
-  so the join never matches; `eairg31`'s `Eairg31_params` (slot 30) matches and launches
-  Peacemakers. The extra Bloodhawk is therefore CSVM's invention on an authored typo, and it is
-  what reads as an additional squad at the airfield. *Fix shape:* decode what `crimson.exe` does
-  with a `vehicle.params` label that resolves to no roster block (`FUN_00452450`'s caller chain on
-  the generator record): a silent no-launch, the first block of the def, or the same generator's
-  other host. Then match it and drop the airframe fallback for campaign generators (`BL-564`
-  asks the same for a surface def). *⚠ Traps:* do not "fix" the data spelling; the shipped file
-  is the reference and the original ran with it. *Cross-refs:* `BL-564`, `BL-527`,
-  `docs/formats/mission-entities/enemy-generators.md`, `docs/formats/ai-rosters.md`.
-
 - `BL-581` `[Bug]` **CM09 (C1/M04): with the radio tower down and every aircraft killed, the
   Pandora's Defend marker clears and the mission does not go on to the docking.** *Evidence
   (chain decoded, stall cause open):* reported at the controls. The "Defend rock_zeppelin"
@@ -2934,7 +2918,7 @@ usual.
   the decode (`docs/formats/objectives.md`'s `TICK_DEPENDS_ON_OBJ` row). `BL-563` stays a
   separate fix. *⚠ Traps:* the Defend marker clearing is correct behaviour (`OBJECTIVE25`), not
   the bug.
-  *Cross-refs:* `BL-563`, `BL-565`, `BL-572`, `BL-580`, `docs/formats/objectives.md`.
+  *Cross-refs:* `BL-563`, `BL-565`, `BL-572`, `docs/formats/objectives.md`.
 
 - `BL-582` `[Bug]` **A two-element objective target `[parent, child]` is flattened into two bare
   names, so CM09 (C1/M04) shows two Defend markers: one on the Pandora and one on a ground

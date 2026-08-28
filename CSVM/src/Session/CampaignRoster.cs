@@ -6,6 +6,20 @@ using Godot;
 
 namespace CSVM.Session;
 
+/// <summary>What one generator launch builds; see
+/// <see cref="CampaignRosterPlan.ResolveGeneratorLaunch"/>.</summary>
+public enum GeneratorLaunch
+{
+    /// <summary>The roster block the <c>vehicle.params</c> label names.</summary>
+    Template,
+
+    /// <summary>The CLI airframe: the generator authors no label.</summary>
+    Airframe,
+
+    /// <summary>Nothing: the label names no block, and the launch is counted all the same.</summary>
+    Empty,
+}
+
 /// <summary>One campaign roster block, planned: everything the placement step needs, resolved
 /// from the block's fields, the vehicle def table and the chapter's nets, and nothing read from
 /// the engine. <see cref="Escorts"/> and <see cref="Net"/> are the decoded fork and are never
@@ -299,6 +313,23 @@ public sealed class CampaignRosterPlan
             }
         }
         return templates;
+    }
+
+    /// <summary>What a generator launch builds from its <c>vehicle.params</c> label: the block
+    /// the label names, the CLI airframe when no label is authored, or nothing when the label
+    /// names no block. ⚠ The caller counts an empty launch rather than replacing it: the decoded
+    /// launch reports one with nothing built (docs/formats/mission-entities/enemy-generators.md,
+    /// "shipped typo"; C1/M04's <c>Eairg32_params</c>, and the data stays as shipped).</summary>
+    public static GeneratorLaunch ResolveGeneratorLaunch(
+        IReadOnlyDictionary<string, RosterSpawnPlan> templates, string? parameter,
+        out RosterSpawnPlan? plan)
+    {
+        ArgumentNullException.ThrowIfNull(templates);
+        plan = null;
+        if (parameter == null)
+            return GeneratorLaunch.Airframe;
+        return templates.TryGetValue(parameter, out plan)
+            ? GeneratorLaunch.Template : GeneratorLaunch.Empty;
     }
 
     /// <summary>Writes the plan's remaining pilot slots onto a spawned pilot: the volumes

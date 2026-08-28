@@ -110,7 +110,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☐ `BL-576`: the Pandora pitches steeply up and down along the Klondike net
 22. ☐ `BL-577` + `BL-564`: no runtime for a roster or generator surface vehicle, so the patrol boats never spawn
-23. ☐ `BL-580`: `eairg32`'s launch falls back to a `player_bhawk` on a misspelt parameter block
+23. ☑ `BL-580`: `eairg32`'s launch falls back to a `player_bhawk` on a misspelt parameter block
 24. ☐ `BL-582`: a `[parent, child]` objective target is flattened into two bare names
 25. ☐ `BL-581`: the docking objective is never reached after the radio tower goes down
 
@@ -569,7 +569,7 @@ suite to extend and the ram-terrain check at the origin>`
 fighter def. CM12's three Bloodhawks are group 3 and never count toward "Destroy all enemy
 fighters"; killing them is not progress.
 
-## C23 ☐ `BL-580`: `eairg32`'s launch falls back to a `player_bhawk` on a misspelt parameter block
+## C23 ☑ `BL-580`: `eairg32`'s launch falls back to a `player_bhawk` on a misspelt parameter block
 
 **Goal.** A campaign generator whose `vehicle.params` label resolves to no roster block does what
 the original does with it, and never invents a player-airframe launch.
@@ -578,17 +578,33 @@ the original does with it, and never invents a player-airframe launch.
 label table spells it `Earig32_params` (slot 31), so `CampaignRosterPlan.GeneratorTemplates` has no
 entry and `GameSession.SpawnFromGenerator` falls back to `SessionSpec.GeneratorsPlane`; the log
 shows `player_bhawk_eg1` launched beside `blakepeace_2_eg0`. `eairg31`'s `Eairg31_params` matches.
-`<TODO: re-verify still-open against the code>`
+Re-verified against the code: `SpawnFromGenerator`'s fallback branch took every miss, a null label
+and an unresolved one alike.
 
-**Approach.** Decode what `crimson.exe` does with an unresolved `vehicle.params` label
-(`FUN_00452450`'s caller chain on the generator record): a silent no-launch, the first block of the
-def, or the same generator's other host. Match it and drop the airframe fallback for campaign
-generators.
+**Approach.** Decoded. `FUN_00452450` is only the Instant Action arm (group-matched parked
+airframes); the campaign launch is `FUN_00451bf0`, called from the cycle at `FUN_00452640`. The
+record parser `FUN_00452850` stores the label's vehicle record at `+0x3c` and leaves it null on a
+miss; the launch then spawns the generator's `vehicle.type` (`+0x44`, unauthored in every shipped
+file) through `FUN_0047b650`, whose `_stricmp` walk finds no def for the empty name and returns
+null. The launch still returns 1, so the cycle books it (`capacityRemaining--`, `active++`, timer
+reset, wave counter, global `%s_eg%d` ordinal) and nothing is built; the `active` slot never frees,
+so `eairg32` blocks itself after four. Neither "first block of the def" nor "the sibling's block"
+exists in the code. CSVM matches it: `CampaignRosterPlan.ResolveGeneratorLaunch` returns
+`GeneratorLaunch.Empty` for a label naming no block, `SpawnFromGenerator` returns null on it, and
+`AiGeneratorRuntime.Spawn` books that null as the counted empty launch (ordinal advances, slot
+stays taken) when the generator authored a label. The CLI airframe stays only for a generator with
+no `params` key.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** Sonnet-sized once the decode is in hand; the decode itself needed the
+three-function chain read together, which is where the "silent no-launch" versus "counted
+no-launch" distinction lives.
 
-**Verify.** Headless CM09 with the generators woken: no `player_bhawk_eg*` launch; the
-`generator-roster-params` suite extended with the unresolved-label case.
+**Verify.** The `generator-roster-params` suite carries the C1/M04 arm: `eairg32` resolves Empty
+with no plan, `eairg31` resolves its block, a null label resolves the airframe. The headless CM09
+check ("no `player_bhawk_eg*` launch") is covered by the same read, since the fallback branch is
+no longer reachable with a label present; the sortie (D31) judges the airfield.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not "fix" the data spelling; the shipped file is the reference and the original
 ran with it.

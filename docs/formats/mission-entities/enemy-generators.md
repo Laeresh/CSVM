@@ -40,6 +40,20 @@ design document and the shipped data agree field-for-field.
 `Earig32_params` (a transposition), so that generator's roster lookup cannot succeed as authored.
 Asserted in `CSVM.Tests/EnemyGeneratorsTests.cs`.
 
+What the engine does with it is decoded. The record parser (`FUN_00452850`) compares the `params`
+string against every label in the roster table and stores the matching vehicle record at `+0x3c`;
+no match leaves it null. The launch (`FUN_00451bf0`, called from the cycle at `FUN_00452640`) then
+takes the template-less branch: it copies the generator's `vehicle.type` string (`+0x44`, empty
+because no shipped file authors the key) and asks `FUN_0047b650` for a vehicle def of that name,
+which walks the def table with `_stricmp` and returns null for the empty name. The launch still
+returns 1, so the cycle books it: `capacityRemaining--`, `active++`, the timer resets, the wave
+counter advances and the global `%s_eg%d` ordinal increments. Nothing is built, and the `active`
+slot is never freed because no vehicle exists to die, so `eairg32` (`max_active 4`) blocks itself
+after four empty launches. The other branch, the first block of the def or the sibling generator's
+block, does not exist in the code. CSVM matches this: the launch builds nothing, the ordinal
+advances and the slot stays taken (`Session/AiGeneratorRuntime.cs`); the `player_bhawk` stand-in
+is only for a generator that authors no `params` key at all.
+
 ## The generator cycle
 
 Decoded from the binary. One generator holds a timer, a next-event threshold, a per-wave counter

@@ -2407,19 +2407,27 @@ public partial class GameSession : Node3D
                 // The decoded launch name: one counter across the mission's generators, so a
                 // second launch off the same template is a distinct node rather than a rename.
                 int ordinal = _generators?.LaunchOrdinal ?? 0;
-                if (def.VehicleParams is not { } parameter
-                    || !generatorTemplates.TryGetValue(parameter, out var plan))
+                switch (CampaignRosterPlan.ResolveGeneratorLaunch(
+                    generatorTemplates, def.VehicleParams, out var plan))
                 {
-                    // ⚠ shippedSkins: a generated aircraft is the mission's enemy, so it keeps its
-                    // own textures rather than the player militia's default.
-                    return flightRoster.SpawnAi(new AiSpawn(
-                        _spec.GeneratorsPlane, pos, look, pilot, ShippedSkins: true,
-                        NodeName: EnemyGenerators.LaunchName(_spec.GeneratorsPlane, ordinal)));
+                    case GeneratorLaunch.Empty:
+                        // The decoded empty launch: a label naming no block builds nothing, and
+                        // the runtime counts the launch anyway. Never an airframe in its place.
+                        GD.Print($"egen: '{def.Node}' params '{def.VehicleParams}' names no " +
+                                 "roster block: the launch builds nothing");
+                        return null;
+                    case GeneratorLaunch.Airframe:
+                        // ⚠ shippedSkins: a generated aircraft is the mission's enemy, so it
+                        // keeps its own textures rather than the player militia's default.
+                        return flightRoster.SpawnAi(new AiSpawn(
+                            _spec.GeneratorsPlane, pos, look, pilot, ShippedSkins: true,
+                            NodeName: EnemyGenerators.LaunchName(_spec.GeneratorsPlane, ordinal)));
                 }
-                var launched = flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot,
-                    EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(plan.Name), ordinal)));
-                CampaignRosterPlan.ApplyPlan(pilot, plan, generatorActiveDist);
-                RegisterAiVoice(launched, plan.AccentId);
+                var template = plan!;
+                var launched = flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(template, pos, look, pilot,
+                    EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(template.Name), ordinal)));
+                CampaignRosterPlan.ApplyPlan(pilot, template, generatorActiveDist);
+                RegisterAiVoice(launched, template.AccentId);
                 return launched;
             }
 

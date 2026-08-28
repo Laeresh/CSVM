@@ -5277,8 +5277,13 @@ excluded from the initial roster and
 `BuildGeneratorTemplate` resolves it separately when an enemy generator's `vehicle.params` names
 its positional header label; `GeneratorTemplates` is the whole mission's map of those, keyed by
 that label, and `GameSession` builds it on any run with the generators on rather than only a
-campaign one, since the parameter blocks are mission data and a launch that misses its block flies
-a CLI airframe carrying none of the authored fields. `ApplyPlan` is the after-the-spawn half of a
+campaign one, since the parameter blocks are mission data. `ResolveGeneratorLaunch` is the
+three-way read of that map for one launch: the block the label names, the CLI airframe when no
+label is authored, or `GeneratorLaunch.Empty` when the label names no block. Empty is the decoded
+shape, not a gap: `FUN_00451bf0` then spawns the generator's `vehicle.type` (unauthored in every
+shipped file), finds no def for the empty name and still reports a launch, so nothing is built and
+the launch is counted. C1/M04's `eairg32` (`Eairg32_params` against a label table spelling
+`Earig32_params`) is the shipped case; the data stays as shipped. `ApplyPlan` is the after-the-spawn half of a
 plan (volumes under the floor, signature maneuvers, the gunner's rating biases and its assignment),
 shared by the campaign placement and the generator launch so the two cannot drift; ⚠ it leaves an
 escorting block's `primary_target` alone, because there it names a leader and not a target.
@@ -5387,8 +5392,12 @@ callback receives the whole `EnemyGeneratorDef`, allowing `vehicle.params` to se
 template while position is still read from the live host. That selection is the mission spawner's
 roster read and runs on any generator session: `GameSession.SpawnFromGenerator` spawns the matched
 template through `CampaignRosterPlan.SpawnFor`, applies the rest of its slots with `ApplyPlan` and
-registers the block's accent, and falls back to the `--generators=` airframe only when no parameter
-resolves. C5/M04's `dantezep` is the one shipped case whose block authors the nitro slot.
+registers the block's accent, and falls back to the `--generators=` airframe only when the
+generator authors no `vehicle.params` at all. A label that names no block returns null, and the
+runtime books that as the decoded empty launch: `LaunchOrdinal` advances and the `max_active` slot
+stays taken by nothing (the original never frees it, so C1/M04's `eairg32` blocks itself after
+four), never an airframe in the block's place. C5/M04's `dantezep` is the one shipped case whose
+block authors the nitro slot.
 `UseInstantActionLaunches(hostNode, release)` plus the same credit are F12's arm: the
 objective zeppelin's generator goes onto the wave-credit budget and its launches RELEASE an
 already-built (inert) wave member through the caller's hook instead of spawning a fresh aircraft —
