@@ -406,6 +406,33 @@ public class NameResolverTests
         Assert.Null(ambiguous);
     }
 
+    [Fact]
+    public void AClaimInsideAStagedCopyNarrowsToThatCopysOwnNode()
+    {
+        // CM07's shape: the parked aircraft-archive figure binds the flare def's cp_lh by index,
+        // while the def is dispatched onto the chapter's staged passenger copy carrying the same
+        // limb under a different index. The consist's caboose, which the copy lacks, keeps binding.
+        var figure = Node("pickup_cpilot");
+        var figureHand = Node("cp_lh");
+        var passenger = Node("pickup_agent");
+        var passengerHand = Node("cp_lh");
+        var caboose = Node("caboose");
+        var resolver = new NameResolver<TestNode>(privateCopyOf: n => n == passenger || n == passengerHand ? passenger : null);
+        resolver.Add(figure, "pickup_cpilot", null, gamezIndex: 9769);
+        resolver.Add(figureHand, "cp_lh", figure, gamezIndex: 9784);
+        resolver.Add(caboose, "caboose", null, gamezIndex: 1200);
+        resolver.Add(passenger, "pickup_agent", null, gamezIndex: 2680, indexByPointer: false);
+        resolver.Add(passengerHand, "cp_lh", passenger, gamezIndex: 2686, indexByPointer: false);
+        var def = Def("pickup_flare");
+        def.NodeRefs["cp_lh"] = 9784;
+        def.NodeRefs["caboose"] = 1200;
+
+        Assert.Same(figureHand, resolver.Resolve("cp_lh", def, null));         // off the pool: the index binds
+        Assert.Same(passengerHand, resolver.Resolve("cp_lh", def, passenger)); // on the copy: its own hand
+        Assert.Same(passengerHand, resolver.Resolve("cp_lh", def, passengerHand));
+        Assert.Same(caboose, resolver.Resolve("caboose", def, passenger));     // a name the copy lacks stands
+    }
+
     // ---- multi-target NAME1 defs anchor through their authored paths (M4 F18) ----
 
     [Fact]

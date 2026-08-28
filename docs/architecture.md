@@ -1197,7 +1197,14 @@ an airframe swap frees the aircraft it staged and re-stages the same cross-archi
 index the build never created is answered by `SoleStagedCopy`: the one live pooled copy carrying
 that gamez index, and only when exactly one does, so a multi-copy effect pool stays anchor-scoped
 while a mission's single staged actor (CM07's pickup switch, sensor and passenger) is reachable by
-the definitions that toggle it through their symbol table alone (`pickup_timing`). `AnimRuntime`'s `Resolve`/`ResolveScoped`/`FindAll`/`Anchors`
+the definitions that toggle it through their symbol table alone (`pickup_timing`). A claim made
+from inside a staged library copy (the `privateCopyOf` hook, `AnimRuntime.StagedCopyRootOf`) is
+narrowed to that copy: a bound node outside it yields to the copy's own node of that name, and a
+name the copy lacks keeps its binding. That is the private-copy rule applied to the symbol path,
+and it is needed because a cross-archive symbol table binds by index: CM07's `pickup_flare`
+claims the aircraft archive's `cp_lh`, and once `AircraftStage` has parked that figure the
+by-index map answers with the parked figure's hand instead of the passenger's, which is where
+the definition runs. `AnimRuntime`'s `Resolve`/`ResolveScoped`/`FindAll`/`Anchors`
 are one-line forwards; the engine-free instantiation over a plain token type is `CSVM.Tests`' suite.
 
 **Every tier is filtered by `AdmissibleStaging`, and the template pool is why.** The original

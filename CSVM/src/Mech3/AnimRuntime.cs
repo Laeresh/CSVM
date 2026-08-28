@@ -598,7 +598,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         _templateStage = stage;
         _resolver = new NameResolver<Node3D>(Node3DIdentity.Instance, _templateStage.RootsFor, IsInstanceValid,
-            StagingAdmits);
+            StagingAdmits, StagedCopyRootOf);
         _templateStage.Wire(
             FindAll,
             Anchors,
@@ -2946,26 +2946,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // every keyframe in world space, which is the whole reason the intro camera flies under the sea.
     private bool HandleReparent(AnimEvent ev, AnimDefinition def, Node3D? anchor, bool adopt)
     {
-        // Inside a library copy this runtime staged: a staged actor's own choreography runs on
-        // ordinary ticks long after the ranged call that staged it (the passenger's wave loop is
-        // re-entered from a poll), and its add-child of a further root (the flare) must build it.
-        bool InStagedCopy(Node3D? at)
-        {
-            for (Node? n = at; n != null; n = n.GetParent())
-                if (n is Node3D node && _stagedCopies.Contains(node))
-                    return true;
-            return false;
-        }
-
         if (ev.Data.Str("child") is not { } childName || ev.Data.Str("parent") is not { } parentName)
             return false;
         var named = Resolve(parentName, def, anchor);
         if (named == null)
             return false;
         var child = Resolve(childName, def, anchor);
+        // Inside a library copy this runtime staged: a staged actor's own choreography runs on
+        // ordinary ticks long after the ranged call that staged it (the passenger's wave loop is
+        // re-entered from a poll), and its add-child of a further root (the flare) must build it.
         if (child == null && adopt && ResolveLibraryRoot != null
             && (_deathCallDepth > 0 || _rangeCallDepth > 0 || _missionCallDepth > 0
-                || InStagedCopy(anchor)))
+                || StagedCopyRootOf(anchor) != null))
             child = ResolveLibraryRoot(childName, named);
         if (child == null)
             return false;
@@ -3587,6 +3579,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
     }
 
+    // The staged library copy a node sits inside (its root), or null: the resolver narrows a
+    // symbol-table claim to it, and an add-child dispatched inside one may build a further root.
+    private Node3D? StagedCopyRootOf(Node3D? at)
+    {
+        for (Node? n = at; n != null; n = n.GetParent())
+            if (n is Node3D node && _stagedCopies.Contains(node))
+                return node;
+        return null;
+    }
+
     // Whether one definition's name resolution may see a staged template copy. The pool is our
     // stand-in for the private node-tree copy the original hands each definition at load, and a
     // copy nothing in this definition references sits in no scope the original would search — so
@@ -3721,7 +3723,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // gamez node index — always prefer it. Name matching resolves C1's `caboose` to the
         // real consist AND to an unrelated `caboose.flt` in the rail yard, and drives both.
         if ((ev.Data.Str("node") ?? ev.Data.Str("name")) is { } refName
-            && _resolver.SymbolClaims(def, refName, out var bound))
+            && _resolver.SymbolClaims(def, refName, anchor, out var bound))
         {
             if (bound != null)
                 return new List<Node3D> { bound };

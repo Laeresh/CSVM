@@ -73,6 +73,10 @@ public sealed class NameResolver<TNode>
     // byte-identical.
     private readonly Func<AnimDefinition, TNode?, TNode, bool> _stagingAdmits;
 
+    // The staged library copy an anchor sits inside (its root), or null off the pool: the
+    // private subtree a definition dispatched onto that copy resolves its names in first.
+    private readonly Func<TNode, TNode?> _privateCopyOf;
+
     // The compiled gamez index -> built node map SymbolClaims and NarrowToSymbolRoot read. See
     // Add for the two population rules (never on a fallback runtime, never for a pooled copy).
     private readonly Dictionary<int, TNode> _byIndex = new();
@@ -101,17 +105,19 @@ public sealed class NameResolver<TNode>
     /// <see cref="FindAll"/> only — never <see cref="Anchors"/>, whose census it would re-enter.
     /// Null means "no own roots" (the tier always misses). <paramref name="isLive"/> answers whether
     /// an anchor is still valid; a dead one drops the scoped tiers. <paramref name="stagingAdmits"/>
-    /// is the owner's verdict on a pooled copy (<see cref="AdmissibleStaging"/>).</summary>
+    /// is the owner's verdict on a pooled copy (<see cref="AdmissibleStaging"/>); <paramref name="privateCopyOf"/> the staged library copy an anchor sits in (the anchored <see cref="SymbolClaims(AnimDefinition, string, TNode?, out TNode?)"/> narrows to it).</summary>
     public NameResolver(
         IEqualityComparer<TNode>? identity = null,
         Func<AnimDefinition, TNode?, IReadOnlyList<TNode>>? ownRootsOf = null,
         Func<TNode, bool>? isLive = null,
-        Func<AnimDefinition, TNode?, TNode, bool>? stagingAdmits = null)
+        Func<AnimDefinition, TNode?, TNode, bool>? stagingAdmits = null,
+        Func<TNode, TNode?>? privateCopyOf = null)
     {
         _identity = identity ?? EqualityComparer<TNode>.Default;
         _ownRootsOf = ownRootsOf ?? ((_, _) => Array.Empty<TNode>());
         _isLive = isLive ?? (_ => true);
         _stagingAdmits = stagingAdmits ?? ((_, _, _) => true);
+        _privateCopyOf = privateCopyOf ?? (_ => default);
         _parentOf = new Dictionary<TNode, TNode?>(_identity);
         _findCache = new Dictionary<(string, TNode?), List<TNode>>(new ScopeKeyComparer(_identity));
     }
@@ -200,7 +206,7 @@ public sealed class NameResolver<TNode>
     /// anchor-scoped rescue) — this convenience form keeps the pre-existing fall-through.</summary>
     public TNode? Resolve(string name, AnimDefinition def, TNode? anchor)
     {
-        if (SymbolClaims(def, name, out var bound) && bound != null)
+        if (SymbolClaims(def, name, anchor, out var bound) && bound != null)
         {
             return bound;
         }
@@ -264,7 +270,16 @@ public sealed class NameResolver<TNode>
     /// <paramref name="node"/> is the bound world node, or null when never built (a dropped LOD, a
     /// skipped subtree, or any lookup on a <see cref="NameResolveFallback"/> runtime). False means
     /// the symbol table has no opinion and name resolution proceeds as usual.</summary>
-    public bool SymbolClaims(AnimDefinition def, string name, out TNode? node)
+    public bool SymbolClaims(AnimDefinition def, string name, out TNode? node) =>
+        SymbolClaims(def, name, null, out node);
+
+    /// <summary><see cref="SymbolClaims(AnimDefinition, string, out TNode?)"/> for a definition
+    /// dispatched onto <paramref name="anchor"/>: inside a staged library copy the claim is
+    /// narrowed to that copy, the private subtree the original hands the definition
+    /// (org/sequences.md). A bound node outside the copy yields to the copy's own node of that
+    /// name; a name the copy lacks keeps its binding. ⚠ A cross-archive symbol table binds by
+    /// index, so a parked archive figure would otherwise answer for the staged actor (docs/architecture.md).</summary>
+    public bool SymbolClaims(AnimDefinition def, string name, TNode? anchor, out TNode? node)
     {
         node = null;
         if (!def.NodeRefs.TryGetValue(name, out int idx))
@@ -272,6 +287,15 @@ public sealed class NameResolver<TNode>
             return false;
         }
         node = BoundNode(idx) ?? (NameResolveFallback ? null : SoleStagedCopy(idx));
+        if (node != null && anchor != null && _isLive(anchor)
+            && _privateCopyOf(anchor) is { } copy && !IsWithin(node, copy))
+        {
+            var own = FindAll(name, copy);
+            if (own.Count > 0)
+            {
+                node = own[0];
+            }
+        }
         return true;
     }
 
