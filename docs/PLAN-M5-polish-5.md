@@ -26,9 +26,7 @@ follow-up of D32, and it is judged at CM13, not by the D31 sortie.
 Every item was re-verified still-open against the record in this session: `git log --grep` on
 each id finds only its filing, a cross-reference or a partial (`BL-583`, the one D32 filing that
 landed, is already gone from `backlog.md`; `BL-563` closed on main). The two live worktree
-branches (`bl-431-cockpit-gauge-drive`, `worktree-m5-campaign`) hold no unmerged commits. None
-was re-verified against the code; each item carries a `<TODO: re-verify still-open against the
-code>` for that half. Evidence grades are capped by provenance: an item whose backlog entry rests
+branches (`bl-431-cockpit-gauge-drive`, `worktree-m5-campaign`) hold no unmerged commits. Each item's section records its re-verification against the code, made by the implementing agent. Evidence grades are capped by provenance: an item whose backlog entry rests
 on a log line, a data file or a cited routine is `traced`, an item resting on a controls report
 alone is `lead-only`.
 
@@ -226,7 +224,13 @@ and asserts HP 0. The watch brackets only the calls, since a death's first start
 the frames between are advanced unwatched because the world's own ambient loops (the zeppelin
 prop defs) restart there. The C3/M03 open itself is judged in D31.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** The replay must still leave the pool `Destroyed` so a later hit is a no-op; do not
 fix it by skipping the replay for destroyed objects, and do not gate on the visual state alone.
@@ -304,7 +308,13 @@ the live kill path, not this mission's start state, so do not reopen it. M02 sti
 twelve `bont*` pools for six balloons (the listed reader templates beside their compiled
 expansions); that duplication is that plan's, not this item's.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 ## A3 ☑ `BL-567`: the Pandora's broadside cannons fire on the player
 
@@ -351,7 +361,13 @@ the corrected chain.
 the player; that assertion is now the decoded behaviour, not a placeholder. The headless CM04
 check the item first proposed (no `wep_28` hit on P1) would fail by design and is not the gate.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** Do not add a hostility or team gate; `BL-517` found none in the engine, and this
 decode found none either. The user's report is not answered by this decode: only the original
@@ -418,7 +434,13 @@ hull unmoved. The eleven zeppelin and net suites (`zeppelin-motion`, `zeppelin-p
 `campaign-zeppelins`, `campaign-zeppelin-wakeup`, `zeppelin-identity`, `instant-action-zeppelin`,
 `ai-net-follow`) pass 11/11 in the foreground, engine errors clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** Do not move the record's position to the path start; the record's seat is data and
 the script is what flies it.
@@ -487,7 +509,13 @@ node's own pose holding y = 0 under its ±0.5° roll. The bob never plays becaus
 `ObjectMotionFromTo` evicts it on the same channel each loop, which is a separate, smaller finding
 and not a jump.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** Do not special-case the submarine or the tanker; do not "fix" the 1.2 m residual,
 which is authored. The cargo-crane choreography between the Pandora and the tanker is untested
@@ -555,7 +583,13 @@ so the four launches run their deck path 35 m under the sea surface and dive on 
 itself completes on every launch (`completes its take-off run at (-12032,-31,-13080), 22.9 m/s`)
 and no launch rams `sub_doors`/`sub_runway`. Judge CM04 at the controls (D31).
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** The zeppelin launch-altitude gate is an airship rule, not a general one; do not lift
 the launch by borrowing it, do not add a spawn-height offset beyond the decoded 0.2 m, and do not
@@ -618,7 +652,13 @@ built world with cutscene roots, the `player` marker and `camera1` exist, playin
 player out of flight, the AI parked, the chrome off and a skip armed; `destroy_the_cargozep` is in
 that same call closure, so the destruction has one call to play from; the skip ends the scene.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** The cargo zeppelin's destruction already runs (fireballs, `tntbox`/`gasbag`
 deactivation); do not run it a second time under the camera. `BL-548`'s deferred `--pos=` handoff
@@ -665,7 +705,13 @@ the ring's displacement. Seen FAILING with the follow flag forced off and PASSIN
 `TemplateStageTests` pin `PlaceFollowing`/`FollowSites` off-engine. The twelve effect and
 zeppelin suites around it stay green; the 16 goldens are hash-identical.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** `trail-world-anchor` settled the opposite case (an emitter that must NOT ride its
 host); keep both. Do not reopen `BL-514`'s `PUFFER_STATE` reading.
@@ -713,7 +759,13 @@ entries, the chapter's 5; the three targets label `Zeppelin [Disable] -` / `Work
 keeping its key as `--target=` identity. `MissionTargetsTests` pins the nested key and the
 mission-else-chapter load. Plus the flown check in D31.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** `BL-397` is the marker's bracket range rule and not this. The format is a
 recollection until decoded; do not build the exact layout from it.
@@ -753,7 +805,13 @@ neighbouring gun dropped into the pit damages it, the same flak owned by the pit
 nothing. `world-turrets`, `carried-turrets`, `blast-neighbor-shape`, `blast-curve-cover-cap` and the
 units stay green.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** Do not exclude turrets from splash wholesale; a rocket into a gun pit must still
 kill it. One burst still deals a destructible one share per collider body it carries (the aagun
@@ -809,7 +867,13 @@ scheme, and a plain swap onto the same node stays stock with no injector. Foregr
 (`hangar3_doors` is called by the fuel depot's death in the chapter's `fueltruck.zrd`), so the
 runtime path is the suite's. D31 judges the livery and the drop at the controls.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** Do not give the stock Bloodhawk nitro, and do not touch the post-mission grant
 (`BL-528`), which is correct. The swap itself works and must stay.
@@ -853,7 +917,13 @@ the settle callback.
 `ladder_pickup_sensor` after `trigger_copilot` stages it, the ladder drops (`ladder: started
 'drop_ladder'` in the log); banked past 45 degrees or outside the sphere once deployed, it
 retracts. Judged on D31's flown pickup.
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** `BL-035`'s dropped kinds play no role; do not build this as an anim event. Do not
 teach the cutscene host code 123: it is the switch's settle signal, and the switch answers it
@@ -900,7 +970,13 @@ across the two legs to the armed stop at node 5 and −1.9° in the ramp-down, a
 the accel ramp, the way-on freeze, the 45° slope followed without overshoot or band, a
 Klondike-shaped level route staying under 8°, and `ResumeAt`; `zeppelin-pandora-dead-end` now
 asserts the pitch never exceeds the steepest leg's slope over the real net.
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** The initial-pitch clamp that never fires (`ZeppelinMotion.cs`) is decoded verbatim
 and stays. Do not flatten the net. Do not reintroduce a per-step pitch band as a safety net: the
@@ -978,7 +1054,13 @@ itself does not show in that run because OBJECTIVE6 (dormant 180 s) kills OBJECT
 `campaign-submarine`, `campaign-set-ai-net`, `campaign-squad-wakeup`, `campaign-objectives`,
 `campaign-zeppelin-wakeup`, `scripted-path` all pass; `dotnet test` 2524/2524.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** Do not spawn a boat as an aircraft with a low ceiling, and do not hand `eshipg31` a
 fighter def. CM12's three Bloodhawks are group 3 and never count toward "Destroy all enemy
@@ -1023,7 +1105,13 @@ with no plan, `eairg31` resolves its block, a null label resolves the airframe. 
 check ("no `player_bhawk_eg*` launch") is covered by the same read, since the fallback branch is
 no longer reachable with a label present; the sortie (D31) judges the airfield.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** Do not "fix" the data spelling; the shipped file is the reference and the original
 ran with it.
@@ -1061,7 +1149,13 @@ neither bare name), and the engine suite `campaign-objective-target-path` over C
 world: `[[piratezep, rock_zeppelin]]` is held as one key, exactly one `rock_zeppelin` site is
 offered, it stands on the node inside `piratezep`, and its category is the `MSG_OBJ_DEFEND` text.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** The help label applies to the same resolved node, not to the parent. A site's
 identity string (`TargetRef.Name`, what `--target=` matches) is now the key, so a path-authored
@@ -1103,7 +1197,13 @@ over a fake world with settable group counts. No change to `Ticks`.
 first line to read is whether `objective 28 completed` (group 2 down to two) and
 `objective 42 completed` (group 1 empty) appear at all, which points at `GroupLiveCount` if not.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** `BL-563` stays a separate fix (landed on main). The marker clearing is not the bug.
 
@@ -1123,13 +1223,51 @@ CM09 (CM05 is out of scope but is on the path). For each mission, check the item
 its wave, and record the verdicts in this plan under D31. Reopen with a new id minted by
 `New-ItemId.ps1` where a fix fails at the controls.
 
-**Model recommendation.** `<TODO: not settled this session>`
+**Model recommendation.** None: the user flies.
 
-**Verify.** `<TODO: the checklist of per-mission look-fors, assembled once the items have landed>`
+**Verify.** Per mission, at the controls; the user's eyes outrank every instrument line below.
 
-**⚠ Traps.** A live symptom is evidence about the build that was running: confirm no testing
-worktree is open before minting. `<TODO: the per-mission launch commands>`
+- CM04 (C3/M03): opens on `cgzep_camera`, the cargo zeppelin going down, letterboxed and
+  skippable (A7); the objects destroyed in CM03 stand destroyed on the first frames with no
+  fireball, death sound or debris flight (A1); the barrage balloons are down and no gunner engages
+  `b_turret*` (A2); the Pandora flies in over the first minute to the dry dock and holds there
+  instead of starting moored (A4); the Barracuda drives smoothly into the bay with no single-frame
+  snap, and which way its nose faces against the bay opening is the open half (A5); its fighters
+  fly the deck run and lift off instead of dying on the deck, and their first turn after lift-off
+  is judged separately (A6; a wing into the apron on the first bank is `BL-523`); fly abeam the
+  Pandora inside cannon range and note whether its hatches open and rounds come at you (A3; the
+  decode says they do, `CAP-46` asks the same of the original).
+- CM06 (C1C/M01): the three objective markers read `Zeppelin [Disable] -` over `Worker's Voyage`
+  in red, `[Dock] -` over `Worker's Voyage Docking Hook` in blue and `[Dock] -` over `Pandora
+  Docking Hook` in blue (B12); shoot a gun ring off the Workers' Voyage: its fire rides the hull
+  while the ring's debris and fireballs stay where it died, which is authored (B11).
+- CM07 (C1/M02): no AA gun destroys itself firing at the barrier (B13); the hangar hand-over
+  animates (doors, lift, the drop) and hands over the Blue Streak build (nitro, twin 40 and twin
+  30, two pylons) in Blake Aviation livery, the livery being the one open choice (B14); flying
+  level inside 100 m of the staged ladder sensor deploys the rope ladder and banking past 45
+  degrees retracts it (B15; a ladder hanging tilted with the aircraft is the unbuilt `ladder_roll`,
+  not the switch); the airfield's launches fly the strip and lift off (A6), and `eairg32` launches
+  nothing at all after four counted empty launches (C23).
+- CM08 (C1B/M03): the Pandora holds a near-level pitch along Klondike1 (C21); the tanker sits and
+  rolls with no jump (A5, not reproduced headless, so re-check); destroy the power hut inside
+  180 s so OBJECTIVE5 completes before OBJECTIVE6, then four patrol boats wake on the water at
+  181 s and drive their nets (C22; they carry no gunnery, `BL-523`).
+- CM09 (C1/M04): `mission_intro_animation` plays (the hangar scene, then the flight down over the
+  water) and skips; an intro ending on its first frame is a key still held from the flight-check
+  screen (A7); one Defend marker, on the Pandora's own `rock_zeppelin`, labelled with its proper
+  name (C24, B12); `eairg32` launches no Bloodhawk (C23); with the Promised Land down, read the
+  `[campaign] objective N woke|napped|completed|killed` lines in the log for 28 and 42 to see where
+  the docking chain stalls (C25, `BL-581` open).
+- CM13 (C2/M03): the enemy racers turn into `dzpath1` and `dzpath2` and fly them on rails (the
+  tagged zones are 1, 2, 3, 10, 6, 7 and 9 of 13), and the race is winnable (E41).
 
+**âš  Traps.** A live symptom is evidence about the build that was running: confirm no testing
+worktree is open before minting. Launch from the launchscreen on a COPY of the profile positioned
+at CM04 (a campaign run writes mission results back). Headless equivalents for a re-check:
+`.\RunProbe.ps1 --campaign=<copy>:3` (CM04), `:5` (CM06), `:6` (CM07), `:7` (CM08), `:8` (CM09),
+`:12` (CM13), with `--wake-generators` where a launch matters; `[campaign]` objective lines reach
+the file sink, while `cutscene:`, `zep:`, `egen:` and `surface:` lines are `GD.Print` and reach
+only the console, so their absence from the sink is not evidence.
 # Wave E — CM13 (C2/M03), the blocker
 
 ## E41 ☑ `BL-585`: AI planes never lock onto a `dzpath` and fly it on rails, so the CM13 racers skip the danger zones
@@ -1203,7 +1341,13 @@ interrupted run resuming as an approach) plus the existing `AiModeMachineTests`,
 inside 150 s of sim. Still owed: the user flies CM13 and judges whether the racers fly the zones
 and the race is winnable, with their eyes outranking the log.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2541 unit tests, 164 engine
+suites in four shards with the error census clean, 16 goldens with six re-pinned (`c3-island`,
+`c5-city-night`, `c1-destroy-effects`, `c1-debris-rest`, `c1-targeting-hud` at a channel delta of 1 to 7;
+`c1-crash` at 5748 pixels for the vector-form crash pieces that now tumble, A5). Two cross-item
+regressions the per-agent suites could not see were fixed on the merged tree before this run
+(the trailer pickup suite against B14's prerequisite gate; `target-pool`/`world-turrets` against
+A2's in-tree liveness read).
 
 **⚠ Traps.** Do not invent the entry condition (the prohibition on `AiModeMachine` stands until
 the decode replaces it). Do not use polygon index to find the route ribbon; classify by
