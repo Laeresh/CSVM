@@ -671,7 +671,9 @@ internal static class TargetingSuites
             ctx.RequireData(texturesPath, $"C1 textures");
             var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
             var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
-            ctx.WithWorld("C1", collision: false, world =>
+            // Private: the assertions read every site as ia1.gw leaves it and then the five aaguns
+            // alive, and a suite earlier in the shard (the self-fire drill) kills one in the shared cache.
+            ctx.WithPrivateWorld("C1", collision: false, world =>
             {
                 var textures = new TextureArchive(texturesPath);
                 ProjectilePool? live = null;
