@@ -13,6 +13,7 @@ namespace CSVM.Tests;
 /// Input is <c>fixtures/zrdr/shapes.json</c>, hand-authored to carry one instance of each shape
 /// the convention allows.
 /// </summary>
+[Trait("Tier", "Quick")]
 public class ZrdrTests
 {
     private static string FixtureDir => TestData.Fixture("zrdr");

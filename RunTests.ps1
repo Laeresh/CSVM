@@ -56,7 +56,28 @@
 
 .PARAMETER Filter
     Substring filter on the in-engine suite names (-Filter weapons runs weapons-defs and
-    weapons-fire). Engine stage only; the unit tests are unaffected -- use -SkipUnits.
+    weapons-fire). Engine stage only; the unit tests are unaffected -- use -UnitFilter.
+
+.PARAMETER Suite
+    Exact in-engine suite name(s), comma separated: -Suite weapons-fire runs that one suite and
+    nothing else, where -Filter weapons-fire would still run anything else carrying the substring.
+    A name no suite carries selects nothing and FAILS the stage; it is never an empty pass.
+    Composable with -Filter, whose substring terms are unioned with these exact ones.
+
+.PARAMETER UnitFilter
+    Passed to dotnet test --filter, so the whole VSTest grammar is available: a
+    FullyQualifiedName~Name for one test or class, or Tier=Quick for the checked-in quick unit
+    tier. A filter matching no test FAILS the units stage rather than reporting a green zero.
+
+.PARAMETER Quick
+    The broad partial confidence gate: build, the quick unit tier (Tier=Quick), the quick engine
+    tier (--run-tests=tier:quick), and nothing else. Goldens and hitch are skipped and every
+    omitted surface is named in the summary's "not checked:" lines. Membership of both tiers is
+    checked in -- SuiteCatalog.QuickTier and the [Trait("Tier", "Quick")] classes -- and chosen by
+    what each representative can catch, never inferred from a diff. An explicit -Suite/-Filter is
+    added to the engine tier (quick plus the suite under edit); an explicit -UnitFilter replaces the
+    unit tier, since the VSTest grammar can express the union itself. It is partial by construction
+    and never satisfies the landing gate, which is the complete run.
 
 .PARAMETER SkipUnits
     Skip the dotnet test stage.
@@ -111,6 +132,15 @@
     Build, then only the in-engine suites whose name contains "weapons".
 
 .EXAMPLE
+    .\RunTests.ps1 -Suite weapons-fire -SkipUnits -SkipGoldens -SkipHitch
+    Build, then that one suite exactly -- the targeted engine loop.
+
+.EXAMPLE
+    .\RunTests.ps1 -Quick
+    The broad partial gate: build, the quick unit tier, the quick engine tier, and a summary
+    naming every surface it did not check.
+
+.EXAMPLE
     .\RunTests.ps1 -Perf -PerfLabel base -SkipUnits -SkipEngine -SkipGoldens
     Measure the perf scenario set and file it under the label "base". Flip the one line under
     test, then repeat with -PerfLabel change -PerfCompare base for the paired verdict.
@@ -123,6 +153,9 @@
 [CmdletBinding()]
 param(
     [string]$Filter = "",
+    [string]$Suite = "",
+    [string]$UnitFilter = "",
+    [switch]$Quick,
     [switch]$SkipUnits,
     [switch]$SkipEngine,
     [switch]$SkipGoldens,
@@ -137,6 +170,30 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# The engine stage's selector, in the harness's own comma-separated term grammar (suite:<name>
+# exact, tier:<name> a checked-in tier, anything else a substring). Terms union, so -Suite and
+# -Filter compose, and -Quick's tier joins the union rather than being replaced by an explicit
+# selection: that is what makes "quick plus this one suite I am editing" expressible. Every term
+# must match something or the stage fails.
+$SelectorTerms = @()
+foreach ($exact in ($Suite -split ',')) {
+    if ($exact.Trim()) {
+        $SelectorTerms += "suite:$($exact.Trim())"
+    }
+}
+if ($Filter.Trim()) {
+    $SelectorTerms += $Filter.Trim()
+}
+if ($Quick) {
+    $SelectorTerms += "tier:quick"
+}
+$EngineSelector = ($SelectorTerms -join ",")
+if ($Quick -and -not $UnitFilter) {
+    $UnitFilter = "Tier=Quick"
+}
+$SkipGoldensNow = ($SkipGoldens -or $Quick)
+$SkipHitchNow   = ($SkipHitch -or $Quick)
 
 $RepoRoot   = $PSScriptRoot
 $ProjectDir = Join-Path $RepoRoot "CSVM"
@@ -335,6 +392,15 @@ function Stop-StrayGodots {
 
 # ---- build -------------------------------------------------------------------------------
 
+if ($Quick) {
+    Write-Host ""
+    Write-Host "== quick: a PARTIAL gate ==" -ForegroundColor Cyan
+    Write-Host "  units:  dotnet test --filter `"$UnitFilter`"" -ForegroundColor DarkGray
+    Write-Host "  engine: --run-tests=$EngineSelector" -ForegroundColor DarkGray
+    Write-Host "  goldens and hitch do not run; the landing gate is the complete .\RunTests.ps1" -ForegroundColor DarkGray
+    Add-Unchecked "-Quick ran two checked-in tiers and is partial by construction: a PASS here is development confidence, and only the complete .\RunTests.ps1 satisfies the landing rule"
+}
+
 Write-Stage-Banner "build"
 $watch = [System.Diagnostics.Stopwatch]::StartNew()
 # PowerShell 5.1 wraps a native command's stderr in ErrorRecords as soon as this script's own
@@ -371,7 +437,12 @@ if ($SkipUnits) {
     }
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $ErrorActionPreference = "Continue"
-    dotnet test $Sln --no-build --nologo --results-directory $trxDir --logger "trx;LogFileName=units.trx"
+    if ($UnitFilter) {
+        dotnet test $Sln --no-build --nologo --filter $UnitFilter `
+            --results-directory $trxDir --logger "trx;LogFileName=units.trx"
+    } else {
+        dotnet test $Sln --no-build --nologo --results-directory $trxDir --logger "trx;LogFileName=units.trx"
+    }
     $unitCode = $LASTEXITCODE
     $ErrorActionPreference = "Stop"
     $watch.Stop()
@@ -396,13 +467,25 @@ if ($SkipUnits) {
     } else {
         $detail = "dotnet test exited $unitCode (no TRX written)"
     }
-    if ($unitCode -eq 0 -and $failed -le 0) {
+    if ($UnitFilter) {
+        $detail = "$detail; filter '$UnitFilter'"
+    }
+    # A filter that selects nothing is a typo, not a green run: the same rule the engine selector
+    # holds to. Zero tests can only mean the filter missed, since an unfiltered run always has some.
+    $noUnitMatched = ($total -eq 0)
+    if ($noUnitMatched) {
+        $detail = "no test matched '$UnitFilter'"
+    }
+    if ($unitCode -eq 0 -and $failed -le 0 -and -not $noUnitMatched) {
         Add-Stage -Name "units" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
     } else {
         Add-Stage -Name "units" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
     }
     if ($skipped -gt 0) {
         Add-Unchecked "$skipped unit test(s) SKIPPED, normally for missing extracted game data"
+    }
+    if ($UnitFilter) {
+        Add-Unchecked "the unit tests outside --filter '$UnitFilter' did not run"
     }
 }
 
@@ -439,8 +522,8 @@ if ($SkipEngine) {
     }
 
     $testArg = "--run-tests"
-    if ($Filter) {
-        $testArg = "--run-tests=$Filter"
+    if ($EngineSelector) {
+        $testArg = "--run-tests=$EngineSelector"
     }
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $ErrorActionPreference = "Continue"
@@ -491,10 +574,22 @@ if ($SkipEngine) {
             $detail = "$detail [$($failedNames -join ', ')]"
         }
     } else {
-        $detail = "Godot exited $engineCode with no report at $report"
+        # A selector term that matched nothing ends the harness before any suite runs, so there is
+        # no report to score. Say which term missed rather than reporting only the missing file.
+        $missed = @()
+        if (Test-Path $engineLog) {
+            $missed = @(Get-Content -Path $engineLog | Where-Object { $_ -match 'selector matched nothing' })
+        }
+        # The log line names the missed terms first and every registered suite after the semicolon;
+        # only the terms belong in a summary row.
+        if ($missed.Count -gt 0 -and $missed[0] -match 'selector matched nothing: ([^;]+)') {
+            $detail = "selector matched nothing: $($Matches[1].Trim())"
+        } else {
+            $detail = "Godot exited $engineCode with no report at $report"
+        }
     }
-    if ($Filter) {
-        $detail = "$detail; filter '$Filter'"
+    if ($EngineSelector) {
+        $detail = "$detail; selector '$EngineSelector'"
     }
     # No report means no suite ran, whatever the exit code says. Treating that as a pass would let a
     # run that never started read as a green one -- the same trap the SKIP rows exist to avoid.
@@ -507,6 +602,9 @@ if ($SkipEngine) {
     }
     if ($eSkipped -gt 0) {
         Add-Unchecked "$eSkipped in-engine suite(s) SKIPPED, normally for missing extracted game data"
+    }
+    if ($EngineSelector) {
+        Add-Unchecked "the in-engine suites outside the selector '$EngineSelector' did not run"
     }
     if ($errorNote -eq "engine errors UNSCREENED") {
         Add-Unchecked "native engine ERROR lines were not screened (no readable engine log)"
@@ -611,9 +709,10 @@ function Save-GoldenFailureEvidence {
     }
 }
 
-if ($SkipGoldens) {
-    Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "-SkipGoldens"
-    Add-Unchecked "the golden-image shots did not run (-SkipGoldens): pixel regressions are not caught by this run"
+if ($SkipGoldensNow) {
+    $why = if ($SkipGoldens) { "-SkipGoldens" } else { "-Quick" }
+    Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail $why
+    Add-Unchecked "the golden-image shots did not run ($why): pixel regressions are not caught by this run"
 } elseif (-not $buildOk) {
     Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "build failed"
     Add-Unchecked "the golden-image shots did not run (the build failed)"
@@ -819,9 +918,10 @@ if ($SkipGoldens) {
 # .hitches.jsonl sidecar HitchSidecar writes beside the PROJECT's own log (Log.SinkPath) -- not
 # Godot's --log-file, which is a different file; the sidecar's path is recovered from the
 # "[core] log file=..." line every session prints once at Log.Open.
-if ($SkipHitch) {
-    Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "-SkipHitch"
-    Add-Unchecked "the hitch-detector check did not run (-SkipHitch)"
+if ($SkipHitchNow) {
+    $why = if ($SkipHitch) { "-SkipHitch" } else { "-Quick" }
+    Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail $why
+    Add-Unchecked "the hitch-detector check did not run ($why)"
 } elseif (-not $buildOk) {
     Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "build failed"
     Add-Unchecked "the hitch-detector check did not run (the build failed)"

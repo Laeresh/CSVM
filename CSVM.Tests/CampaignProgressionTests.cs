@@ -8,6 +8,7 @@ namespace CSVM.Tests;
 /// <summary>The progression rules over a profile: the two-half mission record and its best-of
 /// merge, the monotonic position that only a completed primary objective raises, the replay rule
 /// Previous Missions flies under, and the five aircraft awards granted once per profile.</summary>
+[Trait("Tier", "Quick")]
 public class CampaignProgressionTests
 {
     [Fact]

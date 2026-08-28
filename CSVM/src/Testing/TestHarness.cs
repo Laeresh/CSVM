@@ -63,18 +63,23 @@ public static class TestHarness
         }
     }
 
-    /// <summary>Runs every registered suite whose name contains <paramref name="filter"/> (empty =
-    /// all), prints the table, writes <c>.scratch/test-report.json</c>, and returns the process exit
-    /// code: 0 when nothing failed, 1 otherwise. A skipped suite is not a failure.</summary>
+    /// <summary>Runs the suites <paramref name="filter"/> selects (empty = all), prints the table,
+    /// writes <c>.scratch/test-report.json</c>, and returns the process exit code: 0 when nothing
+    /// failed, 1 otherwise. A skipped suite is not a failure; a selector term that matched nothing
+    /// is, and nothing runs in that case.</summary>
     public static int Run(TestContext ctx, string filter)
     {
         // Numbers in a committed report must read the same on every machine.
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
-        var selected = All.Where(s => filter.Length == 0
-            || s.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+        var selected = Select(All, filter, out var unmatched);
         var results = new List<SuiteResult>();
         Log.Info("test", $"run-tests suites={selected.Count}/{All.Count} filter='{filter}' chapter={ctx.Chapter} mission={ctx.Mission}");
+        if (unmatched.Count > 0)
+        {
+            Log.Error("test", $"run-tests selector matched nothing: {string.Join(", ", unmatched)}; registered: {string.Join(", ", All.Select(s => s.Name))}");
+            return 1;
+        }
         if (selected.Count == 0)
         {
             Log.Error("test", $"run-tests filter '{filter}' matched no suite of {string.Join(", ", All.Select(s => s.Name))}");
@@ -136,6 +141,42 @@ public static class TestHarness
         return fail > 0 || screenFailed ? 1 : 0;
     }
 
+    /// <summary>The suites a <c>--run-tests=</c> spec selects, in registry order and deduplicated.
+    /// Comma-separated terms, unioned: <c>suite:&lt;name&gt;</c> exact, <c>tier:&lt;name&gt;</c> a
+    /// checked-in tier, anything else a name substring. A term that selects nothing lands in
+    /// <paramref name="unmatched"/> instead of quietly narrowing the run. Pure, so a selector can
+    /// be proved outside the engine.</summary>
+    public static IReadOnlyList<Suite> Select(IReadOnlyList<Suite> suites, string spec,
+        out IReadOnlyList<string> unmatched)
+    {
+        var missed = new List<string>();
+        unmatched = missed;
+        if (spec.Trim().Length == 0)
+        {
+            return suites;
+        }
+        var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string raw in spec.Split(','))
+        {
+            string term = raw.Trim();
+            if (term.Length == 0)
+            {
+                continue;
+            }
+            var hits = MatchTerm(suites, term);
+            if (hits.Count == 0)
+            {
+                missed.Add(term);
+                continue;
+            }
+            foreach (var hit in hits)
+            {
+                wanted.Add(hit.Name);
+            }
+        }
+        return suites.Where(s => wanted.Contains(s.Name)).ToList();
+    }
+
     /// <summary>Classifies a run's log lines: how many engine error lines there were, how many the
     /// allowlist covers, which are unknown, and which allowed pattern went over its cap. Pure — no
     /// Godot API, no file access — so it is unit-testable outside the engine.</summary>
@@ -187,6 +228,28 @@ public static class TestHarness
             OverCap = overCap,
             AllowedCounts = counts,
         };
+    }
+
+    private static List<Suite> MatchTerm(IReadOnlyList<Suite> suites, string term)
+    {
+        const string exact = "suite:";
+        const string tier = "tier:";
+        if (term.StartsWith(exact, StringComparison.OrdinalIgnoreCase))
+        {
+            string name = term[exact.Length..];
+            return suites.Where(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+        if (term.StartsWith(tier, StringComparison.OrdinalIgnoreCase))
+        {
+            var names = SuiteCatalog.Tier(term[tier.Length..]);
+            if (names == null)
+            {
+                return new List<Suite>();
+            }
+            var set = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            return suites.Where(s => set.Contains(s.Name)).ToList();
+        }
+        return suites.Where(s => s.Name.Contains(term, StringComparison.OrdinalIgnoreCase)).ToList();
     }
 
     // The engine log Godot's `--log-file` is writing, or null when launched without it. Error

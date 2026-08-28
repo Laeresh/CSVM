@@ -124,12 +124,14 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 
 ### Development verification loop
 
-- **During an edit, run the smallest red/green surface.** For an engine suite use
-  `.\RunTests.ps1 -Filter <suite> -SkipUnits -SkipGoldens -SkipHitch`; for a unit use
+- **During an edit, run the smallest red/green surface.** For one engine suite use
+  `.\RunTests.ps1 -Suite <suite> -SkipUnits -SkipGoldens -SkipHitch` (exact name; `-Filter` is still
+  the substring form); for a unit use
   `dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter "FullyQualifiedName~<test>"`.
-- **Broad development confidence uses `.\RunTests.ps1 -Quick` after
-  [`PLAN-fast-verification` A1](docs/PLAN-fast-verification.md) lands.** While A1 is open, the flag
-  does not exist; use the targeted commands above and do not advertise or invoke it.
+- **Broad development confidence is `.\RunTests.ps1 -Quick`:** build, the checked-in quick unit
+  tier and quick engine tier, no goldens and no hitch, with every omitted surface printed as a
+  `not checked:` line. A selector or filter matching nothing fails its stage rather than passing
+  empty.
 - **Before landing any change under `CSVM/`, run the complete `.\RunTests.ps1`.** Targeted and quick
   runs are partial by design and never satisfy that landing gate. `CSVM.Tests/`-only,
   documentation, and tooling changes do not require the full run.

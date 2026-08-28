@@ -102,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Fast confidence layers
 
-1. ☐ Implement the explicit quick lane and exact targeted selectors
+1. ☑ Implement the explicit quick lane and exact targeted selectors
 2. ☐ Remove the 31-second unit-test wall
 
 ### Wave B — Engine isolation and throughput
@@ -130,7 +130,7 @@ lands last and reconciles `RunTests.ps1`, `docs/tooling.md`, `docs/verification.
 
 # Wave A — Fast confidence layers
 
-## A1 ☐ Implement the explicit quick lane and exact targeted selectors
+## A1 ☑ Implement the explicit quick lane and exact targeted selectors
 
 **Goal.** `RunTests.ps1 -Quick` is a broad partial gate with a measured ≤60-second budget, while an
 agent can select one exact engine suite and one filtered xUnit surface without spelling a brittle
@@ -146,8 +146,58 @@ startup; build alone was 5.3 seconds.
 the existing `not checked:` honesty, and prints its declared scope. Keep the existing switches
 composable. Update `docs/tooling.md` and, if exact selection changes the Godot flag contract,
 `docs/cli.md`; remove the temporary A1-open conditional from the agent guidance when the flag
-exists. <TODO: choose the quick suite/unit membership by able-to-fail coverage, and record why each
-representative belongs; elapsed time alone is not selection evidence.>
+exists.
+
+**What landed.** `--run-tests=`'s value became a selector rather than a bare substring:
+comma-separated terms, unioned and run in registry order, where `suite:<name>` is one exact suite,
+`tier:<name>` a checked-in tier and anything else the old substring. `TestHarness.Select` is pure
+over the registry and reports every term that matched nothing; `Run` refuses such a run before any
+suite starts, so a typo cannot read as an empty pass. The Godot flag set is unchanged (still 133),
+since the grammar rides inside the existing value.
+
+`SuiteCatalog.QuickTier` is the checked-in engine membership, resolved through `Tier(name)`, and
+`RunTests.ps1` gained `-Suite <name>[,<name>]` (exact), `-UnitFilter <expr>` (straight into
+`dotnet test --filter`) and `-Quick`. Quick builds once, runs the quick unit tier
+(`--filter Tier=Quick`, a `[Trait("Tier", "Quick")]` on each member class) and the quick engine
+tier, skips goldens and hitch, prints its declared scope before it starts, and prints a
+`not checked:` line for every omitted surface including its own partiality. A `-UnitFilter` matching
+zero tests fails the units stage, the same rule the engine selector holds. `-Suite`/`-Filter` are
+unioned with the engine tier, so quick plus the suite under edit is one command; `-UnitFilter`
+replaces the unit tier, since the VSTest grammar can express a union itself. Every existing switch
+still composes.
+
+**Quick engine tier, and why each representative belongs** (coverage, not elapsed time; measured
+warm seconds in brackets):
+
+| Suite | The failure surface it is there to catch |
+|---|---|
+| `puffer-modes` [0.05] | the particle/emitter runtime end to end through a fake renderer, the one engine surface with no GPU dependency at all |
+| `loadout-bind` [5.4] | every airframe model builds and every stock loadout's markers resolve: the plane-build path the whole flight half stands on |
+| `weapons-fire` [0.5] | all 48 weapon defs mount and fire from a built plane, so a weapon-data or fire-control break is caught |
+| `air-to-air` [1.7] | the hit chain: struck shape to data part, armour then health, the whole-vehicle kill rule and kill attribution |
+| `instant-action` [2.5] | the Instant Action mission runtime and roster spawn, one of the two mission families |
+| `ai-actor` [0.8] | the AI seam: an AI-piloted plane spawned into a running sim, flying orders, damageable and killable |
+| `damage-stages` [2.2] | the authored `DAMAGE_SEQUENCE` ladder firing its stage effects across an HP sweep |
+| `damage-hd` [3.6] | the built world's destructibles: hits destroy, swap meshes, drop colliders, and survive destroy/reset/destroy, with collision forced on |
+| `effect-template-mesh` [0.06] | effect template meshes appearing at the call site and going dark on stop, the world-effects runtime's own tripwire |
+| `collision-visibility` [11.4] | the only member that builds every one of the 8 chapters: a chapter that fails to build at all, and the invisible-wall class, are caught nowhere else in the tier |
+| `target-selection` [0.02] | the targeting cycle and sticky selection, tree-free |
+| `music-states` [0.3] | the state-driven score, the audio runtime's able-to-fail surface |
+| `campaign-objectives` [0.02] | the campaign objective graph driven to both endings over a shipped mission's own script |
+
+`emitter-lifetime` is deliberately excluded even though it is registered first: it installs the fake
+emitter factory that the shared C1 world would then be cached with, and the `collision:true` rebuild
+that undoes that for everyone sits far down the registry. Its registration order is untouched, so
+the full run is unchanged. The unit tier is 193 tests over 14 classes covering the same idea from
+the engine-free side: the CLI arg contract, the zrdr/gamez/anim/weapon readers, ballistics, plane
+damage, the flight envelope, loadout and objective-graph models, campaign progression, AI target
+ranking, the harness's own error screen, and the catalog/selector metadata itself.
+
+**Measured** (warm, `$env:CSVM_DATA_ROOT` at the primary tree): `-Quick` 39.8 s and 35.6 s against
+its 60 s budget (build ~6 s, units 2.1 s / 193 tests, engine ~32 s / 13 suites); one exact engine
+suite 3.7 s; one unit class 2.0 s. A deliberate assertion break in each included lane turned that
+lane red and the run exited 1; `-Suite weapons` (a substring, not a suite name) failed the engine
+stage naming the term, and a `-UnitFilter` matching nothing failed the units stage.
 
 **Model recommendation.** high, because changing the verification contract has repository-wide
 blast radius even though the script edits are localized.
@@ -159,6 +209,14 @@ nothing and fails, and the warm run is ≤60 seconds. Finish with the unchanged 
 
 **⚠ Traps.** Never infer completion from `git diff`, never let a zero-match filter pass, and never
 label quick output `PASS` without adjacent `not checked:` lines for omitted coverage.
+
+**⚠ For B13 and C23.** The full engine stage measured 296.8 s of suite time on this machine and hit
+`RunTests.ps1`'s own 300 s `$EngineTimeoutSec` watchdog, which kills Godot, writes no report and
+fails the stage with exit 124. The suites that ran (146 of 153) all passed. Nothing here changed the
+full run's selection, so this is the pre-existing serial cost the plan exists to remove; whoever
+sets the budget decides whether the watchdog moves with it.
+
+**Verified.** <pending orchestrator run>
 
 ## A2 ☐ Remove the 31-second unit-test wall
 

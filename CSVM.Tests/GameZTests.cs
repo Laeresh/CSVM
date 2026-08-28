@@ -9,6 +9,7 @@ namespace CSVM.Tests;
 /// order and the transposed stored matrix). Input is <c>fixtures/gamez-plane/</c>, an
 /// eight-node hand-authored tree in the legacy extraction shape.
 /// </summary>
+[Trait("Tier", "Quick")]
 public class GameZTests
 {
     private const float Tolerance = 1e-4f;

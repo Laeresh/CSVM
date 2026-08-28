@@ -4604,7 +4604,10 @@ scene-tree host, and `WithWorld` — the chapter-world builder over `WorldSessio
 mission-override form `WithWorld(chapter, collision, mission, body)` builds a chapter at another
 mission and never caches it, since the cache is keyed by chapter alone — `zeppelin-damage` wants
 C1 at M04), the
-PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code. `TestContext.
+PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code. `Select` is the pure
+selector over the flag's value — comma-separated terms, `suite:` exact, `tier:` a `SuiteCatalog`
+tier, anything else a substring — returning registry order and reporting every term that matched
+nothing, which `Run` refuses before any suite starts. `TestContext.
 EmitterFactory` (mutable, default null) forwards straight into `WorldSession.Options.EmitterFactory`
 for the next `WithWorld` build — a suite sets it, on a chapter other than `Chapter` so a cached
 default-chapter world built before the set is never reused in its place. `BuildWorld` opens its
@@ -4635,7 +4638,9 @@ emitter's own MODES are. Neither covers the other's job.
 The ordered registry of the in-engine assertion suites. Scenario bodies are grouped by domain in
 the `*Suites.cs` modules; `Names` is the registry-order test surface and the count's one home. It preserves the original
 suite order, including `emitter-lifetime` first, because that suite installs the shared C1 world's
-fake emitter factory. The suites cover plane/loadout bindings (stock and, since M3 B4,
+fake emitter factory. `QuickTier` is the checked-in membership of `--run-tests=tier:quick`, resolved
+through `Tier(name)`, and holds one representative per failure surface rather than the cheapest
+rows; `emitter-lifetime` is out of it for the same fake-factory reason. The suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
 build from ai.zrd + the thirdp mount, arc-centre rest pose, track/fire/hit under the host's
 shooter id, bored-window fire suppression with live tracking, the nearer-end-stop park, YAW [0,0]

@@ -10,6 +10,7 @@ namespace CSVM.Tests;
 /// that most needs proving: an allowlist that quietly absorbed an unfamiliar error would turn the
 /// whole harness into a rubber stamp.
 /// </summary>
+[Trait("Tier", "Quick")]
 public class TestHarnessScreenTests
 {
     private const string KnownDet = "ERROR: Condition \"det == 0\" is true.";

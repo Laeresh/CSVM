@@ -154,10 +154,34 @@ Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 | `hitch` | Two scripted Godot launches reporting `HitchMonitor`/`HitchSidecar` health: a clean `--frames=180` run should stay silent, and `--hitch-inject=50@300 --frames=310` should trip once on frame 300 with a full 120-entry ring and matching sidecar record. Results are awareness-only and never fail the run |
 | `perf` | `-Perf` only: every scenario in `analysis/perf/scenarios.json` under `--det --perf --no-vsync --mute`, medians appended to the git-ignored `perf-history.jsonl`. ~88 s for 5 scenarios. It measures and records; it never judges (below) |
 
-Switches: **`-Filter <substring>`** (engine suite names only — `-Filter weapons` runs `weapons-defs`
-+ `weapons-fire`; the unit tests are unaffected), **`-SkipUnits`**, **`-SkipEngine`**,
-**`-SkipGoldens`**, **`-RegenGoldens`**, **`-SkipHitch`**, **`-Perf`** (+ `-PerfLabel`, `-PerfCompare`,
-`-PerfFilter`, `-PerfIterations`, `-PerfFrames`).
+Switches: **`-Suite <name>[,<name>]`** (exact in-engine suite names), **`-Filter <substring>`**
+(engine suite names only — `-Filter weapons` runs `weapons-defs` + `weapons-fire`),
+**`-UnitFilter <expr>`** (straight into `dotnet test --filter`), **`-Quick`**, **`-SkipUnits`**,
+**`-SkipEngine`**, **`-SkipGoldens`**, **`-RegenGoldens`**, **`-SkipHitch`**, **`-Perf`**
+(+ `-PerfLabel`, `-PerfCompare`, `-PerfFilter`, `-PerfIterations`, `-PerfFrames`).
+
+**Selection is exact or substring, and a miss is a failure.** `-Suite` and `-Filter` compose into
+the harness's own term grammar on `--run-tests=` (`suite:<name>` exact, `tier:<name>` a checked-in
+tier, anything else a substring; terms are comma separated and unioned, and the run keeps registry
+order). A term that selects no suite ends the harness before anything runs and fails the stage,
+naming the term — an empty selection is never an empty pass. `-UnitFilter` holds the same rule from
+the other side: a filter matching zero tests fails the units stage rather than reporting a green
+zero. The targeted loops are `.\RunTests.ps1 -Suite <name> -SkipUnits -SkipGoldens -SkipHitch`
+(measured ~4 s warm) and `.\RunTests.ps1 -UnitFilter "FullyQualifiedName~<test>" -SkipEngine
+-SkipGoldens -SkipHitch` (~2 s).
+
+**`-Quick` is the broad partial gate**: build, the quick unit tier (`--filter Tier=Quick`), the
+quick engine tier (`--run-tests=tier:quick`), no goldens and no hitch. Measured 36–40 s warm on the
+development machine against a ≤60 s budget. Membership of both tiers is checked in — the
+`[Trait("Tier", "Quick")]` classes in `CSVM.Tests` and `SuiteCatalog.QuickTier` — and chosen by the
+failure surface each representative can catch, never inferred from a diff or from elapsed time.
+`emitter-lifetime` is deliberately outside the engine tier: it installs the fake emitter factory the
+shared C1 world would then be cached with, and the collision rebuild that undoes that is far down
+the registry. An explicit `-Suite`/`-Filter` is unioned with the engine tier, so "the quick lane
+plus the suite I am editing" is one command; an explicit `-UnitFilter` replaces the unit tier,
+since the VSTest grammar can express a union itself. Quick prints its declared scope before
+it starts and a `not checked:` line for every omitted surface; it is partial by construction and
+never satisfies the landing rule, which stays the complete run.
 
 **The golden stage is a scripted pass, not an in-engine suite, and that is structural**: the
 `--run-tests` harness runs every suite to completion inside one `_Ready` call and never yields a

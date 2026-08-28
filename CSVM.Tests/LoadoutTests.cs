@@ -9,6 +9,7 @@ namespace CSVM.Tests;
 /// <c>CSVM/data/</c>, so these run without an extraction — plus the caliber+ammo weapon-id rule.
 /// Binding a loadout to a plane needs live <c>Node3D</c>s and stays with the in-engine suites.
 /// </summary>
+[Trait("Tier", "Quick")]
 public class LoadoutTests
 {
     private static string ConfigPath =>

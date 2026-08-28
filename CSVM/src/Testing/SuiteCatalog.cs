@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -202,6 +203,33 @@ public static class SuiteCatalog
         "campaign-briefing-note",
         "airframe-hull-coverage",
     };
+
+    // The suites `--run-tests=tier:quick` runs: one representative per failure surface, checked in
+    // here rather than inferred from a diff, every name also in Names. The selection rule is in
+    // docs/tooling.md; the tier is partial and the full catalog stays the landing gate.
+    // ⚠ Keep emitter-lifetime out. It installs the fake emitter factory the shared C1 world would
+    // then be cached with, and the collision rebuild undoing that sits far down the registry.
+    public static readonly IReadOnlyList<string> QuickTier = new[]
+    {
+        "puffer-modes",
+        "loadout-bind",
+        "weapons-fire",
+        "air-to-air",
+        "ai-actor",
+        "instant-action",
+        "damage-stages",
+        "damage-hd",
+        "effect-template-mesh",
+        "collision-visibility",
+        "target-selection",
+        "campaign-objectives",
+        "music-states",
+    };
+
+    /// <summary>The suite names a tier holds, or null when no tier carries that name (which a
+    /// selector must treat as a miss, not as an empty selection).</summary>
+    public static IReadOnlyList<string>? Tier(string name) =>
+        name.Equals("quick", StringComparison.OrdinalIgnoreCase) ? QuickTier : null;
 
     internal static void RegisterAll(List<TestHarness.Suite> into)
     {

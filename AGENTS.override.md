@@ -36,11 +36,11 @@ matching **[skill](.agents/skills/)** before using it (backlog, plan-item, analy
 commit-next, close-backlog-item, …).
 
 **Use the layered verification loop for `CSVM/` or `CSVM.Tests/` code.** While editing, run the
-smallest affected surface: `.\RunTests.ps1 -Filter <suite> -SkipUnits -SkipGoldens -SkipHitch` for
-an engine suite, or `dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter
-"FullyQualifiedName~<test>"` for a unit. After `PLAN-fast-verification` A1 is ☑, use
-`.\RunTests.ps1 -Quick` for broad development confidence; while A1 is open that flag does not
-exist. Before landing code, run the complete `.\RunTests.ps1` (build → units → in-engine suites →
+smallest affected surface: `.\RunTests.ps1 -Suite <suite> -SkipUnits -SkipGoldens -SkipHitch` for
+one engine suite, or `dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter
+"FullyQualifiedName~<test>"` for a unit. Use `.\RunTests.ps1 -Quick` for broad development
+confidence: it runs the checked-in quick unit and engine tiers and names every surface it did not
+check. Before landing code, run the complete `.\RunTests.ps1` (build → units → in-engine suites →
 golden hashes → one exit code) only when code under `CSVM/` changed. Quick and targeted runs never
 satisfy that landing gate. `CSVM.Tests/`-only, doc, and tooling changes (this file, `.pi/`,
 `.claude/`, `docs/`, scripts) do not need the full run.

@@ -17,6 +17,7 @@ namespace CSVM.Tests;
 /// both, so a re-decode that moves either fails loudly. Plus the roster accessors for slots 6
 /// (primary_target) and 33 (rating_biases), with install-wide goldens.
 /// </summary>
+[Trait("Tier", "Quick")]
 public class AiTargetRankingTests
 {
     private const float Activation = 2000f;

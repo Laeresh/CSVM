@@ -5,8 +5,8 @@ architecture decisions, repo layout, the Godot project + CLI reference, coding c
 the "Current status" pointer. This file holds only what's specific to Claude Code as a tool.
 
 Follow PROJECT_CONTEXT.md's **Development verification loop**: run the exact affected suite or unit
-while editing, use `.\RunTests.ps1 -Quick` for broad development confidence once the active plan's
-A1 item is done, and run the complete `.\RunTests.ps1` before landing a change under `CSVM/`.
+while editing, use `.\RunTests.ps1 -Quick` for broad development confidence, and run the complete
+`.\RunTests.ps1` before landing a change under `CSVM/`.
 Quick and targeted runs never satisfy that landing gate; `CSVM.Tests/`-only changes do not require it.
 
 ## Claude Code specifics

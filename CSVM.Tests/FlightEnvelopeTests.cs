@@ -16,6 +16,7 @@ namespace CSVM.Tests;
 /// plant's number with nothing to compare it to.
 /// ⚠ A demotion to informational is never the quiet way to make a run green.
 /// </summary>
+[Trait("Tier", "Quick")]
 public class FlightEnvelopeTests
 {
     // How many flight scenarios carry a decoded target to assert. Pinned so that silently demoting

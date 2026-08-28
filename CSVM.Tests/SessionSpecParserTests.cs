@@ -14,6 +14,7 @@ namespace CSVM.Tests;
 /// nothing downstream notices, because a mis-parsed vector or hold sequence still produces a
 /// perfectly valid session.
 /// </summary>
+[Trait("Tier", "Quick")]
 public class SessionSpecParserTests
 {
     [Fact]
