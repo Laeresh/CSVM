@@ -216,7 +216,10 @@ fails the stage with exit 124. The suites that ran (146 of 153) all passed. Noth
 full run's selection, so this is the pre-existing serial cost the plan exists to remove; whoever
 sets the budget decides whether the watchdog moves with it.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the merged Wave A tree with no other engine work on the
+machine: build 7.4 s, units 2475/2475 in 18.4 s, engine 153/153 in 253.1 s with errors clean,
+goldens 16/16 hash-identical in 88.0 s, hitch clean/inject as expected in 16.4 s, 383.3 s total,
+exit 0. `-Quick -Suite warning-shot` ran 14/153 in 30.1 s.
 
 ## A2 ☑ Remove the 31-second unit-test wall
 
@@ -267,7 +270,8 @@ deliberately wrong expected def (`ai_crash_dirt` → `ai_crash_WRONG` on C1's `D
 failed as `chapter C1: Assert.Equal() Failure: Strings differ … Expected: "ai_crash_WRONG" Actual:
 "ai_crash_dirt"`, naming the chapter, then was restored and reverified green.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The same full battery as A1's: units 2475/2475 in 18.4 s against the plan's
+measured 35.4 s, everything else green, exit 0.
 
 ---
 
