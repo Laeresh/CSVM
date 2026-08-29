@@ -1969,10 +1969,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // FLY MISSION: the profile is saved, the board's score stops and the host builds a campaign
-    // session for this profile and story position. The pilot's aircraft goes with it — its stock
-    // node, its hangar build where it has one, and the ammunition and ordnance the ammo screen
-    // stored (the plan's C24/C25 contract). The wingman's own binding is resolved by
-    // CampaignDirector, which has the profile open anyway.
+    // session for this profile and story position. Every joined human's aircraft goes with it —
+    // its stock node, its hangar build where it has one, and the ammunition and ordnance the ammo
+    // screen (or, for a guest, C22's own flight check) stored. The wingman's own binding is
+    // resolved by CampaignDirector, which has the profile open anyway.
     private void FlyCampaignMission(CampaignFlow flow)
     {
         if (flow.Profile is not { } profile || LaunchCampaign == null)
@@ -1982,26 +1982,37 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         flow.Store.Save(profile);
-        int at = Math.Clamp(profile.SelectedPlane, 0, Math.Max(0, profile.Planes.Count - 1));
-        var plane = profile.Planes.Count > 0 ? profile.Planes[at] : new OwnedPlane();
-        // A reward aircraft with no file in the build store falls back to its own award template:
-        // the grant writes one, and this is what carries a profile granted before it did.
-        var custom = CustomPlaneStore.UserPlanes().Load(plane.Name)
-                     ?? CampaignProgression.BuildForOwned(plane);
-        var launch = new CampaignLaunch(
-            profile.Name, flow.MissionSeq, PlanePickerRoster.AirframeNode(plane.Airframe),
-            custom, CampaignLoadout.For(plane, Fits), _slots.Count);
+        int players = _slots.Count;
+        var planeNodes = new string[players];
+        var customs = new CustomPlaneDef?[players];
+        var fits = new LoadoutChoice?[players];
+        string seatedName = "";
+        for (int player = 0; player < players; player++)
+        {
+            var plane = flow.Field.Plane(player) ?? new OwnedPlane();
+            planeNodes[player] = PlanePickerRoster.AirframeNode(plane.Airframe);
+            // A reward aircraft with no file in the build store falls back to its own award
+            // template: the grant writes one, and this is what carries a profile granted before it
+            // did. Per entry, since a guest may pick a granted aircraft from the seated profile too.
+            customs[player] = CustomPlaneStore.UserPlanes().Load(plane.Name)
+                               ?? CampaignProgression.BuildForOwned(plane);
+            fits[player] = CampaignLoadout.For(plane, Fits);
+            if (player == 0)
+            {
+                seatedName = plane.Name;
+            }
+        }
+
+        var launch = new CampaignLaunch(profile.Name, flow.MissionSeq, planeNodes, customs, fits, players);
         StopNarration();
         Music?.Stop();
         _campaign = null;
         _screen = Screen.Mode;
         _error = "";
-        GD.Print($"launchscreen: campaign '{profile.Name}' flying mission seq {flow.MissionSeq} in \"{plane.Name}\"");
-        // C22 settles what each guest flies; C23 is what carries it into the launch. Until then the
-        // sequence is visible here rather than silently dropped.
-        foreach (var guest in flow.Field.Guests)
+        GD.Print($"launchscreen: campaign '{profile.Name}' flying mission seq {flow.MissionSeq} in \"{seatedName}\"");
+        for (int player = 1; player < players; player++)
         {
-            GD.Print($"launchscreen: campaign P{guest.Player + 1} flying \"{guest.Plane.Name}\"");
+            GD.Print($"launchscreen: campaign P{player + 1} flying \"{flow.Field.Plane(player)?.Name}\"");
         }
 
         LaunchCampaign(launch);
@@ -3140,16 +3151,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         string PlaneNode, int[] Pads, LoadoutChoice? Fit = null, string? CustomPlane = null);
 
     /// <summary>What the cabin's FLY MISSION hands the host: the profile and the
-    /// <c>cm_sequence</c> story position the session is for, plus the pilot's aircraft as the
-    /// three things binding it needs — its stock node, its hangar build (null for a profile
-    /// starter or a reward aircraft, neither of which is hangar-built), and the ammunition and
-    /// ordnance the ammo screen stored. The wingman is NOT here: <c>CampaignDirector</c> resolves
-    /// its binding from the same profile it already opens. <c>Players</c> is how many humans joined;
-    /// the aircraft above is the seated pilot's, and a guest falls back to it until each player
-    /// brings an entry of their own.</summary>
+    /// <c>cm_sequence</c> story position the session is for, plus one entry per joined human, in
+    /// player order, for the three things binding an aircraft needs — its stock node, its hangar
+    /// build (null for a profile starter or a reward aircraft, neither of which is hangar-built),
+    /// and the ammunition and ordnance its flight check stored. Entry 0 is the seated pilot's,
+    /// exactly as a solo launch always built it; entries 1 and up are guests, session-scoped
+    /// records that never touch the profile store. The wingman is NOT here: <c>CampaignDirector</c>
+    /// resolves its binding from the same profile it already opens.</summary>
     public readonly record struct CampaignLaunch(
-        string Profile, int Seq, string PlaneNode, CustomPlaneDef? Custom, LoadoutChoice? Fit,
-        int Players);
+        string Profile, int Seq, IReadOnlyList<string> PlaneNodes,
+        IReadOnlyList<CustomPlaneDef?> Customs, IReadOnlyList<LoadoutChoice?> Fits, int Players);
 
     // One editable line of a loadout list. Key is the gun slot (1-4) or the physical pylon
     // number (1-8) — slot identity, the same key LoadoutChoice uses, never a row index.

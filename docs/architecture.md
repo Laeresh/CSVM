@@ -3977,9 +3977,10 @@ The flow's three exits are the shell's three jobs. `Cancelled` returns to the Mo
 the campaign flow standing; `CloseHangar` calls `Resume` on it, built or cancelled alike, so a
 purchase or a sale shows on the cabin the moment the hangar closes. `FlyMission` saves the profile,
 stops the score and hands the host a `CampaignLaunch`; with guests joined the flight check only asks
-for it on the LAST player's press, every earlier one advancing the walk instead (`C22`): the profile, the story position, and the
-pilot's aircraft as its stock node, its hangar build where it has one, and the fit
-`CampaignLoadout` derives from the profile's picks. The wingman is deliberately not in it, since
+for it on the LAST player's press, every earlier one advancing the walk instead (`C22`): the profile,
+the story position, and one entry per joined human — its stock node, its hangar build where it has
+one, and the fit `CampaignLoadout` derives from its picks, entry 0 the seated pilot's own and every
+entry after it a guest's `CampaignFlightField.Plane`. The wingman is deliberately not in it, since
 `CampaignDirector` resolves that binding from the same profile it opens anyway.
 
 Two things the campaign pages cannot own live here, because a page holds no Godot node and has no
@@ -4701,9 +4702,10 @@ they are testable. `SessionMode` is closed — Menu/Fly/Viewer/Freecam/AnimLab �
 `Versus` (`--vs`, `--vs-kills=`, `--vs-time=`) beats `Stunt` by fixed precedence, not last-wins.
 `Resolve`'s step order and the purity contract (DET-9) are on the class and method themselves;
 `FromMenu`'s no-re-resolve/Dogfight-lock/`iaDef` rules are on `FromMenu` and `IaDef`.
-`FromCampaign` is the cabin's counterpart, taking the joined player count and the SEATED pilot's
-aircraft, the only one it names; a guest falls back to that entry through `PlaneRoster.PlaneFor`
-until `CampaignLaunch` carries one per player. A campaign session is co-op with no flag: `Resolve`
+`FromCampaign` is the cabin's counterpart, taking the joined player count and one aircraft node per
+player, entry 0 the SEATED pilot's; `LaunchMenu.CampaignLaunch` is where that list is built, one
+entry per joined human read off `CampaignFlightField.Plane`, so a guest flies its own C22 pick
+rather than falling back to entry 0. A campaign session is co-op with no flag: `Resolve`
 sets `Coop` for any `--campaign=` that is not also `--vs`, and `FromCampaign` sets it directly
 because that factory deliberately does not re-resolve. `--coop` on a campaign command line is
 therefore ignored in silence, which is the one ignored flag here that prints nothing, because it

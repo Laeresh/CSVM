@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Joining and leaving from any campaign screen, with the player chip strip
 22. ☑ Sequential per-player flight checks
-23. ☐ `CampaignLaunch` carries the whole human field
+23. ☑ `CampaignLaunch` carries the whole human field
 
 ### Wave D — Recording, evidence and words
 
@@ -557,7 +557,7 @@ field its own way puts a different rocket on the flight check than the ammo scre
 The seated profile is saved by `FlyCampaignMission` before launch (`LaunchMenu.cs:1886`); confirm
 that save cannot capture a guest's edits.
 
-## C23 ☐ `CampaignLaunch` carries the whole human field
+## C23 ☑ `CampaignLaunch` carries the whole human field
 
 **Goal.** The launchscreen hands the session one entry per player rather than one aircraft, and a
 campaign session built from the menu is identical to the same session built from the command line.

@@ -33,7 +33,7 @@ internal static class CampaignZeppelinSuites
 
         var report = new StringBuilder();
         var cli = SessionSpec.Parse(System.Array.Empty<string>());
-        var campaignSpec = SessionSpec.FromCampaign(cli, "Suite", mission.Seq, "player_bhawk", players: 1);
+        var campaignSpec = SessionSpec.FromCampaign(cli, "Suite", mission.Seq, new[] { "player_bhawk" }, players: 1);
         ctx.Check(!campaignSpec.Zeppelins && !campaignSpec.Generators,
             $"FromCampaign itself sets neither flag — BL-451's own bug, guarded so it cannot come back unnoticed");
 

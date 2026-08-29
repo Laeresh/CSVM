@@ -1182,21 +1182,23 @@ public sealed record SessionSpec
     }
 
     /// <summary>The campaign cabin's FLY MISSION, <see cref="FromMenu"/>'s counterpart for a story
-    /// mission: the profile and story position <c>--campaign=</c> would name, the joined player
-    /// count, and <paramref name="planeNode"/>, the SEATED pilot's aircraft and the only one named.
-    /// The chapter and mission are NOT settled here: they come out of <c>cm_sequence.zrd</c>, so
+    /// mission: the profile and story position <c>--campaign=</c> would name, and
+    /// <paramref name="planeNodes"/>, one entry per joined human in player order — entry 0 the
+    /// SEATED pilot's aircraft, entries 1 and up guests'. The chapter and mission are NOT settled
+    /// here: they come out of <c>cm_sequence.zrd</c>, so
     /// <see cref="Session.CampaignDirector.ResolveSpec"/> resolves them in the session's constructor
     /// as for a command line. ⚠ Derived from the pristine <paramref name="cli"/>.</summary>
     public static SessionSpec FromCampaign(SessionSpec cli, string profile, int seq,
-        string planeNode, int players, LoadoutChoice? fit = null, CustomPlaneDef? custom = null) =>
+        IReadOnlyList<string> planeNodes, int players,
+        IReadOnlyList<LoadoutChoice?>? fits = null, IReadOnlyList<CustomPlaneDef?>? customs = null) =>
         cli with
         {
             CampaignProfile = profile,
             CampaignMissionSeq = seq,
-            MenuLoadouts = new[] { fit },
-            MenuCustomPlanes = new[] { custom },
-            PlaneNames = new[] { planeNode },
-            PlaneName = planeNode,
+            MenuLoadouts = fits ?? Array.Empty<LoadoutChoice?>(),
+            MenuCustomPlanes = customs ?? Array.Empty<CustomPlaneDef?>(),
+            PlaneNames = planeNodes.ToArray(),
+            PlaneName = planeNodes.Count > 0 ? planeNodes[0] : cli.PlaneName,
             Players = Mathf.Clamp(players, 1, UI.SplitScreen.MaxPlayers),
             Coop = true,
             Stunt = false,
