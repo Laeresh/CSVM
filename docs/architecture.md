@@ -4268,6 +4268,23 @@ unioned across panes, which share one stereo out. Without it a splitscreen sessi
 the main camera stands down here and a camera is in the `World3D` listener set only while current —
 and every `AudioStreamPlayer3D` in the world goes silent, uncounted and unlogged. Pinned by the
 `splitscreen-listeners` suite.
+**`Fill(true)` gives pane 1 the whole window for a cutscene** and takes the other panes, their
+listeners and the gutter backdrop down; `Fill(false)` lays them back out. Four small copies of one
+camera path is not a picture anybody framed, and every rig camera mirrors `camera1` while a
+definition plays (`Session/CutsceneController.cs`), so what the other panes draw during an episode
+is the same shot. Nothing is rebuilt: each pane keeps its camera, its `HudParent`, its private
+visual layer and its cull mask, and the hidden panes keep their own quadrant, so the restore is a
+visibility change and one rect. A hidden pane's render target is disabled with it, so an episode
+costs one rendered view rather than N of the same shot. ⚠ The listener of a hidden pane is taken
+down BY HAND, and exactly
+one is left standing: this is the one place the pinned model above is deliberately departed from,
+and leaving zero is the silent session that model exists to prevent. The main viewport's camera
+stays down throughout, which is why the collapse expands a pane rather than re-arming it. Pinned by
+the `campaign-coop-cutscene-fullscreen` suite.
+**`NoteSkip(index)`** stands a line naming the skipping player, in that player's own `PlayerColor`,
+over the window for a few seconds of wall time; the session calls it beside
+`CutsceneController.Skip`, which logs the same fact once. Splitscreen only, because with one human
+there is nobody else the key press could have been.
 
 ## src/UI/ScreenFlash.cs
 The full-screen colour wash: **two channels over one pixel per pane, one hidden `ColorRect` per
@@ -5919,7 +5936,15 @@ the session. Where a skip is armed, it force-stops the definition and runs the s
 loses nothing: an intro's remaining codes are the chrome ones and its `RESET_STATE` authors exactly
 the four `RestoreCodes` raises. ⚠ The gate is not a convenience: every definition that swaps the
 player's airframe or re-places the pilot is one the original arms no skip on, so a skip can never
-drop one.
+drop one. ANY human may take it, and `Skip(playerIndex)` logs which one did; the session resolves
+that index from the device the event came from (a pad is bound to one seat, the keyboard is the
+scripted player's) and names them on screen through `UI/SplitScreen.NoteSkip`.
+`FillsWindow` is the window seam, raised true as an episode takes the session and false at the
+restore, which both exits reach: a splitscreen session answers it by giving pane 1 the whole window
+(`UI/SplitScreen.Fill`), since every rig camera mirrors `camera1` and four panes would show four
+small copies of one shot. `BindRigs` re-raises it for an episode still playing, because a mission
+intro's first code lands in the animation bootstrap, before the pane rig exists. Unbound in a
+single-player session, which has one pane and nothing to collapse.
 ⚠ `IntroAnims` is the scope, and it is a NAME test: Instant Action's `player_setup` authors the same
 nine codes, so a code test would give every mission a letterbox and a suspended world. The list is
 the three definitions a story mission's start list plays as its opening movie: the two intros and

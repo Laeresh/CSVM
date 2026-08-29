@@ -491,6 +491,10 @@ public partial class GameSession : Node3D
                     ApplyDeferredSpawnOverride();
                 }
             };
+            // Read live, not captured: the pane rig is built later in this same build, and an
+            // intro's first code lands in the animation bootstrap before it exists (BindRigs
+            // re-raises this for that episode).
+            _cutscene.FillsWindow = fills => _split?.Fill(fills);
             AddChild(_cutscene);
             // The mid-mission cutscene trigger, hosted by the same controller. ⚠ Story missions
             // only: C3/IA1 carries hooked_to_klondike with its approach armed, so an Instant
@@ -613,10 +617,16 @@ public partial class GameSession : Node3D
         // since a connected pad reports button 0 pressed as it arrives.
         if (_cutscene is { Playing: true }
             && (@event is InputEventKey { Pressed: true, Echo: false, Keycode: not Key.Escape }
-                || (!_spec.PadsDisabled && @event is InputEventJoypadButton { Pressed: true }))
-            && _cutscene.Skip())
+                || (!_spec.PadsDisabled && @event is InputEventJoypadButton { Pressed: true })))
         {
-            return;
+            int skipper = SkipperIndex(@event);
+            if (_cutscene.Skip(skipper))
+            {
+                // Named on screen, because with a field of humans the picture ending is one
+                // player's decision the others did not make.
+                _split?.NoteSkip(skipper);
+                return;
+            }
         }
         // P halts the sim and . steps it one frame, in freecam and the static viewer. ⚠ Do not
         // handle either for flight or the animation lab; both own their own transport.
@@ -2903,6 +2913,29 @@ public partial class GameSession : Node3D
                 ? fc.GlobalPosition
                 : _rigs[i].Camera.GlobalPosition;
         return positions;
+    }
+
+    // Which human that key or button belongs to. A pad is bound to exactly one seat by
+    // Pads.AssignPads, and the keyboard is P1's alone (HumanFlightAdapter); an unmatched device is
+    // the scripted player's, so a skip always has a skipper to name rather than a hole.
+    private int SkipperIndex(InputEvent @event)
+    {
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller is not { IsHumanPiloted: true } pilot)
+            {
+                continue;
+            }
+
+            if (@event is InputEventJoypadButton pad
+                ? pilot.PadDevices != null && System.Array.IndexOf(pilot.PadDevices, pad.Device) >= 0
+                : pilot.UseKeyboard)
+            {
+                return rig.Index;
+            }
+        }
+
+        return 0;
     }
 
     // Whether any human pilot is flying one of the two first-person views — the answer the anim

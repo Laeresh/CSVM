@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Landing-approach rows, pickup sensors and the ladder switch read the human field
 12. ☑ Cutscene staging places the episode owner on the `player` marker
 13. ☑ A downed human spectates; the mission ends when the last one is lost
-14. ☐ A cutscene fills the window
+14. ☑ A cutscene fills the window
 15. ☐ Per-pane campaign chrome
 
 ### Wave C — The screens
@@ -397,7 +397,7 @@ wreck does; with N humans that becomes N wrecks and the wait is for the last one
 last `Downed` event. `AircraftLifecycle`'s `AutoRespawnAfter` exists and is the Dogfight path;
 decision 9 rejects respawning here, so leave it unarmed for a campaign session.
 
-## B14 ☐ A cutscene fills the window
+## B14 ☑ A cutscene fills the window
 
 **Goal.** A cutscene in a splitscreen campaign session plays across the whole window rather than in
 four small copies, and the player who skips it is named.

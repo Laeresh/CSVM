@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -55,6 +56,13 @@ public sealed partial class CutsceneController : Node
     /// <summary>Raised whenever the world hold changes, so the session can suspend the mission
     /// director alongside its own per-step world update (code 20 stops both).</summary>
     public Action<bool>? WorldHeld;
+
+    /// <summary>Raised as an episode takes the window and again as it gives it back, so a
+    /// splitscreen session can play the cutscene across the whole window rather than in N small
+    /// copies of one camera path. Both exits (the definition ending and a skip) go through the
+    /// restore, so both hand it back; <see cref="BindRigs"/> re-raises it for an episode that
+    /// started before the panes existed, which is every mission intro.</summary>
+    public Action<bool>? FillsWindow;
 
     /// <summary>Puts the player into the airframe codes 965 to 967 name, and carries out whatever
     /// else the raised code asks of the mission (<see cref="AirframeHandover"/>). The session fills
@@ -333,6 +341,7 @@ public sealed partial class CutsceneController : Node
             return;
         }
 
+        FillsWindow?.Invoke(true);
         ApplyPresentation(Presenting);
         ApplyOutOfFlight(OutOfFlight);
         if (AiParked)
@@ -415,6 +424,7 @@ public sealed partial class CutsceneController : Node
             GD.Print(Anim == animName
                 ? $"cutscene: '{animName}' has the session"
                 : $"cutscene: '{Anim}' has the session, its callee '{animName}' raising the first code");
+            FillsWindow?.Invoke(true);
         }
 
         _codeRoot = rootName;
@@ -450,14 +460,17 @@ public sealed partial class CutsceneController : Node
     /// <summary>The player's skip. Force-stops the definition the way the original's state core
     /// does, then restores the gameplay state the definition's own RESET_STATE asserts, so the
     /// remaining beats being dropped cannot leave the mission held, hidden or unflyable.
-    /// Declined, and the key press left to whatever else reads it, while no skip is armed.</summary>
-    public bool Skip()
+    /// Declined, and the key press left to whatever else reads it, while no skip is armed.
+    /// <paramref name="playerIndex"/> is the human whose device it came from: any of them may
+    /// skip, so who did is something the other players are owed rather than a detail.</summary>
+    public bool Skip(int playerIndex = 0)
     {
         if (!Playing || !Skippable)
         {
             return false;
         }
 
+        Log.Info("anim", $"cutscene '{Anim}' skipped by P{playerIndex + 1}");
         if (Anim != null)
         {
             _runtime?.Stop(Anim);
@@ -625,6 +638,9 @@ public sealed partial class CutsceneController : Node
         _fov.Clear();
         Playing = false;
         Anim = null;
+        // Last, with the state it was raised alongside already down: the panes come back to a
+        // session that is flying again rather than to one still holding the world.
+        FillsWindow?.Invoke(false);
     }
 
     private void Act(int code)
