@@ -58,18 +58,18 @@ internal static class SuiteConstants
     // Authored-inactive placed roots are staged hidden and therefore contribute to this registry.
     // Instances exceed node groups where a reader wildcard def and its compiled per-instance twin
     // bind the same nodes. Both columns sit far below plain NAME matching because a compiled def
-    // binds the one instance its symbol table names (AnimRuntime.Anchors). A shared reader file
-    // no ANIMATION_DEFINITION_FILE list of the mission names registers nothing (AnimProgram).
+    // binds the one instance its symbol table names (AnimRuntime.Anchors), and because a file no
+    // mission list names registers nothing in either scope (AnimProgram), holding C2 and C5 down.
     internal static readonly (string Chapter, int Instances, int Anchors)[] Census =
     {
         ("C1", 186, 117),
         ("C1B", 28, 28),
         ("C1C", 28, 28),
-        ("C2", 192, 125),
+        ("C2", 176, 109),
         ("C2B", 28, 28),
         ("C3", 210, 133),
         ("C4", 92, 67),
-        ("C5", 166, 102),
+        ("C5", 158, 94),
     };
 
     // C1 textures spanning the three alpha classes the flatten must leave alone: opaque,

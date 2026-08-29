@@ -298,7 +298,12 @@ proof, so do not fit anything to the 37 to 42 range. A brightness that overshoot
 water was carrying a second term as well as the dim, which is a different item, not a reason to
 scale the exemption.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged tree carrying every landed item of this
+run: build clean, 2558 of 2558 units passed, 175 of 175 engine suites passed with engine errors
+clean across 4 shards, and all 16 golden shots hash-identical, in 144.7 s against a 180 s budget.
+The one failure the merged tree produced was `destructible-census`, which no per-item agent could
+have seen, and it was B12's intended effect meeting a pinned count rather than a regression: see
+the census re-pin's own commit.
 
 ## A2 ☐ `BL-322`: C5's lit facades render at 0.58 to 0.66 of the original with WorldLight already at clamp
 
@@ -409,7 +414,12 @@ this disc swap on a flyable aircraft, or only ever ran it on the bare library mo
 question this pass did not settle; see the restored `BL-546` for the two competing readings and
 what would separate them.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged tree carrying every landed item of this
+run: build clean, 2558 of 2558 units passed, 175 of 175 engine suites passed with engine errors
+clean across 4 shards, and all 16 golden shots hash-identical, in 144.7 s against a 180 s budget.
+The one failure the merged tree produced was `destructible-census`, which no per-item agent could
+have seen, and it was B12's intended effect meeting a pinned count rather than a regression: see
+the census re-pin's own commit.
 
 **Original approach (kept for reference).**
 
@@ -508,7 +518,12 @@ landing): `c1-clouds-before.png`, `c1-clouds-after2.png`, `c1-clouds-before-afte
 mirrors) and `.\RunTests.ps1 -Quick` (226 units, 13 engine suites) both green; `dotnet build` 0
 warnings; `CheckCommentCaps.ps1 -Summary` clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged tree carrying every landed item of this
+run: build clean, 2558 of 2558 units passed, 175 of 175 engine suites passed with engine errors
+clean across 4 shards, and all 16 golden shots hash-identical, in 144.7 s against a 180 s budget.
+The one failure the merged tree produced was `destructible-census`, which no per-item agent could
+have seen, and it was B12's intended effect meeting a pinned count rather than a regression: see
+the census re-pin's own commit.
 
 **Original approach (kept for reference).**
 
@@ -649,7 +664,12 @@ predicts. In dropped frames it is a mild improvement: one dropped frame every 13
 every 33 s. The item's goal as written, that the 24 to 29 ms pause goes, is not reachable by
 attacking allocators, and the reading it was written from was the transient.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged tree carrying every landed item of this
+run: build clean, 2558 of 2558 units passed, 175 of 175 engine suites passed with engine errors
+clean across 4 shards, and all 16 golden shots hash-identical, in 144.7 s against a 180 s budget.
+The one failure the merged tree produced was `destructible-census`, which no per-item agent could
+have seen, and it was B12's intended effect meeting a pinned count rather than a regression: see
+the census re-pin's own commit.
 
 **For C22.** This item changed nothing in `GodotWorldQuery` or on the physics tick, so C22's
 baseline is unaffected by it; the `--fly` C1 `physics_ms` sat at 0.06 to 0.09 ms throughout, and the
@@ -824,7 +844,12 @@ ordinary; the judgement is only in not widening the contract.
 obvious instrument, but the failure has been seen once in ten runs, so name a run count that would
 mean something, or make the failure reproducible first by forcing the contended condition.>
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged tree carrying every landed item of this
+run: build clean, 2558 of 2558 units passed, 175 of 175 engine suites passed with engine errors
+clean across 4 shards, and all 16 golden shots hash-identical, in 144.7 s against a 180 s budget.
+The one failure the merged tree produced was `destructible-census`, which no per-item agent could
+have seen, and it was B12's intended effect meeting a pinned count rather than a regression: see
+the census re-pin's own commit.
 
 **⚠ Traps.** Do not widen the assertion to a tolerance: zero allocations is the contract
 `PerfSample` makes, and a tolerance would hide a real regression, which is exactly the regression
@@ -878,7 +903,12 @@ reads `BlastCoverCensus`, which is deliberately left per-body. `blast-neighbor-s
 `air-to-air` is the canary that the dedupe did not leak into the aircraft branch, which is keyed
 per plane already.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged tree carrying every landed item of this
+run: build clean, 2558 of 2558 units passed, 175 of 175 engine suites passed with engine errors
+clean across 4 shards, and all 16 golden shots hash-identical, in 144.7 s against a 180 s budget.
+The one failure the merged tree produced was `destructible-census`, which no per-item agent could
+have seen, and it was B12's intended effect meeting a pinned count rather than a regression: see
+the census re-pin's own commit.
 
 **Original approach (kept for reference).**
 
@@ -936,7 +966,12 @@ here reads the follower's speed yet, a candidate for a follow-up). `FlightContro
 assist. `SelectRankedTarget` (the AI gunner's own acquisition, `BL-523`'s territory) is untouched:
 it already filters to `c.Source is FlightController`, so it would have ignored a boat regardless.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged tree carrying every landed item of this
+run: build clean, 2558 of 2558 units passed, 175 of 175 engine suites passed with engine errors
+clean across 4 shards, and all 16 golden shots hash-identical, in 144.7 s against a 180 s budget.
+The one failure the merged tree produced was `destructible-census`, which no per-item agent could
+have seen, and it was B12's intended effect meeting a pinned count rather than a regression: see
+the census re-pin's own commit.
 
 Suites (foreground, `$env:CSVM_DATA_ROOT="Z:\CSVM"`):
 `.\RunTests.ps1 -Suite "campaign-surface-vehicles,target-pool,target-selection,aim-assist,targeting-candidates" -SkipUnits -SkipGoldens`
