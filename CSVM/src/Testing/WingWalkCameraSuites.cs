@@ -250,7 +250,7 @@ internal static class WingWalkCameraSuites
     }
 
     // The capture as a flown session runs it: started through the mission-trigger seam the approach
-    // table starts it with, on a realtime clock, with each aircraft stepping itself (INSTR-26).
+    // table starts it with, on a realtime clock; this leg isolates the authored camera choreography.
     private static void Play(TestContext ctx, TestWorld world, PlayerRig rig,
         CutsceneController cutscene, FlightRoster roster, FlightController captured,
         StringBuilder report)
@@ -316,8 +316,6 @@ internal static class WingWalkCameraSuites
                 var eye = camera?.GlobalTransform.Origin ?? Vector3.Zero;
                 float frameOff = composed ? FrameOffset(world, subject) : -1f;
                 cutscene.Tick();
-                rig.Controller?._PhysicsProcess(StepDt);
-                captured._PhysicsProcess(StepDt);
                 if (!composed)
                 {
                     continue;

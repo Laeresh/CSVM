@@ -1368,24 +1368,13 @@ public partial class FlightController : Node3D
     /// method's test callers exercise the receiving half alone, with no ram and no grace to arm.</summary>
     public void ArmCollisionGrace() => _lifecycle.ArmCollisionGrace();
 
-    public override void _PhysicsProcess(double delta)
-    {
-        float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
-        if (dt <= 0f)
-        {
-            return;   // the session drives SimStep itself this frame (see GameClock.PhysicsDt)
-        }
-        SimStep(dt);
-    }
-
-    /// <summary>One flight step: input, the flight model, collision, weapons and the stunt clock.
-    /// Public because a non-realtime clock has the session call this instead of Godot's physics
-    /// tick — the halt (P / gamepad Start) simply stops the calls.</summary>
+    /// <summary>One session-simulation flight step: input, flight model, collision, weapons and
+    /// the stunt clock.</summary>
     public void SimStep(float dt)
     {
         // An inert airframe takes no step at all — no stunt clock, no input, no flight
         // model, no collision sweep, no weapons. Guarded here rather than in the session's loop so
-        // every caller (the loop, this node's own _PhysicsProcess, a suite) honours it in one place.
+        // every caller (the session simulation or a focused suite) honours it in one place.
         if (Inert)
             return;
 
@@ -1395,7 +1384,7 @@ public partial class FlightController : Node3D
         Stunt?.Tick(dt);
 
         // The near-miss accumulator drains on the sim clock like everything else here; the pool
-        // registers passes into it earlier in the same step (GameSession.DriveSimSteps order).
+        // registers passes into it earlier in the same SessionSimulation step.
         _warningShots?.Tick(dt);
 
         // Race players finish STAGGERED by index, exercising the real one-finishes-while-others-fly
@@ -2448,6 +2437,18 @@ public partial class FlightController : Node3D
             _cam?.CrashView(at, _model.VelocityDir);
         if (_hudCanvas != null)
             _hudCanvas.Visible = false;
+        LeaveFirstPerson();
+    }
+
+    // The crash camera is an external vantage, so the first-person hiding comes off with the cut.
+    // ⚠ Not something _Process can do for us: it writes nothing to the camera while crashed, so
+    // the last flying frame's state would stand for the whole crash. The interior lives OUTSIDE
+    // PlaneModel under the overlay pass, which is why hiding the airframe does not take it with it.
+    private void LeaveFirstPerson()
+    {
+        Cockpit?.Apply(_cam?.ViewMode ?? PilotViewMode.Chase, firstPerson: false);
+        CockpitPass?.Deactivate();
+        _panelShown = false;
     }
 
     // The dead hull flying itself, on the same model it flew alive: the original gates nothing in

@@ -11,9 +11,8 @@ namespace CSVM.Session;
 /// gunners. Registered with the shared pool so every player's aim assist sees them. Detail on
 /// the wake mechanisms (<see cref="WakeAll"/>, <see cref="SetActivatedUnder"/>) and the tree
 /// order this depends on: this module's docs/architecture.md entry.
-/// ⚠ Must step from both <see cref="_PhysicsProcess"/> and <c>GameSession.DriveSimSteps</c>, and
-/// must be added to the tree after the zeppelin runtime. A plain class stepped from
-/// <c>DriveSimSteps</c> alone left every emplacement inert in ordinary play.
+/// SessionSimulation steps this after the zeppelin runtime, so a slung emplacement reads its
+/// host's moved pose. It has no independent Godot tick.
 /// ⚠ Shipped `ACTIVATED` is the default; <see cref="WakeAll"/> and <see cref="SetActivatedUnder"/>
 /// are the only two wake paths, both logged. Never wake a turret silently.
 /// </summary>
@@ -51,16 +50,6 @@ public sealed partial class TurretEmplacementRuntime : Node
             }
             return n;
         }
-    }
-
-    public override void _PhysicsProcess(double delta)
-    {
-        float dt = Utils.GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
-        if (dt <= 0f)
-        {
-            return;   // the session drives SimStep itself this frame (see GameClock.PhysicsDt)
-        }
-        SimStep(dt);
     }
 
     /// <summary>The <c>WAKEUP_TURRETS</c> stand-in: wakes every dormant emplacement, one

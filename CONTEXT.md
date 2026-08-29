@@ -128,6 +128,11 @@ _Avoid_: freeze, frozen, stop, stopped
 One cause of a halt. The clock advances only when there are none.
 _Avoid_: halt flag, pause flag, halt source
 
+**Session simulation**:
+The haltable, ordered advancement of a running session's flight, combat, mission, radio, effects,
+and match state. Authored animation and presentation are outside it.
+_Avoid_: game loop, world simulation, physics loop, world tick
+
 **Pause**:
 A player-requested halt, as distinct from a halt any other reason caused.
 _Avoid_: using it for a halt a results board caused

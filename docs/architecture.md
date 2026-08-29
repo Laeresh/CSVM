@@ -326,6 +326,7 @@ clusters they delegate to.
 
 - `src/Session/Launcher.cs` — Main.tscn root: the once-per-process bootstrap (args → paths → log/seed/window), shader-global registration, persistent camera/lighting, launchscreen + menu flow; instantiates a `GameSession` session node per launch.
 - `src/Session/GameSession.cs` — the per-launch session node (instantiated by `Launcher`): builds one session — rigs, world, plane, HUD, weather — from its `SessionSpec`; return-to-menu `QueueFree`s it.
+- `src/Session/SessionSimulation.cs` — the plain-C# owner of one haltable, ordered session-simulation step; `GameSession` maps its named runtime phases to the existing subsystem owners.
 - `src/Session/ExtractionStamp.cs` — boot-time check of `extracted/VERSION.json` (the provenance stamp the extraction scripts write): schema const + at most one warning line when the stamp is stale, missing, or unreadable.
 - `src/Session/LiveryResolver.cs` — resolves each player's livery against a `SessionSpec`: the paint catalog, the pattern-mask library, and the per-player scheme pick.
 - `src/Session/SpawnPicker.cs` — resolves each player's flight spawn against a `SessionSpec`: the shared spawn-list index and the per-player point (or the `--spawn-at=` override); the plain `IFlightStarts`.
@@ -4666,26 +4667,37 @@ The `--stage=empty` test stage: a flat collidable 20 km ground plane under a 100
 for a chapter world so flight/ballistics runs boot in ~2 s with nothing else in the frame.
 
 ## src/Session/GameSession.cs
-The per-launch orchestrator: `Launcher` constructs it from `(SessionSpec, LauncherContext)`, then
+The per-launch orchestrator: `Launcher` constructs it from `(SessionSpec, LauncherContext)` and
 `StartSession` runs ordered build phases over one local `BuildState`. It owns the session clock,
-world root, panes, mode runtimes and archive/resource lifetimes, while delegating aircraft assembly
-and membership to `FlightRoster`, world construction to `WorldSession`, effects/crash staging to
-`WorldEffectsFactory`, and scripted probes/captures to the Launcher-owned testing services.
-`BuildFlightRigs` translates resolved session facts into the roster's four grouped contracts; all
-initial humans and later command-line/mission/wave/generator AI enter through that aggregate.
-`AllAircraft` combines the ordered rig controllers with the roster's AI view for simulation-facing
-consumers. Exit frees the session subtree atomically, asks the roster to release non-node membership,
-and disposes only the non-node resources this orchestrator owns.
+world root, panes, mode runtimes and resource lifetimes, delegating aircraft assembly and membership
+to `FlightRoster`, world construction to `WorldSession`, and effects staging to `WorldEffectsFactory`.
+After the synchronous build it constructs one `SessionSimulation`. `_PhysicsProcess` requests one
+realtime step; `_Process` requests each parent-driven `GameClock` substep. Debug/CLI forces remain
+outer-frame input injection. The nested runtime adapter maps named phases to concrete owners, which
+do not self-step from Godot callbacks. All human and dynamic AI aircraft enter through `FlightRoster`;
+`AllAircraft` combines its AI view with ordered rig controllers for non-step consumers. Exit frees
+the session subtree atomically and releases only the non-node resources this orchestrator owns.
+
+## src/Session/SessionSimulation.cs
+The session simulation: one plain-C# module owning hold admission and the exact order of flight,
+combat, mission, radio, effects and match advancement. `Step(dt)` snapshots eligible AI membership
+at entry, then advances incoming fire → projectiles → human aircraft → zeppelins → emplacements →
+generators → captured AI → landing approaches → Instant Action → campaign → radio → smoke → tags →
+AI voice → Versus. A generator-spawned aircraft therefore first flies on the next step, including
+the next fixed-accumulator substep in the same rendered frame. A landing or campaign callback that
+raises `SimHeld` halts the remaining phases immediately. Exceptions are fail-fast. Authored animation,
+cutscene presentation, weather, lens flare, terrain extension and wall-time watches stay outside.
+`ISessionSimulationRuntime` is the named recording/production seam; it is not a participant registry.
 
 ## src/Utils/GameClock.cs
 The session's simulation clock: `BeginFrame(wallDelta)` (first thing in `GameSession._Process`)
-sets `Steps` + `Dt`; consumers read `FrameDt`, or loop `Steps` times on `Dt`. Modes: Realtime,
-FixedAccum (interactive anim lab), FixedStep (scripted runs / `--det`); `Halted` is orthogonal.
-`SimHeld` freezes the `PhysicsDt` consumers alone, which is how a cutscene's world hold reaches an
-aircraft stepping itself on a realtime tick; `FrameDt` is untouched, so animation keeps playing.
+sets `Steps` + `Dt`; `GameSession` translates those into requests to `SessionSimulation`. Modes:
+Realtime, FixedAccum (interactive anim lab), FixedStep (scripted runs / `--det`); `Halted` is
+orthogonal. `SimHeld` is the authoritative session-simulation hold read by `SessionSimulation`;
+`FrameDt` is untouched, so animation keeps playing.
 On a realtime session `AnimRuntime` is a `PhysicsDt` consumer too (its `_PhysicsProcess`), so the
-world's motions step on the same tick as the aircraft and the objective graph; its `_Process` takes
-over only under `SimHeld`, a halt, or a parent-driven mode. Regression: the `anim-clock-realtime`
+authored motions step on the physics tick; its `_Process` takes over only under `SimHeld`, a halt,
+or a parent-driven mode. Regression: the `anim-clock-realtime`
 suite. Published as `GameClock.Current` (session-scoped, nulled on teardown; null = raw frame delta).
 
 ## src/Utils/Log.cs
@@ -5849,9 +5861,8 @@ place. Format and decode: `formats/ai-nets.md`, `formats/mission-entities.md`,
 The world AA emplacements: `TurretController.BuildEmplacements` resolved against the
 built chapter world (`AnimRuntime.FindNodes`; a multi-segment `NODES` path scopes each further
 segment to the prior match's subtree), registered with the shared pool so every player's aim
-assist sees them (`ProjectilePool.CollectTurrets`), and stepped from its own `_PhysicsProcess` on a
-realtime clock or from `GameSession.DriveSimSteps` on a parent-driven one — added to the tree after
-the zeppelin runtime, so a slung mount reads its ride's moved pose under either. Built
+assist sees them (`ProjectilePool.CollectTurrets`), and stepped by `SessionSimulation` after the
+zeppelin runtime, so a slung mount reads its ride's moved pose. Built
 unconditionally with a chapter flight — the original's world placement pass is unconditional too.
 Observability: the `turrets: N world emplacement(s) placed…` census line plus per-turret
 `woken`/`engaging` breadcrumbs. Pinned by the `world-turrets` suite (C1 census 74, C4 census 92)

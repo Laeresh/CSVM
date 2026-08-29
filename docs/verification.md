@@ -497,14 +497,15 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **INSTR-15** — **Report a collider-swap census by direction, never as a signed sum.** A death both
   disables the healthy collider and enables wreck colliders, so a net count can read positive while
   the real removal happened — count OFF and ON separately (see `Probes.EnabledColliders`).
-- **INSTR-14** — **Every automated check here runs on a PARENT-DRIVEN clock, so a consumer stepped
-  only from `GameSession.DriveSimSteps` is invisible to all of them.** `--det` — implied by
-  `--run-tests`, `--screenshot=` and every other flag that drives a session by itself — makes
-  `GameClock.ParentDriven` true, and a realtime (interactive) session never enters that method at
-  all: it paces each consumer from its own `_PhysicsProcess`. Measured: E11's wave sequencer was
-  stepped only there, so waves 2 to 4 could never arrive at the controls, while its suite and its
-  scripted probes were both green. A per-step consumer belongs in one
-  method called from both paths, the way the match clock already was.
+- **INSTR-14** — **Every automated session check runs on a PARENT-DRIVEN clock, so verify the shared
+  step owner rather than either clock adapter alone.** `--det` — implied by `--run-tests`,
+  `--screenshot=` and every other flag that drives a session by itself — makes
+  `GameClock.ParentDriven` true. Measured before `SessionSimulation`: E11's wave sequencer lived
+  only in the parent-driven path, so waves 2 to 4 never arrived at the controls while every scripted
+  check stayed green. Now realtime requests one `SessionSimulation.Step` from `_PhysicsProcess` and
+  parent-driven modes request `Steps` calls from `_Process`; per-step consumers belong only to that
+  module's named order. Pin order, hold and admission at the `ISessionSimulationRuntime` seam, and
+  keep an interactive smoke check for the two tiny adapters.
 
 - **INSTR-16** — **A capture taken on the very first rendered frame can beat the first per-frame
   publish.** `EffectAmbience`'s camera pose is written once per frame by `WeatherRig.Tick`; an
@@ -582,13 +583,13 @@ loss. What the engine renders was decodable from the authored constants + oscill
   and ends 128 m above the player and 302 m behind. A green `wingman-station` is a statement about
   the law, never about the sortie.
 
-- **INSTR-26** — **A suite CAN model the realtime path: install a Realtime `GameClock` as
-  `GameClock.Current` and drive the node's own `_PhysicsProcess`, rather than the `SimStep` every
-  other leg calls.** INSTR-14 says the automated checks all run parent-driven, which is how they are
-  written, not a limit on what they can do; a defect that lives in the self-stepping path is
-  reachable from a suite as soon as one leg paces a node the way Godot's tick does. Measured with
-  the cutscene clock hold removed: `wingman-station`'s hold leg reads 4809.9 m of drift over a 40 s
-  hold and goes red, while every `SimStep`-driven leg beside it stays green.
+- **INSTR-26** — **Model realtime at the clock-adapter boundary, not by giving each consumer a
+  private callback again.** Install a Realtime `GameClock`, confirm it is not `ParentDriven`, and
+  request one `SessionSimulation.Step` with the physics delta. INSTR-14's automation blind spot is now
+  removed by the shared step owner: the engine-free recording adapter pins order, hold, failure and
+  next-step admission, while an interactive smoke check pins the small Godot adapter. The former
+  wingman hold leg measured 4809.9 m of drift when a consumer's own callback missed the hold; that
+  callback topology is intentionally gone.
 
 - **INSTR-27** — **On a realtime leg a stand-in flies, so read the STATE under test, never a
   presence flag that its flying can also answer.** `FlightController.InPlay` folds `Inert` together

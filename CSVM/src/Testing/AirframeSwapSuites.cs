@@ -896,7 +896,7 @@ internal static class AirframeSwapSuites
     // The capture as a flown session runs it: the mission's own definition played through the
     // runtime on a realtime clock, with the AI list the park and reveal codes actually see. The
     // dispatched leg raises 967 by itself, so it can see neither the 913/914 pair the capture's own
-    // wing walk wraps that code in nor an aircraft stepping itself (INSTR-26).
+    // wing walk wraps that code in; this leg isolates the authored swap choreography.
     private static void PlayTheCapture(TestContext ctx, TestWorld world, Staged staged,
         (string Anim, int Code, string Root) call, StringBuilder report)
     {
@@ -924,8 +924,6 @@ internal static class AirframeSwapSuites
                 clock.BeginFrame(StepDt);
                 world.Runtime.Advance(StepDt);
                 cutscene.Tick();
-                rig.Controller?._PhysicsProcess(StepDt);
-                captured._PhysicsProcess(StepDt);
                 if (!swapped && !ReferenceEquals(rig.Controller, before))
                 {
                     swapped = true;
