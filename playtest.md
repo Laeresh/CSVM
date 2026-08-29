@@ -496,6 +496,10 @@ reasons that have nothing to do with any of these checks.
 
 ### CM08 (C1B/M03) · the patrol boats, targeting on
 
+```powershell
+./RunGame.ps1 --campaign=<profile>:7
+```
+
 - `PT-87` `[Own]` **A patrol boat brackets on the HUD and takes a gun lock** (`BL-598`).
   The four boats drove their nets and took hits but could not be targeted, because a surface
   vehicle reached none of the candidate lists. The decode puts it on `VehicleList`, the same list
