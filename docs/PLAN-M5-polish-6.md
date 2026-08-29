@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — World lighting and the fade band
 
-1. ☐ `BL-304`: water takes the WorldLight dim the original renders it without
+1. ❌ `BL-304`: water takes the WorldLight dim the original renders it without
 2. ☐ `BL-322`: C5's lit facades render at 0.58 to 0.66 of the original with WorldLight already at clamp
 3. ☐ `BL-538`: a dark band crosses the large buildings at the range the templates clutter fades out
 
@@ -161,7 +161,105 @@ not a conflict, and the run-5 sortie does not judge `BL-598`.
 
 # Wave A — World lighting and the fade band
 
-## A1 ☐ `BL-304`: water takes the WorldLight dim the original renders it without
+## A1 ❌ `BL-304`: water takes the WorldLight dim the original renders it without
+
+**Closed without code.** Closed on the user's decision that footage-derived and screenshot-derived
+measurements — this project's repeated failure mode — do not drive a fidelity change by themselves,
+and `BL-304` rests entirely on one such measurement. Everything found while investigating strengthens
+that call rather than the fix: the shipped gamez data authors `lighting: true` on every water tile
+exactly like ordinary terrain, so nothing in the original's own data marks water exempt; a bounded
+Ghidra search of `crimson.exe` (below) found no routine that exempts a surface from SUNLIGHT
+modulation by soil type, material flag or class; the raw C2B A/B needed a rain-streak correction
+before it recovered anything close to CAP-11's 0.78 ratio; a real 3–6% overshoot remains unexplained
+after fog was tested out directly; and the `SoilId == Water` key silently covers non-ocean water
+CAP-11 never measured, including a node literally named `pool` in C3. A `SceneBuilder` override with
+no authored field and no decoded routine behind it is exactly the invented-rule failure mode this
+project names as its most common one, fitted to two screenshots. The code is reverted;
+`CSVM/src/Mech3/SceneBuilder.cs` is byte-identical to its committed state.
+
+**The decode search (bounded, then stopped on instruction).** Working outward from `BL-332`'s
+decoded sunlight pair: `FUN_00472ea0` (the zone-apply, called once per fog-zone/mission change) calls
+`FUN_004dbdb0` (diffuse) and `FUN_004dbce0` (ambient) on the `sunlight` gamez node's own `Light`
+class instance (`D:\zipper\gamez\zclass\Light.c`) — these are the light object's own property
+setters, not a per-surface test. The renderer's per-material draw setup (`FUN_005a4210`, called from
+the polygon-submission code `FUN_005c0ff0`/`FUN_005d1940` in `zvid_ddd3d.c`) toggles
+`ALPHABLENDENABLE`/`SHADEMODE`/`ZWRITEENABLE`/`SRCBLEND`/`DESTBLEND` keyed on the texture's own blend
+field (`tex+0x10`, matching `BL-508`'s existing decode of that same field), never on soil id, and
+never touches a lighting-enable state. Vertex colours reaching that polygon-submission code are
+already fully computed (packed with alpha as a finished ARGB dword), which means the actual
+bake-in-SUNLIGHT-or-don't decision, if a per-surface one exists at all, happens earlier — in a
+model/mesh load-time colour bake this search did not locate among the codebase's ~8,400 functions.
+The one confirmed soil-id-keyed special case found anywhere in the binary is unrelated to rendering:
+`FUN_005ad330` tests `material+0x20 == 1` (water) for weapon-impact effects (splash vs explosion),
+not lighting. The `BL-070` "same should-be-exempt family" analogy this item leaned on is itself
+undecoded — `BL-070`'s own poleflare entry says outright that it "needs an original-game A/B" — so
+that comparison was two unconfirmed hunches supporting each other, not one decoded case backing
+another. **The absence of any such routine is itself the result:** nothing found argues FOR a
+soil-based exemption, and the data (every water tile authoring `lighting: true`) argues against one.
+
+**The measurement (kept — this is the useful residue of the item).**
+
+*Exact commands (both frames 1280×720, `CSVM_DATA_ROOT=Z:\CSVM`):*
+```
+.\RunProbe.ps1 --fly --chapter=C2B --mission=IA1 "--pos=-3843,200,-1101" --det --frames=30 "--screenshot=<out>\baseline.png"   # built WITHOUT the fix
+.\RunProbe.ps1 --fly --chapter=C2B --mission=IA1 "--pos=-3843,200,-1101" --det --frames=30 "--screenshot=<out>\postfix2.png"  # built WITH the fix
+```
+against `playtest/CAP-11/t0.5-c2b-spawn-ocean.png` (the original reference, already 1280×720 in the
+repo). *Exact boxes* (pixel `x0,y0,x1,y1` in that 1280×720 frame, greyscale mean):
+`right=(750,660,950,700)`, `left=(60,660,260,700)`. These are NOT CAP-11's own boxes —
+`playtest/CAP-11/README.md` line 94 says those coordinates live only in "the CAP-11 analysis
+conversation" and are not in the repo, so they cannot be reproduced; this is a real, reportable
+instrumentation gap, not a failure to look.
+
+*Naive box means do not reproduce CAP-11's ratio.* Baseline 43.8 (right) / 44.89 (left); original
+51.77 / 52.03 in the same boxes → ratio **0.846 / 0.863**, not CAP-11's 0.784. Post-change 57.44 /
+56.01 → post/orig **1.109 / 1.077**, an 8–11% overshoot past the original.
+
+*Root cause of the box mismatch: our render carries visible rain streaks CAP-11's own footage
+does not.* C2B IA1 rains below the cloud cover; ours draws one-pixel-wide streaks at full
+resolution, while CAP-11's 2560-wide, compressed video capture swallows the same streaks
+(`playtest/CAP-11/README.md`'s own caveat: "our low-shot boxes still carry slight streak
+contamination"). Per-column means inside each box confirm it: several columns run 45–83 against a
+flat ~40–41 median everywhere else — rain, not water texture. Filtering out every column whose mean
+exceeds the box's median by more than 3 (same column set applied to both frames, since `--det`
+pins the precip seed identically) gives a streak-corrected reading: baseline 40.6 (right, 159/200
+columns kept) / 39.97 (left, 139/200 kept); ratio against the SAME unfiltered original (which needs
+no filtering) is **0.784 (right) / 0.768 (left)** — the right box lands on CAP-11's 0.784 almost
+exactly, the left is close. Filtered post-change: 54.66 / 53.55, i.e. post/orig **1.056 / 1.029** —
+a real but much smaller overshoot than the naive 8–11%. This is a derived, contamination-corrected
+approximation of CAP-11's instrument, not a reproduction of its own lost box, and the corrected
+baseline/original absolute values (40.6/51.77, 39.97/52.03) still sit a few units under CAP-11's
+stated 42.0–42.5/53.9 — consistent with box placement differing enough to shift both sides together
+without breaking the ratio, but not decisive proof of hitting the same patch of water.
+
+*The plan's own overshoot explanation does not hold up.* Traps says an overshoot "means the water
+was carrying a second term as well as the dim" and the first landing text pointed at
+`csky_light_spill` and the fog mix. Testing that: a `--no-fog` capture at the same pose gives an
+IDENTICAL filtered water mean to the fogged one (54.66 vs 54.66, 53.55 vs 53.55, to two decimals) —
+fog contributes nothing measurable to this near-range, low-altitude sample, so **the fog half of
+that explanation is wrong and is retracted**. `csky_light_spill` (`CSVM/shaders/csky_lights.gdshaderinc`)
+only adds anything within a `LIGHT_STATE` point light's range, and the C2B low pose is open ocean far
+from any lit structure, so a nonzero spill contribution here is architecturally implausible, though
+no on/off flag exists to isolate it directly — this stays unconfirmed rather than asserted. The
+residual ~3–6% overshoot (corrected measure) is real and consistent across both boxes but its cause
+is not established.
+
+*Scope is wider than CAP-11 tested.* `SoilId == SurfaceRegistry.Water` is a material property, not
+an "is this the ocean" flag, so the exemption applies uniformly wherever the original authors that
+soil id. Census across all 8 chapters' gamez data (mesh count carrying the water material): C1 48,
+C1B 144, C1C 144, C2 82, C2B 144, C3 348, C4 12, C5 163. C3's water meshes include one node literally
+named `pool` — a non-ocean water body. CAP-11 measured open ocean only (C1B, C2B); the pool and any
+other non-ocean water surface are exempted on the same soil-id reasoning but have no original-game
+measurement behind them.
+
+An 8-chapter `--freecam` sanity sweep (C1/C1B/C1C/C2/C2B/C3/C4/C5) built clean at exit 0 with no new
+errors and unchanged mesh/node counts; `dotnet build`/`dotnet format --verify-no-changes`/
+`CheckCommentCaps.ps1` are clean. The full golden suite was not run here (orchestrator's job); the
+manifest shots carrying open water are named below. `WorldLight` itself was not retuned. This
+verification ran against a build carrying the since-reverted `SceneBuilder` exemption; it is kept
+here as the record of what was checked, not as evidence for a change now closed.
+
+**Original approach (kept for reference).**
 
 **Goal.** Water renders at the original's brightness in a matched pose: the C2B ocean foreground
 reads about 53.9 where it now reads 42.0 to 42.5, with the rest of the world's `WorldLight`
@@ -175,15 +273,12 @@ the original within 7%. C1B's night ocean points the same way (original 37 to 42
 23) but is noisy, because moon glitter and wave texture vary with screen position, so the night
 number is support rather than proof. The candidate is that the water material should be exempt from
 `csky_world_light`, the same should-be-exempt family as `BL-070`'s poleflare glows.
-<TODO: re-verify still-open against the code.>
 
 **Approach.** Find where the water material is built and whether it goes through the shared
 `csky_world_light` modulation, then exempt it. The mechanism claim is a candidate and not a
 finding, so the first deliverable is confirming that the water pass is in fact modulated and that
 removing the modulation lands on 53.9 rather than past it; a ratio that comes out at 0.78 by
-coincidence of two other terms is the reading to rule out. Decode lane:
-<TODO: name the `crimson.exe` routine that applies or skips SUNLIGHT modulation on the water
-surface, the way `BL-332`'s entry names `FUN_00472ea0` for the sunlight pair.>
+coincidence of two other terms is the reading to rule out.
 
 **Model recommendation.** Medium. The change is small and the measurement is already taken; the
 judgement is whether the candidate mechanism is the real one, which is a confirm-or-disprove task
@@ -193,13 +288,17 @@ rather than a design one.
 `playtest/CAP-11/t0.5-c2b-spawn-ocean.png`, reading the foreground water the A/B measured. Take the
 baseline first: the pre-change number must be seen to reproduce 42.0 to 42.5 before the post-change
 number means anything. Then the full 8-chapter `--freecam` regression, plus whichever goldens carry
-water. <TODO: name the goldens in `analysis/goldens/manifest.json` whose shots contain water.>
+water: `c1b-night-sea`, `c2b-rain`, `c3-island` by name (open water is explicit in their `exercises`
+text); `c1-waterfall` is a maybe (its own water-soil pool may or may not sit in that shot's frame —
+its falls/mist geometry is a separate, non-water-soil material either way).
 
 **⚠ Traps.** The `WorldLight` scalar itself is `CAP-11`-calibrated on terrain and must not move;
 this item exempts one material from it and does not retune it. C1B's night ocean is support and not
 proof, so do not fit anything to the 37 to 42 range. A brightness that overshoots 53.9 means the
 water was carrying a second term as well as the dim, which is a different item, not a reason to
 scale the exemption.
+
+**Verified.** <pending orchestrator run>
 
 ## A2 ☐ `BL-322`: C5's lit facades render at 0.58 to 0.66 of the original with WorldLight already at clamp
 
