@@ -43,11 +43,14 @@ public sealed partial class CutsceneController : Node
     /// figure (BL-452).</summary>
     public const float CardOverscan = 0.02f;
 
-    /// <summary>The bespoke C1/M04 intro, and the one the other twelve story missions share. ⚠ The
+    /// <summary>The definitions a story mission's start list plays as its opening movie: the
+    /// bespoke C1/M04 intro, the one the other twelve share, and C3/M03's cargo zeppelin camera,
+    /// which no list names (its start anim <c>calldestroy_the_cargozep</c> calls it). ⚠ The
     /// authored codes do NOT identify a cutscene on their own: Instant Action's own
     /// <c>player_setup</c> raises the same nine, and what the original does with them there is
     /// undecoded (docs/formats/anim-definitions/cutscenes.md).</summary>
-    public static readonly string[] IntroAnims = { "mission_intro_animation", "generic_intro" };
+    public static readonly string[] IntroAnims =
+        { "mission_intro_animation", "generic_intro", "cgzep_camera" };
 
     /// <summary>Raised whenever the world hold changes, so the session can suspend the mission
     /// director alongside its own per-step world update (code 20 stops both).</summary>
@@ -60,12 +63,20 @@ public sealed partial class CutsceneController : Node
     /// swap says no aircraft changed.</summary>
     public Func<AirframeSwapOrder, AirframeSwapResult>? SwapAirframe;
 
+    /// <summary>Code 13, which the original answers with the call its objectives runtime makes when
+    /// a primary completes and then the mission-end path. Every mission that ends by docking on a
+    /// zeppelin's hook ends on this code and on nothing else: no objective in the shipped data
+    /// completes on a landing, so unbound the docking plays out and the mission simply carries on.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public Action? MissionComplete;
+
     // The rest of the mission-script host's codes the intro definitions author. Each is the whole
     // message: the definition it sits in never qualifies it
     // (docs/formats/anim-definitions/cutscenes.md).
     private const int CodeHandoff = 1;
     private const int CodePresentation = 2;
     private const int CodeRestoreSystems = 10;
+    private const int CodeMissionComplete = 13;
     private const int CodeCamParamsFree = 666;
     private const int CodeCamParamsRestore = 667;
     private const int CodeParkAi = 913;
@@ -85,6 +96,12 @@ public sealed partial class CutsceneController : Node
         { CodeHandoff, CodeRestoreSystems, CodeRevealAi, CodeCamParamsRestore };
 
     private readonly HashSet<string> _hosted = new(StringComparer.Ordinal);
+    // Every definition of the current episode that authors a code, or has raised one. The
+    // original's player flags are written by the codes alone (11 takes flight away, 1 gives it
+    // back) and never by a definition ending, so the end-of-definition handoff below waits for
+    // these to finish as well: CM06's docking row ends with its unhook, whose handoff code comes
+    // at its own end, still playing.
+    private readonly HashSet<string> _raisers = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<int> _codes = new();
     private readonly List<FlightController> _parked = new();
     private readonly HashSet<int> _gapsLogged = new();
@@ -97,11 +114,16 @@ public sealed partial class CutsceneController : Node
     // definition belongs to. Set per dispatch, not per episode: a called definition raises its own
     // codes off its own root.
     private string? _codeRoot;
+    // The landings slot: the row definition the trigger has just started, owning the next episode
+    // whichever callee raises its first code. Null once that episode has taken it.
+    private string? _owner;
     // The world root `camera1` belongs under, so Restore can undo a definition's own reparent.
     private Node3D? _cameraHome;
     private Node3D? _bars;
-    // The staged `player` marker an intro poses, or null in a session with no aircraft stage.
+    // The staged `player` marker an intro poses, or null in a session with no aircraft stage, and
+    // the world root it was built under, so Restore can undo a definition's own reparent of it.
     private Node3D? _playerMarker;
+    private Node3D? _markerHome;
     private AircraftStage? _aircraft;
     private Node3D? _card;
     private Aabb _cardBox;
@@ -156,7 +178,10 @@ public sealed partial class CutsceneController : Node
     /// which is what a suite asserts the shape of the cutscene by.</summary>
     public IReadOnlyList<int> Codes => _codes;
 
-    /// <summary>The animation name that raised the first code, and whose end hands off.</summary>
+    /// <summary>The definition the episode belongs to, whose end hands off: the one the landings
+    /// trigger started (<see cref="Own"/>), or else the one that raised the first code. ⚠ Not
+    /// always the raiser: CM06's docking row raises no code itself and calls the definitions that
+    /// do, and the first of those ends with the aeroplane still on the hook.</summary>
     public string? Anim { get; private set; }
 
     /// <summary>The letterbox card's extent as <see cref="BindWorld"/> measured it, in the bars
@@ -182,7 +207,8 @@ public sealed partial class CutsceneController : Node
         return Mathf.RadToDeg(2f * Mathf.Atan(half / dist));
     }
 
-    /// <summary>Is this one of the two story-mission intro definitions?</summary>
+    /// <summary>Is this one of the story-mission opening definitions (<see cref="IntroAnims"/>)?
+    /// </summary>
     public static bool IsIntro(string? animName) =>
         animName != null && Array.IndexOf(IntroAnims, animName) >= 0;
 
@@ -205,6 +231,24 @@ public sealed partial class CutsceneController : Node
     public bool Hosts(string? animName) =>
         animName != null && (IsIntro(animName) || _hosted.Contains(animName));
 
+    /// <summary>Puts <paramref name="animName"/> in the landings slot: the next episode belongs to
+    /// it and ends when it does, however deep the callee that raises its first code sits. This is
+    /// the original's own slot, which holds the instance the trigger started. Call it before
+    /// starting the definition, since the first code can land inside that start.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public void Own(string animName)
+    {
+        // ⚠ Not every mission trigger starts a cutscene: an objective's WAKE_ANIM and the ladder
+        // switch go through the same call, and a slot one of those claimed would outrank the next
+        // episode's real raiser for as long as it ran.
+        if (Playing || (_runtime != null && !RaisesInClosure(animName)))
+        {
+            return;
+        }
+
+        _owner = animName;
+    }
+
     /// <summary>The world's animation runtime and the two nodes a cutscene definition drives. Run
     /// once the world is built, before any rig exists: the intro definitions start during the
     /// animation bootstrap, so their codes are hosted before there is anything to apply them to.
@@ -219,6 +263,7 @@ public sealed partial class CutsceneController : Node
             return;
         }
 
+        _markerHome = runtime.WorldRoot;
         _cutsceneCamera = First(runtime.FindNodes(CameraNode));
         // ⚠ The runtime's root, not the camera's parent right now: this binds AFTER the bootstrap,
         // by which time an intro definition has already reparented the camera into what it frames.
@@ -247,6 +292,14 @@ public sealed partial class CutsceneController : Node
         StageFlownAirframe();
         if (!Playing)
         {
+            // ⚠ The flown vehicle's node is ACTIVE once gameplay starts: `player_setup` switches
+            // `player` off and its end-of-definition reset (unrun here) back on. Left off, a later
+            // drop holds the pilot undrawn for its whole length (docs/architecture.md).
+            if (_playerMarker != null)
+            {
+                _playerMarker.Visible = true;
+            }
+
             return;
         }
 
@@ -281,6 +334,7 @@ public sealed partial class CutsceneController : Node
             case CodeCamParamsRestore:
             case CodeHandoff:
             case CodeRestoreSystems:
+            case CodeMissionComplete:
             case CodeReplacePlayer:
                 break;
             default:
@@ -302,16 +356,30 @@ public sealed partial class CutsceneController : Node
         if (!Playing)
         {
             _codes.Clear();
+            _raisers.Clear();
         }
 
         _codes.Add(code);
+        if (animName != null)
+        {
+            _raisers.Add(animName);
+        }
         if (!Playing)
         {
             Playing = true;
-            Anim = animName;
+            // The slot beats the raiser only while its definition is live, so a stale one cannot
+            // outlast it. ⚠ With no runtime yet to ask it wins outright: the intro's first code
+            // lands in the bootstrap, before the build has handed this host a runtime.
+            Anim = _owner != null
+                   && (_runtime == null || _runtime.AnimStateOf(_owner) == AnimRunning)
+                ? _owner : animName;
+            _owner = null;
+            SeedRaisers();
             _barsFlipsThisEpisode = 0;
             _lastBarsVisible = _bars?.Visible ?? false;
-            GD.Print($"cutscene: '{animName}' has the session");
+            GD.Print(Anim == animName
+                ? $"cutscene: '{animName}' has the session"
+                : $"cutscene: '{Anim}' has the session, its callee '{animName}' raising the first code");
         }
 
         _codeRoot = rootName;
@@ -337,7 +405,8 @@ public sealed partial class CutsceneController : Node
         PinBars();
         FrameBars();
         WatchBars();
-        if (_runtime != null && Anim != null && _runtime.AnimStateOf(Anim) != AnimRunning)
+        if (_runtime != null && Anim != null && _runtime.AnimStateOf(Anim) != AnimRunning
+            && !AnyRaiserRunning())
         {
             Restore("its definition ended");
         }
@@ -363,6 +432,22 @@ public sealed partial class CutsceneController : Node
         return true;
     }
 
+    private static bool AuthorsCode(AnimDefinition def)
+    {
+        foreach (var seq in def.Sequences)
+        {
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Kind == "Callback")
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private static Node3D? First(IReadOnlyList<Node3D> found) => found.Count > 0 ? found[0] : null;
 
     // The card's extent in the bars root's own frame: one mesh on or under `g1`, whose AABB carries
@@ -383,6 +468,21 @@ public sealed partial class CutsceneController : Node
         }
 
         return null;
+    }
+
+    // The question the slot is claimed on, asked of the whole call closure: a row that raises no
+    // code itself and calls the definitions that do is the shape the slot exists for.
+    private bool RaisesInClosure(string animName)
+    {
+        foreach (var def in _runtime!.CallClosureOf(animName))
+        {
+            if (AuthorsCode(def))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // BL-452: the bars are separately-called data (docs/formats/anim-definitions/cutscenes.md),
@@ -423,6 +523,25 @@ public sealed partial class CutsceneController : Node
             GD.Print($"cutscene: '{Anim}' ran its authored RESET_STATE at the handoff");
         }
 
+        // The staged archive props go back to their switched-off base state. The reset's own
+        // OBJECT_DELETE_CHILD detaches one to the world root, where the original's walk no longer
+        // reaches it but this scene still draws it (the hangar undercarriage, left at the origin).
+        if (_aircraft != null)
+        {
+            foreach (var prop in _aircraft.Props.Values)
+            {
+                AnimRuntime.SetSubtreeActive(prop, false);
+            }
+        }
+
+        // A re-placement authored in that same block is raised here, since the reset walk above
+        // suppresses callbacks. ⚠ Before the restore codes: the hand-back reads the target it sets.
+        if (Anim != null && ResetStateAuthors(Anim, CodeReplacePlayer))
+        {
+            _codes.Add(CodeReplacePlayer);
+            Act(CodeReplacePlayer);
+        }
+
         foreach (int code in RestoreCodes)
         {
             _codes.Add(code);
@@ -448,6 +567,19 @@ public sealed partial class CutsceneController : Node
             }
 
             _cutsceneCamera.Transform = Transform3D.Identity;
+        }
+
+        // The `player` marker goes home too, and for the camera's reason above: left on the frame a
+        // definition composed itself onto, it poses the NEXT episode's aeroplane in that frame
+        // (docs/architecture.md). ⚠ After the restore codes, whose 951 reads the pose it was left in.
+        if (_playerMarker != null)
+        {
+            if (_markerHome != null && _playerMarker.GetParent() != _markerHome)
+            {
+                AnimRuntime.Reparent(_playerMarker, _markerHome);
+            }
+
+            _playerMarker.Transform = Transform3D.Identity;
         }
 
         foreach (var (camera, fov) in _fov)
@@ -506,6 +638,9 @@ public sealed partial class CutsceneController : Node
             case CodeReplacePlayer:
                 ReplacePlayer();
                 break;
+            case CodeMissionComplete:
+                MissionComplete?.Invoke();
+                break;
             case CodeRestoreSystems:
                 foreach (var pilot in Pilots())
                 {
@@ -552,6 +687,9 @@ public sealed partial class CutsceneController : Node
         if (swapped.Hidden is { } hidden)
         {
             _parked.Remove(hidden);
+            // The hide is the original's deactivate (its dead byte set), so the park no longer
+            // stands behind the inert flag: the player now counts for that aircraft's group.
+            hidden.Parked = false;
         }
 
         StageFlownAirframe();
@@ -624,6 +762,10 @@ public sealed partial class CutsceneController : Node
         {
             if (!ai.Inert)
             {
+                // Parked before inert, so a listener on the inert flip already reads the park:
+                // the original's 913 sets the hold flag and never the dead byte, and the DEDG
+                // walk keeps counting a parked vehicle (docs/formats/objectives.md).
+                ai.Parked = true;
                 ai.Inert = true;
                 _parked.Add(ai);
             }
@@ -637,6 +779,7 @@ public sealed partial class CutsceneController : Node
         foreach (var ai in _parked)
         {
             ai.Inert = false;
+            ai.Parked = false;
         }
 
         _parked.Clear();
@@ -751,5 +894,67 @@ public sealed partial class CutsceneController : Node
                 yield return pilot;
             }
         }
+    }
+
+    // The episode's code-authoring definitions, read off the owning definition's call closure at
+    // the start: a callee that has not raised anything yet (CM06's unhook, whose two codes sit at
+    // its end) is as much the episode's as one that has.
+    private void SeedRaisers()
+    {
+        if (_runtime == null || Anim == null)
+        {
+            return;
+        }
+
+        foreach (var def in _runtime.CallClosureOf(Anim))
+        {
+            if (def.AnimName is { Length: > 0 } name && AuthorsCode(def))
+            {
+                _raisers.Add(name);
+            }
+        }
+    }
+
+    // A trailing WAIT_FOR_COMPLETION never holds a runner open (docs/org/sequences.md), so a row
+    // definition can end while the callee it called last is still posing the player: the
+    // definitions that author or raised this episode's codes are what the handoff waits for.
+    private bool AnyRaiserRunning()
+    {
+        foreach (string raiser in _raisers)
+        {
+            if (raiser != Anim && _runtime!.AnimStateOf(raiser) == AnimRunning)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Does any definition of this name author the code in its RESET_STATE?
+    private bool ResetStateAuthors(string animName, int code)
+    {
+        if (_runtime == null)
+        {
+            return false;
+        }
+
+        foreach (var def in _runtime.DefsFor(animName))
+        {
+            if (def.ResetState == null)
+            {
+                continue;
+            }
+
+            foreach (var ev in def.ResetState.Events)
+            {
+                if (ev.Kind == "Callback" && (int)(ev.Data.Num("value") ?? -1f) == code)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }

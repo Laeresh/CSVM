@@ -78,7 +78,8 @@ internal sealed class MotionRuntime : IAnimMotion
     private bool _hasScale;
 
     // forward_rotation: a live rate about the launch's own perpendicular. angle(t) = rate·t +
-    // ½·accel·t², turned about `_tumbleAxis` — zero for a body that never drew a launch direction.
+    // ½·accel·t², turned about `_tumbleAxis` — zero for a body whose launch direction is vertical
+    // or absent.
     private float _tumbleRate, _tumbleAccel;
 
     private Vector3 _tumbleAxis;
@@ -154,9 +155,8 @@ internal sealed class MotionRuntime : IAnimMotion
     /// <see cref="TryContact"/> instead, from the surface it strikes.</summary>
     public string? PendingBounce { get; private set; }
 
-    // Whether this body turns at all: an authored rate AND an axis to turn it about. A
-    // vector-translation launch has the rate and no axis (see TumbleAxis) — arithmetic, not a
-    // guard against it.
+    // Whether this body turns at all: an authored rate AND an axis to turn it about. A vertical
+    // launch has the rate and no axis (see TumbleAxis) — arithmetic, not a guard against it.
     private bool Tumbles => (_tumbleRate != 0f || _tumbleAccel != 0f) && _tumbleAxis != Vector3.Zero;
 
     public static MotionRuntime? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime)
@@ -177,7 +177,6 @@ internal sealed class MotionRuntime : IAnimMotion
             _runTime = rtSafe,
         };
 
-        float RandSym() => (float)(rt._rng.NextDouble() * 2.0 - 1.0); // [-1, 1] via the seedable RNG
         float Rand(float a, float b) => a + (float)rt._rng.NextDouble() * (b - a);
 
         var gravityBlock = data.Obj("gravity");
@@ -240,12 +239,13 @@ internal sealed class MotionRuntime : IAnimMotion
 
         if (data.Obj("translation") is { } tr)
         {
-            var v0 = tr.Vec3("initial");
-            var rnd = tr.Vec3("rnd_xz");
-            v0 += new Vector3(RandSym() * rnd.X, RandSym() * rnd.Y, RandSym() * rnd.Z);
+            // `rnd_xz` is the compiled launch DIRECTION, the cache the tumble reads back; the
+            // parser built `initial` and `delta` from it and nothing here draws a random number
+            // (docs/org/objectMotion.md). ⚠ Read as a spread it walked the Barracuda ±44 m.
+            m._tumbleAxis = TumbleAxis(tr.Vec3("rnd_xz"));
             // `delta` folds straight into acceleration, never divided by run_time
             // (docs/org/objectMotion.md). InheritedLocal adds the whole inherited velocity or none.
-            m._v0 = v0 + InheritedLocal();
+            m._v0 = tr.Vec3("initial") + InheritedLocal();
             m._accel = GravityAccel() + tr.Vec3("delta");
             m._hasBallistic = true;
         }
@@ -321,28 +321,13 @@ internal sealed class MotionRuntime : IAnimMotion
         m._tumbleAccel = fwd?.Num("delta") ?? 0f;
         m._spinRate = data.Obj("xyz_rotation")?.Vec3("initial") ?? Vector3.Zero;
 
-        // A ballistic launch seeds from the node's AUTHORED rest pose, not the live one.
-        // ⚠ Three exceptions keep the live pose instead (docs/architecture.md, src/Mech3/Anim/):
-        // a placed template root, a contact-landing continuation, a takeover.
-        bool seedsFromRest = m._hasBallistic && !target.TopLevel && !continuesLanding
-                             && !rt.Motions.DrivesTransform(target);
-        if (seedsFromRest)
-        {
-            m._heldOrigin = rest.Origin;
-            m._heldRot = rest.Basis.Orthonormalized();
-        }
-
-        // Which of the four conditions above decided the seed, and the authored pose a live-pose
-        // seed declined. A pooled copy relaunching from its last flight's END pose is invisible
-        // without this: the drift only reads once the pool wraps onto the same copy (BL-511).
+        // ⚠ Do not re-seat a launch on the authored rest pose; that teleported the Barracuda to the
+        // map origin between its surfacing FromTo and its drive. The original integrates from the
+        // node's live translation and writes no start position (docs/org/objectMotion.md).
         if (rt.DebugMotions && m._hasBallistic)
         {
-            string seed = seedsFromRest ? "rest"
-                : target.TopLevel ? "live:toplevel"
-                : continuesLanding ? "live:landing-resume"
-                : "live:takeover";
             var host = target.GetParent() as Node3D;
-            Utils.Log.Info("anim", $"anim: launch seed '{target.Name}' {seed} at {m._heldOrigin} (authored {rest.Origin}) under '{host?.Name}' {host?.Transform.Origin} rot {host?.Transform.Basis.GetEuler()} toplevel={target.TopLevel}");
+            Utils.Log.Info("anim", $"anim: launch seed '{target.Name}' live at {m._heldOrigin} (authored {rest.Origin}) under '{host?.Name}' {host?.Transform.Origin} rot {host?.Transform.Basis.GetEuler()} toplevel={target.TopLevel}");
         }
 
         // Nothing to drive → no motion (a bare gravity/bounce stub, handled by the caller).
@@ -424,11 +409,11 @@ internal sealed class MotionRuntime : IAnimMotion
     }
 
     /// <summary>The axis one <c>forward_rotation</c> tumble turns about: the horizontal
-    /// perpendicular of the launch direction <see cref="RangeLaunchDirection"/> just drew.
-    /// ⚠ Deliberately NOT unit length, same reason as the launch direction (docs/org/objectMotion.md):
-    /// a steep throw tumbles slowly off the same authored rate. Shared with <c>ProjectilePool</c>'s
-    /// casing ejection; do not spell this twice. ⚠ A zero vector in means no tumble — a DECODE, not
-    /// a guard, since the vector <c>translation</c> form never writes the direction cache.</summary>
+    /// perpendicular of the launch direction, drawn by <see cref="RangeLaunchDirection"/> or read
+    /// from the vector form's compiled <c>rnd_xz</c> (docs/org/objectMotion.md).
+    /// ⚠ Deliberately NOT unit length, same reason as the launch direction: a steep throw tumbles
+    /// slowly off the same authored rate. Shared with <c>ProjectilePool</c>'s casing ejection; do
+    /// not spell this twice. A zero or vertical direction in means no tumble, by arithmetic.</summary>
     internal static Vector3 TumbleAxis(Vector3 launchDir) => new(launchDir.Z, 0f, -launchDir.X);
 
     /// <summary>How far a tumble has turned at <paramref name="t"/>: the closed-form integral of a
@@ -593,11 +578,7 @@ internal sealed class MotionRuntime : IAnimMotion
     // The ballistic origin at time t, in the node's parent frame; factored out because the sweep
     // needs both ends of the step it is about to take. Measured from _ballisticStart rather than
     // 0, since a contact the body survives re-bases the launch at the surface.
-    private Vector3 BallisticOrigin(float t)
-    {
-        float e = t - _ballisticStart;
-        return _heldOrigin + _v0 * e + 0.5f * e * e * _accel;
-    }
+    private Vector3 BallisticOrigin(float t) => LaunchLaw.Origin(_heldOrigin, _v0, _accel, t - _ballisticStart);
 
     // The BOUNCE_SEQUENCE branch a contact selects, from the surface it struck. Water is the only
     // distinction drawn, and only where the block authors one; a null `water` branch falls back

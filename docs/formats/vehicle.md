@@ -397,8 +397,10 @@ random pdp panel (unwired).
 ## Collision probes
 
 Each player def carries a `collision` list of six xyz points in the plane's local frame
-(nose −Z, right +X, meters) — the original's own collision representation, apparently
-probe points: nose, right wing, left wing, tail, top, belly. pbloodhawk:
+(nose −Z, right +X, meters), the original's own collision representation: the contact
+probes `FUN_0048d7f0` carries from the previous pose to this frame's pose and tests against
+the world, the earliest strike along the motion winning (the list at vehicle `+0x6a4`, one
+0x24-byte entry per point: local, world, previous world). pbloodhawk:
 
 ```
 (0, 0, −5.68)  nose        (0, −0.20, 4.55)  tail
@@ -407,8 +409,19 @@ probe points: nose, right wing, left wing, tail, top, belly. pbloodhawk:
 ```
 
 Note the left/right pair is point-symmetric (both z signs flipped), not mirrored —
-probably hand-authored. The remake does **not** use these (its swept boxes are derived
-from the actual mesh, item 10a); documented for completeness.
+probably hand-authored.
+
+⚠ **Only the `p*` player defs author the list.** `basic_airplane` carries a single probe at
+the origin, `(0, 0, 0)`, and no AI def (`fury`, `hafury`, `secfury`, the `w*` wingmen, the
+`r*` remotes) overrides it, so every AI aeroplane in the shipped game collides as ONE point at
+its centre: its wings and tail pass through anything. That is how the CM13 racers thread the
+`dbase` arch on `dzpath2` (9.7 m wide at rail height, against the 10.4 m between the pfury
+wing probes) and how any
+AI clears a gap a player airframe cannot. The remake reads the list as
+`PlaneStats.CollisionProbes` (nearest def in the damage chain, so the AI chain on an AI load)
+and sweeps exactly those probes for an AI aircraft (`FlightController.SweepProbes`); a human
+rig keeps the mesh-derived hull sweep, which is wider than the six points but never narrower
+in a way a flown stunt has shown.
 
 ## Effect emitters
 

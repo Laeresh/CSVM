@@ -663,17 +663,22 @@ internal static class TargetingSuites
                       && bag.Health is { } bh && Mathf.IsEqualApprox(bh, 1f) && bag.Armor == null,
                 $"…carrying its hull's velocity (never zero — the bracket gate has to lead it), its part node's name and health with no armor pool name='{bag.Name}' v={bag.Velocity}");
 
-            // --- C1's real emplacements through the same pool --------------------------------
+            // C1's real emplacements through the same pool. ia1.gw switches all 74 sites off at
+            // their roots, so the built world has no live emplacement; the five aagun sites go on
+            // by the .gw's own switch reversed, and off again in the finally (shared world cache).
             ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
             string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
             ctx.RequireData(texturesPath, $"C1 textures");
             var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
             var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
-            ctx.WithWorld("C1", collision: false, world =>
+            // Private: the assertions read every site as ia1.gw leaves it and then the five aaguns
+            // alive, and a suite earlier in the shard (the self-fire drill) kills one in the shared cache.
+            ctx.WithPrivateWorld("C1", collision: false, world =>
             {
                 var textures = new TextureArchive(texturesPath);
                 ProjectilePool? live = null;
                 Session.TurretEmplacementRuntime? emplacements = null;
+                var shown = new List<Node3D>();
                 try
                 {
                     live = new ProjectilePool(textures, null, null);
@@ -687,20 +692,41 @@ internal static class TargetingSuites
                     live.CollectTurrets(worldScan);
                     var worldPool = new TargetPool();
                     worldPool.Rebuild(worldScan, null, AimAssist.PlayerTeam, null);
-                    int aliveEmplacements = emplacements.Emplacements.Count(t => t.Alive);
-                    ctx.Check(worldScan.Turrets.Count == emplacements.Count && aliveEmplacements > 0,
+                    int aliveAtBuild = emplacements.Emplacements.Count(t => t.Alive);
+                    ctx.Check(worldScan.Turrets.Count == emplacements.Count && emplacements.Count > 0,
                         $"C1's whole emplacement census reaches the scan turrets={worldScan.Turrets.Count} of {emplacements.Count}");
-                    ctx.Check(worldPool.NonAircraft.Count > 0
-                              && worldPool.NonAircraft.All(t => t.Kind == AimTargetKind.Turret)
+                    ctx.Check(aliveAtBuild == 0 && worldPool.NonAircraft.Count == 0,
+                        $"every site ia1.gw switched off is listed by the scan but dead, and none is selectable alive={aliveAtBuild} nonAircraft={worldPool.NonAircraft.Count}");
+
+                    var aaguns = emplacements.Emplacements
+                        .Where(t => t.Label.StartsWith("MSG_TUR_AAA@aagun", System.StringComparison.Ordinal))
+                        .ToList();
+                    foreach (var site in aaguns.Select(t => t.Site).OfType<Node3D>().Distinct())
+                    {
+                        world.Runtime.SetTargetActive(site, true);
+                        shown.Add(site);
+                    }
+                    worldScan.Clear();
+                    live.CollectTurrets(worldScan);
+                    worldPool.Rebuild(worldScan, null, AimAssist.PlayerTeam, null);
+                    ctx.Check(aaguns.Count == 5 && aaguns.All(t => t.Alive),
+                        $"switching the five aagun sites on brings their gunners alive alive={aaguns.Count(t => t.Alive)} of {aaguns.Count}");
+                    ctx.Check(worldPool.NonAircraft.Count == aaguns.Count
+                              && worldPool.NonAircraft.All(t => t.Kind == AimTargetKind.Turret
+                                  && aaguns.Any(a => ReferenceEquals(a, t.Source)))
                               && worldPool.Enemy.Count == 0 && worldPool.Ally.Count == 0,
-                        $"every selectable emplacement lands on the NON-AIRCRAFT cycle, never Enemy or Ally, whatever its team nonAircraft={worldPool.NonAircraft.Count}");
+                        $"every live emplacement lands on the NON-AIRCRAFT cycle, never Enemy or Ally, whatever its team, and a switched-off one stays out nonAircraft={worldPool.NonAircraft.Count}");
                     ctx.Check(worldPool.NonAircraft.All(t => t.Health == null && t.Armor == null
                                   && t.Name.Length > 0),
                         $"…each with its TITLE@site label and no health figure at all (the retail loaders read no HEALTH key)");
-                    ctx.Note($"C1 target pool: {worldPool.NonAircraft.Count} selectable emplacements of {emplacements.Count} placed, {aliveEmplacements} alive");
+                    ctx.Note($"C1 target pool: {worldPool.NonAircraft.Count} selectable emplacements of {emplacements.Count} placed once the aagun sites are on, {aliveAtBuild} alive as ia1.gw leaves them");
                 }
                 finally
                 {
+                    foreach (var site in shown)
+                    {
+                        world.Runtime.SetTargetActive(site, false);
+                    }
                     emplacements?.Free();
                     live?.Free();
                     textures.Dispose();

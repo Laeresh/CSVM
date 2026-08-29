@@ -349,7 +349,15 @@ Two aircraft, both from the aircraft archive rather than the chapter's gamez.
 
 CSVM stages both, from the aircraft archive, only for a mission that bootstraps an intro
 (`Mech3/AircraftStage.cs`). `piratefighter` is built as a prop with no pilot and no flight model,
-switched off until `gi_pfighter1` activates it; `player` is a bodiless marker, since the aeroplane
+drawn in the archive's own shipped state: the node is ACTIVE in `planes.zbd`, the shared
+`piratefighter` reader def's `RESET_STATE` asserts its children's states and never its own, and
+`gi_pfighter1`'s `OBJECT_ACTIVE_STATE [piratefighter, true]` re-asserts what already holds. That
+is what C1/M04's own intro relies on: its `pfighter11`..`pfighter13` (called by `scene1`,
+`playerdrop` and `playerthruclouds`) set the children, call `wing_lights_blink`, and fly the prop
+on an SI script, with no activation and no `OBJECT_ADD_CHILD` at all, so a prop built switched
+off shows that intro's launch and dive with the wingman missing. Where a script leaves it is where
+it stays after the handoff (`pfighter13` ends 95 m over the water past the dive), in this engine
+and the original alike. `player` is a bodiless marker, since the aeroplane
 it stands for is the one the pilot flies and that model belongs to the flown `FlightController`.
 Every staged node's compiled pointer is rebased onto the chapter's own base, so the definition's
 symbol table binds the names it addresses. `OBJECT_ACTIVE_STATE [player, false]` stays callback 11's
@@ -374,7 +382,8 @@ aircraft-archive node **2288** (a parentless `Object3d`, model-less, one child `
 at 2291) — the same archive `player`/`piratefighter` come from, addressed the same way: C3's base
 7500 makes the compiled def's symbol table read `chuteman` 9788, `chutemanparent` 9789, `pilot`
 9790, `stamp` 9791, each exactly `2288..2291 + 7500`. The shared `chuteman.zrd` reader ships the
-node `INACTIVE` as its own `RESET_STATE`, the same base state `piratefighter` ships in.
+node `INACTIVE` as its own `RESET_STATE`, which is where it differs from `piratefighter`: that
+node ships ACTIVE and no `RESET_STATE` touches it.
 
 Before `BL-540`, `AircraftStage` staged `player`/`piratefighter` alone, so `chuteman`'s subtree
 never joined the runtime's node table: the drop's own definition claimed a symbol with a null
@@ -492,12 +501,33 @@ from mission load. `OBJECTIVE21`'s `WAKE_ANIM [enable_dropoff]` sets them `ACTIV
 klondike hookup is armed the same way, by `OBJECTIVE14`'s `WAKE_ANIM [pzhomebase]`. **The approach
 table is the mechanism; the objective script decides when each row is live.**
 
-CM07 adds a pickup gate in front of that arming step. `C1/M02/zrdr/pickups.zrd` is the compact
-table `[[["ladder_pickup_sensor", 100.0]]]`: sensor node plus radius in metres. Once
-`trigger_copilot` has staged that sensor on the caboose, entering its active 100 m sphere starts
-the mission's `pickup_timing` definition. Its authored sequence opens
-`agent_approach_cone/land_on` 13.46 seconds later, synchronised with the ladder pickup window;
-the ordinary `landings.zrd` test then owns the final approach and cutscene start.
+CM07 adds a pickup gate in front of that arming step, and it runs on the train's own clock. The
+chapter's `train.zrd` definition `train_on_track` (a `NEW_GAME_START` anim) opens with
+`CALL_ANIMATION [pickup_timing]` before it starts the consist's `tr_*.zan` track loops, so the
+mission's `pickup_timing` definition runs from mission load in step with the train. Its authored
+sequence toggles `copilot_pickup_switch`, `ladder_pickup_sensor` and `agent_approach_cone/land_on`
+together through the loop (open at 12.36 s, 28.9 s, 61.36 s, 105.5 s, 216 s, 259.3 s and 291.73 s
+of the run, closed between), which is the set of track phases where the pickup is flyable. Nothing
+starts the timing off the player: `C1/M02/zrdr/pickups.zrd`, the compact table
+`[[["ladder_pickup_sensor", 100.0]]]` (sensor node plus radius in metres), feeds only the rope
+ladder's switch. Once `trigger_copilot` has staged the sensor and the passenger on the caboose,
+the ordinary `landings.zrd` test owns the final approach and cutscene start.
+
+The same sensor is the rope ladder's gate. The exe's own reader of `pickups.zrd`
+(`FUN_00471830`) builds the sensor list the native ladder switch tests every frame, and nothing
+else in the image reads that list; the switch, its attitude gate and the `CALLBACK 123` both
+ladder definitions raise to settle it are decoded in [`../../org/ladderSwitch.md`](../../org/ladderSwitch.md).
+
+The passenger's own choreography is what the switch selects. `caboosewave` (called by
+`trigger_copilot`) parents `pickup_agent` and the switch under the caboose and runs its
+`wave_or_drop` fork: switch active is `waveloop`, which calls `pickup_flare` (`ballflare.flt` added
+under the passenger's `cp_lh` hand) and asserts the `flaretrail` puffer on that hand; switch
+inactive is `hit_the_deck`, which polls the switch every 0.5 s and stands the passenger back up
+through `get_up` into `waveloop`. All of these move the person through the `ROOT`/`ALL_NAMES` form
+of `OBJECT_MOTION_SI_SCRIPT`, one record per body part
+([`compiled-archives.md`](compiled-archives.md)). The pickup itself, `lookat_copilotpkup`, calls
+`cabpkup_ladder`, `cabpkup_player` and then `caboosepickup` with `WAIT_FOR_COMPLETION`, and the
+person's climb is that last definition's one sequence, so the hold spans the whole climb.
 
 #### The hookup poses the flown airframe's own parts
 
@@ -559,6 +589,28 @@ aircraft a cutscene holds `Inert` while posing it must not read as "no airframe 
   the **reading** that the host answers for a started row's definition *and* its `CALL_ANIMATION`
   closure, because the drop is a letterboxed movie that has to hide the chrome and take the player
   out of flight, and no other mechanism does that.
+- **The slot holds the row's definition, and the player's flags are the codes'.** C1C/M01's
+  `wv_initiate_hookup` is the one shipped row whose definition authors no `CALLBACK`: it calls
+  `wv_hookup_player` (2 and 11 at t=0, a 7.3 s SI script on `player`), then the drop, the hook
+  state and `wv_unhook_player` with a trailing `WAIT_FOR_COMPLETION`, and that callee raises 1 and
+  951 after its own SI script, 2.6 s later. A trailing wait holds no runner open
+  ([`org/sequences.md`](../../org/sequences.md)), so the row's instance ends before the unhook
+  does. In the original nothing about that matters: `+0x91d` is set by 11 and cleared by 1, and
+  no definition ending touches it. CSVM's episode therefore belongs to the started row
+  (`CutsceneController.Own`, written by the trigger before the start) and its end-of-definition
+  handoff waits until every code-authoring definition in the row's call closure has ended as
+  well; booking the episode to the first raiser handed the player flight at 7.3 s with the
+  aeroplane still hung, and the unhook's 951 then re-placed them when it ran out.
+  The slot is not the landings table's alone. `DAT_0071b1dc` holds whatever instance the trigger
+  started, and the mission-script host is installed the same way whichever trigger started it, so
+  CSVM writes the slot from `AnimRuntime.PlayMissionTrigger` itself (the approach rows, the
+  objective script's `WAKE_ANIM`, the ladder switch) and from the world build for the opening
+  cutscene, which starts inside the start-list walk instead. C5/M02's ending is the shipped
+  objective-path case: `nypd_southward` raises no code and calls `nypd_player`, which raises 11, 2
+  and 13. No shipped `WAKE_ANIM` target reaches more than one code-authoring definition, so the
+  multi-raiser shape CM06 shows exists on the landings path alone.
+  A definition whose closure authors no `CALLBACK` never claims the slot: an ordinary `WAKE_ANIM`
+  goes through the same call, and the original's slot only ever holds a cutscene.
 - **Undecoded: when the landings slot clears.** `DAT_0071b1dc` holds the running instance and is
   cleared only by `SceneAnimCallback_0045e0f0` seeing callback **0**, which nothing authors. Read
   literally, one landings cutscene per mission load would lock out the rest, which C3/M01 (drop,
@@ -595,6 +647,20 @@ description of the cutscene's shape** (what is hidden, when the simulation stops
 returns), which is what a cutscene player has to reproduce. They are not a set of messages that
 must be delivered to an existing listener.
 
+The same path reaches a definition the start list never names. C3/M03's `NEW_GAME_START` lists
+`calldestroy_the_cargozep` (root `cargozep1`, no callbacks of its own), whose one sequence calls
+`cgzep_camera` at once, `movebridge1`/`movebridge2`, and `destroy_the_cargozep` 0.5 s later.
+`player-cgzep_camera` (root `player`, objects `player`, `cockpit1`, `camera1`) is the mission's
+opening movie: it calls `letterbox`, deactivates `player` and `cockpit1`, raises 20, 11, 14, 913
+and 2, and flies `camera1` on five SI scripts (`campath1`..`campath5`, absolute world keyframes
+beside `cargozep1`, no reparent) under `snd_IntrosceneHAch4`; its `RESET_STATE` restores both
+nodes and raises 1, 10 and 914. Nothing in `FUN_0046c370`'s start registers a host on the called
+instance either, so the reading above covers it unchanged. CSVM hosts it by name beside the two
+intros (`CutsceneController.IntroAnims`), and reads the start list's call closure rather than the
+list when deciding to stand up `camera1`, the bars and the `player` marker
+(`WorldSession.BootstrapsCutscene`). ⚠ The zeppelin's destruction is that start anim's own later
+call and plays under the camera from it; the host issues no second call.
+
 ## `CALLBACK` code reference
 
 The mission-script host `FUN_0047e080`. Counts are occurrences in the loose `zrdr` readers of this
@@ -609,7 +675,7 @@ install; the compiled archives carry the same events.
 | 10 | 5 | restores the in-flight systems as a block: engine audio (`FUN_004a0af0`/`FUN_004a0a30`), `FUN_00455800(1)` chrome on, `FUN_00494b20`, `FUN_00443d60(1)`, `FUN_004696f0`, and `FUN_004b24d0` on the player. |
 | 11 | 21 | `FUN_004b1510` releases the vehicle's four sound handles, sets the player's `+0x91d` and `+0x91e` cutscene flags, `FUN_00455800(0)` chrome off. **Takes the player out of flight.** |
 | 12 | 4 | in multiplayer, hands control back through `FUN_00470a10`; otherwise re-arms the player's crash animation path. |
-| 13 | 3 | `FUN_00463c10(1)`, the same call the objectives runtime makes when a primary objective completes, then the mission-end path `FUN_00443090`. Partially decoded. |
+| 13 | 3 | `FUN_00463c10(1)`, the same call the objectives runtime makes when a primary objective completes, then the mission-end path `FUN_00443090` (decoded in full in [objectives.md](../objectives.md), "The mission-end path"). **The mission-completion code.** The three reader sources are `hooked_to_klondike` (the shared docking, compiled into twenty missions), C4/M01's `carpkup_player` and C5/M02's `nypd_player`, and no objective in the shipped data completes on a landing or on either drop, so this code is the only ending those missions have. **It takes no wrap-up:** the case sets the won flag and calls `FUN_00443090` in the same breath, never touching the wrap-up timer at mission `+0xc40` that the objective endings run down (0.1 s for `INSTANTWIN`, 3 s otherwise), so the ending lands on the frame the film raises it and the world stops there, under the mission-end path's own 2 s fade. CSVM hosts it into `ObjectiveGraph.NotifyDockingComplete`, and the hold after it is `CampaignDirector.LeavingHoldS`. |
 | 14 | 6 | **not handled.** Falls through the host's switch. See the gap note below. |
 | 15, 16 | 12, 12 | not this host's: the vehicle-death handler `LAB_00480710` takes these ([`org/vehicleDamage.md`](../../org/vehicleDamage.md), [`org/objectMotion.md`](../../org/objectMotion.md)). |
 | 20 | 4 | stores this animation in `DAT_0071c50c`, the active-cutscene slot. **Consequence: the per-frame world update `FUN_004897c0` and the objectives update `FUN_0046a490` both return immediately while the slot is set, so the simulation is suspended for the duration.** |
@@ -691,10 +757,17 @@ Each case does the same five things, in this order.
 **CSVM implements all five steps.** The rig is rebuilt through the flight roster's own assembler on
 the named airframe, at the pose, heading, throttle and speed the outgoing aircraft held, with that
 airframe's stock fit at full ammunition and its own armour pools; the cutscene flags land on the
-aircraft the swap built. `Session/AirframeSwap.cs`'s `AirframeHandover` carries the mission gate,
-the 100 m / −45° placement and the capture test; `FlightRoster.RunSwap` runs the whole order, and
-the definition's root node reaches it through `AnimRuntime.CallbackHost`. Four divergences, each
-deliberate:
+aircraft the swap built. Step 2's re-point walk is `FlightRoster.RepointHolders`: every AI pilot
+whose escort leader or standing quarry was the outgoing aircraft holds the replacement (CSVM has
+no global target list; those two fields are where an AI holds a vehicle), and the campaign
+director re-subscribes its death and damage hooks on the rebuilt rig. 967's `+0x388` copy is
+`FlightController.Group`, stamped from the captured aircraft's roster plan onto the replacement
+(`AirframeHandover.CarriesCapturedGroup`), and the `DEDG` walk counts a human rig carrying the
+counted group as one live member, which is what keeps `C3/M05`'s `DEDG [5, 0]` from completing
+and napping the instant loss once the player is flying the last bomber. `Session/AirframeSwap.cs`'s
+`AirframeHandover` carries the mission gate, the 100 m / −45° placement and the capture test;
+`FlightRoster.RunSwap` runs the whole order, and the definition's root node reaches it through
+`AnimRuntime.CallbackHost`. Three divergences, each deliberate:
 
 - **The airframe and livery are decided at the roster spawn, not at the swap.** The original writes
   them at mission start and so does CSVM (`CampaignRosterPlan.Build`'s `handover` argument), which
@@ -705,7 +778,6 @@ deliberate:
   one airframe's pools as a zone sum on a human rig and as the AI def's authored pair on an AI one
   (`docs/org/vehicleDamage.md`), so an undamaged hand-over lands at the receiver's full pools rather
   than at the player's larger number.
-- **`+0x388` is not copied.** CSVM's `wingman_4` is already on the player's team.
 - **967's rebuild carries the captured aircraft's own `PaintScheme` onto the player's new hull**
   (`BL-543`, `BL-554`). This is NOT in the executable: case 967 (`FUN_0047e080`, `0x3c7`) rebuilds
   through `FUN_0047fd50(s_pbalmoral, s_player_balmoral)`, which reads no paint field off the
@@ -718,13 +790,30 @@ deliberate:
   real enemy roster spawn's `ShippedSkins` reading resolved it to no scheme at all: that null has to
   carry too, or the rebuild falls back to the player's own default livery.
 
+- **965's rebuild flies the Blue Streak build in its shipped skins, unpainted.** The case's tables
+  (40/30 with both twin bytes, two hardpoints of six, 20 armour across, the injector bit) are the
+  special-plane template for airframe 3 (`docs/org/hangar.md`), so CSVM assembles the rebuild
+  from `CampaignProgression.AwardBuild(3)` (`AirframeSwapCode.AwardAirframe`) rather than the
+  stock fit, and the same swap onto `player_bhawk` with no build stays a stock Bloodhawk with no
+  injector. The livery is the absence of one: `pbloodhawk` authors no `paint_pattern`, and
+  `FUN_0047c210` tests the pattern string's length and jumps past the whole scheme composite on
+  zero (`0x0047db0c`; the `player_fortune` branch that copies the launched plane's scheme from
+  `0x0071db08` is never reached), so the original draws the `blo_*` skin textures as shipped: the
+  desaturated blue-grey body with the yellow-olive stripe on the wingtips and fin
+  (`docs/formats/paint.md`), which is the aeroplane the hangar clip shows. No shipped scheme
+  produces that look (`blake` is light blue-grey with near-white trim, `hughes` a yellow body).
+  CSVM's code carries `ShippedSkins` (`AirframeSwapCode.ShippedSkins`), the same reading a real
+  enemy spawn draws under, so the rebuild composites nothing over the archive's skins.
+
 ⚠ **967's hide has to outlive the reveal of code 914.** In `C3/M05` the capture definition raises
 967 from the same sequence that calls `wingwalk`, and `wingwalk_parent-wingwalk` brackets its own
 19.25 s motion with **913 then 914**: the captured aircraft is parked by 913, hidden by 967 while it
 is already parked, and then handed back by 914 at the end of the wing walk. The original keeps the
 two apart, since 913/914 drive the vehicle's hold flag and scene node while 967's
-`FUN_004b0f40(1)` sets the vehicle's own hidden bit `+0x945`; CSVM carries both on one `Inert` flag,
-so `CutsceneController` drops whatever the swap hid out of its parked list instead. Measured on
+`FUN_004b0f40(1)` sets the vehicle's own hidden bit `+0x945` and its dead byte `+0x91d`; CSVM
+carries the presence half of both on one `Inert` flag, with `Parked` beside it for the hold flag
+(`+0x354`, which `FUN_0041f250` sets and the DEDG walk never reads), so `CutsceneController` drops
+whatever the swap hid out of its parked list and clears its `Parked` instead. Measured on
 CM02's own definition, played through the runtime: without that drop the Balmoral comes back
 **19.25 s** after the swap, which is the aeroplane sitting in front of the player at the cut back to
 flight.
@@ -863,7 +952,13 @@ M04's intro is spread over three readers, all listed by its `mis_anim.zrd`:
   `scene2`, stops it 12.4 s after that event, and branches on which airframe the player is flying
   (`check_balmoral` → `check_warhawk` → `drop_planes`).
 - `scenes.zrd` holds the beats. Five of them call `letterbox`.
-- `startanims.zrd` puts `mission_intro_animation` in `NEW_GAME_START`.
+- `startanims.zrd` puts `mission_intro_animation` in `NEW_GAME_START`. Both of its sections also
+  name `pure_panic`, the C1/M02 hangar-crowd definition (`hangar_panic.zrd`, root
+  `hangar_panic_scream`); no M04 reader file lists that reader, so the mission's compiled archive
+  holds no such definition and the loader's lookup finds nothing. The same dead name sits in
+  C1/IA1's and C1/MP1's `startanims.zrd`, which is the shape of a copied template rather than of
+  an intent. The original plays nothing for it in M04, and neither does CSVM
+  (`undefined here: [pure_panic]` in the start-anims log line).
 
 The zeppelin's two visible jumps are the cuts between those beats, and its disappearance is the last
 beat deactivating it; the smooth phase between them is

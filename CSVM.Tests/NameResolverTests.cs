@@ -385,6 +385,54 @@ public class NameResolverTests
         Assert.Contains(trail, resolver.FindAll("fly_trail1", null));         // names still resolve
     }
 
+    [Fact]
+    public void AClaimedUnbuiltIndexResolvesToTheOnePooledCopyCarryingIt()
+    {
+        var resolver = new NameResolver<TestNode>();
+        var pool = Node("pool");
+        var copy = Node("copilot_pickup_switch");
+        resolver.Add(pool, "pool", null);
+        resolver.Add(copy, "copilot_pickup_switch", pool, gamezIndex: 2703, indexByPointer: false);
+        var def = Def("pickup_timing");
+        def.NodeRefs["copilot_pickup_switch"] = 2703;
+
+        Assert.True(resolver.SymbolClaims(def, "copilot_pickup_switch", out var bound));
+        Assert.Same(copy, bound); // the staged actor answers for the index the build never created
+
+        // A second copy on the same index is an effect pool, which stays anchor-scoped.
+        var second = Node("copilot_pickup_switch");
+        resolver.Add(second, "copilot_pickup_switch", pool, gamezIndex: 2703, indexByPointer: false);
+        Assert.True(resolver.SymbolClaims(def, "copilot_pickup_switch", out var ambiguous));
+        Assert.Null(ambiguous);
+    }
+
+    [Fact]
+    public void AClaimInsideAStagedCopyNarrowsToThatCopysOwnNode()
+    {
+        // CM07's shape: the parked aircraft-archive figure binds the flare def's cp_lh by index,
+        // while the def is dispatched onto the chapter's staged passenger copy carrying the same
+        // limb under a different index. The consist's caboose, which the copy lacks, keeps binding.
+        var figure = Node("pickup_cpilot");
+        var figureHand = Node("cp_lh");
+        var passenger = Node("pickup_agent");
+        var passengerHand = Node("cp_lh");
+        var caboose = Node("caboose");
+        var resolver = new NameResolver<TestNode>(privateCopyOf: n => n == passenger || n == passengerHand ? passenger : null);
+        resolver.Add(figure, "pickup_cpilot", null, gamezIndex: 9769);
+        resolver.Add(figureHand, "cp_lh", figure, gamezIndex: 9784);
+        resolver.Add(caboose, "caboose", null, gamezIndex: 1200);
+        resolver.Add(passenger, "pickup_agent", null, gamezIndex: 2680, indexByPointer: false);
+        resolver.Add(passengerHand, "cp_lh", passenger, gamezIndex: 2686, indexByPointer: false);
+        var def = Def("pickup_flare");
+        def.NodeRefs["cp_lh"] = 9784;
+        def.NodeRefs["caboose"] = 1200;
+
+        Assert.Same(figureHand, resolver.Resolve("cp_lh", def, null));         // off the pool: the index binds
+        Assert.Same(passengerHand, resolver.Resolve("cp_lh", def, passenger)); // on the copy: its own hand
+        Assert.Same(passengerHand, resolver.Resolve("cp_lh", def, passengerHand));
+        Assert.Same(caboose, resolver.Resolve("caboose", def, passenger));     // a name the copy lacks stands
+    }
+
     // ---- multi-target NAME1 defs anchor through their authored paths (M4 F18) ----
 
     [Fact]

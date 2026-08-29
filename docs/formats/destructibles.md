@@ -160,6 +160,17 @@ authored to start destroyed in its `RESET_STATE` reaches the same sync; no shipp
 install uses that shape, so it is verified structurally rather than against authored data.
 Regression: the `start-state-swap-pool` suite (`CSVM/src/Testing/DestroyChoreographySuites.cs`).
 
+The cross-mission state log is the other way an object starts destroyed. The original opens a
+later mission of the chapter on the carried state itself, a destroyed pose (the `PERSIST_LOG`
+reader defs such as `ucamp_dest` and `tower_dest` are the silent destroyed variants), never on a
+replayed death; see [saved-games.md](saved-games.md). The engine's `CampaignPersistLog.ApplyTo`
+therefore goes through `AnimRuntime.CarryState`, not `DamageAt`: the pool is written directly
+(`Health` 0 and `Destroyed`, or the carried HP at its `DAMAGE_SEQUENCE` stage) and the nodes take
+the pose the death ends in, read off the death's own sequences as the healthy-off and
+destroyed/`dbase`-on switches. No fireball, debris, sound or stage puffer plays, and a later hit
+on the object finds the pool dead and is a no-op. Regression: the `carried-state-silent` and
+`campaign-persistence` suites.
+
 ## Definition binding
 
 A destructible def anchors to scene nodes exactly like any animation definition (full rules in

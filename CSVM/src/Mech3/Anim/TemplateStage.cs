@@ -85,6 +85,11 @@ public sealed class TemplateStage<TNode>
     // Sweep for when they drain).
     private readonly List<(AnimDefinition Def, TNode? Anchor)> _hidesPending = new();
 
+    // Placed roots that re-place themselves on a live call site every frame (PlaceFollowing): a
+    // death's call on a carried node. The offset is the site's own frame, so a yawing hull
+    // carries the fire around with it. A re-placement or a hide of the root ends the follow.
+    private readonly List<(TNode Root, TNode Site, Vector3 LocalOffset)> _follows = new();
+
     // ---- runtime hooks (Wire) ----
     private Func<string, TNode?, List<TNode>> _findAll = null!;
 
@@ -164,6 +169,9 @@ public sealed class TemplateStage<TNode>
     /// staged copies) — the shared-template collapse, bounded to the wrap instead of every call.
     /// Zero on the goldens; what <c>effect_pools.json</c> is sized against.</summary>
     public int Recycles { get; private set; }
+
+    /// <summary>How many placed roots are following a site right now (<see cref="PlaceFollowing"/>).</summary>
+    public int Following => _follows.Count;
 
     /// <summary>The runtime-dependent hooks, wired at the handover rather than construction:
     /// the stage is built before any resolver exists, and the resolver's own
@@ -310,8 +318,9 @@ public sealed class TemplateStage<TNode>
 
     /// <summary>Moves an effect template's own root(s) to a call site so its puffers emit there
     /// instead of at the template's gamez origin — the remake's stand-in for the original's
-    /// per-call template copy. Pooled, only the call's own slot moves. Docs: architecture.md.</summary>
-    public void PlaceAt(AnimDefinition callee, TNode site, Vector3 offset)
+    /// per-call template copy. Pooled, only the call's own slot moves. With <paramref name="follow"/>
+    /// the root keeps riding the site (<see cref="PlaceFollowing"/>). Docs: architecture.md.</summary>
+    public void PlaceAt(AnimDefinition callee, TNode site, Vector3 offset, bool follow = false)
     {
         // An airframe-scoped NAME is a live scene node, never a staged template — placing it
         // would TopLevel-pin the aircraft itself (see _placeExempt). Resolution is untouched:
@@ -319,7 +328,11 @@ public sealed class TemplateStage<TNode>
         if (!string.IsNullOrEmpty(callee.Name) && _placeExempt.Contains(callee.Name))
             return;
         var xf = _transformOf(site);
-        PlaceOn(RootsFor(callee, site), xf.Origin + xf.Basis * offset, _levels(callee));
+        var origin = xf.Origin + xf.Basis * offset;
+        if (follow)
+            PlaceFollowing(RootsFor(callee, site), site, origin, _levels(callee));
+        else
+            PlaceOn(RootsFor(callee, site), origin, _levels(callee));
     }
 
     /// <summary>Places the given root(s) at an absolute world origin, with <paramref name="orient"/>
@@ -334,6 +347,8 @@ public sealed class TemplateStage<TNode>
         {
             if (root == null || !_isValid(root))
                 continue;
+            // A placement is a new site: whatever this root was following is over.
+            _follows.RemoveAll(f => _identity.Equals(f.Root, root));
             var xf = _transformOf(root);
             xf.Origin = origin;
             // ⚠ Named crash-def templates only (docs/architecture.md); leveling every template
@@ -342,6 +357,41 @@ public sealed class TemplateStage<TNode>
                 xf.Basis = Basis.Identity;
             if (orient is { } basis)
                 xf.Basis = basis;
+            _placeAt(root, xf);
+        }
+    }
+
+    /// <summary>Places the root(s) at <paramref name="origin"/> as <see cref="PlaceOn"/> does, then
+    /// keeps them there RELATIVE to <paramref name="site"/>: <see cref="FollowSites"/> re-places each
+    /// root every frame at the site's live pose plus the offset the origin had in the site's frame.
+    /// The placement for a death's effects on a site that moves (a zeppelin's gun ring); a site that
+    /// never moves reads exactly as a <see cref="PlaceOn"/>. The root's basis is left as placed;
+    /// only the site's translation and yaw carry the offset (docs/architecture.md).</summary>
+    public void PlaceFollowing(IEnumerable<TNode?> roots, TNode site, Vector3 origin, bool level = false)
+    {
+        var siteXf = _transformOf(site);
+        var local = siteXf.AffineInverse() * origin;
+        var placed = roots.Where(r => r != null && _isValid(r)).ToList();
+        PlaceOn(placed, origin, level);
+        foreach (var root in placed)
+            _follows.Add((root!, site, local));
+    }
+
+    /// <summary>Re-places every following root on its site's current pose, once per frame from the
+    /// runtime's advance, BEFORE the emitters read their hosts. A root whose site was freed stops
+    /// where it is.</summary>
+    public void FollowSites()
+    {
+        for (int i = _follows.Count - 1; i >= 0; i--)
+        {
+            var (root, site, local) = _follows[i];
+            if (!_isValid(root) || !_isValid(site))
+            {
+                _follows.RemoveAt(i);
+                continue;
+            }
+            var xf = _transformOf(root);
+            xf.Origin = _transformOf(site) * local;
             _placeAt(root, xf);
         }
     }
@@ -408,8 +458,14 @@ public sealed class TemplateStage<TNode>
         // ⚠ Only staged copies (nodes in a pool slot) take the visibility write; a crash-rig
         // "root" that is the aircraft's own model must never be blanked here.
         foreach (var root in RootsOf(def, anchor))
-            if (root != null && _isValid(root) && (!Pooled || SlotOf(root) >= 0))
-                _setVisible(root, visible);
+        {
+            if (root == null || !_isValid(root) || (Pooled && SlotOf(root) < 0))
+                continue;
+            _setVisible(root, visible);
+            // A hidden copy has nothing left to carry along; its next play places it afresh.
+            if (!visible)
+                _follows.RemoveAll(f => _identity.Equals(f.Root, root));
+        }
         // ⚠ A def whose t=0 events finish it never reaches the retire walk (Start removes it
         // itself), so schedule its hide here too or a reveal stands for the rest of the session.
         if (visible && !_isLive(def, anchor))

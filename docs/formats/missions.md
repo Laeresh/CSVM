@@ -136,13 +136,22 @@ must be walked as pairs.
 | Key | Meaning |
 |---|---|
 | `description` | The target's own name key (`MSG_OBJ_TRAINTUNNEL_M`). |
-| `nodes` | List of world-node name(s) this entry labels (usually one; the `dzN` for a zone). |
+| `nodes` | List of target(s) this entry labels (usually one; the `dzN` for a zone). A target is a bare world-node name or a nested `[parent, child]` path (`[wv_tailhook, peoplehook]`, `[piratezep, rock_zeppelin]`), the same shape and key `objectives.zrd`'s target directives use ([objectives.md](objectives.md)). |
 | `category_label` | The target *type* key (`MSG_OBJ_DZ` = "Danger Zone"). Optional. |
 | `help_label` | The *action* key (`MSG_OBJ_FLYTHROUGH` / `MSG_OBJ_FLYOVER` / `MSG_OBJ_REFPOINT`). |
 
 The file is generic across mission types — the same schema labels dogfight zeppelins
 (`MSG_TRGT_ZEP_ENEMY` / `MSG_OBJ_DISABLEENG`) and reference points (`ap_transmitter`
 radio tower). The stunt loader reads only the entries whose node is a `dzN` from `dzones`.
+
+**Where the file is found.** The engine opens `targets.zrd` through its reader search path
+(`FUN_004a2be0` → `FUN_00579c60` → `FUN_00579710`), which every chapter's `init.gw` sets as
+`common\zrdr`, `<chapter>\zrdr`, `<chapter>\zrdr\nets`, `<chapter>\<mission>\zrdr`
+(`RdrSetPath`/`RdrAddPath`, [interp.md](interp.md)). One file is opened whole, never merged. 52
+of the 53 missions ship their own; `C1C/M01` ships none and is labelled by `C1C/zrdr/targets.zrd`,
+the one chapter-scope copy, which is where its `Worker's Voyage`, docking-hook and Pandora entries
+live. The mission-scope and chapter-scope files never coexist in the shipped data, so which end of
+the path wins is unobservable there.
 
 ## Message table
 

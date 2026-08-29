@@ -93,6 +93,7 @@ public sealed class AircraftLifecycle
     private bool _destroyed;
     private bool _wreckFalling;
     private bool _inert;
+    private bool _parked;
 
     /// <summary>The crash-def vector the struck surface id indexes, bound with the rest of the
     /// crash rig; null leaves every crash without an authored def.</summary>
@@ -120,6 +121,17 @@ public sealed class AircraftLifecycle
 
     /// <summary>Built but held completely out of the session: not stepped, drawn or collidable.</summary>
     public bool Inert => _inert;
+
+    /// <summary>Held out of the session by a cutscene's AI park (code 913), the original's hold flag
+    /// rather than its dead byte: the aircraft is still in the mission and an objective walk still
+    /// counts it. Always set beside <see cref="Inert"/>, never on its own.</summary>
+    public bool Parked => _parked;
+
+    /// <summary>Out of the mission the way the original's dead byte reads: inert without a cutscene
+    /// park behind it, which is a roster block shipped deactivated or a captured airframe hidden.
+    /// ⚠ DEDG and TRAVELERS walks read this, never <see cref="Inert"/>: the wing-walk capture parks
+    /// the last bomber for 19 s, and a walk that dropped it there wipes its group out mid-cutscene.</summary>
+    public bool Deactivated => _inert && !_parked;
 
     /// <summary>Present in the session as a real object: neither crashed nor inert.</summary>
     public bool InPlay => !_crashed && !_inert;
@@ -234,4 +246,8 @@ public sealed class AircraftLifecycle
         _inert = value;
         return true;
     }
+
+    /// <summary>Flips the cutscene-park flag. No presence write follows: the park is a reading on
+    /// top of <see cref="Inert"/>, which the caller sets in the same breath.</summary>
+    public void SetParked(bool value) => _parked = value;
 }

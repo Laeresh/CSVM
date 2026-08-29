@@ -39,6 +39,22 @@ public sealed partial class ZeppelinRuntime
     /// <summary>Total broadside rounds this zeppelin has fired.</summary>
     public int BroadsideShotsOf(string node) => Find(node)?.BroadsideShots ?? 0;
 
+    /// <summary>What <c>COMPLETED_ZEPCANNONS</c> does: writes the engage flag of one zeppelin's
+    /// broadside (<see cref="ZeppelinBroadside.CannonsEngaged"/>, the decoded byte <c>+0xc</c>).
+    /// Every broadside starts disengaged, so a mission whose script never runs the directive
+    /// never deploys a hatch. Returns false for an unknown node or one without cannons.</summary>
+    public bool SetCannonsEngaged(string node, bool engaged)
+    {
+        if (Find(node) is not { Broadside: { } broadside } zep)
+        {
+            return false;
+        }
+        broadside.CannonsEngaged = engaged;
+        GD.Print($"zep: '{zep.Def.Node}' broadside {(engaged ? "engaged" : "disengaged")} by the " +
+                 $"mission script, targets [{string.Join(",", zep.Def.Targets)}]");
+        return true;
+    }
+
     /// <summary>Builds every cannon-bearing zeppelin's broadside machine. Idempotent. Resolves
     /// the hardcoded <c>wep_28</c> once; without it (degraded extraction) the broadside is
     /// disabled and says so. Call after <see cref="WireDamage"/> so F18's cannon pools exist —
@@ -186,7 +202,7 @@ public sealed partial class ZeppelinRuntime
                  $"{_broadsideWeapon!.Velocity ?? ProjectilePool.DefaultVelocity:0} m/s, delay " +
                  $"{broadside.FireDelaySeconds:0.#} s, range {def.CannonFireRange ?? 0f:0} m, " +
                  $"inaccuracy {def.CannonInaccuracyDeg ?? 0f:0.#}°, targets " +
-                 $"[{string.Join(",", def.Targets)}]");
+                 $"[{string.Join(",", def.Targets)}], disengaged until COMPLETED_ZEPCANNONS");
     }
 
     // One broadside step for a live, active zeppelin: resolve the authored target, gate on
@@ -198,7 +214,9 @@ public sealed partial class ZeppelinRuntime
             return;
         }
         var hullPos = zep.Host.GlobalPosition;
-        var target = ResolveTarget(zep);
+        // Disengaged (the shipped default), the original never reaches its fire routine, so
+        // there is no target to resolve either.
+        var target = broadside.CannonsEngaged ? ResolveTarget(zep) : null;
         var side = BroadsideSide.None;
         if (target is { } t
             && zep.Def.CannonFireRange is { } range
@@ -288,31 +306,31 @@ public sealed partial class ZeppelinRuntime
 
     // The record's authored targets, first live one wins (authored order — only C5/M04's
     // dantezep authors two, and the decoded routine's ordering across several is not pinned).
-    // 'player' is the human aircraft; any other name is another zeppelin of this mission.
+    // 'player' resolves to the human aircraft as the original's node lookup would; what keeps
+    // every shipped campaign broadside off the player is the engage flag, never a filter here.
     private (Vector3 Pos, Vector3 Vel, string Name, LiveZeppelin? Zep)? ResolveTarget(
-        LiveZeppelin zep)
+        LiveZeppelin zep) =>
+        ZeppelinBroadside.FirstLiveTarget(zep.Def.Targets, name => ResolveOne(zep, name));
+
+    private (Vector3 Pos, Vector3 Vel, string Name, LiveZeppelin? Zep)? ResolveOne(
+        LiveZeppelin zep, string name)
     {
-        foreach (var name in zep.Def.Targets)
+        if (ZeppelinBroadside.IsPlayerTarget(name))
         {
-            if (name.Equals("player", StringComparison.OrdinalIgnoreCase))
-            {
-                if (NearestHumanAircraft(zep.Host.GlobalPosition) is { } plane)
-                {
-                    return (plane.Pos, plane.Vel, name, null);
-                }
-                continue;
-            }
-            if (Find(name) is { Dead: false } other)
-            {
-                var vel = other.Dormant
-                    ? Vector3.Zero
-                    : other.Motion.Forward * other.Motion.Speed;
-                return (other.Host.GlobalPosition, vel, name, other);
-            }
-            if (_warnedTargets.Add($"{zep.Def.Node}:{name}"))
-            {
-                GD.Print($"zep: '{zep.Def.Node}' target '{name}' unresolved — skipped");
-            }
+            return NearestHumanAircraft(zep.Host.GlobalPosition) is { } plane
+                ? (plane.Pos, plane.Vel, name, null)
+                : null;
+        }
+        if (Find(name) is { Dead: false } other)
+        {
+            var vel = other.Dormant
+                ? Vector3.Zero
+                : other.Motion.Forward * other.Motion.Speed;
+            return (other.Host.GlobalPosition, vel, name, other);
+        }
+        if (_warnedTargets.Add($"{zep.Def.Node}:{name}"))
+        {
+            GD.Print($"zep: '{zep.Def.Node}' target '{name}' unresolved — skipped");
         }
         return null;
     }

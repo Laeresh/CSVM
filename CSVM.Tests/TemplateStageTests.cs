@@ -212,6 +212,55 @@ public class TemplateStageTests
         Assert.True(root.Xf.Basis.IsEqualApprox(Basis.Identity)); // level:true squares the basis to identity
     }
 
+    // ---- PlaceFollowing: a WITH_NODE placement rides its site ----
+
+    [Fact]
+    public void PlaceFollowingKeepsTheRootOnItsSiteAsTheSiteMoves()
+    {
+        var h = new Harness();
+        var root = h.Node("fire_here");
+        var site = h.Node("doublecannon4");
+        site.Xf = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(90f)), new Vector3(100, 50, 100));
+        var offset = site.Xf.Basis * new Vector3(0, 2, 0);
+
+        h.Stage.PlaceFollowing(new[] { root }, site, site.Xf.Origin + offset);
+        Assert.True(root.Placed);
+        Assert.True(root.Xf.Origin.IsEqualApprox(new Vector3(100, 52, 100)));
+        Assert.Equal(1, h.Stage.Following);
+
+        // The hull flies on and yaws; the fire re-places on the site's new pose with the
+        // offset carried in the site's frame.
+        site.Xf = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(180f)), new Vector3(500, 60, -300));
+        h.Stage.FollowSites();
+        Assert.True(root.Xf.Origin.IsEqualApprox(new Vector3(500, 62, -300)));
+
+        // A fresh placement of the same root ends the follow.
+        h.Stage.PlaceOn(new[] { root }, new Vector3(1, 1, 1));
+        Assert.Equal(0, h.Stage.Following);
+        site.Xf = new Transform3D(Basis.Identity, new Vector3(9, 9, 9));
+        h.Stage.FollowSites();
+        Assert.Equal(new Vector3(1, 1, 1), root.Xf.Origin);
+    }
+
+    [Fact]
+    public void PlaceFollowingEndsOnAHideAndOnAFreedSite()
+    {
+        var h = new Harness(shown: true);
+        var (def, copies) = h.PooledRoot("fire_here", slots: 1);
+        var site = h.Node("dbase");
+        site.Xf = new Transform3D(Basis.Identity, new Vector3(10, 0, 10));
+        h.Stage.PlaceFollowing(copies, site, site.Xf.Origin);
+        Assert.Equal(1, h.Stage.Following);
+
+        h.Stage.Reveal(def, copies[0], visible: false);
+        Assert.Equal(0, h.Stage.Following);
+
+        h.Stage.PlaceFollowing(copies, site, site.Xf.Origin);
+        site.Valid = false;
+        h.Stage.FollowSites();
+        Assert.Equal(0, h.Stage.Following);
+    }
+
     [Fact]
     public void IsAtHonoursTheOneMoveTolerance()
     {

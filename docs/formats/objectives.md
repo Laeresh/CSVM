@@ -102,7 +102,12 @@ authored by any shipped file:
 
 `TICK_DEPENDS_ON_OBJ [n]` gates the whole objective: it is only ticked, tested, or completed
 while objective `n` is **awake** (state 1), not merely alive (`FUN_0046a490` gate at
-0x46a5e6).
+0x46a5e6). The nap countdown (state 2, `+0x5cc` accumulating against `+0x5d8`) sits behind
+that gate too, so a nap another objective puts a gated objective into is **held**, not dropped:
+`FUN_0046b160` sets state 2, zeroes the timer and clears the completed flag regardless of the
+gate, and the timer only starts counting once `n` is awake. C1/M04's 18 and 19 (both gated on
+29, which 28's `DEDG [2, 2]` wakes) are the shipped case: their naps of 20 wait for 29, and the
+Paladin Blake squad arrives 30 s or 90 s after that, whichever route the radio tower chose.
 
 ### Completion conditions
 
@@ -117,7 +122,7 @@ immediately on its first eligible tick.
 | `ANIM_STATE` | `ANIM { NAME [a], STATE [s] }` repeated, optional `COMPLETION_COUNT [k]` | Counts entries whose animation's current runtime state (`FUN_004ed530`) equals the authored one; true at `k` matches, default all (`FUN_004697a0`). States parse as `RUNNING` = 2, `EXECUTED` = 3, `INVALID` = 4 (`FUN_004691d0`); they are the anim runtime's playing / has-run / invalidated states (see [anim-definitions.md](anim-definitions.md)). |
 | `DANGER_ZONES_COMPLETED` | `[zone, ...]` | Names danger zones ([missions.md](missions.md)). When the player completes a zone, the zone module walks every **awake** objective and flags matching names (`FUN_00446990` at 0x446a72); the condition is true when `DANGER_ZONES_COMPLETION_COUNT` names are flagged, default all (`FUN_00469ab0`). Zones completed while the objective is dormant or napping do not count for it. |
 | `DANGER_ZONES_COMPLETION_COUNT` | `[k]` | Required count for the zone list. |
-| `DEDG` | `[group, max]`, parser accepts optional 3rd string `generator` | True when the number of live vehicles whose AI group equals `group` (vehicle +0x388, the roster `group` field) is at or below `max` (`FUN_00465910` / `FUN_004658d0`); an optional generator name adds that generator's remaining capacity (+0x80) to the live count, so unspawned members block completion. `DEDG [2,0]` is "group 2 wiped out"; `[1,2]` is "group 1 down to two". "Live" is the dead byte `+0x91d` being clear (`FUN_00465850`), and the activate/deactivate primitive `FUN_004b0f40` sets that byte together with `+0x945`, so a roster member shipped `deactivated` is not counted until `WAKEUP_ENEMIES` puts it in play; C2/M01 relies on this, its `DEDG [1, 2]` gates falling to two while seven group-1 blocks are still parked. Side effect: every counted member's engagement volume is widened each tick to 9,000 m radius and ±9,000 m altitude (`FUN_00465850`), so a DEDG-watched group never disengages by distance. The name is not expanded anywhere in the binary; the mechanics above are the full decoded meaning. |
+| `DEDG` | `[group, max]`, parser accepts optional 3rd string `generator` | True when the number of live vehicles whose AI group equals `group` (vehicle +0x388, the roster `group` field) is at or below `max` (`FUN_00465910` / `FUN_004658d0`); an optional generator name adds that generator's remaining capacity (+0x80) to the live count, so unspawned members block completion. `DEDG [2,0]` is "group 2 wiped out"; `[1,2]` is "group 1 down to two". "Live" is the dead byte `+0x91d` being clear (`FUN_00465850`), and the activate/deactivate primitive `FUN_004b0f40` sets that byte together with `+0x945`, so a roster member shipped `deactivated` is not counted until `WAKEUP_ENEMIES` puts it in play; C2/M01 relies on this, its `DEDG [1, 2]` gates falling to two while seven group-1 blocks are still parked. A cutscene's AI park (code 913, `FUN_0041f250`) is different: it sets the hold flag `+0x354`, pushes the next-think time out and deactivates the scene node, and never touches `+0x91d`, so a parked vehicle still counts; C3/M05 relies on that, its wing walk parking the last Balmoral for 19 s under a `DEDG [5, 0]` that naps the instant loss (CSVM: `FlightController.Deactivated`, inert without `Parked`). Side effect: every counted member's engagement volume is widened each tick to 9,000 m radius and ±9,000 m altitude (`FUN_00465850`), so a DEDG-watched group never disengages by distance. The name is not expanded anywhere in the binary; the mechanics above are the full decoded meaning. |
 | `TRAVELERS` | `[who, "APPROACHING", where, radius, count]`, optional `"DELETE_ON_SUCCESS"` | Proximity condition (`FUN_00465b40`). `who` is either a gamez node name (the shipped files mostly use `player`) or an integer AI group. `where` is a node name or a literal `[x,y,z]`. Node form: true when the subject node is inside (`APPROACHING`) or outside (any other word; nothing else is authored) `radius` meters of the reference; with `DELETE_ON_SUCCESS` the vehicle standing on the node is deleted, or the node deactivated, as the condition fires. Group form: each tick, every live group member inside (or outside) the radius adds 1 to a running tally, `DELETE_ON_SUCCESS` deletes the counted members (never the player), and the condition is true when the tally reaches `count` (default 1). Without deletion a loitering member re-counts every tick. Radius is stored squared; `count` sits in the 5th slot. |
 | `COUNTER … TEST_COMPLETE` | see below | Parsed, authored nowhere; see [unauthored keywords](#keywords-the-parser-accepts-that-no-mission-authors). |
 
@@ -167,12 +172,12 @@ Then, in order:
 | `SET_AI_TEAM` | `[[name, team], ...]` up to 10 | Sets the vehicle's team through its vtable (dropping its current target) or the zeppelin's team fields +0xdc/+0xe0 with a turret-side refresh (`FUN_00469e20`, log string `SET_AI_TEAM: setting vehicle %s to team %d`). |
 | `SET_AI_NET` | `[[name, net], ...]` up to 10 | Reassigns the vehicle (`FUN_00475f30`) or zeppelin (`FUN_004bd7a0`) to the named patrol net ([ai-nets.md](ai-nets.md)). This is how C2/M01 walks its patrol boats through successive nets. |
 | `SET_AI_ATTACK_RADIUS` | `[[name, r], ...]` | Parsed and executable (`FUN_00469f70` writes the vehicle's radius-squared / ±band volume at +0x328), authored nowhere. |
-| `COMPLETED_ZEPCANNONS` | `[[zep, flag], ...]` up to 10 | Writes `flag` to zeppelin record byte +0xc (`FUN_0046a0b0`). The write is proven; **which behaviour reads +0xc is untraced**, a named gap. |
+| `COMPLETED_ZEPCANNONS` | `[[zep, flag], ...]` up to 10 | Writes `flag` to zeppelin record byte +0xc (`FUN_0046a0b0`), the broadside engage flag: the zeppelin update `FUN_004bf9d0` runs the cannon fire pass only while it is set and retracts ready cannons while it is clear ([mission-entities.md](mission-entities.md) "Broadside firing"). Authored in C2B/M04, C4/M05 and C5/M04 only. |
 | `COMPLETED_STOPPOINT` | `[[net, stop, flag], ...]` up to 10 | Looks the name up in the patrol-net table, requires `stop > 0`, finds the FIRST node carrying that stop-point id (`FUN_004319a0`) and writes `flag` onto that node's halt byte (`FUN_0046a0d0` / `FUN_004319d0`). `flag = 0` releases a docked zeppelin, `flag = 1` arms a fresh stop mid-route; the file's own flag is only the starting state. All 23 shipped clauses resolve to a node ([ai-nets.md](ai-nets.md) stop points). |
-| `ADD_OTHER_TARGET` / `REMOVE_OTHER_TARGET` | names, single or listed | Sets/clears byte +0x4c on the named vehicle, turret, or object (`FUN_0046a1b0`/`FUN_0046a1f0`): the `other_target` display flag `targets.zrd` also sets at load ([missions.md](missions.md)). |
-| `ADD_OBJECTIVE_TARGET` / `REMOVE_OBJECTIVE_TARGET` | names, single or listed | Sets/clears byte +0x4d, the mission-objective target flag (the byte [instant-action.md](instant-action.md) documents on the IA objective zeppelin). A list argument is a list of independent names, not a node path. |
+| `ADD_OTHER_TARGET` / `REMOVE_OTHER_TARGET` | targets: a bare name, or a `[parent, child, ...]` path | Sets/clears byte +0x4c on the named vehicle, turret, or object (`FUN_0046a1b0`/`FUN_0046a1f0`): the `other_target` display flag `targets.zrd` also sets at load ([missions.md](missions.md)). |
+| `ADD_OBJECTIVE_TARGET` / `REMOVE_OBJECTIVE_TARGET` | targets: a bare name, or a `[parent, child, ...]` path | Sets/clears byte +0x4d, the mission-objective target flag (the byte [instant-action.md](instant-action.md) documents on the IA objective zeppelin). A nested list is ONE target, a node path walked from the outer name inward, the shape `INACTIVEn` uses: every shipped nesting is a path (`[piratezep, rock_zeppelin]`, `[zcrane1, healthy]`, `[cargozep2, ctur1]`, C5/M01's three-deep `[rfspt4, healthy, spprt]`), and a bare name beside one (`[[player_bmhook, bm_hook], bhf_hangar]`) is a second target. Read as independent names, `[piratezep, rock_zeppelin]` flags the hull root and every ground `rock_zeppelin` too. The read is from the data's shape; the binary's walk of the list is not traced. |
 | `START_TAXI` | `[name, ...]` up to 10 | Clears vehicle byte +0xd4 (`FUN_0046a2b0`), releasing the vehicle onto its authored `taxiPath` ([ai-rosters.md](ai-rosters.md)). |
-| `SET_HELP_LABEL` | `[name(s), MSG_key]` | Resolves the message key to its langui id and writes id + text into the target's help-label fields (+0x48/+0x38, `FUN_0046a2d0`), the label the HUD shows for a selected target. |
+| `SET_HELP_LABEL` | `[target, MSG_key]`, the target a bare name or a `[parent, child]` path | Resolves the message key to its langui id and writes id + text into the target's help-label fields (+0x48/+0x38, `FUN_0046a2d0`), the label the HUD shows for a selected target. |
 | `STOP_QUEUED_SOUNDS` | `[name, ...]` up to 10 | Removes the named sounds from the radio queue if they have not started (`FUN_005920f0`). Used to cancel now-moot reminder chatter. |
 | `ADJUST_TIMER_WHEN_I_COMPLETE` | `[op, seconds]`, op `SET` or `ADJUST` | Sets or adds to the mission countdown (`FUN_0046c510`/`FUN_0046c550`). Parsed (also as unauthored alias `TIMER_ADJUST`), authored nowhere. |
 | `END_TIMER` | flag | Stops the mission countdown (`FUN_0046c5c0`). Authored nowhere. |
@@ -222,8 +227,45 @@ matches (`FUN_004ad240`). Consequences, all decoded:
   `LOST`-marked ones are (`FUN_0046a490` tail), playing `OBJECTIVES_WON_SOUND` /
   `OBJECTIVES_LOST_SOUND`.
 - The mission countdown expiring is a third ending (see `MISSION_TIMER`).
+- A cutscene's completion code 13 sets the same won flag from outside this module and runs the
+  mission-end path itself, with no wrap-up
+  ([anim-definitions/cutscenes.md](anim-definitions/cutscenes.md)). Where a mission carries both,
+  the code always wins: it is raised by the docking definition's last sequence, so that definition
+  is still `RUNNING` when it lands and the `ANIM_STATE ... EXECUTED` objective watching it cannot
+  have completed yet. C3/M05 is the worked case, its `OBJECTIVE19` (`ANIM_STATE
+  hooked_to_klondike EXECUTED`, `INSTANTWIN`) reaching its condition one frame after the mission
+  is already over.
 
-Every shipped campaign mission ends through `INSTANTWIN`/`INSTANTLOSS` objectives; the
+#### The mission-end path, and what the player sees after it
+
+All four endings converge on `FUN_00443090`, and it does three things and no more.
+
+1. **Silences the world.** `FUN_00594040` walks every live sound instance and collects the ones
+   still playing, `FUN_00594580` stops each (`FUN_00593dc0`) and `FUN_00594680` frees the list.
+2. **Records the attempt.** `FUN_004194e0` (or `FUN_00419700` for game type 3) builds the
+   completed-objective bitmask, writes the result slot through `FUN_00419630`, and asks for the
+   results state `DAT_0071d57c`.
+3. **Asks for it through the fade, not directly.** `FUN_0046fb60` parks the requested state in
+   `_DAT_0071c210`, arms the "Fade State" object at `DAT_0071c200` with a duration and pushes THAT
+   onto the state machine at `DAT_0071d3a0`. The duration is `_DAT_006272b8`, the fade's own
+   default, and it is **2.0 s** (`FUN_00470000` seeds every fade with it).
+
+The Fade State is the whole answer to "what plays after the ending". Its entry
+(`FUN_0046fc80` -> `FUN_0059e2e0`) COPIES THE CURRENT FRAMEBUFFER into a surface of its own; its
+tick (`FUN_0046fcc0` -> `FUN_0046fe10`) blits that copy every frame at a level ramping from 0 to 1
+at `1/duration` per second and presents it itself; its exit (`FUN_0046fd60`) frees the copy. The
+flying state is off the top of the machine for all of it, and `FUN_00443090`'s own
+`DAT_0071d290 = 5000` parks that state's presenter for 5000 frames on top of that, where every
+ordinary cutscene callback writes 1.
+
+So nothing of the film plays on after an ending. **The last live frame is the frame the ending
+landed on**, and the player looks at that frame fading out for 2.0 s before the next screen. In
+C3/M05 that catches the docking 0.06 s before `bal_wing_foldup`'s authored end, with the wings
+folded but a few degrees short of their authored angle, and 0.85 s before `stopprops` would have
+finished spinning the Balmoral's propellers down. Neither is ever seen.
+
+Every shipped campaign mission authors `INSTANTWIN`/`INSTANTLOSS` objectives to end on (the
+missions finishing on a hook or a drop reach code 13 first); the
 `WON`/`LOST` aggregate rule and the timer are unexercised by the data. **Four of the 21 campaign
 missions author no loss at all** (`C3/M01`, `C3/M02`, `C4/M02`, `C5/M03`: zero `INSTANTLOSS`, zero
 `LOST`), which is the shape of the fourth ending below: those missions are losable only by dying.
@@ -391,7 +433,7 @@ display readers `FUN_004acc20` / `FUN_004ad240` / `FUN_004a2350`, and the danger
 `extracted\` tree.
 
 Named gaps, each marked at its point of use: the consumers of `PLAYER_INIT`'s first, fourth
-and fifth values; the reader of zeppelin byte +0xc (`COMPLETED_ZEPCANNONS`); `WIN_ANIM` /
+and fifth values; `WIN_ANIM` /
 `LOSS_ANIM`'s consumer; and the radio queue's internal mode/delay parameters
 (`FUN_0046caf0`), whose pre/in/won-battle special routing is decoded but whose exact fade
 behaviour is not.

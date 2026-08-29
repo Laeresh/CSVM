@@ -28,7 +28,8 @@ public enum ZeppelinCannonState
 }
 
 /// <summary>The zeppelin broadside law (M4 F19), pure and engine-free (docs/architecture.md): the
-/// decoded 90° firing arc, the per-cannon stowed → deploy → ready → fire machine with its own
+/// script-owned engage flag (<see cref="CannonsEngaged"/>, off until <c>COMPLETED_ZEPCANNONS</c>),
+/// the decoded 90° firing arc, the per-cannon stowed → deploy → ready → fire machine with its own
 /// re-fire timer, and the zeppelin-vs-zeppelin gasbag pick. Hit resolution is BALLISTIC: <see
 /// cref="TryAim"/> is a lead/intercept solve, and a target with no solution is SKIPPED, never
 /// rolled against. <see cref="StowAfterIdleSeconds"/> and the two fallback timings are invented,
@@ -53,6 +54,12 @@ public sealed class ZeppelinBroadside
     /// <c>cannon_fire_delay</c>; no shipped record does (all 48 cannon-bearing records author
     /// 10/15/20 s).</summary>
     public const float FallbackFireDelaySeconds = 20f;
+
+    /// <summary>The one <c>targets</c> name that is not a zeppelin record: the human aircraft.
+    /// The original resolves it through the same world-node table as a zeppelin's node, but no
+    /// shipped script ever engages the cannons of a record naming it, so the arm is unreachable
+    /// in the campaign (docs/formats/mission-entities.md "Broadside firing").</summary>
+    public const string PlayerTarget = "player";
 
     public ZeppelinBroadside(ZeppelinDef def,
         Func<ZeppelinCannon, float>? deploySeconds = null,
@@ -85,6 +92,12 @@ public sealed class ZeppelinBroadside
 
     /// <summary>All cannons, left side first, in record order.</summary>
     public IReadOnlyList<Cannon> Cannons { get; }
+
+    /// <summary>The decoded zeppelin byte <c>+0xc</c>: zero at construction, written only by the
+    /// objective script's <c>COMPLETED_ZEPCANNONS</c>. While clear the per-frame pass never
+    /// reaches the fire routine (so nothing deploys or fires) and a ready cannon is retracted
+    /// outright; the record's <c>targets</c> list is inert until a script sets it.</summary>
+    public bool CannonsEngaged { get; set; }
 
     /// <summary>The sign of the hull-local X axis that points out of the RIGHT broadside. +1
     /// by the mission convention (yaw 0 = −Z forward, +X starboard); the runtime re-derives it
@@ -139,6 +152,27 @@ public sealed class ZeppelinBroadside
         AimAssist.TryIntercept(muzzlePos, roundSpeed, targetPos, targetVel - platformVel,
             out aimDir, out _);
 
+    public static bool IsPlayerTarget(string name) =>
+        name.Equals(PlayerTarget, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The decoded candidate walk: the authored <c>targets</c> list in authored order,
+    /// the first name whose <paramref name="resolve"/> yields a live target wins, a name that
+    /// yields none is skipped. No team, side or hostility read exists in the original's chain;
+    /// the gate that keeps the shipped campaign's broadsides off the player is
+    /// <see cref="CannonsEngaged"/>, not a filter on this walk.</summary>
+    public static T? FirstLiveTarget<T>(IReadOnlyList<string> targets, Func<string, T?> resolve)
+        where T : struct
+    {
+        foreach (var name in targets)
+        {
+            if (resolve(name) is { } hit)
+            {
+                return hit;
+            }
+        }
+        return null;
+    }
+
     /// <summary>The zeppelin-vs-zeppelin pick: one index into the already-filtered list of the
     /// TARGET zeppelin's in-arc live gasbags, drawn from the seeded rng (the engine's
     /// <c>rand()</c>). −1 when none is in arc.</summary>
@@ -146,20 +180,33 @@ public sealed class ZeppelinBroadside
         inArcCount <= 0 ? -1 : rng.Next(inArcCount);
 
     /// <summary>One step of every cannon's machine. <paramref name="targetSide"/> is where the
-    /// current target bears; <paramref name="cannonAlive"/> is F18's zone view, dropping a
-    /// destroyed cannon from the volley. The caller plays the anims for <paramref
-    /// name="deploying"/>/<paramref name="retracting"/> and fires each <paramref
-    /// name="readyToFire"/> cannon, calling <see cref="Fired"/> on an actual launch.</summary>
+    /// current target bears (ignored while <see cref="CannonsEngaged"/> is clear); <paramref
+    /// name="cannonAlive"/> is F18's zone view, dropping a destroyed cannon from the volley. The
+    /// caller plays the anims for <paramref name="deploying"/>/<paramref name="retracting"/> and
+    /// fires each <paramref name="readyToFire"/> cannon, calling <see cref="Fired"/> on an
+    /// actual launch.</summary>
     public void Step(float dt, BroadsideSide targetSide, Func<string, bool> cannonAlive,
         List<Cannon>? deploying = null, List<Cannon>? retracting = null,
         List<Cannon>? readyToFire = null)
     {
+        if (!CannonsEngaged)
+        {
+            targetSide = BroadsideSide.None;
+        }
         foreach (var cannon in Cannons)
         {
             cannon.RefireIn = Math.Max(0f, cannon.RefireIn - dt);
             if (!cannonAlive(cannon.Record.Node))
             {
                 continue;   // destroyed (F18): out of the volley, and no anim ever plays again
+            }
+            if (!CannonsEngaged && cannon.State == ZeppelinCannonState.Ready)
+            {
+                // Disengaged, the original's pass retracts every ready cannon at once (decoded).
+                cannon.State = ZeppelinCannonState.Retracting;
+                cannon.StateLeft = cannon.RetractSeconds;
+                retracting?.Add(cannon);
+                continue;
             }
             switch (cannon.State)
             {

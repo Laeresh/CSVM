@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
@@ -468,9 +469,11 @@ internal static class AnimationAndEffectsSuites
                     // The IMPACT_FORCE gate itself: one armed runtime, one body, the authored flag
                     // the only difference. ⚠ High above the surface, not at the rest pose, or the
                     // column tier stops both launches on the same polygon and they read alike.
-                    elsewhere.GlobalPosition = new Vector3(0f, surfaceY + DropHeight, 0f);
                     float LaunchY(bool impactForce)
                     {
+                        // Re-placed per launch: a launch integrates from the LIVE pose, so without
+                        // this the second body would start where the first one's 0.2 s left it.
+                        elsewhere.GlobalPosition = new Vector3(0f, surfaceY + DropHeight, 0f);
                         MotionRuntime.Create(runtime, elsewhere, Body(flagged: false, impactForce: impactForce),
                             Authored)?.Seek(0.2f);
                         return elsewhere.GlobalPosition.Y;
@@ -524,9 +527,9 @@ internal static class AnimationAndEffectsSuites
     // FORWARD_ROTATION turns a launched body about the horizontal PERPENDICULAR of its own launch
     // direction, at the authored rate and scaled by that direction's horizontal length, so one authored
     // number tumbles a flat throw fast and a steep one slowly. Every case is arithmetic on a synthetic
-    // body, with min = max ranges and the pose read back as geometry rather than as the euler triple
-    // the implementation writes. ⚠ A body launched by the vector translation form must hold its
-    // orientation exactly; that is the case that fails if the axis is ever "fixed" to a mesh axis.
+    // body, with min = max ranges and the pose read back as geometry, not as the euler triple written.
+    // ⚠ A vector-translation body turns about its COMPILED direction (`rnd_xz`) and holds exactly
+    // when that is zero; both cases fail if the axis is ever "fixed" to a mesh axis.
     internal static void ForwardRotation(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -562,15 +565,16 @@ internal static class AnimationAndEffectsSuites
                     ["run_time"] = runTime,
                 });
 
-            // The same tumble on the VECTOR launch form — the shape the crash pieces author.
-            static AnimData Vector(float rate) =>
+            // The same tumble on the VECTOR launch form — the shape the crash pieces author. `dir` is
+            // the compiled direction cache the extractor names `rnd_xz`.
+            static AnimData Vector(float rate, Vector3 dir) =>
                 new(new Dictionary<string, object?>
                 {
                     ["translation"] = new Dictionary<string, object?>
                     {
-                        ["initial"] = Vec(10f, 0f, 0f),
+                        ["initial"] = Vec(10f * dir.X, 10f * dir.Y, 10f * dir.Z),
                         ["delta"] = Vec(0f, 0f, 0f),
-                        ["rnd_xz"] = Vec(0f, 0f, 0f),
+                        ["rnd_xz"] = Vec(dir.X, dir.Y, dir.Z),
                     },
                     ["forward_rotation"] = new Dictionary<string, object?>
                     {
@@ -636,13 +640,156 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(Mathf.Abs(rampedAngle - 1f) < 1e-3f,
                 $"forward_rotation.delta accelerates the rate angle={rampedAngle:0.000} rad expected=1.000");
 
-            // 5 — the report from the controls. The vector launch form never fills the direction
-            // cache the tumble multiplies through, and the parser zeroes the event struct before
-            // reading it, so these bodies hold their orientation however large the authored rate is.
-            var vec = Pose(Vector(15.708f), 1f);
+            // 5 — the vector launch form turns about the direction the PARSER compiled into its
+            // third triple, the same cache the ranged form draws: a +Z launch pitches over +Z.
+            var vecZ = Pose(Vector(Mathf.Pi / 2f, Vector3.Back), 1f);
+            ctx.Check(vecZ.Y.IsEqualApprox(Vector3.Back),
+                $"a vector-translation launch tumbles about its compiled direction up={vecZ.Y}");
+
+            // 6 — and with that triple zero (a vertical launch, or a hand-built shape) there is no
+            // axis to turn about, so the body holds its orientation however large the authored rate.
+            var vec = Pose(Vector(15.708f, Vector3.Zero), 1f);
             ctx.Check(vec.IsEqualApprox(Basis.Identity),
-                $"a vector-translation launch does not tumble at all basis={vec}");
-            ctx.Note($"flat 1 rad/s = {-slow.GetEuler(EulerOrder.Yxz).Z:0.000} rad/s, the same launch at 60° = {steepAngle:0.000} rad/s, vector form = 0");
+                $"a vector-translation launch with a zero direction does not tumble basis={vec}");
+            ctx.Note($"flat 1 rad/s = {-slow.GetEuler(EulerOrder.Yxz).Z:0.000} rad/s, the same launch at 60° = {steepAngle:0.000} rad/s, vector form along +Z up={vecZ.Y}, zero direction = 0");
+        });
+    }
+
+    // ---- the vector launch form's third triple: a compiled direction, not a spread --------------
+
+    // The parser compiles `TRANSLATION az elev speed delta` into `initial` (direction × speed),
+    // `delta` (direction × acceleration) and the direction cache the tumble reads back, which the
+    // extractor names `rnd_xz`. Nothing on the vector form is random, so two bodies must fly the
+    // identical path and end exactly where `initial` puts them. ⚠ Read as a spread, the third triple
+    // walked the Barracuda's 40 s cruise up to 44 m per draw, snapped away by the next placement.
+    internal static void LaunchDirectionCache(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var runtime = world.Runtime;
+            var root = world.Session.Root;
+
+            static Dictionary<string, object?> Vec(Vector3 v) =>
+                new() { ["x"] = v.X, ["y"] = v.Y, ["z"] = v.Z };
+
+            // The Barracuda's cruise event as authored: 40 m/s along +Z for 40 s, no acceleration,
+            // the third triple its unit +Z direction (`cache` lets a case vary that triple alone).
+            static AnimData Cruise(Vector3 dir, Vector3? cache = null) =>
+                new(new Dictionary<string, object?>
+                {
+                    ["translation"] = new Dictionary<string, object?>
+                    {
+                        ["initial"] = Vec(dir * 40f),
+                        ["delta"] = Vec(Vector3.Zero),
+                        ["rnd_xz"] = Vec(cache ?? dir),
+                    },
+                    ["run_time"] = 40f,
+                });
+
+            Vector3 Fly(AnimData data, float t)
+            {
+                var node = new Node3D { Name = "launch-direction-probe" };
+                root.AddChild(node);
+                try
+                {
+                    var motion = MotionRuntime.Create(runtime, node, data, data.Num("run_time") ?? 0f);
+                    motion?.Seek(t);
+                    return node.Transform.Origin;
+                }
+                finally
+                {
+                    node.QueueFree();
+                }
+            }
+
+            // Two bodies built one after the other share nothing but the data; under the spread
+            // reading each drew its own three numbers off the runtime's RNG and the two diverged.
+            var first = Fly(Cruise(Vector3.Back), 40f);
+            var second = Fly(Cruise(Vector3.Back), 40f);
+            var expected = new Vector3(0f, 0f, 1600f);
+            ctx.Check(first.IsEqualApprox(expected),
+                $"the cruise ends exactly where initial × run_time puts it end={first} expected={expected}");
+            ctx.Check(first.IsEqualApprox(second),
+                $"a second body flies the identical path first={first} second={second}");
+
+            // The third triple is a direction, not an amplitude: scaling it changes nothing about
+            // where the body goes, only (through the tumble) how it turns.
+            var scaled = Fly(Cruise(Vector3.Back, cache: Vector3.Back * 2f), 40f);
+            ctx.Check(scaled.IsEqualApprox(expected),
+                $"a longer third triple moves the body not one metre further end={scaled}");
+            ctx.Note($"cruise end {first} against the authored placement 1600 m along +Z");
+        });
+    }
+
+    // ---- a chain of OBJECT_MOTION events on one placed node: the Barracuda's drive -------------
+
+    // C3/M03's `sub_movement` is the install's clearest chain: a reset placement 17.8 km from the
+    // hull's gamez pose (the map origin), a surfacing FromTo, three vector-form drive legs and a
+    // closing FromTo 1.2 m past where the legs end. The original integrates every leg from the
+    // node's live translation, so the hull never leaves its line. ⚠ A launch seeded from the
+    // authored rest pose plays the whole drive at the map origin and snaps back into the bay.
+    internal static void BarracudaDrive(TestContext ctx)
+    {
+        const float Tick = 1f / 30f;
+        const float DriveSeconds = 62f;     // 10 s surfacing, 44 s of drive, 6 s of settling, slack
+        const float StepLimitM = 10f;       // 40 m/s is 1.3 m per tick; a re-seat is kilometres
+        const float EndToleranceM = 3f;
+        var bay = new Vector3(-12032f, 0f, -11516.288f);
+        var start = new Vector3(-12032f, -38f, -13197.5f);
+
+        ctx.WithWorld("C3", collision: false, "M03", world =>
+        {
+            var runtime = world.Runtime;
+            var hulls = runtime.FindNodes("barracuda");
+            ctx.Same(1, hulls.Count, $"C3/M03 builds one barracuda node");
+            if (hulls.Count != 1)
+            {
+                return;
+            }
+            var hull = hulls[0];
+            var started = runtime.Play("sub_movement");
+            ctx.Check(started.Count > 0, $"sub_movement starts ({started.Count} instance(s))");
+            var placed = hull.GlobalPosition;
+            ctx.Check(placed.DistanceTo(start) < 1f,
+                $"the reset places the hull at its authored start placed={placed} start={start}");
+
+            var trace = new StringBuilder();
+            var last = placed;
+            float maxStep = 0f, maxStepAt = 0f;
+            Vector3 maxStepFrom = placed, maxStepTo = placed;
+            int steps = (int)(DriveSeconds / Tick);
+            for (int i = 1; i <= steps; i++)
+            {
+                runtime.Advance(Tick);
+                var now = hull.GlobalPosition;
+                float step = now.DistanceTo(last);
+                if (step > maxStep)
+                {
+                    maxStep = step;
+                    maxStepAt = i * Tick;
+                    maxStepFrom = last;
+                    maxStepTo = now;
+                }
+                if (i % 30 == 0)
+                {
+                    trace.AppendLine($"t={i * Tick:0.0} pos=({now.X:0.0},{now.Y:0.00},{now.Z:0.0}) step={step:0.00}");
+                }
+                last = now;
+            }
+
+            var end = hull.GlobalPosition;
+            var basis = hull.GlobalTransform.Basis.Orthonormalized();
+            float yaw = basis.GetEuler(EulerOrder.Yxz).Y;
+            var nose = -basis.Z;
+            ctx.Check(maxStep < StepLimitM,
+                $"the hull never jumps: largest step {maxStep:0.0} m at t={maxStepAt:0.0} s from {maxStepFrom} to {maxStepTo}");
+            ctx.Check(end.DistanceTo(bay) < EndToleranceM,
+                $"the drive ends in the bay end={end} authored={bay} off by {end.DistanceTo(bay):0.00} m");
+            ctx.Check(end.Z > start.Z + 1000f,
+                $"the drive ran along +Z from the start, not out to sea end.Z={end.Z:0.0} start.Z={start.Z:0.0}");
+            trace.AppendLine($"end=({end.X:0.0},{end.Y:0.00},{end.Z:0.0}) yaw={yaw:0.000} rad nose={nose}");
+            ctx.WriteArtifact("test-barracuda-drive.txt", trace.ToString());
+            ctx.Note($"largest step {maxStep:0.00} m, end {end}, yaw {Mathf.RadToDeg(yaw):0.0} deg, nose (local -Z) points {nose}");
         });
     }
 

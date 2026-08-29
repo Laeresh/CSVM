@@ -12,7 +12,8 @@ namespace CSVM.Flight;
 /// docs/architecture.md entry; the anchored-trailer ride is docs/formats/ai-nets.md.
 /// Arrival is the decoded along-leg test (<see cref="ArrivalRadius"/>). A node's stop point
 /// (<see cref="AiNetNode.StopPointId"/>) is live state here, armed and disarmed by
-/// <see cref="SetStopPoint"/>; <see cref="AiNetNode.EntersDangerZone"/> is preserved unacted-on.
+/// <see cref="SetStopPoint"/>; a reached node's <see cref="AiNetNode.EntersDangerZone"/> is
+/// reported through <see cref="ArrivedNode"/> for the aircraft pilot to act on.
 /// A caller observing stop points (<see cref="ObservesStopPoints"/>) also holds unconditionally at
 /// a structural dead end instead of turning back (<see cref="Update"/>, `FUN_004bf9d0`).</summary>
 public sealed class AiNetFollower
@@ -41,6 +42,8 @@ public sealed class AiNetFollower
     private readonly Func<Vector3?>? _trailerTarget;
     private readonly int _anchorIndex = -1;
     private int _previousIndex = -1;
+    private int _avoidFrom = -1;
+    private int _avoidTo = -1;
     private Vector3? _legOrigin;
 
     /// <param name="trailerTarget">Where the net's trailer target is right now, null when it cannot
@@ -107,6 +110,12 @@ public sealed class AiNetFollower
     /// <summary>How many node captures have advanced the target so far.</summary>
     public int Advances { get; private set; }
 
+    /// <summary>The node the last <see cref="Update"/> arrived at and stepped past, or null when
+    /// that call advanced nothing. The aircraft follower's danger-zone report: the original reads
+    /// the reached node's <c>+0x11</c>/<c>+0x14</c> right after the step (<c>FUN_0041d1f0</c>),
+    /// so <see cref="AiPilot"/> starts a run off this and never off the node it flies toward.</summary>
+    public AiNetNode? ArrivedNode { get; private set; }
+
     /// <summary>Whether an armed stop point halts this walk at all (the constructor's
     /// <c>observesStopPoints</c>). The flags are still readable and writable when it is false.
     /// </summary>
@@ -168,17 +177,20 @@ public sealed class AiNetFollower
     public Vector3 NodePosition(int index) => Net.Nodes[index].Position + LiveOffset();
 
     /// <summary>Drops the walk back to "nearest node next", so the next <see cref="Update"/>
-    /// re-seats from wherever the follower now is. This is the original's own activation rule:
-    /// <c>FUN_004b0f40</c> snaps a vehicle carrying a net to that net's nearest node
-    /// (<c>FUN_00432010</c>) when it is activated. An Instant Action wave member ticks while it
-    /// is inert (presence is not a sim gate), so without this its first update latches a node
-    /// near the parking pose and it flies back there after the teleport.</summary>
-    public void Reseat()
+    /// re-seats from wherever the follower now is: the original's activation snap
+    /// (<c>FUN_004b0f40</c> into <c>FUN_00432010</c>) and its danger-zone exit
+    /// (<c>FUN_00490590</c>) alike, both decoded in this module's architecture.md entry.</summary>
+    /// <param name="avoidFrom">One end of an edge the next seat pick must refuse, −1 for none.</param>
+    /// <param name="avoidTo">The other end of that edge.</param>
+    public void Reseat(int avoidFrom = -1, int avoidTo = -1)
     {
         CurrentIndex = -1;
         _previousIndex = -1;
         _legOrigin = null;
         Holding = false;
+        ArrivedNode = null;
+        _avoidFrom = avoidFrom;
+        _avoidTo = avoidTo;
     }
 
     /// <summary>Whether node <paramref name="index"/> currently halts whoever reaches it: an
@@ -238,14 +250,18 @@ public sealed class AiNetFollower
     // flows past its node instead of orbiting it forever.
     public bool Update(Vector3 position, Vector3 heading = default)
     {
+        ArrivedNode = null;
         if (CurrentIndex < 0)
         {
             int seat = NearestNode(position);
+            int avoid = AvoidedNeighborOf(seat);
+            _avoidFrom = -1;
+            _avoidTo = -1;
             if (heading.LengthSquared() > HeadingEpsilon && _neighbors[seat].Length > 0)
             {
                 _previousIndex = seat;
                 _legOrigin = null;
-                CurrentIndex = PickOnward(seat, exclude: -1, heading);
+                CurrentIndex = PickOnward(seat, avoid, heading);
             }
             else
             {
@@ -273,6 +289,7 @@ public sealed class AiNetFollower
         if (_neighbors[CurrentIndex].Length == 0)
             return false; // an isolated node is held, not escaped by inventing an edge
         int next = PickOnward(CurrentIndex, _previousIndex, heading);
+        ArrivedNode = Net.Nodes[CurrentIndex];
         _previousIndex = CurrentIndex;
         _legOrigin = null;
         CurrentIndex = next;
@@ -335,6 +352,15 @@ public sealed class AiNetFollower
         }
         return candidates[0]; // unreachable; keeps the compiler satisfied
     }
+
+    // The neighbour of `seat` across the edge Reseat was told to avoid, or −1 when that edge is
+    // not incident to the seat. The engine excludes an EDGE ID from the seat pick (FUN_00490590's
+    // exit passes the leg the walk was on, FUN_00431e40 skips the candidate carrying it); an
+    // undirected neighbour list says the same thing by naming the far end.
+    private int AvoidedNeighborOf(int seat) =>
+        seat == _avoidFrom ? _avoidTo
+        : seat == _avoidTo ? _avoidFrom
+        : -1;
 
     // The current node's only edge is the one just flown: nowhere further to go. Scoped to
     // CurrentIndex (never a lookahead) because _previousIndex describes THIS leg only.

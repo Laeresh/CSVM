@@ -318,6 +318,14 @@ public sealed partial class AnimTimeline : Control
             case "ObjectMotionSiScript":
                 int slot = (int)(ev.Data.Num("index") ?? 0f);
                 return _program?.ScriptFor(def, slot)?.Duration ?? 0f;
+            case AnimDefinition.AllNamesKind:
+                float longest = 0f;
+                foreach (var motion in ev.Data.Objects("motions"))
+                {
+                    int one = (int)(motion.Num("index") ?? 0f);
+                    longest = Mathf.Max(longest, _program?.ScriptFor(def, one)?.Duration ?? 0f);
+                }
+                return longest;
             default:
                 return 0f;
         }

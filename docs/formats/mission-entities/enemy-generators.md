@@ -40,6 +40,20 @@ design document and the shipped data agree field-for-field.
 `Earig32_params` (a transposition), so that generator's roster lookup cannot succeed as authored.
 Asserted in `CSVM.Tests/EnemyGeneratorsTests.cs`.
 
+What the engine does with it is decoded. The record parser (`FUN_00452850`) compares the `params`
+string against every label in the roster table and stores the matching vehicle record at `+0x3c`;
+no match leaves it null. The launch (`FUN_00451bf0`, called from the cycle at `FUN_00452640`) then
+takes the template-less branch: it copies the generator's `vehicle.type` string (`+0x44`, empty
+because no shipped file authors the key) and asks `FUN_0047b650` for a vehicle def of that name,
+which walks the def table with `_stricmp` and returns null for the empty name. The launch still
+returns 1, so the cycle books it: `capacityRemaining--`, `active++`, the timer resets, the wave
+counter advances and the global `%s_eg%d` ordinal increments. Nothing is built, and the `active`
+slot is never freed because no vehicle exists to die, so `eairg32` (`max_active 4`) blocks itself
+after four empty launches. The other branch, the first block of the def or the sibling generator's
+block, does not exist in the code. CSVM matches this: the launch builds nothing, the ordinal
+advances and the slot stays taken (`Session/AiGeneratorRuntime.cs`); the `player_bhawk` stand-in
+is only for a generator that authors no `params` key at all.
+
 ## The generator cycle
 
 Decoded from the binary. One generator holds a timer, a next-event threshold, a per-wave counter
@@ -161,12 +175,35 @@ work.
   climb supplies the pitch;
 - velocity: **zero**, against the zeppelin drop's inherited carrier velocity;
 - throttle: the field pair at `+0x124`/`+0x128` set to **1.0**, where the drop sets them to 0.1;
-- the path is kept on the aircraft at `+0xc8` with the flag at `+0xcc`, which is the take-off run
-  it then flies, and which also suppresses the net-nearest-node snap an ordinary activation makes
-  (`FUN_004b0f40`).
+- the path is kept on the aircraft at `+0xc8` with the flag at `+0xcc` and the leg index zeroed
+  at `+0xd0`, which is the take-off run it then flies under the scripted-path follower
+  (`FUN_0048a110`, docs/org/flightModel.md "The scripted-path follower": 40 mph along the run,
+  accelerating and climbing out on the final leg, the flag cleared at the final leg's 300 m point,
+  past a short strip's last waypoint), and which
+  also suppresses the net-nearest-node snap an ordinary activation makes (`FUN_004b0f40`), so the
+  run places the aircraft and the net takes over where the run ends.
 
 There is no altitude gate and no spawn-height offset on this path. `min_altitude` is a zeppelin
 key and does not appear on a surface record.
+
+**The host node's own matrix never places a surface launch.** `FUN_00451bf0` reads the host's
+world matrix (`FUN_004cf200`, the node's accumulated transform) only on the zeppelin branch
+(`generator+1` set), where the drop point is the `origin` node; a surface host takes waypoint 0
+of its path on every launch, and the branch that would read the host with no path is unreachable
+because the loader has already dropped a host whose path is shorter than two points. So a
+model-less group host is no special case: C2/M01's `eshipg31` is an identity-transform group
+under `generators` under the terrain tile `g36347`, its geometry `ship_gen.flt` and its
+`esg31_aip0..5` points carrying the world translation themselves (`(-5888.8, 0.02, -4408.0)` to
+`(-6141.7, -0.04, -4435.7)`, a 253 m run west along the water), and the launch lands on
+`esg31_aip0` in the original and here alike. The bbox centre is not read by anything in the launch.
+
+**A ship generator launches a hull.** `Eshipg31_params` names `patrolboat_eg0`, a `mode ship` def
+(`patrolboat`, docs/formats/vehicle.md), and the same spawner `FUN_0047c210` builds it and sets
+the path flag on it, so the boat runs `esg31_aip0..5` under the scripted-path follower and joins
+`M2Patrol1` where the path ends; the mission's `SET_AI_NET [patrolboat_egN, M2GoosePatrol]`
+clauses then walk each launch between nets. CSVM: `GeneratorLaunch.Surface` in
+`Session/CampaignRoster.cs`, built by `Session/SurfaceVehicleRuntime.cs` and launched down the
+path by `Session/AiGeneratorRuntime.cs`; never the CLI airframe in a hull's place.
 
 ## Launch names
 
@@ -205,9 +242,10 @@ so launches are Peacemakers configured from that template and appear at the subm
 
 CSVM resolves a surface host's take-off path at load, drops the generator when it is shorter than
 two points, and launches on the decoded pose: point 0 plus 0.2 m, nose on point 1, at rest with
-the throttle open. The take-off **run** is not built: the aircraft is handed straight to its
-patrol net from that pose rather than flying the remaining path points, so the path's later points
-are read but unused.
+the throttle open. An aircraft then flies the take-off **run** under the scripted-path follower
+and is handed to the flight model at the final leg's 300 m point, climbing; a hull runs the same
+points and joins its
+net where they end (`Session/SurfaceVehicle.cs`).
 
 CSVM applies the decoded capacity check when `capacity > 0`. Campaign generators named by a
 mission's `WAKEUP_GENERATOR` additionally start on the zero-credit budget and receive its top-ups;

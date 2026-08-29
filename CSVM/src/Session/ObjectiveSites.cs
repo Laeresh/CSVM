@@ -13,9 +13,14 @@ namespace CSVM.Session;
 /// selection every frame.</summary>
 public sealed class ObjectiveSite
 {
-    /// <summary>The flagged world node's name — this site's identity string, what
-    /// <c>--target=</c> matches.</summary>
+    /// <summary>The flagged target's <see cref="ObjectiveTarget.Key"/> — this site's identity
+    /// string, what <c>--target=</c> matches: a bare node name, or <c>parent/child</c> for a site
+    /// the mission authored as a path.</summary>
     public string Node { get; init; } = "";
+
+    /// <summary>The target itself: <see cref="ObjectiveTarget.Node"/> is the name of the world
+    /// node the site stands on, the fallback a label is looked up by.</summary>
+    public ObjectiveTarget Target { get; init; }
 
     /// <summary>The site's own resolved name, the marker's second line.</summary>
     public string DisplayName { get; set; } = "";
@@ -63,7 +68,7 @@ public sealed class ObjectiveSites
         _runtime = runtime;
     }
 
-    /// <summary>The nodes carrying the objective-target flag right now: every
+    /// <summary>The target keys carrying the objective-target flag right now: every
     /// <c>targets.zrd</c> entry the mission flags <c>objective</c> whose flag no completed
     /// objective has removed, plus everything <c>ADD_OBJECTIVE_TARGET</c> has since added.
     /// ⚠ Do not build this from <see cref="ObjectiveGraph.ObjectiveTargets"/> alone. That store
@@ -79,11 +84,11 @@ public sealed class ObjectiveSites
             }
         }
 
-        foreach (var name in graph.ObjectiveTargets)
+        foreach (var key in graph.ObjectiveTargets)
         {
-            if (!Holds(into, name))
+            if (!Listed(into, key))
             {
-                into.Add(name);
+                into.Add(key);
             }
         }
     }
@@ -92,18 +97,82 @@ public sealed class ObjectiveSites
     /// that target, where the mission gives one, and null to fall back to the world node.
     /// ⚠ Prefer the point over the node. C3/M01's village target names a node standing at the world
     /// origin, 7.9 km from the point its own objective tests, so the node is not the site.</summary>
-    public static Vector3? PointFor(ObjectiveScript script, string node)
+    public static Vector3? PointFor(ObjectiveScript script, string key)
     {
         foreach (var def in script.Objectives)
         {
             if (def.Travelers is { WherePoint: { } p }
-                && (Holds(def.RemoveObjectiveTarget, node) || Holds(def.AddObjectiveTarget, node)))
+                && (Holds(def.RemoveObjectiveTarget, key) || Holds(def.AddObjectiveTarget, key)))
             {
                 return new Vector3(p[0], p[1], p[2]);
             }
         }
 
         return null;
+    }
+
+    /// <summary>The one world node a target stands on: a bare name is the first global match,
+    /// and a path is walked one name at a time, each found inside the node before it, so
+    /// <c>piratezep/rock_zeppelin</c> is the hull's own child and never a ground node of the
+    /// same name. Null when any step resolves to nothing.</summary>
+    public static Node3D? ResolveTarget(AnimRuntime runtime, ObjectiveTarget target)
+    {
+        Node3D? node = null;
+        foreach (var name in target.Path)
+        {
+            var found = runtime.FindNodes(name, node);
+            if (found.Count == 0)
+            {
+                return null;
+            }
+
+            node = found[0];
+        }
+
+        return node;
+    }
+
+    /// <summary>Where a resolved site node's marker stands: the node's own position for a placed
+    /// node, and for a group node standing at the world origin that draws nothing itself the
+    /// centre of its parts, read off the built meshes. ⚠ Do not read such a node's position.
+    /// C2's seaplane hangar (<c>sghangar</c>) is a group at the world origin whose door leaves and
+    /// body carry the world coordinates, 8 km from it. A <c>door</c>-named leaf pair wins over the
+    /// whole, since a fly-through site means the aperture (the stunt mode's own rule).</summary>
+    public static Vector3 SiteAnchor(Node3D node)
+    {
+        if (node is MeshInstance3D || HasOwnMesh(node) || !node.GlobalPosition.IsZeroApprox())
+        {
+            return node.GlobalPosition;
+        }
+
+        var boxes = new List<(string Name, Aabb Box)>();
+        CollectMeshBoxes(node, node.Name, boxes);
+        if (boxes.Count == 0)
+        {
+            return node.GlobalPosition;
+        }
+
+        int doors = 0;
+        foreach (var box in boxes)
+        {
+            if (IsDoorLeaf(box.Name))
+            {
+                doors++;
+            }
+        }
+
+        Aabb? merged = null;
+        foreach (var box in boxes)
+        {
+            if (doors >= 2 && !IsDoorLeaf(box.Name))
+            {
+                continue;
+            }
+
+            merged = merged?.Merge(box.Box) ?? box.Box;
+        }
+
+        return merged!.Value.GetCenter();
     }
 
     /// <summary>Appends this frame's live sites, each as an objective-flagged candidate the pool
@@ -136,11 +205,11 @@ public sealed class ObjectiveSites
         }
     }
 
-    private static bool RemovedByCompletion(ObjectiveScript script, ObjectiveGraph graph, string node)
+    private static bool RemovedByCompletion(ObjectiveScript script, ObjectiveGraph graph, string key)
     {
         foreach (var def in script.Objectives)
         {
-            if (graph.CompletedOf(def.Number) && Holds(def.RemoveObjectiveTarget, node))
+            if (graph.CompletedOf(def.Number) && Holds(def.RemoveObjectiveTarget, key))
             {
                 return true;
             }
@@ -149,11 +218,11 @@ public sealed class ObjectiveSites
         return false;
     }
 
-    private static bool Holds(IReadOnlyList<string> names, string node)
+    private static bool Listed(List<string> keys, string key)
     {
-        foreach (var name in names)
+        foreach (var listed in keys)
         {
-            if (string.Equals(name, node, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(listed, key, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
@@ -161,21 +230,67 @@ public sealed class ObjectiveSites
 
         return false;
     }
+
+    private static bool Holds(IReadOnlyList<ObjectiveTarget> targets, string key)
+    {
+        foreach (var target in targets)
+        {
+            if (target.Is(key))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasOwnMesh(Node3D node)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is MeshInstance3D { Mesh: not null })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // One world-frame box per drawing node under `node`, named for the gamez node that owns the
+    // mesh (the mesh instance itself is always called "mesh").
+    private static void CollectMeshBoxes(Node3D node, string owner, List<(string Name, Aabb Box)> into)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is MeshInstance3D { Mesh: not null } mi)
+            {
+                into.Add((owner, mi.GlobalTransform * mi.GetAabb()));
+            }
+            else if (child is Node3D c3d)
+            {
+                CollectMeshBoxes(c3d, c3d.Name, into);
+            }
+        }
+    }
+
+    private static bool IsDoorLeaf(string name) =>
+        name.Contains("door", StringComparison.OrdinalIgnoreCase);
 
     // A message key resolves to itself when unknown, which is right for a readout and wrong for a
     // marker; a whitespace-only value is how a mission clears a label, so both read as absent.
     private string Text(string? key) =>
         string.IsNullOrWhiteSpace(key) ? "" : _messages.Get(key).Trim();
 
-    private Vector3? Where(string node) =>
-        PointFor(_director.Script, node) ?? Resolve(node)?.GlobalPosition;
+    private Vector3? Where(string key) =>
+        PointFor(_director.Script, key) ?? (Resolve(key) is { } node ? SiteAnchor(node) : null);
 
     // Cached: FindNodes walks the world index by name and this runs once per pane per frame.
     // ⚠ Re-resolve an invalid or detached node rather than caching the miss. `piratezep` is
     // switched off and moved while the world is built, and a dock point sits under it.
-    private Node3D? Resolve(string node)
+    private Node3D? Resolve(string key)
     {
-        if (_nodes.TryGetValue(node, out var cached)
+        if (_nodes.TryGetValue(key, out var cached)
             && GodotObject.IsInstanceValid(cached) && cached.IsInsideTree())
         {
             return cached;
@@ -186,33 +301,40 @@ public sealed class ObjectiveSites
             return null;
         }
 
-        var found = _runtime.FindNodes(node, null);
-        if (found.Count == 0 || !found[0].IsInsideTree())
+        var found = ResolveTarget(_runtime, ObjectiveTarget.Parse(key));
+        if (found == null || !found.IsInsideTree())
         {
             return null;
         }
 
-        _nodes[node] = found[0];
-        return found[0];
+        _nodes[key] = found;
+        return found;
     }
 
     // The strings are re-read every frame because SET_HELP_LABEL rewrites a live site's category;
     // the instance itself survives that, since it is the identity the selection is held by.
-    private ObjectiveSite SiteFor(string node, ObjectiveGraph graph, Vector3 at)
+    private ObjectiveSite SiteFor(string key, ObjectiveGraph graph, Vector3 at)
     {
-        if (!_sites.TryGetValue(node, out var site))
+        if (!_sites.TryGetValue(key, out var site))
         {
-            site = new ObjectiveSite { Node = node };
-            _sites[node] = site;
+            site = new ObjectiveSite { Node = key, Target = ObjectiveTarget.Parse(key) };
+            _sites[key] = site;
         }
 
-        var info = _targets.For(node);
+        // targets.zrd keys a path-authored entry by the same parent/child key the script uses,
+        // and a bare one by the node; a path added by the script over a bare entry reads the node.
+        var info = _targets.For(key);
+        if (info == default)
+        {
+            info = _targets.For(site.Target.Node);
+        }
+
         string name = Text(info.Description);
         string typeLabel = Text(info.CategoryLabel);
-        string category = Text(graph.HelpLabels.TryGetValue(node, out var written)
+        string category = Text(graph.HelpLabels.TryGetValue(key, out var written)
             ? written
             : info.HelpLabel);
-        site.DisplayName = name.Length > 0 ? name : node;
+        site.DisplayName = name.Length > 0 ? name : site.Target.Node;
         site.TypeLabel = typeLabel.Length > 0 ? typeLabel : null;
         site.Category = category.Length > 0 ? category : null;
         site.Position = at;

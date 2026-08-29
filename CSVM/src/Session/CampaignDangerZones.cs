@@ -100,30 +100,11 @@ internal sealed class CampaignDangerZones
         _lastPos = playerPos;
     }
 
-    /// <summary>Test seam: one armed zone's gate centres and outward normals, the same values
-    /// <see cref="Update"/> tests against, so a suite can build a real crossing segment without
-    /// duplicating the material-matched gate read.</summary>
-    internal bool TryGateProbe(string pathName,
-        out Vector3 greenCenter, out Vector3 greenNormal, out Vector3 redCenter, out Vector3 redNormal)
-    {
-        foreach (var z in _zones)
-        {
-            if (!string.Equals(z.PathName, pathName, StringComparison.OrdinalIgnoreCase))
-                continue;
-            greenCenter = z.Green.Center;
-            greenNormal = z.Green.Normal;
-            redCenter = z.Red.Center;
-            redNormal = z.Red.Normal;
-            return true;
-        }
-        greenCenter = redCenter = greenNormal = redNormal = default;
-        return false;
-    }
-
-    // The mission's own zone-set override (docs/formats/missions.md "Zone overrides"): a
-    // dzpathN named here is switched off for this mission. Absent for most missions (no
-    // dzones.zrd at all), which reads as nothing disabled.
-    private static HashSet<string> ReadDisabled(string missionZrdrPath)
+    /// <summary>The mission's own zone-set override (docs/formats/missions.md "Zone overrides"):
+    /// a <c>dzpathN</c> named here is switched off for this mission, for the player's scoring and
+    /// the AI's runs alike. Absent for most missions (no <c>dzones.zrd</c> at all), which reads as
+    /// nothing disabled.</summary>
+    internal static HashSet<string> ReadDisabled(string missionZrdrPath)
     {
         var disabled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrEmpty(missionZrdrPath))
@@ -143,6 +124,26 @@ internal sealed class CampaignDangerZones
                 if (v is string s)
                     disabled.Add(s);
         return disabled;
+    }
+
+    /// <summary>Test seam: one armed zone's gate centres and outward normals, the same values
+    /// <see cref="Update"/> tests against, so a suite can build a real crossing segment without
+    /// duplicating the material-matched gate read.</summary>
+    internal bool TryGateProbe(string pathName,
+        out Vector3 greenCenter, out Vector3 greenNormal, out Vector3 redCenter, out Vector3 redNormal)
+    {
+        foreach (var z in _zones)
+        {
+            if (!string.Equals(z.PathName, pathName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            greenCenter = z.Green.Center;
+            greenNormal = z.Green.Normal;
+            redCenter = z.Red.Center;
+            redNormal = z.Red.Normal;
+            return true;
+        }
+        greenCenter = redCenter = greenNormal = redNormal = default;
+        return false;
     }
 
     // Same read as Flight.StuntMission.TryReadGates: a dzpathN mesh is always route ribbon plus

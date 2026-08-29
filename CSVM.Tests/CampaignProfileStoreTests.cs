@@ -37,7 +37,7 @@ public class CampaignProfileStoreTests
         def.Funds = 900;
         def.MissionsCompleted = 1;
         def.GrantedAircraft.Add(2);
-        def.PersistLog.Merge(6, new[] { new PersistedObject(412, "susp_bridge", "rope1", true, 0f) });
+        def.PersistLog.Merge(6, 2, new[] { new PersistedObject(412, "susp_bridge", "rope1", true, 0f) });
         def.MissionResults.Add(new MissionResult
         {
             Seq = 0,
@@ -74,6 +74,7 @@ public class CampaignProfileStoreTests
         Assert.Equal(412, persisted.Node);
         Assert.True(persisted.Destroyed);
         Assert.Equal("susp_bridge", persisted.Def);
+        Assert.Equal(2, persisted.Seq);
     }
 
     [Fact]

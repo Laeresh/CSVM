@@ -158,6 +158,11 @@ public sealed class AnimArchive
     }
 }
 
+/// <summary>One node-state activation prerequisite: the node <paramref name="Path"/> names must
+/// read <paramref name="Active"/> for the definition to start. An optional entry counts toward
+/// <see cref="AnimDefinition.PrereqMinToSatisfy"/> and is parsed but not enforced.</summary>
+public sealed record AnimNodePrereq(IReadOnlyList<string> Path, bool Active, bool Required);
+
 /// <summary>
 /// One ANIMATION_DEFINITION — the UNIFIED model both front-ends produce (the compiled
 /// archives via <see cref="AnimArchive"/>, the zrdr readers via <see cref="AnimDefs"/>).
@@ -167,6 +172,10 @@ public sealed class AnimArchive
 /// </summary>
 public sealed class AnimDefinition
 {
+    /// <summary>The event kind of OBJECT_MOTION_SI_SCRIPT's multi-node <c>ROOT</c>/<c>ALL_NAMES</c>
+    /// form, carried as a decoded <c>motions</c> list after <see cref="Parse"/>.</summary>
+    public const string AllNamesKind = "ObjectMotionSiScriptAllNames";
+
     public readonly List<AnimSequence> Sequences = new();
 
     /// <summary>This definition's symbol table: the node name each event refers to → that node's
@@ -194,6 +203,12 @@ public sealed class AnimDefinition
     /// <summary>The ACTIVATION_PREREQUISITE ANIMATION_LIST names (see
     /// <see cref="PrereqMinToSatisfy"/>).</summary>
     public readonly List<string> PrereqAnims = new();
+
+    /// <summary>The ACTIVATION_PREREQUISITE node-state form: a node path and the active state it
+    /// must read for this definition to start. Compiled as a run of <c>Parent</c> entries closed
+    /// by one <c>Object</c> leaf; reader <c>REQUIRED [OBJECT_ACTIVE_LIST [[path...]]]</c>. CM07's
+    /// hangar drop forks its camera legs on it (docs/formats/anim-definitions.md).</summary>
+    public readonly List<AnimNodePrereq> PrereqNodes = new();
 
     public string Name = "";              // the world node(s) this def anchors to
     public string? AnimName;              // ANIMATION_NAME — what startanims/CALL_ANIMATION use
@@ -237,6 +252,9 @@ public sealed class AnimDefinition
     /// <see cref="SiScriptIds"/> index into. Null for zrdr-sourced defs (no scripts exist
     /// outside the compiled archives).</summary>
     public AnimArchive? Archive;
+
+    private const int AllNamesRecordSize = 76;
+    private const int AllNamesHeaderSize = 12;
 
     public bool OnStartup => Activation.Equals("OnStartup", StringComparison.OrdinalIgnoreCase);
 
@@ -282,13 +300,33 @@ public sealed class AnimDefinition
             def.NodeList.Add(r.Str("name") ?? "");
         // The activation prerequisite (zeppelin hull deaths): min-to-satisfy over an anim list.
         def.PrereqMinToSatisfy = (int)(d.Num("activ_prereq_min_to_satisfy") ?? 0f);
+        // The node-state form is a path: Parent entries accumulate until the Object leaf closes
+        // them. ⚠ The leaf's state is bit 0 of `active_raw`, never mech3ax's `active`: bit 1 is
+        // the LOCAL_NODES_ONLY scope, so a local INACTIVE entry is 2 (compiled-archives.md).
+        var path = new List<string>();
         foreach (var prereq in d.Objects("activ_prereqs"))
+        {
             if (prereq.Obj("Animation")?.Str("name") is { } prereqName)
                 def.PrereqAnims.Add(prereqName);
+            else if (prereq.Obj("Parent")?.Str("name") is { } parentName)
+                path.Add(parentName);
+            else if (prereq.Obj("Object") is { } leaf && leaf.Str("name") is { } leafName)
+            {
+                path.Add(leafName);
+                bool active = leaf.Num("active_raw") is { } raw
+                    ? ((int)raw & 1) == 1
+                    : leaf.Bool("active");
+                def.PrereqNodes.Add(new AnimNodePrereq(path.ToArray(), active, leaf.Bool("required")));
+                path.Clear();
+            }
+        }
         if (d.Obj("reset_state") is { } reset)
             def.ResetState = AnimSequence.Parse(reset);
         foreach (var seq in d.Objects("sequences"))
             def.Sequences.Add(AnimSequence.Parse(seq));
+        foreach (var seq in def.Sequences)
+            foreach (var ev in seq.Events)
+                ExpandAllNamesScript(ev, def.NodeList);
         // The slot's authored name is empty; give the debugger timeline a recognizable lane.
         if (d.Obj("unknown_seq") is { } slot
             && AnimSequence.Parse(slot) is { Events.Count: > 0 } death)
@@ -297,6 +335,51 @@ public sealed class AnimDefinition
             def.DeathSlot = death;
         }
         return def;
+    }
+
+    // The ROOT/ALL_NAMES form of OBJECT_MOTION_SI_SCRIPT (the skeletal person and ladder
+    // cutscenes), left raw by the extraction: a count, then one 76-byte record per animated node,
+    // each an e12 event (12-byte header, then {0, node_index, script_index}) with a 1-based node
+    // index into the def's node list and a slot in SiScriptIds, the single-node form's pair
+    // (docs/formats/anim-definitions/compiled-archives.md). Written back onto the event as
+    // `motions`, one {name, index} per record, played as that many single-node scripts at once.
+    private static void ExpandAllNamesScript(AnimEvent ev, List<string> nodeList)
+    {
+        if (ev.Kind != AllNamesKind || ev.Data.Str("data") is not { } raw)
+            return;
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(raw);
+        }
+        catch (FormatException)
+        {
+            return;
+        }
+        if (bytes.Length < 4)
+            return;
+        int count = BitConverter.ToInt32(bytes, 0);
+        var motions = new List<object?>();
+        for (int i = 0; i < count; i++)
+        {
+            int at = 4 + i * AllNamesRecordSize + AllNamesHeaderSize;
+            if (at + 12 > bytes.Length)
+                break;
+            int nodeIndex = BitConverter.ToInt32(bytes, at + 4);
+            int scriptIndex = BitConverter.ToInt32(bytes, at + 8);
+            if (nodeIndex < 1 || nodeIndex > nodeList.Count)
+                continue;
+            motions.Add(new Dictionary<string, object?>
+            {
+                ["name"] = nodeList[nodeIndex - 1],
+                ["index"] = scriptIndex,
+            });
+        }
+        ev.Data = new AnimData(new Dictionary<string, object?>
+        {
+            ["motions"] = motions,
+            ["data"] = raw,
+        });
     }
 }
 

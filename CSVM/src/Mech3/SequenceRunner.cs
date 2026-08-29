@@ -489,7 +489,10 @@ public sealed class SequenceRunner
                 }
             }
         }
-        if (_pc >= _seq.Events.Count)
+        // ⚠ Past the last event the runner still executes until that event's run time is up
+        // (_base), as the original's timed handlers report: a sequence ending on an SI script holds
+        // its instance, and a WAIT_FOR_COMPLETION on it, for the script's length (docs/org/sequences.md).
+        if (_pc >= _seq.Events.Count && _clock >= _base)
         {
             _done = true;
         }

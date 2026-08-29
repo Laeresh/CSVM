@@ -550,6 +550,13 @@ public partial class FlightController : Node3D
         set => _team = value;
     }
 
+    /// <summary>The roster cohort this aircraft is counted in (the <c>aiv</c> block's <c>group</c>,
+    /// the original's vehicle <c>+0x388</c>), or null for an aircraft no group counts: a free-flight
+    /// or wave spawn, and a human rig until a 967 capture swap hands it the captured aircraft's.
+    /// A mission's <c>DEDG</c> walk reads it off the human rig alone; the AI members are counted
+    /// off their roster plans.</summary>
+    public int? Group { get; set; }
+
     /// <summary>The weapon lab's hold: the airframe holds its pose while everything else in the
     /// session keeps running (props, guns, rounds, world sim). ⚠ NOT the P halt
     /// (<see cref="GameClock.Halted"/>), which stops the whole clock. Clearing it un-pins the
@@ -665,6 +672,20 @@ public partial class FlightController : Node3D
             InertChanged?.Invoke(this);
         }
     }
+
+    /// <summary>Inert under a cutscene's AI park (code 913) rather than deactivated: the aircraft is
+    /// still in the mission, so an objective walk counts it. The cutscene host sets it beside
+    /// <see cref="Inert"/> and clears it at the reveal, or when a swap hides the aircraft.</summary>
+    public bool Parked
+    {
+        get => _lifecycle.Parked;
+        set => _lifecycle.SetParked(value);
+    }
+
+    /// <summary>Out of the mission the way the original's dead byte reads: inert with no cutscene
+    /// park behind it. ⚠ DEDG and TRAVELERS count by this, never by <see cref="Inert"/>, or the
+    /// wing-walk capture wipes the parked bomber's group out mid-cutscene.</summary>
+    public bool Deactivated => _lifecycle.Deactivated;
 
     /// <summary>Whether this aircraft is present in the session as a real object: neither crashed
     /// nor <see cref="Inert"/>. The single "is it there" test every roster reads — the aim assist's
@@ -1034,6 +1055,24 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>Hands a held aircraft back to the flight model where it stands, moving at
+    /// <paramref name="velocity"/> with the lever at <paramref name="throttle"/>: the
+    /// scripted-path follower's handoff, which the original makes by clearing the path flag and
+    /// nothing else (<c>FUN_0048a110</c>), so no respawn and no spawn grace, and the collision
+    /// sweep and ground blow run from the first flown step. The patrol net reseats where the
+    /// aircraft is, since the run placed it and not the net.</summary>
+    public void ReleaseHeld(Vector3 velocity, float throttle)
+    {
+        Held = false;
+        _model.SetVelocity(velocity);
+        _throttle = throttle;
+        _model.Throttle = throttle;
+        if (Pilot != null)
+            Pilot.Throttle = throttle;
+        ThrottleSmoke?.Reset(_throttle);
+        Pilot?.Patrol?.Reseat();
+    }
+
     /// <summary>Weapon lab: pin the held airframe at <paramref name="pos"/> with its nose on
     /// <paramref name="lookAt"/>, at zero speed — click-to-place and <c>--weapon-target=</c>. Goes
     /// through the same <see cref="FlightModel.Reset"/> + <see cref="SnapCamera"/> pair
@@ -1112,6 +1151,13 @@ public partial class FlightController : Node3D
     {
         _stagedFrom = pose.Orthonormalized();
         _resumePlaced = true;
+        // A definition that raises its handoff BEFORE this code (CM06's unhook) has already had
+        // the aeroplane handed back, so there is no later hand-back to defer to: place it now, the
+        // way the original writes the pose the instant the code lands.
+        if (!Held)
+        {
+            StageAt(null);
+        }
     }
 
     /// <summary>Weapon lab: point the gun selector at a firable gun group (0-based, clamped) —
@@ -1419,7 +1465,12 @@ public partial class FlightController : Node3D
             // one. Every contact it resolves spends the pair; nothing else gates the spend.
             bool onSweepStep = _sweep.Advance(entered, out var prev);
             _lifecycle.TickTimers(dt);
-            _model.Step(input, dt);
+            // A danger-zone run writes the pose off its ribbon in place of the physics, the
+            // original's state-5 bypass (FUN_004897c0); the sweep below still runs, as its does.
+            if (!IsHumanPiloted && Pilot is { RailPose: { } rail } onRails)
+                _model.Reset(rail.Origin, rail.Basis, onRails.RailSpeed, _throttle);
+            else
+                _model.Step(input, dt);
 
             // The airframe boxes sweep along the carried motion; the center ray stays as an
             // anti-tunnelling backstop. Only the shapeless fallback keeps a nose margin on it.
@@ -1433,7 +1484,12 @@ public partial class FlightController : Node3D
             bool sweeping = onSweepStep && !_lifecycle.CollisionGraceActive;
             ContactReport contact = default;
             Node? hitBody = null;
-            bool hit = sweeping && SweepAirframe(prev, step, out contact, out hitBody);
+            // A human rig sweeps the airframe hulls; an AI rig sweeps its def's collision probes,
+            // the original's shape (see SweepProbes): one origin point on every AI def, so its
+            // wings clip through a slot the hull cannot pass, the CM13 racers' dzpath2 arch first.
+            bool hit = sweeping && (IsHumanPiloted
+                ? SweepAirframe(prev, step, out contact, out hitBody)
+                : SweepProbes(prev, step, out contact, out hitBody));
             if (!hit && sweeping)
                 hit = CenterRayContact(prev, probeEnd, step, len, out contact, out hitBody);
             // No contact means the boxes cleared the whole motion, which is where they are drawn.
@@ -3271,6 +3327,46 @@ public partial class FlightController : Node3D
             StruckIsAircraft = (report.Collider as AircraftBody)?.Rig != null,
         };
         return true;
+    }
+
+    // The original's contact test (FUN_0048d7f0): each of the def's collision probes is carried
+    // from the pose the sweep runs from to this frame's pose and the earliest strike along the
+    // motion wins (docs/formats/vehicle.md "Collision probes": the player defs author six, every
+    // AI def resolves basic_airplane's single origin probe, which is what lets the CM13 racers
+    // thread the 9.7 m dbase arch on dzpath2). A def with no probe list reports nothing, and the
+    // centre ray behind it stands.
+    private bool SweepProbes(Vector3 from, Vector3 motion, out ContactReport contact, out Node? hitBody)
+    {
+        contact = default;
+        hitBody = null;
+        if (Stats?.CollisionProbes is not { Count: > 0 } probes)
+            return false;
+        float len = motion.Length();
+        if (len < 1e-4f)
+            return false;
+        float best = float.MaxValue;
+        foreach (var probe in probes)
+        {
+            var offset = _model.Attitude * probe;
+            var start = from + offset;
+            if (!World.Ray(start, start + motion, CollisionLayers.WorldAndAircraft, Body?.ExcludeSelf, out var report))
+                continue;
+            float fraction = start.DistanceTo(report.Position) / len;
+            if (fraction >= best)
+                continue;
+            best = fraction;
+            hitBody = report.Collider;
+            contact = new ContactReport
+            {
+                Impact = report.Position,
+                Normal = report.Normal.LengthSquared() > 1e-6f ? report.Normal : -motion / len,
+                Part = Mathf.Abs(probe.X) > 1f ? "wing" : "center",
+                ColliderName = report.Collider is { } body ? $"{body.GetParent()?.Name}/{body.Name}" : "",
+                StopFraction = fraction,
+                StruckIsAircraft = (report.Collider as AircraftBody)?.Rig != null,
+            };
+        }
+        return best < float.MaxValue;
     }
 
     // The anti-tunnelling backstop, filling the same report off the centre ray alone: no box

@@ -76,7 +76,9 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   suffix since events reference nodes by index); light/puffer/dynamic-sound 44 bytes;
   static-sound refs **40 bytes** = one garbage-padded name field (the garbage runs past
   byte 32); **activation prereqs (48 B) ARE used** (contra the survey note): object
-  prereqs carry `active` ∈ {0,1,2} and real pointers, `min_to_satisfy` up to the count;
+  prereqs carry a two-bit state word (`active_raw` ∈ {0,1,2}: bit 0 ACTIVE_LIST 1 /
+  INACTIVE_LIST 0, bit 1 the def's LOCAL_NODES_ONLY scope, written by `FUN_0051d7b0`; mech3ax's
+  `active` reads 2 as true, which is wrong) and real pointers, `min_to_satisfy` up to the count;
   anim refs 72 B — `ref_ty` **1 = CALL_ANIMATION with LOCAL_NAME** (name + local_name
   halves, both garbage-padded), 0 = plain CALL_ANIMATION. Object/node name fields use MW/PM's
   `Default_node_name` padding convention, with zero-padded and garbage exceptions.
@@ -91,7 +93,12 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   (176 B, the volume/frequency/pan fade-series op — `hdplayer*` defs; payload not yet
   field-decoded); **e47 = OBJECT_MOTION_SI_SCRIPT in its `ROOT`/`ALL_NAMES` form** (multi-
   node skeletal person animations — `caboosewave`, ladder climbs; payload = count u32 +
-  count × 76-byte records, not yet field-decoded). **CS event quirks** (all preserved by
+  count × 76-byte records, each one embedded e12 event: the 12-byte header `{type 12,
+  start_offset 1, pad, size 76, start_time 0}` then `{0, node_index, script_index, 52 zero
+  bytes}`, where `node_index` is 1-based into the def's `nodes` list and `script_index` a slot in
+  its script-id list; `caboosepickup`'s 15 records map `pickup_agent`, `cp_rt` … `cp_torso` onto
+  `cabpickup-<part>.zan` in order. The extraction keeps the payload raw; `AnimDefinition.Parse`
+  decodes it). **CS event quirks** (all preserved by
   the fork): `IF`/`ELSEIF` conditions add **NODE_BELOW_ALT 0x100** (node + altitude),
   **ANIM_HEALTH 0x800** (float), **ANIM_HEALTH two-value form 0x1000** (min/max — uses the
   dword PM asserts zero; `locklear_zep_nacelles` `ANIM_HEALTH [20, 32]`), and

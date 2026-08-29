@@ -112,8 +112,8 @@ internal sealed class HumanFlightAdapter
 
         // The plane this pilot BUILT, when they picked one: its guns, pylons, paint and armour
         // replace the airframe's stock ones below. Null on a stock pick, empty outside a
-        // launchscreen launch, and never on a swap (see AirframeSwapRequest).
-        var custom = swap != null ? null : CustomPlaneFor(pi);
+        // launchscreen launch; a swap brings its own or none (see AirframeSwapRequest).
+        var custom = swap != null ? swap.Build : CustomPlaneFor(pi);
         string planeDisplay = custom?.Name is { Length: > 0 } customName
             ? customName
             : PlaneRoster.PlaneDisplayName(stats);
@@ -159,6 +159,7 @@ internal sealed class HumanFlightAdapter
             CockpitPanel = CockpitGauges.Bind(planeBuilder),
             Scheme = scheme,
             Painter = planeBuilder.Painter,
+            ShippedSkins = swap is { ShippedSkins: true },
         };
         if (verbose && controller.Cockpit != null)
             GD.Print($"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");

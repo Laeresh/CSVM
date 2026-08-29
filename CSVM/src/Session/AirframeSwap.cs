@@ -7,8 +7,16 @@ namespace CSVM.Session;
 /// <c>CALLBACK</c> value, the vehicle def the stats and the stock fit come from (<c>pbalmoral</c>),
 /// and the planes.zbd node the model is built from (<c>player_balmoral</c>). That pair is the one
 /// every other player-airframe path already uses (<c>PlaneStats.DefName</c> /
-/// <c>UI.PlanePickerRoster.AirframeNode</c>), so a swap needs no table of its own.</summary>
-public readonly record struct AirframeSwapCode(int Code, string Def, string PlaneNode);
+/// <c>UI.PlanePickerRoster.AirframeNode</c>), so a swap needs no table of its own.
+/// <c>AwardAirframe</c> names the special-plane template the code's own case writes by hand
+/// (965 fits the Blue Streak: twin 40 and twin 30, two pylons, 20 armour a zone, the injector),
+/// null for a code that hands over the stock fit. <c>ShippedSkins</c> says the rebuild draws the
+/// airframe's shipped skin textures with no scheme composited over them, which is what the
+/// original does for a def that authors no <c>paint_pattern</c> (965's <c>pbloodhawk</c>: the
+/// vehicle build skips the scheme outright on the empty pattern string); false draws the pilot's
+/// own paint.</summary>
+public readonly record struct AirframeSwapCode(int Code, string Def, string PlaneNode,
+    int? AwardAirframe = null, bool ShippedSkins = false);
 
 /// <summary>One swap as the mission-script host raises it: the airframe the code names, and the
 /// node the raising definition is rooted on, which is the aircraft the capture animation belongs
@@ -30,9 +38,12 @@ public readonly record struct AirframeSwapResult(bool Swapped, Flight.FlightCont
 /// is where the replacement begins. <c>Scheme</c> is null outside a 967 whose capture root resolved,
 /// and also null INSIDE one when the captured rig's own <c>ShippedSkins</c> resolution painted
 /// nothing: <c>ShippedSkins</c> carries that reading so the rebuild draws the captured rig's own
-/// result rather than falling back to this pilot's default livery.</summary>
+/// result rather than falling back to this pilot's default livery. <c>Build</c> is the custom
+/// plane the replacement flies in place of the airframe's stock fit (965's Blue Streak); null
+/// keeps the stock one.</summary>
 internal sealed record AirframeSwapRequest(
-    string PlaneNode, FlightStart Start, Mech3.PaintScheme? Scheme = null, bool ShippedSkins = false);
+    string PlaneNode, FlightStart Start, Mech3.PaintScheme? Scheme = null, bool ShippedSkins = false,
+    Flight.CustomPlaneDef? Build = null);
 
 /// <summary>
 /// The three <c>CALLBACK</c> codes that hand the player a different airframe in mid mission, and
@@ -48,9 +59,14 @@ internal sealed record AirframeSwapRequest(
 /// </summary>
 public static class AirframeSwapCodes
 {
+    /// <summary>The Blue Streak's airframe id in the special-plane template array.</summary>
+    public const int BlueStreakAirframe = 3;
+
     private static readonly AirframeSwapCode[] All =
     {
-        new(965, "pbloodhawk", "player_bhawk"),
+        // ⚠ ShippedSkins, not a scheme: the Blue Streak's blue-grey body and yellow wingtips ARE
+        // the unpainted blo_* skins, the state the original leaves them in.
+        new(965, "pbloodhawk", "player_bhawk", BlueStreakAirframe, ShippedSkins: true),
         new(966, "pwarhawk", "player_warhawk"),
         new(967, "pbalmoral", "player_balmoral"),
     };
@@ -74,9 +90,9 @@ public static class AirframeSwapCodes
 }
 
 /// <summary>
-/// The two things codes 966 and 967 do past rebuilding the player's rig: the capture animation's
-/// own aircraft hands its damage to the new hull (967 alone), and the aeroplane the player just
-/// left goes to <c>wingman_4</c>.
+/// The things codes 966 and 967 do past rebuilding the player's rig: the capture animation's
+/// own aircraft hands its damage and its roster group to the new hull (967 alone), and the
+/// aeroplane the player just left goes to <c>wingman_4</c>.
 /// ⚠ Neither behaviour is asked for by anything in the shipped data. Both are keyed on chapter
 /// and mission strings inside the executable, so a search of the data for a trigger comes back
 /// empty and that emptiness is NOT evidence they do not exist. Decode:
@@ -127,6 +143,13 @@ public static class AirframeHandover
     /// <summary>Whether this code carries the captured aircraft's damage into the new hull and
     /// hides that aircraft.</summary>
     public static bool CarriesCapturedDamage(AirframeSwapCode airframe) =>
+        airframe.Code == CaptureCode;
+
+    /// <summary>Whether this code also makes the player a member of the captured aircraft's
+    /// roster group (the <c>+0x388</c> copy, 967 alone: 966 has no captured vehicle to read). The
+    /// player then stands in for the aircraft they took, so a <c>DEDG</c> over that group counts
+    /// one live member for as long as the player flies it.</summary>
+    public static bool CarriesCapturedGroup(AirframeSwapCode airframe) =>
         airframe.Code == CaptureCode;
 
     /// <summary>Where the outgoing aeroplane is put, and the point its nose is put on: 100 m along

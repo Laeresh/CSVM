@@ -445,30 +445,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   spawn-and-kill harness this needs, `git log --grep=BL-291`), `docs/architecture.md`'s
   `ZeppelinDamage.cs` bullet (the survivor-count kill that fires the def).
 
-- `BL-513` `[Bug]` **CM04 (C3/M03) opens with the buildings destroyed in the previous mission
-  exploding again: the persist-log replay runs their death choreography at mission open.**
-  *Evidence (traced):* the sortie log of a C3/M03 open shows, on the first frame after bootstrap,
-  `damage: -30 on aagun30 HP 30→0 DESTROYED — death sequence run` and the same for
-  `aagun31`/`aagun32`/`aagun01`/`aagun02`/`g_tower1`/`g_tower3`, `-60` on `u_camp1..3`/`unit10` and
-  `-15` on `t_truck02`, each recycling its `large_fireball`/`sputter_fire_smoke_obj` effect pool, and
-  the player watches the camp blow up as the mission starts. Those are the objects destroyed in
-  C3/M02; `CampaignPersistLog.ApplyTo` replays a chapter's carried destruction through the same
-  `DamageAt` a weapon hit takes, so the damage stages and the death sequence run again, by its own
-  design. The original's carried state is a destroyed pose, not a replayed death: the `PERSIST_LOG`
-  reader defs (`ucamp_dest`/`tower_dest`/…) are the silent destroyed variants a later mission opens
-  with. The earlier reading of this item (a start-state role swap leaving the pool healthy) is a
-  real architecture hole and stays fixed (`AnimRuntime.SyncDestructiblePool`, the
-  `start-state-swap-pool` suite, `docs/formats/destructibles.md` "Starting destroyed"), but it was
-  not this report's trigger. *Fix shape:* give `ApplyTo` a silent path: set the pool to
-  `Destroyed`/HP 0 (or the carried partial HP with its damage stages), apply the destroyed role swap
-  the death sequence ends in, and run no effects, sounds or choreography; `DamageAt` stays the
-  weapon path. A partially damaged carried object (`state.Health` above zero) wants its stage
-  visuals without the stage's puffer bursts. *⚠ Traps:* the replay must still leave the pool
-  `Destroyed` so a later hit is a no-op, which the earlier reading of this item guards; do not fix
-  it by skipping the replay for destroyed objects, and do not gate on the visual state alone.
-  *Cross-refs:* `BL-243` (the persist log), `BL-521` (the same mission's balloons, a different
-  trigger), `docs/formats/saved-games.md`, `docs/formats/destructibles.md`.
-
 - `BL-515` `[Research]` **CM04 (C3/M03): the Barracuda takes damage from every side, and the original may
   only accept hits inside its hangar.** *Evidence:* reported at the controls as a question: the
   submarine can be damaged from any angle, where the recollection is that the original demands
@@ -482,8 +458,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps:* the report is a question prompted by that voice line, not a memory of the original's
   hit rule; do not build a hangar-only rule from it. If the data shows one pool on the hull, the
   voice line is flavour and this closes. *Cross-refs:*
-  `BL-512` (the same sub's launch motion), `BL-522` (its launched fighters).
-
 - `BL-570` `[Feature]` **The difficulty setting has no menu row.** *Evidence:* the scale itself is
   live (`Flight/Difficulty`, `--difficulty=<normal|hard|hardest>`), but a CLI flag is the only way to
   change it, so a player launching normally always flies the default Normal. The original puts it on
@@ -861,26 +835,113 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   system and the decode page records the sight and the assist as deliberately disagreeing already.
   *Cross-refs:* `docs/org/aim-assist.md`, `docs/org/ordnanceTypes.md`, `ProjectilePool.Ballistics`.
 
-- `BL-567` `[Bug]` **CM04 (C3/M03): the Pandora's broadside cannons fire on the player; the
-  original's broadsides engage zeppelins only.** *Evidence:* reported at the controls with the
-  original's rule stated: broadside cannons attack enemy zeppelins and never aircraft. The sortie
-  log shows `shot hit P1 (fuselage→nose): wep_28 armor=5.0/25 ...` and three more `wep_28` hits on
-  the player; `wep_28` is the piratezep broadside's weapon (`zep: 'piratezep' broadside wired — 6+6
-  cannons, wep_28`, a `GD.Print` line the file sink does not carry, so its absence from the log is
-  not evidence). `ZeppelinRuntime.Cannons.ResolveTarget` takes the first live authored `targets`
-  name and fires on the player when the record names `player`. The earlier disproof (`BL-517`,
-  closed as "no hostility gate exists in the fire path") read the decoded pipeline as
-  `FUN_004bd8d0` parsing `targets` into name pairs and `FUN_004bede0` resolving each through
-  `FUN_004bd430`, a plain name match against the live zeppelin roster. If that resolver walks the
-  zeppelin roster only, a `player` entry never resolves in the original and a broadside cannot fire
-  on an aircraft, which is the rule reported; the disproof did not settle what a non-zeppelin name
-  resolves to. *Fix shape:* re-read `FUN_004bd430` for the list it walks, and `FUN_004bfe00` for
-  what an unresolved pair does at fire time. If the roster is zeppelins only, `ResolveTarget` drops
-  non-zeppelin names and `docs/formats/mission-entities.md` "Broadside firing" is corrected. If
-  `player` does resolve, record how, since the controls report then stands against the decode and
-  needs a flown original-game check. *⚠ Traps:* do not add a hostility or team gate; the earlier
-  item found none in the engine, and the lever is the resolver's candidate set. *Cross-refs:*
-  `BL-517`'s closing commit (`git log --grep=BL-517`), `docs/formats/mission-entities.md`.
+- `BL-603` `[Bug]` **The human rig sweeps the mesh hull where the original sweeps its def's six
+  `collision` probes.** *Evidence:* decoded for `BL-601` (`git log --grep=BL-601`): `FUN_0048d7f0`
+  carries the def's `collision` list as rays from the previous pose, six points on the `p*` player
+  defs; `FlightController.SweepProbes` does that for an AI rig and keeps the mesh-derived hull sweep
+  for the human rig, which is wider than the six points. *Fix shape:* fly a slot the six points
+  clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
+  sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
+
+- `BL-619` `[Task]` **The turret census and the `WAKEUP_TURRETS` arm are `GD.Print`, so a sortie log
+  cannot say whether a mission's emplacements woke.** *Evidence:* `BL-611` looked like a turret
+  defect for most of its investigation because the log reads identically whether the guns are alive
+  or dead: neither `turrets: N world emplacement(s) placed for <chapter>` nor `campaign:
+  WAKEUP_TURRETS armed N emplacement(s)` reaches the file sink. *Fix shape:* route both through
+  `Log.Info("flight", ...)` and add the per-gun alive and awake counts. *⚠ Traps:* `Log.Info` takes a
+  `FormattableString`, so fold each line into one interpolated string. *Cross-refs:* `Log.cs`'s
+  incremental migration note, `TurretController`, `BL-611`'s closing commit
+  (`git log --grep=BL-611`).
+
+- `BL-622` `[Feature]` **No debrief screen: a finished mission drops straight back to the cabin.**
+  *Evidence:* reported at the controls, on a won and on a lost mission alike. `CampaignDirector`
+  records the attempt, writes the profile and raises `ReturnToCabin`; `GameSession.
+  OnCampaignMissionEnded` prints one `GD.Print` and calls the launcher's return, which reopens the
+  launchscreen on the cabin, so nothing between the mission ending and the cabin exists. The
+  result the screen would show is already carried: `CampaignMissionResult` has the outcome, the
+  attempt, the recorded flags and the won mission's `CompletedMask`. *Fix shape:* a page in the
+  `CampaignFlow` board family (`CampaignCabinPage`, `CampaignPreviousMissionsPage` are the nearest
+  shapes) shown between the mission and the cabin, reading that result; the original's own debrief
+  layout, its per-objective lines and its scoring are undecoded and are the first job.
+  *⚠ Traps:* the world stays up for the rest of the frame after the end is raised, so the page
+  belongs to the launchscreen side, not the session's. *Cross-refs:* `CampaignFlow`,
+  `CampaignProgression`, `docs/formats/saved-games.md`, `BL-620`'s and `BL-623`'s closing commits
+  (`git log --grep=BL-620`); the held two seconds `BL-623` added are where this screen belongs.
+
+- `BL-621` `[Bug]` **CM07 (C1/M02): the parachutist is gone from the hangar drop since the chute
+  pool landed.** *Evidence:* reported at the controls; before `BL-608` the drop showed the pilot
+  parachuting into the hangar while the aeroplane was missing, and now the aeroplane is there and
+  the figure is not. `WorldSession`'s `ResolveLibraryRoot` serves `AircraftStage`'s staged
+  `chuteman` as pool copy 0 keyed on the call anchor and site, so a caller gets the staged actor
+  relocated to its authored site and later callers get duplicates; CM07's drop does not call the
+  figure at a site, `hdchute1` adopts it with `OBJECT_ADD_CHILD`. *Fix shape:* the placement kind
+  is the distinguishing rule, so let the pool serve the site-bearing call path alone and leave an
+  adoption's node where it is. *⚠ Traps:* CM02's three drifting chutes come from `ww_player`'s three
+  `ww_chuteman` calls and must keep their per-call copies (`campaign-capture-chutes`). *Cross-refs:*
+  `BL-608`'s closing commit (`git log --grep=BL-608`), `AircraftStage`, `docs/architecture.md`.
+
+- `BL-618` `[Bug]` **A compiled anim addressing a mech3ax `~n` dedup name resolves to nothing.**
+  *Evidence:* CM13's `pzhomebase` switches `land_on` and `land_on~2` on and neither of the
+  Pandora's two landing cones draws (`zeppelin-hull-activation`'s artifact records `cones 0/2`);
+  C2's gamez carries four `land_on` nodes, two under `piratezep`. The extraction renames the
+  second sibling `land_on~2` and the runtime's name resolver has no rule for the suffix, so the
+  bare name is ambiguous and the suffixed one matches nothing. *Fix shape:* resolve the suffix
+  scoped by the def's own node list, where `land_on` roots on `pz_manual_land` and `land_on~2` on
+  `pz_auto_land`. *⚠ Traps:* stripping `~n` and taking the first hit is wrong, the suffix identifies
+  which sibling. *Cross-refs:* `NameResolver`, `docs/formats/gamez.md`, `BL-616`'s closing commit
+  (`git log --grep=BL-616`).
+
+- `BL-612` `[Bug]` **CM09 (C1/M04): the frame rate falls under 60 for the rest of the mission once
+  the Promised Land is down and the next fighter squad spawns.** *Evidence:* reported at the
+  controls on the plan branch, and it is a sustained rate drop, not single hitches. The sortie
+  log's late `[perf] hitch` lines carry the shape in their baseline: 19 to 26 ms against 10 ms
+  earlier in the same sortie, with `script_ms` about 25 and `physics_ms` 17 to 18 while
+  `render_cpu_ms` stays near 1 and `gpu_ms` near 0.5, `nodes` about 37000 and `mem_mb` about 1300.
+  The frame is spent on the CPU in script and physics, not on the GPU. *Fix shape:* the hitch
+  detector reports outliers against a rolling baseline, so a whole-run slowdown reads only in that
+  baseline; measure the rate itself instead (a frame-time trace over the sortie, or the probe's
+  own timing), then attribute the script time with the sampler armed. Read whether the cost is the
+  zeppelin's death choreography left running (the burn, finisher and sink anims and their emitters
+  persist after the hull is down), the destroyed hull's colliders and debris still stepping, or the
+  new squad's rigs adding AI and physics on top; the node count says nothing was freed. Compare a
+  run that leaves the zeppelin alive. *⚠ Traps:* the hitch detector is opt-in (`RunTests.ps1 -Hitch`)
+  and answers a different question than this one; `attributed_ms` is 0 in these lines because the
+  sampler was not armed, so they name no culprit. CM13 (C2/M03) shows the same sustained drop and
+  is the likelier test case, since that mission spawns its whole field at the start and involves no
+  zeppelin death: if both share a cause it is the number of live aircraft, not the destruction
+  choreography, so measure CM13 first and treat CM09's zeppelin as the second variable.
+  *Cross-refs:* `HitchMonitor`, `Launcher`'s hitch tick, `BL-599`'s closing commit
+  (`git log --grep=BL-599`).
+
+- `BL-597` `[Bug]` **CM08 (C1B/M03): the Pandora does not halt exactly over the tanker and plays no
+  hangar animation there.** *Evidence:* reported at the controls against the original: the Pandora
+  holds level along Klondike1 now, but its armed stop lands short of or past the tanker, and the
+  original plays a sequence over it (the hangar door opens, a person descends on a rope and
+  ascends again) that the remake never starts. *Fix shape:* the node capture rule recorded in C21's
+  closing commit (`git log --grep=C21`: capture fires when along-edge progress plus
+  `max(sqrt(edge[7]), 125 m)` reaches the edge length, so an armed hold engages 125 m or more short
+  of the node) decides the stop; find the tanker sequence in `extracted/C1B/M03/mis_anim/` and what
+  calls it (an objective completion action, or a zeppelin node arrival) and why the caller never
+  fires. *Cross-refs:* `ZeppelinMotion`, `docs/formats/mission-entities.md` "Steering",
+  `zeppelin-pandora-dead-end`.
+
+- `BL-598` `[Bug]` **CM08 (C1B/M03): the patrol boats take hits but cannot be targeted.** *Evidence:*
+  reported at the controls: the four boats C22's surface launch wakes at 181 s drive their nets and
+  rounds hit them, but the targeting HUD never brackets one and the aim assist never snaps to one.
+  *Fix shape:* `SurfaceVehicleRuntime`'s hull is neither an aircraft rig nor a world turret, so
+  `TargetSelection` and `AimAssist`'s candidate lists (vehicles, turrets, structures) do not see it;
+  decide which list the original puts a surface vehicle in (its targets record and the HUD class)
+  and register the hull there. *Cross-refs:* `SurfaceVehicle`, `TargetHud`, `AimAssist.AddStructures`,
+  `BL-523` (their gunnery).
+
+- `BL-586` `[Bug]` **One burst deals a world destructible one splash share per collider body it
+  carries.** *Evidence (traced):* the C1 aagun carries ten collider bodies, and one flak bursting
+  over its own pit dealt `-8.18/-8.04/-8/-7.36`, one share per body (the `turret-self-fire`
+  trace), where the original's hit buffer holds one entry per node (`FUN_004cb420`). *Fix
+  shape:* dedupe `ProjectilePool.ApplyDamage`'s world candidates per resolved destructible,
+  keeping the nearest body's share; needs a `DamageSink`-side key, since the pool cannot resolve
+  destructibles itself. *Cross-refs:* `docs/org/ordnanceTypes.md`, `turret-self-fire`,
+  `BL-573`'s closing commit (`git log --grep=BL-573`).
 
 ## Flight model & collision physics
 
@@ -1422,34 +1483,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Where to look:* whether the collapsed clutter cards still write depth or a dark fragment behind the band (the `csky_clutter_fade` cutout keeps a card in the pass until `step(d, far)` culls it, and a card collapsed to zero size should contribute nothing), whether the fog-volume clutter's own `far_fade` and the templates fade overlap at that range, and whether the gamez buildings carry a `far_fade_range` of their own the remake ignores (`FUN_004d5de0` applies the scaled test to every type-5 scene node, not only clutter). A C5 screenshot pair at the band distance with `graphics.clutterFarFade` on and off separates the two.
   *Cross-refs:* `BL-337` (closed; the fade), `docs/org/clutter.md`.
 
-- `BL-512` `[Bug]` **CM04 (C3/M03): the Barracuda jumps while driving into the bay.**
-  *Evidence:* the `sub_movement` def is read out
-  (`extracted/C3/M03/mis_anim/barracuda-sub_movement.json`, main sequence): the drive is an
-  `ObjectMotionFromTo` rise from `(-12032,-38,-13197.5)` to `(-12032,-6,-13197.5)` over 10 s, then
-  three `ObjectMotion` events on `barracuda` (accelerate over 2 s, cruise 40 s, decelerate over
-  2 s), then a second `ObjectMotionFromTo` at the absolute `(-12032,-6,-11516.288)` for the final
-  6 s surfacing. Reading `translation.delta` as acceleration, as `MotionRuntime` does, makes the
-  three speeds continuous and the travel 1680 m, which lands within 1.2 m of that absolute
-  placement, so the authored choreography is smooth and our `delta` semantics are right. The jump
-  is `rnd_xz`: all three events carry `(8.742278e-08, 0, 1.0)`, which is exactly the normalized
-  `initial`/`delta` direction rather than a random amplitude, and `MotionRuntime` adds
-  `RandSym() * rnd_xz` to each event's start velocity. That is +/-1 unit/s drawn independently
-  three times, up to +/-44 m of accumulated travel, and the closing absolute `ObjectMotionFromTo`
-  snaps it away in one frame. The final heading is NOT part of this: no event in the def carries a
-  rotation term, `barracuda`'s gamez transform is `Initial`, and the hull's local -Z (its take-off
-  run, `BL-522`) is correct as built. *Fix shape:* settle whether `rnd_xz` is a random spread at
-  all, or a cached unit direction the original reads back; it is non-zero on far more than this
-  def, so the change belongs to `ObjectMotion` as a whole (`docs/org/objectMotion.md`), not to the
-  submarine. At the controls, on the landed launch decode, the Barracuda still reads wrong on all
-  three counts: it appears where the bay approach is not, no surfacing is seen near the bay, and it
-  then stands in the bay in one step (the closing absolute `ObjectMotionFromTo` snap after the
-  `rnd_xz` drift), and its hull still faces the wrong way for the bay. The heading disproof above
-  rests on the def carrying no rotation term and the gamez transform being `Initial`; the report at
-  the controls stands over it, so the next pass compares the hull's local -Z against the bay
-  opening and the `bauda_aip*` take-off path direction in the built world, not against the def
-  alone. *⚠ Traps:* do not special-case the submarine, and do not "fix" the 1.2 m residual,
-  which is authored. *Cross-refs:* `BL-515`, `BL-522`, `docs/org/objectMotion.md`.
-
 - `BL-546` `[Bug]` **A nitro engage produces none of its visuals: no prop swap, no exhaust smoke.**
   *Evidence:* reported at the controls on a nitrous build whose boost accelerates the aircraft and
   whose dial now reads correctly: nothing on the airframe changes. Every part of the
@@ -1501,6 +1534,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   belongs on the definition's dt, not on the session's `PhysicsDt`. *Cross-refs:*
   `docs/formats/anim-definitions/cutscenes.md` "Handoff and skip"; `docs/plans/PLAN-M5-polish-2.md`
   E24 (the decode that made the two scenes unskippable).
+
+- `BL-587` `[Fidelity]` **Chapter-scope reader files no `ANIMATION_DEFINITION_FILE` list names still
+  load.** *Evidence (traced to the data):* the shared scope is gated on the lists a mission sees
+  (`AnimProgram`, `docs/formats/anim-definitions.md` "Shared-scope files are listed per mission
+  too"); the chapter scope stays unconditional. Unlisted chapter files: C1's `clouds`,
+  `lightning`, `spotlights`, `train_smoke`; C2's `game_targets`, `police_*`, `security_destroy`
+  (M01/M02 list two of them); C5's `steinmann` (M01 lists it); C4's `bhmhookup`/`bhm_warhawks`
+  (M04 lists them). The original's compiled archives derive from the lists, so it never runs an
+  unlisted file. *Fix shape:* the same file gate for the chapter scope. *⚠ Traps:* C1's
+  `cloudparent#` 0.6 opacity comes from `clouds.zrd`, and the overcast match
+  (`docs/plans/PLAN-overcast-match.md`) was judged with it in place, so the C1 goldens and the
+  user's eyes decide before it lands. *Cross-refs:* `BL-521`'s closing commit
+  (`git log --grep=BL-521`), `docs/formats/anim-definitions.md`.
 
 ## Audio
 
@@ -2372,56 +2418,12 @@ usual.
   snapshot flow, so the cabin's other rows shipped without it rather than waiting.
   *Cross-refs:* `BL-256` is the adjacent snapshot work; `docs/PLAN-M5-campaign.md` Decision 3.
 
-- `BL-521` `[Bug]` **CM04 (C3/M03)'s barrage balloons should already be destroyed at mission start.**
-  *Evidence (two leads from the sortie log, still open):* at the controls the balloons stand at
-  mission open. The log shows the AI gunners engaging them as live turrets on the first frames
-  (`ai gunner: shooter 100 targets MSG_TUR_DEFENSE_BALLOON@b_turret3 at 1027 m`, then `b_turret5`
-  and `b_turret4`), although `support\c3\m03.gw` switches `bont1..6`/`b_turret1..6` fully OFF
-  (`NodeSetActive off`): either that switch does not reach those nodes' turret registration, or it
-  does not reach the nodes at all, and the balloons the report names are these. Later in the run,
-  `anim: WAIT_FOR_COMPLETION on 'balloon_downa*' had nothing to hold — no live callee instance`:
-  something in M03's running world calls the `balloon_downa*` defs, which live in
-  `data\common\zrdr\turrets\balloon_down.zrd`, a reader def compiled only into M02's `mis_anim`
-  (`bont1-balloon_downa1.json` and siblings) and superseded in M03 by the mission's compiled
-  manifest, so the call reaches nothing. *Fix shape:* first confirm which nodes the `.gw` OFF switch
-  reaches (`mission setup: ... 36 node(s) deactivated`) and whether a deactivated `b_turret*` stays
-  in the turret target pool with its balloon visible; then find the caller of `balloon_downa*` in
-  M03 (a chapter-scope reader def or the turret def itself) and settle whether the original resolves
-  that call against the chapter's reader set where CSVM's manifest supersession drops it.
-  `BL-513`'s pool sync applies once the trigger is a role-named swap. *⚠ Traps:*
-  `PLAN-c3-balloon-kill-chain.md` settled the balloons' kill chain for C3/M02; that is the live kill
-  path and not this mission's start state, so do not reopen it. *Cross-refs:* `BL-513` (the same
-  mission's exploding buildings, the persist-log replay), `BL-348`'s plan,
-  `docs/formats/anim-definitions.md` (the `bont*`/`balloon_t*`/`tether*` state events).
-
-- `BL-522` `[Bug]` **A surface generator's launch does not fly the take-off run it is placed on.**
-  *Evidence:* the launch pose is decoded and landed (`docs/formats/mission-entities/enemy-generators.md`
-  "Launching from a surface host"): a launch starts on `<base>_aip0` plus 0.2 m, nose on
-  `<base>_aip1`, at zero velocity with the throttle open. The original then keeps the path on the
-  aircraft at `+0xc8` with the flag at `+0xcc` and flies the remaining points as a take-off run,
-  which also suppresses the net-nearest-node snap an ordinary activation makes (`FUN_004b0f40`).
-  CSVM hands the aircraft straight to its patrol net from that pose instead, so an aircraft that
-  starts at rest on a deck or a runway has no authored way to reach flying speed. Affects all three
-  surface hosts: `barracuda` (C3, a 4-point path climbing 2.5 m to 10.8 m over 130 m), `eairg31`
-  and `eairg32` (C1, 5-point flat ground rolls). *Fix shape:* decode the consumer of `+0xc8`/`+0xcc`
-  on the aircraft record and fly the path, releasing to the patrol net at its last point. *⚠ Traps:*
-  the zeppelin launch-altitude gate is a decoded rule for airships and not a general one; do not
-  lift the launch by borrowing it, and do not add a spawn-height offset beyond the decoded 0.2 m.
-  Do not give the aircraft a starting speed instead: the zero velocity is decoded. At the controls,
-  on the landed launch pose, the fighters still die at once: `britpeace_eg0..3` launch in turn at
-  `(-12028,8,-11597)` on the `bauda_aip*` path and each is destroyed on the same frame (`AI ram into
-  sub_doors/col — destroyed outright`, then `sub_runway/col` twice and terrain `g627/col`,
-  `CRASH ... spd=75..78 m/s`), so a launch placed at rest on the deck is killed by the AI ram rule
-  before any take-off run could begin, and the wrecks' crash damage is what destroys the Barracuda
-  with almost no fire from the player (`BL-515`). The take-off run is the fix; while it is unbuilt,
-  a launched aircraft standing on its own host's colliders must not count as a ram.
-  *Cross-refs:* `BL-512`, `BL-515`, `BL-527` (CM07's second patrol is a launch off `eag31`/`eag32`,
-  so it is re-judged against this), `docs/org/flightModel.md`'s scripted-path follower (CM09's
-  ground airfields launch off the same take-off paths, `eag31`/`eag32` in C1/M04).
-
 - `BL-523` `[Bug]` **The AI's patrol/pursue/lay-off cycle does not match the original: CM05's
-  second patrol never pursues, and CM09's enemies fly up to 80 km away.** *Evidence:* two
-  symptoms of one mode machine, reported at the controls. In CM05 (C3/M04) the second enemy patrol
+  second patrol never pursues, CM07's friendly flights hold their net while enemies attack them,
+  and CM09's enemies fly up to 80 km away.** *Evidence:* three
+  symptoms of one mode machine, reported at the controls. In CM07 (C1/M02) friendly aircraft keep
+  flying their net instead of engaging enemies that are shooting at them, so the promotion gate is
+  wrong on the friendly side too, not only for the enemy patrol below. In CM05 (C3/M04) the second enemy patrol
   stays on its net around the Pandora with the player in range and never engages; in CM09 enemy
   aircraft leave the mission area and end up tens of kilometres out. `AiModeMachine` promotes
   `Patrol` to `Pursue` on its own gates (`AiModeMachine.cs:314`); a patrol that never leaves the
@@ -2443,8 +2445,10 @@ usual.
   wingman onto the chapter's first net, has no callers. The remaining fly-away path in CSVM is
   `AiPilot.FlyPatrol`'s netless arm reading `TargetHeadingDeg` and `TargetAltitude` after
   `FlyPursuit` has overwritten them, so a pilot with no net and no leader holds the last bearing to
-  a dead target.
-  *Cross-refs:* `BL-524`, `docs/org/aiPilot.md`.
+  a dead target. The take-off hand-off is settled (`BL-594`'s closing commit): a launch is released 300 m
+  past its last waypoint at 53 m/s, climbing, and lives; the net-nearest snap the original skips
+  (`FUN_004b0f40`) stays undecoded.
+  *Cross-refs:* `BL-524`, `docs/org/aiPilot.md`, `BL-522`'s closing commit (`git log --grep=BL-522`).
 
 - `BL-550` `[Feature]` **The AI's altitude floor is enforced at one site in CSVM and at three in
   the original: the manoeuvre veto and the mode-5 global disable are both missing.** *Evidence:*
@@ -2541,56 +2545,6 @@ usual.
   `AnimRuntime`: the prerequisite is data-authored and general, and a docking-only patch would leave
   the gasbag/cargo/chute defs carrying the same shape unfixed. *Cross-refs:* `BL-458`.
 
-- `BL-526` `[Bug]` **CM07 (C1/M02): the rope ladder never deploys.** *Evidence:* reported at the
-  controls: the pickup's rope ladder does not appear, so the pickup step cannot be flown.
-  Re-verified against the code and the decompile: not a dropped `AnimRuntime` event kind. `player`'s
-  `drop_ladder` def (`C1/M02/zrdr/ladder.zrd`) does its visible work (`OBJECT_ADD_CHILD`,
-  `OBJECT_ACTIVE_STATE`, `OBJECT_MOTION_SI_SCRIPT`) with kinds the runtime already handles,
-  unconditionally, before its trailing `CALLBACK[123]`, which is one of the two gap codes
-  `docs/formats/anim-definitions/cutscenes.md` already names as reaching no case in the
-  mission-script host; `BL-035`'s dropped kinds play no role. No `.zrd` file in C1/M02 or the shared
-  chapter `landings.zrd` ever authors a `CALL_ANIMATION[drop_ladder]`. The string `"drop_ladder"`
-  has exactly one xref in the exe, inside `FUN_004735b0`, a hardcoded C1/M02-specific mission-init
-  function: it resolves `drop_ladder`/`retract_ladder` into a small heap object (`DAT_0071c324`)
-  that the main world tick `FUN_004897c0` drives every frame, outside a cutscene, gated on an
-  attitude test (`0.707 < player_field[100]`, cos 45°) and a proximity/membership test
-  (`FUN_00471690`) against the object's own switch list, calling the deploy or retract through the
-  switch object's own vtable, never through `CALL_ANIMATION`, `pickups.zrd` or `landings.zrd`.
-  *Fix shape:* not an event-kind handler. This is a bespoke, per-mission native gameplay object
-  (an attitude-and-proximity-gated ladder switch, evaluated every tick) CSVM has never modeled;
-  decoding `FUN_00471690`'s membership test and `player_field[100]`'s exact meaning is the
-  prerequisite before a CSVM equivalent can be built. *Cross-refs:* the CM07 pickup fix
-  (`2aa7d77d`, the train pickup cutscene, which covers `pickups.zrd`/`landings.zrd` but not this).
-
-- `BL-527` `[Bug]` **CM07 (C1/M02): the second patrol, a single Peacemaker, spawns under the ground.**
-  *Evidence:* reported at the controls: the aircraft appears below the terrain. Not a roster
-  placement: `aiv.zrd`'s four enabled `blakepeace_2_1`..`_4` blocks are the whole formation-roster
-  spawn, and a headless run (spawn log now on `CampaignDirector.BuildRoster`'s `campaign: roster`
-  line) places all four ~122 m above the measured terrain height, so that path is clean. The
-  mission's only other Peacemaker-def blocks are `blakepeace_2_5`/`_2_6`, both authored `enabled 0`
-  (`docs/formats/ai-rosters.md`'s generator-parameter-template slot), so the second patrol is a
-  generator launch, not a roster one, the same class of bug as `BL-522`'s Barracuda fighters. CM07's
-  `egen.zrd` runs two live generators (`eairg31`/`eairg32`) whose `vehicle.params` names the
-  disabled AIV block a fresh spawn is configured from; that join is built
-  (`CampaignRosterPlan.GeneratorTemplates`, asserted by the `generator-roster-params` suite; both
-  C1/M02 records point at `Eairg31_params`, so both hosts launch `blakepeace_2_5` by the data's own
-  doing), and the `player_bhawk` on the egen load line is the fallback-plane label, not the launch.
-  The launch pose is decoded and landed (`BL-522`): it now sits on `eag31_aip0`/`eag32_aip0` plus
-  0.2 m instead of the host origin, and the generators are gated behind four `WAKEUP_GENERATOR`
-  credits, so no headless run launches there without playing the mission. Re-judged at the
-  controls on the landed launch pose: the launches now come out of the hangar in the air but crash
-  at once. The sortie log shows `blakepeace_2_eg0..eg4` launching in turn and `eg1`, `eg2`, `eg3`
-  and `eg4` each ending on `AI ram into a5/col — destroyed outright` at about `(-5940,165,-4164)`,
-  `spd=104 m/s`; `eg0` survived long enough to pursue. So the residual is `BL-522`'s take-off run:
-  handed to the patrol net from the launch pose, the aircraft flies through `a5` (a structure
-  beside `eag31`'s path) instead of along the authored run that clears it. *Fix shape:* `BL-522`,
-  not a `CampaignRoster.cs` change. *⚠ Traps:* do not add a
-  blanket spawn lift; `BL-457` shows authored spawns are otherwise exact, and the roster-spawned
-  formation here is one more confirmation of that.
-  *Cross-refs:* `BL-522`, `BL-457`, `docs/formats/ai-rosters.md`,
-  `docs/formats/mission-entities/enemy-generators.md`.
-
-
 - `BL-558` `[Research]` **A damaged AI flies a full evasive maneuver where the original may only set a
   flag.** *Evidence:* [`docs/org/aiControlLaw.md`](docs/org/aiControlLaw.md) records `obj+0xBA` as an
   **evade flag**, set to 1 by the damage handler `FUN_004b9bc0` when the steady-hand test fails
@@ -2609,29 +2563,6 @@ usual.
   code. Removing evasive maneuvers on damage is a large behavioural change to make on one line of a
   decode page, and the steady-hand roll itself is not in question, only what a failed roll does.
   *Cross-refs:* `BL-557` (the other open TTK cause), `docs/org/aiControlLaw.md`.
-
-- `BL-564` `[Bug]` **CM12 (C2/M01): the `eshipg31` generator launches Bloodhawks at the world
-  origin instead of patrol boats at the pirate ship.** *Evidence:* a flown CM12 session
-  (`.scratch/logs/menu-20260827-215135.log`): the wave
-  arrives as `ai17_player_bhawk`, `ai18_player_bhawk`, `ai19_player_bhawk`, tracked by the target
-  HUD at 7.6 km from the player, and two of the three ram terrain `g34586` within seconds at
-  `pos=(5,5,-109)`, the world origin; the third patrols `M2Patrol1`, a water net, and is shot down
-  later. Two causes. (1) The generator's `vehicle.params` label `Eshipg31_params` resolves to the
-  roster block `patrolboat_eg0` (def 4, `patrolboat`, a surface vehicle), which
-  `CampaignRosterPlan.Build` reports in `Skipped` rather than planning, so `GeneratorTemplates`
-  has no entry and `GameSession.SpawnFromGenerator` falls back to `SessionSpec.GeneratorsPlane`,
-  `player_bhawk`. The mission's boats are the `patrolboat_eg0..5` that OBJECTIVE58-63 and
-  OBJECTIVE70 move between `M2GoosePatrol` and `M2PatrolStop`. (2) The host node `eshipg31` is a
-  model-less group node with a zero local translation whose geometry sits at its node bbox,
-  about (-5892, 10, -4412); `AiGeneratorRuntime.Spawn` drops at `Host.GlobalPosition`, which is
-  (0, 0, 0). *Fix shape:* decode the original's launch position for a generator whose host has no
-  model (`FUN_00452450`: the node's world matrix, or its bbox centre) and use that; then decide
-  what a surface-vehicle launch is in CSVM (a boat on a water net, not an aircraft), or at least
-  refuse the fallback airframe for a surface def so a boat generator launches nothing rather than
-  fighters. *⚠ Traps:* the three Bloodhawks are group 3 and never count toward "Destroy all
-  enemy fighters" (`DEDG [1, 0]`); killing them is not progress. Do not "fix" (1) by handing the
-  generator a fighter def. *Cross-refs:* `BL-522` (launch placement from a surface host),
-  `BL-527`, `docs/formats/mission-entities/enemy-generators.md`.
 
 - `BL-565` `[Fidelity]` **`DEDG`'s decoded side effect, widening every counted member's engagement
   volume to 9,000 m, is not applied.** *Evidence:* `docs/formats/objectives.md`'s `DEDG` row and
@@ -2666,293 +2597,13 @@ usual.
   pursuing a low player, which would mean the terrain contact test misses a steep fast crossing;
   (2) why a plane under a tile flies on: terrain colliders are single-sided so a crossing from
   below is silent, and the ram rule only fires on the way back up. *Fix shape:* answer (1) first;
-  if the spawn is under ground it is BL-527's question again (a decoded ground rule at spawn, or
-  none), and if it is a crossing, the contact test at the crossing is the bug, not the floor.
+  if the spawn is under ground it is the spawn-placement question again (a decoded ground rule at
+  spawn, or none; `BL-457` says authored spawns are exact), and if it is a crossing, the contact test at the crossing is the bug, not the floor.
   *⚠ Traps:* do not replace the absolute 20 m floor with an AGL floor; it is decoded
   (`DAT_0071c3f0`) and the original has no AGL floor either. Do not add a spawn lift. The ace did
   count for "Destroy all enemy fighters" in the end (its ram death dropped group 2 to zero and
-  primary 3 completed), so this is not an objective bug. *Cross-refs:* `BL-527` (CM07's Peacemaker
-  under the ground), `docs/org/aiPilot.md` (the activation primitive and
-  `FUN_00432010`).
-
-- `BL-568` `[Bug]` **CM04 (C3/M03): the Pandora starts moored in the dry dock instead of flying in
-  over the mission's first minute.** *Evidence:* at the controls the Pandora is already in the dry
-  dock while the cargo zeppelin is still moving out. M03's `NEW_GAME_START` list runs
-  `pzep_todrydock` (`extracted/C3/M03/mis_anim/piratezep-pzep_todrydock.json`, `OnCall`, one
-  `ObjectMotionSiScript` on `piratezep`), whose SI script
-  (`data-c3-m03-zrdr-zeps-pzep_todrydock-piratezep.zan.json`, 185 frames, 0 to 61.65 s) carries the
-  airship from `(-11314,554,-13697)` to `(-12401,150,-10355)`. The zeppelin record in
-  `zeppelins.zrd` seats `piratezep` at `(-12400.9,150.3,-10355.2)`, yaw -180, on net `M3PirateZep`,
-  which is the script's END pose. That reads as: the record seats the airship at its destination
-  and the start anim's script owns the pose from its first frame; CSVM spawns the zeppelin at the
-  record position and the script never takes its pose (or the net follower writes over it), so it
-  stands in the dock from the first frame. *Fix shape:* an `ObjectMotionSiScript` on a zeppelin node
-  owns that zeppelin's pose for the script's duration, starting at frame 0's base, with the net
-  follower parked and resuming from the script's last frame. Check `ZeppelinRuntime`'s placement
-  against the scripted-path snap (`BL-531`'s fix) and the dead-end hold (`BL-529`'s fix) first,
-  since both touched placement; neither should apply to a scripted motion. *⚠ Traps:* do not move
-  the record's position to the path start; the record's seat is data and the script is what flies
-  it. *Cross-refs:* `BL-529`, `docs/org/objectMotion.md`, `docs/formats/anim-definitions.md`.
-
-- `BL-569` `[Bug]` **CM04 (C3/M03)'s opening cutscene does not play: `calldestroy_the_cargozep`'s
-  camera never takes the view.** *Evidence:* at the controls the mission opens in the cockpit with
-  no cutscene. `NEW_GAME_START` runs `calldestroy_the_cargozep`, which calls
-  `destroy_the_cargozep` (the cargo zeppelin's scripted destruction, with `snd_IntrosceneHAch4`)
-  and `cgzep_camera` (`player-cgzep_camera.json`, `OnCall`, objects `player`, `cockpit1`,
-  `camera1`: a cutscene camera over the player's aircraft). The sortie log has no cutscene line for
-  this mission, and `one-shot SOUND 'snd_IntrosceneHAch4' positioned by out-of-tree ancestor
-  composition ... (world root not parented at bootstrap)` says the chain fired during bootstrap,
-  before the world was in the tree, rather than as the mission's opening scene. `generic_intro` is
-  not in M03's start list, so the cutscene path `BL-548` and the trigger latch (`BL-583`) exercise
-  is never entered here. *Fix shape:* settle how the original runs a `camera1`-object cutscene
-  called from a start anim (the registration sites `docs/formats/anim-definitions/cutscenes.md`
-  lists) and route `cgzep_camera` through the cutscene runner with the world held, so the player
-  watches the cargo zeppelin go down and the skip works. *⚠ Traps:* the destruction itself already
-  runs (fireballs, `tntbox`/`gasbag` deactivation); do not run it a second time under the camera.
-  *Cross-refs:* `BL-548`, `BL-583`, `docs/formats/anim-definitions/cutscenes.md`.
-
-- `BL-571` `[Bug]` **A carried turret's death fire, and the turret itself, stay in the air where
-  the turret died while the zeppelin moves on.** *Evidence (traced for the fire, lead-only for the
-  turret):* reported at the controls in CM06 (C1C/M01) after a Workers' Voyage gun ring died: a
-  persistent flame hangs at the death position, and the turret is seen stuck there too. The fire
-  is `large_30sec_fire`, which the ring's destroy def (`doublecannon4-*doublecannon4-healthy.json`)
-  calls with `WithNode doublecannon4 (0, 2, 0)`. `AnimRuntime`'s `CallAnimation` case hands a
-  death's effect call to the world-effects runtime through `ExternalEffect` with a world POSITION
-  snapshot (`VisualOriginOf(callAnchor) + basis * offset`), and `PlayEffectAt` stages the template
-  root at that point with `TopLevel = true`; the site node rides along only as the callee's
-  `INPUT_NODE` for its condition gate, not as its parent. So the flame is world-anchored at the
-  death position for its authored 30 s while the hull flies away (the log's `WAIT_FOR_COMPLETION
-  on 'large_30sec_fire' not held — the callee is routed to the world-effects runtime` is that
-  hand-off). The earlier disproof (`BL-514`, closed as "the fire rides the hull") examined the
-  `PUFFER_STATE` path on the world runtime, which does re-read the host each frame; the
-  death-call path is this one. Whether the turret model itself is held back the same way (a
-  destroyed-role template placed through the same `PlayEffectAt`) or by something else is not
-  traced. *Fix shape:* an effect called `WithNode` on a node that moves (a carried site, any
-  vehicle sub-part) must follow that node: parent the staged template root under the site node,
-  or feed `EmitterDirector` the site's live transform each tick, keeping the `TopLevel` placement
-  for world-fixed sites. Then read how the ring's destroyed pose is placed and give it the same
-  rule. *⚠ Traps:* `trail-world-anchor` settled the opposite case (an emitter that must NOT ride
-  its host); keep both. Do not reopen `BL-514`'s `PUFFER_STATE` reading, it is correct for that
-  path. *Cross-refs:* `BL-514`'s closing commit (`git log --grep=BL-514`),
-  `docs/formats/anim-definitions.md` (`CALL_ANIMATION` `WithNode`), `docs/formats/effects.md`,
-  `docs/org/puffer.md`.
-
-- `BL-572` `[Fidelity]` **A campaign objective's marker labels the raw node name in the team
-  colour (`peoplehook`, `pzhookpoint`, `workersvoyagezep`) instead of the original's objective
-  marker.** *Evidence (lead-only):* reported at the controls in CM06 (C1C/M01): objective markers
-  read as green node names. The log's `targeting hud: P1 brackets on peoplehook at 999 m` /
-  `pzhookpoint` / `workersvoyagezep` lines show `TargetRef.DisplayName` carrying the node name for
-  an objective target, `TargetHud.LabelLines` drawing it as the second label line, and the colour
-  rule (`HudGreen` for a non-hostile team) applying as to any friendly vehicle. The original's
-  marker, from the user's recollection of this mission: a red `Zeppelin [Disable] Worker's
-  Voyage` for the first objective, then a blue `[Dock] Worker's Voyage Docking Hook` for the hook,
-  so a category, an action verb in brackets, the target's proper name, and a colour by the
-  action rather than the team. The strings exist in `extracted/messages.json`: `MSG_OBJ_DOCK`
-  (8003, "Dock"), `MSG_OBJ_DISABLE` (8006, "Disable"), `MSG_OBJ_DISABLEENG` ("Disable Engines"),
-  `MSG_OBJ_WVOYAGE` (8025, "Worker's Voyage"), `MSG_OBJ_WVOYAGEHOOK` (8027, "Worker's Voyage
-  Docking Hook"), `MSG_OBJ_KLONDIKEHOOK` (8017, "Pandora Docking Hook"). `objectives.zrd` only
-  names the node (`ADD_OBJECTIVE_TARGET [workersvoyagezep]`, `[pzhookpoint]`,
-  `[[wv_tailhook, peoplehook]]`, `docs/formats/objectives.md` 173), so the node-to-name and the
-  node-to-verb maps live elsewhere (a vehicle or zeppelin record field, or a table `crimson.exe`
-  indexes by node name) and are the decode. *Fix shape:* decode where the objective marker's verb
-  and proper name come from for a target node and what sets the marker colour, give `TargetRef`
-  an objective display line built from those message ids, and keep the node name for the debug
-  tag only. *⚠ Traps:* `BL-397` is the marker's bracket
-  range rule and not this. *Cross-refs:* `BL-397`, `docs/formats/markers.md`, `docs/org/targeting.md`.
-
-- `BL-573` `[Bug]` **CM07 (C1/M02): the AA guns damage themselves, one blowing itself up while
-  firing at the barrier in front of it.** *Evidence (lead-only):* reported at the controls: an AA
-  gun exploded on its own while shooting at a barrier. The sortie log shows `aagun32` taking four
-  hits in a row with no player round near it (`damage: -10 on aagun32 HP 30→20 [stage 0]`,
-  `-9.58`, `-9.2`, `-10 ... DESTROYED — death sequence run`), then `aagun33`, `aagun34` and
-  `aagun36` taking the same `-10`, `-9.58` pair; the identical decrements across four guns read as
-  one weapon's rounds, the guns' own, bursting on the obstruction and splashing the shooter. Not
-  traced: whether the flak's burst damage excludes its own shooter in `crimson.exe`, and whether
-  the original's gun fires at all when a structure blocks its line. *Fix shape:* trace which
-  shooter id lands those hits (`--debug` hit logging on the turret pool), then decode the flak
-  burst's damage application for a self-exclusion and the turret fire gate for a line-of-fire
-  test; apply what the decode says. *⚠ Traps:* do not exclude turrets from splash wholesale, a
-  rocket into a gun pit must still kill it. *Cross-refs:* `BL-516` (turret waking), `BL-514`,
-  `docs/org/weaponImpact.md`.
-
-- `BL-574` `[Bug]` **CM07 (C1/M02): the hangar hand-over gives the player a stock Bloodhawk in the
-  ordinary player paint and without nitro, where the original hands over the Blue Streak in Blake
-  Aviation livery.** *Evidence (traced to the swap, lead-only on the livery):* at the controls the
-  aircraft flown out of the hangar has the Fortune Hunters livery and no nitro, and the profile's
-  Blue Streak has nitro only after the mission (`BL-528`'s award half works). The log shows the
-  swap: `EXECUTION_BY_RANGE reached - starting hangar_drop at 67 m`, then `airframe swap: P1 is
-  now flying 'player_bhawk'`. `AirframeSwapCodes` maps code 965 to `pbloodhawk`/`player_bhawk`
-  and `FlightRoster.SwapPlayerAirframe` assembles that node through the ordinary player build
-  with the shared paint stream, so it is the stock airframe. `BL-528`'s in-mission half was closed
-  on the `aiv.zrd` `player` block authoring no aircraft, which is true, but the mission's aircraft
-  hand-over is this swap, not the roster, and it was not examined. The Blue Streak template
-  (`docs/org/hangar.md`, `0x0061a9b8`) carries engine 4 (nitrous), twin 40 and twin 30 guns and
-  1/1 hardpoints; its paint is the shared custom scheme, so where the Blake Aviation livery the
-  user remembers comes from (the swap code's own skin set, `blake*` in the faction table, or the
-  cutscene's captured rig) is the decode. *Fix shape:* decode what swap code 965 builds in the
-  original (the template at `0x0061a9b8` or a stock def) and which skin it draws; then have the
-  hand-over assemble the Blue Streak build (`CustomPlaneBuild` from `CampaignProgression.AwardBuild`'s
-  template, `Nitro.Installed` true) in that livery. *⚠ Traps:* do not give the stock Bloodhawk
-  nitro, and do not touch the post-mission grant, which is correct. *Cross-refs:* `BL-528`,
-  `docs/org/hangar.md`, `docs/formats/anim-definitions/cutscenes.md` (the swap codes),
-  `docs/formats/paint.md`.
-
-- `BL-575` `[Bug]` **CM07 (C1/M02): the hangar cutscene plays with none of its animations.**
-  *Evidence (lead-only):* reported at the controls: during the hangar hand-over cutscene nothing
-  animates. The log shows `'hangar_drop' armed by call at 1167 m, waiting for EXECUTION_BY_RANGE
-  (75 m)`, `EXECUTION_BY_RANGE reached - starting hangar_drop at 67 m (range 75 m)`, the airframe
-  swap, and `4 call(s) retargeted onto a named node`, but no line for the hangar's own motion
-  (doors, lift, the aircraft's drop) and no cutscene hold. Not traced: which defs `hangar_drop`
-  calls, whether they are among the `431 reader def(s) superseded by this mission's compiled
-  manifest` (the same drop `BL-521`'s `balloon_downa*` shows) or run on nodes the cutscene
-  reparents. *Fix shape:* read `hangar_drop`'s call list from `extracted/C1/M02/mis_anim`, run
-  the mission headless with `--debug-anim` to the hangar, and trace the first callee that does not
-  start. *⚠ Traps:* the swap itself works and must stay; the missing part is the choreography
-  around it. *Cross-refs:* `BL-574`, `BL-521`, `docs/formats/anim-definitions/cutscenes.md`.
-
-- `BL-576` `[Bug]` **CM08 (C1B/M03): the Pandora pitches steeply up and down along the Klondike
-  net, following every altitude step of the route at full pitch.** *Evidence (seen at the
-  controls, mechanism lead-only):* the screenshot
-  `Screenshots/crimsonskies_2026-08-27_23-47-46-050.png` (plan worktree) shows `piratezep` nose
-  down about 30 degrees, diving along the green `Klondike1` segment toward a lower node with the
-  ai-nets overlay on. `Klondike1` is a 13-node open chain whose nodes swing between about 400 m
-  and 93 m, and the record's pitch band is -30 to 30 degrees at `max_rate_pitch` 5. The dead-end
-  shuttle `BL-529` fixed was one cause of the porpoising report and the hold at the far end is
-  confirmed; the up-and-down along the route itself is still there and was the report's first
-  half. *Fix shape:* read `FUN_004bf9d0`'s pitch term against `ZeppelinMotion`: whether the
-  original steers pitch at the node's altitude difference directly, clamps it under a smaller
-  authored limit for route following, or eases altitude over the edge length, and whether the
-  net's node altitudes are the airship's targets at all (a zeppelin net may carry its own altitude
-  field). Then match. *⚠ Traps:* the initial-pitch clamp that never fires (`ZeppelinMotion.cs`)
-  is decoded verbatim and stays; do not "fix" it as part of this. Do not flatten the net.
-  *Cross-refs:* `BL-529`'s closing commit (`git log --grep=BL-529`), `docs/org/flightModel.md`,
-  `docs/formats/mission-entities.md` "Route ends and stop points".
-
-- `BL-577` `[Bug]` **CM08 (C1B/M03): the patrol boats never spawn.** *Evidence (traced):*
-  reported at the controls: no boats. `aiv.zrd` carries four enabled roster blocks
-  `patrolboat_1..4` (defs 37 to 39, positions at `y = 0` such as `(-7614.8, 0, -5556.5)`,
-  `-90` yaw, nets `Patrolboat1..4`), and `objectives.zrd` wakes them by `WAKEUP_ENEMIES
-  [patrolboat_1, patrolboat_2, patrolboat_3, patrolboat_4]` (line 164) and moves them between
-  nets (lines 241 to 253). `CampaignRosterPlan.Build` reports a surface-vehicle block in
-  `Skipped` (`'{def}' ({mode}) has no player airframe`, `CampaignRoster.cs`) and never spawns it,
-  so the wake finds nothing; CSVM has no runtime for a roster surface vehicle at all. The same gap
-  is what makes C2/M01's boat generator launch fighters (`BL-564`). *Fix shape:* a surface
-  vehicle runtime for roster blocks: spawn the def on its net at water height, drive it along the
-  net with the scripted-path follower's law (`docs/org/flightModel.md`), and give it the turret
-  and destructible wiring the `patrolboat-*` mis_anim defs (`ptboat_50damage`, `ptboat_75damage`,
-  `emit_ptsplash*`) expect; then the generator case in `BL-564` is the same runtime launched.
-  *⚠ Traps:* do not spawn a boat as an aircraft with a low ceiling. *Cross-refs:* `BL-564`,
-  `BL-531` (the scripted-path follower), `docs/formats/ai-rosters.md`.
-
-- `BL-578` `[Bug]` **CM08 (C1B/M03): the tanker jumps and sits at the wrong position.**
-  *Evidence (lead-only):* reported at the controls: the tanker makes a jump and is not where it
-  should be. Its motion is authored as `ObjectMotion`: `freighter-freightercruise.json` drives
-  `freighter` (with its wakes, hold and hold doors), and `freighter-freighterwavemotion.json`
-  loops two `ObjectMotion` events on `tanker`, both in M03's `NEW_GAME_START` list, and the
-  mission's anim census reports `ObjectMotion×1` not yet acted on. Two leads: the `rnd_xz` start
-  velocity drift that `BL-512` traced on the Barracuda (a normalized direction read as a random
-  amplitude, snapped away at the next absolute placement) applies to every `ObjectMotion`, so a
-  jump on the tanker is the same defect; and the tanker is `Russian`'s net trailer
-  (`ai nets: #28 'Russian' nodes=9 edges=8 trailer=tanker@node8`), so a net or scripted-path
-  placement (`BL-531`'s waypoint-0 snap) may be writing its pose against the motion. Whether the
-  Pandora and the tanker play the cargo-crane choreography is untested and belongs to this item's
-  check. *Fix shape:* `--anim-lab --node=tanker` on C1B, play `freightercruise`/`freighterwavemotion`
-  and log the pose at each event boundary; if the discontinuity is `rnd_xz`, fold it into `BL-512`'s
-  `ObjectMotion` fix; if a follower writes the pose, exclude a node an `ObjectMotion` owns.
-  *⚠ Traps:* do not special-case the tanker; the `ObjectMotion` semantics are shared with the
-  Barracuda and the airships. *Cross-refs:* `BL-512`, `BL-531`, `BL-568` (the Pandora's own
-  scripted motion), `docs/org/objectMotion.md`.
-
-- `BL-579` `[Bug]` **CM09 (C1/M04): the intro cutscene does not play correctly.** *Evidence
-  (lead-only):* reported at the controls. The mission's `NEW_GAME_START` list runs
-  `mission_intro_animation` (`camera1-mission_intro_animation.json`, `OnCall`, root `camera1`,
-  objects `player`, `piratezep`, `cockpit1`, `interior`, the hangar `front_door_*` and five
-  `bullet*` nodes: a hangar-interior camera scene with the Pandora), and the log shows it in the
-  start list (`start anims [pzep_engines_start, train_on_track, mission_intro_animation],
-  undefined here: [pure_panic]`) but no cutscene hold or handoff line for it, and the scene's
-  one-shot `snd_scene1` is `positioned by out-of-tree ancestor composition at (0, 0, 0) (world
-  root not parented at bootstrap)`, so at least its sound fires during bootstrap rather than in
-  the scene. `pure_panic` is a C1/M02 hangar def the list names and this mission does not
-  compile; whether the original plays it here is part of the question. What the original shows,
-  from the user's recollection: the standard generic intro first, then the player's aircraft and
-  the wingmen flying down out of the sky to the mission's start point, which is what
-  `mission_intro_animation`'s `player` object motion over the `bullet*` path nodes authors; CSVM
-  opens at the start point with neither. *Fix shape:* run `--campaign=<CM09>` headless with `--debug-anim` and read
-  `mission_intro_animation`'s event log against the def; `BL-569` (C3/M03's opening scene fired
-  at bootstrap with no camera) is the same class and may be the same fix. *⚠ Traps:* `BL-548`'s
-  deferred `--pos=` handoff is for `generic_intro`; this mission's intro is its own def.
-  *Cross-refs:* `BL-569`, `BL-548`, `docs/formats/anim-definitions/cutscenes.md`.
-
-- `BL-580` `[Bug]` **CM09 (C1/M04): `eairg32`'s launch falls back to a `player_bhawk` because the
-  data misspells its parameter block.** *Evidence (traced):* the sortie log shows
-  `player_bhawk_eg1` launched beside `blakepeace_2_eg0` and pursued as an enemy Bloodhawk; that is
-  `SessionSpec.GeneratorsPlane`, the fallback `GameSession.SpawnFromGenerator` takes when
-  `CampaignRosterPlan.GeneratorTemplates` has no entry. `egen.zrd` names the block
-  `Eairg32_params` (line 54) while `aiv.zrd`'s label table spells it `Earig32_params` (slot 31),
-  so the join never matches; `eairg31`'s `Eairg31_params` (slot 30) matches and launches
-  Peacemakers. The extra Bloodhawk is therefore CSVM's invention on an authored typo, and it is
-  what reads as an additional squad at the airfield. *Fix shape:* decode what `crimson.exe` does
-  with a `vehicle.params` label that resolves to no roster block (`FUN_00452450`'s caller chain on
-  the generator record): a silent no-launch, the first block of the def, or the same generator's
-  other host. Then match it and drop the airframe fallback for campaign generators (`BL-564`
-  asks the same for a surface def). *⚠ Traps:* do not "fix" the data spelling; the shipped file
-  is the reference and the original ran with it. *Cross-refs:* `BL-564`, `BL-527`,
-  `docs/formats/mission-entities/enemy-generators.md`, `docs/formats/ai-rosters.md`.
-
-- `BL-581` `[Bug]` **CM09 (C1/M04): with the radio tower down and every aircraft killed, the
-  Pandora's Defend marker clears and the mission does not go on to the docking.** *Evidence
-  (chain decoded, stall cause open):* reported at the controls. The "Defend rock_zeppelin"
-  marker is authored: `OBJECTIVE23` (live from the start) completes when one of the Promised
-  Land's `destroy_hkzep_*broad*` anims goes `INVALID`, adds `[piratezep, rock_zeppelin]` as the
-  objective target with help label `MSG_OBJ_DEFEND` ("Defend"), naps `OBJECTIVE24` (25 s, wakes
-  `blakebloodhawk_9..13`), and `OBJECTIVE25` (`DEDG [2, 0]`) removes that target once group 2 is
-  dead; the node name in the label is `BL-572`. The radio tower is `OBJECTIVE15`/`33`
-  (`INACTIVE1 rtwr_healthy`); destroyed in time it kills `OBJECTIVE16` and routes through 17 to
-  19 (90 s) to `OBJECTIVE20`, otherwise 16 routes through 18 (30 s) to the same 20, which wakes
-  `blakebloodhawk_1/2/3/8`: the squad arrives either way, only later with the tower down. The
-  docking (`OBJECTIVE31`, primary 2, `pzhookpoint`) is reached only through `OBJECTIVE30`
-  (primary 1, `INACTIVE1 [lkgasbag05, panelleft1]`, the Promised Land destroyed) waking
-  `OBJECTIVE42` (`DEDG [1, 0]`, ticking on 40), then 43 (`DEDG [2, 0]`), then 44 (`DEDG [5, 0]`).
-  The Promised Land was destroyed in both flights, so primary 1 is met and the stall is a `DEDG`
-  group never reading empty, and the flight that stalled is the one where the Paladin Blake
-  squad (`blakebloodhawk_1/2/3/8`, group 1, woken only by `OBJECTIVE20`) never arrived: with
-  four deactivated members, `DEDG [1, 0]` cannot complete (`BL-563` makes a deactivated member
-  count as alive, and even without that the four are alive-but-parked). The squad's two routes
-  differ only in timing: with the tower still up, `OBJECTIVE16` (15 s after 14) kills 15 and 17,
-  wakes 18, and 18 naps 20 for 30 s; with the tower down inside that window, 15 kills 16, naps
-  17 (16 s), 17 naps 19 (3 s), and 19 naps 20 for 90 s. Both 18 and 19 carry
-  `TICK_DEPENDS_ON_OBJ 29`, and `ObjectiveGraph.Ticks` holds such an objective entirely while
-  29 is not `Awake`; 29 is dormant until 28 (`DEDG [2, 2]`, woken by 24) wakes it. So the
-  90 s leg through 19 is where to look: whether a nap timer set on 19 while 29 was still
-  dormant is dropped rather than resumed, or whether 19's own nap of 20 never starts because
-  19 is gated when 17 wakes it. Objective transitions are not in the file log at all (no
-  `[campaign]` objective line exists in the sink), which is why this cannot be settled from the
-  sortie. *Fix shape:* first route the graph's wake, nap, complete and kill transitions through
-  `Log.Info("campaign", ...)` so a sortie log carries them; then reproduce headless: complete 15
-  inside 16's window, then 23/24/28 (a Promised Land hatch down, group 2 to two), and assert 20
-  wakes 90 s after 19; fix `Ticks`' interaction with a nap that lands on a gated objective per
-  the decode (`docs/formats/objectives.md`'s `TICK_DEPENDS_ON_OBJ` row). `BL-563` stays a
-  separate fix. *⚠ Traps:* the Defend marker clearing is correct behaviour (`OBJECTIVE25`), not
-  the bug.
-  *Cross-refs:* `BL-563`, `BL-565`, `BL-572`, `BL-580`, `docs/formats/objectives.md`.
-
-- `BL-582` `[Bug]` **A two-element objective target `[parent, child]` is flattened into two bare
-  names, so CM09 (C1/M04) shows two Defend markers: one on the Pandora and one on a ground
-  `rock_zeppelin` near the enemy zeppelin.** *Evidence (traced):* reported at the controls as two
-  markers. `OBJECTIVE23` authors `ADD_OBJECTIVE_TARGET [[piratezep, rock_zeppelin]]` and
-  `SET_HELP_LABEL [[piratezep, rock_zeppelin], MSG_OBJ_DEFEND]`, a node path (the child
-  `rock_zeppelin` under `piratezep`). `ObjectiveScript.ReadNames` flattens a nested list into
-  its strings, so the def's `AddObjectiveTarget` holds `piratezep` and `rock_zeppelin` as two
-  independent names, and `ObjectiveGraph.IsObjectiveTarget(name)` matches any node by bare name:
-  the Pandora's root and every other `rock_zeppelin` in the world (a ground node near the
-  enemy zeppelin) both light up. `REMOVE_OBJECTIVE_TARGET` and `ADD_OTHER_TARGET` read the same
-  way (`ObjectiveSites.Holds`). The same shape is C1C/M01's `[[wv_tailhook, peoplehook]]`.
-  *Fix shape:* read a nested pair as a path (`Parent`/`Child`), resolve it to the one node under
-  that parent (`AnimRuntime.FindNodes` scoped to the parent's subtree), and mark that node only;
-  a bare name keeps today's global match. Add a unit test on `ReadNames` with `[[a, b]]` and an
-  objective-sites test on a world with two `rock_zeppelin` nodes. *⚠ Traps:* the help label
-  applies to the same resolved node, not to the parent. *Cross-refs:* `BL-572` (what the marker
-  says once it is on the right node), `BL-581`, `docs/formats/objectives.md` 173.
+  primary 3 completed), so this is not an objective bug. *Cross-refs:* `docs/org/aiPilot.md` (the
+  activation primitive and `FUN_00432010`).
 
 ## Tooling, platform & docs
 
@@ -2964,6 +2615,22 @@ usual.
   `thirdparty/sdl/joystick/SDL_joystick.c` `SDL_PrivateJoystickForceRecentering` for the `int i`
   fix before removing. Side effect while active: DirectInput-only controllers (non-XInput
   sticks without an SDL HIDAPI driver) are invisible in-game.
+
+- `BL-581` `[Bug]` **CM09 (C1/M04): with the radio tower down and every aircraft killed, the
+  mission does not go on to the docking.** *Evidence (graph disproved, world side open):* reported
+  at the controls. The objective graph closes the chain: driven headless on the shipped script,
+  the tower-down route reaches 20 (the Paladin Blake squad wake) 90 s after 19 wakes, 30 wakes
+  42, and 42/43/44 nap 31 (the docking) once groups 1, 2 and 5 read empty; a nap landing on a
+  `TICK_DEPENDS_ON_OBJ`-gated objective is held and resumed, as the original does
+  (`FUN_0046a490`/`FUN_0046b160`, `docs/formats/objectives.md`). What stalls is on the world
+  side: `DEDG` never reading group 1 (or 2/5) empty through `GroupLiveCount`, or `WAKEUP_ENEMIES`
+  not putting the parked `blakebloodhawk_1/2/3/8` into play. *Fix shape:* the sortie log now
+  carries every transition as `[campaign] objective N woke|napped|completed|killed` lines; if
+  `objective 28 completed` never appears, group 2 never read at most two, and if `objective 42
+  completed` never appears after 20 woke, group 1 never read empty. Fix the world read that log
+  names. *⚠ Traps:* the Defend marker clearing (`OBJECTIVE25`) is correct; `BL-563` is a
+  separate landed fix; the graph needs no change. *Cross-refs:* `BL-563`, `BL-565`,
+  `docs/formats/objectives.md`, the closing commit of the graph half (`git log --grep=BL-581`).
 
 - `BL-584` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` is not same-build stable inside the
   parallel unit stage.** *Evidence (seen once, mechanism lead-only):* the full `RunTests.ps1` unit

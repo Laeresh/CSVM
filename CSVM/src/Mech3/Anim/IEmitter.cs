@@ -46,7 +46,7 @@ public interface IEmitterFactory
 /// which is precisely the distinction <see cref="EmitterDirector.EndFor"/> and
 /// <see cref="EmitterDirector.Discard"/> exist to make.</summary>
 public readonly record struct EmitterCensusRow(
-    string Name, string Host, string Def, bool Emitting, int LiveParticles);
+    string Name, string Host, string Def, bool Emitting, int LiveParticles, Node3D? HostNode);
 
 /// <summary>What one <c>AnimRuntime.PrewarmEmitters</c> pass did: emitters built ahead, events
 /// whose named host resolves to nothing on that runtime, and events hosted on their call site

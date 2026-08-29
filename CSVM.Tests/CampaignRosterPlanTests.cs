@@ -32,6 +32,7 @@ public class CampaignRosterPlanTests
         "bswingman", Props("kind_of", "basic_airplane", "mode", "wingman", "nodename", "fury"),
         "blakepeace_2", Props("kind_of", "devastator"),
         "patrolboat", Props("mode", "ship"),
+        "armytruck", Props("mode", "ground"),
     });
 
     private static List<AiNet> Nets => new()
@@ -130,7 +131,7 @@ public class CampaignRosterPlanTests
         var plan = CampaignRosterPlan.Build(new List<(string, List<object?>)>
         {
             ("bswingman_1", Block(-1f, "player")),
-            ("patrolboat_1", Block(5f, "")),
+            ("armytruck_1", Block(5f, "")),
         }, Defs, Nets);
 
         var bs = Assert.Single(plan.Spawns);
@@ -138,7 +139,45 @@ public class CampaignRosterPlanTests
         Assert.Null(bs.AiDef);
         Assert.True(bs.Escorts);
         var skipped = Assert.Single(plan.Skipped);
-        Assert.Equal("patrolboat_1", skipped.Name);
+        Assert.Equal("armytruck_1", skipped.Name);
+    }
+
+    [Fact]
+    public void AShipBlockPlansASurfaceVehicleOnItsNet()
+    {
+        var fields = Block(5f, "");
+        fields[21] = 1f;
+        var plan = CampaignRosterPlan.Build(
+            new List<(string, List<object?>)> { ("patrolboat_1", fields) }, Defs, Nets);
+
+        Assert.Empty(plan.Skipped);
+        var boat = Assert.Single(plan.Spawns);
+        Assert.True(boat.Surface);
+        Assert.Equal("patrolboat", boat.Def);
+        Assert.Equal("patrolboat", boat.PlaneNode);
+        Assert.Null(boat.AiDef);
+        Assert.Equal("ship", boat.Mode);
+        Assert.Equal(5, boat.Net?.Id);
+        Assert.True(boat.Inert);
+        Assert.False(boat.Escorts);
+        Assert.Throws<System.ArgumentException>(() =>
+            CampaignRosterPlan.SpawnFor(boat, Vector3.Zero, Vector3.Forward, AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward)));
+    }
+
+    [Fact]
+    public void AGeneratorLabelNamingAShipBlockResolvesASurfaceLaunch()
+    {
+        var fields = Block(5f, "");
+        fields[5] = 0f;
+        var hull = CampaignRosterPlan.BuildGeneratorTemplate("patrolboat_eg0", fields, Defs, Nets);
+        Assert.NotNull(hull);
+        var templates = new Dictionary<string, RosterSpawnPlan> { ["Eshipg31_params"] = hull };
+
+        Assert.Equal(GeneratorLaunch.Surface,
+            CampaignRosterPlan.ResolveGeneratorLaunch(templates, "Eshipg31_params", out var resolved));
+        Assert.Same(hull, resolved);
+        Assert.Equal(GeneratorLaunch.Empty,
+            CampaignRosterPlan.ResolveGeneratorLaunch(templates, "Earig32_params", out _));
     }
 
     [Fact]

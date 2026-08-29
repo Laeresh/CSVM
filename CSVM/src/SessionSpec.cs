@@ -359,8 +359,9 @@ public sealed record SessionSpec
     public bool NoAssist { get; private set; }
     /// <summary><c>--generators[=plane]</c>: run the mission's egen enemy generators;
     /// each surviving generator spawns AI aircraft on its decoded wave/period cycle through the
-    /// same runtime spawn seam <c>--ai=</c> uses. The optional value picks the spawned airframe
-    /// (a stand-in until the roster's <c>vehicle.params</c> chain resolves one).</summary>
+    /// same runtime spawn seam <c>--ai=</c> uses. The optional value picks the airframe of a
+    /// generator that authors no <c>vehicle.params</c>; a label that names no block builds
+    /// nothing, the decoded rule, never this airframe.</summary>
     public bool Generators { get; private set; }
     /// <summary>Which plane <c>--generators</c> spawns; the default is the default flight plane.</summary>
     public string GeneratorsPlane { get; private set; } = "player_bhawk";
@@ -375,6 +376,12 @@ public sealed record SessionSpec
     /// the mission script's <c>WAKEUP_TURRETS</c>, which M4 does not implement — this flag is
     /// the documented, logged stand-in, never a silent default.</summary>
     public bool WakeTurrets { get; private set; }
+    /// <summary><c>--wake-generators</c>: grant every generator a campaign mission's script gates
+    /// behind <c>WAKEUP_GENERATOR</c> the whole of that script's credit at session build, so a
+    /// headless run launches without playing the mission up to the objective. A logged stand-in
+    /// for the objective's own grant, never a silent default; inert outside a campaign mission,
+    /// whose generators run uncredited anyway.</summary>
+    public bool WakeGenerators { get; private set; }
     public (FlightInput, float)[][]? HoldSets { get; private set; }
     /// <summary>The <c>--damage=</c> preset pairs (part, fraction 0–1); null when <c>--damage</c>
     /// carried no value.</summary>
@@ -956,6 +963,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }
             else if (arg == "--zeppelins") { s.Zeppelins = true; }
             else if (arg == "--wake-turrets") { s.WakeTurrets = true; }
+            else if (arg == "--wake-generators") { s.WakeGenerators = true; }
             else if (arg == "--fire") { s.AutoFire = true; }
             else if (arg == "--fire-rockets") { s.AutoFireRockets = true; }
             else if (arg.StartsWith("--gun-select=")) { s.GunSelect = int.Parse(arg["--gun-select=".Length..]); }

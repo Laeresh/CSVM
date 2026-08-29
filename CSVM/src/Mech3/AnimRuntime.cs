@@ -47,7 +47,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         "ObjectActiveState", "ObjectTranslateState", "ObjectRotateState", "ObjectScaleState",
         "ObjectMotionFromTo", "ObjectOpacityState", "ObjectOpacityFromTo", "ObjectMotion",
-        "ObjectMotionSiScript", "Loop", "If", "Elseif", "Else", "Endif", "CallSequence",
+        "ObjectMotionSiScript", AnimDefinition.AllNamesKind, "Loop", "If", "Elseif", "Else", "Endif", "CallSequence",
         "StopSequence", "CallAnimation", "StopAnimation", "InvalidateAnimation", "ResetAnimation",
         "PufferState",
         "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild", "ObjectDeleteChild",
@@ -144,11 +144,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public string? AnchorWarnLabel;
 
     /// <summary>Hands a named effect to the world-effects runtime instead of starting it locally,
-    /// passing the call-site world point and the resolved call-site node (the callee's INPUT_NODE).
-    /// Returns true when it took the effect, so the local Start is skipped. Set on the WORLD
-    /// runtime, whose puffer factory is gone after the build and which would render nothing; null
-    /// everywhere else, where CALL_ANIMATION starts the callee locally.</summary>
-    public Func<string, Vector3, Node3D?, bool>? ExternalEffect;
+    /// passing the call-site world point, the resolved call-site node (the callee's INPUT_NODE) and
+    /// whether the effect rides that node (true for every call that resolved a site, so a carried
+    /// site's death effects move with the hull, docs/architecture.md). Returns true when it took the
+    /// effect, so the local Start is skipped. Set on the WORLD runtime, whose puffer factory is gone
+    /// after the build; null everywhere else, where CALL_ANIMATION starts the callee locally.</summary>
+    public Func<string, Vector3, Node3D?, bool, bool>? ExternalEffect;
 
     /// <summary>Stops a named effect on the external runtime <see cref="ExternalEffect"/> routes to
     /// — the reverse channel, for undoing a routed effect the data has no stop event for:
@@ -171,6 +172,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// and to the census, which is what every runtime with no host wired reports.
     /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
     public Func<int, string?, string?, bool>? CallbackHost;
+
+    /// <summary>Told the name of every definition a mission trigger starts, before it starts, so
+    /// the session can book the episode that definition raises to the definition itself rather
+    /// than to whichever callee raised its first code. This is the original's own trigger slot,
+    /// which holds the started instance for as long as it runs, and it is the SAME slot on every
+    /// path a trigger takes: an approach row, the objective script's <c>WAKE_ANIM</c>, the ladder
+    /// switch. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public Action<string>? MissionTriggerOwner;
 
     /// <summary>Animation names whose <c>EXECUTION_BY_RANGE</c> is an ARMING gate, not a LOD one:
     /// a <c>CALL_ANIMATION</c> only arms them and the player reaching the band is what runs them.
@@ -277,11 +286,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>Lazily builds, indexes and RESET_STATE-poses a pooled copy of a named library root
     /// (<see cref="GameZ.IsLibraryRoot"/>, docs/formats/gamez.md), returning the copy this exact
-    /// caller owns; a different caller gets a fresh one until the pool wraps. Null when the name is
-    /// no library root, and on every runtime that stages its templates eagerly instead.
-    /// ⚠ It returns the node rather than a permission bool on purpose. Drive that one copy, never
-    /// the def's name-wide <see cref="TemplateStage{TNode}.RootsFor"/> set.</summary>
-    internal Func<string, Node3D, Node3D?>? ResolveLibraryRoot;
+    /// call owns; another gets a fresh one until the pool wraps. Null off a library root and on
+    /// every runtime staging templates eagerly. The third argument is the authored call event,
+    /// null when that call names no site: a staged actor is served to a placing call alone.
+    /// ⚠ Drive the copy, never the def's whole <see cref="TemplateStage{TNode}.RootsFor"/>.</summary>
+    internal Func<string, Node3D, object?, Node3D?>? ResolveLibraryRoot;
 
     /// <summary>The world-space velocity an <c>IMPACT_FORCE</c> launch adds, transformed into the
     /// launched node's parent frame. Written only by <c>Callback 16</c>, which is the original's
@@ -410,6 +419,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // Same, for a flagged call that reached no live callee instance and so held nothing.
     private readonly HashSet<string> _inertWaitsNamed = new(StringComparer.OrdinalIgnoreCase);
 
+    // The roots of every library copy IndexPooledCopy took in, read by InStagedCopy.
+    private readonly HashSet<Node3D> _stagedCopies = new();
+
     private readonly DestructibleRegistry _destructibles = new();
 
     // The call-site node a PlayEffectAt instance was invoked WITH — the callee's INPUT_NODE. The
@@ -491,6 +503,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // which carry the aircraft's presence rather than any gamez node's active bit: see
     // SetTargetActive.
     private readonly Dictionary<ulong, List<Node3D>> _vehicleShell = new();
+
+    // Every definition a mission trigger has started, its CALL_ANIMATION closure included. The
+    // _missionCallDepth counter below only covers the trigger's own dispatch; a cutscene's later
+    // beats run off delayed sequence events outside it and are still that trigger's work.
+    private readonly HashSet<string> _missionTriggerDefs = new(StringComparer.OrdinalIgnoreCase);
 
     private Node3D _root = null!;
 
@@ -594,7 +611,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         _templateStage = stage;
         _resolver = new NameResolver<Node3D>(Node3DIdentity.Instance, _templateStage.RootsFor, IsInstanceValid,
-            StagingAdmits);
+            StagingAdmits, StagedCopyRootOf);
         _templateStage.Wire(
             FindAll,
             Anchors,
@@ -889,6 +906,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public List<(AnimDefinition Def, Node3D? Anchor)> PlayMissionTrigger(string animName,
         Node3D? fallbackAnchor = null)
     {
+        // ⚠ Before the start, not after: the first CALLBACK can land inside this very dispatch,
+        // and a slot written behind it would arrive to an episode already booked to a callee.
+        MissionTriggerOwner?.Invoke(animName);
+        // ⚠ The depth below covers this dispatch and nothing after it, while a cutscene's later
+        // beats run off delayed events outside it (docs/architecture.md), so the closure is what is
+        // remembered rather than the call stack.
+        foreach (var reached in CallClosureOf(animName))
+        {
+            if (reached.AnimName is { Length: > 0 } reachedName)
+                _missionTriggerDefs.Add(reachedName);
+        }
         _missionCallDepth++;
         try
         {
@@ -1083,6 +1111,28 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         ApplyResetStatesWithin(subtree);
     }
 
+    /// <summary>Indexes a further copy of a chapter library root built after the bootstrap (a
+    /// spawned surface vehicle): by name only, since every copy carries the same compiled indices
+    /// and the by-index map holds one claimant; then registers the destructible pools of every
+    /// definition now anchored within it and applies their RESET_STATE, the two halves of
+    /// bootstrap pass 1 a late hull needs. Returns the pools registered on it.</summary>
+    public List<DestructibleRegistry.Instance> IndexSpawnedCopy(Node3D subtree)
+    {
+        IndexWorld(subtree, indexByPointer: false);
+        _resolver.ClearFindCache();
+        var pools = new List<DestructibleRegistry.Instance>();
+        foreach (var def in _program.Defs)
+        {
+            if (!def.Destructible)
+                continue;
+            foreach (var a in Anchors(def))
+                if (a != null && (a == subtree || subtree.IsAncestorOf(a)))
+                    pools.Add(_destructibles.Register(def, a, def.Health));
+        }
+        ApplyResetStatesWithin(subtree);
+        return pools;
+    }
+
     /// <summary>Indexes a subtree built from ANOTHER archive: its stamped node indices are shifted
     /// by <paramref name="indexOffset"/> into this chapter's cross-archive block, so a compiled
     /// symbol table binds them (<see cref="AircraftStage.PointerBaseOf"/>). No RESET_STATE pass
@@ -1222,6 +1272,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // Motions advance ONCE per frame, here — not from the sequence runners, which would
         // apply dt once per running sequence and run the train at 4× speed.
         TickMotions(dt);
+        // Before the emitters read their hosts, so a carried fire is fed this frame's hull pose.
+        _templateStage.FollowSites();
         Emitters.Tick(dt);
         Light.Tick(dt);
         Sounds?.Tick();
@@ -1296,14 +1348,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// a record's destroy anim as a destructible pool (M4 F18).</summary>
     public IReadOnlyList<AnimDefinition> DefsFor(string animName) => _program.ByAnimName(animName);
 
-    /// <summary>Stages the named effect at an absolute world point: relocates each matching
-    /// template root onto the point (with <paramref name="orient"/> as its basis when given) and
-    /// starts the definition, as a CALL_ANIMATION would with a synthetic site. <paramref
-    /// name="inputNode"/> is the callee's INPUT_NODE, so a damage-stage sputter emits on the damaged
-    /// object and its <c>NodeActive</c> loop gate reads that object. ⚠ Give an input-governed def no
-    /// TTL; its lifetime is authored. Everything else takes <paramref name="ttl"/>, or <see cref="EffectTtl"/> when that is 0.</summary>
+    /// <summary>Every definition reachable from <paramref name="animName"/> through
+    /// <c>CALL_ANIMATION</c>, itself included: the cutscene host reads which of them author a
+    /// <c>CALLBACK</c>, since a row definition can end before the callee carrying its handoff.</summary>
+    public IReadOnlyList<AnimDefinition> CallClosureOf(string animName) =>
+        _program.Subset(animName).Defs;
+
+    /// <summary>Stages the named effect at a world point: relocates each matching template root
+    /// onto it (<paramref name="orient"/> as the basis when given) and starts the definition.
+    /// <paramref name="inputNode"/> is the callee's INPUT_NODE (a damage sputter emits on the damaged
+    /// object, whose <c>NodeActive</c> gate reads it); with <paramref name="follow"/> the placed copy
+    /// keeps riding that node (a death's call on a carried site). ⚠ Give an input-governed def no
+    /// TTL; its lifetime is authored. Others take <paramref name="ttl"/>, or <see cref="EffectTtl"/> at 0.</summary>
     public bool PlayEffectAt(string animName, Vector3 worldPoint, Node3D? inputNode = null,
-        float ttl = 0f, Basis? orient = null)
+        float ttl = 0f, Basis? orient = null, bool follow = false)
     {
         float bound = ttl > 0f ? ttl : EffectTtl;
         bool matched = false;
@@ -1317,7 +1375,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // motion targets live under it; null falls back to global name resolution. Pooled,
                 // that root is this call's own slot, and only that copy moves onto the site.
                 var roots = _templateStage.TakeNextSlot(def);
-                _templateStage.PlaceOn(roots, worldPoint, LevelsTemplate(def), orient);
+                if (follow && inputNode != null && IsInstanceValid(inputNode))
+                    _templateStage.PlaceFollowing(roots, inputNode, worldPoint, LevelsTemplate(def));
+                else
+                    _templateStage.PlaceOn(roots, worldPoint, LevelsTemplate(def), orient);
                 // ⚠ Before Start, every play: the copy is a reused node tree, not the fresh one
                 // the original instances per call, and its last run left it in its END pose.
                 ResetCheckedOutCopies(animName, roots);
@@ -1420,6 +1481,32 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             _damagesLogged++;
             Log.Info("anim", $"damage: -{healthDamage:0.##} on {NameOf(inst.Anchor)} HP {before:0.##}→{inst.Health:0.##}{(destroyed ? " DESTROYED — death sequence run" : $" [stage {inst.DamageStage}]")}");
         }
+        return true;
+    }
+
+    /// <summary>Puts a destructible into the state an earlier mission left it in, silently: the
+    /// pool reads destroyed at HP 0 (or the carried HP at its damage stage) and its nodes take the
+    /// pose the death ends in, with no effects, sounds or choreography. Returns false when there is
+    /// nothing to carry. ⚠ Never route a carried state through <see cref="DamageAt"/>; that
+    /// replays the death at mission open (docs/formats/destructibles.md "Starting destroyed").</summary>
+    public bool CarryState(DestructibleRegistry.Instance inst, bool destroyed, float health)
+    {
+        if (inst.Status == DestructibleRegistry.State.Destroyed)
+            return false;
+        if (!destroyed && health >= inst.Health)
+            return false;
+        inst.Health = destroyed ? 0f : Math.Max(0f, health);
+        var stages = inst.Def.Sequences.FirstOrDefault(s =>
+            string.Equals(s.Name, DamageSequenceName, StringComparison.OrdinalIgnoreCase));
+        if (stages != null)
+            inst.DamageStage = Math.Max(inst.DamageStage, DamageStageFor(stages, inst.Health));
+        if (!destroyed)
+        {
+            inst.Status = DestructibleRegistry.State.Damaged;
+            return true;
+        }
+        inst.Status = DestructibleRegistry.State.Destroyed;
+        ApplyDeathPose(inst);
         return true;
     }
 
@@ -1586,6 +1673,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         _templateStage.IndexPooledCopy(subtree);
         PrimeRest(subtree);
+        _stagedCopies.Add(subtree);
     }
 
     /// <summary>Starts a definition on one anchor (null resolves its node names globally), running
@@ -1608,6 +1696,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (_invalidated.Contains(def))
         {
             Count("Start(invalidated)");
+            return;
+        }
+        // The node-state prerequisite is the data's own fork: CM07's hangar drop calls both camera
+        // legs and lets hdrop_direction's state pick one, so an unmet leg is skipped in silence,
+        // the way the hull-death gate is.
+        if (!NodePrerequisitesMet(def, anchor))
+        {
+            Count("Start(prerequisite unmet)");
             return;
         }
         // ⚠ Do not tear down the live resources on a restart; the new instance re-establishes them
@@ -1945,6 +2041,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             Log.Info("anim", $"anim: {_destructibles.Count} destructible instance(s) across {_destructibles.DistinctAnchors} node group(s) registered (mutable HP; inert until weapons land)");
         if (program.MissionLibrarySkipped.Count > 0)
             Log.Info("anim", $"anim: {program.MissionLibrarySkipped.Count} reader def(s) superseded by this mission's compiled manifest (mission-scope + NAME1), not instantiated: {string.Join(", ", program.MissionLibrarySkipped.Take(8))}{(program.MissionLibrarySkipped.Count > 8 ? ", …" : "")}");
+        if (program.SharedFilesSkipped.Count > 0)
+            Log.Info("anim", $"anim: {program.SharedFilesSkipped.Count} shared reader file(s) no ANIMATION_DEFINITION_FILE list of this mission names, not loaded: {string.Join(", ", program.SharedFilesSkipped.Take(8))}{(program.SharedFilesSkipped.Count > 8 ? ", …" : "")}");
         if (ran.Count > 0 || missing.Count > 0)
             Log.Info("anim", $"anim: start anims [{string.Join(", ", ran)}]{(missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : "")}");
         var emitterCensus = Emitters.Census;
@@ -2393,6 +2491,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 _opsApplied += Pose.HandleMotionSiScript(ev, def, anchor, instant, out duration);
                 return true;
 
+            case AnimDefinition.AllNamesKind:
+                _opsApplied += Pose.HandleMotionSiScriptAllNames(ev, def, anchor, instant, out duration);
+                return true;
+
             // Control flow is the runner's business, not the table's.
             case "Loop":
             case "If":
@@ -2433,8 +2535,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         var siteXform = callAnchor.GlobalTransform;
                         // ⚠ Use VisualOriginOf, not the raw origin; an absolute-modelled target's
                         // node origin is the map corner. The site node rides along as the callee's
-                        // INPUT_NODE, which defs whose lifecycle reads that node need.
-                        if (ExternalEffect(callName, VisualOriginOf(callAnchor) + siteXform.Basis * siteOffset, siteNode))
+                        // INPUT_NODE and the effect follows it (a ring's death fireballs move with the hull).
+                        if (ExternalEffect(callName, VisualOriginOf(callAnchor) + siteXform.Basis * siteOffset, siteNode, siteNode != null))
                         {
                             // ⚠ Count the dropped hold rather than passing over it. A routed call
                             // leaves no instance here to wait on, and this is the one scope
@@ -2470,7 +2572,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                 relocate = true;
                             }
                             else if ((_deathCallDepth > 0 || _rangeCallDepth > 0
-                                    || _missionCallDepth > 0)
+                                    || _missionCallDepth > 0 || StartedByMissionTrigger(def))
                                 && !operandRedirect && ResolveLibraryRoot != null)
                             {
                                 string rootName = string.IsNullOrEmpty(target.Name)
@@ -2481,7 +2583,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                 if (!string.Equals(NameOf(callAnchor), rootName,
                                         StringComparison.OrdinalIgnoreCase))
                                 {
-                                    libraryCopy = ResolveLibraryRoot(rootName, callAnchor);
+                                    // ⚠ The site the call NAMES, never the caller's own anchor: a
+                                    // placeless call must not move its callee's root, and a staged
+                                    // actor's script poses its children in WORLD coordinates.
+                                    libraryCopy = ResolveLibraryRoot(rootName, callAnchor,
+                                        siteNode != null ? ev : null);
                                     relocate = libraryCopy != null;
                                 }
                             }
@@ -2521,13 +2627,24 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             // template's own root, so re-anchoring alone emits at the gamez origin.
                             if (relocate)
                             {
+                                // A death's callee rides its call site: a carried ring's debris
+                                // moves with the hull (the pieces integrate in the root's frame,
+                                // docs/architecture.md). Other relocating calls hold their placement.
+                                bool rides = _deathCallDepth > 0;
                                 if (ownCopy != null)
+                                {
                                     // Level a repeat call's copy exactly as PlaceAt would level the
                                     // first one; the library-root pool has never levelled.
-                                    _templateStage.PlaceOn(new[] { (Node3D?)ownCopy }, wantSite,
-                                        libraryCopy == null && LevelsTemplate(target));
+                                    bool level = libraryCopy == null && LevelsTemplate(target);
+                                    if (rides)
+                                        _templateStage.PlaceFollowing(new[] { (Node3D?)ownCopy }, callAnchor!, wantSite, level);
+                                    else
+                                        _templateStage.PlaceOn(new[] { (Node3D?)ownCopy }, wantSite, level);
+                                }
                                 else
-                                    _templateStage.PlaceAt(target, callAnchor!, siteOffset);
+                                {
+                                    _templateStage.PlaceAt(target, callAnchor!, siteOffset, follow: rides);
+                                }
                             }
                             Start(target, startAnchor);
                             // ⚠ Reveal the mesh too, after Start. On a stage that hides its
@@ -2863,9 +2980,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (named == null)
             return false;
         var child = Resolve(childName, def, anchor);
+        // Inside a library copy this runtime staged: a staged actor's own choreography runs on
+        // ordinary ticks long after the ranged call that staged it (the passenger's wave loop is
+        // re-entered from a poll), and its add-child of a further root (the flare) must build it.
         if (child == null && adopt && ResolveLibraryRoot != null
-            && (_deathCallDepth > 0 || _rangeCallDepth > 0 || _missionCallDepth > 0))
-            child = ResolveLibraryRoot(childName, named);
+            && (_deathCallDepth > 0 || _rangeCallDepth > 0 || _missionCallDepth > 0
+                || StagedCopyRootOf(anchor) != null))
+            child = ResolveLibraryRoot(childName, named, null);
         if (child == null)
             return false;
         // A delete names the parent it detaches FROM, so a child hanging somewhere else is a
@@ -2879,6 +3000,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             Reparent(child, parent);
             _opsApplied++;
+        }
+        // ⚠ A staged copy is TopLevel from its placement (PlaceNodeAt), which pins it to the
+        // world: adopted under a moving parent it would hang where the call site was. The original
+        // instances it as an ordinary child at its authored pose, so the adoption does the same.
+        if (adopt && child.TopLevel)
+        {
+            child.TopLevel = false;
+            child.Transform = RestOf(child);
         }
 
         return true;
@@ -2906,6 +3035,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         string? targetName = null;
         Vector3 offset = Vector3.Zero;
+        // AT_NODE and WITH_NODE both resolve here; the placement does not tell them apart
+        // (docs/org/sequences.md, the CALL_ANIMATION section).
         if (ev.Data.Obj("parameters")?.Union() is { Value: Dictionary<string, object?> p })
         {
             var atNode = new AnimData(p);
@@ -3217,6 +3348,52 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
     }
 
+    // The pose a death ends in, read off the sequences RunDeathSequence would play: every
+    // OBJECT_ACTIVE_STATE switching a node off, and the destroyed/dbase role nodes switched on.
+    // ⚠ Leave a non-role piece switched on mid-death off; it flies and is hidden, so switching it
+    // on parks debris at its rest pose. A def with no role swap of its own takes the RESET-derived
+    // one, under the same visible-death withholding RunDeathSequence applies.
+    private void ApplyDeathPose(DestructibleRegistry.Instance inst)
+    {
+        bool swapped = false;
+        foreach (var (def, seq) in DeathSequencesOf(inst.Def))
+        {
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Kind != "ObjectActiveState")
+                    continue;
+                var name = RoleName(ev);
+                bool active = ev.Data.Bool("state");
+                bool destroyedRole = name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("dbase", StringComparison.OrdinalIgnoreCase);
+                bool healthyRole = name.Contains("healthy", StringComparison.OrdinalIgnoreCase);
+                if (active && !destroyedRole)
+                    continue;
+                foreach (var node in Targets(ev, def, inst.Anchor))
+                {
+                    SetTargetActive(node, active);
+                    swapped |= destroyedRole || healthyRole;
+                }
+            }
+        }
+        if (!swapped && !AuthorsVisibleDeath(inst.Def))
+            ApplyDeathSwap(inst);
+    }
+
+    // The sequences a death plays, with the def each resolves its targets through: the def's own
+    // Initial sequences, its compiled destruction slot, and every sequence of a chained swap
+    // target (AuthorsSwap accepts its swap in an ON_CALL sequence too).
+    private IEnumerable<(AnimDefinition Def, AnimSequence Seq)> DeathSequencesOf(AnimDefinition def)
+    {
+        foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
+            yield return (def, seq);
+        if (def.DeathSlot is { } slot)
+            yield return (def, slot);
+        if (ChainedSwapTarget(def) is { } chained)
+            foreach (var seq in chained.Sequences)
+                yield return (chained, seq);
+    }
+
     // Keeps a destructible's HP pool in step with a healthy/destroyed OBJECT_ACTIVE_STATE swap
     // dispatched outside DamageAt's own kill, such as a start-state script authoring an object
     // destroyed before the player arrives. Without this the pool stays Healthy at full HP
@@ -3329,6 +3506,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         Log.Info("anim", $"anim: conditions evaluated (lod {QualityLod}): {string.Join(", ", parts)}");
     }
 
+    // Every REQUIRED node prerequisite reads the state it asks for. Active is what
+    // OBJECT_ACTIVE_STATE writes, the subtree's visibility. A path that resolves to no node
+    // passes: the optional entries and MINIMUM_TO_SATISFY are parsed, not enforced.
+    private bool NodePrerequisitesMet(AnimDefinition def, Node3D? anchor)
+    {
+        foreach (var prereq in def.PrereqNodes)
+        {
+            if (!prereq.Required)
+                continue;
+            foreach (var node in ResolveScoped(new List<string>(prereq.Path), def, anchor))
+                if (IsInstanceValid(node) && node.Visible != prereq.Active)
+                    return false;
+        }
+        return true;
+    }
+
     private void Count(string kind) =>
         _unhandled[kind] = _unhandled.TryGetValue(kind, out var n) ? n + 1 : 1;
 
@@ -3412,6 +3605,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             if (DebugMotions)
                 Log.Debug("anim", $"anim/debug: '{landing.Target.Name}' landed at {landing.Target.GlobalPosition} — bounce sequence '{landing.Bounce}'{(live ? "" : " — NO LIVE INSTANCE, dispatched nothing")}");
         }
+    }
+
+    // Was this definition reached by a mission trigger? Asked of the CALLING definition rather than
+    // of the call stack, so a beat the trigger scheduled for seconds later still instances the
+    // library roots it names.
+    private bool StartedByMissionTrigger(AnimDefinition def) =>
+        def.AnimName is { Length: > 0 } name && _missionTriggerDefs.Contains(name);
+
+    // The staged library copy a node sits inside (its root), or null: the resolver narrows a
+    // symbol-table claim to it, and an add-child dispatched inside one may build a further root.
+    private Node3D? StagedCopyRootOf(Node3D? at)
+    {
+        for (Node? n = at; n != null; n = n.GetParent())
+            if (n is Node3D node && _stagedCopies.Contains(node))
+                return node;
+        return null;
     }
 
     // Whether one definition's name resolution may see a staged template copy. The pool is our
@@ -3548,7 +3757,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // gamez node index — always prefer it. Name matching resolves C1's `caboose` to the
         // real consist AND to an unrelated `caboose.flt` in the rail yard, and drives both.
         if ((ev.Data.Str("node") ?? ev.Data.Str("name")) is { } refName
-            && _resolver.SymbolClaims(def, refName, out var bound))
+            && _resolver.SymbolClaims(def, refName, anchor, out var bound))
         {
             if (bound != null)
                 return new List<Node3D> { bound };

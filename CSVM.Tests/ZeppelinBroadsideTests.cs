@@ -10,8 +10,9 @@ namespace CSVM.Tests;
 /// <summary>
 /// The F19 broadside law, engine-free: the decoded 90° arc (dot &gt; 0.707 on the moving hull's
 /// side normal, both sides), the per-cannon stowed → deploy → ready → fire machine and its own
-/// re-fire timer, the F18 coupling (a dead cannon drops out of the volley), the decoded
-/// skip-on-no-solution rule, and the zeppelin-vs-zeppelin gasbag pick's seeded determinism.
+/// re-fire timer, the script-owned engage flag, the F18 coupling (a dead cannon drops out of the
+/// volley), the decoded skip-on-no-solution rule, and the zeppelin-vs-zeppelin gasbag pick's
+/// seeded determinism.
 /// </summary>
 public class ZeppelinBroadsideTests
 {
@@ -61,7 +62,7 @@ public class ZeppelinBroadsideTests
     [Fact]
     public void StowedCannonDeploysInsteadOfFiringAndReadiesOnTheAnimDuration()
     {
-        var bs = new ZeppelinBroadside(Def(), _ => 2f, _ => 1.5f);
+        var bs = Engaged(new ZeppelinBroadside(Def(), _ => 2f, _ => 1.5f));
         var deploying = new List<ZeppelinBroadside.Cannon>();
         var ready = new List<ZeppelinBroadside.Cannon>();
 
@@ -93,7 +94,7 @@ public class ZeppelinBroadsideTests
     [Fact]
     public void EachCannonRunsItsOwnRefireTimer()
     {
-        var bs = new ZeppelinBroadside(Def(delay: 20f), _ => 0f, _ => 0f);
+        var bs = Engaged(new ZeppelinBroadside(Def(delay: 20f), _ => 0f, _ => 0f));
         var ready = new List<ZeppelinBroadside.Cannon>();
         bs.Step(Dt, BroadsideSide.Left, _ => true, readyToFire: ready);   // instant deploy
         bs.Step(Dt, BroadsideSide.Left, _ => true, readyToFire: ready);   // deploy → ready
@@ -125,7 +126,7 @@ public class ZeppelinBroadsideTests
     [Fact]
     public void DestroyedCannonDropsOutOfTheVolley()
     {
-        var bs = new ZeppelinBroadside(Def(), _ => 0f, _ => 0f);
+        var bs = Engaged(new ZeppelinBroadside(Def(), _ => 0f, _ => 0f));
         bool Alive(string node) => node != "rb1";   // F18's zone view: rb1 is destroyed
         var deploying = new List<ZeppelinBroadside.Cannon>();
         var ready = new List<ZeppelinBroadside.Cannon>();
@@ -140,7 +141,7 @@ public class ZeppelinBroadsideTests
     [Fact]
     public void IdleReadyCannonRetractsAfterTheInventedStowWindow()
     {
-        var bs = new ZeppelinBroadside(Def(), _ => 0f, _ => 1f);
+        var bs = Engaged(new ZeppelinBroadside(Def(), _ => 0f, _ => 1f));
         bs.Step(Dt, BroadsideSide.Right, _ => true);   // deploy (instant)
         bs.Step(Dt, BroadsideSide.Right, _ => true);   // ready
 
@@ -204,6 +205,84 @@ public class ZeppelinBroadsideTests
         Assert.Equal(ZeppelinBroadside.FallbackFireDelaySeconds, bs.FireDelaySeconds);
         Assert.All(bs.Cannons, c =>
             Assert.Equal(ZeppelinBroadside.FallbackDeploySeconds, c.DeploySeconds));
+    }
+
+    // The decoded engage flag (zeppelin byte +0xc): clear at construction, so a broadside the
+    // script never engages neither deploys nor readies whatever bears on it, and one already
+    // ready is retracted outright when the flag drops.
+    [Fact]
+    public void DisengagedBroadsideNeverDeploysAndRetractsWhatIsReady()
+    {
+        var bs = new ZeppelinBroadside(Def(), _ => 0f, _ => 1f);
+        Assert.False(bs.CannonsEngaged);
+        var deploying = new List<ZeppelinBroadside.Cannon>();
+        var ready = new List<ZeppelinBroadside.Cannon>();
+        for (float t = 0f; t < 25f; t += 0.5f)
+        {
+            bs.Step(0.5f, BroadsideSide.Right, _ => true, deploying, readyToFire: ready);
+        }
+        Assert.Empty(deploying);
+        Assert.Empty(ready);
+        Assert.All(bs.Cannons, c => Assert.Equal(ZeppelinCannonState.Stowed, c.State));
+
+        bs.CannonsEngaged = true;
+        bs.Step(Dt, BroadsideSide.Right, _ => true, deploying);   // instant deploy
+        bs.Step(Dt, BroadsideSide.Right, _ => true);               // deploy → ready
+        bs.Step(Dt, BroadsideSide.Right, _ => true, readyToFire: ready);
+        Assert.Equal(2, deploying.Count);
+        Assert.Equal(2, ready.Count);
+
+        var retracting = new List<ZeppelinBroadside.Cannon>();
+        ready.Clear();
+        bs.CannonsEngaged = false;
+        bs.Step(Dt, BroadsideSide.Right, _ => true, retracting: retracting, readyToFire: ready);
+        Assert.Equal(2, retracting.Count);   // at once, not after the idle window
+        Assert.Empty(ready);
+        Assert.All(retracting, c => Assert.Equal(ZeppelinCannonState.Retracting, c.State));
+    }
+
+    // The decoded candidate walk: the original resolves every targets name through the world
+    // node table, 'player' included; the engage flag above, not this walk, is the gate.
+    [Fact]
+    public void PlayerResolvesLikeAnyZeppelinNode()
+    {
+        Assert.True(ZeppelinBroadside.IsPlayerTarget("player"));
+        Assert.True(ZeppelinBroadside.IsPlayerTarget("Player"));
+        Assert.False(ZeppelinBroadside.IsPlayerTarget("piratezep"));
+        int? hit = ZeppelinBroadside.FirstLiveTarget(new[] { "player" },
+            name => ZeppelinBroadside.IsPlayerTarget(name) ? 1 : (int?)null);
+        Assert.Equal(1, hit);
+    }
+
+    [Fact]
+    public void FirstLiveTargetWalksAuthoredOrder()
+    {
+        var live = new Dictionary<string, int> { ["dantezep"] = 7, ["player"] = 1 };
+        int? Resolve(string name) => live.TryGetValue(name, out var v) ? v : null;
+        Assert.Equal(7, ZeppelinBroadside.FirstLiveTarget(new[] { "dantezep", "player" }, Resolve));
+        Assert.Equal(1, ZeppelinBroadside.FirstLiveTarget(new[] { "player", "dantezep" }, Resolve));
+    }
+
+    [Fact]
+    public void FirstLiveTargetSkipsAnUnresolvedName()
+    {
+        var live = new Dictionary<string, int> { ["player"] = 1 };
+        int? Resolve(string name) => live.TryGetValue(name, out var v) ? v : null;
+        Assert.Equal(1, ZeppelinBroadside.FirstLiveTarget(new[] { "deadzep", "player" }, Resolve));
+    }
+
+    [Fact]
+    public void FirstLiveTargetIsNullWhenNothingResolves()
+    {
+        Assert.Null(ZeppelinBroadside.FirstLiveTarget(new[] { "deadzep" }, _ => (int?)null));
+        Assert.Null(ZeppelinBroadside.FirstLiveTarget(Array.Empty<string>(), _ => (int?)1));
+    }
+
+    // The script's COMPLETED_ZEPCANNONS, stood in for: every broadside starts disengaged.
+    private static ZeppelinBroadside Engaged(ZeppelinBroadside bs)
+    {
+        bs.CannonsEngaged = true;
+        return bs;
     }
 
     private static ZeppelinDef Def(float? delay = 20f) => new()

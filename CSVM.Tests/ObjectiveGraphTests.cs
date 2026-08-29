@@ -193,6 +193,22 @@ public class ObjectiveGraphTests
     }
 
     [Fact]
+    public void The_dockings_completion_code_ends_the_mission_with_no_wrap_up_and_only_once()
+    {
+        var (graph, _) = Build("\"OBJECTIVE1\",[\"INACTIVE1\",[\"never\"]]");
+        int ended = 0;
+        graph.MissionEnded += _ => ended++;
+        Assert.True(graph.NotifyDockingComplete());
+        graph.Step(1f / 60f);
+        Assert.Equal(MissionOutcome.Won, graph.Outcome);
+        Assert.Equal(1, ended);
+        Assert.False(graph.NotifyDockingComplete());
+        graph.Step(3f);
+        Assert.Equal(MissionOutcome.Won, graph.Outcome);
+        Assert.Equal(1, ended);
+    }
+
+    [Fact]
     public void Identity_rows_are_one_per_unique_priority_and_bit_zero_is_the_primary()
     {
         var (graph, _) = Build(
@@ -232,6 +248,33 @@ public class ObjectiveGraphTests
         Assert.Contains("sprucegoose", graph.ObjectiveTargets);
         Assert.Contains("ftank01", graph.OtherTargets);
         Assert.Equal("MSG_OBJ_DESTROY", graph.HelpLabels["ftank01"]);
+    }
+
+    [Fact]
+    public void A_nested_target_list_reads_as_one_path_and_a_bare_name_stays_bare()
+    {
+        var script = Script(
+            "\"OBJECTIVE1\",[\"ADD_OBJECTIVE_TARGET\",[[\"a\",\"b\"],\"c\"],"
+            + "\"REMOVE_OTHER_TARGET\",[[\"d\",\"e\",\"f\"]],"
+            + "\"SET_HELP_LABEL\",[[\"a\",\"b\"],\"MSG_OBJ_DEFEND\"]]");
+        var def = script.Objectives[0];
+        Assert.Equal(new[] { "a/b", "c" }, def.AddObjectiveTarget.ConvertAll(t => t.Key));
+        Assert.Equal(new[] { "a", "b" }, def.AddObjectiveTarget[0].Path);
+        Assert.Equal("b", def.AddObjectiveTarget[0].Node);
+        Assert.True(def.AddObjectiveTarget[0].Scoped);
+        Assert.False(def.AddObjectiveTarget[1].Scoped);
+        Assert.Equal("d/e/f", def.RemoveOtherTarget[0].Key);
+        Assert.Equal("a/b", def.HelpLabel!.Value.Names[0].Key);
+        Assert.Equal(new[] { "a", "b" }, ObjectiveTarget.Parse("a/b").Path);
+
+        var (graph, _) = Build(
+            "\"OBJECTIVE1\",[\"ADD_OBJECTIVE_TARGET\",[[\"a\",\"b\"]],"
+            + "\"SET_HELP_LABEL\",[[\"a\",\"b\"],\"MSG_OBJ_DEFEND\"]]");
+        graph.Step(0.1f);
+        Assert.True(graph.IsObjectiveTarget("a/b"));
+        Assert.False(graph.IsObjectiveTarget("a"));
+        Assert.False(graph.IsObjectiveTarget("b"));
+        Assert.Equal("MSG_OBJ_DEFEND", graph.HelpLabels["a/b"]);
     }
 
     [Fact]
@@ -305,6 +348,65 @@ public class ObjectiveGraphTests
         Assert.Contains(script.Objectives, o => o.InstantWin);
     }
 
+    [ExtractedDataFact]
+    public void C1_M04_reaches_the_squad_wake_with_the_tower_down_inside_the_distress_window()
+    {
+        // 15 (tower down) kills 16 and naps 17, 17 naps 19, and 19's nap is HELD by
+        // TICK_DEPENDS_ON_OBJ 29 until 28 wakes 29; then 19 wakes 3 s later and naps 20 for 90 s.
+        var script = ObjectiveScript.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "M04"));
+        var world = new FakeWorld();
+        var graph = new ObjectiveGraph(script, world);
+        var log = new List<ObjectiveTransition>();
+        graph.Transitioned += log.Add;
+        float WokeAt(int n) => log.Find(t => t.Number == n && t.Kind == ObjectiveTransitionKind.Woke).Elapsed;
+
+        graph.Wake(14);
+        world.Inactive.Add("rtwr_healthy");
+        Run(graph, 2f);
+        Assert.True(graph.CompletedOf(15));
+        Assert.False(graph.AliveOf(16));
+        Assert.Equal(ObjectiveState.Napping, graph.StateOf(17));
+        Run(graph, 20f);
+        Assert.True(graph.CompletedOf(17));
+        Assert.Equal(ObjectiveState.Napping, graph.StateOf(19));
+        Assert.Contains(log, t => t.Number == 19 && t.Kind == ObjectiveTransitionKind.Napped && t.Gated);
+        Assert.Equal(ObjectiveState.Dormant, graph.StateOf(29));
+
+        // A Promised Land hatch goes down: 23 completes and naps 24 for 25 s; 24 wakes 28.
+        world.AnimStates["destroy_hkzep_rbroad1"] = 4;
+        Run(graph, 30f);
+        Assert.True(graph.CompletedOf(24));
+        Assert.Equal(ObjectiveState.Awake, graph.StateOf(28));
+        Assert.Equal(ObjectiveState.Napping, graph.StateOf(19));
+
+        // Group 2 down to two: 28 completes and wakes 29, which releases 19's held nap.
+        world.GroupLive[2] = 2;
+        Run(graph, 1f);
+        Assert.Equal(ObjectiveState.Awake, graph.StateOf(29));
+        Run(graph, 5f);
+        Assert.True(graph.CompletedOf(19));
+        Assert.InRange(WokeAt(19) - WokeAt(29), 2.9f, 3.3f);
+        Assert.Equal(ObjectiveState.Napping, graph.StateOf(20));
+        Run(graph, 95f);
+        Assert.InRange(WokeAt(20) - WokeAt(19), 89.9f, 90.3f);
+        Assert.Contains("blakebloodhawk_1", world.WokenEnemies);
+        Assert.Equal(ObjectiveState.Awake, graph.StateOf(40));
+
+        // The Promised Land goes down: 30 wakes 42, and the DEDG chain 42/43/44 (groups 1, 2, 5
+        // empty) naps the docking, 31, in.
+        world.Inactive.Add("panelleft1");
+        Run(graph, 1f);
+        Assert.True(graph.CompletedOf(30));
+        Assert.Equal(ObjectiveState.Awake, graph.StateOf(42));
+        world.GroupLive[1] = 0;
+        world.GroupLive[2] = 0;
+        world.GroupLive[5] = 0;
+        Run(graph, 3f);
+        Assert.True(graph.CompletedOf(44));
+        Assert.True(graph.CompletedOf(31));
+        Assert.Contains("pzhookpoint", graph.ObjectiveTargets);
+    }
+
     private static (ObjectiveGraph Graph, FakeWorld World) Build(string body)
     {
         var world = new FakeWorld();
@@ -339,17 +441,20 @@ public class ObjectiveGraphTests
 
         public List<string> Anims { get; } = new();
 
+        public Dictionary<int, int> GroupLive { get; } = new();
+
+        public List<string> WokenEnemies { get; } = new();
+
         public bool? NodeInactive(IReadOnlyList<string> path) => Inactive.Contains(path[^1]);
 
         public int AnimState(string anim) => AnimStates.TryGetValue(anim, out int s) ? s : 0;
 
-        public int? GroupLiveCount(int group, string? generator) => null;
+        public int? GroupLiveCount(int group, string? generator) =>
+            GroupLive.TryGetValue(group, out int live) ? live : null;
 
         public bool? TravelersMet(TravelersSpec spec) => null;
 
-        public void WakeupEnemies(IReadOnlyList<string> names)
-        {
-        }
+        public void WakeupEnemies(IReadOnlyList<string> names) => WokenEnemies.AddRange(names);
 
         public void WakeupTurrets(IReadOnlyList<string> patterns)
         {

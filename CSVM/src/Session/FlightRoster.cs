@@ -43,6 +43,7 @@ public sealed class FlightRoster
     private readonly FlightWorldBindings _world;
     private readonly HumanRosterBindings _human;
     private readonly Action? _aiAssemblyFault;
+    private readonly string _zrdrPath;
     private readonly List<FlightController> _ai = new();
     private readonly IReadOnlyList<FlightController> _aiView;
     private readonly Dictionary<FlightController, AiSubscriptions> _aiSubscriptions = new();
@@ -85,6 +86,7 @@ public sealed class FlightRoster
         _world = world;
         _human = human;
         _aiAssemblyFault = aiAssemblyFault;
+        _zrdrPath = aircraft.ZrdrPath;
         _aiView = _ai.AsReadOnly();
         if (starts != null)
             _players = new HumanFlightAdapter(policy, liveries, starts, worldEffects!, worldRoot,
@@ -130,13 +132,13 @@ public sealed class FlightRoster
     }
 
     /// <summary>Puts one player into a different airframe without ending the mission: the rig's
-    /// aircraft is rebuilt from <paramref name="planeNode"/>'s own record, at the pose it was flying.
-    /// <paramref name="scheme"/> carries a captured rig's own livery onto the rebuild (967);
-    /// <paramref name="shippedSkins"/> says a null <paramref name="scheme"/> is that rig's own
-    /// reading, not "draw the ordinary player paint". ⚠ Rounds already airborne ride the shared pool
-    /// under this pilot's unchanged shooter id. Decode: cutscenes.md.</summary>
+    /// aircraft is rebuilt from <paramref name="planeNode"/>'s own record, at the pose it was flying,
+    /// in <paramref name="scheme"/> (<paramref name="shippedSkins"/> says a null one is that rig's
+    /// own reading, not the ordinary player paint) and on <paramref name="build"/> in place of the
+    /// stock fit. ⚠ Rounds already airborne ride the shared pool under this pilot's unchanged
+    /// shooter id. Decode: cutscenes.md.</summary>
     public FlightController SwapPlayerAirframe(PlayerRig rig, string planeNode, PaintScheme? scheme = null,
-        bool shippedSkins = false)
+        bool shippedSkins = false, CustomPlaneDef? build = null)
     {
         ArgumentNullException.ThrowIfNull(rig);
         if (_players == null)
@@ -163,7 +165,7 @@ public sealed class FlightRoster
         try
         {
             _players.Assemble(rig.Index, rig, _ => { },
-                new AirframeSwapRequest(planeNode, start, scheme, shippedSkins));
+                new AirframeSwapRequest(planeNode, start, scheme, shippedSkins, build));
         }
         finally
         {
@@ -313,10 +315,20 @@ public sealed class FlightRoster
             ? AiNamed(order.CaptureRoot)
             : null;
         // The captured rig's own scheme rides the rebuild (undecoded in the executable, so this is
-        // the user's own controls reading), and its ShippedSkins reading rides with it: a real
-        // enemy roster spawn resolves that to no scheme at all, and null must still beat default.
-        SwapPlayerAirframe(rig, order.Airframe.PlaneNode, captured?.Scheme, captured?.ShippedSkins ?? false);
+        // the user's own controls reading) with its ShippedSkins reading, since a real enemy spawn
+        // resolves to no scheme at all and null must beat default; 965 draws its shipped skins.
+        var build = order.Airframe.AwardAirframe is { } awardAirframe
+            ? CampaignProgression.AwardBuild(awardAirframe)
+            : null;
+        var replacement = SwapPlayerAirframe(rig, order.Airframe.PlaneNode, captured?.Scheme,
+            captured?.ShippedSkins ?? order.Airframe.ShippedSkins, build);
+        RepointHolders(outgoing, replacement);
         var hidden = CarryCapturedDamage(captured, rig.Controller?.Damage);
+        if (captured != null && AirframeHandover.CarriesCapturedGroup(order.Airframe))
+        {
+            replacement.Group = captured.Group;
+        }
+
         if (handsOver)
         {
             HandOverOutgoing(leaving, wasAt, wasNose, armorLeft, healthLeft);
@@ -341,6 +353,38 @@ public sealed class FlightRoster
         fresh.ScalePools(armor, health);
         Log.Info("flight", $"airframe swap: '{captured.Name}' hidden, its hull (armour {armor * 100f:0}%, structure {health * 100f:0}%) carried onto the player's");
         return captured;
+    }
+
+    // Step 2's re-point walk: every AI pilot holding the aircraft the player just left, as its
+    // escort leader or its standing quarry, holds the replacement instead. The outgoing node is
+    // freed by the rebuild, so a holder left on it steers on a disposed object every frame.
+    private void RepointHolders(FlightController outgoing, FlightController replacement)
+    {
+        int repointed = 0;
+        foreach (var ai in _ai)
+        {
+            if (ai.Pilot is not { } pilot)
+            {
+                continue;
+            }
+
+            if (pilot.Escort is { } escort && ReferenceEquals(escort.Leader, outgoing))
+            {
+                escort.Leader = replacement;
+                repointed++;
+            }
+
+            if (pilot.Gunner is { } gunner && ReferenceEquals(gunner.Target, outgoing))
+            {
+                gunner.Target = replacement;
+                repointed++;
+            }
+        }
+
+        if (repointed > 0)
+        {
+            Log.Info("flight", $"airframe swap: {repointed} AI reference(s) to the outgoing aircraft re-pointed onto the replacement");
+        }
     }
 
     // The session-wide sinks a human controller takes after assembly rather than during it. One

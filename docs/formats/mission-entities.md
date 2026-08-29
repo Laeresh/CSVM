@@ -23,7 +23,7 @@ instances; the rest are conditional.
 | `max_rate_yaw`, `max_rate_pitch` | °/s | turn-rate limits |
 | `min_pitch` / `max_pitch` | ° | ±30 throughout |
 | `net` | name | the AI "net" (roster/behaviour group) it belongs to |
-| `targets` | node names | who it shoots at — `player`, or another zeppelin (`piratezep`, `dantezep`, …). ⚠ The 8 IA1 files author `targets, null` — key present, no list — so the "47" key census is 39 name lists + 8 nulls |
+| `targets` | node names | who it shoots at once the script engages the cannons — `player`, or another zeppelin (`piratezep`, `dantezep`, …); inert without `COMPLETED_ZEPCANNONS` (see [Broadside firing](#broadside-firing)). ⚠ The 8 IA1 files author `targets, null` — key present, no list — so the "47" key census is 39 name lists + 8 nulls |
 | `healthy` | `[[zoneNode, "panels"], …]` | the **critical** zones; second field is `"panels"` on all 316 entries |
 | `num_healthy_required` | 2–5 | how many of those must **survive**; drop below and the zeppelin dies. Confirmed against the engine — see [below](#the-kill-threshold-counts-survivors). Defaults to **1** when a `healthy` list is present, and is clamped at load to the length of that list |
 | `engines` | node names | the engine nacelles (12 or 14: `leng11`…`reng42`) |
@@ -92,6 +92,42 @@ with the ±30 every instance ships, the comparison is `|0.52 rad| < 30`, so the 
 This is a unit bug in the original, harmless because no instance authors an out-of-range `pitch`.
 Do not "fix" it into a clamp that actually bites, and do not read the ±30 as radians.
 
+The same degree-valued pair is read in two more places, and bites in neither: the pose write
+(`FUN_004bf950`, every step) clamps the pitch it hands the world matrix against them, and the
+node-capture repick (`FUN_004c0b50`) clamps the pitch it builds the nose direction from. The pitch
+state itself is never clamped anywhere. **A zeppelin therefore has no working pitch band at all**,
+and the remake's law carries none.
+
+### Steering
+
+The per-step law (`FUN_004bf9d0` → `FUN_004bf2c0` on a plain leg, `FUN_004bf360` on the approach
+to a halting node) steers at the current node directly: desired yaw `atan2(-dx, -dz)`, desired
+pitch `atan2(dy, sqrt(dx² + dz²))`, the raw slope from the hull to the node. There is no
+altitude easing over the edge and no altitude field on the net; the node's own position is the
+target. Yaw (`FUN_004bf620`) and pitch (`FUN_004bf530`) then go through one routine each, the same
+code, per tick with `dt` = `DAT_009ad744`:
+
+```
+error   = wrap(desired − angle)
+cap     = ±max_rate (sign of error)
+if |error| < 0.43633 rad (25°):  cap = cap · (error / 0.43633)²
+rate    = rate moved toward cap by accel · dt          (rate is state, +0xc8 pitch, +0xcc yaw)
+angle  += (speed / max_speed) · rate · dt              (max_speed the authored one, +0x9c)
+```
+
+So a turn ramps in at `accel_*`, holds `max_rate_*` while the error is over 25°, and eases out
+quadratically inside it, and the whole thing scales with way on: a docked or engine-dead hull
+(speed 0) holds its pose. The remake's `ZeppelinMotion.Steer` is this routine verbatim. ⚠ It
+matters: with `accel_pitch` 0.5°/s² a rate that asks for the full error each step and reaches it
+through that acceleration is an undamped oscillator, and rang up into a standing ±30° pitch swing
+on C1B/M03's level `Klondike1` legs (steepest leg 6.3°), which is what read at the controls as
+the Pandora diving along its route.
+
+Inside 30 m along-facing of a halting node ahead (`FUN_004bf360`'s near branch) the throttle is
+cut and the pitch is left alone; the position decays onto the node and the heading onto the leg's
+own bearing, both by `x ← target + (x − target) · e^(−0.2·dt)` (`FUN_00460700`, `FUN_00460490`
+over `FUN_00460410` = `exp(−x)`). The remake's `Dock` is that branch.
+
 ### Route ends and stop points
 
 The `net` a zeppelin flies is a patrol graph ([ai-nets.md](ai-nets.md)) walked by the shared
@@ -134,16 +170,39 @@ binary rather than inferred:
   design document instead describes a rolled hit chance ramping from 20 % at maximum range to
   100 % near 200 m. **Nothing like that roll is in the shipped fire path** — treat the design's
   curve as design-era and do not implement it.
-- ⚠ **The `targets` list carries no team or hostility test, at any stage.** A record's `targets`
-  names are parsed as unresolved pairs at load (`FUN_004bd8d0`), resolved once after every mission
-  zeppelin is placed by matching each name against the live zeppelin roster (`FUN_004bede0` calling
-  `FUN_004bd430`; the first name match wins, and a name matching no zeppelin (`player` is the only
-  one shipped data uses) falls through to a general named-object position lookup instead), and
-  consumed by the fire routine (`FUN_004bfe00`) on arc and intercept alone. No team, side, or ally
-  field is read anywhere in that chain. A record authoring `targets [player]` fires on the player
-  whenever in `cannon_fire_range` and arc, whether or not the record carries a `team` key at all;
-  the remake's `ZeppelinRuntime.Cannons.ResolveTarget` matches this: the first live authored name
-  wins, with no hostility filter to add.
+- ⚠ **A broadside is inert until the objective script engages it.** The zeppelin object's byte
+  `+0xc` is zeroed by the constructor (`FUN_004bd460`, `0x004bd46x`), never touched by the record
+  parser `FUN_004bd8d0`, and written by exactly one routine: `FUN_0046a0b0`, the
+  `COMPLETED_ZEPCANNONS` completion action ([objectives.md](objectives.md)). The per-frame
+  zeppelin update `FUN_004bf9d0` branches on it at `0x004bfa2x`: non-zero runs `FUN_004c0250`,
+  the pass that walks the cannon vector (`+0x5c..+0x60`) and calls the fire routine
+  `FUN_004bfe00` on every live cannon (that routine is also where a stowed cannon is told to
+  deploy, `FUN_004455e0`, so the hatch never opens without the flag either); zero runs
+  `FUN_004c03a0`, which only retracts any cannon still in its ready state (`FUN_004c0230` →
+  `FUN_00445620`). Three shipped missions author the directive, all zeppelin-versus-zeppelin:
+  C2B/M04 (`piratezep` ↔ `geminizep`), C4/M05 (`blackhatzep` → `cargozep2`) and C5/M04
+  (`dantezep` ↔ `piratezep`/`blackswanzep`). Every record authoring `targets [player]` (18 of
+  the 47 cannon-bearing records, C3/M03's Pandora among them) sits in a mission whose script
+  never runs it, so no shipped broadside fires on the player's aircraft, which is what the
+  original shows at the controls in C3/M03. The remake keeps the flag on
+  `ZeppelinBroadside.CannonsEngaged` (off at construction) and `CampaignDirector` writes it from
+  the directive through `ZeppelinRuntime.SetCannonsEngaged`.
+- **The `targets` list is a world-node list, and `player` resolves like any node.** At load,
+  `FUN_004bd8d0` resolves each `targets` name through the general node-by-name lookup
+  `FUN_004d0280(7, name)` (node table 7, the same table the cutscene code resolves `player` in,
+  see `anim-definitions/cutscenes.md` "The name is what resolves") and stores the node pointer
+  as the first half of a `(node, zeppelin)` pair; a name naming no node is dropped there and
+  never reaches the fire path. After every mission zeppelin is placed, `FUN_004bede0` fills the
+  second half by calling `FUN_004bd430` on the global zeppelin roster (`0x71df80`), which walks
+  the roster's pointer vector comparing each entry's own node (`+0x1c`) against the pair's node
+  and returns the first match or 0. The fire routine `FUN_004bfe00` then walks the pairs in
+  authored order: a pair with a zeppelin takes the gasbag branch below; a pair whose zeppelin is
+  0 (the `player` case) reads the node's world position through `FUN_004cf2c0` and runs the same
+  intercept solve and `> 0.707` arc test against it directly. No team, side or ally field is read
+  anywhere in that chain: the engage flag above is the whole of the gate, and a modified script
+  running `COMPLETED_ZEPCANNONS` on a `targets [player]` record would fire on the aircraft. The
+  remake's `ZeppelinRuntime.Cannons.ResolveTarget` (through `ZeppelinBroadside.FirstLiveTarget`)
+  keeps that walk unfiltered for the same reason.
 
 What the remake's implementation (M4 F19, `Flight/ZeppelinBroadside.cs` +
 `Session/ZeppelinRuntime.Cannons.cs`) added to the picture:
@@ -156,10 +215,11 @@ What the remake's implementation (M4 F19, `Flight/ZeppelinBroadside.cs` +
 - **Side alternation is geometric.** The two 45°-half-angle cones sit on opposite normals, so
   at most one side ever bears; the volley changes sides only when the target crosses the hull
   axis. No alternation schedule exists to decode.
-- **Zeppelin-vs-zeppelin is live data.** Both records of a mutually-targeting pair are active
-  in C1B/M03 (`vostokzep` ↔ `piratezep`, range 500) and in every chapter's MP3
-  (`multiplayer1zep` ↔ `multiplayer2zep`, range 15000 — in range from spawn), so the
-  gasbag-pick arm is exercisable in a shipped session, not only in tests.
+- **Zeppelin-vs-zeppelin is live data in three missions.** The gasbag-pick arm runs where a
+  script engages a record whose target is another zeppelin: C2B/M04, C4/M05 and C5/M04. The
+  other mutually-targeting pairs (C1B/M03's `vostokzep` ↔ `piratezep`, every chapter's MP3
+  `multiplayer1zep` ↔ `multiplayer2zep`) author the lists but no `COMPLETED_ZEPCANNONS`, so
+  they never fire in a shipped session.
 
 ### Engine loss
 

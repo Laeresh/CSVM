@@ -492,13 +492,13 @@ public sealed class AimCandidateSet
     /// candidates. A pool carrying <see cref="DestructibleRegistry.Instance.Team"/> uses it; a pool
     /// carrying none falls through to <see cref="AimAssist.NeutralTeam"/> and is nobody's target,
     /// the original's own rule (docs/org/targeting.md "World objects are in the same space, and are
-    /// normally neutral"). Skipped: an anchor outside the tree (its global transform is meaningless
-    /// until it is in one) and a dormant pool, whose object is not in the world yet.</summary>
+    /// normally neutral"). Skipped: an anchor outside the tree or hidden in it (a switched-off
+    /// subtree is out of the world, as <see cref="TurretController.Alive"/> reads) and a dormant pool.</summary>
     public void AddStructures(DestructibleRegistry registry)
     {
         foreach (var inst in registry.All)
         {
-            if (inst.Dormant || !inst.Anchor.IsInsideTree())
+            if (inst.Dormant || !inst.Anchor.IsInsideTree() || !inst.Anchor.IsVisibleInTree())
             {
                 continue;
             }

@@ -166,13 +166,15 @@ public sealed class TurretController
     public Vector3 TargetPosition { get; private set; }
 
     /// <summary>Carried: alive while the host is <see cref="FlightController.InPlay"/>. Emplacement:
-    /// alive while its <c>HEALTHY_NODE</c> (default <c>healthy</c>) is visible (docs/formats/turrets.md
-    /// "Being alive, and being awake").
+    /// alive while its <c>HEALTHY_NODE</c> (default <c>healthy</c>) is visible IN THE TREE
+    /// (docs/formats/turrets.md "Being alive, and being awake"): a mission's <c>.gw</c> switches a
+    /// site off at its root, and the node's own flag would read that turret as alive.
     /// ⚠ Not <c>Crashed</c>: a gunner carried by an inert airframe must not fire, be fired at, or
     /// join the aim assist's turret candidate list.</summary>
     public bool Alive => _host != null
         ? _host.InPlay
-        : _healthyNode == null || (GodotObject.IsInstanceValid(_healthyNode) && _healthyNode.Visible);
+        : _healthyNode == null || (GodotObject.IsInstanceValid(_healthyNode)
+            && (_healthyNode.IsInsideTree() ? _healthyNode.IsVisibleInTree() : _healthyNode.Visible));
 
     /// <summary>Where the turret is, for the aim assist's candidate list and the detection gate.</summary>
     public Vector3 WorldPosition => (YawNode ?? PitchNode).GlobalPosition;
@@ -528,9 +530,11 @@ public sealed class TurretController
         // rounds spread. Same uniform-polar cone as the player assist's launch scatter.
         var dir = AimAssist.Scatter(aimWorld, Mathf.DegToRad(Def.InaccuracyDeg), _rng);
         // ⚠ Pass team explicitly. A world emplacement has no shooter id, so the shooter-id default
-        // reads its rounds as neutral in the aim assist's ordnance candidate list.
+        // reads its rounds as neutral in the aim assist's ordnance candidate list. Its own mount
+        // rides along as the round's owner: the flak must not strike or splash the gun firing it.
         _pool.Spawn(Weapon, fp.GlobalTransform, PlatformVelocity,
-            _host?.PlayerIndex ?? ProjectilePool.NoShooter, fp, dir, team: _team);
+            _host?.PlayerIndex ?? ProjectilePool.NoShooter, fp, dir, team: _team,
+            ownerBodies: _host == null ? PlatformColliderRids() : null);
         if (_host == null && !_firstShotLogged)
         {
             _firstShotLogged = true; // verification breadcrumb: WHICH emplacements actually engage

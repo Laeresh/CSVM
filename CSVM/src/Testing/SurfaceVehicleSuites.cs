@@ -1,0 +1,325 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using CSVM.Flight;
+using CSVM.Mech3;
+using CSVM.Session;
+using Godot;
+
+namespace CSVM.Testing;
+
+/// <summary>The surface-vehicle runtime over the two shipped missions that author a hull: CM08's
+/// four <c>patrolboat_1..4</c> roster blocks in C1B's built world (spawned on the water at their
+/// authored spots, deactivated until woken, driven along their nets by the scripted-path law,
+/// their wake and destruction the chapter's own definitions), and CM12's <c>eshipg31</c> boat
+/// generator in C2's (a hull launched off the take-off path, never an airframe, and never at the
+/// world origin).</summary>
+internal static class SurfaceVehicleSuites
+{
+    private const string BoatChapter = "C1B";
+    private const string BoatMission = "M03";
+    private const int BoatGroup = 3;
+    private const string BoatDef = "patrolboat";
+    private const float StepDt = 1f / 30f;
+
+    private const string GenChapter = "C2";
+    private const string GenMission = "M01";
+    private const string GenHost = "eshipg31";
+    private const string GenLaunch = "patrolboat_eg0";
+
+    // A hull anywhere near the origin is the CM12 symptom (three Bloodhawks ramming g34586 at
+    // (5,5,-109)); every authored spot in both missions is kilometres away from it.
+    private const float OriginClearanceM = 1000f;
+
+    // The water sits at y = 0 on both missions' blocks; a probe that lands a hull more than
+    // this off it has read the wrong surface.
+    private const float WaterToleranceM = 2f;
+
+    private static readonly string[] BoatBlocks =
+    {
+        "patrolboat_1", "patrolboat_2", "patrolboat_3", "patrolboat_4",
+    };
+
+    internal static void CampaignSurfaceVehicles(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var report = new StringBuilder();
+        RosterBoats(ctx, report);
+        GeneratorBoat(ctx, report);
+        ctx.WriteArtifact("test-campaign-surface-vehicles.txt", report.ToString());
+        ctx.Note($"{BoatChapter}/{BoatMission}'s four patrol boats and {GenChapter}/{GenMission}'s boat generator build hulls, not aircraft");
+    }
+
+    // CM08: the roster half, with the mission's aircraft blocks left unspawned so only the hulls
+    // are under test.
+    private static void RosterBoats(TestContext ctx, StringBuilder report)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BoatChapter, BoatMission);
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, BoatChapter);
+        ctx.RequireData(missionZrdr, $"{BoatChapter}/{BoatMission} zrdr");
+        ctx.RequireData(chapterZrdr, $"{BoatChapter} zrdr");
+        var mission = MissionOf(ctx, BoatChapter, BoatMission);
+        var script = ObjectiveScript.Load(missionZrdr);
+        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var skills = AiSkills.Load(ctx.ZrdrPath);
+        ctx.Check(defs.ModeOf(BoatDef) == VehicleDefs.ShipMode && defs.AirframeFor(BoatDef) == null,
+            $"'{BoatDef}' is a mode ship def with no player airframe");
+        string startAnims = string.Join(", ", defs.StartAnimsOf(BoatDef));
+        ctx.Check(defs.StartAnimsOf(BoatDef).Count == 2 && defs.InjureAnimsOf(BoatDef).Count == 2,
+            $"'{BoatDef}' authors two start anims and a two-rung injure ladder: [{startAnims}]");
+
+        var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Boats"), null);
+        // A counting factory: the harness's own archive closes with the build, and the wake is
+        // reached only after it, so the real factory would build nothing (a session's outlives it).
+        ctx.EmitterFactory = new CountingEmitterFactory();
+        ctx.WithWorld(BoatChapter, collision: true, BoatMission, world =>
+        {
+            var worldRoot = world.Runtime.WorldRoot ?? world.Stage;
+            var vessels = new SurfaceVehicleRuntime(world.Gamez, world.Session.Builder.Scene,
+                world.Runtime, defs, worldRoot);
+            worldRoot.AddChild(vessels);
+            int aircraftAsked = 0;
+            director.BuildRoster(new CampaignDirector.RosterInputs
+            {
+                ChapterZrdrPath = chapterZrdr,
+                MissionZrdrPath = missionZrdr,
+                ZrdrPath = ctx.ZrdrPath,
+                MinAiActiveDist = skills.MinAiActiveDist,
+                FindNodes = name => world.Runtime.FindNodes(name),
+                Spawn = (_, _, _, _) =>
+                {
+                    aircraftAsked++;
+                    return null;
+                },
+                SpawnSurface = (plan, pos, forward) => vessels.Spawn(plan, pos, forward),
+                Rng = new Random(1),
+            });
+            director.Attach(new CampaignDirector.WorldInputs
+            {
+                Runtime = world.Runtime,
+                SurfaceVehicles = vessels,
+                Rng = new Random(1),
+            });
+
+            ctx.Check(aircraftAsked > 0, $"the mission's aircraft blocks still go to the aircraft spawner ({aircraftAsked})");
+            ctx.Same(BoatBlocks.Length, director.Vessels.Count, $"the four patrolboat blocks build hulls");
+            foreach (var name in BoatBlocks)
+            {
+                if (!director.Vessels.TryGetValue(name, out var vessel))
+                {
+                    ctx.Check(false, $"'{name}' has a hull");
+                    continue;
+                }
+                var at = vessel.Position;
+                report.AppendLine($"{name}: at ({at.X:0.#},{at.Y:0.##},{at.Z:0.#}) net='{vessel.Net?.Name}' inert={vessel.Inert} hp={vessel.Health}");
+                ctx.Check(at.Length() > OriginClearanceM, $"'{name}' is nowhere near the world origin: {at.Length():0} m");
+                ctx.Check(Mathf.Abs(at.Y) <= WaterToleranceM, $"'{name}' sits at water height: y={at.Y:0.##}");
+                ctx.Check(vessel.Net?.Name.StartsWith("Patrolboat", StringComparison.OrdinalIgnoreCase) == true,
+                    $"'{name}' is on its authored Patrolboat net: '{vessel.Net?.Name}'");
+                ctx.Check(vessel.Inert, $"'{name}' is built deactivated, waiting for WAKEUP_ENEMIES");
+                ctx.Check(!vessel.Body.Visible, $"'{name}' is hidden while deactivated");
+                ctx.Check(vessel.Health is > 0f, $"'{name}' carries the chapter's destructible pool: {vessel.Health}");
+                ctx.Check(vessel.Team == 2, $"'{name}' carries its block's team: {vessel.Team}");
+                ctx.Same(1, world.Runtime.FindNodes("pt_emitter1", vessel.Body).Count,
+                    $"'{name}' carries its own pt_emitter1, the wake's anchor");
+            }
+            ctx.Same(0, director.GroupLiveCount(BoatGroup) ?? -1,
+                $"DEDG over group {BoatGroup} counts no deactivated hull");
+
+            // Held: a deactivated hull does not move however long the mission steps.
+            var parked = Positions(director.Vessels);
+            for (int i = 0; i < 60; i++)
+            {
+                vessels.SimStep(StepDt);
+            }
+            ctx.Check(Unmoved(parked, director.Vessels), $"a deactivated hull holds its spot");
+
+            // Woken: the hull appears, its wake starts on its own emitters, and it drives its net
+            // at the scripted-path law's taxi speed with its height pinned to the water.
+            int woken = 0;
+            foreach (var vessel in director.Vessels.Values)
+            {
+                woken += vessel.Wake() ? 1 : 0;
+            }
+            ctx.Same(BoatBlocks.Length, woken, $"every hull wakes once");
+            ctx.Same(BoatBlocks.Length, director.GroupLiveCount(BoatGroup) ?? -1,
+                $"DEDG over group {BoatGroup} counts the four woken hulls");
+            int wakeEmitters = 0;
+            foreach (var row in world.Runtime.Emitters.Census)
+            {
+                if (row.Name.StartsWith("wake_emit", StringComparison.OrdinalIgnoreCase))
+                {
+                    wakeEmitters++;
+                }
+            }
+            report.AppendLine($"wake emitters after the wake: {wakeEmitters}");
+            ctx.Check(wakeEmitters >= BoatBlocks.Length * 2,
+                $"the wake reaches the hulls: {wakeEmitters} wake_emit* emitters over four boats");
+
+            const float runS = 20f;
+            for (int i = 0; i < (int)(runS / StepDt); i++)
+            {
+                vessels.SimStep(StepDt);
+            }
+            foreach (var (name, vessel) in director.Vessels)
+            {
+                float moved = new Vector2(vessel.Position.X - parked[name].X, vessel.Position.Z - parked[name].Z).Length();
+                report.AppendLine($"{name}: moved {moved:0.#} m in {runS:0} s, y={vessel.Position.Y:0.##}");
+                ctx.Check(moved > 0f && moved <= PathFollower.TaxiSpeed * runS + 1f,
+                    $"'{name}' drives its net after the wake, never above the taxi speed: {moved:0.#} m in {runS:0} s");
+                ctx.Check(Mathf.Abs(vessel.Position.Y - parked[name].Y) < 0.01f,
+                    $"'{name}' stays on the water while driving: y={vessel.Position.Y:0.##}");
+            }
+
+            // Killed: the pool reaches zero through the same call a weapon hit makes, the hull
+            // reports its death once, stops where it died and leaves the DEDG count.
+            var target = director.Vessels[BoatBlocks[0]];
+            int deaths = 0;
+            target.Destroyed += _ => deaths++;
+            ctx.Check(world.Runtime.DamageAt(target.Body, (target.Health ?? 0f) + 1f),
+                $"a hit on '{target.Name}' lands on its destructible pool");
+            vessels.SimStep(StepDt);
+            var dead = target.Position;
+            for (int i = 0; i < 30; i++)
+            {
+                vessels.SimStep(StepDt);
+            }
+            ctx.Check(target.IsDestroyed && deaths == 1, $"'{target.Name}' is destroyed and reported once");
+            ctx.Check(target.Position.IsEqualApprox(dead), $"a dead hull stops where it died");
+            ctx.Same(BoatBlocks.Length - 1, director.GroupLiveCount(BoatGroup) ?? -1,
+                $"DEDG over group {BoatGroup} drops the dead hull");
+            vessels.Free();
+        });
+    }
+
+    // CM12: the generator half. The label resolves a hull, the launch builds one on the host's
+    // take-off path and it runs that path; no aircraft, nothing at the origin.
+    private static void GeneratorBoat(TestContext ctx, StringBuilder report)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, GenChapter, GenMission);
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, GenChapter);
+        ctx.RequireData(missionZrdr, $"{GenChapter}/{GenMission} zrdr");
+        ctx.RequireData(chapterZrdr, $"{GenChapter} zrdr");
+        var defs = VehicleDefs.Load(ctx.ZrdrPath);
+        var nets = AiNets.Load(chapterZrdr);
+        var templates = CampaignRosterPlan.GeneratorTemplates(missionZrdr, defs, nets);
+        EnemyGeneratorDef? def = null;
+        foreach (var d in EnemyGenerators.Load(missionZrdr))
+        {
+            if (d.Node.Equals(GenHost, StringComparison.OrdinalIgnoreCase))
+            {
+                def = d;
+            }
+        }
+        ctx.Check(def != null, $"{GenChapter}/{GenMission} authors the generator '{GenHost}'");
+        if (def == null)
+        {
+            return;
+        }
+        var kind = CampaignRosterPlan.ResolveGeneratorLaunch(templates, def.VehicleParams, out var plan);
+        ctx.Check(kind == GeneratorLaunch.Surface && plan is { Surface: true, Def: BoatDef },
+            $"'{def.VehicleParams}' resolves a surface launch of '{plan?.Def}' ({kind})");
+        if (plan == null)
+        {
+            return;
+        }
+
+        ctx.WithWorld(GenChapter, collision: false, GenMission, world =>
+        {
+            var worldRoot = world.Runtime.WorldRoot ?? world.Stage;
+            var vessels = new SurfaceVehicleRuntime(world.Gamez, world.Session.Builder.Scene,
+                world.Runtime, defs, worldRoot);
+            worldRoot.AddChild(vessels);
+            int aircraftAsked = 0;
+            int ordinal = 0;
+            var generators = new AiGeneratorRuntime(new[] { def },
+                (name, scope) => world.Runtime.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
+                nets, ctx.PlaneName,
+                (d, pos, look, _) =>
+                {
+                    if (CampaignRosterPlan.ResolveGeneratorLaunch(templates, d.VehicleParams, out var hull)
+                        != GeneratorLaunch.Surface || hull == null)
+                    {
+                        aircraftAsked++;
+                        return default(LaunchedVehicle);
+                    }
+                    return new LaunchedVehicle(null, vessels.Spawn(hull, pos, look - pos,
+                        EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(hull.Name), ordinal++)));
+                });
+            ctx.Same(1, generators.LiveCount, $"'{GenHost}' is live with its take-off path");
+            var host = world.Runtime.FindNodes(GenHost) is { Count: > 0 } hosts ? hosts[0] : null;
+            var first = host != null && world.Runtime.FindNodes(EnemyGenerators.LaunchPathNode(GenHost, 0), host)
+                is { Count: > 0 } points ? points[0].GlobalPosition : (Vector3?)null;
+            ctx.Check(first != null, $"'{GenHost}' carries its first take-off point");
+
+            generators.RequireWakeupCredits(GenHost);
+            generators.GrantWaveCapacity(GenHost, def.WaveSize);
+            for (int i = 0; vessels.Vessels.Count == 0 && i * StepDt < def.IndPeriod + def.WavePeriod + 2f; i++)
+            {
+                generators.SimStep(StepDt);
+            }
+            ctx.Same(0, aircraftAsked, $"the boat generator asks for no aircraft");
+            ctx.Same(0, generators.RunningCount, $"a hull launch runs no aircraft take-off run");
+            ctx.Check(vessels.Vessels.Count == 1 && vessels.ByName(GenLaunch) is { } launched
+                      && launched.Net?.Name == def.Nets[0],
+                $"the launch builds one hull named '{GenLaunch}' on '{def.Nets[0]}'");
+            if (vessels.ByName(GenLaunch) is not { } boat || first is not { } start)
+            {
+                return;
+            }
+            var at = boat.Position;
+            report.AppendLine($"{GenLaunch}: launched at ({at.X:0.#},{at.Y:0.##},{at.Z:0.#}), path point 0 at ({start.X:0.#},{start.Y:0.##},{start.Z:0.#})");
+            ctx.Check(new Vector2(at.X - start.X, at.Z - start.Z).Length() < 1f,
+                $"the hull launches on the host's first take-off point, not at the host node");
+            ctx.Check(at.Length() > OriginClearanceM, $"the hull is nowhere near the world origin: {at.Length():0} m");
+
+            const float runS = 20f;
+            for (int i = 0; i < (int)(runS / StepDt); i++)
+            {
+                generators.SimStep(StepDt);
+                vessels.SimStep(StepDt);
+            }
+            float moved = new Vector2(boat.Position.X - at.X, boat.Position.Z - at.Z).Length();
+            report.AppendLine($"{GenLaunch}: moved {moved:0.#} m in {runS:0} s to ({boat.Position.X:0.#},{boat.Position.Y:0.##},{boat.Position.Z:0.#})");
+            ctx.Check(moved > 50f && moved <= PathFollower.TaxiSpeed * runS + 1f,
+                $"the hull runs the take-off path at the taxi law's speed: {moved:0.#} m in {runS:0} s");
+            ctx.Check(boat.Position.X < at.X, $"…westward down esg31's path, the way the points run");
+            vessels.Free();
+        });
+    }
+
+    private static CampaignMission MissionOf(TestContext ctx, string chapter, string folder)
+    {
+        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        {
+            if (m.ChapterFolder.Equals(chapter, StringComparison.OrdinalIgnoreCase)
+                && m.MissionFolder.Equals(folder, StringComparison.OrdinalIgnoreCase))
+            {
+                return m;
+            }
+        }
+        throw new SuiteSkippedException($"{chapter}/{folder} is not in cm_sequence");
+    }
+
+    private static Dictionary<string, Vector3> Positions(IReadOnlyDictionary<string, SurfaceVehicle> vessels)
+    {
+        var at = new Dictionary<string, Vector3>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, vessel) in vessels)
+        {
+            at[name] = vessel.Position;
+        }
+        return at;
+    }
+
+    private static bool Unmoved(Dictionary<string, Vector3> before, IReadOnlyDictionary<string, SurfaceVehicle> vessels)
+    {
+        foreach (var (name, vessel) in vessels)
+        {
+            if (!vessel.Position.IsEqualApprox(before[name]))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+}

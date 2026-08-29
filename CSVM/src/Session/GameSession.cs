@@ -215,6 +215,9 @@ public partial class GameSession : Node3D
     // SessionSimulation before the AI planes it spawns into AiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
     private ZeppelinRuntime? _zeppelins;
+    // The mission's surface vehicles (a mode ship roster block, a boat generator's launch):
+    // built with the roster on a chapter world, stepped after the generators that launch them.
+    private SurfaceVehicleRuntime? _surfaceVehicles;
     // The active Instant Action mission's director: the mission runtime, the wave state and (as
     // the deepening proceeds) the sequencing (see InstantActionDirector). Built at the top of
     // StartSession — null outside a mission, which is what keeps every other session mode
@@ -230,6 +233,8 @@ public partial class GameSession : Node3D
     private CutsceneController? _cutscene;
     // The landings.zrd approach trigger, built and bound alongside the cutscene host it feeds.
     private LandingApproachRuntime? _landings;
+    // The rope-ladder switch, bound with the landings trigger off the same pickup sensors.
+    private LadderSwitchRuntime? _ladder;
     // The world AA emplacements: built with the rigs whenever a chapter world and the
     // shared pool exist, stepped by SessionSimulation after the zeppelins (slung mounts read the
     // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
@@ -490,6 +495,8 @@ public partial class GameSession : Node3D
             {
                 _landings = new LandingApproachRuntime();
                 AddChild(_landings);
+                _ladder = new LadderSwitchRuntime();
+                AddChild(_ladder);
             }
         }
 
@@ -531,6 +538,10 @@ public partial class GameSession : Node3D
                 if (_cutscene != null)
                 {
                     _cutscene.SwapAirframe = SwapPlayerAirframe;
+                    // The docking's own ending. Instant Action has no objectives graph to complete,
+                    // and its rows never raise the code, so an unbound seam is the right answer
+                    // there rather than a guarded one here.
+                    _cutscene.MissionComplete = () => _campaign?.Graph?.NotifyDockingComplete();
                 }
             }
             ApplyDestroyOverride(state);
@@ -706,6 +717,20 @@ public partial class GameSession : Node3D
     /// </summary>
     public override void _PhysicsProcess(double delta)
     {
+        // ⚠ Ahead of the clock and the simulation step, which it outranks: an ended mission's
+        // world stands still until the session goes (CampaignDirector.LeavingHoldS). On the
+        // frame's own delta, since the sim clock it halts yields none.
+        if (_campaign is { Leaving: true } leaving)
+        {
+            if (_clock != null)
+            {
+                _clock.SimHeld = true;
+            }
+
+            leaving.Step((float)delta);
+            return;
+        }
+
         if (delta <= 0.0 || _clock is not { ParentDriven: false })
             return;
         _simulation?.Step((float)delta);
@@ -999,6 +1024,7 @@ public partial class GameSession : Node3D
                 LandingTriggers = _landings != null,
                 PlanesGamezPath = state.PlanesGamezPath,
                 CallbackHost = _cutscene != null ? _cutscene.Host : null,
+                TriggerOwner = _cutscene != null ? _cutscene.Own : null,
                 // The weather rig is built after the world, and the intro's fog fires inside the
                 // bootstrap, so the event is held until the rig has applied its zone.
                 FogStateSink = fog =>
@@ -1031,6 +1057,8 @@ public partial class GameSession : Node3D
         {
             _cutscene.HostDefinitions(session.LandingCutsceneAnims);
             _landings.Bind(session.Runtime, session.Landings, _cutscene,
+                () => _rigs.Count > 0 ? _rigs[0].Controller : null);
+            _ladder?.Bind(session.Runtime, _cutscene,
                 () => _rigs.Count > 0 ? _rigs[0].Controller : null, session.Pickups);
         }
         // The screen wash. Set here rather than inside WorldSession for the same reason the
@@ -2202,8 +2230,12 @@ public partial class GameSession : Node3D
         if (_campaign is { } campaignRoster)
         {
             int grafted = 0;
+            var surfaceVehicles = EnsureSurfaceVehicles(state);
             state.What += campaignRoster.BuildRoster(new CampaignDirector.RosterInputs
             {
+                SpawnSurface = surfaceVehicles != null
+                    ? (plan, pos, forward) => surfaceVehicles.Spawn(plan, pos, forward)
+                    : null,
                 ChapterZrdrPath = worldBindings.ChapterZrdrPath,
                 MissionZrdrPath = state.MissionZrdrPath,
                 ZrdrPath = state.ZrdrPath,
@@ -2231,6 +2263,8 @@ public partial class GameSession : Node3D
                 && state.WorldRuntime is { } landingWorld && state.Landings is { } landingRows)
             {
                 _landings.Bind(landingWorld, landingRows, _cutscene,
+                    () => _rigs.Count > 0 ? _rigs[0].Controller : null);
+                _ladder?.Bind(landingWorld, _cutscene,
                     () => _rigs.Count > 0 ? _rigs[0].Controller : null, state.Pickups);
             }
         }
@@ -2315,7 +2349,10 @@ public partial class GameSession : Node3D
             var zepNets = AiNets.Load(worldBindings.ChapterZrdrPath);
             _zeppelins = new ZeppelinRuntime(zepDefs,
                 name => worldBindings.WorldRuntime?.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null,
-                zepNets, netTrailers.For);
+                zepNets, netTrailers.For,
+                // The bootstrap has already run the start anims: a hull an SI script owns from
+                // its first frame must not be placed at the record seat on top of it.
+                host => worldBindings.WorldRuntime?.Motions.DrivesTransform(host) ?? false);
             _worldRoot!.AddChild(_zeppelins);
             // F18: the multi-zone damage half — per-part pools over the world registry, the
             // survivor-count kill, and the DAMAGES_ZEPPELIN gate on the shared pool.
@@ -2373,28 +2410,49 @@ public partial class GameSession : Node3D
             var generatorTemplates = CampaignRosterPlan.GeneratorTemplates(
                 state.MissionZrdrPath, VehicleDefs.Load(state.ZrdrPath), chapterNets);
             float generatorActiveDist = MinAiActiveDist();
+            var generatorSurface = EnsureSurfaceVehicles(state);
 
             // The template's own fields, applied the way the campaign roster applies them, then
             // its accent so a generated pilot is heard as the block the mission authored.
-            FlightController? SpawnFromGenerator(EnemyGeneratorDef def, Vector3 pos, Vector3 look,
+            LaunchedVehicle SpawnFromGenerator(EnemyGeneratorDef def, Vector3 pos, Vector3 look,
                 AiPilot pilot)
             {
                 // The decoded launch name: one counter across the mission's generators, so a
                 // second launch off the same template is a distinct node rather than a rename.
                 int ordinal = _generators?.LaunchOrdinal ?? 0;
-                if (def.VehicleParams is not { } parameter
-                    || !generatorTemplates.TryGetValue(parameter, out var plan))
+                switch (CampaignRosterPlan.ResolveGeneratorLaunch(
+                    generatorTemplates, def.VehicleParams, out var plan))
                 {
-                    // ⚠ shippedSkins: a generated aircraft is the mission's enemy, so it keeps its
-                    // own textures rather than the player militia's default.
-                    return flightRoster.SpawnAi(new AiSpawn(
-                        _spec.GeneratorsPlane, pos, look, pilot, ShippedSkins: true,
-                        NodeName: EnemyGenerators.LaunchName(_spec.GeneratorsPlane, ordinal)));
+                    case GeneratorLaunch.Empty:
+                        // The decoded empty launch: a label naming no block builds nothing, and
+                        // the runtime counts the launch anyway. Never an airframe in its place.
+                        GD.Print($"egen: '{def.Node}' params '{def.VehicleParams}' names no " +
+                                 "roster block: the launch builds nothing");
+                        return default;
+                    case GeneratorLaunch.Surface:
+                        // A hull off a ship generator: never an airframe in its place. With no
+                        // surface runtime on this stage the launch is the counted empty one.
+                        var hull = plan!;
+                        if (generatorSurface == null)
+                        {
+                            GD.Print($"egen: '{def.Node}' params '{def.VehicleParams}' names the hull " +
+                                     $"'{hull.Def}', which this stage cannot build: the launch builds nothing");
+                            return default;
+                        }
+                        return new LaunchedVehicle(null, generatorSurface.Spawn(hull, pos, look - pos,
+                            EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(hull.Name), ordinal)));
+                    case GeneratorLaunch.Airframe:
+                        // ⚠ shippedSkins: a generated aircraft is the mission's enemy, so it
+                        // keeps its own textures rather than the player militia's default.
+                        return flightRoster.SpawnAi(new AiSpawn(
+                            _spec.GeneratorsPlane, pos, look, pilot, ShippedSkins: true,
+                            NodeName: EnemyGenerators.LaunchName(_spec.GeneratorsPlane, ordinal)));
                 }
-                var launched = flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot,
-                    EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(plan.Name), ordinal)));
-                CampaignRosterPlan.ApplyPlan(pilot, plan, generatorActiveDist);
-                RegisterAiVoice(launched, plan.AccentId);
+                var template = plan!;
+                var launched = flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(template, pos, look, pilot,
+                    EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(template.Name), ordinal)));
+                CampaignRosterPlan.ApplyPlan(pilot, template, generatorActiveDist);
+                RegisterAiVoice(launched, template.AccentId);
                 return launched;
             }
 
@@ -2409,12 +2467,28 @@ public partial class GameSession : Node3D
             _worldRoot!.AddChild(_generators);
             if (_campaign is { } campaignGenerators)
             {
-                var wakeupHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var wakeupCredits = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 foreach (var objective in campaignGenerators.Script.Objectives)
                 {
-                    if (objective.WakeupGenerator is { } wakeup && wakeupHosts.Add(wakeup.Name))
+                    if (objective.WakeupGenerator is { } wakeup)
                     {
-                        _generators.RequireWakeupCredits(wakeup.Name);
+                        if (!wakeupCredits.ContainsKey(wakeup.Name))
+                        {
+                            wakeupCredits[wakeup.Name] = 0;
+                            _generators.RequireWakeupCredits(wakeup.Name);
+                        }
+                        wakeupCredits[wakeup.Name] += wakeup.Count;
+                    }
+                }
+                // --wake-generators: the script's whole credit granted at build, the headless
+                // stand-in for playing up to each WAKEUP_GENERATOR objective.
+                if (_spec.WakeGenerators)
+                {
+                    foreach (var (host, credit) in wakeupCredits)
+                    {
+                        int fed = _generators.GrantWaveCapacity(host, credit);
+                        GD.Print($"egen: '{host}' woken by --wake-generators: +{credit} credit " +
+                                 $"(granted {fed}, stand-in for the script's WAKEUP_GENERATOR)");
                     }
                 }
             }
@@ -2503,6 +2577,7 @@ public partial class GameSession : Node3D
             Turrets = _turretEmplacements,
             Generators = _generators,
             Zeppelins = _zeppelins,
+            SurfaceVehicles = _surfaceVehicles,
             // A6/BL-458: the campaign's danger-zone gates are chapter-world geometry, so the
             // tracker needs the built gamez to resolve its dzpathN subtrees.
             Gamez = state.Gamez,
@@ -2541,7 +2616,9 @@ public partial class GameSession : Node3D
             var objectiveMessages = Messages.Load(state.MessagesPath);
             _worldRoot!.AddChild(UI.ObjectivesHud.Build(campaign, objectiveMessages, _pauseState!));
             var sites = new ObjectiveSites(campaign, objectiveMessages,
-                MissionTargets.Load(state.MissionZrdrPath), state.WorldRuntime);
+                MissionTargets.Load(state.MissionZrdrPath,
+                    SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter)),
+                state.WorldRuntime);
             flightRoster.SetTargetObjectives(into => sites.Collect(into));
             // Verification breadcrumb: how many sites the mission starts with. A zero here and a
             // populated objectives readout means the target table, not the graph, is the problem.
@@ -3196,6 +3273,18 @@ public partial class GameSession : Node3D
     // outer-frame input injection; each clock substep below enters the same module as realtime.
     private void DriveParentSimulation(GameClock clock)
     {
+        // The leaving hold, the stepped path's half of the guard in _PhysicsProcess: an ended
+        // mission's world stands still until the session goes, so the only thing this drive still
+        // advances is the hold itself.
+        if (_campaign is { Leaving: true } leaving)
+        {
+            for (int i = 0; i < clock.Steps; i++)
+            {
+                leaving.Step(clock.Dt);
+            }
+
+            return;
+        }
         // --crash[=frame]: force every player's crash rig at a fixed sim frame, the only headless
         // trigger for a crash a live collision otherwise gates. Spawned AI planes crash too, while
         // an inert one declines, since DebugForceCrash is gated on InPlay.
@@ -3302,6 +3391,25 @@ public partial class GameSession : Node3D
         }
 
         GD.Print(sb.ToString());
+    }
+
+    // The surface-vehicle runtime, built once on the first roster or generator that can need one
+    // and only where a chapter world exists to copy a hull out of. Null on a bare stage.
+    private SurfaceVehicleRuntime? EnsureSurfaceVehicles(BuildState state)
+    {
+        if (_surfaceVehicles != null)
+        {
+            return _surfaceVehicles;
+        }
+        if (state.Gamez is not { } gamez || state.WorldScene is not { } scene
+            || state.WorldRuntime is not { } runtime || _worldRoot == null)
+        {
+            return null;
+        }
+        _surfaceVehicles = new SurfaceVehicleRuntime(gamez, scene, runtime,
+            VehicleDefs.Load(state.ZrdrPath), runtime.WorldRoot ?? _worldRoot);
+        _worldRoot.AddChild(_surfaceVehicles);
+        return _surfaceVehicles;
     }
 
     // player.json's activation floor, on the same lazily loaded skills table the spawner reads;

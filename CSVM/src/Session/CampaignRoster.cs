@@ -6,6 +6,24 @@ using Godot;
 
 namespace CSVM.Session;
 
+/// <summary>What one generator launch builds; see
+/// <see cref="CampaignRosterPlan.ResolveGeneratorLaunch"/>.</summary>
+public enum GeneratorLaunch
+{
+    /// <summary>The roster block the <c>vehicle.params</c> label names.</summary>
+    Template,
+
+    /// <summary>The CLI airframe: the generator authors no label.</summary>
+    Airframe,
+
+    /// <summary>Nothing: the label names no block, and the launch is counted all the same.</summary>
+    Empty,
+
+    /// <summary>A surface vehicle: the block names a <c>mode ship</c> def, which has no airframe
+    /// and is built by the surface-vehicle runtime, never by the aircraft spawner.</summary>
+    Surface,
+}
+
 /// <summary>One campaign roster block, planned: everything the placement step needs, resolved
 /// from the block's fields, the vehicle def table and the chapter's nets, and nothing read from
 /// the engine. <see cref="Escorts"/> and <see cref="Net"/> are the decoded fork and are never
@@ -18,8 +36,13 @@ public sealed class RosterSpawnPlan
     /// <c>blakepeace_2_1</c>).</summary>
     public required string Def { get; init; }
 
-    /// <summary>The player airframe node the model is built from.</summary>
+    /// <summary>The player airframe node the model is built from; on a <see cref="Surface"/>
+    /// plan the def's own name, which is the chapter's library-root model of the hull.</summary>
     public required string PlaneNode { get; init; }
+
+    /// <summary>A <c>mode ship</c> block: no airframe, no pilot. Built and driven by
+    /// <see cref="SurfaceVehicleRuntime"/>; <see cref="CampaignRosterPlan.SpawnFor"/> refuses it.</summary>
+    public bool Surface { get; init; }
 
     /// <summary>The AI def the stats resolve down, or null when <see cref="Def"/> does not derive
     /// from the airframe's base def and the plain base def flies instead.</summary>
@@ -90,8 +113,8 @@ public sealed class RosterSpawnPlan
 /// The engine-free planning step of the campaign roster spawner: every block of a mission's
 /// <c>aiv</c> roster resolved to a <see cref="RosterSpawnPlan"/>, with the decoded net-versus-
 /// escort fork applied and the volumes merged in the original's order. The placement half is
-/// <c>CampaignDirector.BuildRoster</c>. The player's own block and every block with no airframe
-/// (a surface vehicle, an unknown def) are reported in <see cref="Skipped"/>, never spawned.
+/// <c>CampaignDirector.BuildRoster</c>. A <c>mode ship</c> block plans as a surface vehicle; the
+/// player's own block and any other block with no airframe are reported in <see cref="Skipped"/>.
 /// </summary>
 public sealed class CampaignRosterPlan
 {
@@ -168,23 +191,36 @@ public sealed class CampaignRosterPlan
                 planeNode = handed.PlaneNode;
                 baseDef = defs.BaseDefForPlayerNode(handed.PlaneNode);
             }
+            string mode = defs.ModeOf(def) ?? VehicleDefs.JetMode;
+            bool surface = false;
             if (planeNode == null || baseDef == null)
             {
-                if (defs.AirframeFor(def) is not { } airframe)
+                if (defs.AirframeFor(def) is { } airframe)
                 {
-                    skipped.Add((name, $"'{def}' ({defs.ModeOf(def)}) has no player airframe"));
+                    (planeNode, baseDef) = airframe;
+                }
+                else if (mode.Equals(VehicleDefs.ShipMode, StringComparison.OrdinalIgnoreCase))
+                {
+                    // A hull, not an aeroplane: the model is the def's own library root and
+                    // nothing here derives from a player airframe.
+                    surface = true;
+                    planeNode = def;
+                    baseDef = def;
+                }
+                else
+                {
+                    skipped.Add((name, $"'{def}' ({mode}) has no player airframe"));
                     continue;
                 }
-                (planeNode, baseDef) = airframe;
             }
             // The block's own def decides the mode. The AI def only carries stats and livery: the
             // profile's airframe takes its w<plane> twin, a def that is no variant of its airframe
             // takes the plain base def.
-            string? aiDef = defs.DerivesFrom(def, baseDef) ? def
+            string? aiDef = surface ? null
+                : defs.DerivesFrom(def, baseDef) ? def
                 : planeNode == wingmanNode && defs.Has("w" + baseDef) && defs.DerivesFrom("w" + baseDef, baseDef)
                     ? "w" + baseDef
                     : null;
-            string mode = defs.ModeOf(def) ?? VehicleDefs.JetMode;
 
             var netIds = AiSkills.RosterNetIds(fields);
             AiNet? net = null;
@@ -209,6 +245,7 @@ public sealed class CampaignRosterPlan
                 Name = name,
                 Def = def,
                 PlaneNode = planeNode,
+                Surface = surface,
                 AiDef = aiDef,
                 Mode = mode,
                 Position = pose.Position,
@@ -271,12 +308,14 @@ public sealed class CampaignRosterPlan
     /// <summary>The spawn record a planned block launches as. The block's own representative
     /// rating arms the gunner and machine; its authored slots then outrank the def's inside the
     /// spawner. A campaign enemy keeps its militia's skins; the player's side takes the default
-    /// pattern like an Instant Action wingman. ⚠ Leave <paramref name="nodeName"/> unset: the
-    /// block's own name is what <c>primary_target</c> and <c>rating_biases</c> are authored
-    /// against. Only a generator launch overrides it, with its decoded launch name.</summary>
+    /// pattern. ⚠ Leave <paramref name="nodeName"/> unset: the block's own name is what
+    /// <c>primary_target</c> and <c>rating_biases</c> are authored against; only a generator launch
+    /// overrides it. ⚠ Refuses a <see cref="RosterSpawnPlan.Surface"/> plan: a hull has no airframe.</summary>
     public static AiSpawn SpawnFor(RosterSpawnPlan plan, Vector3 pos, Vector3 lookAt, AiPilot pilot,
         string? nodeName = null) =>
-        new(plan.PlaneNode, pos, lookAt, pilot, Scheme: plan.Scheme, Team: plan.Team,
+        plan.Surface
+            ? throw new ArgumentException($"'{plan.Name}' is a surface vehicle, not an aircraft", nameof(plan))
+            : new(plan.PlaneNode, pos, lookAt, pilot, Scheme: plan.Scheme, Team: plan.Team,
             Inert: plan.Inert, ShippedSkins: plan.Team != AimAssist.PlayerTeam,
             AiDef: plan.AiDef, Fit: plan.Fit,
             AttackRating: InstantActionRuntime.RepresentativeRating(plan.Skills),
@@ -299,6 +338,24 @@ public sealed class CampaignRosterPlan
             }
         }
         return templates;
+    }
+
+    /// <summary>What a generator launch builds from its <c>vehicle.params</c> label: the block
+    /// the label names (a surface vehicle when that block is a hull), the CLI airframe when no
+    /// label is authored, or nothing when the label names no block. ⚠ The caller counts an empty launch rather than replacing it: the decoded
+    /// launch reports one with nothing built (docs/formats/mission-entities/enemy-generators.md,
+    /// "shipped typo"; C1/M04's <c>Eairg32_params</c>, and the data stays as shipped).</summary>
+    public static GeneratorLaunch ResolveGeneratorLaunch(
+        IReadOnlyDictionary<string, RosterSpawnPlan> templates, string? parameter,
+        out RosterSpawnPlan? plan)
+    {
+        ArgumentNullException.ThrowIfNull(templates);
+        plan = null;
+        if (parameter == null)
+            return GeneratorLaunch.Airframe;
+        if (!templates.TryGetValue(parameter, out plan))
+            return GeneratorLaunch.Empty;
+        return plan.Surface ? GeneratorLaunch.Surface : GeneratorLaunch.Template;
     }
 
     /// <summary>Writes the plan's remaining pilot slots onto a spawned pilot: the volumes

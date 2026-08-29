@@ -46,7 +46,17 @@ public sealed class AircraftStage
     /// wrappers the chapter's own walk never reaches.</summary>
     public static readonly string[] FigureNodes = { "rope_ladder", "pickup_cpilot" };
 
+    /// <summary>The aircraft-archive props a hangar hand-over switches on itself: the Bloodhawk on
+    /// the hangar floor while the pilot parachutes in (<c>anim_bloodhawk</c>, under <c>world1</c>)
+    /// and the undercarriage the flown aeroplane wears on the lift (<c>bloodhawk_gear</c>, under
+    /// <c>player</c>). Both ship <c>INACTIVE</c> and parentless, built the way
+    /// <see cref="ChuteNode"/> is; docs/architecture.md has the legs that add and detach them.</summary>
+    public static readonly string[] PropNodes = { "anim_bloodhawk", "bloodhawk_gear" };
+
     private readonly Dictionary<string, Node3D> _figures =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly Dictionary<string, Node3D> _props =
         new(StringComparer.OrdinalIgnoreCase);
 
     private AircraftStage() { }
@@ -56,9 +66,9 @@ public sealed class AircraftStage
     /// </summary>
     public Node3D? PlayerMarker { get; private set; }
 
-    /// <summary>The staged <c>piratefighter</c> subtree, built switched off: the intro's own
-    /// <c>gi_pfighter1</c> is what activates it. Null when the archive carries no such node.
-    /// </summary>
+    /// <summary>The staged <c>piratefighter</c> subtree, drawn from the build in the archive's own
+    /// shipped state: no definition switches it on, its SI scripts only pose it. Null when the
+    /// archive carries no such node.</summary>
     public Node3D? Prop { get; private set; }
 
     /// <summary>The staged <c>chuteman</c> subtree, built switched off: a mid-mission drop's own
@@ -71,6 +81,10 @@ public sealed class AircraftStage
     /// amounts to: resolvable and indexed, drawn only once a capture's own
     /// <c>OBJECT_ADD_CHILD</c> moves one into the shot.</summary>
     public IReadOnlyDictionary<string, Node3D> Figures => _figures;
+
+    /// <summary>The staged <see cref="PropNodes"/> subtrees, by gamez name, each built switched
+    /// off: the definition that names one activates it.</summary>
+    public IReadOnlyDictionary<string, Node3D> Props => _props;
 
     /// <summary>Mesh instances the prop build added, for the session's build summary.</summary>
     public int MeshInstances { get; private set; }
@@ -113,12 +127,15 @@ public sealed class AircraftStage
         // the world's own SceneBuilder reads the chapter gamez's meshes and materials, which none of
         // these subtrees' model indices address.
         var scene = new SceneBuilder(planesGamez, textures, cullBackfaces: true);
+        // ⚠ Drawn in the archive's own shipped state (ACTIVE), never forced off: C1/M04's
+        // pfighter11..13 fly it on SI scripts and nothing in that mission activates or parents it,
+        // so a prop built switched off leaves the wingman out of the launch and the dive.
         if (planesGamez.FindByName(PropNode) is { } prop
             && scene.BuildSubtree(prop, collisionSkip: _ => true) is { } builtProp)
         {
             builtProp.Transform = Transform3D.Identity;
             Rebase(builtProp, pointerBase);
-            AnimRuntime.SetSubtreeActive(builtProp, false);
+            AnimRuntime.SetSubtreeActive(builtProp, prop.Active);
             worldRoot.AddChild(builtProp);
             stage.Prop = builtProp;
         }
@@ -131,6 +148,21 @@ public sealed class AircraftStage
             AnimRuntime.SetSubtreeActive(builtChute, false);
             worldRoot.AddChild(builtChute);
             stage.Chuteman = builtChute;
+        }
+
+        foreach (string propName in PropNodes)
+        {
+            if (planesGamez.FindByName(propName) is not { } propNode
+                || scene.BuildSubtree(propNode, collisionSkip: _ => true) is not { } builtPropNode)
+            {
+                continue;
+            }
+
+            builtPropNode.Transform = Transform3D.Identity;
+            Rebase(builtPropNode, pointerBase);
+            AnimRuntime.SetSubtreeActive(builtPropNode, false);
+            worldRoot.AddChild(builtPropNode);
+            stage._props[propNode.Name] = builtPropNode;
         }
 
         // ⚠ Under a switched-off holder, not switched off themselves. The wing-walk pilot is never
@@ -161,7 +193,10 @@ public sealed class AircraftStage
         string figures = stage._figures.Count > 0
             ? string.Join(", ", stage._figures.Keys)
             : "no figures";
-        Log.Info("world", $"aircraft stage: base {pointerBase} over {chapterNodeCount} chapter node(s), {marked}, {staged}, {chuted}, {figures}, {stage.MeshInstances} mesh instances");
+        string props = stage._props.Count > 0
+            ? string.Join(", ", stage._props.Keys)
+            : "no props";
+        Log.Info("world", $"aircraft stage: base {pointerBase} over {chapterNodeCount} chapter node(s), {marked}, {staged}, {chuted}, {figures}, {props}, {stage.MeshInstances} mesh instances");
         return stage;
     }
 

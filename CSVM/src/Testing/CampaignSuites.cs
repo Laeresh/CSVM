@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -32,6 +33,18 @@ internal static class CampaignSuites
     private const string IntroMission = "M04";
 
     private const string IntroAnim = "mission_intro_animation";
+
+    // The one story mission whose opening cutscene no start list names: the start anim calls it,
+    // and the zeppelin's destruction it frames is that start anim's later call.
+    private const string CalledChapter = "C3";
+
+    private const string CalledMission = "M03";
+
+    private const string CalledFrom = "calldestroy_the_cargozep";
+
+    private const string CalledAnim = "cgzep_camera";
+
+    private const string CalledDestruction = "destroy_the_cargozep";
 
     // BL-458: the mission whose SECONDARY (OBJECTIVE3, IDENTITY SECONDARY 11) and OBJECTIVE11
     // both gate on DANGER_ZONES_COMPLETED (dzpath1, dzpath4) — the worked case that was
@@ -114,7 +127,7 @@ internal static class CampaignSuites
             ctx.Check(CampaignPersistLog.CommitsOn(MissionOutcome.Won)
                 && !CampaignPersistLog.CommitsOn(MissionOutcome.Lost),
                 $"only a won mission commits its capture to the log");
-            profile.PersistLog.Merge(chapter, captured);
+            profile.PersistLog.Merge(chapter, earlier.Seq, captured);
             store.Save(profile);
         });
 
@@ -143,15 +156,39 @@ internal static class CampaignSuites
             }
 
             ctx.Check(present > 0, $"the later mission carries at least one of the destroyed objects");
-            int applied = reloaded!.PersistLog.ApplyTo(world.Runtime, chapter);
-            report.AppendLine($"applied {applied} of {reloaded.PersistLog.For(chapter).Count} in {later.MissionFolder}");
+            // The original opens on the destroyed pose, so the replay must start no instance: no
+            // fireball, debris or sound, and a later hit must not replay the death either. A
+            // death's first start is synchronous, so the watch brackets only the calls.
+            var started = new List<string>();
+            var before = world.Runtime.OnInstanceStarted;
+            world.Runtime.OnInstanceStarted = (def, anchor) => started.Add($"{def.AnimName}@{anchor?.Name}");
+            int applied;
+            try
+            {
+                applied = reloaded!.PersistLog.ApplyTo(world.Runtime, chapter, earlier.Seq);
+                foreach (int node in carried)
+                {
+                    if (nodes.TryGetValue(node, out var anchor) && Live(registry, anchor) is { } live)
+                    {
+                        world.Runtime.DamageAt(anchor, live.MaxHealth + 1f);
+                    }
+                }
+            }
+            finally
+            {
+                world.Runtime.OnInstanceStarted = before;
+            }
+
+            report.AppendLine($"applied {applied} of {reloaded!.PersistLog.For(chapter).Count} in {later.MissionFolder}, started=[{string.Join(", ", started)}]");
             ctx.Same(present, applied, $"every carried object present in the later mission is applied");
+            ctx.Check(started.Count == 0,
+                $"the replay and a later hit on each carried object start no instance (started=[{string.Join(", ", started)}])");
 
             foreach (int node in carried)
             {
                 if (nodes.TryGetValue(node, out var anchor) && Live(registry, anchor) is { } live)
                 {
-                    ctx.Check(live.Status == DestructibleRegistry.State.Destroyed,
+                    ctx.Check(live.Status == DestructibleRegistry.State.Destroyed && live.Health <= 0f,
                         $"it starts the later mission destroyed node={node}");
                 }
             }
@@ -165,6 +202,11 @@ internal static class CampaignSuites
 
             ctx.Same(0, reloaded.PersistLog.For(chapter == 1 ? 2 : 1).Count,
                 $"nothing leaks into another chapter's log");
+            // The backwards walk never reaches the capturing mission itself, so re-flying it opens
+            // on the world its own previous sortie never touched.
+            var ownReplay = CampaignSequence.PreviousInSameChapter(missions, earlier.Seq)?.Seq;
+            ctx.Same(0, reloaded.PersistLog.Through(chapter, ownReplay).Count,
+                $"re-flying {earlier.MissionFolder} carries none of its own wreckage (through seq {ownReplay?.ToString(CultureInfo.InvariantCulture) ?? "none"})");
         });
 
         ctx.WriteArtifact($"test-campaign-persistence-{ctx.Chapter}.txt", report.ToString());
@@ -272,6 +314,10 @@ internal static class CampaignSuites
             ctx.Check(winner > 0, $"the mission authors an INSTANTWIN objective");
             graph.Wake(winner);
             Advance(graph, 2f);
+            ctx.Check(director.Result != null, $"the mission ended and banked its result");
+            ctx.Check(!director.ReturnToCabin,
+                $"but has not left the world yet: the leaving hold runs first");
+            Advance(director, CampaignDirector.LeavingHoldS + 0.2f);
             ctx.Check(director.ReturnToCabin, $"the mission end raised the return-to-cabin exit");
             var result = director.Result!.Value;
             ctx.Check(result.Outcome == MissionOutcome.Won, $"the outcome is the graph's own");
@@ -440,7 +486,8 @@ internal static class CampaignSuites
         });
 
         CutsceneHoldsObjectives(ctx);
-        ctx.Note($"hosted {IntroChapter}/{IntroMission}'s '{IntroAnim}' from its first code to the handoff");
+        OpeningSceneCalledFromStartAnim(ctx);
+        ctx.Note($"hosted {IntroChapter}/{IntroMission}'s '{IntroAnim}' from its first code to the handoff, and {CalledChapter}/{CalledMission}'s '{CalledAnim}' from its start anim to the skip");
     }
 
     /// <summary>The bars are data: the shared <c>letterbox</c> definition switches the node on and
@@ -655,6 +702,65 @@ internal static class CampaignSuites
         ctx.Check(director.Graph!.Elapsed > 0f, $"and runs again once the cutscene hands off");
     }
 
+    // C3/M03 opens on a cutscene no start list names: `calldestroy_the_cargozep` is the start anim,
+    // and its first event calls `cgzep_camera`. Both gates have to read the start list's call
+    // closure, the session's (the camera, the bars and the `player` marker stood up before the
+    // bind) and the host's (the called definition's codes answered rather than counted).
+    private static void OpeningSceneCalledFromStartAnim(TestContext ctx)
+    {
+        var host = new CutsceneController();
+        ctx.Host.AddChild(host);
+        ctx.CutsceneRoots = true;
+        try
+        {
+            ctx.WithWorld(CalledChapter, collision: false, CalledMission, world =>
+            {
+                var startAnims = world.Session.Program.StartAnims;
+                ctx.Check(!startAnims.Contains(CalledAnim) && startAnims.Contains(CalledFrom),
+                    $"'{CalledAnim}' is in no start list; '{CalledFrom}' is, and calls it");
+                ctx.Check(world.Session.Aircraft?.PlayerMarker != null,
+                    $"the world build read the start list's call closure and staged the '{AircraftStage.PlayerNode}' marker the called definition is rooted on");
+                ctx.Check(world.Runtime.FindNodes(CutsceneController.CameraNode).Count > 0,
+                    $"and stood up '{CutsceneController.CameraNode}' for its camera path");
+
+                var stage = new Node3D { Name = "CalledCutsceneStage" };
+                var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+                runtime.CallbackHost = host.Host;
+                ctx.Host.AddChild(stage);
+                ctx.Host.AddChild(runtime);
+                try
+                {
+                    runtime.Bind(stage, world.Session.Program.Subset(CalledFrom));
+                    host.BindWorld(runtime);
+                    runtime.Play(CalledFrom);
+                    ctx.Check(host.Playing && host.Anim == CalledAnim,
+                        $"playing the start anim hands the session to '{CalledAnim}' through the runtime's own dispatch");
+                    ctx.Same(CutsceneController.CodeHoldsWorld, host.Codes.Count > 0 ? host.Codes[0] : 0,
+                        $"whose first code holds the world");
+                    ctx.Check(host.HoldsWorld && host.OutOfFlight && host.AiParked && host.Presenting && host.Skippable,
+                        $"so the world is held, the player is out of flight, the AI is parked, the chrome is off and a skip is armed");
+                    // The destruction reaches this runtime through the start anim's closure and
+                    // nothing else, so the host has no call of its own to issue. A bare stage
+                    // anchors it on nothing, so its running state is not read here.
+                    ctx.Check(runtime.Handles(CalledDestruction),
+                        $"'{CalledDestruction}' is in the same start anim's call closure, which is the one call it plays under the camera from");
+                    ctx.Check(host.Skip() && !host.Playing && !host.HoldsWorld && !host.OutOfFlight,
+                        $"and the skip the hold armed ends the scene and hands the session back");
+                }
+                finally
+                {
+                    runtime.Free();
+                    stage.Free();
+                }
+            });
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+            host.Free();
+        }
+    }
+
     // Runs the loss fuse the mission authors: nothing is satisfied, OBJECTIVE19 wakes at its 300 s
     // and naps the INSTANTLOSS objective 15 s later, which is what loses the mission.
     private static void LossFuse(TestContext ctx, ObjectiveScript script, StringBuilder report)
@@ -813,6 +919,16 @@ internal static class CampaignSuites
         for (float t = 0f; t < seconds; t += 0.1f)
         {
             graph.Step(0.1f);
+        }
+    }
+
+    // The same walk through the director rather than the graph, which is what an ended mission's
+    // leaving hold counts down on.
+    private static void Advance(CampaignDirector director, float seconds)
+    {
+        for (float t = 0f; t < seconds; t += 0.1f)
+        {
+            director.Step(0.1f);
         }
     }
 

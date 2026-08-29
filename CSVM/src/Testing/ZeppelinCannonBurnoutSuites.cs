@@ -1,0 +1,185 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using CSVM.Flight;
+using CSVM.Mech3;
+using CSVM.Session;
+using Godot;
+
+namespace CSVM.Testing;
+
+/// <summary>The animation-authored zeppelin death: C1/M04's <c>hk_zep</c> is no zeppelin record,
+/// so its whole kill runs through the compiled mission defs. A broadside cannon's WeaponHit death
+/// calls its gasbag's burn, the burn calls the gasbag's finisher (gated on the burnt panels being
+/// OFF), three finishers satisfy <c>finish_locklear</c>, and that sinks the hull and completes the
+/// mission's primary. Every link is asserted on the real world with real rounds.</summary>
+internal static class ZeppelinCannonBurnoutSuites
+{
+    private const string Hull = "hk_zep";
+    private const float Dt = 1f / 60f;
+
+    // The doors the suite kills, each with the gasbag its death burns and that gasbag's finisher.
+    private static readonly (string Door, string Burn, string Finisher)[] Doors =
+    {
+        ("lbroad4", "left_lkgasbag04", "finished_lkgasbag04"),
+        ("lbroad3", "left_lkgasbag03", "finished_lkgasbag03"),
+        ("lbroad2", "left_lkgasbag02", "finished_lkgasbag02"),
+    };
+
+    internal static void ZeppelinCannonBurnout(TestContext ctx)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
+        ctx.RequireData(missionZrdr, $"C1/M04 zrdr");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.HealthDamage is > 0f && w.ImpactProximity is not > 0f)
+            ?? weapons.All.FirstOrDefault(w => w.IsGun && w.HealthDamage is > 0f);
+        ctx.Check(gun != null, $"a gun with HEALTH_DAMAGE ships");
+        if (gun == null)
+            return;
+        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        var mission = missions.Where(m =>
+            m.ChapterFolder.Equals("C1", System.StringComparison.OrdinalIgnoreCase)
+            && m.MissionFolder.Equals("M04", System.StringComparison.OrdinalIgnoreCase))
+            .Cast<CampaignMission?>().FirstOrDefault()
+            ?? throw new SuiteSkippedException("C1/M04 is not in cm_sequence");
+        var script = ObjectiveScript.Load(missionZrdr);
+        var report = new StringBuilder();
+
+        ctx.WithWorld("C1", collision: true, mission: "M04", world =>
+        {
+            var runtime = world.Runtime;
+            var hull = runtime.FindNodes(Hull).FirstOrDefault();
+            ctx.Check(hull != null, $"the {Hull} world node resolves in the M04 world");
+            if (hull == null)
+                return;
+
+            var started = new List<string>();
+            var startedAt = new List<string>();
+            float clock = 0f;
+            var saved = runtime.OnInstanceStarted;
+            runtime.OnInstanceStarted = (d, _) =>
+            {
+                if (d.AnimName == null)
+                    return;
+                started.Add(d.AnimName);
+                startedAt.Add($"{d.AnimName}@{clock:0.0}");
+            };
+            ProjectilePool? pool = null;
+            TextureArchive? textures = null;
+            try
+            {
+                var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Suite"), null);
+                director.Attach(new CampaignDirector.WorldInputs { Runtime = runtime });
+                var graph = director.Graph!;
+                var done = new List<int>();
+                graph.Completed += e => done.Add(e.Number);
+                int primary = script.Objectives.First(o => o.Identity?.Class == ObjectiveClass.Primary).Number;
+                ctx.Check(graph.StateOf(primary) == ObjectiveState.Awake,
+                    $"OBJECTIVE{primary}, the primary, is awake from the start");
+
+                // The sabotaged doors: authored open from t=0 by the OnStartup temp_hkzep_* defs,
+                // which call the deploy (the hatch swings 135 degrees over its 4 s) with no
+                // broadside AI and no engage flag behind it.
+                for (int i = 0; i < 300; i++)
+                {
+                    runtime.Advance(Dt);
+                    graph.Step(Dt);
+                }
+                report.AppendLine($"{Hull} visible={hull.Visible} inTree={hull.IsVisibleInTree()} at {hull.GlobalPosition}");
+                foreach (var (door, _, _) in Doors)
+                {
+                    var doorNode = runtime.FindNodes(door, hull).FirstOrDefault();
+                    var hatch = runtime.FindNodes("upper_br_door", doorNode).FirstOrDefault();
+                    report.AppendLine($"{door} visible={doorNode?.Visible} hatch visible={hatch?.Visible} rot={hatch?.Rotation}");
+                    ctx.Check(hatch != null && hatch.IsVisibleInTree() && Mathf.Abs(hatch.Rotation.Z + 2.356f) < 0.05f,
+                        $"{door}'s hatch is deployed from the start with nobody engaging it (rot={hatch?.Rotation.Z ?? 0f:0.###})");
+                }
+
+                float hullY = hull.GlobalPosition.Y;
+                textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C1"));
+                pool = new ProjectilePool(textures, null, null) { DamageSink = runtime.DamageAt };
+                ctx.Host.AddChild(pool);
+
+                // Door 1 dies to real gun rounds; the other two take the same DamageAt a rocket
+                // makes, since the chain under test is the death's, not the round's.
+                var first = runtime.FindNodes(Doors[0].Door, hull).FirstOrDefault();
+                var firstPool = first != null ? runtime.Destructibles.PoolsOn(first).FirstOrDefault() : null;
+                ctx.Check(firstPool != null && Mathf.IsEqualApprox(firstPool.MaxHealth, 60f),
+                    $"{Doors[0].Door} carries its compiled HEALTH 60 pool hp={firstPool?.MaxHealth ?? -1f}");
+                if (first == null || firstPool == null)
+                    return;
+                // From abeam, 40 m out on the door's own side of the hull, so the round meets the
+                // cannon frame rather than the gasbag above it.
+                var target = runtime.FindNodes("frame", first).FirstOrDefault() ?? first;
+                int rounds = 0;
+                for (int i = 0; i < 2400 && firstPool.Status != DestructibleRegistry.State.Destroyed; i++)
+                {
+                    if (i % 4 == 0 && rounds < 400)
+                    {
+                        var at = target.GlobalPosition;
+                        var outward = at - hull.GlobalPosition;
+                        outward.Y = 0f;
+                        var muzzlePos = at + outward.Normalized() * 40f;
+                        var muzzle = new Transform3D(Basis.LookingAt((at - muzzlePos).Normalized(), Vector3.Right), muzzlePos);
+                        pool.Spawn(gun, muzzle, Vector3.Zero);
+                        rounds++;
+                    }
+                    pool.SimStep(Dt);
+                    runtime.Advance(Dt);
+                    graph.Step(Dt);
+                }
+                ctx.Check(firstPool.Status == DestructibleRegistry.State.Destroyed,
+                    $"{gun.Id} rounds destroy {Doors[0].Door} rounds={rounds} hp={firstPool.Health:0.##}");
+                report.AppendLine($"{Doors[0].Door} destroyed by {rounds} {gun.Id} round(s)");
+                foreach (var (door, _, _) in Doors.Skip(1))
+                {
+                    var node = runtime.FindNodes(door, hull).FirstOrDefault();
+                    var doorPool = node != null ? runtime.Destructibles.PoolsOn(node).FirstOrDefault() : null;
+                    ctx.Check(doorPool != null, $"{door} carries a pool");
+                    if (doorPool != null)
+                        runtime.DamageAt(node, doorPool.MaxHealth + 1f);
+                }
+
+                // The chain: door death (+1 s) burn (+6 s) finisher, three finishers satisfy the
+                // hull's death (min 3 of 4), which sinks the hull and switches lkgasbag05's
+                // panelleft1 off, the primary's INACTIVE1 read.
+                bool primaryDone = false;
+                float doneAt = -1f;
+                for (int i = 0; i < 60 * 90; i++)
+                {
+                    clock += Dt;
+                    runtime.Advance(Dt);
+                    graph.Step(Dt);
+                    if (!primaryDone && done.Contains(primary))
+                    {
+                        primaryDone = true;
+                        doneAt = i * Dt;
+                    }
+                }
+                foreach (var (door, burn, finisher) in Doors)
+                {
+                    ctx.Check(started.Contains($"destroy_hkzep_{door}"), $"{door}'s death def ran");
+                    ctx.Check(started.Contains(burn), $"{door}'s death called its gasbag burn {burn}");
+                    ctx.Check(started.Contains(finisher),
+                        $"{burn} called {finisher}, whose panels-OFF prerequisite is met once the burn switched them off");
+                }
+                ctx.Check(started.Contains("finish_locklear"),
+                    $"three finishers satisfy finish_locklear (min 3 of 4)");
+                ctx.Check(started.Contains("lockleargoesdown"), $"finish_locklear sinks the hull");
+                float dropped = hullY - hull.GlobalPosition.Y;
+                ctx.Check(dropped > 5f, $"the hull comes down {dropped:0.#} m");
+                ctx.Check(primaryDone, $"OBJECTIVE{primary} completes off lkgasbag05/panelleft1 going inactive at {doneAt:0.#} s");
+                report.AppendLine($"started: {string.Join(", ", startedAt)}");
+                report.AppendLine($"hull dropped {dropped:0.#} m, primary {(primaryDone ? $"completed at {doneAt:0.#} s" : "NOT completed")}");
+            }
+            finally
+            {
+                runtime.OnInstanceStarted = saved;
+                pool?.Free();
+                textures?.Dispose();
+            }
+        });
+        ctx.WriteArtifact("test-zeppelin-cannon-burnout.txt", report.ToString());
+        ctx.Note($"C1/M04's {Hull}: three door deaths burn three gasbags, the hull sinks and the primary completes");
+    }
+}

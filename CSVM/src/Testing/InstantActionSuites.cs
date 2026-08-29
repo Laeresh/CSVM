@@ -385,7 +385,7 @@ internal static class InstantActionSuites
                     ? resolvedHost
                     : name.Equals("cargobay", System.StringComparison.OrdinalIgnoreCase) ? resolvedBay : null,
                 nets, ctx.PlaneName,
-                (_, _, _, _) => { freshSpawns++; return null; },
+                (_, _, _, _) => { freshSpawns++; return default(LaunchedVehicle); },
                 (_, _) => 1, (_, _) => { });
             ctx.Same(1, gens.LiveCount, $"the generator is live");
 

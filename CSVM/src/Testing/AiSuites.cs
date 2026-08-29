@@ -576,7 +576,10 @@ internal static class AiSuites
                   && !AimAssist.Hostile(AimAssist.PlayerTeam, AimAssist.PlayerTeam),
             $"team 0 never shoots and is never shot, and no side is hostile to itself");
 
-        ctx.WithWorld("C1", collision: true, world =>
+        // A private world: this suite shows multiplayer1zep, aagun32 and the piratezep that ia1.gw
+        // switched off, and kills aagun32 through its destructible, which no finally can undo. A
+        // shared cache would hand every later C1 suite that changed census.
+        ctx.WithPrivateWorld("C1", collision: true, world =>
         {
             var textures = new TextureArchive(texturesPath);
             ProjectilePool? pool = null;
@@ -627,6 +630,15 @@ internal static class AiSuites
                 ctx.Check(!aagun.Activated && AimAssist.Hostile(aagun.Team, AimAssist.PlayerTeam),
                     $"aagun32 is dormant and hostile to the player by default team={aagun.Team}");
                 aagun.Def.InaccuracyDeg = 0f; // determinism: the scatter cone is the assist suite's
+                // ia1.gw switches aagun32's site off at its root, and a switched-off emplacement
+                // is dead before it is dormant. The .gw's own switch, reversed, stands it up so
+                // the ACTIVATED gate is what the checks below read.
+                ctx.Check(!aagun.Alive && aagun.Site != null,
+                    $"aagun32 reads dead as ia1.gw leaves it, site={aagun.Site?.Name}");
+                if (aagun.Site == null)
+                    return;
+                world.Runtime.SetTargetActive(aagun.Site, true);
+                ctx.Check(aagun.Alive, $"…and alive once its site is switched on");
 
                 FlightController BuildRig(string plane, int playerIndex, Vector3 pos, Vector3 look)
                 {
@@ -756,6 +768,13 @@ internal static class AiSuites
                 var allied = runtime.Emplacements
                     .Where(t => t.Team == AimAssist.PlayerTeam).ToList();
                 ctx.Check(allied.Count > 0, $"the piratezep's allied rings exist count={allied.Count}");
+                // The same .gw switch on the piratezep: its rings are dead under a hidden hull.
+                foreach (var hull in world.Runtime.FindNodes("piratezep"))
+                {
+                    world.Runtime.SetTargetActive(hull, true);
+                }
+                ctx.Check(allied.All(t => t.Alive),
+                    $"the piratezep's rings are alive once the hull is switched on alive={allied.Count(t => t.Alive)} of {allied.Count}");
                 if (allied.Count > 0)
                 {
                     int AlliedShots() => allied.Sum(t => t.ShotsFired);
@@ -835,6 +854,399 @@ internal static class AiSuites
             {
                 c4Emplacements?.Free();
                 live.Free();
+            }
+        });
+    }
+
+    // An emplacement standing on a subtree the mission's own .gw script switched OFF is out of
+    // the world: dead to its own tick and unranked by every gunner. C3/M03 switches the six
+    // barrage balloons and their turrets off by name; C3/M02 leaves them up and is the control.
+    internal static void MissionOffTurrets(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C3");
+        ctx.RequireData(texturesPath, $"C3 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        const string Balloon = "MSG_TUR_DEFENSE_BALLOON@b_turret";
+
+        foreach (var (mission, standing) in new[] { ("M02", true), ("M03", false) })
+        {
+            ctx.WithWorld("C3", collision: false, mission, world =>
+            {
+                var textures = new TextureArchive(texturesPath);
+                ProjectilePool? live = null;
+                Session.TurretEmplacementRuntime? emplacements = null;
+                try
+                {
+                    live = new ProjectilePool(textures, null, null) { DamageSink = world.Runtime.DamageAt };
+                    ctx.Host.AddChild(live);
+                    emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                        (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
+                        world.Runtime.WorldRoot);
+                    ctx.Host.AddChild(emplacements);
+                    var balloons = emplacements.Emplacements.Where(t => t.Label.StartsWith(Balloon)).ToList();
+                    ctx.Same(6, balloons.Count, $"C3/{mission} places the six balloon turrets");
+                    var sites = world.Runtime.FindNodes("b_turret*");
+                    var canopies = world.Runtime.FindNodes("bont*");
+                    ctx.Check(sites.Count == 6 && sites.All(n => n.Visible == standing)
+                              && canopies.Count == 6 && canopies.All(n => n.Visible == standing),
+                        $"C3/{mission}'s .gw leaves b_turret*/bont* {(standing ? "on" : "off")}: sites={sites.Count} canopies={canopies.Count} on={sites.Count(n => n.Visible)}/{canopies.Count(n => n.Visible)}");
+                    ctx.Check(balloons.All(t => t.Alive == standing),
+                        $"a balloon turret under a switched-{(standing ? "on" : "off")} site reads Alive={standing}: {string.Join(", ", balloons.Select(t => $"{t.Label}={t.Alive}"))}");
+                    var scan = new AimCandidateSet();
+                    live.CollectTurrets(scan);
+                    var listed = scan.Turrets.Where(c => c.Source is TurretController t && t.Label.StartsWith(Balloon)).ToList();
+                    ctx.Check(listed.Count == 6 && listed.All(c => c.Live == standing),
+                        $"the gunner scan lists them live={standing}: {listed.Count(c => c.Live)} of {listed.Count} live");
+                    foreach (var t in balloons)
+                    {
+                        t.SetActivated(true);
+                    }
+                    emplacements.SimStep(0.1f);
+                    var gates = balloons.Select(t => t.Gate).Distinct().ToList();
+                    ctx.Check(standing ? gates.All(g => g != TurretGate.Dead && g != TurretGate.Asleep)
+                                       : gates.All(g => g == TurretGate.Dead),
+                        $"an awake balloon turret ticks {(standing ? "past the alive gate" : "to Dead")}: gates={string.Join("/", gates)}");
+                    var registered = world.Runtime.Destructibles.All
+                        .Where(i => i.Anchor.Name.ToString().StartsWith("bont")).ToList();
+                    ctx.Note($"C3/{mission} destructible pools on bont*: {registered.Count}; defs named balloon_downa*: {world.Session.Program.ByAnimName("balloon_downa*").Count}, ball_kaboom*: {world.Session.Program.ByAnimName("ball_kaboom*").Count}");
+                    var structures = new AimCandidateSet();
+                    structures.AddStructures(world.Runtime.Destructibles);
+                    int bontListed = structures.Structures.Count(c => c.Source is DestructibleRegistry.Instance i && i.Anchor.Name.ToString().StartsWith("bont"));
+                    ctx.Check(standing || bontListed == 0,
+                        $"a switched-off balloon is no structure candidate either: listed={bontListed} of {registered.Count}");
+                    if (!standing || sites.Count == 0 || canopies.Count == 0)
+                    {
+                        return;
+                    }
+
+                    // The control mission also proves the two gates directly: the same root
+                    // switch the .gw applies, made by hand on one site and one canopy.
+                    var site1 = sites.First(n => n.Name.ToString().EndsWith('1'));
+                    var canopy1 = canopies.First(n => n.Name.ToString().EndsWith('1'));
+                    world.Runtime.SetTargetActive(site1, false);
+                    world.Runtime.SetTargetActive(canopy1, false);
+                    var turret1 = balloons.First(t => t.Label.EndsWith("@" + site1.Name));
+                    structures.Clear();
+                    structures.AddStructures(world.Runtime.Destructibles);
+                    int canopy1Listed = structures.Structures.Count(c => c.Source is DestructibleRegistry.Instance i && i.Anchor == canopy1);
+                    ctx.Check(!turret1.Alive && canopy1Listed == 0,
+                        $"switching {site1.Name} and {canopy1.Name} off by their roots kills the turret (alive={turret1.Alive}) and delists the canopy (listed={canopy1Listed})");
+                    world.Runtime.SetTargetActive(site1, true);
+                    world.Runtime.SetTargetActive(canopy1, true);
+                }
+                finally
+                {
+                    emplacements?.Free();
+                    live?.Free();
+                    textures.Dispose();
+                }
+            });
+        }
+    }
+
+    // The C1 fort's AA guns firing past their own structures: every aagun woken ALONE, a hostile
+    // plane parked low on eight bearings so the line of fire crosses the fort, and every DamageAt on
+    // an aagun node attributed to the only rounds in flight, the gun's own. The trace behind the
+    // shooter-exclusion rule: a gun must never take its own burst, a neighbour's burst still lands.
+    internal static void TurretSelfFire(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+
+        ctx.WithWorld("C1", collision: true, "M02", world =>
+        {
+            var textures = new TextureArchive(texturesPath);
+            ProjectilePool? pool = null;
+            FlightController? target = null;
+            Session.TurretEmplacementRuntime? emplacements = null;
+            try
+            {
+                var hits = new List<(string Victim, float Damage, Node? Struck)>();
+                var live = new ProjectilePool(textures, null, null);
+                pool = live;
+                live.DamageSink = (node, dmg) =>
+                {
+                    var inst = world.Runtime.Destructibles.Resolve(node);
+                    if (inst != null && AnimRuntime.NameOf(inst.Anchor).StartsWith("aagun"))
+                        hits.Add((AnimRuntime.NameOf(inst.Anchor), dmg, node));
+                    return world.Runtime.DamageAt(node, dmg);
+                };
+                ctx.Host.AddChild(live);
+                var runtime = emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                    (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
+                    world.Runtime.WorldRoot);
+                var guns = runtime.Emplacements.Where(t => t.Label.StartsWith("MSG_TUR_AAA@aagun")).ToList();
+                ctx.Same(5, guns.Count, $"C1 places the five aagun emplacements");
+                foreach (var g in guns)
+                    g.Def.InaccuracyDeg = 0f;
+
+                var st = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+                var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                target = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(st.DestroyableParts),
+                    PlayerIndex = 0,
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    AllowPause = false,
+                };
+                target.AddChild(model);
+                var start = guns[0].WorldPosition + new Vector3(0f, 200f, 300f);
+                target.Setup(new FlightModel(st), ctx.Camera, new CamParams(), start, guns[0].WorldPosition);
+                ctx.Host.AddChild(target);
+                target.PlaceHeld(start, guns[0].WorldPosition);
+
+                void Step(int frames)
+                {
+                    for (int i = 0; i < frames; i++)
+                    {
+                        runtime.SimStep(1f / 60f);
+                        live.SimStep(1f / 60f);
+                    }
+                }
+
+                var space = ctx.Host.GetWorld3D().DirectSpaceState;
+                int selfHits = 0, neighbourHits = 0, totalShots = 0;
+                foreach (var gun in guns)
+                {
+                    string own = gun.Label[(gun.Label.IndexOf('@') + 1)..];
+                    // The muzzle against the gun's own body: a round leaving from inside its
+                    // mount's collider would strike that mount on its first step.
+                    var muzzle = gun.Firepoints[0].GlobalPosition;
+                    var probe = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                        muzzle, muzzle + gun.BarrelWorldDir * 30f, CollisionLayers.World));
+                    int bodies = gun.Site!.FindChildren("*", "CollisionObject3D", true, false).Count;
+                    ctx.Note($"{own}: site visible={gun.Site.Visible} colliders={bodies} destructible={(world.Runtime.Destructibles.Resolve(gun.Site) is { } gi ? AnimRuntime.NameOf(gi.Anchor) : "-")}; muzzle probe 30 m along the barrel hits {(probe.Count > 0 ? (probe["collider"].Obj as Node)?.GetParent()?.Name : "nothing")}");
+
+                    gun.SetActivated(true);
+                    // Bearings 0-7: 300 m out and low. Bearing 8: the strafing pass, the plane
+                    // hanging 12 m over the pit, so the flak's own burst falls inside its radius.
+                    for (int b = 0; b < 9; b++)
+                    {
+                        float ang = Mathf.DegToRad(b * 45f);
+                        var pos = b < 8
+                            ? gun.WorldPosition + new Vector3(Mathf.Cos(ang) * 300f, 25f, Mathf.Sin(ang) * 300f)
+                            : gun.WorldPosition + new Vector3(6f, 12f, 6f);
+                        target.PlaceHeld(pos, pos + Vector3.Forward);
+                        target.Damage!.Reset();
+                        int shotsBefore = gun.ShotsFired;
+                        int hitsBefore = hits.Count;
+                        Step(240);
+                        int shots = gun.ShotsFired - shotsBefore;
+                        totalShots += shots;
+                        var these = hits.Skip(hitsBefore).ToList();
+                        int self = these.Count(h => h.Victim == own);
+                        int others = these.Count - self;
+                        selfHits += self;
+                        neighbourHits += others;
+                        if (these.Count > 0 || b == 0 || b == 8)
+                            ctx.Note($"{own} bearing {b * 45}: shots={shots} gate={gun.Gate} target-inplay={target.InPlay} self-hits={self} neighbour-hits={others} {string.Join(" ", these.Select(h => $"{h.Victim}:-{h.Damage:0.##}@{h.Struck?.GetParent()?.Name}/{h.Struck?.Name}"))}");
+                    }
+                    gun.SetActivated(false);
+                }
+                ctx.Check(totalShots > 0, $"the woken guns fired across the sweep shots={totalShots}");
+                ctx.Check(selfHits == 0,
+                    $"no gun takes damage from its own rounds self-hits={selfHits} (neighbour hits {neighbourHits})");
+
+                // The able-to-fail pair on one gun pit, the same flak dropped straight into it from
+                // 15 m: owned by another gun it still kills (a rocket into a gun pit must), owned
+                // by the pit's own gun it deals nothing.
+                target.PlaceHeld(start + new Vector3(0f, 0f, 20000f), start);
+                var pit = guns[0];
+                string pitName = pit.Label[(pit.Label.IndexOf('@') + 1)..];
+                var drop = new Transform3D(Basis.Identity, pit.WorldPosition + Vector3.Up * 15f);
+                var dropDir = new Vector3(0.05f, -1f, 0f).Normalized(); // off the pose's up axis
+                int before = hits.Count;
+                live.Spawn(pit.Weapon, drop, Vector3.Zero, ProjectilePool.NoShooter, null, dropDir,
+                    team: pit.Team, ownerBodies: guns[1].PlatformColliderRids());
+                Step(30);
+                int byNeighbour = hits.Skip(before).Count(h => h.Victim == pitName);
+                ctx.Check(byNeighbour > 0,
+                    $"{pitName} takes a neighbour's flak dropped into its pit hits={byNeighbour}");
+                before = hits.Count;
+                live.Spawn(pit.Weapon, drop, Vector3.Zero, ProjectilePool.NoShooter, null, dropDir,
+                    team: pit.Team, ownerBodies: pit.PlatformColliderRids());
+                Step(30);
+                int byItself = hits.Skip(before).Count(h => h.Victim == pitName);
+                ctx.Same(0, byItself,
+                    $"…and nothing from its own flak dropped at the same spot");
+            }
+            finally
+            {
+                pool?.Free();
+                target?.Free();
+                emplacements?.Free();
+                textures.Dispose();
+            }
+        });
+    }
+
+    // CM07's own flak, end to end on the mission it is flown in. The mission's OBJECTIVE1 authors
+    // WAKEUP_TURRETS 'aagun**', the built world holds five sites for it, and each one wakes,
+    // acquires a hostile plane inside DETECTION_RANGE and fires without hurting itself. The
+    // chapter's persist log is what this pins hardest: CM07 is chapter 1's FIRST mission, so the
+    // engine's backwards walk finds no earlier carrier and a log holding these guns wrecked must
+    // not reach them, or the whole fort opens silent.
+    internal static void C1AaGuns(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M02");
+        ctx.RequireData(missionZrdr, $"C1/M02 zrdr");
+
+        // The mission's own wake directive, read from the shipped script rather than assumed.
+        var script = Session.ObjectiveScript.Load(missionZrdr);
+        var patterns = new List<string>();
+        foreach (var def in script.Objectives)
+            patterns.AddRange(def.WakeupTurrets);
+        ctx.Check(patterns.Contains("aagun**"),
+            $"C1/M02 authors WAKEUP_TURRETS 'aagun**' (found [{string.Join(", ", patterns)}])");
+
+        // Where CM07 sits in the campaign: chapter 1's first mission, so nothing is carried in.
+        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        var cm07 = missions.FirstOrDefault(m => m.Campaign == 1 && m.Mission == 2);
+        ctx.Same(1, cm07.Campaign, $"CM07 is a chapter 1 mission (seq {cm07.Seq})");
+        int? carryThrough = CampaignSequence.PreviousInSameChapter(missions, cm07.Seq)?.Seq;
+        ctx.Check(carryThrough == null,
+            $"CM07 is chapter 1's first mission, so the backwards walk finds no earlier carrier (got {carryThrough})");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+
+        ctx.WithWorld("C1", collision: true, "M02", world =>
+        {
+            var textures = new TextureArchive(texturesPath);
+            ProjectilePool? pool = null;
+            FlightController? target = null;
+            Session.TurretEmplacementRuntime? emplacements = null;
+            try
+            {
+                var hits = new List<(string Victim, float Damage)>();
+                var live = new ProjectilePool(textures, null, null);
+                pool = live;
+                live.DamageSink = (node, dmg) =>
+                {
+                    var inst = world.Runtime.Destructibles.Resolve(node);
+                    if (inst != null && AnimRuntime.NameOf(inst.Anchor).StartsWith("aagun"))
+                        hits.Add((AnimRuntime.NameOf(inst.Anchor), dmg));
+                    return world.Runtime.DamageAt(node, dmg);
+                };
+                ctx.Host.AddChild(live);
+                var runtime = emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                    (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
+                    world.Runtime.WorldRoot);
+                var guns = runtime.Emplacements.Where(t => t.Label.StartsWith("MSG_TUR_AAA@aagun")).ToList();
+                ctx.Same(5, guns.Count, $"C1/M02 places the five aagun emplacements");
+                if (guns.Count == 0)
+                    return;
+                ctx.Check(guns.All(g => !g.Activated),
+                    $"they ship dormant, as ai.zrd's ACTIVATED 0 says: awake={guns.Count(g => g.Activated)}");
+                ctx.Check(guns.All(g => g.Alive),
+                    $"the mission's .gw leaves every site standing: alive={guns.Count(g => g.Alive)} of {guns.Count}");
+
+                // A chapter 1 log holding all five wrecked, written by CM07 itself: the walk cuts
+                // it off, so the mission opens on the fort the .gw built.
+                var log = new Session.CampaignPersistLog();
+                var wrecked = new List<Session.PersistedObject>();
+                foreach (var g in guns)
+                {
+                    if (world.Runtime.Destructibles.Resolve(g.Site!) is { } inst
+                        && inst.Anchor.HasMeta(AnimRuntime.IndexMeta))
+                    {
+                        wrecked.Add(new Session.PersistedObject((int)inst.Anchor.GetMeta(AnimRuntime.IndexMeta),
+                            inst.Def.Name, inst.Anchor.Name, true, 0f));
+                    }
+                }
+
+                ctx.Same(guns.Count, wrecked.Count, $"every aagun site resolves a persistable pool");
+                log.Merge(cm07.Campaign, cm07.Seq, wrecked);
+                ctx.Same(0, log.ApplyTo(world.Runtime, cm07.Campaign, carryThrough),
+                    $"CM07's own capture carries nothing into CM07 (log holds {log.For(cm07.Campaign).Count})");
+                ctx.Check(guns.All(g => g.Alive),
+                    $"…so all five are still alive after the restore pass: alive={guns.Count(g => g.Alive)}");
+
+                // The wake the objectives graph performs, through the same two primitives the
+                // director uses: the world's own node lookup, then the subtree-scoped write.
+                int armed = 0;
+                foreach (string pattern in patterns)
+                {
+                    foreach (var node in world.Runtime.FindNodes(pattern))
+                        armed += runtime.SetActivatedUnder(node, true);
+                }
+
+                ctx.Same(5, armed, $"WAKEUP_TURRETS '{string.Join(", ", patterns)}' arms the five aaguns");
+
+                var st = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+                var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                target = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(st.DestroyableParts),
+                    PlayerIndex = 0,
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    AllowPause = false,
+                };
+                target.AddChild(model);
+                var start = guns[0].WorldPosition + new Vector3(0f, 200f, 300f);
+                target.Setup(new FlightModel(st), ctx.Camera, new CamParams(), start, guns[0].WorldPosition);
+                ctx.Host.AddChild(target);
+                target.PlaceHeld(start, guns[0].WorldPosition);
+
+                void Step(int frames)
+                {
+                    for (int i = 0; i < frames; i++)
+                    {
+                        runtime.SimStep(1f / 60f);
+                        live.SimStep(1f / 60f);
+                    }
+                }
+
+                // Each gun in turn, the plane parked well inside DETECTION_RANGE and above the
+                // fort's own skyline so the sight line is the gun's, not the terrain's.
+                foreach (var gun in guns)
+                {
+                    string own = gun.Label[(gun.Label.IndexOf('@') + 1)..];
+                    int before = gun.ShotsFired;
+                    int hitsBefore = hits.Count;
+                    var pos = gun.WorldPosition + new Vector3(0f, 150f, 250f);
+                    target.PlaceHeld(pos, gun.WorldPosition);
+                    target.Damage!.Reset();
+                    Step(600);
+                    int shots = gun.ShotsFired - before;
+                    int self = hits.Skip(hitsBefore).Count(h => h.Victim == own);
+                    ctx.Check(shots > 0,
+                        $"{own} acquires the player {gun.WorldPosition.DistanceTo(pos):0} m out and fires shots={shots} gate={gun.Gate} alive={gun.Alive}");
+                    ctx.Same(0, self, $"…and takes nothing from its own rounds (B13)");
+                }
+
+                // The able-to-fail half: the same log applied with a cut that DOES reach it wrecks
+                // every gun, which is what a later mission of the chapter must open on.
+                ctx.Same(guns.Count, log.ApplyTo(world.Runtime, cm07.Campaign, cm07.Seq),
+                    $"a later mission of the chapter does carry them");
+                ctx.Check(guns.All(g => !g.Alive),
+                    $"…and then every aagun reads dead: alive={guns.Count(g => g.Alive)}");
+            }
+            finally
+            {
+                pool?.Free();
+                target?.Free();
+                emplacements?.Free();
+                textures.Dispose();
             }
         });
     }

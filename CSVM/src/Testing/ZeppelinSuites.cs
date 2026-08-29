@@ -138,6 +138,9 @@ internal static class ZeppelinSuites
             motion.AliveEngines = motion.TotalEngines;
             for (int i = 0; i < 60 * 600 && !motion.Follower.Holding; i++)
                 runtime.SimStep(dt);
+            // The hold engages while the last of the way bleeds off at max_accel; give it that.
+            for (int i = 0; i < 60 * 5; i++)
+                runtime.SimStep(dt);
             ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == net.Nodes.Count - 1
                 && motion.Speed == 0f,
                 $"the far end holds it for good node={motion.Follower.CurrentIndex} id={net.Nodes[^1].StopPointId} speed={motion.Speed:0.##}");
@@ -244,19 +247,27 @@ internal static class ZeppelinSuites
             ctx.Same(1, runtime.SetStopPoint(def.Net, 7, false), $"stop 7 (node 5) releases");
             ctx.Same(1, runtime.SetStopPoint(def.Net, 8, false), $"stop 8 (node 7) releases");
 
+            // The steepest leg of the chain: the decoded steer law pitches AT the slope from
+            // here to the node and eases onto it, so the hull never pitches past it. The old
+            // bang-bang rate rang up into a standing ±30° swing on the same route.
+            float steepest = 0f;
+            foreach (var (a, b) in net.Edges)
+            {
+                var d = net.Nodes[b].Position - net.Nodes[a].Position;
+                steepest = Mathf.Max(steepest, Mathf.Abs(Mathf.Atan2(d.Y, new Vector2(d.X, d.Z).Length())));
+            }
             const float dt = 1f / 60f;
-            float maxPitchBand = Mathf.DegToRad(def.MaxPitchDeg);
-            int pitchViolations = 0;
+            float worstPitch = 0f;
             int steps = 0, budget = 60 * 900; // the whole ~9 km chain flies in well under 500 s
             while (!(motion.Follower.Holding && motion.Follower.CurrentIndex == farEnd)
                    && steps < budget)
             {
                 runtime.SimStep(dt);
-                if (motion.PitchRad > maxPitchBand + 1e-3f || motion.PitchRad < -maxPitchBand - 1e-3f)
-                    pitchViolations++;
+                worstPitch = Mathf.Max(worstPitch, Mathf.Abs(motion.PitchRad));
                 steps++;
             }
-            ctx.Same(0, pitchViolations, $"pitch stayed inside the record's ±{def.MaxPitchDeg:0}° band the whole route");
+            ctx.Check(worstPitch <= steepest + Mathf.DegToRad(1f),
+                $"pitch never exceeded the steepest leg's {Mathf.RadToDeg(steepest):0.#}° the whole route, worst {Mathf.RadToDeg(worstPitch):0.#}°");
             ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == farEnd,
                 $"the bare far end (node {farEnd}) holds it in {steps / 60f:0} s idx={motion.Follower.CurrentIndex} holding={motion.Follower.Holding}");
             ctx.Check(motion.Follower.Advances == net.Nodes.Count - 1,
@@ -274,6 +285,39 @@ internal static class ZeppelinSuites
             runtime?.Free();
             host?.Free();
         }
+    }
+
+    // CM04 (C3/M03): NEW_GAME_START runs pzep_todrydock, one ObjectMotionSiScript on piratezep
+    // whose 185-frame script flies the Pandora from (-11314,554,-13697) to the record's own seat,
+    // node 0 of M3PirateZep. The record is where the script ENDS: the script owns the pose from
+    // its first frame, the follower parks under it and resumes from its last frame.
+    internal static void ZeppelinScriptedPoseSuite(TestContext ctx)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C3");
+        ctx.RequireData(chapterZrdr, $"C3 zrdr");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03");
+        ctx.RequireData(missionZrdr, $"C3/M03 zrdr");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, "C3"), $"C3 textures");
+
+        ZeppelinDef? def = null;
+        foreach (var d in Zeppelins.Load(missionZrdr))
+        {
+            if (d.Node.Equals("piratezep", System.StringComparison.OrdinalIgnoreCase))
+                def = d;
+        }
+        ctx.Check(def != null && def.Net == "M3PirateZep",
+            $"C3/M03 authors piratezep on M3PirateZep net={def?.Net}");
+        if (def == null)
+            return;
+        var nets = AiNets.Load(chapterZrdr);
+        var net = AiNets.ByName(nets, def.Net);
+        ctx.Check(net != null && net.Nodes[0].Position.DistanceTo(def.Position) < 1f && net.Nodes[0].StopsHere,
+            $"the record seats on node 0, an armed stop point: the dock the script ends at");
+        if (net == null)
+            return;
+
+        ctx.WithWorld("C3", collision: false, "M03", world => DriveScriptedPose(ctx, world, def, nets));
+        ctx.Note($"C3/M03: pzep_todrydock owns piratezep's pose for 61.65 s from its frame 0, the follower parks under it and resumes at the record seat");
     }
 
     internal static void ZeppelinLaunch(TestContext ctx)
@@ -391,7 +435,7 @@ internal static class ZeppelinSuites
                 (name, scope) => name.Equals("multiplayer1zep", System.StringComparison.OrdinalIgnoreCase)
                     ? resolvedHost
                     : name.Equals("cargobay", System.StringComparison.OrdinalIgnoreCase) ? resolvedBay : null,
-                nets, ctx.PlaneName, SpawnPlane,
+                nets, ctx.PlaneName, (d, p, l, pi) => SpawnPlane(d, p, l, pi),
                 (name, _) => { animPlays.Add(name); return 1; }, (_, _) => { });
             ctx.Same(1, gens.LiveCount, $"the generator is live (host + IAZep net resolve)");
 
@@ -466,7 +510,7 @@ internal static class ZeppelinSuites
             capped = new AiGeneratorRuntime(new[] { cappedDef },
                 (name, scope) => name.Equals("multiplayer1zep", System.StringComparison.OrdinalIgnoreCase)
                     ? resolvedHost2 : null,
-                nets, ctx.PlaneName, SpawnPlane, (name, _) => 1, (_, _) => { });
+                nets, ctx.PlaneName, (d, p, l, pi) => SpawnPlane(d, p, l, pi), (name, _) => 1, (_, _) => { });
             for (int i = 0; i < 60 * 30; i++)
                 capped.SimStep(dt);
             ctx.Same(1, spawned.Count - before,
@@ -638,16 +682,17 @@ internal static class ZeppelinSuites
         });
     }
 
-    // The broadside chain on C1/M04's piratezep in its own mission world: arc-gated deploy, a real
-    // volley at a player stand-in, hold-fire-and-retract out of arc, the thinning, scatter on a
-    // cannon_inaccuracy clone, and the zeppelin-versus-zeppelin gasbag pick on constructed geometry.
-    // The stand-in is repositioned through its flight model each step to hold the tested bearing.
+    // The broadside chain: C3/M03's Pandora as shipped (never engaged, so nothing opens or fires
+    // on a player abeam), then C1/M04's piratezep engaged as COMPLETED_ZEPCANNONS would: deploy,
+    // a volley at a player stand-in (repositioned through its flight model each step to hold the
+    // bearing), hold-and-retract out of arc, thinning, scatter, and the gasbag pick.
     // ⚠ Assert rounds at the spawn seam, count and direction, never as hits: a moved body never
     // re-enters the one-frame space queries (INSTR-13).
     internal static void ZeppelinBroadsideSuite(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
         ctx.RequireData(missionZrdr, $"C1/M04 zrdr");
+        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03"), $"C3/M03 zrdr");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var wep28 = weapons.Get(ZeppelinRuntime.BroadsideWeaponId);
@@ -655,6 +700,9 @@ internal static class ZeppelinSuites
             $"the hardcoded {ZeppelinRuntime.BroadsideWeaponId} resolves in weapons.zrd v={wep28?.Velocity ?? 0f:0}");
         if (wep28 == null)
             return;
+
+        ctx.WithWorld("C3", collision: false, mission: "M03", world =>
+            DisengagedPandora(ctx, world, weapons));
 
         ctx.WithWorld("C1", collision: true, mission: "M04", world =>
         {
@@ -696,6 +744,10 @@ internal static class ZeppelinSuites
                     $"the broadside wires 6+6 cannons count={bs?.Cannons.Count ?? 0}");
                 if (bs == null)
                     return;
+                // C1/M04's script never runs COMPLETED_ZEPCANNONS either; the suite stands in
+                // for it so the arm past the gate is exercised on shipped geometry.
+                ctx.Check(!bs.CannonsEngaged && zeps.SetCannonsEngaged("piratezep", true),
+                    $"the broadside wires disengaged and the script's flag engages it");
                 ctx.Check(bs.Cannons.All(c => Mathf.IsEqualApprox(c.DeploySeconds, 4f)),
                     $"deploy durations are read from the authored anim defs (4 s run_time) first={bs.Cannons[0].DeploySeconds:0.##}");
 
@@ -796,6 +848,7 @@ internal static class ZeppelinSuites
                 scatterZeps = new ZeppelinRuntime(new[] { scatterDef },
                     name => runtime.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null, nets);
                 scatterZeps.WireCannons(live, weapons);
+                scatterZeps.SetCannonsEngaged("piratezep", true);
                 var sMotion = scatterZeps.MotionFor("piratezep")!;
                 var sBs = scatterZeps.BroadsideOf("piratezep")!;
                 Vector3 SPort() => host.GlobalPosition + ZeppelinBroadside.SideNormal(
@@ -836,6 +889,7 @@ internal static class ZeppelinSuites
                 zvz = new ZeppelinRuntime(new[] { attacker, target }, name =>
                     name == "attackzep" ? resolvedAtt : name == "targetzep" ? resolvedTgt : null, nets);
                 zvz.WireCannons(live, weapons);
+                zvz.SetCannonsEngaged("attackzep", true);
                 for (int i = 0; i < (int)(6f / dt) && zvz.BroadsideShotsOf("attackzep") == 0; i++)
                 {
                     zvz.SimStep(dt);
@@ -867,6 +921,111 @@ internal static class ZeppelinSuites
                 textures?.Dispose();
             }
         });
+    }
+
+    // CM04 (C3/M03) as shipped: the Pandora authors targets [player] and 500 m of range, and its
+    // objectives never run COMPLETED_ZEPCANNONS, so with the player abeam inside range through a
+    // full deploy plus the 20 s fire delay no hatch opens and no round leaves. The same hull
+    // engaged is the positive control: the gate, not the geometry, is what holds fire.
+    internal static void DisengagedPandora(TestContext ctx, TestWorld world, WeaponDefs weapons)
+    {
+        var runtime = world.Session.Runtime;
+        var defs = Zeppelins.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03"));
+        var def = defs.FirstOrDefault(d => d.Node.Equals("piratezep", System.StringComparison.OrdinalIgnoreCase));
+        var host = runtime.FindNodes("piratezep").FirstOrDefault();
+        ctx.Check(def != null && host != null && def.Targets.Count == 1
+                  && ZeppelinBroadside.IsPlayerTarget(def.Targets[0]) && def.CannonFireRange == 500f,
+            $"C3/M03 authors piratezep with targets [player], range 500 m, and its node resolves");
+        var objectives = ObjectiveScript.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03")).Objectives;
+        ctx.Check(objectives.Count > 0 && objectives.All(o => o.CompletedZepcannons.Count == 0),
+            $"no C3/M03 objective runs COMPLETED_ZEPCANNONS over {objectives.Count} objectives");
+        if (def == null || host == null)
+            return;
+
+        var nets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C3"));
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        TextureArchive? textures = null;
+        ProjectilePool? pool = null;
+        ZeppelinRuntime? zeps = null;
+        FlightController? player = null;
+        var started = new List<string>();
+        try
+        {
+            textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C3"));
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            runtime.OnInstanceStarted = (d, _) => { if (d.AnimName != null) started.Add(d.AnimName); };
+
+            var resolvedHost = host;
+            zeps = new ZeppelinRuntime(new[] { def }, _ => resolvedHost, nets, null,
+                runtime.Motions.DrivesTransform);
+            ctx.Host.AddChild(zeps);
+            zeps.WireDamage(runtime);
+            zeps.WireCannons(live, weapons);
+            var bs = zeps.BroadsideOf("piratezep");
+            ctx.Check(bs is { Cannons.Count: 12, CannonsEngaged: false },
+                $"the Pandora's 12 cannons wire disengaged count={bs?.Cannons.Count ?? 0}");
+            if (bs == null)
+                return;
+
+            var fm = new FlightModel(stats);
+            var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            player = new FlightController
+            {
+                PlaneModel = model,
+                Collider = PlaneCollider.Build(model),
+                PlayerIndex = 0,
+                Projectiles = live,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+            };
+            player.AddChild(model);
+            player.Setup(fm, null, new CamParams(), host.GlobalPosition + Vector3.Right * 300f,
+                host.GlobalPosition);
+            ctx.Host.AddChild(player);
+
+            var motion = zeps.MotionFor("piratezep")!;
+            const float dt = 1f / 60f;
+            Vector3 PortAbeam() => host.GlobalPosition + ZeppelinBroadside.SideNormal(
+                motion.YawRad, motion.PitchRad, BroadsideSide.Left, bs.RightSign) * 300f;
+            void Hold(float seconds)
+            {
+                for (int i = 0; i < (int)(seconds / dt); i++)
+                {
+                    fm.Position = PortAbeam();
+                    zeps.SimStep(dt);
+                    live.SimStep(dt);
+                }
+            }
+
+            // Abeam at 300 m of 500, through the 4 s deploy, the 20 s fire delay and a margin.
+            Hold(30f);
+            ctx.Check(!started.Any(a => a.Contains("broad")),
+                $"30 s abeam the shipped Pandora opens no hatch anims=[{string.Join(",", started.Where(a => a.Contains("broad")))}]");
+            ctx.Same(0, zeps.BroadsideShotsOf("piratezep"),
+                $"...and fires no {ZeppelinRuntime.BroadsideWeaponId} at the player");
+            ctx.Check(bs.Cannons.All(c => c.State == ZeppelinCannonState.Stowed),
+                $"every cannon is still stowed");
+
+            // Positive control: the same hull with the script's flag set opens up on the player.
+            zeps.SetCannonsEngaged("piratezep", true);
+            Hold(5f);
+            ctx.Check(started.Count(a => a.StartsWith("deploy_pzep_lbroad")) == 6,
+                $"engaged, the port six deploy anims=[{string.Join(",", started)}]");
+            ctx.Check(zeps.BroadsideShotsOf("piratezep") > 0,
+                $"...and the readied side fires shots={zeps.BroadsideShotsOf("piratezep")}");
+        }
+        finally
+        {
+            runtime.OnInstanceStarted = null;
+            pool?.Free();
+            zeps?.Free();
+            player?.Free();
+            textures?.Dispose();
+        }
     }
 
     // A copy of a shipped record with `cannon_inaccuracy` authored — the scatter
@@ -940,5 +1099,92 @@ internal static class ZeppelinSuites
             CannonFireRange = 500f,
             Deactivated = deactivated,
         };
+    }
+
+    private static void DriveScriptedPose(TestContext ctx, TestWorld world, ZeppelinDef def,
+        IReadOnlyList<AiNet> nets)
+    {
+        var host = world.Runtime.FindNodes("piratezep", null) is { Count: > 0 } hits ? hits[0] : null;
+        ctx.Check(host != null, $"the built world carries the piratezep node");
+        if (host == null)
+            return;
+        ctx.Check(world.Runtime.Motions.DrivesTransform(host),
+            $"the bootstrap's pzep_todrydock owns piratezep's transform channel before any zeppelin runtime exists");
+        var frame0 = new Vector3(-11313.7f, 553.7f, -13696.8f);
+        var scriptStart = host.GlobalPosition;
+        ctx.Check(scriptStart.DistanceTo(frame0) < 2f,
+            $"…and has posed it at the script's frame 0 base, off by {scriptStart.DistanceTo(frame0):0.##} m");
+
+        ZeppelinRuntime? zeps = null;
+        try
+        {
+            var resolvedHost = host;
+            zeps = new ZeppelinRuntime(new[] { def }, _ => resolvedHost, nets, null,
+                world.Runtime.Motions.DrivesTransform);
+            ctx.Host.AddChild(zeps);
+            zeps.WireDamage(world.Runtime);
+            ctx.Check(host.GlobalPosition.DistanceTo(scriptStart) < 0.01f,
+                $"placement writes nothing over the script's frame 0 pos={host.GlobalPosition}");
+            var motion = zeps.MotionFor("piratezep");
+            ctx.Check(motion != null, $"MotionFor finds the parked motion");
+            if (motion == null)
+                return;
+
+            const float dt = 1f / 60f;
+            const float scriptEnd = 61.65f;
+            float t = 0f, nearestSeat = float.MaxValue, longestStep = 0f;
+            // The approach: the script's last ten seconds settle onto the seat, so the flight
+            // proper is judged before them. A frame moves the hull about a metre at its cruise.
+            while (t < scriptEnd - 10f)
+            {
+                var before = host.GlobalPosition;
+                world.Runtime.Advance(dt);
+                zeps.SimStep(dt);
+                t += dt;
+                nearestSeat = Mathf.Min(nearestSeat, host.GlobalPosition.DistanceTo(def.Position));
+                longestStep = Mathf.Max(longestStep, before.DistanceTo(host.GlobalPosition));
+            }
+            ctx.Check(nearestSeat > 50f,
+                $"the first {scriptEnd - 10f:0} s never put the hull at the record seat, closest {nearestSeat:0} m");
+            ctx.Check(longestStep < 5f,
+                $"…and no frame of them jumped, longest step {longestStep:0.##} m");
+            ctx.Check(ReferenceEquals(zeps.MotionFor("piratezep"), motion)
+                && motion.Position.DistanceTo(def.Position) < 0.01f && motion.Speed == 0f,
+                $"the follower's motion never stepped under the script: still seated on the record, speed {motion.Speed:0.##}");
+
+            while (t < scriptEnd + (2f * dt))
+            {
+                world.Runtime.Advance(dt);
+                zeps.SimStep(dt);
+                t += dt;
+            }
+            var handback = host.GlobalPosition;
+            ctx.Check(!world.Runtime.Motions.DrivesTransform(host),
+                $"the script has ended at {t:0.00} s and released the channel");
+            ctx.Check(handback.DistanceTo(def.Position) < 2f,
+                $"the script's last frame IS the record seat, off by {handback.DistanceTo(def.Position):0.##} m");
+            var resumed = zeps.MotionFor("piratezep");
+            ctx.Check(resumed != null && ReferenceEquals(resumed, motion)
+                && resumed.Position.DistanceTo(handback) < 0.5f,
+                $"the same motion resumed in place from the script's last frame, not from the record pos={resumed?.Position}");
+            if (resumed == null)
+                return;
+            float yawErr = Mathf.Abs(Mathf.AngleDifference(resumed.YawRad, Mathf.DegToRad(def.YawDeg)));
+            ctx.Check(yawErr < Mathf.DegToRad(3f) && Mathf.Abs(resumed.PitchRad) < Mathf.DegToRad(3f),
+                $"…carrying the script's end attitude, which is the record's yaw {def.YawDeg:0} pitch 0: yaw off {Mathf.RadToDeg(yawErr):0.#}° pitch {Mathf.RadToDeg(resumed.PitchRad):0.#}°");
+
+            for (int i = 0; i < 60 * 5; i++)
+            {
+                world.Runtime.Advance(dt);
+                zeps.SimStep(dt);
+            }
+            ctx.Check(resumed.Follower.Holding && resumed.Follower.CurrentIndex == 0
+                && host.GlobalPosition.DistanceTo(handback) < 1f,
+                $"…and holds the dock, node 0's armed stop point, moved {host.GlobalPosition.DistanceTo(handback):0.##} m in 5 s idx={resumed.Follower.CurrentIndex} holding={resumed.Follower.Holding}");
+        }
+        finally
+        {
+            zeps?.Free();
+        }
     }
 }

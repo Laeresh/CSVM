@@ -328,6 +328,32 @@ internal sealed class PoseChannel
         return applied;
     }
 
+    /// <summary>The ALL_NAMES form: every record the definition parser decoded onto the event
+    /// (<see cref="AnimDefinition.AllNamesKind"/>) plays as its own single-node script, all started
+    /// on this dispatch, and the event's run time is the longest of them, which is what holds the
+    /// caller's WAIT_FOR_COMPLETION over a person's whole climb.</summary>
+    internal int HandleMotionSiScriptAllNames(AnimEvent ev, AnimDefinition def, Node3D? anchor,
+        bool instant, out float duration)
+    {
+        duration = 0f;
+        int applied = 0;
+        foreach (var motion in ev.Data.Objects("motions"))
+        {
+            var one = new AnimEvent
+            {
+                Kind = "ObjectMotionSiScript",
+                Data = motion,
+                StartOffset = ev.StartOffset,
+                StartTime = ev.StartTime,
+            };
+            applied += HandleMotionSiScript(one, def, anchor, instant, out float oneDuration);
+            duration = Mathf.Max(duration, oneDuration);
+        }
+        if (applied == 0)
+            _count("ObjectMotionSiScriptAllNames(no target)");
+        return applied;
+    }
+
     /// <summary>Whether this node's next ballistic launch continues from where it landed, clearing
     /// the mark as it answers. See <see cref="_resumeFromLanding"/>.</summary>
     internal bool ConsumeLandingResume(Node3D target) => _resumeFromLanding.Remove(target);

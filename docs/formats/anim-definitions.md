@@ -64,6 +64,7 @@ bare flag (`LOCAL_NODES_ONLY`).
 | `LOCAL_NODES_ONLY` | bare flag | Op node names resolve inside the instance subtree only (building/vehicle templates). |
 | `ACTIVATION` | `ON_STARTUP` \| `ON_CALL` | ON_STARTUP defs run their sequences at mission load (`zepstate`); ON_CALL waits for `CALL_ANIMATION`/game events. Sequences may carry their own `ACTIVATION ON_CALL` (run only via `CALL_SEQUENCE`). |
 | `EXECUTION_BY_RANGE` | 1 float, **metres** | Proximity gate: the def executes only with a player within this distance of its anchor. Compiled as `execution: {ByRange: {min, max}}` in **metres SQUARED** (reader 50 ↔ compiled 2500) — the same reader↔compiled unit divergence as `PLAYER_RANGE`; `min` is 0 across the install. On an ON_STARTUP def the runtime defers the start until a player first enters the band (the C3 `spiderweb_gone` 50 m fade; the 300 m nacelle-prop spins; C1's reader-only `cloudparent#` at 1900 m). 883 compiled defs carry it. |
+| `ACTIVATION_PREREQUISITE` | `OPTIONS [MINIMUM_TO_SATISFY n, ANIMATION_LIST …]` or `REQUIRED`/`OPTIONS [OBJECT_ACTIVE_LIST [[path…]…], OBJECT_INACTIVE_LIST […]]` | A start gate. The anim-list form is the zeppelin hull death (`all_pzep_gasbags`: 3 of the 6 `finish_pzepgasbag*`). The node-state form names node paths and the active state each must read for the definition to start; compiled as a run of `Parent` entries closed by one `Object` leaf carrying `active_raw`/`required`, where the state is BIT 0 of `active_raw` (bit 1 is the def's LOCAL_NODES_ONLY scope, so a local INACTIVE entry reads 2, which mech3ax's `active` field misreports as true; [compiled-archives.md](anim-definitions/compiled-archives.md)). The shipped weight of the node form is the zeppelin gasbag finishers (`finished_lkgasbag0*`, `finish_pzepgasbag*`: `REQUIRED [OBJECT_INACTIVE_LIST [[gasbag, panelleftb1], [gasbag, panelrightb1]]]`, local), called by the burn that switched those panels off, and C1/M04's `hk_zep` (no zeppelin record) sinks only through them: door death, gasbag burn, finisher, three finishers satisfy `finish_locklear`. C1/M02's hangar drop is the shipped fork: `hangar_drop` calls both `hdplayer1` (`REQUIRED [OBJECT_INACTIVE_LIST [[hdrop_direction]]]`) and `hdplayer1b` (the same node ACTIVE), and `hdchute1`/`hdchute1b` likewise, so the direction sensor's state picks one camera leg of each pair. Roughly 50 defs carry the node form (gasbag panel finishers, `pzep_cargo_point`'s cargo stop, C1C/M01's docking legs). The runtime enforces the REQUIRED entries at `Start`; optional entries and a `MINIMUM_TO_SATISFY` over nodes are parsed only. |
 | `RESET_TIME` | 1–2 floats (−1 common) | Reset scheduling (undecoded detail). |
 | `RESET_STATE` | op list | The object's **base state**, applied at load: healthy variants ACTIVE, `destroyed` variants INACTIVE, doors at rest pose. This is what fixes the destroyed-over-healthy coplanar flicker. |
 | `SEQUENCE_DEFINITION` | op list (repeatable) | One timeline of ops; optional `NAME`, optional `ACTIVATION`. |
@@ -178,13 +179,16 @@ rotation-only; every ballistic use is `ON_CALL`/`WEAPON_HIT`, fired by a crash o
 So the rotation half runs through the lightweight `AnimRuntime.SpinMotion` (unchanged — the
 ambient world boots byte-for-byte the same), and the ballistic/scale/tumble half is **implemented
 ** through `AnimRuntime.MotionRuntime`, a full rigid body in the node's parent frame,
-seeded from its **authored rest** pose for a launch and from its live pose otherwise (: a
-shared effect template's children are never re-homed between calls, so seeding a launch from the
-live pose walked every repeat explosion's debris further from the blast than the one before):
+seeded from the node's **live** pose (the original's update adds each step to the node's own
+translation and writes no start position, so a chain of events on one node continues leg from
+leg; a pooled effect copy is returned to its spawn pose by the checkout, not by the launch):
 
-- `TRANSLATION.initial` is the launch **velocity** (a crash piece leaves at y=10 m/s); `rnd_xz` a
-  per-axis random spread added to it (through the runtime's **seedable** `_rng`, so a lab replay
-  is deterministic); `delta` a constant **acceleration** along the launch, in m/s² — **not** a ramp
+- `TRANSLATION.initial` is the launch **velocity** (a crash piece leaves at y=10 m/s); `rnd_xz` is
+  the compiled launch **direction**, the cache the tumble reads back, and **not a random spread**:
+  the source spells `TRANSLATION azimuth elevation speed delta` and the parser compiles it through
+  the same polar construction as `TRANSLATION_RANGE`, so `initial = direction × speed` and nothing
+  on the vector form is drawn at runtime (the name is mech3ax's, [`../org/objectMotion.md`](../org/objectMotion.md));
+  `delta` a constant **acceleration** along the launch, in m/s² — **not** a ramp
   divided by `RUN_TIME`, which is how it was once read (non-zero on 92 of the 757
   vector-form events).
 - `TRANSLATION_RANGE` is a ballistic launch in **polar form** — **`xz` is an AZIMUTH and `y` an
@@ -487,6 +491,16 @@ targeting its own `propstill`. Ignore the target and all eight calls resolve `pr
 globally to whichever one is first, so eight engines share one prop angle. Honour it and each
 engine gets its own. The same mechanism is what places effect templates:
 `CALL_ANIMATION [NAME [huge_30sec_fire], WITH_NODE [rc*_dbase1]]` burns one ship section.
+
+The two node spellings differ in what the callee receives, not in where it resolves: both write
+the same reference slot, and the handler delivers a node or a position by its flag bits (the
+parser at `FUN_00515c00`, [org/sequences.md](../org/sequences.md)). A carried site is where the
+question matters. A zeppelin's gun ring dies with `large_30sec_fire WITH_NODE doublecannon4
+(0, 2, 0)` and `large_fireball`/`dblcannon_flying_parts AT_NODE doublecannon4`, and at the
+original's controls the whole death, the fire, the fireballs and the debris, moves with the hull
+as it flies on. The runtime places a death's callee to follow its call site under either spelling
+(`TemplateStage.PlaceFollowing`, docs/architecture.md); a site that never moves reads the same
+either way.
 
 Two implementation notes. Instance identity is `(definition, anchor)`, so retargeting is also
 what lets one definition run concurrently on many sites — the `IsLive` check must use the
@@ -933,6 +947,32 @@ mission that compiles `tethertower`.
 
 which was generalised from C1/IA1. It is compiled into the missions that use it; being
 uncompiled is exactly the signal that the mission does not instantiate it.
+
+### Shared-scope files are listed per mission too
+
+The shared `zrdr.zbd` is not one runtime-global set. Its 190 `ANIMATION_DEFINITIONS` files
+split three ways by the `ANIMATION_DEFINITION_FILE` lists (every chapter's `cam_anim.zrd`
+lists `..\data\common\zrdr\anim.zrd`, the shared index, plus its own chapter files; every
+mission's `mis_anim.zrd` lists what it adds):
+
+| Shared files | How they reach a mission |
+|---|---|
+| 88 | the `anim.zrd` index closure (effects, splashes, the plane and generic building sets): every mission |
+| 96 | listed by individual `mis_anim.zrd`/`cam_anim.zrd` files only: the zeppelin sets (`pzep_*`, `cg1_*`, `multi1_*`, …), the balloons (`balloon_*`, C3/M02 and C4's `cam_anim.zrd`), the patrol boats, `spruce_destroy*`, `zepskinfire`/`partial_damage` |
+| 6 | listed nowhere (`aa_car`, `armytruck_destruct`, `fire`, `mp2_fighter_release`, `player-1`, `wingman`); `player-1.zrd.json` is the extraction's duplicate-name copy of the listed `planes\player.zrd` and is kept by that stem |
+
+A shared file outside a mission's lists is not part of that mission: its compiled `mis_anim`
+carries none of its defs, and the reader form is compiler input, not a runtime library. The
+barrage balloons are the worked case. `support\c3\m03.gw` switches `bont1..6`/`b_turret1..6`
+off, and M03 lists no `balloon_*.zrd`; loading them anyway ran `balloon_down`'s `RESET_STATE`
+(`bont* ACTIVE`) over the switch, registered six `ball_kaboom*` HP pools on canopies that are
+not in play, and made the AI gunners engage the balloon turrets. `AnimProgram.ListedSharedFiles`
+applies this rule to the shared scope when a compiled mission manifest is present; the log line
+`N shared reader file(s) no ANIMATION_DEFINITION_FILE list of this mission names, not loaded`
+is the census. The chapter scope is not gated yet: C1's `clouds`, `lightning`, `spotlights` and
+`train_smoke`, C2's `game_targets`/`police_*`/`security_destroy` (M01/M02 list two) and C5's
+`steinmann` (M01 lists it) are chapter files no list names, and C1's `cloudparent#` 0.6
+opacity is one a judged overcast match rests on, so that half is a separate item.
 
 ### Mission-spawned entities
 

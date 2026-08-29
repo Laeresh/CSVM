@@ -416,6 +416,105 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // ---- a carried state lands silently, on the pool and the pose ------------------------------
+
+    // The persist log opens a later mission on the pose a death ends in, never on a replayed death:
+    // no instance starts (no fireball, smoke, debris or sound), the pool reads destroyed at HP 0,
+    // the healthy role is hidden and the destroyed one shown, and a later hit is a no-op. A carried
+    // partial HP lands at its damage stage with no stage burst. Subjects: shipped PERSIST_LOG
+    // destructibles. Able to fail with ApplyTo routed back through DamageAt.
+    internal static void CarriedStateIsSilent(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var runtime = world.Runtime;
+            var subjects = new List<DestructibleRegistry.Instance>();
+            foreach (var cand in runtime.Destructibles.All)
+            {
+                if (!cand.Def.PersistLog || !cand.Anchor.HasMeta(AnimRuntime.IndexMeta)
+                    || runtime.Destructibles.Resolve(cand.Anchor) is not { } live
+                    || live.Status != DestructibleRegistry.State.Healthy || live.MaxHealth <= 0f
+                    || subjects.Contains(live))
+                {
+                    continue;
+                }
+
+                subjects.Add(live);
+                if (subjects.Count == 2)
+                {
+                    break;
+                }
+            }
+
+            ctx.Check(subjects.Count == 2,
+                $"chapter {ctx.Chapter} ships two healthy PERSIST_LOG destructibles (found {subjects.Count})");
+            if (subjects.Count < 2)
+            {
+                return;
+            }
+
+            var dead = subjects[0];
+            var worn = subjects[1];
+            float wornHp = worn.MaxHealth * 0.5f;
+            const int chapter = 99;
+            var log = new CampaignPersistLog();
+            const int earlierSeq = 3;   // an earlier mission of the same chapter recorded both
+            log.Merge(chapter, earlierSeq, new[]
+            {
+                new PersistedObject((int)dead.Anchor.GetMeta(AnimRuntime.IndexMeta), dead.Def.Name, dead.Anchor.Name, true, 0f),
+                new PersistedObject((int)worn.Anchor.GetMeta(AnimRuntime.IndexMeta), worn.Def.Name, worn.Anchor.Name, false, wornHp),
+            });
+
+            // A death's first start is synchronous inside the call, so the watch brackets the calls
+            // themselves; the frames between are advanced unwatched, where the world's own ambient
+            // loops restart and would be counted against the replay.
+            var started = new List<string>();
+            var before = runtime.OnInstanceStarted;
+            void Watch() => runtime.OnInstanceStarted = (def, anchor) => started.Add($"{def.AnimName}@{anchor?.Name}");
+            void Unwatch() => runtime.OnInstanceStarted = before;
+            try
+            {
+                Watch();
+                int applied = log.ApplyTo(runtime, chapter, earlierSeq + 1);
+                Unwatch();
+                for (int i = 0; i < 6; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                ctx.Same(2, applied, $"both carried objects are applied");
+                ctx.Check(started.Count == 0,
+                    $"no instance starts on the replay: no effect, debris or sound (started=[{string.Join(", ", started)}])");
+                ctx.Check(dead.Status == DestructibleRegistry.State.Destroyed && dead.Health <= 0f,
+                    $"the carried kill lands on the pool ({dead.Anchor.Name} status={dead.Status}, hp={dead.Health:0.##})");
+                var healthy = runtime.FindNodes("healthy", dead.Anchor);
+                var destroyed = runtime.FindNodes("destroyed", dead.Anchor);
+                ctx.Check(healthy.Count > 0 && healthy.All(n => !n.Visible),
+                    $"{dead.Anchor.Name}: the healthy role is hidden ({healthy.Count} node(s))");
+                ctx.Check(destroyed.Count > 0 && destroyed.Any(n => n.Visible),
+                    $"{dead.Anchor.Name}: the destroyed role is shown ({destroyed.Count} node(s))");
+
+                ctx.Check(worn.Status == DestructibleRegistry.State.Damaged
+                    && Mathf.Abs(worn.Health - wornHp) < 1e-3f,
+                    $"the carried partial HP lands on the pool ({worn.Anchor.Name} status={worn.Status}, hp={worn.Health:0.##})");
+                ctx.Check(!runtime.ApplyDamageStages(worn),
+                    $"{worn.Anchor.Name}: the damage stage is already the carried HP's, so no stage burst is owed");
+
+                Watch();
+                bool landed = runtime.DamageAt(dead.Anchor, dead.MaxHealth + 1f);
+                Unwatch();
+                ctx.Check(landed && dead.Status == DestructibleRegistry.State.Destroyed,
+                    $"a later hit on {dead.Anchor.Name} resolves and finds the pool dead");
+                ctx.Check(started.Count == 0,
+                    $"…and starts nothing: the death does not replay (started=[{string.Join(", ", started)}])");
+            }
+            finally
+            {
+                runtime.OnInstanceStarted = before;
+            }
+        });
+    }
+
     // ---- an AI kill, from the death frame to the ground -----------------------------------------
 
     // The whole fall as one sequence: the kill starts the SELF-NAMED destroy def and nothing else,

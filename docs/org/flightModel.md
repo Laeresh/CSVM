@@ -2671,12 +2671,20 @@ the movement and leave the voice on.
     heading += clamp(headingError / 60°, ±1) · dt        radians, so ≥60° of error gives 1 rad/s
     speed    = 17.8816 m/s, which is exactly 40 mph      held until the final leg
     forward  = speed · (1 − |clamped heading error|)     it barely advances while turning hard
-    advance the leg when dot(target − pos, legDir) ≤ 5.0
+    velocity = forward, pitched by atan2(target.y − pos.y, horizontal distance to target)
+               and yawed by the heading (local_5c, then FUN_0053e160/FUN_0053e1e0)
+    advance the leg when dot(target − pos, normalize(target − wp[leg])) ≤ 5.0
 
-On the **final** leg the steering target is replaced by a point **300 m** along the leg direction,
-its y gains `(speed/110mph − 0.4) · 83.3` once speed passes 0.4 of 110 mph (44 mph), and the speed
-term becomes `speed += 4.0302024 · dt` instead of the fixed 40 mph. Reaching that leg's own waypoint
-clears the path flag, which is the handoff to the flight model.
+On the **final** leg the steering target is replaced by the point **300 m** from the waypoint
+BEHIND the leg along the leg's direction (`local_50 + normalize(next − local_50) · 300`), its y
+gains `(speed/110mph − 0.4) · 83.3` once speed passes 0.4 of 110 mph (44 mph), and the speed term
+becomes `speed += 4.0302024 · dt` instead of the fixed 40 mph. The advance test above is measured
+against that replaced target, so reaching the **300 m point**, not the last waypoint, clears the
+path flag (`0x0048a863`), which is the handoff to the flight model. On a run whose final leg is
+shorter than 300 m the vehicle therefore flies past its last waypoint, accelerating and climbing
+the whole way: C1/M02's `eag31` has a 48 m final leg, so its launch hands off 252 m past the last
+point at about 53 m/s and 54 m above the strip, which is the climb-out the original's airfield
+launches make.
 
 The constants: `17.8816` is 40 mph exactly, `0.020335784` is 1/110 mph and `0.95492965` is 3/π, the
 60° heading-error normaliser. ⚠ **`4.0302024` and the `83.3` climb gain were read but not
@@ -2697,16 +2705,20 @@ golden can see it.
 **What CSVM ports of this.** `Flight/PathFollower.cs` is the law with every constant above,
 `Mech3/ScriptedPath.cs` the route, and `Session/ScriptedPathVehicles.cs` the lifecycle, released by
 `CampaignDirector`'s `START_TAXI`. Pinned by the `scripted-path` suite over C1's real `pp1`.
-Two things the decode does not pin, chosen here rather than found: the altitude between waypoints
-(the follower is taken to the target's height over the horizontal distance still to run), and the
-leg-advance test, which is measured against the leg's own waypoint on every leg including the last,
-so the 300 m point steers and does not also delay the handoff.
+The altitude between waypoints and the finish test are both the decode's: the motion is pitched at
+the steering target's height over the horizontal distance to it, and the leg-advance test is
+measured to the steering target, so on the final leg the 300 m point both steers and ends the run.
 ⚠ **The ride height for movement classes 0 and 4 is not identified.** Those are the aircraft classes,
 so it is the one every shipped path vehicle needs, and `vehicle.json` has no field traced to
 `type+0x218`. The port leaves it at zero and says so rather than reusing the 0.2 m the other classes
 take.
 The roster spawner calls `ScriptedPathVehicles.Place`, so C1/M04 really does put four aeroplanes on
 `pp1`–`pp4` and its `START_TAXI` chain really does release them.
+A surface vehicle (`mode ship`, the patrol boats) is driven by the same law for its whole life
+(`Session/SurfaceVehicle.cs`): the follower steers it over an unbounded route, a generator's
+take-off run and then a walk of its net's edges, so it never reaches the final leg's acceleration
+and climb-out, and its height is pinned to the water rather than taken from the route. The 40 mph
+taxi speed is the only speed it has; the def's own `rates` are not consumed.
 ⚠ Ground blow's own emitter test reads `+0xcc`, so a spawned vehicle put
 on a path stops repelling the player the moment it completes the path; ground blow shipped
 without the registry filter (its player probe simply excludes aircraft), so whether a path-driven
@@ -2721,8 +2733,16 @@ The launch `FUN_00451bf0` then takes the same waypoint-0 placement as the roster
 0.2 m added to Y at `0x00451fa1` rather than the type's ride height), a zero velocity, a full 1.0
 throttle lever at `+0x124`/`+0x128`, and sets `+0xcc = 1` with `+0xd4` untouched, so the aeroplane
 runs the strip immediately instead of waiting for a goal. C1/M04's two airfields each author a
-five-point run about 260 m long. CSVM does not port this entry yet: `AiGeneratorRuntime.Spawn` drops
-a non-zeppelin launch at the host node with no run, which is what `BL-522` is about.
+five-point run about 260 m long. The consumer is the same follower: `FUN_00489ea0` reads the
+launch's `+0xcc` and runs `FUN_0048a110` over the generator's path at `+0xc8` from the leg index
+zeroed at `+0xd0`, and `FUN_004b0f40`'s activation skips the net-nearest-node snap while `+0xcc`
+is set, so the launch is placed by the run and not by its net. CSVM ports this entry in
+`AiGeneratorRuntime.Spawn`: the launched aircraft is held and driven by `PathFollower` over the
+path nodes' live positions from the launch pose, released into the flight model at the final leg's
+300 m point at the speed and climb the run reached with the 1.0 lever, its net reseated there. The
+ride height on this entry is the launch's own 0.2 m lift, decaying to the points' height over the
+first leg, and the nose while held is the follower's own motion, the leg's climb and then the
+final leg's climb-out.
 
 ## Collision response and `bounce_factor` (`FUN_0048d7f0`)
 

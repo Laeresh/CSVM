@@ -42,6 +42,7 @@ different update paths, none of this applies to them.
 | `FUN_004ccf50` / `FUN_004ccf00` | The self-hit guard: clear the flying piece's own `intersect_surface` bit around the query, then restore it |
 | `FUN_0053c6c0` | The sincos the launch azimuth is passed to — the **only** trigonometry on the launch path |
 | `FUN_004d25c0` / `FUN_004d1ba0` | Accumulate the tumble onto the node's own euler angles (`node+0x18..0x20`) |
+| `FUN_004d27d0` / `FUN_004d1e50` | Add one step (`dt × live velocity`) to the node's own translation (Camera class 1 / Object3d class 5); the only position write on the launch path, and it is an ADD to the live field. `FUN_004d2710` / `FUN_004d1d50` are the absolute-set twins the sweep uses to rest a piece on the surface it struck |
 | `FUN_004cef20` | `gwNodeBuildNodeToAncestorMatrix`, walking a node's parent chain; the matrix both `COMPLEX` gravity and `IMPACT_FORCE` transform through |
 | `FUN_004ec5e0` | The `CALLBACK` event (kind 35): calls the owning object's registered handler with the authored value |
 | `FUN_004ee0e0` | Stores a velocity on the **anim instance** (`+0xc0..0xc8`) and sets `+0x9c` bit `0x80`, the state `IMPACT_FORCE` gates on; below the threshold it **clears** that bit |
@@ -95,7 +96,7 @@ Enough of the layout to follow the rest of the page:
 | `+0x4c`…`+0x54` | authored `delta` |
 | `+0x58`…`+0x60` | **live** velocity |
 | `+0x64`…`+0x6c` | **live** acceleration |
-| `+0x70` / `+0x74` / `+0x78` | the launch **direction cache** — x, y, z |
+| `+0x70` / `+0x74` / `+0x78` | the launch **direction cache** — x, y, z; the extractor's `translation.rnd_xz` |
 | `+0x80` / `+0x84` | tumble `delta`, and the **live** tumble rate |
 | `+0x148` | `RUN_TIME`, or — with no `RUN_TIME` authored — the watchdog accumulator reusing the same slot |
 
@@ -115,8 +116,18 @@ and dips to **0.707 at 45°**; across a 60–70° band it runs **0.745–0.81**.
 that vector times the drawn speed, so the elevation reading directly scales how fast a piece leaves.
 The direction is cached at `+0x70`/`+0x74`/`+0x78` and read again by the tumble.
 
-The vector `TRANSLATION` form (flag `0x4`) copies the authored velocity and `delta` into the live
-slots unchanged. It is unaffected by any of the above — **and it never writes the direction cache**.
+**The vector `TRANSLATION` form (flag `0x4`) is the same polar launch, compiled at parse time.**
+The parser's `TRANSLATION` block (`00508d27`…) reads four values, `azimuth elevation speed
+delta`, and runs the identical construction (the azimuth through the sincos at `FUN_0053c6c0`,
+`elevation × 0.011111111`, the L1 remainder on the horizontal), then stores the direction at
+`+0x70`/`+0x74`/`+0x78`, `direction × speed` at `+0x40`…`+0x48` and `direction × delta` at
+`+0x4c`…`+0x54`. The update copies those authored slots into the live ones unchanged and **draws
+nothing**: there is no random source on this path at all. ⚠ **The extractor's `translation.rnd_xz`
+is that direction cache, not a spread.** The name is mech3ax's guess at an unread field; the value
+is exactly the normalised `initial`/`delta` direction on every vector-form event in the install
+(the Barracuda's three drive events carry `(8.742278e-08, 0, 1)`, float `cos 90°`, `sin 90°`),
+and its length is the ranged form's own `1 − |elevation|/90`, unit only for a flat or vertical
+launch. The only reader of the cache is the tumble.
 
 ## `delta` is an acceleration
 
@@ -332,10 +343,12 @@ That is a rotation about the horizontal axis **perpendicular to the launch direc
 unnormalised — so its length is the launch's own `h = 1 − |elevation|/90`, and **a steep throw
 tumbles slowly while a flat one tumbles fast off the same authored number**.
 
-⚠ **A body launched by the vector `TRANSLATION` form does not tumble at all.** The direction cache
-is filled only by the `translation_range` branch and the parser zeroed the struct, so the multiply
-is by zero. That is **495 of the install's 1,399** authored tumbles, including all four
-`player_crash_dirt` pieces — which carry the largest authored numbers in the install.
+**A body launched by the vector `TRANSLATION` form tumbles about the direction the parser
+compiled** into `+0x70`/`+0x78` (the extractor's `rnd_xz`, above), exactly as a ranged body does
+about the direction the update drew. That is **495 of the install's 1,399** authored tumbles,
+including all four `player_crash_dirt` pieces, which carry the largest authored numbers in the
+install. A vertical launch (`rnd_xz = (0, ±1, 0)`) has no horizontal perpendicular and holds its
+attitude, by the same arithmetic.
 
 `FORWARD_ROTATION DISTANCE` (flag `0x40`) is the same shape driven by the step rather than by `dt`,
 i.e. a turn per metre travelled. **All 1,399 tumbles in the install author `Time` and none authors
@@ -421,35 +434,61 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 | **`IMPACT_FORCE` on a `TopLevel` node converts through IDENTITY, not the parent's basis** | Such a node's own transform IS world, so there is no frame to convert into and the world velocity applies unrotated. The original has no `TopLevel`: it reads the real parent matrix, which for the same node would rotate the velocity by the attitude the aircraft died in. Same reasoning as `COMPLEX` gravity's own `TopLevel` arm above |
 | **The exactly-one-parent test is a has-a-parent test** | `node+0x54 == 1` skips a detached node and a multiply-parented one. A Godot node cannot have two parents, so only the detached half is reachable and only that half is written |
 
-### The re-home rule, and the three nodes exempt from it
+### A launch starts from the node's live pose, and chains continue
 
-A motion normally starts from the node's authored rest pose (`AnimRuntime.RestOf`), so a repeat
-does not compound onto where the last one finished. Three cases keep the live pose instead, each
-because re-basing them is visibly wrong rather than merely different:
+The update never writes a start position. The first-tick init (`param_2+0x20 == 0` in
+`FUN_004e8fa0`) copies the authored velocity `+0x40..0x48` and `delta` `+0x4c..0x54` into the live
+slots and, for `IMPACT_FORCE`, adds the inherited momentum; every later tick computes
+`dt × live velocity` and hands it to `FUN_004d27d0` / `FUN_004d1e50`, which ADD it to the node's
+own translation field in the parent frame, unrotated by the node's yaw. So a launch integrates
+from wherever the node stands when the event starts, and a second `OBJECT_MOTION` on the same node
+continues from the first one's end. `MotionRuntime.Create` seeds `_heldOrigin` and `_heldRot`
+from the live transform for that reason, falling back to `AnimRuntime.RestOf` only for a
+non-finite or singular live basis; the law itself is `LaunchLaw.Origin`.
 
-- **A placed template ROOT** (`TopLevel`). The CALL that started the motion has just placed it, so
-  its authored rest is wherever it was authored, not where it now stands. Re-basing replays every
-  repeat at the first placement's site. A cutscene's composition frame is the same case and is
-  stood up `TopLevel` for it (`WorldSession.BuildCompositionFrames`): CM02's `wingwalk_parent` is
-  authored at the map origin and the capture poses it onto the aeroplane the shot is about an
-  instant before launching its 19.25 s motion, so re-basing plays the whole wing walk over the
-  water 6.5 km away.
+What keeps a repeat from compounding is not the launch but the pose bookkeeping around it: a
+`RESET_STATE` placement before each play, `AnimRuntime.RestoreRestPoses` on a destructible's
+reset, and for a pooled effect copy the checkout returning it to its spawn state before the play
+starts (`AnimRuntime.ResetCheckedOutCopies`, `docs/architecture.md`'s entry for that file).
+
+The worked example is C3/M03's `sub_movement`: the hull's gamez node is authored at the map
+origin, the `RESET_STATE` places it at `(-12032, -38, -13197.5)`, a FromTo surfaces it, three
+vector-form legs (accelerate 2 s, cruise 40 m/s for 40 s, brake 2 s) drive it 1680 m along +Z, and
+the closing FromTo settles it 1.2 m further at `z = -11516.288`. The `barracuda-drive` suite runs
+that program and asserts no frame-to-frame step over 10 m.
+
+The three nodes the retired re-home rule exempted are ordinary under this reading:
+
+- **A placed template ROOT** (`TopLevel`), such as CM02's `wingwalk_parent`, authored at the map
+  origin and posed onto the aeroplane an instant before its 19.25 s motion launches.
 - **A piece continuing from a contact landing** (`AnimRuntime._resumeFromLanding`, one-shot and
-  consumed by the launch that follows). A bounce is a continuation; re-basing teleports the piece
-  back to the crash point mid-flight.
-- **A TAKEOVER of a node another motion is driving.** `agyrobus` has no placement of its own, so its
-  authored rest is the map origin, and re-basing threw the shot-down bus kilometres off-map.
-
-⚠ **This rule is not what keeps a pooled effect template from drifting across repeated explosions.**
-The takeover case above defeats it precisely there: a pool slot handed out again while its last
-play is still flying leaves that motion registered, so the new launch reads a takeover and seeds
-from a MID-FLIGHT pose, further out on every wrap. What keeps a pooled copy honest is the checkout
-returning it to its spawn state before the play starts — `AnimRuntime.ResetCheckedOutCopies` stops
-the incumbent instance and restores the poses, `docs/architecture.md`'s entry for that file.
+  consumed by the launch that follows, which still gates the inherited momentum off).
+- **A TAKEOVER of a node another motion is driving**, C5's `agyrobus` flown by its SI script.
 
 ## Retired and superseded readings
 
 Kept because in each case a reading *died*, and the next reader must not re-derive it.
+
+### ⚠ "A launch re-homes to the node's authored rest pose, with three exempt nodes" — RETIRED (2026-08-28)
+
+`MotionRuntime.Create` seeded a ballistic launch from `AnimRuntime.RestOf`'s recorded pose unless
+the node was a `TopLevel` template root, a contact-landing continuation or a takeover of a node
+another motion drove. On the Barracuda that rest is the map origin (the gamez authors the hull
+there and the mission's `RESET_STATE` moves it), so each drive leg played 17.8 km from the surfaced
+hull and the closing FromTo snapped it back into the bay. The update writes no start position
+(the section above); the three exemptions were the cases where the wrong rule was visible, and
+they collapse into the one live-pose seed.
+
+### ⚠ `translation.rnd_xz` as a per-axis random spread on the launch velocity — RETIRED (2026-08-28)
+
+The runtime added `RandSym() × rnd_xz` to every vector-form start velocity, ±1 m/s per axis on
+the Barracuda's three drive events, up to 44 m of drift over the 40 s cruise that the closing
+absolute `OBJECT_MOTION_FROM_TO` snapped away in one frame. The field is the launch direction cache
+the parser fills for the vector form (`00508d27`…), read back by nothing but the tumble; the
+update's flag-`0x4` branch copies `+0x40`…`+0x54` and calls no random source. Its companion,
+"the vector form never writes the direction cache, so those 495 tumbles are inert", died with it:
+the cache is filled at parse time, not by the update's ranged branch alone. ⚠ The name is the
+extractor's, not the binary's; do not read a mechanism out of it again.
 
 ### ⚠ `translation_range.y` as a spherical elevation — RETIRED (2026-08-11)
 

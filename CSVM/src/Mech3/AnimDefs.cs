@@ -122,23 +122,47 @@ public static class AnimDefs
                                     def.MultiTargets.Add((pattern, path));
                             }
                     break;
-                // The zeppelin hull-death gate: OPTIONS [MINIMUM_TO_SATISFY n,
-                // ANIMATION_LIST names] — parsed into the same fields the compiled form fills.
+                // Two forms on one key, parsed into the fields the compiled form fills: OPTIONS
+                // [MINIMUM_TO_SATISFY n, ANIMATION_LIST names] (the hull-death gate) and REQUIRED
+                // or OPTIONS carrying OBJECT_ACTIVE_LIST / OBJECT_INACTIVE_LIST node paths.
                 case "ACTIVATION_PREREQUISITE":
                     if (value != null)
                         foreach (var (optKey, optValue) in Pairs(value))
-                            if (optKey.Equals("OPTIONS", StringComparison.OrdinalIgnoreCase)
-                                && optValue != null)
-                                foreach (var (k, v) in Pairs(optValue))
+                        {
+                            bool required = optKey.Equals("REQUIRED", StringComparison.OrdinalIgnoreCase);
+                            if (optValue == null
+                                || (!required && !optKey.Equals("OPTIONS", StringComparison.OrdinalIgnoreCase)))
+                                continue;
+                            foreach (var (k, v) in Pairs(optValue))
+                            {
+                                if (k.Equals("MINIMUM_TO_SATISFY", StringComparison.OrdinalIgnoreCase))
+                                    def.PrereqMinToSatisfy = (int)(FirstNumber(v) ?? 0f);
+                                else if (k.Equals("ANIMATION_LIST", StringComparison.OrdinalIgnoreCase)
+                                    && v != null)
                                 {
-                                    if (k.Equals("MINIMUM_TO_SATISFY", StringComparison.OrdinalIgnoreCase))
-                                        def.PrereqMinToSatisfy = (int)(FirstNumber(v) ?? 0f);
-                                    else if (k.Equals("ANIMATION_LIST", StringComparison.OrdinalIgnoreCase)
-                                        && v != null)
-                                        foreach (var entry in v)
-                                            if (entry is string anim)
-                                                def.PrereqAnims.Add(anim);
+                                    foreach (var entry in v)
+                                        if (entry is string anim)
+                                            def.PrereqAnims.Add(anim);
                                 }
+                                else if (v != null
+                                    && (k.Equals("OBJECT_ACTIVE_LIST", StringComparison.OrdinalIgnoreCase)
+                                        || k.Equals("OBJECT_INACTIVE_LIST", StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    foreach (var listed in v)
+                                        if (listed is List<object?> pathList)
+                                        {
+                                            var path = new List<string>();
+                                            foreach (var seg in pathList)
+                                                if (seg is string s)
+                                                    path.Add(s);
+                                            if (path.Count > 0)
+                                                def.PrereqNodes.Add(new AnimNodePrereq(path,
+                                                    k.Equals("OBJECT_ACTIVE_LIST", StringComparison.OrdinalIgnoreCase),
+                                                    required));
+                                        }
+                                }
+                            }
+                        }
                     break;
                 case "ANIMATION_NAME": def.AnimName = FirstString(value); break;
                 case "ANIMATION_ROOT_NAME": def.RootName = FirstString(value); break;

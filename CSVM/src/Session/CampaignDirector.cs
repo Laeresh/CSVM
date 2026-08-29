@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -29,13 +30,28 @@ public sealed class CampaignDirector
     /// <see cref="WingmanFit"/> as.</summary>
     public const string WingmanName = "wingman_1";
 
+    /// <summary>How long the world stays up after an ending before the session leaves it. The
+    /// original's mission-end path (<c>FUN_00443090</c>) pushes its "Fade State" over a copy of the
+    /// frame the ending landed on and runs it for this, its default duration, before the next
+    /// screen takes the machine (docs/formats/objectives.md, "Win and loss"). The flown world does
+    /// not advance and does not answer the stick while it plays out, so the last flown frame is the
+    /// frame the ending landed on.</summary>
+    public const float LeavingHoldS = 2f;
+
     private readonly CampaignProfileDef _profile;
     private readonly CampaignProfileStore? _store;
     private readonly CampaignMission _mission;
     private readonly string _missionZrdrPath;
+
+    // The story position whose world state this mission opens on: the most recent EARLIER mission
+    // of the same chapter, or null when this IS that chapter's first and the original's backwards
+    // walk finds nothing. ⚠ Never the mission's own seq: CM07 is chapter 1's first mission, and a
+    // fold that included it opened the fort with the previous sortie's AA guns already wrecked.
+    private readonly int? _carryThroughSeq;
     private readonly HashSet<string> _gapsLogged = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FlightController> _roster = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, SurfaceVehicle> _vessels = new(StringComparer.OrdinalIgnoreCase);
     private World? _world;
     private ScriptedPathVehicles? _paths;
 
@@ -47,25 +63,32 @@ public sealed class CampaignDirector
     private NetTrailerTargets? _netTrailers;
     private float _minAiActiveDist = 2000f;
     private CampaignDangerZones? _dangerZones;
+    private DangerZoneRibbons? _ribbons;
     private bool _cutsceneHold;
 
-    // The proximity scan's accumulator and whether the player's damage event is subscribed yet:
-    // the player's aircraft is built after Attach runs, so the hookup is made on the first step
-    // that finds one.
+    // What is left of the leaving hold below, once an ending has started it.
+    private float _leaving;
+
+    // The proximity scan's accumulator and the player aircraft the damage and death events are
+    // subscribed on: the player's aircraft is built after Attach runs, so the hookup is made on
+    // the first step that finds one, and an airframe swap rebuilds the rig, so a later step that
+    // finds a different aircraft hooks that one (the old node is freed with its subscriptions).
     private float _scanClock;
-    private bool _damageWired;
-    private bool _deathWired;
+    private FlightController? _damageWiredTo;
+    private FlightController? _deathWiredTo;
     private bool _playerLost;
 
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
-        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath)
+        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath,
+        int? carryThroughSeq)
     {
         Script = script;
         _mission = mission;
         _profile = profile;
         _store = store;
         _missionZrdrPath = missionZrdrPath;
+        _carryThroughSeq = carryThroughSeq;
     }
 
     /// <summary>The authored-aircraft spawner, handed in as a delegate for the same reason
@@ -107,8 +130,12 @@ public sealed class CampaignDirector
     public ScriptedPathVehicles? Paths => _paths;
 
     /// <summary>The spawned roster, by block name, empty until <see cref="BuildRoster"/> has run.
-    /// The player's own block is not in it.</summary>
+    /// The player's own block is not in it, nor is a surface vehicle (<see cref="Vessels"/>).</summary>
     public IReadOnlyDictionary<string, FlightController> Roster => _roster;
+
+    /// <summary>The roster's surface vehicles, by block name: the <c>mode ship</c> blocks a
+    /// <see cref="RosterInputs.SpawnSurface"/> built. Generator launches are not in it.</summary>
+    public IReadOnlyDictionary<string, SurfaceVehicle> Vessels => _vessels;
 
     /// <summary>The story position being flown.</summary>
     public int Seq => _mission.Seq;
@@ -117,7 +144,14 @@ public sealed class CampaignDirector
     /// to leave the world and put the player back in the cabin. The cabin screen itself is C22's.</summary>
     public bool ReturnToCabin { get; private set; }
 
-    /// <summary>The result of the flown mission, null until it ends.</summary>
+    /// <summary>Whether the mission has ended and the leaving hold is still running. The outcome is
+    /// already decided and the profile already written; what has not happened yet is leaving the
+    /// world. Nothing in the world may advance while this is true, and no input may reach the
+    /// player's aircraft.</summary>
+    public bool Leaving => _leaving > 0f;
+
+    /// <summary>The result of the flown mission, null until it ends. Set on the frame the ending
+    /// lands, which is <see cref="LeavingHoldS"/> before <see cref="ReturnToCabin"/>.</summary>
     public CampaignMissionResult? Result { get; private set; }
 
     /// <summary>How many danger-zone gates <see cref="Attach"/> armed from a real
@@ -172,7 +206,8 @@ public sealed class CampaignDirector
         var script = ObjectiveScript.Load(missionZrdrPath);
         GD.Print($"campaign: '{profile.Name}' flying {mission.ChapterFolder}/{mission.MissionFolder}, " +
                  $"{script.Objectives.Count} objective(s)");
-        var director = new CampaignDirector(script, mission, profile, store, missionZrdrPath);
+        var director = new CampaignDirector(script, mission, profile, store, missionZrdrPath,
+            CampaignSequence.PreviousInSameChapter(CampaignSequence.Load(zrdrPath), seq)?.Seq);
         director.BindWingman();
         return director;
     }
@@ -183,8 +218,9 @@ public sealed class CampaignDirector
     /// disable list); omitted, nothing is disabled.</summary>
     internal static CampaignDirector Create(
         ObjectiveScript script, CampaignMission mission,
-        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath = "") =>
-        new(script, mission, profile, store, missionZrdrPath);
+        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath = "",
+        int? carryThroughSeq = null) =>
+        new(script, mission, profile, store, missionZrdrPath, carryThroughSeq);
 
     /// <summary>The roster phase: spawns every non-player block of the mission's <c>aiv</c>
     /// roster, at the point of <c>GameSession</c>'s build where the human rigs exist. The plan is
@@ -246,6 +282,12 @@ public sealed class CampaignDirector
                 fwd = -nodes[0].GlobalTransform.Basis.Z;
             }
 
+            if (spawn.Surface)
+            {
+                PlaceSurface(spawn, pos, fwd, inputs);
+                continue;
+            }
+
             var pilot = AiPilot.HoldingCourse(pos, pos + fwd);
             if (spawn.Net is { } net)
             {
@@ -259,6 +301,7 @@ public sealed class CampaignDirector
             }
             _roster[spawn.Name] = rig;
             _rosterPlans[spawn.Name] = spawn;
+            rig.Group = spawn.Group;
             // The chapter's own copy of this vehicle is never placed, so anything it authors past
             // the shared airframe is grafted onto the rig here, while the rig is the plane the
             // block named and is already in the tree.
@@ -302,7 +345,7 @@ public sealed class CampaignDirector
         int escorts = 0;
         foreach (var (name, spawn) in _rosterPlans)
         {
-            if (!spawn.Escorts || _roster[name].Pilot is not { } pilot)
+            if (!spawn.Escorts || !_roster.TryGetValue(name, out var escort) || escort.Pilot is not { } pilot)
             {
                 continue;
             }
@@ -316,7 +359,7 @@ public sealed class CampaignDirector
             escorts++;
         }
 
-        if (_roster.Count == 0)
+        if (_roster.Count == 0 && _vessels.Count == 0)
         {
             return "";
         }
@@ -325,9 +368,10 @@ public sealed class CampaignDirector
         {
             inert += spawn.Inert ? 1 : 0;
         }
-        GD.Print($"campaign: roster spawned {_roster.Count} of {blocks.Count} block(s): " +
-                 $"{escorts} escort(s), {inert} deactivated, {_paths?.Count ?? 0} on a path");
-        return $" + {_roster.Count} roster aircraft";
+        GD.Print($"campaign: roster spawned {_roster.Count + _vessels.Count} of {blocks.Count} block(s): " +
+                 $"{escorts} escort(s), {inert} deactivated, {_paths?.Count ?? 0} on a path, " +
+                 $"{_vessels.Count} surface vehicle(s)");
+        return $" + {_roster.Count} roster aircraft" + (_vessels.Count > 0 ? $" + {_vessels.Count} surface vehicle(s)" : "");
     }
 
     /// <summary>The world phase: binds the graph to the built world's runtimes. Called by
@@ -340,11 +384,24 @@ public sealed class CampaignDirector
             : null;
         Graph = new ObjectiveGraph(Script, _world);
         Graph.MissionEnded += OnMissionEnded;
+        Graph.Transitioned += OnObjectiveTransition;
         _dangerZones = inputs.Gamez is { } gamez
             ? CampaignDangerZones.Load(Script, gamez, _missionZrdrPath)
             : null;
+        // The AI's ribbons are every dzpath of the world, not the mission's objective names: a
+        // net node may send a pilot through a zone the script never scores.
+        _ribbons = inputs.Gamez is { } ribbonGamez
+            ? DangerZoneRibbons.Load(ribbonGamez, CampaignDangerZones.ReadDisabled(_missionZrdrPath))
+            : null;
+        foreach (var rig in _roster.Values)
+        {
+            if (rig.Pilot is { } pilot)
+                pilot.DangerZones = _ribbons;
+        }
         int chapter = _mission.Campaign;
-        int applied = inputs.Runtime != null ? _profile.PersistLog.ApplyTo(inputs.Runtime, chapter) : 0;
+        int applied = inputs.Runtime != null
+            ? _profile.PersistLog.ApplyTo(inputs.Runtime, chapter, _carryThroughSeq)
+            : 0;
         GD.Print($"campaign: {Graph.Count} objective(s) armed, {Graph.Rows.Count} display row(s), " +
                  $"{applied} object(s) restored from the chapter {chapter} persist log" +
                  (_dangerZones is { } dz ? $", {dz.Count} danger zone(s) armed" : ""));
@@ -356,6 +413,20 @@ public sealed class CampaignDirector
     /// cutscene hold nothing advances, which is callback 20's objectives half.</summary>
     internal void Step(float dt)
     {
+        // ⚠ Before the cutscene hold, and before anything else: the ending that started the leaving
+        // hold usually lands under a cutscene that is still running, and the hold has to run down
+        // regardless of what is holding the world.
+        if (_leaving > 0f)
+        {
+            _leaving -= dt;
+            if (_leaving <= 0f)
+            {
+                Leave();
+            }
+
+            return;
+        }
+
         WirePlayerDeath();
         if (_cutsceneHold)
         {
@@ -401,15 +472,17 @@ public sealed class CampaignDirector
     }
 
     // The player's own death, subscribed on the first step that finds an aircraft: the player rig
-    // is built after Attach has run, the same reason the music channel's damage ping waits.
+    // is built after Attach has run, the same reason the music channel's damage ping waits. Read
+    // by identity, not by a flag: a 967 swap rebuilds the rig and a death in the new one has to
+    // end the mission too.
     private void WirePlayerDeath()
     {
-        if (_deathWired || _world?.Player() is not { } player)
+        if (_world?.Player() is not { } player || ReferenceEquals(player, _deathWiredTo))
         {
             return;
         }
 
-        _deathWired = true;
+        _deathWiredTo = player;
         player.Downed += (_, _) => OnPlayerDown();
     }
 
@@ -467,6 +540,35 @@ public sealed class CampaignDirector
         return placed;
     }
 
+    // A mode ship block: a hull on the water from the surface-vehicle runtime, on its authored
+    // net from the spot the block authors. A stage with no such runtime reports it, as the
+    // aircraft path reports a block it cannot spawn.
+    private void PlaceSurface(RosterSpawnPlan spawn, Vector3 pos, Vector3 fwd, RosterInputs inputs)
+    {
+        if (inputs.SpawnSurface is not { } spawnSurface)
+        {
+            GD.Print($"campaign: roster '{spawn.Name}' ({spawn.Def}, {spawn.Mode}) not spawned: no surface-vehicle runtime on this stage");
+            return;
+        }
+        if (spawnSurface(spawn, pos, fwd) is not { } vessel)
+        {
+            return;
+        }
+        _vessels[spawn.Name] = vessel;
+        _rosterPlans[spawn.Name] = spawn;
+        if (spawn.Net is { } net)
+        {
+            vessel.Patrol(net);
+        }
+        GD.Print($"campaign: roster '{spawn.Name}' ({spawn.Def} hull, {spawn.Mode}) " +
+                 $"team={spawn.Team?.ToString() ?? "-"} group={spawn.Group} " +
+                 (spawn.Net is { } n ? $"net='{n.Name}#{n.Id}'"
+                     : spawn.MissingNetId is { } missing ? $"net #{missing} MISSING from this chapter"
+                     : "no net") +
+                 (spawn.Inert ? " DEACTIVATED" : "") +
+                 $" spawn=({vessel.Position.X:0},{vessel.Position.Y:0.##},{vessel.Position.Z:0})");
+    }
+
     // The wingman's aircraft and fit off the profile, for the mission that has one. Resolved here
     // rather than by the launch shell because the profile is already open here; BuildRoster is
     // the consumer.
@@ -500,9 +602,9 @@ public sealed class CampaignDirector
             return;
         }
 
-        if (!_damageWired && _world.Player() is { } player)
+        if (_world.Player() is { } player && !ReferenceEquals(player, _damageWiredTo))
         {
-            _damageWired = true;
+            _damageWiredTo = player;
             player.DamageApplied += _ => Music?.NoteCombat();
         }
 
@@ -524,6 +626,17 @@ public sealed class CampaignDirector
         }
     }
 
+    // The sortie log's objective lines: one per graph transition, through the file sink, so a
+    // stalled chain can be read back from the log rather than re-flown.
+    private void OnObjectiveTransition(ObjectiveTransition t)
+    {
+        string kind = t.Kind.ToString().ToLowerInvariant();
+        string by = t.Source > 0 ? $" by {t.Source}" : "";
+        string nap = t.Kind == ObjectiveTransitionKind.Napped ? $" for {t.Seconds:0.#}s" : "";
+        string gated = t.Gated ? " (held: TICK_DEPENDS_ON_OBJ dependency not awake)" : "";
+        Log.Info("campaign", $"objective {t.Number} {kind}{by}{nap} at {t.Elapsed:0.0}s{gated}");
+    }
+
     private void OnMissionEnded(MissionOutcome outcome)
     {
         var graph = Graph!;
@@ -543,18 +656,31 @@ public sealed class CampaignDirector
             plane?.Name ?? string.Empty);
         if (_world?.Runtime is { } runtime && CampaignPersistLog.CommitsOn(outcome))
         {
-            _profile.PersistLog.Merge(_mission.Campaign, CampaignPersistLog.Capture(runtime));
+            _profile.PersistLog.Merge(_mission.Campaign, _mission.Seq, CampaignPersistLog.Capture(runtime));
         }
 
         var recorded = CampaignProgression.Record(_profile, attempt);
         _store?.Save(_profile);
         SaveAwardedBuilds(recorded);
         Result = new CampaignMissionResult(outcome, attempt, recorded);
-        ReturnToCabin = true;
+        _leaving = LeavingHoldS;
         GD.Print($"campaign: mission {_mission.Ordinal} {outcome} — mask 0x{attempt.CompletedMask:x}, " +
                  $"{attempt.TimeMs / 1000}s, primary={recorded.PrimaryCompleted}, " +
-                 $"advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s)");
-        MissionEnded?.Invoke(Result.Value);
+                 $"advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s); " +
+                 $"holding the world {LeavingHoldS:0.#}s before leaving it");
+    }
+
+    // The far end of the leaving hold: the world has stood still for its length and the session may
+    // go. The original reaches here when its fade over the last flown frame has run out and the next
+    // screen takes the state machine.
+    private void Leave()
+    {
+        _leaving = 0f;
+        ReturnToCabin = true;
+        if (Result is { } result)
+        {
+            MissionEnded?.Invoke(result);
+        }
     }
 
     // An award is a whole aircraft in the original, not just an ownership row: its template record
@@ -592,6 +718,11 @@ public sealed class CampaignDirector
     private FlightController? Commanded(string name) =>
         _roster.TryGetValue(name, out var rig) ? rig : null;
 
+    // The hull a clause names: a roster block's, or a generator launch's through the runtime,
+    // since a boat generator's launches are what C2/M01's SET_AI_NET clauses address.
+    private SurfaceVehicle? CommandedVessel(string name) =>
+        _vessels.TryGetValue(name, out var vessel) ? vessel : _world?.SurfaceVehicles?.ByName(name);
+
     /// <summary>What <see cref="BuildRoster"/> reads from the session's build: the data paths,
     /// the first human, the net trailer resolver, the world's node lookup, and the two delegates
     /// <c>GameSession</c> keeps private behaviour behind (the spawner and the voice
@@ -615,6 +746,11 @@ public sealed class CampaignDirector
         public Func<string, IReadOnlyList<Node3D>>? FindNodes;
         public SpawnRosterAircraft Spawn = null!;
 
+        /// <summary>Builds a <c>mode ship</c> block's hull at a spot facing a direction
+        /// (<c>Session/SurfaceVehicleRuntime.cs</c>). Null on a stage with no chapter world, which
+        /// reports the block rather than spawning an aircraft in its place.</summary>
+        public Func<RosterSpawnPlan, Vector3, Vector3, SurfaceVehicle?>? SpawnSurface;
+
         /// <summary>Grafts the block's authored marker scaffolding onto the rig it just spawned
         /// (<c>Mech3/RosterMarkers.cs</c>). Null in a build with no world runtime, which leaves a
         /// chapter's additions to a vehicle unreachable exactly as they were before.</summary>
@@ -633,6 +769,7 @@ public sealed class CampaignDirector
         public TurretEmplacementRuntime? Turrets;
         public AiGeneratorRuntime? Generators;
         public ZeppelinRuntime? Zeppelins;
+        public SurfaceVehicleRuntime? SurfaceVehicles;
         public WorldSounds? Sounds;
         public ProjectilePool? Projectiles;
         public Func<Vector3>? ListenerPosition;
@@ -669,6 +806,8 @@ public sealed class CampaignDirector
 
         public AnimRuntime? Runtime => _in.Runtime;
 
+        public SurfaceVehicleRuntime? SurfaceVehicles => _in.SurfaceVehicles;
+
         public int Shots => _in.Projectiles?.CannonRoundsFired ?? 0;
 
         public int Hits => _in.Projectiles?.CannonHits ?? 0;
@@ -684,9 +823,9 @@ public sealed class CampaignDirector
         public int? GroupLiveCount(int group, string? generator)
         {
             // Null while no roster is spawned keeps every DEDG false rather than reading an empty
-            // world as "the group is wiped out", which would win a mission on its first tick. A
-            // deactivated member is dead to DEDG (docs/formats/objectives.md, the DEDG row).
-            if (_owner._roster.Count == 0)
+            // world as "the group is wiped out", which would win a mission on its first tick.
+            // Deactivated, never Inert: a cutscene-parked member still counts (the DEDG row).
+            if (_owner._roster.Count == 0 && _owner._vessels.Count == 0)
             {
                 _owner.Gap("DEDG", $"group {group} has no spawned aiv roster to count");
                 return null;
@@ -694,11 +833,26 @@ public sealed class CampaignDirector
             int alive = 0;
             foreach (var (name, plan) in _owner._rosterPlans)
             {
-                var rig = _owner._roster[name];
-                if (plan.Group == group && !rig.Crashed && !rig.Inert)
+                if (plan.Group != group)
+                {
+                    continue;
+                }
+                if (_owner._roster.TryGetValue(name, out var rig) && !rig.Crashed && !rig.Deactivated)
                 {
                     alive++;
                 }
+                else if (_owner._vessels.TryGetValue(name, out var vessel) && !vessel.IsDestroyed && !vessel.Inert)
+                {
+                    alive++;
+                }
+            }
+
+            // The human rig after a 967 capture carries the captured aircraft's group and stands
+            // in for it, or CM02's wiped-out DEDG would nap the instant loss. Crashed alone, not
+            // Inert: a human rig is inert under a cutscene, which is not a deactivation.
+            if (Player() is { Group: { } playerGroup } player && playerGroup == group && !player.Crashed)
+            {
+                alive++;
             }
             if (generator != null)
             {
@@ -717,9 +871,9 @@ public sealed class CampaignDirector
                 return null;
             }
 
-            // The group form: count live, non-inert members of the named aiv roster group inside
-            // the radius, the same roster walk GroupLiveCount uses for DEDG. Null (not yet
-            // decidable) while no roster is spawned, so an empty world never wins the tally early.
+            // The group form: count the named aiv roster group's non-deactivated members (a parked
+            // one counts) inside the radius, the roster walk GroupLiveCount uses for DEDG. Null
+            // (not yet decidable) while no roster is spawned, so an empty world never wins early.
             if (spec.Group is { } group)
             {
                 if (_owner._rosterPlans.Count == 0)
@@ -731,12 +885,25 @@ public sealed class CampaignDirector
                 int matching = 0;
                 foreach (var (name, plan) in _owner._rosterPlans)
                 {
-                    if (plan.Group != group || !_owner._roster.TryGetValue(name, out var rig) || rig.Inert)
+                    if (plan.Group != group)
+                    {
+                        continue;
+                    }
+                    Vector3 where;
+                    if (_owner._roster.TryGetValue(name, out var rig) && !rig.Deactivated)
+                    {
+                        where = rig.WorldPosition;
+                    }
+                    else if (_owner._vessels.TryGetValue(name, out var vessel) && !vessel.Inert)
+                    {
+                        where = vessel.Position;
+                    }
+                    else
                     {
                         continue;
                     }
 
-                    bool memberInside = rig.WorldPosition.DistanceSquaredTo(reference.Value) <= spec.Radius * spec.Radius;
+                    bool memberInside = where.DistanceSquaredTo(reference.Value) <= spec.Radius * spec.Radius;
                     if (memberInside == spec.Approaching)
                     {
                         matching++;
@@ -771,7 +938,7 @@ public sealed class CampaignDirector
             // The partner of BOTH deactivated flags (docs/formats/objectives.md): the roster's,
             // which puts an inert aircraft back in play at its spawn pose, and a zeppelin record's,
             // which puts a hidden airship into the world. A name is one or the other, never both.
-            int aircraft = 0, zeppelins = 0;
+            int aircraft = 0, zeppelins = 0, vessels = 0;
             foreach (var name in names)
             {
                 if (_owner._roster.TryGetValue(name, out var rig) && _owner._rosterPlans.TryGetValue(name, out var plan)
@@ -780,19 +947,23 @@ public sealed class CampaignDirector
                     rig.Activate(plan.Position, plan.Position + plan.Forward);
                     aircraft++;
                 }
+                else if (_owner._vessels.TryGetValue(name, out var vessel) && vessel.Wake())
+                {
+                    vessels++;
+                }
                 else if (_in.Zeppelins?.Wake(name) == true)
                 {
                     zeppelins++;
                 }
             }
-            if (aircraft + zeppelins > 0)
+            if (aircraft + zeppelins + vessels > 0)
             {
                 GD.Print($"campaign: WAKEUP_ENEMIES activated {aircraft} of {names.Count} named " +
-                         $"aircraft and woke {zeppelins} zeppelin(s)");
+                         $"aircraft, {vessels} surface vehicle(s), and woke {zeppelins} zeppelin(s)");
             }
             else if (names.Count > 0)
             {
-                _owner.Gap("WAKEUP_ENEMIES", $"'{names[0]}' and {names.Count - 1} more name no deactivated roster aircraft or zeppelin");
+                _owner.Gap("WAKEUP_ENEMIES", $"'{names[0]}' and {names.Count - 1} more name no deactivated roster aircraft, surface vehicle or zeppelin");
             }
         }
 
@@ -920,6 +1091,12 @@ public sealed class CampaignDirector
             {
                 if (_owner.Commanded(name) is not { } rig)
                 {
+                    if (_owner.CommandedVessel(name) is { } vessel)
+                    {
+                        vessel.Team = team;
+                        set++;
+                        continue;
+                    }
                     unmatched.Add(name);
                     continue;
                 }
@@ -947,6 +1124,15 @@ public sealed class CampaignDirector
             {
                 if (_owner.Commanded(name) is not { } rig || rig.Pilot is not { } pilot)
                 {
+                    // A hull takes the same clause: its route restarts from where it is.
+                    if (_owner.CommandedVessel(name) is { } vessel
+                        && AiNets.ByName(_owner._chapterNets, netName) is { } water)
+                    {
+                        vessel.Patrol(water);
+                        moved++;
+                        GD.Print($"campaign: SET_AI_NET '{name}' (hull) onto '{water.Name}#{water.Id}'");
+                        continue;
+                    }
                     unmatched.Add(name);
                     continue;
                 }
@@ -1004,11 +1190,27 @@ public sealed class CampaignDirector
             Report("SET_AI_ATTACK_RADIUS", set, entries.Count, unmatched);
         }
 
+        /// <summary>Writes each named zeppelin's broadside engage flag (<c>FUN_0046a0b0</c>,
+        /// zeppelin byte <c>+0xc</c>): the only thing that lets a broadside deploy and fire.</summary>
         public void CompletedZepcannons(IReadOnlyList<(string Zeppelin, int Flag)> entries)
         {
-            if (entries.Count > 0)
+            if (entries.Count == 0)
             {
-                _owner.Gap("COMPLETED_ZEPCANNONS", "which behaviour reads zeppelin byte +0xc is untraced");
+                return;
+            }
+
+            if (_in.Zeppelins is not { } zeppelins)
+            {
+                _owner.Gap("COMPLETED_ZEPCANNONS", "no zeppelin runtime in this session");
+                return;
+            }
+
+            foreach (var (name, flag) in entries)
+            {
+                if (!zeppelins.SetCannonsEngaged(name, flag != 0))
+                {
+                    _owner.Gap("COMPLETED_ZEPCANNONS", $"'{name}' is no cannon-bearing zeppelin here");
+                }
             }
         }
 

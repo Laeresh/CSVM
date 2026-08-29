@@ -41,6 +41,30 @@ public class AiNetFollowerTests
     }
 
     [Fact]
+    public void ReseatRefusesTheEdgeItWasToldToAvoid()
+    {
+        // The danger-zone exit (FUN_00490590): the seat pick excludes the leg the walk was on when
+        // the run began, so a racer set down beside its own entry node carries on round the course
+        // instead of flying that leg again and re-locking the zone it just flew.
+        var f = new AiNetFollower(Loop(), new Random(1));
+        var atZero = new Vector3(50f, 0f, 50f);
+        var towardOne = new Vector3(1f, 0f, 0f);
+        f.Reseat();
+        f.Update(atZero, towardOne);
+        Assert.Equal(1, f.CurrentIndex); // the nose alone picks the 0-1 leg
+
+        f.Reseat(0, 1);
+        f.Update(atZero, towardOne);
+        Assert.Equal(0, f.LegStartIndex);
+        Assert.Equal(3, f.CurrentIndex);
+
+        // The exclusion is spent on the seat it applied to; the next re-seat is unconstrained.
+        f.Reseat();
+        f.Update(atZero, towardOne);
+        Assert.Equal(1, f.CurrentIndex);
+    }
+
+    [Fact]
     public void LapsALoopAlongItsEdgesWithoutBacktracking()
     {
         // From 0 the seed picks 1 or 3; every later step has exactly one onward neighbour, so

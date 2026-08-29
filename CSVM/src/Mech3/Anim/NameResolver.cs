@@ -73,9 +73,17 @@ public sealed class NameResolver<TNode>
     // byte-identical.
     private readonly Func<AnimDefinition, TNode?, TNode, bool> _stagingAdmits;
 
+    // The staged library copy an anchor sits inside (its root), or null off the pool: the
+    // private subtree a definition dispatched onto that copy resolves its names in first.
+    private readonly Func<TNode, TNode?> _privateCopyOf;
+
     // The compiled gamez index -> built node map SymbolClaims and NarrowToSymbolRoot read. See
     // Add for the two population rules (never on a fallback runtime, never for a pooled copy).
     private readonly Dictionary<int, TNode> _byIndex = new();
+
+    // SoleStagedCopy's memo: a claimed-but-unbuilt index -> the one pooled copy carrying it, or
+    // null when none or several do. Dropped whenever Add grows the index.
+    private readonly Dictionary<int, TNode?> _soleCopyCache = new();
 
     // ---- the bind-time resolution census (see ResolutionLines) ----
     private readonly HashSet<(string Name, string Anim)> _censusSeen = new();
@@ -97,17 +105,19 @@ public sealed class NameResolver<TNode>
     /// <see cref="FindAll"/> only — never <see cref="Anchors"/>, whose census it would re-enter.
     /// Null means "no own roots" (the tier always misses). <paramref name="isLive"/> answers whether
     /// an anchor is still valid; a dead one drops the scoped tiers. <paramref name="stagingAdmits"/>
-    /// is the owner's verdict on a pooled copy (<see cref="AdmissibleStaging"/>).</summary>
+    /// is the owner's verdict on a pooled copy (<see cref="AdmissibleStaging"/>); <paramref name="privateCopyOf"/> the staged library copy an anchor sits in (the anchored <see cref="SymbolClaims(AnimDefinition, string, TNode?, out TNode?)"/> narrows to it).</summary>
     public NameResolver(
         IEqualityComparer<TNode>? identity = null,
         Func<AnimDefinition, TNode?, IReadOnlyList<TNode>>? ownRootsOf = null,
         Func<TNode, bool>? isLive = null,
-        Func<AnimDefinition, TNode?, TNode, bool>? stagingAdmits = null)
+        Func<AnimDefinition, TNode?, TNode, bool>? stagingAdmits = null,
+        Func<TNode, TNode?>? privateCopyOf = null)
     {
         _identity = identity ?? EqualityComparer<TNode>.Default;
         _ownRootsOf = ownRootsOf ?? ((_, _) => Array.Empty<TNode>());
         _isLive = isLive ?? (_ => true);
         _stagingAdmits = stagingAdmits ?? ((_, _, _) => true);
+        _privateCopyOf = privateCopyOf ?? (_ => default);
         _parentOf = new Dictionary<TNode, TNode?>(_identity);
         _findCache = new Dictionary<(string, TNode?), List<TNode>>(new ScopeKeyComparer(_identity));
     }
@@ -136,6 +146,10 @@ public sealed class NameResolver<TNode>
     {
         _index.Add(new IndexRow(node, srcName, gamezIndex));
         _parentOf[node] = parent;
+        if (gamezIndex is { } grown)
+        {
+            _soleCopyCache.Remove(grown);
+        }
         if (indexByPointer && !NameResolveFallback && gamezIndex is { } gi
             && (!_byIndex.TryGetValue(gi, out var held) || !_isLive(held)))
         {
@@ -192,7 +206,7 @@ public sealed class NameResolver<TNode>
     /// anchor-scoped rescue) — this convenience form keeps the pre-existing fall-through.</summary>
     public TNode? Resolve(string name, AnimDefinition def, TNode? anchor)
     {
-        if (SymbolClaims(def, name, out var bound) && bound != null)
+        if (SymbolClaims(def, name, anchor, out var bound) && bound != null)
         {
             return bound;
         }
@@ -256,14 +270,32 @@ public sealed class NameResolver<TNode>
     /// <paramref name="node"/> is the bound world node, or null when never built (a dropped LOD, a
     /// skipped subtree, or any lookup on a <see cref="NameResolveFallback"/> runtime). False means
     /// the symbol table has no opinion and name resolution proceeds as usual.</summary>
-    public bool SymbolClaims(AnimDefinition def, string name, out TNode? node)
+    public bool SymbolClaims(AnimDefinition def, string name, out TNode? node) =>
+        SymbolClaims(def, name, null, out node);
+
+    /// <summary><see cref="SymbolClaims(AnimDefinition, string, out TNode?)"/> for a definition
+    /// dispatched onto <paramref name="anchor"/>: inside a staged library copy the claim is
+    /// narrowed to that copy, the private subtree the original hands the definition
+    /// (org/sequences.md). A bound node outside the copy yields to the copy's own node of that
+    /// name; a name the copy lacks keeps its binding. ⚠ A cross-archive symbol table binds by
+    /// index, so a parked archive figure would otherwise answer for the staged actor (docs/architecture.md).</summary>
+    public bool SymbolClaims(AnimDefinition def, string name, TNode? anchor, out TNode? node)
     {
         node = null;
         if (!def.NodeRefs.TryGetValue(name, out int idx))
         {
             return false;
         }
-        node = BoundNode(idx);
+        node = BoundNode(idx) ?? (NameResolveFallback ? null : SoleStagedCopy(idx));
+        if (node != null && anchor != null && _isLive(anchor)
+            && _privateCopyOf(anchor) is { } copy && !IsWithin(node, copy))
+        {
+            var own = FindAll(name, copy);
+            if (own.Count > 0)
+            {
+                node = own[0];
+            }
+        }
         return true;
     }
 
@@ -345,6 +377,37 @@ public sealed class NameResolver<TNode>
 
     private static string Sample(List<string> shown, int total) =>
         string.Join(", ", shown) + (total > shown.Count ? $", … (+{total - shown.Count} more)" : "");
+
+    // A claimed index the world build never created, answered by the one pooled copy carrying it.
+    // ⚠ Only when exactly one live copy exists: a multi-copy effect pool keeps its copies apart by
+    // anchor scope, and binding the first would steal every later copy's events (see Add). The
+    // single-copy case is a mission's staged library actor (CM07's pickup switch, sensor and
+    // passenger), which the definitions that toggle it reach only through their symbol table.
+    private TNode? SoleStagedCopy(int index)
+    {
+        if (_soleCopyCache.TryGetValue(index, out var cached))
+        {
+            return cached != null && _isLive(cached) ? cached : Rescan();
+        }
+        return Rescan();
+
+        TNode? Rescan()
+        {
+            TNode? sole = null;
+            int seen = 0;
+            foreach (var row in _index)
+            {
+                if (row.GamezIndex == index && _isLive(row.Node))
+                {
+                    sole = row.Node;
+                    seen++;
+                }
+            }
+            var answer = seen == 1 ? sole : null;
+            _soleCopyCache[index] = answer;
+            return answer;
+        }
+    }
 
     // The by-index map's one reader. A freed claimant answers null and gives the slot up, so the
     // next Add for that index takes it: see Add's own remark.

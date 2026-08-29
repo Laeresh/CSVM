@@ -427,10 +427,14 @@ that offset through the cross-track carry below rather than converging on a node
 is the nose rather than the velocity, so a slipping or rolled aeroplane picks the same edge as a
 coordinated one.
 
-⚠ One arm ahead of all of that is unread: when net `+0x10` is non-zero the function instead returns
-the first non-negative entry of the node's `+0x20` array. That is the same field the net assignment
-tests to seat task 2 rather than 0, so it belongs with the undecoded danger-zone path tags
-([`../formats/ai-nets.md`](../formats/ai-nets.md)) and no shipped net this reaches has been read.
+⚠ One arm sits ahead of all of that and no shipped net reaches it: when net `+0x10` is non-zero the
+function returns the first non-negative entry of the node's `+0x20` table instead. `+0x10` is a
+count of GOAL nodes copied from the parsed record (`FUN_004314e0`, record `+0x18`/`+0x1c`), and
+`FUN_00431b70` fills every node's `+0x20` table with, per goal, the shortest-path distance and the
+edge to take toward it: a net with goal nodes routes every vehicle to its first goal rather than by
+the nose, and the net assignment seats such a vehicle on task 2. It is not the danger-zone tag
+system ("The danger-zone run" below). The record element that would carry a goal list is absent
+from all 222 shipped files (13 or 14 elements each), so `+0x10` is 0 everywhere in this install.
 
 CSVM ports the pick as `AiNetFollower.PickOnward`, taking the nose through `AiNetFollower.Update`;
 `AiPilot.FlyPatrol` passes `−model.Attitude.Z`. A caller with no facing keeps the older
@@ -677,15 +681,16 @@ per vehicle per frame:
 if (mode is 0, 1 or 4) {                             // the dynamics class gate, 0x00489a90
     if (state < 4)                    FUN_0041f810(v);   // the crash check
     if (state == 4 && clock >= +0xc0) state = 0;         // stun expiry
-    if (+0x9bc != 0 && state < 2)     state = 2;         // a queued maneuver starts
+    if (+0x9bc != 0 && state < 2)     state = 2;         // a danger-zone run re-arms its approach
 }
 FUN_0041c270(v);                                     // the AI brain, and so the net follower
 ```
 
 Three rules fall out of the inner block. The crash check runs in states 0 to 3 only, so **stunned
-(4) and state 5 suppress it entirely**. It writes 3 without consulting the prior state, so it
-**pre-empts a running maneuver**. And a maneuver only starts from state 0 or 1, so once crash
-avoidance holds state 3 the maneuver stays queued until the climb-out releases.
+(4) and the rail run (5) suppress it entirely**. It writes 3 without consulting the prior state, so
+it **pre-empts an approach**. And the approach is re-armed from state 0 or 1 only, so once crash
+avoidance holds state 3 the run record waits until the climb-out releases ("The danger-zone run"
+below).
 
 ### Only three dynamics classes get crash avoidance at all
 
@@ -812,6 +817,147 @@ Mid-airs do not move: Welch t = 0.97, p ≈ 0.36, so nothing here separates the 
 another aeroplane fall by 60 % and the collision rate does not follow, which is the same result the
 swept-sphere arm gave from the other direction. Detection frequency is not what produces these
 collisions.
+
+## The danger-zone run: modes 2 and 5, and what "on rails" is
+
+The two AI states the readout names `approaching danger zone` (2) and `navigating danger zone`
+(5) are one mechanism, the `DZPathList` of `dzpath.cpp`: an aeroplane locks onto a `dzpathN`
+route ribbon and is CARRIED along it with its pose written from the ribbon, the flight model
+switched off, until it runs off the far end and returns to its net. The run record is an
+0x18-byte block at vehicle `+0x9bc`: the zone, a reversed flag, a lane, the current segment and
+the metres into it, and a done flag.
+
+### The ribbon is a spline in metres, with lanes
+
+`FUN_004459f0` builds a zone per `dzpath`-prefixed gamez node (`FUN_00445ef0`), in a list of
+0x50-byte entries at `DAT_0064fb64`. Per node: the mesh's polygons whose material is the `dzone`
+material (`DAT_0064fb70`, by name) are the gate outlines; the other polygon is the route, and its
+vertices IN POLYGON ORDER become the control points. Consecutive vertices are joined by a cubic
+whose end tangents are the neighbouring chords averaged (the single chord at either end), and
+every coefficient is then divided by the chord length's powers, so the parameter of a segment runs
+from 0 to that length in metres (`+0x14`: 0x34-byte segments, the length then `a,b,c,d` per
+axis). `FUN_004465b0` evaluates a point, `FUN_00446670` the tangent, `FUN_00446710` the second
+derivative, `FUN_00446790`/`FUN_00446850` an end's point and its tangent INTO the ribbon.
+
+The zone's lane table (`+0x24`, 0x10 bytes per lane: an occupancy count and an offset) holds a
+zero lane plus one per CHILD node of the ribbon, at the child's local translation. A run takes the
+least-occupied lane (`FUN_00446560`) and every point it flies is displaced by that offset. No
+shipped `dzpath` node carries a child, so every install lane table is the zero lane alone.
+
+Per zone: `+0x44` is a difficulty, the node's flag word `+0x28 >> 23`; `+0x48` is the active byte,
+cleared by `dzones.zrd`'s `disable` list (`FUN_00445da0`) and by the script's zone on/off op;
+`+0x49` is cleared by `nosnapshot`; `+0x4c` is the objective slot from `objective_numbers`.
+
+### Two entries, and which one the shipped data uses
+
+**The node tag** (`FUN_0041d1f0`, right after the walk step `FUN_0041d8f0`): the node just
+REACHED has its `+0x11` byte set, so its `+0x14` index names the ribbon. An index of 0 or more is
+formatted as `dzpath%d` and handed to `FUN_00421500`; a negative one calls `FUN_004210e0` in its
+forced arm. Neither arm rolls anything, tests a range or reads a difficulty:
+
+- `FUN_00421500(name)` resolves the zone by name (`FUN_00445ce0`), requires it active and to have
+  a lane table, and enters from whichever end is nearer to the aeroplane (`reversed` when the far
+  vertex is closer). A refused entry sets a 5 s retry stamp (`+0x8a0`) and nothing else.
+- the forced arm of `FUN_004210e0` takes the nearest end of ANY active zone, at any range.
+
+**The proximity roll** (`FUN_004210e0`'s unforced arm) is a different thing and a narrow one: it
+runs from the PURSUE arm alone (`FUN_0041d9f0`, its first statement), and only while the vehicle
+is a `jet` in state 0 with byte `+0xba` set, which the damage handler sets on a FAILED steady-hand
+test (`FUN_004b9bc0`, "Absorbed %f damage, steady hand test failed") and pursue clears when the
+player is no longer behind it. Every 5 s (`+0x8a0`) it rolls `rand()/32767 <
+daredevil_chance` (`+0x954`, default 0.2), "Dare devil test passed. Looking for danger zones.",
+then over every active zone with a FREE lane and a difficulty at or under the pilot's
+`natural_touch` (`+0x958`, default 4; "Choosing danger zone. Natural touch test failed") it takes
+the end inside **500 m** whose into-ribbon tangent best lines up with the direction from the
+aeroplane to it. So the roll is an evasion: a hit pilot being chased dives into a nearby zone.
+The only other caller is the debug console's `force_dz` (`FUN_0043d640`), on the player's target.
+
+Both entries end the same way: the run record is written to `+0x9bc`, the state to **2**, and the
+standing target `+0x948` is released. `FUN_004897c0` then re-arms state 2 from a non-null
+`+0x9bc` every frame the state is below 2, which is how a climb-out or a stun hands back to the
+approach rather than to patrol (the "queued maneuver" reading of that line under "Which state
+wins" was wrong: the maneuver starter `FUN_004201a0` writes state 1 and `+0x9a4`, never
+`+0x9bc`).
+
+⚠ **Which racers fly which zones in C2/M03.** The four tagged nets install-wide are C2's
+`M3StuntCourse` #16 (`hafury_1`…`_6`, the CM13 racers, team 0) and `M1FilmShot` #31 (C2/M02's
+`secfury_5/6`), and C5's `M1Cabbie` #5 (`autogyro_1`) and `M4MilesRun` #41 (a generator's net).
+`M3StuntCourse` tags seven of its 38 nodes: `dzpath1, 2, 3, 10, 6, 7, 9` in walk order, out of the
+mission's thirteen zones. The racers have no target and never pursue, so the proximity roll never
+runs for them: **in the original the racers fly exactly those seven zones and skip the other
+six**, and a port that sends them through all thirteen would be inventing.
+
+### Mode 2, the approach (`FUN_004216e0`)
+
+The aim point is the run's CURRENT point (segment, metres, lane), flown through the steering law
+on the emergency table `DAT_0061fb48` (0.6/1.3) with no aim velocity, and with the altitude floor
+`DAT_0071c3f0` and the vehicle ceiling `+0x314` opened for that one solve. When the 3-D distance
+to that point falls under 105 m (11025 m²) the state becomes **5** and the rail state is seeded:
+`+0x35c` the offset from the rail point, `+0x374` the rail point, `+0x368` the aeroplane's
+velocity minus `speed × tangent`, `+0x380` the lock time, and the velocity zeroed. There is no
+timeout: an aeroplane that cannot reach the point keeps circling it.
+
+### Mode 5, the rail (`FUN_00490590`)
+
+While the state is 5, `FUN_004897c0` calls this INSTEAD of the physics dispatch
+(`0x00489b98`). Per frame:
+
+- direction `d` = the tangent at the cursor, negated on a reversed run, normalised;
+- the target attitude is the quaternion carrying (0,0,−1) onto `d`, then rolled so that "up"
+  points along the second derivative's component perpendicular to `d`: the wings bank fully into
+  the bend, and a straight stretch keeps world up. The attitude at `+0x150` is blended toward it by
+  `min(1, 1.3 × dt)` of the remaining rotation per frame, `0.5 × dt` on the run's last segment;
+- speed walks toward `69.2912 − 4.4704 × d.y` m/s (155 mph, less 10 mph per unit of climb) at
+  22.352 m/s², and the velocity is `speed × d`;
+- the rail point `+0x374` follows the cursor through `exp(−10 dt)`, the residual offset `+0x35c`
+  integrates its own velocity `+0x368`, and both shrink in magnitude by
+  `min(1, 0.6 × (now − lock)) × 111.76 × dt`; the position is rail point plus offset, moved through
+  the collision sweep `FUN_0048d7f0` like any other step;
+- the cursor advances `dt × speed` metres in five sub-steps, each divided by the local tangent
+  length, stepping across segment ends; running off the exit end sets the done flag.
+
+On done: the lane count is decremented, the record freed, the state set to **0**, `+0x8a0`
+stamped now + 5 s, and the net walk RE-SEATED: the nearest node (`FUN_00431900`) and the nose
+edge pick (`FUN_00431e40`) excluding the edge the walk was on when the run began. The stun and
+crash checks are both gated on state < 4 / < 2 in `FUN_004897c0`, so nothing interrupts a rail
+run but a stun write, after which `+0x9bc` re-arms the approach at the cursor's current point.
+
+### What CSVM ports of this
+
+`Flight/DangerZoneRibbon.cs` is the spline, the run cursor and the rail integrator with every
+constant above; `Flight/DangerZoneRibbons.cs` reads every `dzpathN` of the chapter gamez by the
+route-versus-gate material rule and applies `dzones.zrd`'s `disable` list. `AiNetFollower`
+reports the node it just reached (`ArrivedNode`), `AiPilot` takes the node-tag entry into
+`AiModeMachine.ApproachingDangerZone`, locks at 105 m into `NavigatingDangerZone` and publishes
+`RailPose`, which `FlightController.SimStep` applies in place of the model step; the exit
+re-seats the follower through `AiNetFollower.Reseat`, which is handed the leg the walk was on at
+the entry and refuses it, the exclusion above. Measured on C2/M03 with the world's colliders up
+(the `campaign-racers` suite, 208 s of sim): all six racers fly `dzpath1, 2, 3, 10, 6, 7, 9` in
+the net's tag order, each once, through approach, lock and exit.
+
+⚠ **The exclusion is what carries a racer out of a zone.** Without it the seat pick after a run
+is free to take the leg back toward the tagged node, and `dzpath3`'s exit sets the aeroplane
+down where that leg is the best-aligned edge under its nose: the racer flies back, reaches the
+tag again and re-locks the zone it just flew, forever. The retry stamp is no help here, because
+`FUN_00421500` never reads `+0x8a0`; the tag arm has no cooldown at all.
+
+⚠ **The rail runs under the original's collision, and that collision is one point for an AI.**
+`FUN_00490590` moves the rail position through the sweep `FUN_0048d7f0` like any step, and a
+positive severity reaches `FUN_0048d2c0` and its AI doom rule, so nothing exempts a rail run
+from a wall. What lets the racers through `dzpath2`'s `dbase` arch (a 9.7 m slot at the rail's
+18 to 20 m height, the route vertex `(-6035.9, 18, -3825)` inside it) is the contact shape:
+the sweep carries the def's `collision` probes, and every AI def resolves `basic_airplane`'s
+single origin probe (docs/formats/vehicle.md "Collision probes"), so the wings never touch the
+posts. The rail's roll is the second derivative's lateral part normalised whatever its size,
+which on that near-straight stretch wanders between 6° and 63° and never reaches the knife
+edge the slot would need; the original does not need one. A hull-swept AI rams the arch's
+front face with a wingtip at `(-6038, 23, -3848)` every time, which is what the
+`campaign-racers` suite holds against with the world's colliders up.
+
+Not ported: the proximity roll (it needs the `+0xba` hit flag the mode machine does not carry;
+`DangerZoneRibbon.ProximityRangeM` and `HasFreeLane` are its admission terms, kept for it), the
+target release at the lock (CSVM's gunner target is the host's), the altitude-floor bypass on the
+approach solve, and the lane table past the zero lane (no shipped node has one).
 
 ## The merge rule: what pursue does when two aircraft close nose to nose
 
@@ -1010,13 +1156,17 @@ is where to start.
 | `FUN_0041ae40` | the `rating_biases` lookup, returning rank units |
 | `FUN_00420070` | the `DAMAGES_ZEPPELIN` ordnance check that admits gasbag candidates |
 | `FUN_0041f420` | the fire decision every behaviour calls, [`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md) |
+| `FUN_004459f0` | builds the `DZPathList`: one zone per `dzpath` gamez node (`FUN_00445ef0`) |
+| `FUN_00445da0` | applies `dzones.zrd`'s `disable`, `nosnapshot` and `objective_numbers` to the zones |
+| `FUN_00421500` | the node-tag entry by name: nearer end, run record, state 2 |
+| `FUN_004210e0` | the pick over all zones: forced (nearest end) from a negative tag, rolled (daredevil, 500 m) from pursue |
+| `FUN_004216e0` | mode 2, the approach: the run's current point on the emergency table, lock at 105 m |
+| `FUN_00490590` | mode 5, the rail: pose written off the ribbon in place of the physics, exit re-seats the net |
+| `FUN_004465b0` / `FUN_00446670` / `FUN_00446710` | a ribbon point, tangent and second derivative at (segment, metres, lane) |
+| `FUN_00431b70` | the goal-node routing table no shipped net carries (`+0x10`/`+0x20`) |
 
 ## Open
 
-- The per-node fields beyond position and degree (`+0xc`, `+0x10`, `+0x11`, `+0x14` on the 0x28-byte
-  node record) are still unread; the raw tags `ai-nets.md` exposes are these. The follower's own
-  reads of `+0x11` / `+0x14` (a flag and a danger-zone path id, `FUN_0041d1f0`'s `dzpath_%d`
-  branch) are the lead.
 - `FUN_0041b560` is described by its parameter table only. The law itself (how it converts a station
   point into bank, pitch and rudder) is a separate decode, and it is what would replace
   `AiPilot`'s placeholder.

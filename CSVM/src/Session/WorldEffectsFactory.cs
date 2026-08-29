@@ -264,7 +264,8 @@ public sealed class WorldEffectsFactory
         var effects = _worldEffects;
         if (worldRuntime.ExternalEffect == null)
         {
-            worldRuntime.ExternalEffect = (name, pt, node) => effects.Handles(name) && effects.PlayEffectAt(name, pt, node);
+            worldRuntime.ExternalEffect = (name, pt, node, follow) =>
+                effects.Handles(name) && effects.PlayEffectAt(name, pt, node, follow: follow);
             worldRuntime.ExternalEffectStop = name => effects.Stop(name);
         }
         if (projectiles != null && projectiles.EffectSink == null)
