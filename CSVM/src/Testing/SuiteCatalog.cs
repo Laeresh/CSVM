@@ -149,6 +149,7 @@ public static class SuiteCatalog
         "damage-stage-slots",
         "ai-damage-stages",
         "crash-rig-anchors",
+        "nitro-boost-anchors",
         "emitter-prewarm",
         "ai-crash-defs",
         "ai-wreck-fall",
@@ -726,6 +727,8 @@ public static class SuiteCatalog
             "an AI plane spawned through FlightRoster stages end to end: its hull falls through the take-hit path and the rig runtime starts six random_remote_damage instances plus one pfsmoketrail, all anchored inside that aircraft, a repair tears each stage down once, and the Bloodhawk's missing elevator pair is named (BL-385)", AiDamageStages));
         into.Add(new TestHarness.Suite("crash-rig-anchors",
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
+        into.Add(new TestHarness.Suite("nitro-boost-anchors",
+            "nitro_boost/nitro_decay author NAME \"warhawk\" as their anchor, which never resolves inside a per-plane crash rig; Play's PlaneModel fallback (the same shape startprops/stopprops already use) starts both defs on the flown Warhawk and sustains its nitropuff1 exhaust puffer, though no flyable model carries the nitropropN disc geometry itself", NitroBoostAnchors));
         into.Add(new TestHarness.Suite("emitter-prewarm",
             "a crash rig's and the world-effects stage's PUFFER_STATE emitters are built at bind, unstarted: a crash, a panel tear, a post-respawn crash and five sonic bursts over a four-slot pool all reach the factory for no emitter, and the claims still count as built", EmitterPrewarm));
         into.Add(new TestHarness.Suite("ai-crash-defs",

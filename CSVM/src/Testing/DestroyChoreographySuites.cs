@@ -794,6 +794,65 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // nitro_boost/nitro_decay anchor as NAME "warhawk" (plane_props.zrd), which never resolves in
+    // a per-plane crash rig's own index — the shape startprops/stopprops share, fixed by Play's
+    // PlaneModel fallback. ⚠ No flyable player_* model carries nitropropN (that disc geometry
+    // ships only on the separate bare-named library root); the fix restores what the flown
+    // plane's own nodes CAN show, the nitropuffN exhaust puffers at exhaust1..4.
+    internal static void NitroBoostAnchors(TestContext ctx)
+    {
+        const string model = "player_warhawk";
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            try
+            {
+                var controller = new Node3D { Name = "controller_replica" };
+                var emitters = new CountingEmitterFactory();
+                var runtime = AnimRuntime.ForCrashRig(
+                    Session.WorldEffectsFactory.NewCrashTemplateStage(), 1, emitters, false);
+                runtime.ManualAdvance = true;
+                try
+                {
+                    var builder = new PlaneBuilder(planesGamez, textures);
+                    var planeModel = builder.Build(model);
+                    controller.AddChild(planeModel);
+                    ctx.Host.AddChild(controller);
+                    ctx.Host.AddChild(runtime);
+                    runtime.Bind(controller,
+                        world.Session.Program.Subset(Session.EffectCatalogue.CrashRigAnimNames(
+                            Session.EffectCatalogue.CrashDefTable(world.Session.Program))));
+
+                    ctx.Check(Find(planeModel, "exhaust1") != null,
+                        $"{model}: builds the exhaust1 marker nitro_boost's puffers anchor at");
+
+                    var started = runtime.Play("nitro_boost", planeModel, applyReset: false);
+                    ctx.Check(started.Count > 0,
+                        $"{model}: nitro_boost starts on the flown plane (PlayWithin's missing fallback left this empty)");
+                    for (int i = 0; i < 30; i++)
+                        runtime.Advance(1f / 60f);
+                    ctx.Check(emitters.Built.Any(e => e.Key.Equals("nitropuff1", System.StringComparison.OrdinalIgnoreCase) && e.Sustaining),
+                        $"{model}: nitro_boost's exhaust puffer is sustaining [{string.Join(",", emitters.Built.Select(e => e.Key))}]");
+
+                    runtime.Stop("nitro_boost");
+                    var decayStarted = runtime.Play("nitro_decay", planeModel, applyReset: false);
+                    ctx.Check(decayStarted.Count > 0, $"{model}: nitro_decay starts on release too");
+                }
+                finally
+                {
+                    runtime.Free();
+                    controller.Free();
+                }
+            }
+            finally
+            {
+                textures.Dispose();
+            }
+        });
+    }
+
     // The pre-warm's contract on a replica rig: after Bind and PrewarmEmitters nothing emits, a
     // crash and a panel tear reach the factory for no emitter, the claims count as built, and
     // respawn keeps the emitters so the next crash builds nothing either.

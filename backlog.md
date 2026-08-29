@@ -1407,35 +1407,41 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Where to look:* whether the collapsed clutter cards still write depth or a dark fragment behind the band (the `csky_clutter_fade` cutout keeps a card in the pass until `step(d, far)` culls it, and a card collapsed to zero size should contribute nothing), whether the fog-volume clutter's own `far_fade` and the templates fade overlap at that range, and whether the gamez buildings carry a `far_fade_range` of their own the remake ignores (`FUN_004d5de0` applies the scaled test to every type-5 scene node, not only clutter). A C5 screenshot pair at the band distance with `graphics.clutterFarFade` on and off separates the two.
   *Cross-refs:* `BL-337` (closed; the fade), `docs/org/clutter.md`.
 
-- `BL-546` `[Bug]` **A nitro engage produces none of its visuals: no prop swap, no exhaust smoke.**
-  *Evidence:* reported at the controls on a nitrous build whose boost accelerates the aircraft and
-  whose dial now reads correctly: nothing on the airframe changes. Every part of the
-  wiring is present, which is what makes this worth an item rather than a feature request. The
-  `nitro_boost` def ships in `plane_props.zrd` as `LOCAL_NODES_ONLY` / `ACTIVATION ON_CALL` /
-  `AUTO_RESET_NODE_STATES OFF`, and its sequences set `OBJECT_ACTIVE_STATE nitropropN ACTIVE`,
-  ramp `OBJECT_OPACITY_FROM_TO` 0→1 on the same discs, spin them through `spin_nitrorotorN`, and
-  play `snd_nitrostart AT_NODE nitroprop1`; `nitro_decay` reverses it. The airframes carry 34
-  `nitropropN` nodes between them. `PlaneBuilder` classifies the disc and builds it hidden for
-  that def (`PlaneBuilder.cs:275-277`, `PropParts.cs:25`), `EffectCatalogue.NitroAnims` binds both
-  defs, and `FlightController` plays them off the `NitroSystem` edges
-  (`FlightController.cs:1727-1741`). So the data is authored, the node is built, the def is bound
-  and the call site fires; the break is between the call and the frame.
-  *Fix shape:* establish first which half fails. Engage the boost with `--debug-anim` and see
-  whether `nitro_boost` starts at all. If it does not, the suspects are `CrashRuntime` or
-  `PlaneModel` being null on the human flight path, or `PlayWithin` failing to resolve
-  `nitropropN` inside `PlaneModel`. If it does start, the disc is being activated and then drawn
-  invisible, which points at `OBJECT_OPACITY_FROM_TO` against a material with no transparency, or
-  at the hidden build state surviving the `ACTIVE` event. Settle the prop first: the smoke is a
-  second question and the prop is the one whose whole chain is already readable.
-  *⚠ Traps:* ⚠ **The absence of a `nitro engaged` line proves nothing** — `FlightController.cs:1733`
-  logs through `Log.Debug("flight", …)`, which the file sink does not take. Do not conclude the
-  edge never fired from a quiet log. The `ai_nitro_boost` / `ai_nitro_decay` wrappers in the same
-  file are retargeting shims the executable never references, so do not wire the AI to them while
-  chasing this. `NitroSystem`'s own state machine is decoded and confirmed working (the boost does
-  accelerate the aircraft), so the defect is downstream of the edge, not in the tank or the arm.
+- `BL-546` `[Bug]` **A nitro engage still shows no prop swap; the exhaust smoke half is fixed.**
+  *Evidence:* `nitro_boost`/`nitro_decay` (`plane_props.zrd`) never started at all: they author
+  their anchor as NAME `warhawk`, which never resolves inside a per-plane crash rig's own index
+  (built only from the flown aircraft's own subtree), and `FlightController.AdvanceNitro` called
+  `PlayWithin`, which has no fallback for a NAME that fails to resolve. `startprops`/`stopprops`
+  carry the identical `NAME warhawk` anchor in the same file and already worked, because their
+  call site uses `Play(name, PlaneModel, applyReset: false)`, whose fallback-to-anchor covers
+  exactly this case; `AdvanceNitro` now does the same for both nitro defs. That landed the
+  exhaust half: `nitro_boost`'s own `PUFFER_STATE nitropuff1..4 AT_NODE exhaust1..4` now fires,
+  confirmed by the `nitro-boost-anchors` suite (builds the real `player_warhawk` rig, plays
+  `nitro_boost` through the production call shape, asserts the puffer sustains).
+  The prop swap (`OBJECT_ACTIVE_STATE`/`OBJECT_OPACITY_FROM_TO nitropropN`, `spin_nitrorotorN`,
+  `snd_nitrostart AT_NODE nitroprop1`) is still not visible after that fix, and the open question
+  is why. `extracted/planes/nodes.json` declares exactly 34 `nitropropN` nodes and carries BOTH a
+  bare-named root and a `player_*` root for nearly every aircraft (`warhawk`/`player_warhawk`,
+  `fury`/`player_fury`, and so on), so the geometry exists somewhere in the shipped data. Building
+  all eleven `player_*` rigs through `PlaneBuilder` (the model every player and AI vehicle def's
+  own `nodename` points at, `vehicle.zrd`) turns up only `staticpropN` on every one; no
+  `nitropropN` node is reachable from any flyable airframe's own subtree.
+  *Open question:* which root the original resolves `nitro_boost`'s `NAME warhawk` anchor
+  against. Reading A: the original also resolves it against the per-plane (flyable) node the way
+  CSVM's crash rig does, in which case the disc never showed on a flyable aircraft in the
+  original either, and this item is a disproof once that is confirmed. Reading B: the original
+  resolves `NAME` globally against the world/library set rather than per-plane-scoped, in which
+  case it would find the bare `warhawk` root (which carries the discs) even while a `player_*`
+  aircraft is flown, and the original DID show a prop swap that CSVM's per-plane-scoped
+  `AnimRuntime` structurally cannot reproduce without a different resolution path for this def.
+  *Fix shape:* decode `FUN_004b2110`'s "play nitro_boost def on the plane node" call (cited in
+  `docs/org/flightModel.md` "Nitro") for whether the original's own anchor resolution is scoped to
+  the calling vehicle or is a global NAME search; that answer alone separates reading A from B.
+  If B, the fix is a CSVM resolution change (a second NAME-search tier for this class of def, or a
+  bespoke bare-root lookup), not a call-site swap like the smoke fix was.
   *Cross-refs:* `BL-447` (the AI's `medium_aishake` and `snd_nitro` blip on an engage, and the
   decay lockout that `_nitroDecayLeftS` stands in for), `docs/org/flightModel.md` "Nitro",
-  `docs/formats/hud.md` "Cockpit gauges" for the dial half, which is settled.
+  the `nitro-boost-anchors` suite (the smoke half's regression coverage).
 
 - `BL-555` `[Feature]` `[Divergence]` **A held key fast-forwards a mid-mission cutscene instead of
   skipping it: the definition plays at a raised rate that spools up while the key is held and

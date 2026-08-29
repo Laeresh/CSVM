@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Effects and the animation scope
 
-11. ☐ `BL-546`: a nitro engage produces no prop swap and no exhaust smoke
+11. ◐ `BL-546`: a nitro engage produces no prop swap and no exhaust smoke
 12. ☐ `BL-587`: chapter-scope animation files no mission lists still run
 13. ☐ `BL-535`: a repeat sonic burst pays a 10 to 14 ms slot re-reset from the third burst on
 
@@ -280,7 +280,39 @@ read the on/off difference as the mechanism.
 
 # Wave B — Effects and the animation scope
 
-## B11 ☐ `BL-546`: a nitro engage produces no prop swap and no exhaust smoke
+## B11 ◐ `BL-546`: a nitro engage produces no prop swap and no exhaust smoke
+
+**Partly landed — the exhaust smoke half only; the prop swap is still open and carried forward
+as the restored `BL-546`.** Marked ◐, not ☑: the visible symptom the user reported ("no prop
+swap") is not delivered by this change, so calling it done would read wrong to anyone checking
+this item against the game.
+
+The def never started at all: `nitro_boost`/`nitro_decay` author their anchor as NAME `warhawk`
+(`plane_props.zrd`), which never resolves inside a per-plane crash rig's own index (that index is
+built only from the flown aircraft's own subtree, and no `player_*` model's own node is named
+`warhawk`) — the identical shape `startprops`/`stopprops` carry in the same file. Those two work
+because `FlightController.Respawn` plays them with `AnimRuntime.Play(name, PlaneModel,
+applyReset: false)`, whose fallback-to-anchor kicks in once the NAME search comes up empty;
+`AdvanceNitro` instead called `PlayWithin(PlaneModel, name, …)`, which has no such fallback and so
+silently started nothing. The fix swaps both nitro call sites (engage and decay) from
+`PlayWithin`/`StopWithin` to `Play`/`Stop` (`FlightController.cs`, `AdvanceNitro`), matching the
+working sibling pattern. That restores the part of `nitro_boost`'s own sequence that targets
+nodes every flyable model carries: the `nitropuffN` exhaust puffers at `exhaust1..4`. Regression:
+the `nitro-boost-anchors` suite, which builds the real `player_warhawk` rig, plays `nitro_boost`
+through the production call shape, and asserts the exhaust puffer starts sustaining.
+
+The prop swap is NOT fixed by this change and is not yet understood well enough to fix. No
+flyable `player_*` airframe's own built model carries the `nitropropN` disc nodes the def
+cross-fades in (confirmed empirically across all eleven `player_*` rigs against `planes.zbd`),
+even though `extracted/planes/nodes.json` declares 34 `nitropropN` nodes total and carries both a
+bare-named root and a `player_*` root for nearly every aircraft. Whether the original ever showed
+this disc swap on a flyable aircraft, or only ever ran it on the bare library model, is an open
+question this pass did not settle; see the restored `BL-546` for the two competing readings and
+what would separate them.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** Engaging the boost swaps the `nitropropN` discs in, ramps them up, spins them, plays
 `snd_nitrostart`, and reverses all of it on decay, on the human flight path.
@@ -297,7 +329,6 @@ disc and builds it hidden for that def (`PlaneBuilder.cs:275-277`, `PropParts.cs
 def is bound and the call site fires, so the break is between the call and the frame. The boost
 does accelerate the aircraft and the dial reads correctly, so `NitroSystem`'s own state machine is
 confirmed working and the defect is downstream of the edge.
-<TODO: re-verify still-open against the code.>
 
 **Approach.** Establish which half fails before changing anything: engage the boost with
 `--debug-anim` and see whether `nitro_boost` starts at all. If it does not, the suspects are

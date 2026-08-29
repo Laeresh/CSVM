@@ -3136,8 +3136,18 @@ maneuver. Both refuse an engine-out aircraft and a re-engage while the boost or 
 is alive; the boost animation lives at least 1 s after an engage. `Installed` is the injector
 (the hangar's nitrous engine ids 3-5, or the roster block's `nitro` slot); `EngagedThisTick` and
 `ReleasedThisTick` are the edges `FlightController.AdvanceNitro` turns into the shake kick, the
-`nitro_boost`/`nitro_decay` defs and the `snd_nitro` loop. Every constant is censused by
-`FlightConstantInventoryTests`; `NitroSystemTests` pins the lifecycle and the force couplings.
+`nitro_boost`/`nitro_decay` defs and the `snd_nitro` loop. `AdvanceNitro` plays them with
+`AnimRuntime.Play(name, PlaneModel, applyReset: false)`, the same fallback-anchor shape
+`startprops`/`stopprops` already use: the defs' own anchor NAME (`warhawk`, `plane_props.zrd`)
+never resolves inside a per-plane crash rig's index, so `PlayWithin` (no fallback) silently played
+neither. That fix's visible effect is only the `nitropuffN` exhaust puffers at `exhaust1..4`,
+which every flyable `player_*` model carries; the disc swap (`nitropropN`) stays inert on any
+flyable aircraft, since no `player_*` model's own built subtree carries that geometry, though
+`extracted/planes/nodes.json` declares 34 `nitropropN` nodes under both a bare-named root and a
+`player_*` root per aircraft. Whether the original ever showed the swap on a flyable aircraft, or
+only ran it against the bare root, is open (`BL-546`). Regression: `nitro-boost-anchors`
+(exhaust half only). Every constant is censused by `FlightConstantInventoryTests`;
+`NitroSystemTests` pins the lifecycle and the force couplings.
 
 ## src/Flight/PathFollower.cs
 The engine's SECOND movement law, and the exclusive alternative to `FlightModel`: the dispatcher
