@@ -858,8 +858,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   new squad's rigs adding AI and physics on top; the node count says nothing was freed. Compare a
   run that leaves the zeppelin alive. *⚠ Traps:* the hitch detector is opt-in (`RunTests.ps1 -Hitch`)
   and answers a different question than this one; `attributed_ms` is 0 in these lines because the
-  sampler was not armed, so they name no culprit. *Cross-refs:* `HitchMonitor`, `Launcher`'s hitch
-  tick, `BL-599`'s closing commit (`git log --grep=BL-599`).
+  sampler was not armed, so they name no culprit. CM13 (C2/M03) shows the same sustained drop and
+  is the likelier test case, since that mission spawns its whole field at the start and involves no
+  zeppelin death: if both share a cause it is the number of live aircraft, not the destruction
+  choreography, so measure CM13 first and treat CM09's zeppelin as the second variable.
+  *Cross-refs:* `HitchMonitor`, `Launcher`'s hitch tick, `BL-599`'s closing commit
+  (`git log --grep=BL-599`).
 
 - `BL-597` `[Bug]` **CM08 (C1B/M03): the Pandora does not halt exactly over the tanker and plays no
   hangar animation there.** *Evidence:* reported at the controls against the original: the Pandora
