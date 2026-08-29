@@ -40,4 +40,21 @@ public static class ScrapbookCompositionFixture
             "3_1_1=0,0,SB_03_01_a,P0,10,10,1,0,0,10,\"0,0,0,0\",0,0,0,0,0\n");
         return root;
     }
+
+    /// <summary>Writes a fresh temp <c>dataRoot</c> holding one mission's danger-zone slot: a
+    /// <c>DZ_generic_corners</c> photo-corner mount (<c>Zoom=0</c>, never opens) painted one step
+    /// above a <c>Snap_</c> capture at the same coordinates, matching
+    /// <c>docs/formats/campaign-screens.md</c>'s "The danger-zone slot" (D21). The capture's own
+    /// file is never written here -- callers drop it into a profile directory to exercise
+    /// <c>CampaignScrapbookPage.CaptureExists</c>.</summary>
+    public static string WriteDangerZoneSpread(string root, int mission)
+    {
+        string dir = Path.Combine(root, "extracted", "rof", "ASSETS");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "SCRAPBOOK.CSV"),
+            "[SCRAPBOOK]\n" +
+            $"{mission}_1_1=0,,DZ_generic_corners,P0,434,377,1,0,0,50,\"0,0,0,0\",0,0,0,0,0\n" +
+            $"{mission}_1_2=0,,Snap_{mission}_18,PP,434,377,0,0,0,48,\"0,0,0,0\",Q,0,0,0,0\n");
+        return root;
+    }
 }

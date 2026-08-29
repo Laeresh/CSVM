@@ -210,6 +210,27 @@ public class CampaignScrapbookPageTests
         Assert.Contains(flow.Page.Captions, l => l.Text == "Not yet flown");
     }
 
+    /// <summary>The danger-zone slot (D21): the photo-corner mount always draws, but the capture it
+    /// frames is skipped until the profile directory actually carries the file
+    /// (<c>CampaignScrapbookPage.CaptureExists</c>, resolved against
+    /// <c>CampaignProfileStore.DirFor</c>) -- exactly the gate <c>ScrapbookComposition</c> already
+    /// applies, exercised here end to end through the page rather than the composition alone.</summary>
+    [Fact]
+    public void TheDangerZoneCaptureDrawsOnlyOnceItsFileExistsInTheProfileDirectory()
+    {
+        string root = ScrapbookCompositionFixture.WriteDangerZoneSpread(TestData.TempDir(), mission: 1);
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        Assert.Single(flow.Page.Pictures); // just the corner mount, no capture on disk yet
+
+        File.WriteAllBytes(Path.Combine(flow.Store.DirFor(profile.Name), "Snap_1_18.PNG"), new byte[] { 0 });
+        Assert.Equal(2, flow.Page.Pictures.Count); // the capture, then the mount painted over it
+        Assert.EndsWith("Snap_1_18.PNG", flow.Page.Pictures[0].Art.Name);
+        Assert.EndsWith("DZ_generic_corners.PNG", flow.Page.Pictures[1].Art.Name);
+    }
+
     // Presses whichever row currently carries the named arrow/bookmark button, failing loudly if
     // the layout ever stops offering it where a test expects one.
     private static void StepNext(CampaignFlow flow) => Press(flow, BoardButton.ScrapbookNext);

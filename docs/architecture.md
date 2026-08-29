@@ -278,6 +278,14 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
   but naming itself on the hint line (title, else caption, else body, else the image name);
   confirming one opens `CampaignScreen.ScrapbookZoom` via `CampaignFlow.SetScrapbookZoom`. The Best
   to Date toggle and the page title (mission name and area) are not yet wired.
+  `CaptureExists` (D21, the danger-zone scrap slot) resolves a `Snap_`-prefixed row's file against
+  `CampaignFlow.Store.DirFor(profile.Name)`, the profile directory `BL-256`'s still-unbuilt capture
+  writer would save into; `ScrapbookComposition.Pictures`/`Openable` already skip the row when it is
+  absent, so the slot and its `DZ_generic_corners` mount need no code of their own beyond that check
+  and draw correctly the moment a file exists. The mount's own `Objective` gate is authored
+  independently of its paired capture's (`SCRAPBOOK.CSV` rows `1_2_4`/`1_2_6`: mount objective 1,
+  capture objective 18), so the two can show and hide on different mission progress, which this
+  page reproduces by treating every row's gate as its own rather than inferring a pairing.
 - `src/UI/CampaignScrapbookZoomPage.cs` — one scrap's detail view, opened on
   `CampaignFlow.ZoomTarget` and closing back to `Scrapbook` (CLOSE, or the default `Back()`): the
   zoom family's background (`SB_BG_<letter>.jpg`), the scrap's inset image at its own
@@ -292,8 +300,9 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
   spread from item 1 upward and stops at the first missing key, the way the original's own reader
   does; `Pictures` gates each row's `Objective` against the mission's merged best-to-date mask
   (bit 0 "ever won", a positive value its own bit set, a negative value its own bit clear), skips a
-  `Snap_`-prefixed capture when a caller-supplied check says its file is not on disk (nothing saves
-  one yet), and stacks the survivors by ascending `DrawOrder`. `Openable` narrows the same gate to
+  `Snap_`-prefixed capture when a caller-supplied check says its file is not on disk (`BL-256`, the
+  capture writer, does not exist yet, so no such file exists on a real profile), and stacks the
+  survivors by ascending `DrawOrder`. `Openable` narrows the same gate to
   `ScrapbookScrap.Opens`, the `Zoom` column alone (`!= '0'`) rather than `ImageType`'s second
   letter (`docs/formats/campaign-screens.md`, "Resolving a row to a file"). `ZoomFamily` reads
   `LAYOUT.CSV`'s `SBZ_T_TITLE`/`CAPTION`/`TEXT<letter>` rows for a family's three text boxes (X, Y,

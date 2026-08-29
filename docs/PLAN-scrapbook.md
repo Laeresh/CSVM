@@ -187,7 +187,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 18. ☑ The story page and its per-mission scrap composition
 19. ☑ The per-scrap detail view
 20. ☑ Navigation: page and mission arrows, and the Current Mission bookmark
-21. ☐ The danger-zone scrap slot
+21. ☑ The danger-zone scrap slot
 
 ### Closing — worktree housekeeping
 
@@ -219,7 +219,7 @@ File contention, and these must not run in parallel worktrees:
 
 - `CSVM/src/Session/CampaignDirector.cs`: B11 and B14.
 - `CSVM/src/Session/Launcher.cs`: B12 and C17.
-- `CSVM/src/UI/CampaignScrapbookPage.cs`: C17 (new file), D18, D19 and D20 have all landed.
+- `CSVM/src/UI/CampaignScrapbookPage.cs`: C17 (new file), D18, D19, D20 and D21 have all landed.
   C15's and C16's own rows/stamps landed in `CampaignPreviousMissionsPage.cs`'s
   `CampaignScrapbookResults` instead, a deviation from the plan's assumed single file.
   `CampaignScrapbookZoomPage.cs` (new file, D19) is its own screen and not part of this contention.
@@ -932,29 +932,73 @@ implied (`uiData` 2405's "the mission the open page shows") but did not call out
 existing rows. The table-of-contents scope call stays open; this item's own floor is the whole
 range a mission end can actually reach, slots 1 to 24.
 
-## D21 ☐ The danger-zone scrap slot
+## D21 ☑ The danger-zone scrap slot
 
-**Goal.** A flown danger zone leaves a photograph on that mission's story page, mounted in the
-original's photo corners.
+**Landed as a disproof: the slot and its mount were already built, by D18/A1's own generic
+`Snap_`-capture handling, before this item was opened.** `BL-256` re-verified still open
+(`git log --grep=BL-256` returns only its minting commit, a closed-adjacent `BL-090` commit that
+named `snd_dangerzone_camera` without touching the capture itself, and this plan's own minting
+commit; no closing commit exists, and `CampaignScrapbookPage.cs`/`ScrapbookComposition.cs` carry no
+capture writer). This item's floor, "the slot and the mount reading a capture that already exists",
+turned out to already be data-driven rather than danger-zone-specific: `ScrapbookScrap.IsCapture`
+(any `Snap_`-prefixed `ImageName`) and `ScrapbookComposition.Filtered`'s capture-exists skip apply to
+every row uniformly, so the danger-zone slot never needed its own code path once A1 read
+`SCRAPBOOK.CSV` generically and D18 wired `Pictures`/`Openable` through a caller-supplied
+`captureExists` check. `CampaignScrapbookPage.CaptureExists` already resolves a capture's file
+against `CampaignFlow.Store.DirFor(profile.Name)`, the exact profile directory `BL-256`'s
+still-unbuilt capture writer would save into.
 
-**Evidence (confidence: traced).** A1: 167 rows name a `Snap_<mission>_<objective>` capture, each
-gated on that objective and paired with a `DZ_generic_corners` row at identical coordinates one
-step higher in draw order. A capture is any name beginning `Snap_`, tested by `FUN_00406db0`; it
-resolves against the profile directory rather than `assets\graphics\`, is **skipped when the file is
-absent**, is forced to a 164×123 region and is drawn at 25% on the page and full size in the zoom.
-The danger-zone objective ids run 18 to 31. `SB_01_00_DZ.PNG` is not the slot and is referenced by
-nothing, and captures appear on results pages too, not only story pages (`10_1_5`).
-`BL-256` is the capture half, recorded as intent with no design, and it names
-`snd_dangerzone_camera` as the shutter sting.
-<TODO: re-verify `BL-256` still-open against `git log --grep=BL-256` and the code.>
+**Verified.** The composition-level skip (`ACaptureIsSkippedWhenItsFileIsNotOnDisk`,
+`ScrapbookCompositionTests.cs`) predates this item; it had no page-level counterpart, so the gap
+this item actually closed was test coverage, not code. A new fixture,
+`ScrapbookCompositionFixture.WriteDangerZoneSpread`, authors one mission's danger-zone slot exactly
+as `SCRAPBOOK.CSV` ships it: a `DZ_generic_corners` mount at draw order 50 over a `Snap_` capture at
+draw order 48, same coordinates. A new page-level test,
+`TheDangerZoneCaptureDrawsOnlyOnceItsFileExistsInTheProfileDirectory`, confirms `Pictures` holds only
+the mount before the capture file exists, then both (capture first, mount painted over it, matching
+the ascending-`DrawOrder` stacking rule) once a file is dropped into
+`flow.Store.DirFor(profile.Name)`. `dotnet build`/`format` clean, `CheckCommentCaps.ps1` clean, and
+the targeted filter (`CampaignScrapbookPageTests`, `ScrapbookCompositionTests`) passes 32/32.
 
-**Approach.** First question, and it is a scope call rather than a technical one: whether the
-capture itself lands here or stays `BL-256`. This item's floor is the slot and the mount reading a
-capture that already exists; its ceiling is the capture too.
+**What it did not build.** The capture itself: nothing in CSVM takes a screenshot when the player
+flies a danger zone, so no capture file will ever exist on a real profile until `BL-256` lands its
+own trigger and writer. This item's own Approach called that a ceiling question, "whether the
+capture itself lands here or stays `BL-256`"; the answer is it stays `BL-256`, unchanged, since
+nothing about reading an already-saved capture required touching the write side. The mount's own
+`Objective` gate is authored independently of its paired capture's own gate (`SCRAPBOOK.CSV` rows
+`1_2_4` objective 1, `1_2_6` objective 18) — a real data quirk, not a CSVM simplification — so once
+`BL-256` exists a completed danger-zone objective and a visible mount are not guaranteed to line up;
+this item did not attempt to reconcile them, since doing so would mean inventing a rule the data
+does not state.
 
-**Model recommendation.** medium.
+**Original approach (kept for reference).**
 
-**Verify.** Fly a danger zone and find its photograph on the mission's story page.
+> **Goal.** A flown danger zone leaves a photograph on that mission's story page, mounted in the
+> original's photo corners.
+>
+> **Evidence (confidence: traced).** A1: 167 rows name a `Snap_<mission>_<objective>` capture, each
+> gated on that objective and paired with a `DZ_generic_corners` row at identical coordinates one
+> step higher in draw order. A capture is any name beginning `Snap_`, tested by `FUN_00406db0`; it
+> resolves against the profile directory rather than `assets\graphics\`, is **skipped when the file is
+> absent**, is forced to a 164×123 region and is drawn at 25% on the page and full size in the zoom.
+> The danger-zone objective ids run 18 to 31. `SB_01_00_DZ.PNG` is not the slot and is referenced by
+> nothing, and captures appear on results pages too, not only story pages (`10_1_5`).
+> `BL-256` is the capture half, recorded as intent with no design, and it names
+> `snd_dangerzone_camera` as the shutter sting.
+> <TODO: re-verify `BL-256` still-open against `git log --grep=BL-256` and the code.>
+>
+> **Approach.** First question, and it is a scope call rather than a technical one: whether the
+> capture itself lands here or stays `BL-256`. This item's floor is the slot and the mount reading a
+> capture that already exists; its ceiling is the capture too.
+>
+> **Model recommendation.** medium.
+>
+> **Verify.** Fly a danger zone and find its photograph on the mission's story page.
+>
+> **⚠ Traps.** `DzRadius` is 15 m and hand-tuned, and `BL-256` records it as the marker-centre radius
+> whose screenshot-trigger role is intent and not decode. Do not treat the trigger as settled.
 
-**⚠ Traps.** `DzRadius` is 15 m and hand-tuned, and `BL-256` records it as the marker-centre radius
-whose screenshot-trigger role is intent and not decode. Do not treat the trigger as settled.
+The approach's floor/ceiling framing held exactly: the floor was already built, the ceiling stayed
+`BL-256`. Its Verify line ("fly a danger zone and find its photograph") could not be run literally,
+since flying one produces no capture file yet; the fixture-and-profile-directory test above is its
+practical equivalent given the ceiling stayed out of scope.
