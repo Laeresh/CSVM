@@ -865,7 +865,7 @@ public sealed class CampaignDirector
         {
             Vector3? reference = spec.WherePoint is { } p
                 ? new Vector3(p[0], p[1], p[2])
-                : Resolve(new[] { spec.WhereNode ?? string.Empty })?.GlobalPosition;
+                : Where(spec.WhereNode ?? string.Empty);
             if (reference == null)
             {
                 return null;
@@ -921,12 +921,12 @@ public sealed class CampaignDirector
             Vector3 subject = _in.ListenerPosition();
             if (!string.Equals(spec.Who, "player", StringComparison.OrdinalIgnoreCase))
             {
-                if (Resolve(new[] { spec.Who }) is not { } who)
+                if (Where(spec.Who) is not { } who)
                 {
                     return null;
                 }
 
-                subject = who.GlobalPosition;
+                subject = who;
             }
 
             bool inside = subject.DistanceSquaredTo(reference.Value) <= spec.Radius * spec.Radius;
@@ -1076,8 +1076,49 @@ public sealed class CampaignDirector
             _owner.Gap("STOP_QUEUED_SOUNDS", "this session built no mission radio queue");
         }
 
-        public void WarpVehicle(string vehicle, IReadOnlyList<WarpPoint> points) =>
-            _owner.Gap("WARP_VEHICLE", $"'{vehicle}' is not a spawned mission vehicle");
+        /// <summary>`WARP_VEHICLE` (<c>FUN_0046a490</c> at <c>0x0046a8f2</c>): ONE waypoint drawn
+        /// from the list at random. A plain entry teleports the vehicle there (<c>FUN_00493fb0</c>);
+        /// an entry carrying the 5th string puts it on that named scripted path and releases it
+        /// moving instead (<c>FUN_004940d0</c>, which clears the freeze flag <c>+0xd4</c>). The
+        /// forward velocity is the caller's, not the placement's, and it is written only for a
+        /// vehicle that did NOT end up path-driven.</summary>
+        public void WarpVehicle(string vehicle, IReadOnlyList<WarpPoint> points)
+        {
+            if (points.Count == 0)
+            {
+                return;
+            }
+
+            if (_owner.Commanded(vehicle) is not { } rig)
+            {
+                _owner.Gap("WARP_VEHICLE", $"'{vehicle}' is not a spawned mission vehicle");
+                return;
+            }
+
+            // The goal runtime's own `rand() % count`, on the world phase's stream: uniform over
+            // the authored list, so a mission hiding one aircraft in four places hides it evenly.
+            var point = points[_in.Rng.Next(points.Count)];
+            if (point.PointName is { Length: > 0 } path
+                && _owner._paths != null && _owner.PlaceOnPath(rig, vehicle, path))
+            {
+                _owner._paths.Release(vehicle);
+                GD.Print($"campaign: WARP_VEHICLE put '{vehicle}' on path '{path}', moving");
+                return;
+            }
+
+            // A named point whose path this chapter has not is the original's own no-op branch: it
+            // leaves the vehicle where it stands and still writes the velocity below.
+            bool authored = point.PointName is not { Length: > 0 };
+            var at = authored ? new Vector3(point.X, point.Y, point.Z) : rig.WorldPosition;
+            float heading = authored ? point.Heading : Mathf.RadToDeg(rig.GlobalRotation.Y);
+            // The speed it flies out at, along the placed nose: the original takes
+            // min(plane_speed_max, fd_speed). CSVM models no plane_speed_max
+            // (docs/org/flightModel.md, "What this changes" #13), so fd_speed stands in alone.
+            rig.WarpTo(at, heading, rig.Stats?.FdSpeed ?? 0f);
+            GD.Print($"campaign: WARP_VEHICLE moved '{vehicle}' to " +
+                     $"({at.X:0},{at.Y:0},{at.Z:0}) heading {heading:0} deg, " +
+                     $"1 of {points.Count} waypoint(s)");
+        }
 
         /// <summary>The vehicle arm of <c>SET_AI_TEAM</c> (<c>FUN_00469e20</c>): the script's raw
         /// integer becomes the vehicle's team id with no conversion, in the one space the roster
@@ -1269,6 +1310,25 @@ public sealed class CampaignDirector
                 _owner.Gap(directive, $"'{unmatched[0]}' and {unmatched.Count - 1} more name no " +
                                       "spawned roster aircraft (a zeppelin is one such name)");
             }
+        }
+
+        // Either end of a node-form TRAVELERS: a built world node first, then the roster's own
+        // aircraft and hulls, which is where an aiv block's name usually lives.
+        // ⚠ Never gate this on Deactivated. C4/M02 spots Blacke while he is still inert; the
+        // reading is in docs/formats/objectives.md ("TRAVELERS and the roster").
+        private Vector3? Where(string name)
+        {
+            if (Resolve(new[] { name }) is { } node)
+            {
+                return node.GlobalPosition;
+            }
+
+            if (_owner._roster.TryGetValue(name, out var rig))
+            {
+                return rig.WorldPosition;
+            }
+
+            return _owner._vessels.TryGetValue(name, out var vessel) ? vessel.Position : null;
         }
 
         // A node path: the first name resolved globally, then each named child inside the one

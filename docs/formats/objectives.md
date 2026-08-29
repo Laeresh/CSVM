@@ -123,11 +123,31 @@ immediately on its first eligible tick.
 | `DANGER_ZONES_COMPLETED` | `[zone, ...]` | Names danger zones ([missions.md](missions.md)). When the player completes a zone, the zone module walks every **awake** objective and flags matching names (`FUN_00446990` at 0x446a72); the condition is true when `DANGER_ZONES_COMPLETION_COUNT` names are flagged, default all (`FUN_00469ab0`). Zones completed while the objective is dormant or napping do not count for it. |
 | `DANGER_ZONES_COMPLETION_COUNT` | `[k]` | Required count for the zone list. |
 | `DEDG` | `[group, max]`, parser accepts optional 3rd string `generator` | True when the number of live vehicles whose AI group equals `group` (vehicle +0x388, the roster `group` field) is at or below `max` (`FUN_00465910` / `FUN_004658d0`); an optional generator name adds that generator's remaining capacity (+0x80) to the live count, so unspawned members block completion. `DEDG [2,0]` is "group 2 wiped out"; `[1,2]` is "group 1 down to two". "Live" is the dead byte `+0x91d` being clear (`FUN_00465850`), and the activate/deactivate primitive `FUN_004b0f40` sets that byte together with `+0x945`, so a roster member shipped `deactivated` is not counted until `WAKEUP_ENEMIES` puts it in play; C2/M01 relies on this, its `DEDG [1, 2]` gates falling to two while seven group-1 blocks are still parked. A cutscene's AI park (code 913, `FUN_0041f250`) is different: it sets the hold flag `+0x354`, pushes the next-think time out and deactivates the scene node, and never touches `+0x91d`, so a parked vehicle still counts; C3/M05 relies on that, its wing walk parking the last Balmoral for 19 s under a `DEDG [5, 0]` that naps the instant loss (CSVM: `FlightController.Deactivated`, inert without `Parked`). Side effect: every counted member's engagement volume is widened each tick to 9,000 m radius and ±9,000 m altitude (`FUN_00465850`), so a DEDG-watched group never disengages by distance. The name is not expanded anywhere in the binary; the mechanics above are the full decoded meaning. |
-| `TRAVELERS` | `[who, "APPROACHING", where, radius, count]`, optional `"DELETE_ON_SUCCESS"` | Proximity condition (`FUN_00465b40`). `who` is either a gamez node name (the shipped files mostly use `player`) or an integer AI group. `where` is a node name or a literal `[x,y,z]`. Node form: true when the subject node is inside (`APPROACHING`) or outside (any other word; nothing else is authored) `radius` meters of the reference; with `DELETE_ON_SUCCESS` the vehicle standing on the node is deleted, or the node deactivated, as the condition fires. Group form: each tick, every live group member inside (or outside) the radius adds 1 to a running tally, `DELETE_ON_SUCCESS` deletes the counted members (never the player), and the condition is true when the tally reaches `count` (default 1). Without deletion a loitering member re-counts every tick. Radius is stored squared; `count` sits in the 5th slot. |
+| `TRAVELERS` | `[who, "APPROACHING", where, radius, count]`, optional `"DELETE_ON_SUCCESS"` | Proximity condition (`FUN_00465b40`). `who` is either a gamez node name (the shipped files mostly use `player`) or an integer AI group. `where` is a node name or a literal `[x,y,z]`. Node form: true when the subject node is inside (`APPROACHING`) or outside (any other word; nothing else is authored) `radius` meters of the reference; with `DELETE_ON_SUCCESS` the vehicle standing on the node is deleted, or the node deactivated, as the condition fires. Group form: each tick, every live group member inside (or outside) the radius adds 1 to a running tally, `DELETE_ON_SUCCESS` deletes the counted members (never the player), and the condition is true when the tally reaches `count` (default 1). Without deletion a loitering member re-counts every tick. Radius is stored squared; `count` sits in the 5th slot. See ["TRAVELERS and the roster"](#travelers-and-the-roster) for what a name may address. |
 | `COUNTER … TEST_COMPLETE` | see below | Parsed, authored nowhere; see [unauthored keywords](#keywords-the-parser-accepts-that-no-mission-authors). |
 
 `COMPLETED_ZEPCANNONS` and `COMPLETED_STOPPOINT`, despite the names, are **completion
 actions**, not conditions; they are listed under [Completion actions](#completion-actions).
+
+### TRAVELERS and the roster
+
+A node-form `TRAVELERS` names its subject and its reference by **vehicle name**, and a vehicle
+name is not always a world node. An `aiv` roster block is spawned from the roster, and its name
+reaches the world's node index only where the chapter gamez happens to carry a library root of
+that same name; `C4/M02`'s `bhatgyro_1` does not, because the root it is built from is
+`bhatgyro`. A resolver that walks the node index alone therefore cannot answer where that
+aircraft is, and the condition is unanswerable rather than false.
+
+That distinction decides `C4/M02`. Each of its four search locations wakes a spot check
+(`OBJECTIVE31` to `OBJECTIVE34`, `TRAVELERS player APPROACHING bhatgyro_1 500`) and naps the
+"he is not here" radio line that kills that spot check two seconds later, so each location is a
+two-second window. Those four spot checks are the **only** objectives that wake `OBJECTIVE24`,
+the mission's PRIMARY 1. A reference that never resolves is a mission that cannot be finished.
+
+⚠ **Deactivation is not consulted on the node form.** `C4/M02` warps Blacke at five seconds and
+spots him while he is still deactivated; `WAKEUP_ENEMIES` puts him in the air only from
+`OBJECTIVE17`, which is downstream of the spot check. The group form's liveness rule is `DEDG`'s
+and does not carry here.
 
 ### Wake actions
 
@@ -168,7 +188,7 @@ Then, in order:
 
 | Directive | Args | Effect (traced) |
 |---|---|---|
-| `WARP_VEHICLE` | `[vehicle, [x,y,z,heading], ...]`, entries may append a 5th string | Picks one waypoint **at random** from the list. A plain entry teleports the vehicle to it (`FUN_00493fb0`); an entry with the 5th string warps to that named point instead (`FUN_004940d0`). An AI vehicle is then given forward velocity at its cruise value, so it arrives flying. Authored once (C4/M02). |
+| `WARP_VEHICLE` | `[vehicle, [x,y,z,heading], ...]`, entries may append a 5th string | Picks one waypoint **at random** (`rand() % count`) from the list. A plain entry writes the vehicle's position and its euler attitude and nothing else (`FUN_00493fb0`); an entry with the 5th string instead names a **scripted path**, and puts the vehicle on it at waypoint 0 facing the leg into waypoint 1, with the path flag `+0xcc` set and the freeze flag `+0xd4` CLEARED, so it leaves moving (`FUN_004940d0`, the same placement the spawner makes but released — see [flightModel.md](../org/flightModel.md), "The scripted-path follower"). The forward velocity belongs to the caller (`FUN_0046a490` at `0x0046a8f2`), not to either placement: `min(plane_speed_max, fd_speed)` along the placed nose, written **only** for a vehicle that did not end up path-driven. Authored once (C4/M02), where it is what hides Blacke in one of four places. |
 | `SET_AI_TEAM` | `[[name, team], ...]` up to 10 | Sets the vehicle's team through its vtable (dropping its current target) or the zeppelin's team fields +0xdc/+0xe0 with a turret-side refresh (`FUN_00469e20`, log string `SET_AI_TEAM: setting vehicle %s to team %d`). |
 | `SET_AI_NET` | `[[name, net], ...]` up to 10 | Reassigns the vehicle (`FUN_00475f30`) or zeppelin (`FUN_004bd7a0`) to the named patrol net ([ai-nets.md](ai-nets.md)). This is how C2/M01 walks its patrol boats through successive nets. |
 | `SET_AI_ATTACK_RADIUS` | `[[name, r], ...]` | Parsed and executable (`FUN_00469f70` writes the vehicle's radius-squared / ±band volume at +0x328), authored nowhere. |

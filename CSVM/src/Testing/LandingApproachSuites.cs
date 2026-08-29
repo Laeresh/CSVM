@@ -2089,10 +2089,8 @@ internal static class LandingApproachSuites
         ctx.Same(1, starts(),
             $"the row fires once: a cutscene owning the session locks its own trigger out");
 
-        // The film's own two moments, against the authored script lengths rather than a
-        // watched value: 'carpkup_player.zan' (6.66 s) then the EVENT_OFFSET 10 before
-        // destroy_car01, and 'sparkspickup.zan' + 'final_cpilot.zan' (6.66 + 14.85 s) before the
-        // WAIT_FOR_COMPLETION releases and the pickup calls got_sparks.
+        // The film's own two moments, against the authored script lengths rather than a watched
+        // value. Both sums are on WreckAtS/GotSparksAtS where they are declared.
         ctx.Check(Math.Abs(wreckedAt - WreckAtS) < FilmToleranceS,
             $"the film calls destroy_car01 on its authored beat: OBJECTIVE{wreck.Number} at {wreckedAt:0.##}s (authored {WreckAtS:0.##}s)");
         ctx.Check(Math.Abs(got - GotSparksAtS) < FilmToleranceS,

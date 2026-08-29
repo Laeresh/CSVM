@@ -1061,6 +1061,27 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>`WARP_VEHICLE`'s plain waypoint (<c>FUN_00493fb0</c>): put this aeroplane at
+    /// <paramref name="pos"/> yawed to <paramref name="headingDeg"/>, flying at
+    /// <paramref name="speed"/> along the placed nose.
+    /// ⚠ Not <see cref="Activate"/>: the warp writes a pose and a velocity and nothing else, so
+    /// damage, ammo, fuel and the INERT bit all survive it. C4/M02 warps Blacke while he is still
+    /// deactivated, and activating him here would put the boss up at mission start.</summary>
+    public void WarpTo(Vector3 pos, float headingDeg, float speed)
+    {
+        // The roster block's own yaw convention (CampaignRoster's Forward), which is the one the
+        // authored angle is written in: the shipped points sit within a few degrees of the aiv
+        // spawn yaw of the aircraft they move.
+        var attitude = new Basis(Vector3.Up, Mathf.DegToRad(headingDeg));
+        _spawnPos = pos;
+        _spawnAttitude = attitude;
+        _model.Reset(pos, attitude, speed, _model.Throttle);
+        _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
+        GlobalTransform = _simCurr;
+        if (_cam != null && IsInsideTree())
+            SnapCamera();
+    }
+
     /// <summary>Hands a held aircraft back to the flight model where it stands, moving at
     /// <paramref name="velocity"/> with the lever at <paramref name="throttle"/>: the
     /// scripted-path follower's handoff, which the original makes by clearing the path flag and
