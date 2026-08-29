@@ -180,7 +180,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — the results page
 
 15. ☑ The results block: four rows, the outcome line and the two tabs
-16. ☐ The per-airframe kill stamps
+16. ☑ The per-airframe kill stamps
 17. ☐ Enter the scrapbook at mission end, and Replay Mission
 
 ### Wave D — the book
@@ -189,6 +189,16 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 19. ☐ The per-scrap detail view
 20. ☐ Navigation: page and mission arrows, and the Current Mission bookmark
 21. ☐ The danger-zone scrap slot
+
+### Closing — worktree housekeeping
+
+22. ☐ Rebase onto main instead of merging it: main's history carries a rewrite (a `Co-Authored-By`
+    trailer backfill across roughly 110 commits, each an identical tree to its old self) that landed
+    after this worktree forked from it. `close-worktree`'s ordinary "main has moved → `git merge
+    main`" step would replay every one of those rewritten commits as new work in one merge commit.
+    Confirm the fork point (`Merge worktree-m5-polish-6`) has a same-tree twin on current main, then
+    `git rebase --onto <main's current tip> <fork point> worktree-bl-622-debrief-decode` to replay
+    only this worktree's own commits, and run the complete `.\RunTests.ps1` before merging back.
 
 ## Dependency and parallelism notes
 
@@ -666,7 +676,7 @@ a stored total would drift from the stamps it has to agree with. ⚠ The outcome
 whose source offset differs between the two tabs (`0x0040a7e6`, `+0x00` against `+0x24` inside the
 half); every other row and both kill arrays sit at the same offset in whichever half is selected.
 
-## C16 ☐ The per-airframe kill stamps
+## C16 ☑ The per-airframe kill stamps
 
 **Goal.** The results page draws one stamp per airframe with a kill count, and the starred variant
 where the original draws it.

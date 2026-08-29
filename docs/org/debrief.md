@@ -450,6 +450,10 @@ merge, not its author, and the two run in the same mission-end pass.
   outcome line and the four drawn rows off one `MissionResult` and either tab, including the Best to
   Date tab's own bug: it always reads Mission Failed, since `0x0040a7e6` never reads the merged
   mask for that tab. Not yet wired into a screen; C17 is the entry path.
+- **The kill stamps are computed (C16).** The same class's `Stamps` walks the plain tally then the
+  ace tally in ascending airframe order, skipping zeros, filling the eleven `SB_KILL`/`SB_KILLTEXT`
+  slots densely; `StampPictures`/`StampLabels` place the strip frame and count at each slot's own
+  `LAYOUT.CSV` position. Not yet drawn by a screen.
 - **The skip offer's counter and its answer are implemented; the asking is not (B14).**
   `MissionResult.Attempts` is the per-mission counter, moved by `CampaignProgression.Record` on a
   failure alone and only while `Best`'s bit 0 is clear, so it counts total rather than consecutive

@@ -33,6 +33,9 @@ public static class CampaignScrapbookResults
     // AB14I, the row font every SB_T_* widget in [@ScrapBook@] carries.
     private const float RowFont = 14f;
 
+    // KTEXTW, the SB_KILLTEXT box width (C16).
+    private const float StampTextWidth = 15f;
+
     private const string MissionCompletedText = "Mission Completed"; // langui 1213
     private const string MissionFailedText = "Mission Failed"; // langui 1214
     private const string ResultsHeadingText = "Mission Results"; // langui 1202
@@ -40,6 +43,24 @@ public static class CampaignScrapbookResults
     private const string GunHitRatioTitle = "Gun Hit Ratio"; // langui 1205
     private const string CashEarnedTitle = "Cash Earned"; // langui 1206
     private const string PlanesDownedTitle = "Overall Planes Downed"; // langui 1207
+
+    // SB_killMARKERcombined.png: 22 frames of 70x100, the eleven airframes then the same eleven
+    // starred (C16).
+    private static readonly BoardArt KillMarker = new(BoardArtLibrary.Ui, "SB_KILLMARKERCOMBINED.PNG", 22);
+
+    // SB_KILL0..SB_KILL10's top-left, LAYOUT.CSV [@ScrapBook@]. Not in reading order (C16).
+    private static readonly (float X, float Y)[] StampSlots =
+    {
+        (560f, 109f), (467f, 93f), (604f, 173f), (604f, 50f), (520f, 42f),
+        (679f, 153f), (540f, 195f), (682f, 46f), (476f, 184f), (416f, 154f), (417f, 43f),
+    };
+
+    // SB_KILLTEXT0..SB_KILLTEXT10, the count drawn over each stamp.
+    private static readonly (float X, float Y)[] StampTextSlots =
+    {
+        (588f, 128f), (494f, 114f), (632f, 195f), (633f, 72f), (549f, 64f),
+        (707f, 176f), (568f, 218f), (709f, 69f), (504f, 207f), (445f, 177f), (444f, 66f),
+    };
 
     /// <summary>Best to Date (langui 1159), the merged half at <c>+0x54</c>, or Most Recent
     /// (langui 1160), the attempt half at <c>+0x00</c> (<c>docs/formats/saved-games.md</c>, "The
@@ -68,6 +89,63 @@ public static class CampaignScrapbookResults
         }
 
         return total & 0xffff;
+    }
+
+    /// <summary>The filled kill-stamp slots, densely from slot 0: the plain tally's airframes in
+    /// ascending index order, skipping zeros, then the ace tally's the same way, stopping at
+    /// eleven (<c>docs/org/debrief.md#the-stamps-and-the-total</c>). The same airframe can fill
+    /// two slots, once plain and once starred.</summary>
+    public static IReadOnlyList<KillStamp> Stamps(MissionResult result, bool bestToDate)
+    {
+        var run = bestToDate ? result.Best : result.Latest;
+        var stamps = new List<KillStamp>();
+        for (int i = 0; i < CampaignProgression.AirframeCount && stamps.Count < CampaignProgression.AirframeCount; i++)
+        {
+            if (run.Kills[i] > 0)
+            {
+                stamps.Add(new KillStamp(stamps.Count, i, run.Kills[i]));
+            }
+        }
+
+        for (int i = 0; i < CampaignProgression.AirframeCount && stamps.Count < CampaignProgression.AirframeCount; i++)
+        {
+            if (run.AceKills[i] > 0)
+            {
+                stamps.Add(new KillStamp(stamps.Count, i + CampaignProgression.AirframeCount, run.AceKills[i]));
+            }
+        }
+
+        return stamps;
+    }
+
+    /// <summary>The stamp art, one <c>BoardPicture</c> per filled slot at its <c>SB_KILL</c>
+    /// position. ⚠ The eleven slots are not in reading order (C16): <c>SB_KILL1</c> sits left of
+    /// and above <c>SB_KILL0</c>.</summary>
+    public static IReadOnlyList<BoardPicture> StampPictures(MissionResult result, bool bestToDate)
+    {
+        var pictures = new List<BoardPicture>();
+        foreach (var stamp in Stamps(result, bestToDate))
+        {
+            var (x, y) = StampSlots[stamp.Slot];
+            pictures.Add(new BoardPicture(KillMarker, x, y, stamp.Frame));
+        }
+
+        return pictures;
+    }
+
+    /// <summary>The kill count drawn over each filled stamp, at its <c>SB_KILLTEXT</c>
+    /// position.</summary>
+    public static IReadOnlyList<BoardLine> StampLabels(MissionResult result, bool bestToDate)
+    {
+        var lines = new List<BoardLine>();
+        foreach (var stamp in Stamps(result, bestToDate))
+        {
+            var (x, y) = StampTextSlots[stamp.Slot];
+            lines.Add(new BoardLine(
+                stamp.Count.ToString(CultureInfo.InvariantCulture), x, y, StampTextWidth, RowFont, BoardInk.Row));
+        }
+
+        return lines;
     }
 
     /// <summary>The outcome line, the heading and the four drawn rows (title then value), at
@@ -104,6 +182,12 @@ public static class CampaignScrapbookResults
                 ValueX, PlanesY, 0, RowFont, BoardInk.Row),
         };
     }
+
+    /// <summary>One filled kill-stamp slot: <paramref name="Slot"/> is the <c>SB_KILL</c>/
+    /// <c>SB_KILLTEXT</c> ordinal (0-10, not reading order), <paramref name="Frame"/> the strip
+    /// frame (the airframe index, or that plus eleven for the starred/ace variant), and
+    /// <paramref name="Count"/> the number drawn over it.</summary>
+    public readonly record struct KillStamp(int Slot, int Frame, int Count);
 }
 
 /// <summary>

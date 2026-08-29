@@ -96,6 +96,86 @@ public class CampaignScrapbookResultsTests
         Assert.Equal("Best to Date", CampaignScrapbookResults.TabTitle(bestToDate: true));
     }
 
+    /// <summary>CM02: slot 0 <c>2 Balmoral</c>, slot 1 <c>3 Peacemaker</c>, slot 2 a starred
+    /// <c>1 Peacemaker</c>, over 6. Balmoral is airframe index 2, Peacemaker index 9; the ace
+    /// stamp's frame is 9 + 11 = 20.</summary>
+    [Fact]
+    public void Cm02StampsFillDenselyPlainThenAce()
+    {
+        var result = new MissionResult
+        {
+            Latest = Run(mask: 1, timeMs: 199000, shots: 50, hits: 9, money: 500,
+                kills: (2, 2), kills2: (9, 3), aceKills: (9, 1)),
+        };
+
+        var stamps = CampaignScrapbookResults.Stamps(result, bestToDate: false);
+
+        Assert.Equal(3, stamps.Count);
+        Assert.Equal(new CampaignScrapbookResults.KillStamp(0, 2, 2), stamps[0]);
+        Assert.Equal(new CampaignScrapbookResults.KillStamp(1, 9, 3), stamps[1]);
+        Assert.Equal(new CampaignScrapbookResults.KillStamp(2, 20, 1), stamps[2]);
+    }
+
+    /// <summary>The same airframe filling two slots, once plain and once starred, must not be
+    /// collapsed by a layout keyed uniquely on airframe.</summary>
+    [Fact]
+    public void SameAirframePlainAndStarredFillsTwoSlots()
+    {
+        var result = new MissionResult
+        {
+            Latest = Run(mask: 1, timeMs: 0, shots: 0, hits: 0, money: 0, kills: (9, 3), aceKills: (9, 1)),
+        };
+
+        var stamps = CampaignScrapbookResults.Stamps(result, bestToDate: false);
+
+        Assert.Equal(2, stamps.Count);
+        Assert.Equal(9, stamps[0].Frame);
+        Assert.Equal(20, stamps[1].Frame);
+    }
+
+    [Fact]
+    public void StampPicturesAndLabelsUseTheAuthoredSlotPositions()
+    {
+        var result = new MissionResult
+        {
+            Latest = Run(mask: 1, timeMs: 0, shots: 0, hits: 0, money: 0, kills: (2, 2), kills2: (9, 3)),
+        };
+
+        var pictures = CampaignScrapbookResults.StampPictures(result, bestToDate: false);
+        var labels = CampaignScrapbookResults.StampLabels(result, bestToDate: false);
+
+        Assert.Equal(2, pictures.Count);
+        // Slot 0 (Balmoral, frame 2) sits at SB_KILL0, 560,109 -- NOT the leftmost on screen:
+        // SB_KILL1 (467,93) is left of and above it, so a reading-order layout would swap these.
+        Assert.Equal(560f, pictures[0].X);
+        Assert.Equal(109f, pictures[0].Y);
+        Assert.Equal(2, pictures[0].Frame);
+        Assert.Equal(467f, pictures[1].X);
+        Assert.Equal(93f, pictures[1].Y);
+
+        Assert.Equal(2, labels.Count);
+        Assert.Equal("2", labels[0].Text);
+        Assert.Equal(588f, labels[0].X);
+        Assert.Equal(128f, labels[0].Y);
+        Assert.Equal("3", labels[1].Text);
+    }
+
+    [Fact]
+    public void StampsStopAtElevenSlots()
+    {
+        var run = new MissionRun { CompletedMask = 1 };
+        for (int i = 0; i < CampaignProgression.AirframeCount; i++)
+        {
+            run.Kills[i] = 1;
+            run.AceKills[i] = 1;
+        }
+
+        var result = new MissionResult { Latest = run };
+        var stamps = CampaignScrapbookResults.Stamps(result, bestToDate: false);
+
+        Assert.Equal(CampaignProgression.AirframeCount, stamps.Count);
+    }
+
     private static MissionRun Run(
         int mask, int timeMs, int shots, int hits, int money,
         (int Index, int Count)? kills = null, (int Index, int Count)? kills2 = null,
