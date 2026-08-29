@@ -13,8 +13,7 @@ namespace CSVM.Session;
 /// spot and driven by <see cref="SurfaceVehicle"/>. The copy is indexed on the world runtime so
 /// the chapter's own definitions anchor on it (the wake, the damage stages, the sinking), and its
 /// destructible pool is the one a weapon hit or a ram reaches through <c>AnimRuntime.DamageAt</c>.
-/// Stepped from <see cref="_PhysicsProcess"/> on a realtime clock or from
-/// <c>GameSession.DriveSimSteps</c> on a parent-driven one, like the generators.
+/// Stepped only by <see cref="SessionSimulation"/>, after the generators that may launch a hull.
 /// </summary>
 public sealed partial class SurfaceVehicleRuntime : Node
 {
@@ -104,17 +103,7 @@ public sealed partial class SurfaceVehicleRuntime : Node
         return vessel;
     }
 
-    public override void _PhysicsProcess(double delta)
-    {
-        float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
-        if (dt <= 0f)
-        {
-            return;   // the session drives SimStep itself this frame (see GameClock.PhysicsDt)
-        }
-        SimStep(dt);
-    }
-
-    /// <summary>One step of every hull. Public so a fixed or halted clock can drive it.</summary>
+    /// <summary>One session-simulation step of every hull.</summary>
     public void SimStep(float dt)
     {
         foreach (var vessel in _vessels)

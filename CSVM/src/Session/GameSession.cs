@@ -717,20 +717,6 @@ public partial class GameSession : Node3D
     /// </summary>
     public override void _PhysicsProcess(double delta)
     {
-        // ⚠ Ahead of the clock and the simulation step, which it outranks: an ended mission's
-        // world stands still until the session goes (CampaignDirector.LeavingHoldS). On the
-        // frame's own delta, since the sim clock it halts yields none.
-        if (_campaign is { Leaving: true } leaving)
-        {
-            if (_clock != null)
-            {
-                _clock.SimHeld = true;
-            }
-
-            leaving.Step((float)delta);
-            return;
-        }
-
         if (delta <= 0.0 || _clock is not { ParentDriven: false })
             return;
         _simulation?.Step((float)delta);
@@ -3278,50 +3264,43 @@ public partial class GameSession : Node3D
     // outer-frame input injection; each clock substep below enters the same module as realtime.
     private void DriveParentSimulation(GameClock clock)
     {
-        // The leaving hold, the stepped path's half of the guard in _PhysicsProcess: an ended
-        // mission's world stands still until the session goes, so the only thing this drive still
-        // advances is the hold itself.
-        if (_campaign is { Leaving: true } leaving)
+        // The mission-ending hold rejects outer-frame input before every request enters the same
+        // SessionSimulation admission path as realtime.
+        if (_campaign?.Leaving != true)
         {
-            for (int i = 0; i < clock.Steps; i++)
+            // --crash[=frame]: force every player's crash rig at a fixed sim frame, the only
+            // headless trigger for a crash a live collision otherwise gates. Spawned AI planes
+            // crash too, while an inert one declines, since DebugForceCrash is gated on InPlay.
+            if (_spec.CrashFrame is int crashFrame && !_crashFired && clock.Frame >= crashFrame)
             {
-                leaving.Step(clock.Dt);
+                _crashFired = true;
+                foreach (var rig in _rigs)
+                    rig.Controller?.DebugForceCrash();
+                foreach (var plane in AiPlanes)
+                    plane.DebugForceCrash();
             }
-
-            return;
-        }
-        // --crash[=frame]: force every player's crash rig at a fixed sim frame, the only headless
-        // trigger for a crash a live collision otherwise gates. Spawned AI planes crash too, while
-        // an inert one declines, since DebugForceCrash is gated on InPlay.
-        if (_spec.CrashFrame is int crashFrame && !_crashFired && clock.Frame >= crashFrame)
-        {
-            _crashFired = true;
-            foreach (var rig in _rigs)
-                rig.Controller?.DebugForceCrash();
-            foreach (var plane in AiPlanes)
-                plane.DebugForceCrash();
-        }
-        // --debug-pause[=frame]: the scripted Start press, so a --screenshot catches the pause
-        // screen. Player 0 owns it, as a solo press would. Same single-fire shape as --crash above.
-        if (_spec.DebugPauseFrame is int pauseFrame && !_debugPauseFired && clock.Frame >= pauseFrame)
-        {
-            _debugPauseFired = true;
-            _pauseState?.TryToggle(0);
-        }
-        // --debug-scoreboard --vs: one scripted, ATTRIBUTED kill on the first sim step, through the
-        // same Downed path a real kill takes, so a screenshot has a real K/D and kill banner
-        // without scripting a shot. Same single-fire shape as --crash above.
-        if (_spec.Versus && _spec.DebugScoreboard && !_versusDebugKillFired && _rigs.Count > 1)
-        {
-            _versusDebugKillFired = true;
-            _rigs[1].Controller?.DebugForceCrash(_rigs[0].Controller?.PlayerIndex);
-        }
-        // --debug-scoreboard (IA): the director's single-fire force, the same shape as the two
-        // blocks above, attributed to P1 so the wrap-up board reads non-zero. Which modes have a
-        // force at all: docs/architecture.md on GameSession.cs.
-        if (_spec.DebugScoreboard)
-        {
-            _iaDirector?.ForceDebugScoreboard();
+            // --debug-pause[=frame]: the scripted Start press, so a --screenshot catches the pause
+            // screen. Player 0 owns it, as a solo press would. Same single-fire shape as --crash.
+            if (_spec.DebugPauseFrame is int pauseFrame && !_debugPauseFired && clock.Frame >= pauseFrame)
+            {
+                _debugPauseFired = true;
+                _pauseState?.TryToggle(0);
+            }
+            // --debug-scoreboard --vs: one scripted, ATTRIBUTED kill on the first sim step,
+            // through the same Downed path a real kill takes, so a screenshot has a real K/D and
+            // kill banner without scripting a shot. Same single-fire shape as --crash above.
+            if (_spec.Versus && _spec.DebugScoreboard && !_versusDebugKillFired && _rigs.Count > 1)
+            {
+                _versusDebugKillFired = true;
+                _rigs[1].Controller?.DebugForceCrash(_rigs[0].Controller?.PlayerIndex);
+            }
+            // --debug-scoreboard (IA): the director's single-fire force, the same shape as the two
+            // blocks above, attributed to P1 so the wrap-up board reads non-zero. Which modes have
+            // a force at all: docs/architecture.md on GameSession.cs.
+            if (_spec.DebugScoreboard)
+            {
+                _iaDirector?.ForceDebugScoreboard();
+            }
         }
         for (int i = 0; i < clock.Steps; i++)
         {
@@ -3329,6 +3308,18 @@ public partial class GameSession : Node3D
         }
 
         DiagTraceRoster();
+    }
+
+    // The mission-end hold presents one unchanged flown frame: the session and authored-animation
+    // clocks both stay quiet while CampaignDirector alone counts down the hand-off.
+    private void HoldEndingFrame()
+    {
+        if (_clock == null)
+        {
+            return;
+        }
+        _clock.SimHeld = true;
+        _clock.AuthoredAnimationHeld = true;
     }
 
     private void DiagTraceRoster()
@@ -3480,6 +3471,13 @@ public partial class GameSession : Node3D
         private readonly List<FlightController> _eligibleAiAircraft = new();
 
         public bool SimHeld => session._clock?.SimHeld ?? false;
+        public bool EndingHold => session._campaign?.Leaving ?? false;
+
+        public void StepEndingHold(float dt)
+        {
+            session.HoldEndingFrame();
+            session._campaign?.Step(dt);
+        }
 
         public void CaptureAiAircraft()
         {
@@ -3518,7 +3516,14 @@ public partial class GameSession : Node3D
         }
 
         public void StepInstantAction(float dt) => session._iaDirector?.Step(dt);
-        public void StepCampaign(float dt) => session._campaign?.Step(dt);
+        public void StepCampaign(float dt)
+        {
+            session._campaign?.Step(dt);
+            if (EndingHold)
+            {
+                session.HoldEndingFrame();
+            }
+        }
         public void StepRadio(float dt) => session._radio?.Tick(dt);
         public void StepSmokeScreens(float dt) => session._smokeScreens?.SimStep(dt);
         public void StepBeeperTags(float dt) => session._beeperTags?.SimStep(dt);

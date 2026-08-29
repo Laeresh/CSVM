@@ -93,6 +93,21 @@ public sealed class SessionSimulationTests
         Assert.DoesNotContain("radio:0.25", runtime.Calls);
     }
 
+    [Fact]
+    public void CampaignEndingHaltsLaterPhasesAndLaterRequestsAdvanceOnlyTheLeavingHold()
+    {
+        var runtime = new RecordingRuntime("ai-1") { EndAtCampaign = true };
+        var simulation = new SessionSimulation(runtime);
+
+        simulation.Step(0.25f);
+        Assert.Equal("campaign:0.25", runtime.Calls[^1]);
+        int firstStepCalls = runtime.Calls.Count;
+
+        simulation.Step(0.25f);
+        Assert.Equal(new[] { "leaving-hold:0.25" }, runtime.Calls.GetRange(
+            firstStepCalls, runtime.Calls.Count - firstStepCalls));
+    }
+
     private sealed class RecordingRuntime(params string[] aiAircraft) : ISessionSimulationRuntime
     {
         private readonly List<string> _aiAircraft = new(aiAircraft);
@@ -104,6 +119,8 @@ public sealed class SessionSimulationTests
         public string? ThrowAt { get; init; }
         public bool HoldAtLanding { get; init; }
         public bool HoldAtCampaign { get; init; }
+        public bool EndAtCampaign { get; init; }
+        public bool EndingHold { get; private set; }
 
         public void CaptureAiAircraft()
         {
@@ -144,7 +161,10 @@ public sealed class SessionSimulationTests
             Record("campaign", dt);
             if (HoldAtCampaign)
                 SimHeld = true;
+            if (EndAtCampaign)
+                EndingHold = true;
         }
+        public void StepEndingHold(float dt) => Record("leaving-hold", dt);
         public void StepRadio(float dt) => Record("radio", dt);
         public void StepSmokeScreens(float dt) => Record("smoke-screens", dt);
         public void StepBeeperTags(float dt) => Record("beeper-tags", dt);

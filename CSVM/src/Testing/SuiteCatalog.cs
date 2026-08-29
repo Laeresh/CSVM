@@ -995,7 +995,8 @@ public static class SuiteCatalog
             + "session the physics tick advances it by its own dt and the frame's wall delta "
             + "advances nothing, a cutscene hold hands the advance back to the frame, a halt "
             + "advances neither until a queued step, and fixed-step takes exactly one step per "
-            + "frame from the frame",
+            + "frame from the frame; a mission-ending hold keeps both callbacks quiet on the "
+            + "last flown pose",
             AnimClockRealtime));
         into.Add(new TestHarness.Suite("fog-state",
             "the FOG_STATE animation event (BL-038) over C1/M04's intro definition: a weather "
@@ -1351,7 +1352,8 @@ public static class SuiteCatalog
             + "once woken, and die once through the chapter's destructible pool; CM12's eshipg31 "
             + "launch resolves a surface launch off Eshipg31_params, builds patrolboat_eg0 on the "
             + "host's first take-off point kilometres from the world origin, runs the path "
-            + "westward at the taxi speed, and never asks for an aircraft",
+            + "westward at the taxi speed, never asks for an aircraft, and a realtime simulation "
+            + "request advances it once through the shared session owner",
             SurfaceVehicleSuites.CampaignSurfaceVehicles));
 
         // BL-491: a campaign mission had three endings and none of them was the player dying, so

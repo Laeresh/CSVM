@@ -1226,6 +1226,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // per step, so one 4/60 s call and four 1/60 s calls are not the same playback.
         if (GameClock.Current is { } clock)
         {
+            if (clock.AuthoredAnimationHeld)
+            {
+                return;
+            }
             // A realtime session advances on the physics tick (_PhysicsProcess); the frame keeps
             // the advance only while the sim is held for a cutscene, since the movie is animation.
             if (clock.Mode == GameClock.RunMode.Realtime && !clock.Halted && !clock.SimHeld)

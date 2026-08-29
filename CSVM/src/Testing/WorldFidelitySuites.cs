@@ -557,6 +557,16 @@ internal static class WorldFidelitySuites
                 $"and the frame keeps the movie running on wall time");
             clock.SimHeld = false;
 
+            clock.SimHeld = true;
+            clock.AuthoredAnimationHeld = true;
+            clock.BeginFrame(wallDt);
+            runtime._PhysicsProcess(physicsDt);
+            runtime._Process(wallDt);
+            ctx.Check(Mathf.IsEqualApprox(runtime.Elapsed, (2f * physicsDt) + wallDt),
+                $"under an ending hold neither callback advances the authored animation");
+            clock.AuthoredAnimationHeld = false;
+            clock.SimHeld = false;
+
             clock.Halted = true;
             clock.BeginFrame(wallDt);
             runtime._PhysicsProcess(physicsDt);

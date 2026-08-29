@@ -4,6 +4,7 @@ using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -310,6 +311,29 @@ internal static class SurfaceVehicleSuites
                 $"the hull launches on the host's first take-off point, not at the host node");
             ctx.Check(at.Length() > OriginClearanceM, $"the hull is nowhere near the world origin: {at.Length():0} m");
 
+            // The realtime adapter and the shared session simulation together must still advance
+            // one step. A concrete runtime callback here would make every interactive hull run 2x.
+            var savedClock = GameClock.Current;
+            try
+            {
+                var clock = new GameClock { Mode = GameClock.RunMode.Realtime };
+                GameClock.Current = clock;
+                ctx.Check(!clock.ParentDriven, $"the surface-vehicle callback check uses a realtime clock");
+                var simulation = new SessionSimulation(new SurfaceStepRuntime(vessels));
+                var beforeStep = boat.Position;
+                vessels._PhysicsProcess(StepDt);
+                simulation.Step(StepDt);
+                float oneStep = new Vector2(boat.Position.X - beforeStep.X,
+                    boat.Position.Z - beforeStep.Z).Length();
+                report.AppendLine($"{GenLaunch}: realtime adapter + session request moved {oneStep:0.###} m in one {StepDt:0.###} s step");
+                ctx.Check(oneStep > 0f && oneStep <= PathFollower.TaxiSpeed * StepDt + 0.05f,
+                    $"a realtime session request advances the hull once: {oneStep:0.###} m");
+            }
+            finally
+            {
+                GameClock.Current = savedClock;
+            }
+
             const float runS = 20f;
             for (int i = 0; i < (int)(runS / StepDt); i++)
             {
@@ -358,5 +382,30 @@ internal static class SurfaceVehicleSuites
             }
         }
         return true;
+    }
+
+    private sealed class SurfaceStepRuntime(SurfaceVehicleRuntime vessels) : ISessionSimulationRuntime
+    {
+        public bool SimHeld => false;
+        public bool EndingHold => false;
+
+        public void StepEndingHold(float dt) { }
+        public void CaptureAiAircraft() { }
+        public void StepIncomingFire(float dt) { }
+        public void StepProjectiles(float dt) { }
+        public void StepHumanAircraft(float dt) { }
+        public void StepZeppelins(float dt) { }
+        public void StepTurretEmplacements(float dt) { }
+        public void StepGenerators(float dt) { }
+        public void StepSurfaceVehicles(float dt) => vessels.SimStep(dt);
+        public void StepCapturedAiAircraft(float dt) { }
+        public void StepLandingApproaches() { }
+        public void StepInstantAction(float dt) { }
+        public void StepCampaign(float dt) { }
+        public void StepRadio(float dt) { }
+        public void StepSmokeScreens(float dt) { }
+        public void StepBeeperTags(float dt) { }
+        public void StepAiVoice(float dt) { }
+        public void StepVersus(float dt) { }
     }
 }

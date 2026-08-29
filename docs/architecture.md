@@ -4695,7 +4695,9 @@ to `FlightRoster`, world construction to `WorldSession`, and effects staging to 
 After the synchronous build it constructs one `SessionSimulation`. `_PhysicsProcess` requests one
 realtime step; `_Process` requests each parent-driven `GameClock` substep. Debug/CLI forces remain
 outer-frame input injection. The nested runtime adapter maps named phases to concrete owners, which
-do not self-step from Godot callbacks. All human and dynamic AI aircraft enter through `FlightRoster`;
+do not self-step from Godot callbacks. Its mission-ending admission path holds both simulation and
+authored animation while advancing only the campaign hand-off. All human and dynamic AI aircraft
+enter through `FlightRoster`;
 `AllAircraft` combines its AI view with ordered rig controllers for non-step consumers. Exit frees
 the session subtree atomically and releases only the non-node resources this orchestrator owns.
 
@@ -4703,10 +4705,13 @@ the session subtree atomically and releases only the non-node resources this orc
 The session simulation: one plain-C# module owning hold admission and the exact order of flight,
 combat, mission, radio, effects and match advancement. `Step(dt)` snapshots eligible AI membership
 at entry, then advances incoming fire → projectiles → human aircraft → zeppelins → emplacements →
-generators → captured AI → landing approaches → Instant Action → campaign → radio → smoke → tags →
+generators → surface vehicles → captured AI → landing approaches → Instant Action → campaign →
+radio → smoke → tags →
 AI voice → Versus. A generator-spawned aircraft therefore first flies on the next step, including
 the next fixed-accumulator substep in the same rendered frame. A landing or campaign callback that
-raises `SimHeld` halts the remaining phases immediately. Exceptions are fail-fast. Authored animation,
+raises `SimHeld` halts the remaining phases immediately. An active ending hold advances only the
+campaign hand-off; one raised by the campaign also rejects every later phase and same-frame substep.
+Exceptions are fail-fast. Authored animation,
 cutscene presentation, weather, lens flare, terrain extension and wall-time watches stay outside.
 `ISessionSimulationRuntime` is the named recording/production seam; it is not a participant registry.
 
@@ -4715,10 +4720,11 @@ The session's simulation clock: `BeginFrame(wallDelta)` (first thing in `GameSes
 sets `Steps` + `Dt`; `GameSession` translates those into requests to `SessionSimulation`. Modes:
 Realtime, FixedAccum (interactive anim lab), FixedStep (scripted runs / `--det`); `Halted` is
 orthogonal. `SimHeld` is the authoritative session-simulation hold read by `SessionSimulation`;
-`FrameDt` is untouched, so animation keeps playing.
+`FrameDt` is untouched, so animation keeps playing during a cutscene. `AuthoredAnimationHeld`
+distinguishes the mission-ending hold, where both animation callbacks must keep the current pose.
 On a realtime session `AnimRuntime` is a `PhysicsDt` consumer too (its `_PhysicsProcess`), so the
 authored motions step on the physics tick; its `_Process` takes over only under `SimHeld`, a halt,
-or a parent-driven mode. Regression: the `anim-clock-realtime`
+or a parent-driven mode unless authored animation itself is held. Regression: the `anim-clock-realtime`
 suite. Published as `GameClock.Current` (session-scoped, nulled on teardown; null = raw frame delta).
 
 ## src/Utils/Log.cs
@@ -5601,8 +5607,8 @@ keeps the authored height), and indexes it on the world runtime through
 `AnimRuntime.IndexSpawnedCopy`, which is what lets the chapter's own `patrolboat` definitions
 (the reader files `patrol_boat_destroy`, `ptboat_damage`, `ptboat_wake`) anchor on every copy and
 register its destructible pool. A def with no library root in the chapter is logged and builds
-nothing. Stepped from `_PhysicsProcess` on a realtime clock or `GameSession.DriveSimSteps`
-after the generators, like them. `GameSession` builds one lazily (`EnsureSurfaceVehicles`) for
+nothing. Stepped only by `SessionSimulation`, after the generators that may launch another hull;
+it has no independent Godot callback. `GameSession` builds one lazily (`EnsureSurfaceVehicles`) for
 the roster phase and the generator block, only where a chapter world exists; `CampaignDirector`
 reaches it through `RosterInputs.SpawnSurface` and `WorldInputs.SurfaceVehicles`. Observability:
 one `surface: '<name>' … built at (…) water=…` line per hull. `CollectVehicles(AimCandidateSet)`

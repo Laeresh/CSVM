@@ -6,7 +6,9 @@ namespace CSVM.Session;
 public interface ISessionSimulationRuntime
 {
     bool SimHeld { get; }
+    bool EndingHold { get; }
 
+    void StepEndingHold(float dt);
     void CaptureAiAircraft();
     void StepIncomingFire(float dt);
     void StepProjectiles(float dt);
@@ -44,6 +46,11 @@ public sealed class SessionSimulation
     /// <summary>Advances exactly one requested step, or no-ops while the session is held.</summary>
     public void Step(float dt)
     {
+        if (_runtime.EndingHold)
+        {
+            _runtime.StepEndingHold(dt);
+            return;
+        }
         if (_runtime.SimHeld)
             return;
 
@@ -67,7 +74,7 @@ public sealed class SessionSimulation
 
         _runtime.StepInstantAction(dt);
         _runtime.StepCampaign(dt);
-        if (_runtime.SimHeld)
+        if (_runtime.EndingHold || _runtime.SimHeld)
             return;
 
         _runtime.StepRadio(dt);

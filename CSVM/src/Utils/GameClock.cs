@@ -39,6 +39,11 @@ public sealed class GameClock
     /// <see cref="FrameDt"/>, because the movie is animation.</summary>
     public bool SimHeld;
 
+    /// <summary>Authored animation held on its current pose. Mission ending sets this with
+    /// <see cref="SimHeld"/> so the last flown frame remains unchanged; a cutscene hold leaves it
+    /// clear because the movie itself is authored animation.</summary>
+    public bool AuthoredAnimationHeld;
+
     // A hitch must not unwind as a burst of catch-up steps: a quarter second (15 steps) keeps
     // slow frames honest without turning a debugger breakpoint stall into fast-forward.
     private const float MaxAccum = 0.25f;
@@ -81,8 +86,8 @@ public sealed class GameClock
     public float StepFraction => Mode == RunMode.FixedAccum ? Mathf.Clamp(_accum / FixedDt, 0f, 1f) : 1f;
 
     /// <summary>True when GameSession requests <see cref="Steps"/> simulation steps from its frame
-    /// callback instead of one from its physics callback. <see cref="SimHeld"/> zeroes
-    /// <see cref="PhysicsDt"/> without setting this.</summary>
+    /// callback instead of one from its physics callback. <see cref="SimHeld"/> and
+    /// <see cref="AuthoredAnimationHeld"/> zero <see cref="PhysicsDt"/> without setting this.</summary>
     public bool ParentDriven => Halted || Mode != RunMode.Realtime;
 
     /// <summary>Queue exactly one step through a halt (the <c>.</c> transport key).</summary>
@@ -131,7 +136,8 @@ public sealed class GameClock
     }
 
     /// <summary>The realtime authored-animation dt. Zero hands animation to its frame callback:
-    /// parent-driven modes and <see cref="SimHeld"/> both need the movie's separate frame path.</summary>
+    /// parent-driven modes and <see cref="SimHeld"/> both need the movie's separate frame path,
+    /// while <see cref="AuthoredAnimationHeld"/> keeps both paths quiet.</summary>
     public float PhysicsDt(double godotPhysicsDelta) =>
-        ParentDriven || SimHeld ? 0f : (float)godotPhysicsDelta;
+        ParentDriven || SimHeld || AuthoredAnimationHeld ? 0f : (float)godotPhysicsDelta;
 }
