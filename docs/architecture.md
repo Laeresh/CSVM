@@ -2349,6 +2349,15 @@ its only neighbour and shuttling the route forever (`BL-529`, `docs/formats/miss
 Pinned by `AiNetFollowerTests` + the `ai-net-follow` suite.
 `ArrivedNode` is the danger-zone report: the node the last `Update` reached and stepped past,
 which `AiPilot` reads for its tag, never the node being flown toward.
+`Reseat` is the original's activation snap (`FUN_004b0f40` into `FUN_00432010`): an Instant Action
+wave member ticks while it is inert, presence being no sim gate, so without it the member's first
+update latches a node near its parking pose and it flies back there after the teleport (`BL-364`).
+It optionally names an edge the next seat pick must refuse, which is how the danger-zone
+exit continues the course: the original's exit (`FUN_00490590`) hands `FUN_00431e40` the edge id
+the walk was on when the run began, so a racer set down by the ribbon beside its own entry node
+cannot fly that leg again and re-lock the zone it just flew (`BL-615`). An undirected neighbour
+list says the same thing by naming the edge's far end; the exclusion is spent on the seat it
+applies to.
 
 ## src/Flight/DangerZoneRibbon.cs
 The decoded danger-zone run (`docs/org/aiPilot.md` "The danger-zone run"), engine-free:

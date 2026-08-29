@@ -930,8 +930,16 @@ route-versus-gate material rule and applies `dzones.zrd`'s `disable` list. `AiNe
 reports the node it just reached (`ArrivedNode`), `AiPilot` takes the node-tag entry into
 `AiModeMachine.ApproachingDangerZone`, locks at 105 m into `NavigatingDangerZone` and publishes
 `RailPose`, which `FlightController.SimStep` applies in place of the model step; the exit
-re-seats the follower. Measured on C2/M03 (`--campaign=<copy>:12`, 150 s): all six racers enter
-`dzpath1` then `dzpath2` in course order, each through approach, lock and exit.
+re-seats the follower through `AiNetFollower.Reseat`, which is handed the leg the walk was on at
+the entry and refuses it, the exclusion above. Measured on C2/M03 with the world's colliders up
+(the `campaign-racers` suite, 208 s of sim): all six racers fly `dzpath1, 2, 3, 10, 6, 7, 9` in
+the net's tag order, each once, through approach, lock and exit.
+
+⚠ **The exclusion is what carries a racer out of a zone.** Without it the seat pick after a run
+is free to take the leg back toward the tagged node, and `dzpath3`'s exit sets the aeroplane
+down where that leg is the best-aligned edge under its nose: the racer flies back, reaches the
+tag again and re-locks the zone it just flew, forever. The retry stamp is no help here, because
+`FUN_00421500` never reads `+0x8a0`; the tag arm has no cooldown at all.
 
 ⚠ **The rail runs under the original's collision, and that collision is one point for an AI.**
 `FUN_00490590` moves the rail position through the sweep `FUN_0048d7f0` like any step, and a

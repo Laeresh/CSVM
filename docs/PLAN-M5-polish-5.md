@@ -142,6 +142,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 52. ☑ `BL-602`: CM13's first zone marker sits at the world origin; an origin-standing group site anchors on its built meshes, the race chain pinned
 53. ☑ `BL-601`: CM13's racers ram the hangar on dzpath2; an AI rig sweeps its def's one collision probe, as the original does
 54. ☑ `BL-604`: CM02 is still lost during the capture, before the swap: the wing walk's 913 park counted as a deactivation for DEDG
+55. ☑ `BL-615`: CM13's racers loop around zone 3 instead of going on; the run exit's net re-seat never refused the leg it entered on
 
 ## Dependency and parallelism notes
 
@@ -1612,3 +1613,19 @@ on the flown path.
 **Verified.** On the merged plan tree, the full gate: build clean, 2558 unit tests, 174 engine suites in four shards with the error census clean (engine stage 104 s against its 100 s budget, awareness only), 16 goldens hash-identical.
 
 **⚠ Traps.** `Inert` is presence; `Deactivated` is the mission's dead byte. Any new objective or tally walk reads `Deactivated`. The park is set before `Inert` so an `InertChanged` listener reads a consistent pair. The hidden captured aircraft leaves both the parked list and `Parked`, or the player and the bomber count twice.
+
+## F55 ☑ `BL-615`: CM13's racers loop around zone 3 and never go on to the next zone
+
+**Goal.** A racer that finishes a `dzpathN` run rejoins its net going onward, so the six racers fly the seven tagged zones of `M3StuntCourse` in the net's own order and the race runs its full course.
+
+**Evidence (confidence: decoded).** At the controls after F53 every danger zone clears and nobody crashes, but the racers circle zone 3. Reproduced in `campaign-racers` extended past `dzpath2`: all six run `dzpath1, 2, 3, 3, 3, 3` for 540 s and never reach `dzpath10`. The decode: `FUN_00490590`'s rail exit reads the edge the walk was on at the entry off `+0x2e8`/`+0x2ec`, snaps to the nearest node (`FUN_00431900`) and hands that edge id to the nose pick `FUN_00431e40` as its exclusion, whose candidate loop skips it; the ordinary walk step `FUN_0041d8f0` excludes the flown leg the same way. `AiNetFollower.Reseat` excluded nothing, and `dzpath3`'s exit at (-7628, 174, -2788) leaves the leg back toward the tagged node as the best-aligned edge, so the racer flew back, reached the tag and re-locked. No cooldown backs it up: `FUN_00421500` writes the `+0x8a0` retry stamp on a refusal and never reads it. E41's `docs/org/aiPilot.md` already carried the clause; it was never ported.
+
+**Approach.** `AiNetFollower.Reseat` takes an optional edge to refuse, held as an unordered node pair and spent on the seat it applies to; `AiPilot` records the leg at the entry and hands it back at the exit. Every other `Reseat` caller keeps the unconstrained default.
+
+**Model recommendation.** A single session; the decode was four functions of the walk and the rail exit.
+
+**Verify.** `campaign-racers` extended from two zones to the net's whole seven-zone course with two new per-racer assertions (no zone flown twice, the tagged zones in the net's order): all six run `dzpath1, 2, 3, 10, 6, 7, 9` in 208 s of sim with no rams. `AiNetFollowerTests.ReseatRefusesTheEdgeItWasToldToAvoid`. Foreground: build clean, `dotnet test` 2559, and `campaign-danger-zones`, `ai-modes`, `ai-net-follow`, `campaign-roster`, `campaign-race-chain` PASS.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** The exclusion is an edge, not a node: refusing the tagged node itself would strand a racer whose course runs back through it. It is spent on one seat pick, so an interrupted run that re-approaches carries no stale refusal. The other `Reseat` callers (the Instant Action activation snap, `FlightController`) must keep the unconstrained default, or a teleported wave member loses its nearest-node seat.
