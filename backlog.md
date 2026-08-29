@@ -853,6 +853,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   incremental migration note, `TurretController`, `BL-611`'s closing commit
   (`git log --grep=BL-611`).
 
+- `BL-621` `[Bug]` **CM07 (C1/M02): the parachutist is gone from the hangar drop since the chute
+  pool landed.** *Evidence:* reported at the controls; before `BL-608` the drop showed the pilot
+  parachuting into the hangar while the aeroplane was missing, and now the aeroplane is there and
+  the figure is not. `WorldSession`'s `ResolveLibraryRoot` serves `AircraftStage`'s staged
+  `chuteman` as pool copy 0 keyed on the call anchor and site, so a caller gets the staged actor
+  relocated to its authored site and later callers get duplicates; CM07's drop does not call the
+  figure at a site, `hdchute1` adopts it with `OBJECT_ADD_CHILD`. *Fix shape:* the placement kind
+  is the distinguishing rule, so let the pool serve the site-bearing call path alone and leave an
+  adoption's node where it is. *⚠ Traps:* CM02's three drifting chutes come from `ww_player`'s three
+  `ww_chuteman` calls and must keep their per-call copies (`campaign-capture-chutes`). *Cross-refs:*
+  `BL-608`'s closing commit (`git log --grep=BL-608`), `AircraftStage`, `docs/architecture.md`.
+
 - `BL-618` `[Bug]` **A compiled anim addressing a mech3ax `~n` dedup name resolves to nothing.**
   *Evidence:* CM13's `pzhomebase` switches `land_on` and `land_on~2` on and neither of the
   Pandora's two landing cones draws (`zeppelin-hull-activation`'s artifact records `cones 0/2`);
