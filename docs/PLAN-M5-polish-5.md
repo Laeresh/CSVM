@@ -154,6 +154,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 61. ☑ `BL-608`: CM02's crew bail out as one figure at the world origin, and the docking on the Pandora never ends the mission
 62. ☑ `BL-620`: CM02's ending waits out an objective wrap-up the completion code does not take
 63. ☑ `BL-621`: CM07's hangar drop loses its parachutist to G61's staged-actor pool
+64. ☑ `BL-623`: CM02's ending cuts to the cabin on the frame it is won, where the original holds the last flown frame for two seconds
 
 ## Dependency and parallelism notes
 
@@ -1776,3 +1777,19 @@ on the flown path.
 **Verified.** On the merged plan tree, the full gate: build clean, 2562 unit tests, 179 engine suites in four shards with the error census clean, 16 goldens hash-identical.
 
 **⚠ Traps.** `hdchute1b`'s prerequisite fails in this mission, so it never starts; a pool that hands it a slot anyway leaves a frozen duplicate in the world.
+
+## G64 ☑ `BL-623`: the ending cuts to the cabin on the frame it is won
+
+**Goal.** A won or lost mission holds its world for the two seconds the original spends fading the last flown frame out, with control never returning, before the session leaves.
+
+**Evidence (confidence: traced).** `FUN_00443090`, the path all four endings converge on (callers `FUN_0046ba10`, the wrap-up runner, and `FUN_0047e080` case 13), silences every playing sound (`FUN_00594040`, `FUN_00594580`, `FUN_00594680`), records the attempt (`FUN_004194e0`, or `FUN_00419700` for game type 3, the result slot through `FUN_00419630`) and then pushes the Fade State (`DAT_0071c200`, built by `FUN_00470000`, its name string at `0x006273c0`) onto the state machine at `DAT_0071d3a0` with the results state `DAT_0071d57c` behind it, at the fade's default duration `_DAT_006272b8` of 2.0 s. That state's entry copies the current framebuffer (`FUN_0046fc80` into `FUN_0059e2e0`), its tick blits the copy at a level ramping 0 to 1 over the duration and presents it itself (`FUN_0046fcc0` into `FUN_0046fe10`), and its exit frees it (`FUN_0046fd60`); `DAT_0071d290 = 0x1388` parks the flying state's presenter, where every ordinary cutscene callback writes 1, confirming G62's reading of that value. So the film does not play on after an ending: the last live frame is the frame the ending landed on, and C3/M05 never shows `bal_wing_foldup`'s last 0.06 s, `stopprops` past 13.47 s or `pzep_interior_light` at all. What was missing was not film, it was those two seconds.
+
+**Approach.** `CampaignDirector` banks the result on the ending's own frame and starts a `LeavingHoldS` of 2 s; `ReturnToCabin` and `MissionEnded` come at its far end. `GameSession` reads `Leaving` ahead of everything else in both drive paths, holds the sim clock and steps nothing but the director, so no aeroplane step, no animation advance and no stick input reaches the world in between.
+
+**Model recommendation.** A single session; the decode was the mission-end path and the fade state.
+
+**Verify.** `landings-balmoral-dock` drives the director and asserts the outcome turns Won on the code's frame (12.62 s), the session leaves a whole hold later (14.65 s) and not a frame before, and zero world steps run in between; `campaign-mission-end` separates the banking from the leaving.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** The freeze catches the wing fold 0.048 rad short of its authored angle, which is decoded and not a defect, so the pose check reads it at that tolerance. `campaign-mission-end` steps the graph, not the director, so it needs the director stepped for the hold. CSVM paints no fade over the held frame and has no debrief on its far end (`BL-622`): the two seconds are currently held picture and then a cut.

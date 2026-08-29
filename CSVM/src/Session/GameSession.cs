@@ -724,6 +724,19 @@ public partial class GameSession : Node3D
     /// the rigs.</summary>
     public override void _PhysicsProcess(double delta)
     {
+        // ⚠ Ahead of the clock and of the cutscene hold below, because it outranks both: an ended
+        // mission's world stands still until the session goes (CampaignDirector.LeavingHoldS).
+        // Counted on the frame's own delta, since the sim clock it halts yields none.
+        if (_campaign is { Leaving: true } leaving)
+        {
+            if (_clock != null)
+            {
+                _clock.SimHeld = true;
+            }
+
+            leaving.Step((float)delta);
+            return;
+        }
         float dt = _clock?.PhysicsDt(delta) ?? (float)delta;
         if (dt <= 0f)
             return;
@@ -3285,6 +3298,18 @@ public partial class GameSession : Node3D
     // this frame behaves exactly as it did.
     private void DriveSimSteps(GameClock clock)
     {
+        // The leaving hold, the stepped path's half of the guard in _PhysicsProcess: an ended
+        // mission's world stands still until the session goes, so the only thing this drive still
+        // advances is the hold itself.
+        if (_campaign is { Leaving: true } leaving)
+        {
+            for (int i = 0; i < clock.Steps; i++)
+            {
+                leaving.Step(clock.Dt);
+            }
+
+            return;
+        }
         // --crash[=frame]: force every player's crash rig at a fixed sim frame, the only headless
         // trigger for a crash a live collision otherwise gates. Spawned AI planes crash too, while
         // an inert one declines, since DebugForceCrash is gated on InPlay.

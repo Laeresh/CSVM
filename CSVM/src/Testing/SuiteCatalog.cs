@@ -1434,7 +1434,10 @@ public static class SuiteCatalog
             + "reach the angle the fold authors, and the mission-completion code lands at its end "
             + "while the definition is still running, so it beats the objective watching that same "
             + "definition for EXECUTED and wins the mission on its own frame, once, with a later "
-            + "completion code changing nothing",
+            + "completion code changing nothing; the world then stands still for the whole leaving "
+            + "hold, taking no aeroplane step, no animation advance and no stick, so the film's "
+            + "last live frame is the code's own and the session goes to the cabin two seconds "
+            + "after it rather than on it",
             LandingApproachSuites.BalmoralDock));
         into.Add(new TestHarness.Suite("campaign-cutscene-ownership",
             "which definition an episode belongs to when the OBJECTIVE SCRIPT starts it rather than "

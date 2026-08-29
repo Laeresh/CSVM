@@ -60,6 +60,11 @@ internal static class LandingApproachSuites
     // How close a pose has to land on its authored value to count as that value.
     private const float PoseEpsilon = 1e-3f;
 
+    // How far short of its authored end the wing fold is when the mission's own ending stops the
+    // world: the fold turns 1.92 rad in 2.01 s and the branch that raises the code waits 2.0 s, so
+    // the last 0.06 s of the turn is never flown, whatever the frame rate.
+    private const float FoldFreezeEpsilon = 0.1f;
+
     // How long the mission's own intro is given to run out before a hookup is flown, and how long
     // the airframe's own wing-fold turn is given after the episode ends.
     private const float IntroSettleS = 60f;
@@ -558,14 +563,15 @@ internal static class LandingApproachSuites
         }
 
         WithTrigger(ctx, world, director, rows, (trigger, cutscene, rig, graph) =>
-            RunBalmoralDock(ctx, world, graph, script, trigger, cutscene, rig, dock, report),
+            RunBalmoralDock(ctx, world, director, graph, script, trigger, cutscene, rig, dock, report),
             planeNode: BalmoralPlane, aircraft: stage);
     }
 
     // Flies the row and reads the branch out of the run: which definitions the episode started,
     // when the fold ran, when the mission-completion code landed and when the host let go.
     private static void RunBalmoralDock(
-        TestContext ctx, TestWorld world, ObjectiveGraph graph, ObjectiveScript script,
+        TestContext ctx, TestWorld world, CampaignDirector director, ObjectiveGraph graph,
+        ObjectiveScript script,
         LandingApproachRuntime trigger, CutsceneController cutscene, FlightController rig,
         LandingApproach dock, StringBuilder report)
     {
@@ -596,7 +602,10 @@ internal static class LandingApproachSuites
         float executedAt = -1f;
         float wonAt = -1f;
         float watcherAt = -1f;
+        float leftAt = -1f;
+        float lastFlownAt = -1f;
         int stateAtCode = -1;
+        int flownAfterEnd = 0;
         int endings = 0;
         bool secondTook = false;
         void Ended(MissionOutcome outcome)
@@ -656,12 +665,33 @@ internal static class LandingApproachSuites
             ctx.Check(cutscene.Playing, $"and the cutscene host takes the session on it");
             for (float t = 0f; t < DockBudgetS; t += StepDt)
             {
-                rig.SimStep(StepDt);
-                world.Runtime.Advance(StepDt);
-                trigger.Tick();
-                cutscene.Tick();
-                graph.Step(StepDt);
+                // The session's own drive under an ended mission: while the leaving hold runs,
+                // GameSession advances nothing but the director, so the aeroplane takes no step and
+                // no stick reaches it, and the animation runtime stands where the ending left it.
+                bool leaving = director.Leaving;
+                bool endedBefore = completedAt >= 0f;
+                if (!leaving)
+                {
+                    rig.SimStep(StepDt);
+                    world.Runtime.Advance(StepDt);
+                    trigger.Tick();
+                    cutscene.Tick();
+                    lastFlownAt = now;
+                    if (endedBefore)
+                    {
+                        flownAfterEnd++;
+                    }
+                }
+
+                director.Step(StepDt);
                 now += StepDt;
+                if (director.ReturnToCabin)
+                {
+                    leftAt = now;
+                    report.AppendLine($"  t={now,6:0.00} the session left the world for the cabin");
+                    break;
+                }
+
                 if (handedBackAt < 0f && !cutscene.Playing)
                 {
                     handedBackAt = now;
@@ -679,7 +709,8 @@ internal static class LandingApproachSuites
                     wonAt = now;
                 }
 
-                if (completedAt >= 0f && foldEndedAt >= 0f && now > completedAt + AfterReleaseS)
+                if (completedAt >= 0f && now > completedAt + CampaignDirector.LeavingHoldS
+                    + AfterReleaseS)
                 {
                     break;
                 }
@@ -701,13 +732,15 @@ internal static class LandingApproachSuites
             world.Runtime.CallbackHost = cutscene.Host;
         }
 
-        report.AppendLine($"fold ran {foldStartedAt:0.00}..{foldEndedAt:0.00}, " +
+        report.AppendLine($"fold started at {foldStartedAt:0.00} (finished at {foldEndedAt:0.00}, " +
+            $"-1 when the ending stopped the world first), " +
             $"completion code at t={completedAt:0.00}, session handed back at t={handedBackAt:0.00}, " +
             $"codes=[{string.Join(", ", cutscene.Codes)}]");
         ctx.Check(foldStartedAt >= 0f,
             $"the docking reaches '{BalmoralPlane}'s own branch and calls its wing fold");
-        ctx.Check(foldEndedAt >= 0f && foldEndedAt - foldStartedAt >= FoldRunS - StepDt,
-            $"which runs its whole authored {FoldRunS:0.#} s turn");
+        ctx.Check(completedAt >= 0f && foldStartedAt >= 0f
+                  && completedAt - foldStartedAt >= FoldRunS - FoldEndToleranceS,
+            $"which turns through the branch's whole authored {FoldRunS:0.#} s wait before the ending stops the world");
         ctx.Check(completedAt >= 0f,
             $"the docking raises its mission-completion code {CompleteCode}");
         ctx.Check(completedAt >= 0f && foldStartedAt >= 0f
@@ -743,9 +776,30 @@ internal static class LandingApproachSuites
         ctx.Check(endings == 1, $"and the mission ends exactly once (ended {endings} time(s))");
         ctx.Check(!secondTook, $"a second completion code after the win is refused and changes nothing");
         ctx.Check(graph.Outcome == MissionOutcome.Won, $"the outcome after it is still Won");
+
+        // The other end of the same ending: the outcome is settled on the code's frame, and the
+        // session stays in the world for the leaving hold after it. The film's last live frame is
+        // the frame the code landed on, which is what the original leaves standing under its fade.
+        report.AppendLine($"the film's last live frame is t={lastFlownAt:0.00} " +
+            $"(the code's own frame), the session left at t={leftAt:0.00}, " +
+            $"{flownAfterEnd} world step(s) ran after the ending");
+        ctx.Check(leftAt >= 0f, $"the session leaves the world rather than staying in it");
+        ctx.Check(leftAt < 0f || wonAt < 0f || leftAt > wonAt + StepDt,
+            $"not on the frame the mission was won (won at t={wonAt:0.00}, left at t={leftAt:0.00})");
+        ctx.Check(leftAt < 0f || completedAt < 0f
+                  || leftAt >= completedAt + CampaignDirector.LeavingHoldS - EndLagS,
+            $"but a whole {CampaignDirector.LeavingHoldS:0.#} s leaving hold after the code (left at t={leftAt:0.00})");
+        ctx.Check(leftAt < 0f || completedAt < 0f
+                  || leftAt <= completedAt + CampaignDirector.LeavingHoldS + AfterReleaseS,
+            $"and not a second longer than the hold the original's fade runs for");
+        ctx.Check(flownAfterEnd == 0,
+            $"with the world standing still throughout: no aeroplane step, no animation advance and no stick between the ending and the cabin ({flownAfterEnd} step(s) ran)");
         if (rig.PlaneModel is { } model)
         {
-            CheckWingFold(ctx, world, fold, model, report);
+            // ⚠ The ending catches the fold a few frames short of its authored end (the branch
+            // waits 2.0 s where the fold runs 2.01), so that gap and not the pose epsilon is the
+            // tolerance the wings are read at here.
+            CheckWingFold(ctx, world, fold, model, report, FoldFreezeEpsilon);
         }
 
         world.Runtime.Stop(dock.Anim);
@@ -1027,7 +1081,8 @@ internal static class LandingApproachSuites
     // The wing fold's own two movers, checked against the rotations the fold definition authors.
     // An airframe that authors no fold is a coverage statement, not a failure (DIAG-22).
     private static void CheckWingFold(TestContext ctx, TestWorld world,
-        (string Anim, AnimDefinition Def)? fold, Node3D model, StringBuilder report)
+        (string Anim, AnimDefinition Def)? fold, Node3D model, StringBuilder report,
+        float epsilon = PoseEpsilon)
     {
         if (fold is not { } authored)
         {
@@ -1051,7 +1106,7 @@ internal static class LandingApproachSuites
                 var got = node?.Basis.GetEuler(EulerOrder.Yxz) ?? Vector3.Zero;
                 report.AppendLine($"fold '{name}': authored {want}, measured {got}");
                 ctx.Check(node != null, $"'{authored.Anim}' reaches the flown airframe's '{name}'");
-                ctx.Check(node != null && Near(got, want),
+                ctx.Check(node != null && Near(got, want, epsilon),
                     $"and turns it to the {want} the definition authors");
                 checkedPairs++;
             }
@@ -1144,7 +1199,8 @@ internal static class LandingApproachSuites
         return null;
     }
 
-    private static bool Near(Vector3 a, Vector3 b) => (a - b).Length() <= PoseEpsilon;
+    private static bool Near(Vector3 a, Vector3 b, float epsilon = PoseEpsilon) =>
+        (a - b).Length() <= epsilon;
 
     private static Node3D? NamedNode(Node3D root, string name)
     {

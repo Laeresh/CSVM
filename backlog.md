@@ -865,8 +865,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   layout, its per-objective lines and its scoring are undecoded and are the first job.
   *⚠ Traps:* the world stays up for the rest of the frame after the end is raised, so the page
   belongs to the launchscreen side, not the session's. *Cross-refs:* `CampaignFlow`,
-  `CampaignProgression`, `docs/formats/saved-games.md`, `BL-620`'s closing commit
-  (`git log --grep=BL-620`).
+  `CampaignProgression`, `docs/formats/saved-games.md`, `BL-620`'s and `BL-623`'s closing commits
+  (`git log --grep=BL-620`); the held two seconds `BL-623` added are where this screen belongs.
 
 - `BL-621` `[Bug]` **CM07 (C1/M02): the parachutist is gone from the hangar drop since the chute
   pool landed.** *Evidence:* reported at the controls; before `BL-608` the drop showed the pilot

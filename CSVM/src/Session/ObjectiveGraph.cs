@@ -166,7 +166,8 @@ public sealed class ObjectiveGraph
 
     // The docking's completion code takes none of it. The code's own case sets the won flag and
     // calls the mission-end path in the same breath, never touching the wrap-up timer the objective
-    // endings run down, so the debrief opens on the frame the film's last sequence raises it.
+    // endings run down, so the mission ends on the frame the film's last sequence raises it. What
+    // comes after that ending is the same for every ending, and is CampaignDirector's hold.
     private const float DockingWrapUpS = 0f;
 
     private readonly ObjectiveScript _script;

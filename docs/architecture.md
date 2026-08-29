@@ -5446,8 +5446,14 @@ called from BOTH of `GameSession`'s drive paths. Every graph transition is one
 through `Log.Info`, so the file sink carries the chain a sortie report is about. Mission end records the attempt through
 `CampaignProgression`, merges `CampaignPersistLog.Capture` into the profile, saves it, writes any
 aircraft award's build into `CustomPlaneStore` (`SaveAwardedBuilds`, which is where the cabin's
-launch looks a plane's fit up by name), and raises
-`ReturnToCabin` plus `MissionEnded` for the session layer; the cabin screen itself is C22's.
+launch looks a plane's fit up by name), and starts the LEAVING HOLD; `ReturnToCabin` and
+`MissionEnded` come at the far end of it, `LeavingHoldS` (2 s) later, and the cabin screen itself
+is C22's. The hold is the original's `FUN_00443090`, which records the result and then pushes its
+"Fade State" over a copy of the frame the ending landed on for that fade's default 2 s before the
+next screen takes the state machine: the world is not advanced and the stick is not read while it
+runs, so the last flown frame is the frame the ending landed on. `Leaving` says the hold is
+running; `GameSession` reads it in BOTH drive paths ahead of everything else, holds `GameClock`'s
+sim on the realtime one, and steps nothing but the director until it expires.
 Which directives reach the engine today: `INACTIVEn` (node visibility, the decoded active bit),
 `ANIM_STATE` (`AnimRuntime.AnimStateOf`), both forms of `TRAVELERS` (the node form against
 `ListenerPosition`/a named node; the group form tallying the spawned roster's live, non-inert

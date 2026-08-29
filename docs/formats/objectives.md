@@ -236,6 +236,34 @@ matches (`FUN_004ad240`). Consequences, all decoded:
   hooked_to_klondike EXECUTED`, `INSTANTWIN`) reaching its condition one frame after the mission
   is already over.
 
+#### The mission-end path, and what the player sees after it
+
+All four endings converge on `FUN_00443090`, and it does three things and no more.
+
+1. **Silences the world.** `FUN_00594040` walks every live sound instance and collects the ones
+   still playing, `FUN_00594580` stops each (`FUN_00593dc0`) and `FUN_00594680` frees the list.
+2. **Records the attempt.** `FUN_004194e0` (or `FUN_00419700` for game type 3) builds the
+   completed-objective bitmask, writes the result slot through `FUN_00419630`, and asks for the
+   results state `DAT_0071d57c`.
+3. **Asks for it through the fade, not directly.** `FUN_0046fb60` parks the requested state in
+   `_DAT_0071c210`, arms the "Fade State" object at `DAT_0071c200` with a duration and pushes THAT
+   onto the state machine at `DAT_0071d3a0`. The duration is `_DAT_006272b8`, the fade's own
+   default, and it is **2.0 s** (`FUN_00470000` seeds every fade with it).
+
+The Fade State is the whole answer to "what plays after the ending". Its entry
+(`FUN_0046fc80` -> `FUN_0059e2e0`) COPIES THE CURRENT FRAMEBUFFER into a surface of its own; its
+tick (`FUN_0046fcc0` -> `FUN_0046fe10`) blits that copy every frame at a level ramping from 0 to 1
+at `1/duration` per second and presents it itself; its exit (`FUN_0046fd60`) frees the copy. The
+flying state is off the top of the machine for all of it, and `FUN_00443090`'s own
+`DAT_0071d290 = 5000` parks that state's presenter for 5000 frames on top of that, where every
+ordinary cutscene callback writes 1.
+
+So nothing of the film plays on after an ending. **The last live frame is the frame the ending
+landed on**, and the player looks at that frame fading out for 2.0 s before the next screen. In
+C3/M05 that catches the docking 0.06 s before `bal_wing_foldup`'s authored end, with the wings
+folded but a few degrees short of their authored angle, and 0.85 s before `stopprops` would have
+finished spinning the Balmoral's propellers down. Neither is ever seen.
+
 Every shipped campaign mission authors `INSTANTWIN`/`INSTANTLOSS` objectives to end on (the
 missions finishing on a hook or a drop reach code 13 first); the
 `WON`/`LOST` aggregate rule and the timer are unexercised by the data. **Four of the 21 campaign
