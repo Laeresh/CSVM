@@ -132,6 +132,20 @@ sounds like, watched and frame-sampled, never measured into a constant.
 
 ## 1 · Actionable now (`PT-nn`)
 
+### C1 · Campaign — the mission-end result carry (`BL-622` `B12`)
+
+```powershell
+./RunGame.ps1
+```
+
+- `PT-88` `[Own]` **B12: the mission's result reaches the launchscreen side intact.** From the
+  menu, start or continue a campaign profile and fly CM01 (C1's first mission) once to a win and
+  once to a loss (bail or let the wingman/objectives fail it). *Look for:* the console prints
+  `campaign: <Outcome> — returning '<profile>' to the cabin` when the world leaves, then
+  `campaign: <Outcome> — arrived at the cabin with '<profile>'` one frame later at the launchscreen
+  side, with the same outcome in both lines. *Blocks:* nothing else reads the carried result yet
+  (`C17` opens the debrief screen on it); a mismatch or a missing second line reopens `BL-622`.
+
 ### C1 · Bloodhawk — the overcast sky, ground to above the deck
 
 ```powershell

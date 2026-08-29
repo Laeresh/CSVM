@@ -174,7 +174,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the record and the director
 
 11. ☑ A lost attempt keeps its objective bits
-12. ☐ Carry the mission result across the launcher's deferred hop
+12. ☑ Carry the mission result across the launcher's deferred hop
 13. ☐ Count the per-airframe tallies and merge them per index
 14. ☐ The per-mission attempt counter and the four-attempt skip offer
 
@@ -478,7 +478,17 @@ alone (unchanged), so a non-zero mask on a loss neither advances the campaign no
 best record. The persist-log commit (`CampaignPersistLog.CommitsOn`) is untouched, a separate
 outcome test.
 
-## B12 ☐ Carry the mission result across the launcher's deferred hop
+## B12 ☑ Carry the mission result across the launcher's deferred hop
+
+**Landed.** `LauncherContext.ReturnToCabin` widened from `Action<string>` to
+`Action<string, CampaignMissionResult>`, threaded through `Launcher._pendingCabin` (now
+`(string Profile, CampaignMissionResult Result)?` instead of a bare `string?`) and
+`GameSession._returnToCabin` (`Launcher.cs:131,683-687,812-814,1006-1013`;
+`GameSession.cs:112,788-797`). Timing is unchanged: `GameSession.OnCampaignMissionEnded` still
+calls `_returnToCabin` synchronously inside the session's own `_Process`, `Launcher._Process` still
+frees the session and calls `OpenCabin` from `_pendingCabin` one frame later, and `OpenCabin` still
+does nothing but `ReturnToMenu()` then `_menu!.OpenCampaignCabin(profile)` — it now also has the
+result in hand (logged, for C17 to build on) but does not read the world from it.
 
 **Goal.** The `CampaignMissionResult` reaches the launchscreen side intact, alongside the profile
 name, so a page can be opened on it.
@@ -499,6 +509,13 @@ to a win and to a loss with the result logged on arrival at the launchscreen sid
 
 **⚠ Traps.** The world stays up for the rest of the frame after the end is raised. Do not move the
 free earlier to simplify the carry, and do not read the world from the launchscreen side afterwards.
+
+**Verified.** `dotnet build` is clean and `.\RunTests.ps1 -Suite campaign-mission-end -SkipUnits
+-SkipGoldens` passes (that suite drives `CampaignDirector` against a built world directly and does
+not cross the `Launcher`/`GameSession` boundary this item widens, so it is unaffected by
+construction rather than a positive check of the carry). `PT-88` is the at-the-controls leg of this
+item's Verify (a flown CM01 to a win and to a loss, console line for console line at both ends of
+the hop) and is owed, not exercised this session.
 
 ## B13 ☐ Count the per-airframe tallies and merge them per index
 

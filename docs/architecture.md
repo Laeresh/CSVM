@@ -5164,9 +5164,10 @@ settled. It names no chapter and no mission: `CampaignDirector.ResolveSpec` read
 `cm_sequence` in the session's constructor, so one place resolves a story position whether it came
 from a cabin or a `--campaign=` command line. Its return leg is `ReturnToCabin`, handed down
 through `LauncherContext` and non-null only in a menu-driven process: a campaign mission's end
-queues the profile name, and the next `_Process` frees the session and reopens the launchscreen on
-that profile's cabin. Queued rather than acted on directly, because the mission ends inside the
-session's own physics step, which is no place to free it.
+queues the profile name alongside its `CampaignMissionResult` (B12), and the next `_Process` frees
+the session and reopens the launchscreen on that profile's cabin with the result in hand. Queued
+rather than acted on directly, because the mission ends inside the session's own physics step,
+which is no place to free it.
 The music channel is built here too, once per process and after every early-quit probe, over a
 `SoundArchive` of its own rather than the build-scoped `SessionArchives.Sounds`: one channel has to
 outlive a mission launch, or the cabin track would restart every time the player left a board. It
