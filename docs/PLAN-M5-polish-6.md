@@ -103,7 +103,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ❌ `BL-304`: water takes the WorldLight dim the original renders it without
 2. ☑ `BL-322`: C5's lit facades render at 0.58 to 0.66 of the original with WorldLight already at clamp
-3. ☐ `BL-538`: a dark band crosses the large buildings at the range the templates clutter fades out
+3. ❌ `BL-538`: the band is the `cblock*` mip chain's non-monotone level 1, not the clutter fade
 
 ### Wave B — Effects and the animation scope
 
@@ -133,7 +133,9 @@ whether these facades should be modulated at all), so run them in sequence in on
 than in parallel; A1 first, because its measurement is the tighter of the two. A3 is separable
 (the clutter fade cutout and the gamez buildings' own fade range) and may run alongside, but not in
 a parallel worktree if it touches `csky_clutter_fade` and A1/A2 touch the shared world shader
-include. <TODO: confirm whether the world-light and clutter-fade shaders share an include file.>
+include. The two live in separate includes (`csky_world_light` is declared in
+`csky_atmosphere.gdshaderinc` and the fade in `csky_clutter_fade.gdshaderinc`), so the contention is
+only over `SceneBuilder.GetBiasShader`, which assembles both into one generated shader.
 
 Wave B: B11 and B13 are both in `AnimRuntime` and its emitter path, and B13 changes what
 `ResetCheckedOutCopies` walks while B11 may need `PlayWithin` and the activation path, so sequence
@@ -395,7 +397,7 @@ excludes both families.
 
 **Verified.** <pending orchestrator run>
 
-## A3 ☐ `BL-538`: a dark band crosses the large buildings at the range the templates clutter fades out
+## A3 ❌ `BL-538`: a dark band crosses the large buildings at the range the templates clutter fades out
 
 **Goal.** In C5, with the authored `far_fade_range` applied, the large gamez buildings read at the
 same brightness through the range where the downtown clutter vanishes as they do nearer and
@@ -411,27 +413,78 @@ collapsed clutter cards may still write depth or a dark fragment behind the band
 collapsed to zero size should contribute nothing); the fog-volume clutter's own `far_fade` may
 overlap the templates fade at that range; or the gamez buildings may carry a `far_fade_range` of
 their own that the remake ignores, since `FUN_004d5de0` applies the scaled test to every type-5
-scene node rather than only to clutter. <TODO: re-verify still-open against the code.>
+scene node rather than only to clutter.
 
-**Approach.** Separate the candidates before touching anything: a C5 screenshot pair at the band
-distance with `graphics.clutterFarFade` on and off tells you whether the band belongs to the
-clutter pass at all. If it does not, `FUN_004d5de0`'s application to every type-5 node is the decode
-lane and the answer is that the gamez buildings want their own fade. Read `docs/org/clutter.md`
-first; `BL-337` (closed) is where the fade itself was settled and its dead ends are recorded.
+**Outcome: a disproof, no code.** All three candidates are ruled out and the darkening is not in the
+clutter pass at all. It is the **shipped hand-authored mip chain of C5's `cblock*` facade textures,
+whose level 1 is a non-monotone dip**: `--dump-mips` reads `cblock1` at mean luminance 15.62 (L0) →
+**4.41** (L1) → 6.77 (L2), and `cblock2` at 9.60 → **0.83** → 1.84. A facade near enough to sample
+L0 reads bright, one in the L1 band reads three to eleven times darker, and one far enough for L2
+reads brighter again, which is the reported shape exactly. `--mips=generated` (the box filter)
+removes the band completely; turning `graphics.clutterFarFade` off does not touch it. The chain is
+installed correctly (every `installed` line in the dump reads `== authored`), so this is the
+original's own art reaching the screen, not a loader fault.
+
+How each candidate falls:
+
+- **Collapsed cards writing depth or a dark fragment, disproven by measurement.** At the pose
+  below, the fade-on frame and the `--no-clutter` frame are pixel-identical (mean absolute
+  difference 0.00, zero changed pixels) across every row where the fade has culled every instance,
+  while the fade-off frame fills those same rows with buildings. A collapsed card contributes
+  nothing.
+- **The fog-volume clutter overlapping the templates fade, disproven on the data.** C5's
+  `fogvol.zrd` field is 16,170 cloud sprites over 17 volumes at `fade 1200-1800 m`, well outside the
+  200–900 m the templates author, and they are clouds rather than buildings.
+- **The gamez buildings wanting a `far_fade_range` of their own, disproven by decode.**
+  `FUN_004d5de0` is reached from two places only, `FUN_004d5d90` (the per-cell clutter instance list,
+  `+0x40` count over `+0x44` at stride `0x60`) and the clutter quadtree `FUN_004d6010`, and
+  `FUN_004d5d90` is itself called once, from the world walk `FUN_004d5910`, behind the
+  `CameraRenderClutter` global. Ordinary scene nodes draw through `FUN_004d4a20` in that same walk
+  and never reach the fade test. The `node type == 5` compare inside `FUN_004d5de0` selects how the
+  instance's transform is written, not which nodes the fade applies to, and the near/far/reciprocal
+  triple it reads (`+0xd`/`+0xe`/`+0xf`) is the stamper's own step-11 output. The original does not
+  fade a non-clutter building.
+
+The alpha-texture lighting gate of [`org/vertexLighting.md`](org/vertexLighting.md) is ruled
+out too: the band is a function of camera distance and it disappears under a mip-policy switch that
+changes no lighting term. It is not `BL-613`.
+
+The buildings themselves were misread in the report: C5's towers **are** clutter. With
+`graphics.clutterFarFade=false` the whole city stands out to the fog wall, so every one of them is a
+templates stamp, and the two families the data authors (`cb02/03/04/05b/07-10/17/19/20` at 700–800 /
+800–900 m against `cb00/01/06/11-16/18/21-24` at 200–300 / 300–350 m) are why the low city thins out
+several hundred metres before the towers do.
+
+**What stays open** is the judgement the mechanism hands back, and it needs the user at the
+controls: the L1 dip is the original's art, so honouring it is right, but nothing here settles at
+what distance it is *meant* to be reached. `BL-538` is rewritten onto that half.
 
 **Model recommendation.** High. Three live candidates, a rendering pass that other items in this
 wave also touch, and a real chance the answer is a decode rather than a fix.
 
-**Verify.** The C5 pose at the band distance.
-<TODO: name the exact `--freecam --chapter=C5 --pos=… --direction=…` the controls report came from;
-the backlog entry does not carry one.> Then the full 8-chapter `--freecam` regression and the C5
-goldens, since any change to the clutter pass is global.
+**Verify.** The C5 pose that reproduces the band, run from the repo root with
+`$env:CSVM_DATA_ROOT` set in a worktree:
+
+```
+.\RunProbe.ps1 --freecam --chapter=C5 "--pos=-9491,140,-3479" "--direction=-0.588,-0.03,-0.809" `
+    --det --mute "--screenshot=.scratch\a3-band.png"
+```
+
+Add `--mips=generated` for the A/B that identifies the band, and put
+`{"graphics":{"clutterFarFade":false}}` in `CSVM/config.json` with `--no-det --seed=1 --jitter=0
+--no-pads` for the fade pair (`--det` drops config overrides, so the pair cannot be taken under it;
+a `--det`/`--no-det` control at the same settings differs by 12 of 921,600 pixels).
 
 **⚠ Traps.** The dither is not the fault and must not be changed to chase the band. This item and
 A1/A2 all end in the world pass, so a fix here that moves the measured facade or water numbers has
 broken one of those items rather than fixed this one; take A1's and A2's numbers as a control if
 they have landed. A screenshot pair proves which pass owns the band and nothing more, so do not
-read the on/off difference as the mechanism.
+read the on/off difference as the mechanism. ⚠ Decorrelating the dither lattice per instance (a
+phase off the stamp origin, so overlapping stamps at the same alpha stop discarding the same screen
+pixels) was tried as a probe and changes the frame barely at all; it is not the mechanism and the
+dither still must not be touched.
+
+**Verified.** <pending orchestrator run>
 
 ---
 
