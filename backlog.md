@@ -1459,19 +1459,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `docs/formats/anim-definitions/cutscenes.md` "Handoff and skip"; `docs/plans/PLAN-M5-polish-2.md`
   E24 (the decode that made the two scenes unskippable).
 
-- `BL-587` `[Fidelity]` **Chapter-scope reader files no `ANIMATION_DEFINITION_FILE` list names still
-  load.** *Evidence (traced to the data):* the shared scope is gated on the lists a mission sees
-  (`AnimProgram`, `docs/formats/anim-definitions.md` "Shared-scope files are listed per mission
-  too"); the chapter scope stays unconditional. Unlisted chapter files: C1's `clouds`,
-  `lightning`, `spotlights`, `train_smoke`; C2's `game_targets`, `police_*`, `security_destroy`
-  (M01/M02 list two of them); C5's `steinmann` (M01 lists it); C4's `bhmhookup`/`bhm_warhawks`
-  (M04 lists them). The original's compiled archives derive from the lists, so it never runs an
-  unlisted file. *Fix shape:* the same file gate for the chapter scope. *⚠ Traps:* C1's
-  `cloudparent#` 0.6 opacity comes from `clouds.zrd`, and the overcast match
-  (`docs/plans/PLAN-overcast-match.md`) was judged with it in place, so the C1 goldens and the
-  user's eyes decide before it lands. *Cross-refs:* `BL-521`'s closing commit
-  (`git log --grep=BL-521`), `docs/formats/anim-definitions.md`.
-
 ## Audio
 
 - `BL-455` `[Feature]` **There is no audio options menu, so the music level is a hard-coded

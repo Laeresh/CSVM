@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Effects and the animation scope
 
 11. ☐ `BL-546`: a nitro engage produces no prop swap and no exhaust smoke
-12. ☐ `BL-587`: chapter-scope animation files no mission lists still run
+12. ☑ `BL-587`: chapter-scope animation files no mission lists still run
 13. ☐ `BL-535`: a repeat sonic burst pays a 10 to 14 ms slot re-reset from the third burst on
 
 ### Wave C — The allocation and tick budget
@@ -320,7 +320,67 @@ edge never fired from a quiet log. The `ai_nitro_boost` and `ai_nitro_decay` wra
 file are retargeting shims the executable never references, so do not wire the AI to them while
 chasing this. The smoke half may belong to a different def and is not evidence about the prop half.
 
-## B12 ☐ `BL-587`: chapter-scope animation files no mission lists still run
+## B12 ☑ `BL-587`: chapter-scope animation files no mission lists still run
+
+**Landed.** The reader gate `AnimProgram` already applied to the shared scope (`ListedSharedFiles`)
+now applies to the chapter scope too (`ListedChapterFiles`, same shape: the chapter's own
+`cam_anim.zrd` listing plus any chapter files a mission's `mis_anim.zrd` adds directly), gated
+behind the same `haveMissionManifest` condition so a reader-only extraction still degrades to its
+old ungated behaviour. `AnimRuntime` gained a matching `ChapterFilesSkipped` census line beside
+`SharedFilesSkipped`.
+
+**The decode.** Every mission's `mis_anim.zrd` and every chapter's `cam_anim.zrd` across the whole
+install was checked for the files this item names, not sampled: none of C1's seven missions (IA1,
+M02, M04, M05, MP1, MP2, MP3) references `clouds`, `lightning`, `spotlights` or `train_smoke`
+anywhere. The original's compiled archives derive from exactly these lists, so the original
+genuinely never runs them; this was the open question the item's own trap raised, and the decode
+answers it rather than the fix special-casing anything.
+
+**New finding beyond the item's original evidence.** The 8-chapter `--freecam` regression this
+change was verified against found three more chapter files gated by the same mechanism that
+`BL-521`'s close did not name: C3's `flag_british`, `flag_rollout` and `hydrogen`. No mission's
+`mis_anim.zrd`/`cam_anim.zrd` in C3 lists them either, so they follow the identical traced
+mechanism as the C1/C2/C4/C5 files this item was filed on; they are not a separate item.
+
+**Measured, before vs after the gate (`anim:` census line, `CSVM_DATA_ROOT` set, same poses,
+zero errors both ways in all eight chapters):**
+
+| Chapter | Files newly gated | Anim defs (before → after) | Anchored (before → after) | Destructible instances (before → after) |
+|---|---|---|---|---|
+| C1 | `clouds`, `lightning`, `spotlights`, `train_smoke` | 666 → 660 | 361 → 360 | 186 → 186 |
+| C1B | (none) | 476 → 476 | 169 → 169 | — |
+| C1C | (none) | 476 → 476 | 169 → 169 | — |
+| C2 | `game_targets`, `police_blockade`, `police_blockade1`, `police_blockade2`, `police_destroy`, `security_destroy` | 632 → 584 | 326 → 279 | 192 → 176 |
+| C2B | (none) | 477 → 477 | 169 → 169 | — |
+| C3 | `flag_british`, `flag_rollout`, `hydrogen` | 735 → 731 | 428 → 425 | 210 → 210 |
+| C4 | `bhmhookup`, `bhm_warhawks` | 586 → 564 | 268 → 254 | 92 → 92 |
+| C5 | `steinmann` | 633 → 624 | 325 → 318 | 166 → 158 |
+
+Puffer emitter and point-light counts are identical before/after in every chapter (the gated files
+carry no puffer/light defs); gamez node and mesh-instance counts are untouched by construction,
+since `AnimProgram` never builds or removes world geometry, only toggles state on nodes
+`SceneBuilder` already built.
+
+**The C1 cloud montage and the user's judgement.** No pinned golden's `--freecam` pose reaches
+`cloudparent`'s 1069.7–1875.6 m altitude band, so no golden hash moved. But the overcast-match
+milestone (`docs/plans/PLAN-overcast-match.md`) was judged at a pose that does reach it
+(`--pos=-7323,1192,-3829 --direction=0,0,-1`), with C1's `cloudparent#` 0.6 opacity — sourced from
+`clouds.zrd`, one of the files this gate stops loading — in place. A before/after montage at that
+exact pose was put in front of the user rather than assumed safe: at a glance the two frames read
+as the same overcast bank, but a pixel diff shows a real, `cloudparent`-shaped difference
+concentrated on the cloud facades (more contrast, brighter lit faces and darker undersides, once
+the 0.6 blend is gone). **The user has seen the montage and approved the cloud change.** Screenshots
+and the diff stayed in the landing worktree's `.scratch/b12/` (gitignored, not part of this
+landing): `c1-clouds-before.png`, `c1-clouds-after2.png`, `c1-clouds-before-after-montage.png`,
+`c1-clouds-diff.png`.
+
+**Suites checked.** `mission-off-turrets` (the closing suite for `BL-521`'s shared-scope gate this
+mirrors) and `.\RunTests.ps1 -Quick` (226 units, 13 engine suites) both green; `dotnet build` 0
+warnings; `CheckCommentCaps.ps1 -Summary` clean.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A chapter-scope animation definition file that no mission's `ANIMATION_DEFINITION_FILE`
 list names does not load, matching the original, whose compiled archives derive from those lists

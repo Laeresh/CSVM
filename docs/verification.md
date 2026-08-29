@@ -453,6 +453,15 @@ loss. What the engine renders was decodable from the authored constants + oscill
   Godot window delivers only the mouse enter/exit pair, never a focus notification; on Windows
   11 / Godot 4.7 a real focus change delivers `APPLICATION_FOCUS_OUT`/`_IN`, not the
   `WM_WINDOW_FOCUS_*` pair.
+- **SHELL-16** — **An incremental `dotnet build` after restoring a file to byte-identical content
+  can silently no-op, so an A/B test built by swapping file content back and forth needs
+  `--no-incremental` or it compares a build against itself.** Copying a prior version's bytes back
+  over a source file (to build the "before" half of a comparison without a git revert) leaves
+  MSBuild's up-to-date check seeing content it has already compiled, so the "after" build reports
+  success in under a second and reuses the stale assembly. Measured landing `BL-587`: an
+  after-the-fix probe log showed the same reader files still loading as the before probe, with the
+  gate line absent from both, until `--no-incremental` produced a real ~8 s rebuild and the gate
+  showed up in the log.
 
 ## INSTR — building instruments
 
