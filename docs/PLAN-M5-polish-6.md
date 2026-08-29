@@ -114,7 +114,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — The allocation and tick budget
 
 21. ☑ `BL-536`: the gen1/24-29 ms reading is the session build settling; the settled pause is set by finalizable-object count
-22. ☐ `BL-562`: the physics tick costs about 39 ms late in CM11, so the sim runs at half wall time
+22. ❌ `BL-562`: the 39 ms is Godot's 1 Hz worst-tick monitor; the step is 1.8 ms and the sim keeps up
 23. ❌ `BL-584`: `PerfSampleTests.AScopeAllocatesNothing` is not same-build stable in the parallel unit stage
 
 ### Wave D — Damage share and target class
@@ -864,7 +864,110 @@ first showed the unexplained trip and its record should be read before re-derivi
 Reusing a query object per caster is only safe if no caster is re-entrant within a sim step;
 establish that before doing it.
 
-## C22 ☐ `BL-562`: the physics tick costs about 39 ms late in CM11, so the sim runs at half wall time
+## C22 ❌ `BL-562`: the 39 ms is Godot's 1 Hz worst-tick monitor; the step is 1.8 ms and the sim keeps up
+
+**Disproven as stated, on both legs.** Re-verified against the code first: nothing in the physics
+chain had moved, C21 changed neither `GodotWorldQuery` nor the tick, and Godot's physics tick rate
+and `max_physics_steps_per_frame` are still at the engine defaults (60 Hz, 8) because
+`CSVM/project.godot` carries no `[physics]` section and no code writes
+`Engine.PhysicsTicksPerSecond`.
+
+The item's 39 ms came from `physics_ms`, which is Godot's `TIME_PHYSICS_PROCESS` monitor. That
+monitor holds the **worst single physics tick of the last wall second** and refreshes about once a
+second, so it is neither a per-frame cost nor a mean. Three independent readings say so, and the
+first two need no new code: a `--fly --chapter=C1` window reported `physics_ms=27.52` while the
+worst *frame* in that same window was `max_ms=8.33`, which no per-frame cost can do; and the flown
+CM11 log repeats one `physics_ms` value byte-for-byte across every hitch record of a second
+(frames 15802 to 15811 all read `physics_ms=144.94` against frame costs of 43 to 167 ms).
+
+The third reading is the instrument this item lands. `PhysicsTickCost` brackets the whole physics
+tick between two nodes at the extremes of Godot's physics priority order, so the pair spans every
+`_PhysicsProcess` callback wherever in the tree it sits, and `--perf` gained three terms from it:
+`phys_tick_ms` (the mean measured wall cost of one tick), `phys_tick_max_ms` (the worst tick in the
+window) and `phys_hz` (the ticks the window actually got per wall second). Over 333 windows of a
+loaded CM11 session:
+
+| | median | p95 | max |
+|---|---|---|---|
+| `physics_ms` (Godot's monitor) | 16.96 ms | 29.37 ms | 163.39 ms |
+| `phys_tick_max_ms` (measured worst tick) | 15.48 ms | 26.64 ms | 177.37 ms |
+| **`phys_tick_ms` (measured mean tick)** | **1.81 ms** | **3.20 ms** | **5.79 ms** |
+| `frame_ms` | 13.48 ms | 25.59 ms | 37.38 ms |
+
+The monitor tracks the measured *worst* tick, not the mean. The step the 16.7 ms budget is written
+against is **1.81 ms**, about a ninth of it, so there is no budget overrun to fix.
+
+**The second leg fails on its own measurement.** `phys_hz` read a median of **60.0** and a minimum
+of 58.6 across those windows, and the session's aggregate was **18,404 physics ticks over 306.7 wall
+seconds, so 306.7 sim seconds, a sim-to-wall ratio of 0.9999**, with the roadblocks woken, the
+trailer segments running and the five Firebrands activated by objective 57. A realtime clock
+advances the physics-stepped sim exactly one `1/60` step per tick (`GameClock.PhysicsDt` returns
+Godot's fixed delta, and `CampaignDirector.Step` accrues the mission's `TimeMs` off that same dt),
+so 60 ticks a wall second *is* real time. The sim was never running at half speed here. The
+original session's "2770 rendered frames covered 52 sim seconds" is 53 rendered frames per sim
+second, which at that session's own frame costs is a shortfall of tens of percent in its heaviest
+segment, not a factor of two; over its whole length that log shows 815 sim seconds against about
+875 seconds of session, and it holds two mission attempts rather than one.
+
+**Attribution across the five named candidates**, from a 40 s `dotnet-trace`
+`dotnet-sampled-thread-time` capture of the loaded session, taken 130 s in so it cannot land in the
+world-build settling regime (PERF-19), and read only as shares *within* the physics stack: the
+capture's absolute totals do not reconcile with the bracket (it charges 49 % of sampled thread time
+to physics where the bracket measures 11 % of wall), so the bracket is the authority on cost and
+this is the authority on proportion.
+
+| candidate | share of the physics tick | reading |
+|---|---|---|
+| the AI mode machines | `SelectRankedTarget` **23.7 %** (of which `AimCandidateSet.AddStructures` 14.5 %) | the machines themselves do not appear; the target ranking bolted beside them is the largest single consumer |
+| the six flight models | inside `FlightController.SimStep`'s 30.6 % exclusive bucket, alongside its transform writes | no separate cost worth naming |
+| the projectile sweeps | `ProjectilePool.SimStep` **3.4 %** | one ray per live round per tick |
+| the objective graph's per-tick scans | **below 1 %**, absent from the top 30 | `NameResolver.FindAll` is memoised, so the 61-objective scan is dictionary probes |
+| the trailer's puffer emitters at 1 m intervals | `AnimRuntime.HandlePufferState` **3.1 %**, `EmitterDirector.Tick` 0.8 % | the emission is a floor division; the 2000-particle integration is in `_Process`, not on this tick |
+
+Two the item did not name: `ZeppelinRuntime` **8.9 %** (almost all of it `Place`) and
+`GodotWorldQuery.Ray` **13.4 %** across all callers, `ProbeGroundBlow` being 9.4 % of the tick on
+its own. So the ray *casts* do cost real physics time even though C21 showed the ray *objects* are
+not a meaningful allocator. But 13.4 % of 1.81 ms is 0.24 ms, and removing the whole ranking pass
+would take the step from 1.81 ms to about 1.38 ms. Nothing here is worth optimising against a
+16.7 ms budget, so no fix lands and none should.
+
+**What does land.** The instrument (`CSVM/src/Utils/PhysicsTickCost.cs`, the two bracket nodes added
+in `Launcher._Ready`, the three `--perf` terms, five units in `PhysicsTickCostTests`), the rule
+(`docs/verification.md` PERF-21, with `docs/cli.md` and `docs/tooling.md` corrected, since both told the
+reader `physics_ms` was empty under `--det` and nothing about what it means when it is not), and the
+regression gate below.
+
+**The perf scenario, and the honest limit on it.** `c2m02-hollywood`
+(`--chapter=C2 --mission=M02 --plane=player_bhawk --hold=0.2,0.1,0,1`) is in
+`analysis/perf/scenarios.json` and runs clean. It gates the **world** CM11 is built on: the
+chapter's node census, its 52 world emplacements and the destructible registry the ranking pass
+scans, which is what the tick's cost scales with. It cannot gate the flown mission: the roster and
+objectives need a `CampaignProfileStore` profile under `user://Profiles/`, which is machine state
+the manifest has no way to create, and the campaign session brings the node count from 12,583 to
+28,640. That gap is stated in the scenario's `exercises` rather than hidden. The three new `phys_*`
+terms are registered as awareness metrics with their reasons: the harness runs `--det`, which makes
+the clock parent-driven, so the tick is empty there (`phys_tick_ms` reads 0.034 ms) and these are
+numbers for a `--no-det` hand-run.
+
+**Verified.** <pending orchestrator run>
+
+**What could NOT be verified here.** Nobody flew the mission. The loaded state was reached with
+`--debug-objective=18`, which drives the trailer chain and, 115 s later, objectives 19 → 58 → 57 and
+the five Firebrands; the player aircraft flew itself, crashed early and respawned, so no sustained
+firefight, no burst of live projectiles and no destruction cascade is in these numbers. The
+attribution therefore under-weights `ProjectilePool` and the debris motions relative to a real
+engagement. It also means the residual below is characterised from spikes this run happened to hit,
+not from the ones a pilot provokes.
+
+**The residual, which is real and is not this item's claim.** `phys_tick_max_ms` reached 72, 102 and
+177 ms on single ticks. A tick that long costs the sim time for a different reason than a slow
+average: Godot caps catch-up at 8 steps per frame, so a 177 ms stall discards about six sim steps
+outright. That is a spike problem in the shape the C21 agent's chain-map predicted
+(`NameResolver.ClearFindCache` turning the next tick's name resolutions into a walk of the ~5000-row
+index with an `IsInstanceValid` per row, on the spawn and warm-up paths), and it is what `BL-562`
+is rewritten onto.
+
+**Original approach (kept for reference).**
 
 **Goal.** The late-CM11 physics step comes under the 16.7 ms budget on the reference rig, so the sim
 clock tracks the wall clock and the mission takes as long to play as its `TimeMs` records.

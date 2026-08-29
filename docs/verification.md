@@ -377,6 +377,19 @@ loss. What the engine renders was decodable from the authored constants + oscill
   the non-finalizable allocation rate stretched the interval from 13 s to 33 s and took the pause
   from 10 to 13 ms up to 25 to 31 ms, leaving total pause per wall second unchanged. Judge such a
   change on pause per second and on dropped frames, never on the per-collection figure alone.
+- **PERF-21** — **`physics_ms` is the WORST single physics tick of the last wall second, refreshed
+  about once a second, so it is neither a per-frame cost nor a mean and reading it as one overstates
+  the physics step by roughly an order of magnitude.** It is Godot's `TIME_PHYSICS_PROCESS`
+  (`Launcher.ReadFrameCounters`), and the engine holds a maximum in it between refreshes: the same
+  value repeats across every record of a second, and it routinely exceeds `max_ms`, the worst *frame*
+  of the same window, which no per-frame cost can do. Measured on a flown CM11 (C2/M02) session over
+  333 windows: `physics_ms` median 16.96 ms and p95 29.37 ms, against a directly bracketed
+  `phys_tick_max_ms` of 15.48 ms median and 26.64 ms p95 (the same quantity), while the actual mean
+  tick, `phys_tick_ms`, was **1.81 ms** median and 3.20 ms p95. `script_ms` (`TIME_PROCESS`) is the
+  same shape, which is the mechanism behind PERF-1's "~2.2× real". Read `phys_tick_ms` for the step
+  cost and `phys_hz` for whether the sim keeps up (60 ticks a wall second is real time, because a
+  realtime clock advances the physics-stepped sim exactly one 1/60 step per tick); both are
+  `--no-det` numbers, since `--det` empties the tick.
 
 ## LOG — logs, error censuses, and exit codes
 
