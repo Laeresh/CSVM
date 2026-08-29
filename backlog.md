@@ -2404,8 +2404,11 @@ usual.
   *Cross-refs:* `BL-256` is the adjacent snapshot work; `docs/PLAN-M5-campaign.md` Decision 3.
 
 - `BL-523` `[Bug]` **The AI's patrol/pursue/lay-off cycle does not match the original: CM05's
-  second patrol never pursues, and CM09's enemies fly up to 80 km away.** *Evidence:* two
-  symptoms of one mode machine, reported at the controls. In CM05 (C3/M04) the second enemy patrol
+  second patrol never pursues, CM07's friendly flights hold their net while enemies attack them,
+  and CM09's enemies fly up to 80 km away.** *Evidence:* three
+  symptoms of one mode machine, reported at the controls. In CM07 (C1/M02) friendly aircraft keep
+  flying their net instead of engaging enemies that are shooting at them, so the promotion gate is
+  wrong on the friendly side too, not only for the enemy patrol below. In CM05 (C3/M04) the second enemy patrol
   stays on its net around the Pandora with the player in range and never engages; in CM09 enemy
   aircraft leave the mission area and end up tens of kilometres out. `AiModeMachine` promotes
   `Patrol` to `Pursue` on its own gates (`AiModeMachine.cs:314`); a patrol that never leaves the
