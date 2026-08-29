@@ -14,6 +14,7 @@ public interface ISessionSimulationRuntime
     void StepZeppelins(float dt);
     void StepTurretEmplacements(float dt);
     void StepGenerators(float dt);
+    void StepSurfaceVehicles(float dt);
     void StepCapturedAiAircraft(float dt);
     void StepLandingApproaches();
     void StepInstantAction(float dt);
@@ -56,6 +57,9 @@ public sealed class SessionSimulation
         _runtime.StepZeppelins(dt);
         _runtime.StepTurretEmplacements(dt);
         _runtime.StepGenerators(dt);
+        // A hull a generator launched this step is not eligible until the next one, the same
+        // admission the captured-aircraft membership above takes.
+        _runtime.StepSurfaceVehicles(dt);
         _runtime.StepCapturedAiAircraft(dt);
         _runtime.StepLandingApproaches();
         if (_runtime.SimHeld)

@@ -925,23 +925,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fires. *Cross-refs:* `ZeppelinMotion`, `docs/formats/mission-entities.md` "Steering",
   `zeppelin-pandora-dead-end`.
 
-- `BL-598` `[Bug]` **CM08 (C1B/M03): the patrol boats take hits but cannot be targeted.** *Evidence:*
-  reported at the controls: the four boats C22's surface launch wakes at 181 s drive their nets and
-  rounds hit them, but the targeting HUD never brackets one and the aim assist never snaps to one.
-  *Fix shape:* `SurfaceVehicleRuntime`'s hull is neither an aircraft rig nor a world turret, so
-  `TargetSelection` and `AimAssist`'s candidate lists (vehicles, turrets, structures) do not see it;
-  decide which list the original puts a surface vehicle in (its targets record and the HUD class)
-  and register the hull there. *Cross-refs:* `SurfaceVehicle`, `TargetHud`, `AimAssist.AddStructures`,
-  `BL-523` (their gunnery).
-
-- `BL-586` `[Bug]` **One burst deals a world destructible one splash share per collider body it
-  carries.** *Evidence (traced):* the C1 aagun carries ten collider bodies, and one flak bursting
-  over its own pit dealt `-8.18/-8.04/-8/-7.36`, one share per body (the `turret-self-fire`
-  trace), where the original's hit buffer holds one entry per node (`FUN_004cb420`). *Fix
-  shape:* dedupe `ProjectilePool.ApplyDamage`'s world candidates per resolved destructible,
-  keeping the nearest body's share; needs a `DamageSink`-side key, since the pool cannot resolve
-  destructibles itself. *Cross-refs:* `docs/org/ordnanceTypes.md`, `turret-self-fire`,
-  `BL-573`'s closing commit (`git log --grep=BL-573`).
+- `BL-605` `[Bug]` **A surface vehicle's aim-assist candidate carries zero velocity, so the lead
+  solver never leads a moving boat.** *Evidence (traced):*
+  `SurfaceVehicleRuntime.CollectVehicles` adds each hull with `Vector3.Zero` for velocity, where
+  `ProjectilePool.CollectAircraft` passes the rig's own; the aim assist's lead term is therefore
+  zero on a boat driving its net at the taxi speed, and the gun snaps to where the hull is rather
+  than where it will be. *Fix shape:* expose the `PathFollower`'s current velocity on
+  `SurfaceVehicle` and feed it through `CollectVehicles`. *⚠ Traps:* the candidate list membership
+  itself is settled and must not move (`VehicleList`, `docs/org/aim-assist.md` "The four lists");
+  this is the velocity field alone. Whether the original leads a surface vehicle at all is the
+  first question, not the magnitude. *Cross-refs:* `AimAssist.Scan`, `BL-523` (the boats' own
+  gunnery, a separate item).
 
 ## Flight model & collision physics
 
@@ -976,24 +970,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
   so the ledger keeps "a wreck flies the near-field plant" as an exception. Decode when and by
   whom it is set so the wreck can fly the decoded arm.
-- `BL-562` `[Perf]` **The physics tick costs ~39 ms per frame late in CM11 (C2/M02), so the sim runs
-  at about half of wall time.** *Evidence:* a flown CM11 session's hitch records
-  (`.scratch/logs/game-*.out`, `[perf] hitch … physics_ms=…`) show the frame baseline rising from
-  9 ms at launch to 30–40 ms with `physics_ms` at ~39 ms of it once six aircraft, the trailer's dust
-  puffers and the roadblocks are live; 2770 rendered frames then covered 52 sim seconds (one
-  parked-plane `flight:` line per sim second). Godot caps physics catch-up per frame, so a
-  physics-bound frame lets the sim clock fall behind the wall clock: the mission takes about twice
-  as long to play as its `TimeMs` records, and every `_Process`-driven consumer that still reads wall
-  time drifts against the aircraft (the animation runtime moved onto the physics tick for this
-  reason, see `AnimRuntime._PhysicsProcess` and the `anim-clock-realtime` suite). *Fix shape:* profile
-  one CM11 session past the roadblocks with `--perf` and the hitch sidecar's `samples`, attribute
-  the physics step (`FlightController._PhysicsProcess` chain: six flight models, AI mode machines,
-  projectile sweeps, the objective graph's per-tick scans, puffer emitters at 1 m distance
-  intervals on the trailer) and bring the step under the 16.7 ms budget on the reference rig; a
-  perf scenario in `analysis/perf/scenarios.json` for the late-CM11 state is the regression gate.
-  *⚠ Traps:* a wall-clock measurement of anything in that session is not a sim measurement, so
-  compare durations in sim seconds (the log's 1 Hz `flight:` cadence, `GameClock.Frame`), never in
-  wall seconds; do not raise `max_physics_steps_per_frame`, which only deepens the catch-up spiral.
+- `BL-562` `[Perf]` **Single physics ticks reach 70 to 180 ms in CM11 (C2/M02), and Godot's 8-step
+  catch-up cap turns each one into sim time the mission never gets back.** *Evidence (traced):* the
+  bracketed instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` /
+  `phys_hz`) over 333 windows of a loaded CM11 session puts the **mean** tick at 1.81 ms (p95
+  3.20 ms) and the tick rate at a median of 60.0 per wall second, but `phys_tick_max_ms` hit 72,
+  102 and 177 ms on individual ticks. `max_physics_steps_per_frame` is at Godot's default 8, so a
+  177 ms stall leaves about six sim steps undeliverable and they are discarded, not deferred. *Fix
+  shape:* find what a spiking tick is doing. The chain map's candidate is
+  `NameResolver.ClearFindCache`, which drops the whole find memo, so the next tick's ~60 objective
+  name resolutions re-walk the ~5000-row index calling `GodotObject.IsInstanceValid` on every row;
+  its callers are the `IndexStage` / `IndexSpawnedCopy` / `IndexRebasedStage` / `IndexPooledCopy`
+  spawn and warm-up paths in `AnimRuntime`, which is the right shape for a spike that lands on a
+  spawn rather than steadily. Confirm by bracketing a spiking tick rather than by inference. *⚠
+  Traps:* **do not chase the sustained step.** The entry used to claim a ~39 ms step and a sim at
+  half wall time; both were a misreading of Godot's `physics_ms` monitor, which holds the WORST tick
+  of the last wall second and refreshes about 1 Hz (`docs/verification.md` PERF-21, and the
+  disproof's own commit, `git log --grep=BL-562`). The mean step is a ninth of its 16.7 ms budget and
+  the sim tracks the wall clock at a ratio of 0.9999 over 306 wall seconds, so there is nothing to
+  win by optimising the steady tick. Compare durations in sim seconds, never wall seconds, and do
+  not raise `max_physics_steps_per_frame`: it deepens the catch-up spiral rather than recovering the
+  lost steps. The measurement was taken with `--debug-objective=18` driving the mission, with nobody
+  at the controls, so it under-weights projectiles and destruction cascades. *Cross-refs:*
+  `docs/PLAN-M5-polish-6.md` C22, `BL-606` (the same per-sim-step suspects seen as an allocator).
 
 ## Environment & world
 
@@ -1008,6 +1007,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the two), but fixing it means giving `Kind` a billboard mode and a second material path, and it
   changes how 139,388 C5 sprites look with no reference shot to check against — so it needs an
   original-game A/B.
+  *The "should be exempt from the dim" half is now decoded and survives.* `docs/org/vertexLighting.md`
+  finds the original's per-surface exemption and it lands on this family: `poleflare` ships texture
+  storage flags `0xab`, i.e. the alpha bit that makes `FUN_005524d0` skip the per-vertex light
+  evaluation outright, so the glows take no sun term at all in the original. So does `lightpole`, and
+  so do `lite_out`, `bliteon`/`bliteoff` and the rest of C5's lit-signage set. The exemption keys on
+  the **texture**, not on a kind, a `soil` id or a node name, so it is a general rule and not a
+  special case cut for this item. It also does not need the A/B: the billboard-axis half still does.
 
 - `BL-076` `[Feature]` **Star twinkle + undecoded light fields** (flags 523/…, the 0.17 float) — stars/beacons
   render as fixed-size soft sprites, no twinkle.
@@ -1117,9 +1123,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-322` `[Bug]` **C5's lit facades render ×0.58–0.66 of the original with WorldLight already at
   clamp 1.0** (split out of `BL-303` at its close, 2026-08-08; measured `CAP-11`: tower faces 10.2
   vs 15.5, low-rise 21.7 vs 37.6). Explicitly NOT fog — `BL-303`'s own adjunct note, and the Wave
-  B fog work moved none of it. Candidate direction: the lit-signage/self-lit family
-  (`lighting: false` models draw fullbright, weather.md) — check whether these facades author a
-  flag or vertex data we modulate that the original does not.
+  B fog work moved none of it.
+  *Decoded, and the item's own premise is refuted:* the original's per-surface lighting exemption is
+  found and written up in `docs/org/vertexLighting.md`. It is two gates, the model's `lighting` flag
+  (`FUN_00551d90`) and the texture's alpha bit (`FUN_005524d0`), and **the measured facades are on
+  the lit side of both**: `cblock1`–`7`, `bldg1`–`4` and `bldgtrim1` all ship storage flags `0xa5`,
+  i.e. no alpha bit, so the original modulates them exactly as we do. Asking "should these facades
+  be modulated at all" therefore answers yes, and no exemption is available to close the measured
+  ratio. What the decode does hand over is a narrower, real gap: the overlays drawn **on top of**
+  those facades are exempt in the original and are not in ours, because the remake applies its
+  per-model `lit` decision to every overlay pass. In C5 that is `buildingspotlighted` (the lit
+  windows, 34 polygons over `cblock*`), `nypd`, `clock`, `fadedsign01`–`03`, `lightpole`, `lite_out`,
+  `bliteon`/`bliteoff` and `traffic_sign1`. Whether drawing those fullbright moves the tower-face and
+  low-rise boxes is untested and is the next step; it is a different mechanism from the one this item
+  was filed on, and the residual after it is not predicted.
+  *Blocked on plumbing:* the exemption keys on the texture header's storage byte, which the deployed
+  texture tree does not carry (PNGs only; the extractor's `alpha` field lives in `texture.zip`'s
+  `manifest.json`). A PNG alpha-channel test is not a substitute — it loses the 1–10 `Simple`
+  textures per chapter that carry the bit too.
   *Playtest after fix:* the C5 night poses in `playtest/CAP-11/README.md`.
 
 - `BL-325` `[Feature]` **Night cloud sprites are directionally moonlit in the original; ours are
@@ -1257,17 +1278,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   in-cloud frames) once such footage is reviewed for timing rather than just colour.
   *Cross-refs:* `docs/architecture.md`'s `Session/WeatherRig.cs` entry (D32 bullet).
 
-- `BL-304` `[Bug]` **Water gets the WorldLight dim; the original renders it unmodulated** (`CAP-11`
-  A/B, 2026-08-07; surfaced closing `BL-110`; evidence `playtest/CAP-11/README.md`). C2B ocean
-  foreground, same world, matched spawn pose: original 53.9 vs ours 42.0–42.5 — ratio
-  **0.78 ≈ our `world_light` 0.784 exactly**, i.e. dividing our value by the dim reproduces the
-  original within 7%. C1B's night ocean points the same way (original 37–42 vs ours 9–23) but is
-  noisy — moon glitter and wave texture vary with screen position — so the night number is
-  support, not proof. Candidate: exempt the water material from `csky_world_light`, the same
-  should-be-exempt family as `BL-070`'s poleflare glows.
-  *Playtest after fix:* the C2B low pose (`--pos=-3843,200,-1101`) against
-  `playtest/CAP-11/t0.5-c2b-spawn-ocean.png`.
-
 - `BL-341` `[Research]` **Reopened `BL-250`: with the real `no_clutter` gate landed, 7.6% of C5's ground
   (13.8 million m², the flagged overlay area with no base layer beneath it) renders bare, and
   whether that is what the original does is untested.** `BL-250` closed 2026-08-07 on a curated
@@ -1316,6 +1326,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   tree lines and C2's Eiffel replica, where the erosion this rule was written to prevent would show
   first. *Cross-refs:* `analysis/alpha-classification/FINDINGS.md`, which carries the decode and the
   install-wide census; the coastline commit that filed this (`git log --grep=SoftAlphaCoastline`).
+
+- `BL-613` `[Fidelity]` **An alpha-textured surface takes a sun term in ours and none in the
+  original.** *Evidence (decoded):* [`docs/org/vertexLighting.md`](docs/org/vertexLighting.md) pins
+  the original's per-surface lighting exemption as two gates, and the second is engine-wide: in
+  `FUN_005524d0`'s textured branch, bit `0x02` of the texture object's storage flags byte at `+0x09`
+  (set for exactly the textures carrying an alpha channel) skips the per-vertex light evaluation
+  outright and sends the polygon through the unlit submission path. CSVM has no counterpart, so
+  every alpha-textured surface in every chapter is modulated where the original leaves it
+  fullbright. Confirmed against the shipped data: `poleflare` and `lightpole` are `alpha: Full`
+  and exempt, while `cblock1`, `bldg1` and `wtr00000` are `alpha: None` and lit in both.
+  *Fix shape:* carry the exemption on the material the builder creates, keyed on the texture's own
+  alpha class, alongside the existing per-model `lighting` gate. *⚠ Traps:* **the deployed texture
+  tree cannot answer the question.** It ships PNGs only; the alpha class lives in the extractor's
+  `alpha` field in `texture.zip`'s `manifest.json`, so the plumbing to reach it is the first half of
+  the work. **A PNG alpha-channel test is not a substitute**, because it loses the one to ten
+  `Simple` textures per chapter that carry the bit as well. This changes how a large population of
+  surfaces reads across all eight chapters, so it wants a golden re-pin and the user's eyes, not a
+  suite alone. *Cross-refs:* `BL-322` (the C5 facade overlays, this rule's first concrete instance),
+  `BL-070` (whose "should be exempt from the dim" half this decode settles, leaving only its
+  billboard-axis half), `docs/org/textures.md` (the storage-flag bits).
 
 ## Effects & animation runtime
 
@@ -1471,47 +1501,52 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clips above, and its "look for" list should gain the flat-ring-versus-airborne-hoops question),
   `BL-406` (closed).
 
-- `BL-535` `[Bug]` **A repeat sonic burst pays a 10 to 14 ms slot re-reset on every play from the third on.** With every emitter pre-built at bind (`AnimRuntime.PrewarmEmitters`), the weapon-lab probe (`--chapter=C1 --weapon-lab=wep_08 --weapon-fire --infinite-ammo --weapon-surface=default --weapon-standoff=90`) still records one `effect_checkout` sample per burst once `hitchMonitor.floorMs` is 10 and `medianMultiple` 1.2 under `--no-det --no-vsync`: 0.6 ms for the first two bursts, 10.2 to 13.9 ms for every burst from the third on, one call each. The step lands two bursts before a 4-slot pool could recycle, so it is not a wrap and not construction; it is the cost of re-resetting a slot copy that has run before, in `AnimRuntime.ResetCheckedOutCopies` (the re-reset that fixed the rings vanishing from the fifth burst on). Under the stock monitor it never trips, so it is a per-burst cost rather than a hitch, and at vsync it is inside a frame.
-  *Where to look:* what the re-reset walks per copy (every template node of the subtree, or only the ones the last run posed), and whether the END pose can be recorded at stop time so the reset is a replay of a short list. ⚠ `docs/verification.md` PERF-14: the stock probe cannot fail on this; the lowered monitor is the only instrument that sees it, and it needs both knobs, since the trigger is the larger of the floor and median × multiple.
+- `BL-535` `[Bug]` **A repeat sonic burst pays a 10 to 14 ms slot re-reset once the pool recycles a still-live slot.** With every emitter pre-built at bind (`AnimRuntime.PrewarmEmitters`), the weapon-lab probe (`--chapter=C1 --weapon-lab=wep_08 --weapon-fire --infinite-ammo --weapon-surface=default --weapon-standoff=90 --no-det --no-vsync --seed=1 --no-pads --frames=1200 --screenshot=<path>`) with `hitchMonitor.floorMs` 10 and `medianMultiple` 1.2 in `CSVM/config.json` records `effect_checkout` samples of 15.6 ms and 12.2 ms in `.hitches.jsonl`; under the stock monitor it never trips. `AnimRuntime.ResetCheckedOutCopies`'s own def/anchor loop is cheap and constant (17 defs, 17 matched anchors every burst); the cost sits inside `RESET_STATE`'s `ObjectOpacityState` dispatch on the ring defs — `PoseChannel.SetSubtreeOpacity` → `ApplyOpacity`'s recursive subtree walk plus `WorldCollision.SetFaded` → `SyncSubtree`/`FadedAbove` — and lands exactly at the pool wrap (a per-burst `Stopwatch` shows burst 4 cheap, then the log's own `anim: effect pool for 'sonic_ground_effect' recycled slot 0 of 4 while it was still live` line, then burst 5 onward expensive), not two bursts before it as first measured.
+  *Where to look:* isolate `ApplyOpacity`'s material/shader-param cost from `SetFaded`'s collider-resync cost before changing either — `EnsureOpacityPath`'s own `Shader.Code.Contains` scan is measured NOT to be the bottleneck (under 0.1 ms typically). Both are shared machinery well beyond the sonic burst; `WorldCollision._fadedRoots` is a single process-wide counter, so `FadedAbove`'s ancestor walk degrades for every currently-faded object in the world, not just this one, once more than one is faded at a time.
   *Cross-refs:* `BL-231` (closed; the pool-size judgement this was measured under), the `effect-pool-reset` suite (the pose contract the re-reset keeps).
-- `BL-536` `[Bug]` **Every .NET collection in flight is a gen1 collection with ~45k objects pending finalization and ~30 MB promoted, pausing 24 to 29 ms about every 12 s.** The 90 to 120 ms stall every ~190 frames that this item was filed on is gone: it was the `EXECUTION_BY_RANGE` sweep re-measuring 69 deferred anchors' mesh bounds on every 8 m cell crossing, ~25 MB/s of finalizable `StringName`/`Godot.Collections.Array` wrappers (now measured once per anchor, `AnimRuntime._rangeOriginLocal`). What remains is under `HitchMonitor`'s 40 ms floor and no longer trips, but a `dotnet-trace` GC-verbose capture on `--fly --chapter=C1 --plane=player_bhawk --perf --no-vsync` still shows every collection as gen1 (`gc0_delta` and `gc1_delta` move together), `FinalizationPendingCount` ~45k at each one and a residual 1.7 MB per 60-frame `--perf` window, of which `GodotWorldQuery.Ray` (a `PhysicsRayQueryParameters3D`, an `Array<Rid>` and a result `Dictionary` per cast, several casts a sim step), `AnimInstance.Live()` (an iterator per frame from `AnimRuntime.Retirable`) and `GaugeCluster.DrawGaugePoly` (a `Color[]` and `Vector2[]` per polygon per draw) are the sampled allocators.
-  *Where to look:* what keeps promoting ~30 MB into gen1 per collection when the allocation rate is 3 MB/s (finalizable Godot wrappers survive their first collection by construction, so the ray-query objects are the first suspect: reuse one `PhysicsRayQueryParameters3D` per caster), and whether the 24 to 29 ms pause is the finalizer queue's registration rather than marking. ⚠ PERF-13: compare only within one vsync mode; the residual pause needs `hitchMonitor.floorMs` lowered to be seen at all (PERF-14's lowered-monitor caveat).
-  *Cross-refs:* `BL-355` (closed; the capture that first showed the unexplained trip), `PLAN-perf-hitches`.
 - `BL-537` `[Owed-playtest]` **Effect pools at four players, judged in play.** The pool sizes in `CSVM/data/effect_pools.json` were re-judged on a build with no first-use construction cost: rockets and the sonic burst never wrap, a four-object simultaneous death wraps `flame_ball_01` at 4 and 6 slots and is quiet at 8 (now shipped), and seven or more identical deaths in one frame wrap at the 16 ceiling and cannot be sized away. At the controls the single-player half reads right: four fireballs burn out in place, and the seven-death wrap is not visible under the debris. Still owed: a 4-player splitscreen session with everyone firing, judged for anything that reads as shared between panes, and the ceiling for many-player builds (at 16 players the default root wants 19 and gets 16). The instrument is `AnimRuntime.PoolRecycles` and the `anim: effect pool for '<name>' recycled slot` DEBUG line in the log file sink; the sizes staged print on the world-effects build line. ⚠ Raise only a root that logs a recycle, never the default; the three gun roots stay at 1; a root sized 0 clamps to 1. Each slot copies the root's subtree (155 templates at 1 player, 263 at 4).
   *Cross-refs:* `BL-535` (the per-burst re-reset cost measured under the same instrument), `BL-296`/`BL-299` (the other splitscreen-scoped items).
-- `BL-538` `[Bug]` **A dark band on the large buildings at the distance the templates clutter fades out.** Reported at the controls in C5 with the authored `far_fade_range` applied: in the original the fade reaches the other buildings as well as downtown, and in the remake the larger (gamez) buildings show a dark area at the range where the downtown clutter vanishes, with buildings nearer and farther than that band reading brighter. Not the dither itself, which reads as the original's fade in motion.
-  *Where to look:* whether the collapsed clutter cards still write depth or a dark fragment behind the band (the `csky_clutter_fade` cutout keeps a card in the pass until `step(d, far)` culls it, and a card collapsed to zero size should contribute nothing), whether the fog-volume clutter's own `far_fade` and the templates fade overlap at that range, and whether the gamez buildings carry a `far_fade_range` of their own the remake ignores (`FUN_004d5de0` applies the scaled test to every type-5 scene node, not only clutter). A C5 screenshot pair at the band distance with `graphics.clutterFarFade` on and off separates the two.
-  *Cross-refs:* `BL-337` (closed; the fade), `docs/org/clutter.md`.
+- `BL-538` `[Tuning]` `[Owed-playtest]` **At what distance C5's city is meant to reach the dark level of its facade mip chain.** The dark band reported at the controls in C5 is not the clutter fade: it is the shipped hand-authored mip chain of the `cblock*` facade textures, whose level 1 is a non-monotone dip. `--dump-mips` reads `cblock1` at mean luminance 15.62 (L0) → 4.41 (L1) → 6.77 (L2) and `cblock2` at 9.60 → 0.83 → 1.84, so a facade near enough for L0 reads bright, one in the L1 band three to eleven times darker, and one far enough for L2 brighter again. `--mips=generated` removes the band completely; `graphics.clutterFarFade=false` does not touch it. The chain installs correctly (every `installed` line in the dump reads `== authored`), and the levels are the original's own art that must not be regenerated, so what is left is a judgement about *selection*: the artists tuned these levels against a 640×480 DX7 pipeline, and nothing yet says the remake reaches L1 at the distance they drew it for.
+  *Where to look:* the sampler and any LOD bias on the world shader (`SceneBuilder.GetBiasShader` emits `filter_linear_mipmap_anisotropic`), and whether the original point-selected a level where the remake trilinearly blends L0 into L1 across a range. Instrument: `--dump-mips` for the installed chain, `--mips=generated` for the A/B. The judgement itself is the user's at the controls, over the pose in the entry below.
+  *Reproduce:* `.\RunProbe.ps1 --freecam --chapter=C5 "--pos=-9491,140,-3479" "--direction=-0.588,-0.03,-0.809" --det --mute "--screenshot=.scratch\band.png"`, then the same with `--mips=generated`.
+  *Ruled out, do not re-chase:* collapsed clutter cards writing depth or a dark fragment (the fade-on frame is pixel-identical to `--no-clutter` in every row where the fade has culled every instance); C5's fog-volume clutter overlapping the templates fade (its field is 16,170 cloud sprites at `fade 1200-1800 m`, outside the 200–900 m the templates author); the gamez buildings carrying an ignored `far_fade_range` (`FUN_004d5de0` is reached only from the clutter instance list `FUN_004d5d90` and the clutter quadtree `FUN_004d6010`, both behind `CameraRenderClutter` in the world walk `FUN_004d5910`, while ordinary scene nodes draw through `FUN_004d4a20` and never reach the fade test); the alpha-texture lighting gate of `BL-613` (the band is a function of camera distance and lifts under a mip-policy switch that changes no lighting term); and decorrelating the dither lattice per stamp, which was probed and changes the frame barely at all.
+  *Cross-refs:* `PT-85` (the flight that judges it, with the pose and the A/B), `BL-337` (closed; the fade), `docs/org/clutter.md`, `docs/formats/gamez.md` on the authored mip levels.
 
-- `BL-546` `[Bug]` **A nitro engage produces none of its visuals: no prop swap, no exhaust smoke.**
-  *Evidence:* reported at the controls on a nitrous build whose boost accelerates the aircraft and
-  whose dial now reads correctly: nothing on the airframe changes. Every part of the
-  wiring is present, which is what makes this worth an item rather than a feature request. The
-  `nitro_boost` def ships in `plane_props.zrd` as `LOCAL_NODES_ONLY` / `ACTIVATION ON_CALL` /
-  `AUTO_RESET_NODE_STATES OFF`, and its sequences set `OBJECT_ACTIVE_STATE nitropropN ACTIVE`,
-  ramp `OBJECT_OPACITY_FROM_TO` 0→1 on the same discs, spin them through `spin_nitrorotorN`, and
-  play `snd_nitrostart AT_NODE nitroprop1`; `nitro_decay` reverses it. The airframes carry 34
-  `nitropropN` nodes between them. `PlaneBuilder` classifies the disc and builds it hidden for
-  that def (`PlaneBuilder.cs:275-277`, `PropParts.cs:25`), `EffectCatalogue.NitroAnims` binds both
-  defs, and `FlightController` plays them off the `NitroSystem` edges
-  (`FlightController.cs:1727-1741`). So the data is authored, the node is built, the def is bound
-  and the call site fires; the break is between the call and the frame.
-  *Fix shape:* establish first which half fails. Engage the boost with `--debug-anim` and see
-  whether `nitro_boost` starts at all. If it does not, the suspects are `CrashRuntime` or
-  `PlaneModel` being null on the human flight path, or `PlayWithin` failing to resolve
-  `nitropropN` inside `PlaneModel`. If it does start, the disc is being activated and then drawn
-  invisible, which points at `OBJECT_OPACITY_FROM_TO` against a material with no transparency, or
-  at the hidden build state surviving the `ACTIVE` event. Settle the prop first: the smoke is a
-  second question and the prop is the one whose whole chain is already readable.
-  *⚠ Traps:* ⚠ **The absence of a `nitro engaged` line proves nothing** — `FlightController.cs:1733`
-  logs through `Log.Debug("flight", …)`, which the file sink does not take. Do not conclude the
-  edge never fired from a quiet log. The `ai_nitro_boost` / `ai_nitro_decay` wrappers in the same
-  file are retargeting shims the executable never references, so do not wire the AI to them while
-  chasing this. `NitroSystem`'s own state machine is decoded and confirmed working (the boost does
-  accelerate the aircraft), so the defect is downstream of the edge, not in the tank or the arm.
+- `BL-546` `[Bug]` **A nitro engage still shows no prop swap; the exhaust smoke half is fixed.**
+  *Evidence:* `nitro_boost`/`nitro_decay` (`plane_props.zrd`) never started at all: they author
+  their anchor as NAME `warhawk`, which never resolves inside a per-plane crash rig's own index
+  (built only from the flown aircraft's own subtree), and `FlightController.AdvanceNitro` called
+  `PlayWithin`, which has no fallback for a NAME that fails to resolve. `startprops`/`stopprops`
+  carry the identical `NAME warhawk` anchor in the same file and already worked, because their
+  call site uses `Play(name, PlaneModel, applyReset: false)`, whose fallback-to-anchor covers
+  exactly this case; `AdvanceNitro` now does the same for both nitro defs. That landed the
+  exhaust half: `nitro_boost`'s own `PUFFER_STATE nitropuff1..4 AT_NODE exhaust1..4` now fires,
+  confirmed by the `nitro-boost-anchors` suite (builds the real `player_warhawk` rig, plays
+  `nitro_boost` through the production call shape, asserts the puffer sustains).
+  The prop swap (`OBJECT_ACTIVE_STATE`/`OBJECT_OPACITY_FROM_TO nitropropN`, `spin_nitrorotorN`,
+  `snd_nitrostart AT_NODE nitroprop1`) is still not visible after that fix, and the open question
+  is why. `extracted/planes/nodes.json` declares exactly 34 `nitropropN` nodes and carries BOTH a
+  bare-named root and a `player_*` root for nearly every aircraft (`warhawk`/`player_warhawk`,
+  `fury`/`player_fury`, and so on), so the geometry exists somewhere in the shipped data. Building
+  all eleven `player_*` rigs through `PlaneBuilder` (the model every player and AI vehicle def's
+  own `nodename` points at, `vehicle.zrd`) turns up only `staticpropN` on every one; no
+  `nitropropN` node is reachable from any flyable airframe's own subtree.
+  *Open question:* which root the original resolves `nitro_boost`'s `NAME warhawk` anchor
+  against. Reading A: the original also resolves it against the per-plane (flyable) node the way
+  CSVM's crash rig does, in which case the disc never showed on a flyable aircraft in the
+  original either, and this item is a disproof once that is confirmed. Reading B: the original
+  resolves `NAME` globally against the world/library set rather than per-plane-scoped, in which
+  case it would find the bare `warhawk` root (which carries the discs) even while a `player_*`
+  aircraft is flown, and the original DID show a prop swap that CSVM's per-plane-scoped
+  `AnimRuntime` structurally cannot reproduce without a different resolution path for this def.
+  *Fix shape:* decode `FUN_004b2110`'s "play nitro_boost def on the plane node" call (cited in
+  `docs/org/flightModel.md` "Nitro") for whether the original's own anchor resolution is scoped to
+  the calling vehicle or is a global NAME search; that answer alone separates reading A from B.
+  If B, the fix is a CSVM resolution change (a second NAME-search tier for this class of def, or a
+  bespoke bare-root lookup), not a call-site swap like the smoke fix was.
   *Cross-refs:* `BL-447` (the AI's `medium_aishake` and `snd_nitro` blip on an engage, and the
   decay lockout that `_nitroDecayLeftS` stands in for), `docs/org/flightModel.md` "Nitro",
-  `docs/formats/hud.md` "Cockpit gauges" for the dial half, which is settled.
+  the `nitro-boost-anchors` suite (the smoke half's regression coverage).
 
 - `BL-555` `[Feature]` `[Divergence]` **A held key fast-forwards a mid-mission cutscene instead of
   skipping it: the definition plays at a raised rate that spools up while the key is held and
@@ -1535,18 +1570,40 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `docs/formats/anim-definitions/cutscenes.md` "Handoff and skip"; `docs/plans/PLAN-M5-polish-2.md`
   E24 (the decode that made the two scenes unskippable).
 
-- `BL-587` `[Fidelity]` **Chapter-scope reader files no `ANIMATION_DEFINITION_FILE` list names still
-  load.** *Evidence (traced to the data):* the shared scope is gated on the lists a mission sees
-  (`AnimProgram`, `docs/formats/anim-definitions.md` "Shared-scope files are listed per mission
-  too"); the chapter scope stays unconditional. Unlisted chapter files: C1's `clouds`,
-  `lightning`, `spotlights`, `train_smoke`; C2's `game_targets`, `police_*`, `security_destroy`
-  (M01/M02 list two of them); C5's `steinmann` (M01 lists it); C4's `bhmhookup`/`bhm_warhawks`
-  (M04 lists them). The original's compiled archives derive from the lists, so it never runs an
-  unlisted file. *Fix shape:* the same file gate for the chapter scope. *⚠ Traps:* C1's
-  `cloudparent#` 0.6 opacity comes from `clouds.zrd`, and the overcast match
-  (`docs/plans/PLAN-overcast-match.md`) was judged with it in place, so the C1 goldens and the
-  user's eyes decide before it lands. *Cross-refs:* `BL-521`'s closing commit
-  (`git log --grep=BL-521`), `docs/formats/anim-definitions.md`.
+- `BL-606` `[Perf]` **The settled GC pause is set by the finalizable-object count, and about 2000
+  finalizable Godot objects a second keep it there.** *Evidence (traced):* with the session's
+  build-settling transient excluded, a GC-verbose capture of a C1 cruise shows the pause tracking
+  the finalization-promoted COUNT at 0.4 to 0.5 ms per thousand objects, consistent across two
+  builds and 26k to 85k objects per collection, while ms per promoted MB varies several-fold over
+  the same collections. `MarkFinalizeQueueRoots` promotes 0.00 MB at every collection, so it is the
+  per-object queue walk and not resurrection marking, and queue registration happens at allocation,
+  outside the suspension window, so it cannot contribute. `Godot.StringName` is the largest single
+  source, ahead of the physics query parameters. *Fix shape:* reduce the RATE of finalizable Godot
+  object creation on the per-frame path, or take the objects off the finalization queue where the
+  binding allows it; caching `StringName` instances at their construction sites is the first move.
+  *⚠ Traps:* **cutting ordinary allocation does not shrink this pause, it only batches it.** Halving
+  the allocation rate moved the settled collection from gen0 every 13 s at 10 to 13 ms to gen1
+  every 31 to 36 s at 25 to 27 ms, leaving total pause per wall second unchanged at about 0.8 ms.
+  Judge any change on pause per second, never on per-collection pause or on collection frequency
+  alone. Exclude the first 50 s of process life, which is the world build tenuring and reproduces
+  to the byte. `docs/verification.md` PERF-13 (compare within one vsync mode) and PERF-19/PERF-20
+  apply. *Cross-refs:* `BL-536`'s closing commit (`git log --grep=BL-536`), which corrected the
+  premise this succeeds and landed the two allocator fixes, `BL-562` (the CM11 physics tick, now
+  rewritten onto single-tick spikes: its steady step is 1.81 ms and its ray casts are 13.4 % of it,
+  so the per-sim-step query objects cost measurable physics time even though C21 showed they are
+  1.6 % of allocation), `PLAN-perf-hitches`.
+
+- `BL-614` `[Perf]` **`WorldCollision._fadedRoots`'s ancestor walk degrades globally once any two
+  faded objects overlap anywhere in the world.** *Evidence (traced):* found while measuring
+  `BL-535`. `WorldCollision.SetFaded` re-derives colliders through `SyncSubtree` and `FadedAbove`,
+  and `FadedAbove` walks ancestors against a process-wide `_fadedRoots` set rather than against the
+  subtree the fade belongs to, so its cost is a function of how many faded objects exist anywhere
+  rather than of the one effect being reset. *Fix shape:* bound the walk to the fading subtree, or
+  key `_fadedRoots` so an unrelated fade elsewhere in the world cannot lengthen it. *⚠ Traps:* the
+  fade contract itself is what keeps a collider from surviving its hidden geometry, so any bound
+  must be checked against the suites that pin it, not only against timings. This is a separate
+  question from which half of the reset dominates, which is `BL-535`'s. *Cross-refs:* `BL-535`
+  (the measurement this came out of), `PoseChannel.ApplyOpacity`, the `effect-pool-reset` suite.
 
 ## Audio
 
@@ -2632,18 +2689,44 @@ usual.
   separate landed fix; the graph needs no change. *Cross-refs:* `BL-563`, `BL-565`,
   `docs/formats/objectives.md`, the closing commit of the graph half (`git log --grep=BL-581`).
 
-- `BL-584` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` is not same-build stable inside the
-  parallel unit stage.** *Evidence (seen once, mechanism lead-only):* the full `RunTests.ps1` unit
-  stage reported it red once (`Expected: 0, Actual: 3984` bytes) on a tree whose only difference
-  from six green runs was PowerShell and documentation edits; it then passed three times alone and
-  on every later complete run. An allocation assertion measured with `GC.GetAllocatedBytesForCurrentThread`
-  or similar shares a process with fourteen concurrent test classes, so another class's work on
-  the same thread pool thread, or a tiered-JIT recompile landing mid-scope, can charge bytes to
-  it. *Fix shape:* pin the measurement to the current thread and warm the scope once before the
-  asserted call, or move the test to a non-parallel collection and say why. *⚠ Traps:* do not
-  widen the assertion to a tolerance; zero allocations is the contract `PerfSample` makes, and a
-  tolerance would hide a real regression. *Cross-refs:* `docs/verification.md` PERF rules,
-  `docs/plans/PLAN-fast-verification.md` C23.
+- `BL-584` `[Research]` **`PerfSampleTests.AScopeAllocatesNothing` went red once and neither named
+  mechanism reproduces.** *Evidence:* the full `RunTests.ps1` unit stage reported it red once
+  (`Expected: 0, Actual: 3984` bytes) on a tree whose only difference from six green runs was
+  PowerShell and documentation edits; it has passed on every run since. **Both mechanisms this
+  entry used to name are ruled out, so do not re-chase them.** Cross-class interference on a shared
+  thread-pool thread cannot charge this assertion: `GC.GetAllocatedBytesForCurrentThread` is
+  per-thread by construction, confirmed empirically with sixteen background tasks allocating and
+  forcing gen-0 collections across the whole measured window (8 of 8 trials read exactly 0 bytes),
+  and `PerfSampleTests` is the only class in `CSVM.Tests` touching `PerfSample`'s ambient statics
+  at all, since every production call site is reachable only through Godot runtime code the unit
+  stage never loads. A tiered-JIT recompile landing mid-scope is ruled out the same way: warm-up
+  counts of 0, 1, 5, 50 and 500 against the 10,000-iteration measured loop all read 0 bytes.
+  Roughly forty forced-contention trials produced no failure. *Fix shape:* none until the cause is
+  known; the one reading remains unexplained rather than explained-and-fixed. **On recurrence,
+  capture the binary hash and the concurrent-class list from the TRX**, neither of which was
+  captured the one time this fired, and reopen from there. *⚠ Traps:* do not widen the assertion
+  to a tolerance; zero allocations is the contract `PerfSample` makes, and `BL-562` needs
+  this test able to catch a real regression. A handful of green runs is not evidence at the
+  observed rate: at a 1-in-10 base rate, 30 consecutive clean unit stages give about 95%
+  confidence the rate has moved and 44 give about 99%. *Cross-refs:* `docs/verification.md` PERF
+  rules, `docs/plans/PLAN-fast-verification.md` C23.
+
+- `BL-617` `[Perf]` **`--perf`'s `script_ms` is the same once-a-second worst-frame monitor that
+  `physics_ms` turned out to be, so PERF-1's "about 2.2x real" is a symptom rather than a
+  calibration.** *Evidence (traced):* `physics_ms` is Godot's `TIME_PHYSICS_PROCESS`, which holds
+  the worst step of the last wall second and refreshes about 1 Hz, which is why a window can report
+  27.52 ms against a worst frame of 8.33 ms in the same window and why a flown log repeats one
+  value byte-for-byte across a second of records (`docs/verification.md` PERF-21, and `BL-562`'s
+  closing commit). `TIME_PROCESS` is set from the same block in the same engine pass, and a C1
+  window showed `script_ms` equal to `frame_ms` to the digit while another read 212 ms against an
+  8.33 ms frame cap. *Fix shape:* bracket the `_Process` pass the way `PhysicsTickCost` brackets
+  the physics tick, report a measured `proc_ms` beside it, then rewrite PERF-1 onto what the
+  monitor actually is rather than onto a ratio fitted to it. *⚠ Traps:* the 2.2x figure is quoted
+  in existing analysis, so anything resting on it needs re-reading once this lands rather than
+  silent correction. Keep the raw monitor reported alongside the measured value, since it is what
+  older records hold. *Cross-refs:* `BL-562`'s closing commit (the same misreading, found there),
+  `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
+  PERF-21.
 
 ## Misc
 

@@ -108,6 +108,7 @@
     "damage-stage-slots": 0.018,
     "ai-damage-stages": 1.087,
     "crash-rig-anchors": 0.659,
+    "nitro-boost-anchors": 0.4,
     "emitter-prewarm": 0.638,
     "ai-crash-defs": 0.990,
     "ai-wreck-fall": 2.385,

@@ -969,10 +969,23 @@ off, and M03 lists no `balloon_*.zrd`; loading them anyway ran `balloon_down`'s 
 not in play, and made the AI gunners engage the balloon turrets. `AnimProgram.ListedSharedFiles`
 applies this rule to the shared scope when a compiled mission manifest is present; the log line
 `N shared reader file(s) no ANIMATION_DEFINITION_FILE list of this mission names, not loaded`
-is the census. The chapter scope is not gated yet: C1's `clouds`, `lightning`, `spotlights` and
-`train_smoke`, C2's `game_targets`/`police_*`/`security_destroy` (M01/M02 list two) and C5's
-`steinmann` (M01 lists it) are chapter files no list names, and C1's `cloudparent#` 0.6
-opacity is one a judged overcast match rests on, so that half is a separate item.
+is the census.
+
+**The chapter scope carries the same rule**, gated the same way (present only when a compiled
+mission manifest loaded) by `AnimProgram.ListedChapterFiles`: a chapter file is listed by its own
+`cam_anim.zrd`, or added directly by an individual mission's `mis_anim.zrd`, exactly as the shared
+scope's 96 mission-only files are. Unlike the shared scope there is no chapter-level index file to
+walk a closure from — every chapter file that lists further files is `cam_anim.zrd` itself — so an
+empty listed set gates the whole chapter scope shut rather than leaving it ungated. `AnimRuntime`
+prints a matching `N chapter reader file(s) no ANIMATION_DEFINITION_FILE list of this mission
+names, not loaded` census line beside the shared one. C1's `clouds`, `lightning`, `spotlights` and
+`train_smoke`, C2's `game_targets`/`police_blockade*`/`police_destroy`/`security_destroy` (some
+missions list a subset), C3's `flag_british`/`flag_rollout`/`hydrogen`, C4's
+`bhmhookup`/`bhm_warhawks` and C5's `steinmann` are the chapter files no mission's list names, so
+none of their defs load in any mission. C1's `cloudparent#` 0.6 opacity was sourced from
+`clouds.zrd`; with the gate applied, the clusters lose that dim and render at full opacity, matching
+the original, whose compiled archives derive from these same lists and so never ran the file
+either.
 
 ### Mission-spawned entities
 

@@ -19,6 +19,7 @@ public sealed class SessionSimulationTests
         {
             "capture-ai", "incoming-fire:0.25", "projectiles:0.25", "human-aircraft:0.25",
             "zeppelins:0.25", "turret-emplacements:0.25", "generators:0.25",
+            "surface-vehicles:0.25",
             "ai-1:0.25", "ai-2:0.25", "landing-approaches", "instant-action:0.25",
             "campaign:0.25", "radio:0.25", "smoke-screens:0.25", "beeper-tags:0.25",
             "ai-voice:0.25", "versus:0.25",
@@ -121,6 +122,8 @@ public sealed class SessionSimulationTests
             if (SpawnFromGenerator is { } spawned && !_aiAircraft.Contains(spawned))
                 _aiAircraft.Add(spawned);
         }
+
+        public void StepSurfaceVehicles(float dt) => Record("surface-vehicles", dt);
 
         public void StepCapturedAiAircraft(float dt)
         {

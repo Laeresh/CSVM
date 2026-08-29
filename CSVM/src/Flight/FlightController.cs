@@ -327,6 +327,12 @@ public partial class FlightController : Node3D
     /// the scan nothing: that pass simply iterates an empty list.</summary>
     public DestructibleRegistry? Destructibles;
 
+    /// <summary>The mission's surface vehicles, when this session built any — on the SAME candidate
+    /// list the aircraft roster feeds (`VehicleList`, docs/org/aim-assist.md "The four lists": the
+    /// decoded list holds "aircraft and AI ground/sea vehicles"), never the structure or turret one.
+    /// Null in every build with no world or no hull spawned, which costs the scan nothing.</summary>
+    public SurfaceVehicleRuntime? SurfaceVehicles;
+
     /// <summary>Draw the collision probe — the swept ray plus the airframe boxes the
     /// crash test sweeps each physics frame — in green (red on the impact frame).</summary>
     public bool DebugCollision;
@@ -1911,14 +1917,20 @@ public partial class FlightController : Node3D
         {
             if (IsHumanPiloted)
                 Shake?.NitroEngaged();
+            // Play, not PlayWithin: the def's anchor NAME ("warhawk") never resolves in this
+            // per-plane index, same as startprops/stopprops above — Play's fallback to
+            // PlaneModel is what makes those work; PlayWithin has no such fallback.
             if (PlaneModel != null)
-                CrashRuntime?.PlayWithin(PlaneModel, "nitro_boost", applyReset: false);
+                CrashRuntime?.Play("nitro_boost", PlaneModel, applyReset: false);
             Log.Debug("flight", $"nitro engaged charge={Nitro.Charge:0.0}");
         }
         if (Nitro.ReleasedThisTick && PlaneModel != null && CrashRuntime != null)
         {
-            CrashRuntime.StopWithin(PlaneModel, "nitro_boost");
-            CrashRuntime.PlayWithin(PlaneModel, "nitro_decay", applyReset: false);
+            // Unscoped Stop is safe here: this runtime is bound to this one aircraft only
+            // (WorldEffectsFactory.BuildFlightCrashRuntime), so every live instance it holds is
+            // already this plane's own.
+            CrashRuntime.Stop("nitro_boost");
+            CrashRuntime.Play("nitro_decay", PlaneModel, applyReset: false);
             _nitroDecayLeftS = NitroDecayAnimSeconds;
             Log.Debug("flight", $"nitro released charge={Nitro.Charge:0.0}");
         }
@@ -2137,6 +2149,7 @@ public partial class FlightController : Node3D
         {
             _aimCandidates.Clear();
             Projectiles.CollectAircraft(_aimCandidates);
+            SurfaceVehicles?.CollectVehicles(_aimCandidates);
             Projectiles.CollectTurrets(_aimCandidates);
             Projectiles.CollectFusedOrdnance(_aimCandidates);
             if (Destructibles != null)
@@ -2658,6 +2671,7 @@ public partial class FlightController : Node3D
             // keeps the clear cleared rather than an optimisation.
             _targetScan.Clear();
             Projectiles.CollectAircraft(_targetScan);
+            SurfaceVehicles?.CollectVehicles(_targetScan);
             Projectiles.CollectTurrets(_targetScan);
             // The fourth pool (E19): a TARGETABLE round in flight is selectable, which is why a
             // torpedo can be locked and shot at. The pool itself reads the admission byte.

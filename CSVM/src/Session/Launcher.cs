@@ -198,6 +198,12 @@ public partial class Launcher : Node3D
         // the lowest priority first.
         ProcessPriority = -999;
 
+        // Both ends of the physics-tick bracket (see PhysicsTickCost). At the launcher rather than
+        // the session, because the pair must survive a session rebuild for the tick rate either
+        // side of one to be comparable.
+        AddChild(PhysicsTickBracket.Make(false));
+        AddChild(PhysicsTickBracket.Make(true));
+
         // Load the optional tuning-override file first, before any module reads a Config value.
         // Missing/malformed file → in-code defaults (never throws); see src/Config.cs.
         Config.Load();
@@ -816,6 +822,9 @@ public partial class Launcher : Node3D
         // C8: the build's own scopes (loads, material creation) belong to no frame, and the frame
         // that closes over the build would otherwise report them all at once.
         PerfSample.Reset();
+        // Same boundary for the tick bracket: a build that spans the tail leaves a half-open tick
+        // whose next close would charge the whole build to one step.
+        PhysicsTickCost.Reset();
         // D10: same reasoning as HitchMonitor.Rearm above — the build's own stall must never read
         // as the readout's worst recent frame.
         _perfHud.Rearm();
@@ -1062,6 +1071,7 @@ public partial class Launcher : Node3D
         _hitchSidecar.Flush();
         _hitchMonitor.Rearm();
         PerfSample.Reset();
+        PhysicsTickCost.Reset();
         _perfHud.Rearm();
         ShowLaunchMenu();
     }
@@ -1186,6 +1196,12 @@ public partial class Launcher : Node3D
         double renderCpuMs = _perfCpuRender / n;
         double gpuMs = _perfGpu / n;
         double physicsMs = _perfPhysics / n;
+        // ⚠ These are the physics terms to read, not physics_ms above (verification PERF-21). One
+        // tick is one 1/60 sim step on a realtime clock, so phys_hz is sim seconds per wall second
+        // and a step over its 16.7 ms budget shows here as a rate under 60.
+        var (physTickMs, physTickMaxMs, physTicks) = PhysicsTickCost.Take();
+        double physHz = _perfClock > 0 ? physTicks / _perfClock : 0;
+        double physTick = physTicks > 0 ? physTickMs / physTicks : 0;
         double draws = _perfDraws / n;
         double prims = _perfPrims / n;
         double nodes = _perfNodes / n;
@@ -1194,7 +1210,7 @@ public partial class Launcher : Node3D
         System.Array.Sort(_perfFrameMsSorted);
         double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
         double p95Ms = _perfFrameMsSorted[Perf95Index];
-        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00}");
+        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
     }

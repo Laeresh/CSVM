@@ -48,6 +48,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
   quantity.** `obj+0x16c` looked like angular velocity, but `FUN_0053fbf0` consumes it as a
   quaternion half-angle: the matrix turns by twice the stored vector. Comparing the accumulator
   alone left pitch, yaw and roll exactly half-strength while every local value appeared correct.
+- **METHOD-27** — **A count over CSVM's own scene structure is not a count over the original's;
+  name the parent before reading the number as a count of objects.** One flak over a C1 aagun dealt
+  four splash shares of distinct magnitude, which reads as four objects hit, and the destructible
+  carries ten collider bodies. Printing each struck body's PARENT showed two nodes, each split into
+  a `col` and a `col_buildings` body by `SceneBuilder.AttachCollision`'s per-surface-class carve, so
+  half the count was an artefact of a CSVM construction the original has no counterpart for and the
+  other half was correct behaviour. Distinct values are not distinct objects: a per-body sum, hit
+  count or candidate count is a claim about the port's scene graph until the grouping is shown.
 
 ## DIAG — chasing a symptom
 
@@ -349,6 +357,39 @@ loss. What the engine renders was decodable from the authored constants + oscill
   50 %, and a stage past one prints `over budget` beside a summary whose exit code is unchanged. The
   budget's job is to make a verification-time regression visible in the run that caused it; deciding
   whether it is one is still a paired A/B against a freshly measured same-build band.
+- **PERF-19** — **A GC capture that ends inside the first minute of a session measures the world
+  build settling, not the steady state, and the two look nothing alike.** Under
+  `--fly --chapter=C1 --plane=player_bhawk --perf --no-vsync` the first seven or eight collections
+  are gen1 and gen2, promote 18 to 52 MB and pause 20 to 45 ms, because the build's own long-lived
+  data is being tenured (`GCMarkWithType` attributes it to stack and older-generation roots, and
+  gen2 grows to about 70 MB and then stops). Only after that does the session settle to a gen0
+  collection every 13 s promoting 2.7 MB with a 10 to 13 ms pause. Both regimes reproduce to the
+  byte across runs, so a short capture is not noisy, it is measuring a different thing; let the
+  session settle before the window opens and say which regime a number comes from.
+- **PERF-20** — **A .NET GC pause here is set by how many FINALIZABLE objects died, not by how
+  many bytes were promoted, so cutting ordinary allocation makes the pauses rarer and longer
+  rather than smaller.** Every Godot wrapper is finalizable and drags Godot's own instance-tracking
+  weak references with it, so a settled flight retires about 2000 finalizable objects a second
+  whatever else changes. Measured across two builds and 26k to 85k objects per collection, the
+  pause tracks the `GCHeapStats` finalization-promoted COUNT at roughly 0.4 to 0.5 ms per thousand,
+  while ms-per-promoted-MB varies several-fold over the same collections; `MarkFinalizeQueueRoots`
+  promotes nothing at any of them, so the cost is the queue walk, not resurrection marking. Halving
+  the non-finalizable allocation rate stretched the interval from 13 s to 33 s and took the pause
+  from 10 to 13 ms up to 25 to 31 ms, leaving total pause per wall second unchanged. Judge such a
+  change on pause per second and on dropped frames, never on the per-collection figure alone.
+- **PERF-21** — **`physics_ms` is the WORST single physics tick of the last wall second, refreshed
+  about once a second, so it is neither a per-frame cost nor a mean and reading it as one overstates
+  the physics step by roughly an order of magnitude.** It is Godot's `TIME_PHYSICS_PROCESS`
+  (`Launcher.ReadFrameCounters`), and the engine holds a maximum in it between refreshes: the same
+  value repeats across every record of a second, and it routinely exceeds `max_ms`, the worst *frame*
+  of the same window, which no per-frame cost can do. Measured on a flown CM11 (C2/M02) session over
+  333 windows: `physics_ms` median 16.96 ms and p95 29.37 ms, against a directly bracketed
+  `phys_tick_max_ms` of 15.48 ms median and 26.64 ms p95 (the same quantity), while the actual mean
+  tick, `phys_tick_ms`, was **1.81 ms** median and 3.20 ms p95. `script_ms` (`TIME_PROCESS`) is the
+  same shape, which is the mechanism behind PERF-1's "~2.2× real". Read `phys_tick_ms` for the step
+  cost and `phys_hz` for whether the sim keeps up (60 ticks a wall second is real time, because a
+  realtime clock advances the physics-stepped sim exactly one 1/60 step per tick); both are
+  `--no-det` numbers, since `--det` empties the tick.
 
 ## LOG — logs, error censuses, and exit codes
 
@@ -445,6 +486,15 @@ loss. What the engine renders was decodable from the authored constants + oscill
   Godot window delivers only the mouse enter/exit pair, never a focus notification; on Windows
   11 / Godot 4.7 a real focus change delivers `APPLICATION_FOCUS_OUT`/`_IN`, not the
   `WM_WINDOW_FOCUS_*` pair.
+- **SHELL-16** — **An incremental `dotnet build` after restoring a file to byte-identical content
+  can silently no-op, so an A/B test built by swapping file content back and forth needs
+  `--no-incremental` or it compares a build against itself.** Copying a prior version's bytes back
+  over a source file (to build the "before" half of a comparison without a git revert) leaves
+  MSBuild's up-to-date check seeing content it has already compiled, so the "after" build reports
+  success in under a second and reuses the stale assembly. Measured landing `BL-587`: an
+  after-the-fix probe log showed the same reader files still loading as the before probe, with the
+  gate line absent from both, until `--no-incremental` produced a real ~8 s rebuild and the gate
+  showed up in the log.
 
 ## INSTR — building instruments
 

@@ -331,8 +331,11 @@ Nothing in this stage can fail a build, and **a history trend is awareness, not 
 `draws` / `prims` / `nodes`, plus the startup phases. Recorded but printed as *awareness only*, each
 with its reason: `fps` and `frame_ms` (paced — floors, PERF-2), `script_ms` (`TIME_PROCESS`,
 ~2.2× real per PERF-1, and it collapses onto the frame cap when the loop is paced), `physics_ms`
-(`--det` makes the clock parent-driven, so `_PhysicsProcess` consumers no-op and the term is empty),
-`mem_mb` (managed-heap high-water, monotonic inside a run), `max_ms`/`p95_ms` (the worst frame and
+(the worst single physics tick of the last wall second, refreshed about 1 Hz, PERF-21, and empty
+here on top of that, since `--det` makes the clock parent-driven and `_PhysicsProcess` consumers
+no-op), `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz` (the bracketed mean tick, the worst tick, and
+ticks per wall second: the honest form of `physics_ms`, emptied by the same `--det`, so they are
+numbers for a `--no-det` hand-run), `mem_mb` (managed-heap high-water, monotonic inside a run), `max_ms`/`p95_ms` (the worst frame and
 the 95th percentile within each 60-frame window, then MEDIANED across windows — a population too
 small to hold a ratio, and the median actively hides a single bad window: a real 50 ms injected
 stall moved one window's own `max_ms` from 8.33 to 48.96 while the scenario's reported `max_ms`

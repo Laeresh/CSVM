@@ -126,6 +126,25 @@ public sealed partial class SurfaceVehicleRuntime : Node
         }
     }
 
+    /// <summary>Appends every built hull to the assist's candidate set, on <c>VehicleList</c> beside
+    /// the aircraft roster (docs/org/aim-assist.md "The four lists": the decoded list holds
+    /// "aircraft and AI ground/sea vehicles"), never the structure or turret list. An inert hull
+    /// (not yet woken) is present but not live, the same shape a crashed pilot takes, so it neither
+    /// brackets nor draws a gun lock before its wake. No velocity: nothing here reads the follower's
+    /// speed yet.</summary>
+    public void CollectVehicles(AimCandidateSet into)
+    {
+        foreach (var vessel in _vessels)
+        {
+            if (!GodotObject.IsInstanceValid(vessel.Body))
+            {
+                continue;
+            }
+            into.AddVehicle(vessel.Position, Vector3.Zero, vessel.Team ?? AimAssist.NeutralTeam,
+                !vessel.Inert && !vessel.IsDestroyed, vessel);
+        }
+    }
+
     // The water surface under the authored spot: a downward probe on the world mask, carried on
     // past any other surface it meets first (a ship generator's launch point sits under the
     // host's own deck). No water hit, or no collision in this build, keeps the authored height.

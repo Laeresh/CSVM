@@ -453,6 +453,60 @@ reasons that have nothing to do with any of these checks.
   *Variations:* one flight each — repeat with `--chapter=C3`, then `--chapter=C2`; (d)'s four
   untouched chapters need only a glance in each.
 
+### C5 · freecam — the downtown mip band
+
+```powershell
+./RunProbe.ps1 --freecam --chapter=C5 "--pos=-9491,140,-3479" "--direction=-0.588,-0.03,-0.809"
+```
+
+- `PT-85` `[Own]` **At what distance C5's downtown is meant to drop to mip level 1** (`BL-538`).
+  The dark band across the large buildings is **not** the clutter fade, and the fade is not on
+  trial here: the pair proves the band is the shipped hand-authored mip chain, whose level 1 is a
+  non-monotone dip (`cblock1` mean luminance 15.62 at L0, 4.41 at L1, 6.77 at L2; `cblock2` 9.60,
+  0.83, 1.84), so the original's own art draws a darker ring at the distance L1 takes over.
+  `--mips=generated` removes the band and is the A/B to flip against.
+  What to judge, in motion rather than in a still: whether the ring sits at a distance that reads
+  as the original's downtown falling away, or too near the camera. Fly the city rather than hover,
+  since the band moves with you and a hover cannot show whether it tracks convincingly.
+  ⚠ Do not judge this against a capture of the original: the mip levels themselves are the
+  original's art and are not in question, only the distance at which the remake reaches them.
+  Two sub-questions ride along: whether the original point-selected a mip where we trilinearly
+  blend L0 into L1 across a range, and whether the 640×480 to 1280×720 change moves the band.
+  *Blocks:* `BL-538`.
+
+### Any chapter · a nitro engage, external view
+
+```powershell
+./RunGame.ps1 --plane=player_bhawk --chapter=C1
+```
+
+- `PT-86` `[Own]` **A nitro engage trails exhaust smoke, and the decay stops it** (`BL-546`).
+  The engage used an anchor form that resolved to nothing, so the whole `nitro_boost` definition
+  was dead: no sound, no smoke, nothing. It now plays through the same call shape `startprops`
+  has always used, and the suite confirms the definition starts and its `nitropuff1` exhaust
+  puffer sustains. What no suite can confirm is how it reads in flight, because there is no
+  scripted way to hold the engage key headlessly. Engage the boost, hold it, release it: the
+  smoke should start at the exhausts, sustain while boosting, and stop on the decay rather than
+  hanging.
+  ⚠ **Do not judge the propeller discs on this flight.** The `nitropropN` discs are not on any
+  flyable airframe's model, so no disc swap will appear and its absence is not a regression.
+  That half is what `BL-546` is still open for.
+  *Blocks:* `BL-546`'s remaining half only indirectly; this flight judges the half that landed.
+
+### CM08 (C1B/M03) · the patrol boats, targeting on
+
+- `PT-87` `[Own]` **A patrol boat brackets on the HUD and takes a gun lock** (`BL-598`).
+  The four boats drove their nets and took hits but could not be targeted, because a surface
+  vehicle reached none of the candidate lists. The decode puts it on `VehicleList`, the same list
+  the aircraft roster feeds, and a suite asserts a woken hull is live on the candidate set, lands
+  on the Enemy cycle and wins the aim-assist scan. Nobody has seen it on screen. Fly CM08 past
+  the 181 s wake and cycle targets: a boat should bracket like any other target and the gun
+  should snap to it.
+  ⚠ The gun lead will sit ON the hull rather than ahead of it, because the candidate carries no
+  velocity yet (`BL-605`). Expected, not a fault, and worth confirming it looks wrong in exactly
+  that way rather than in some other way.
+  *Blocks:* nothing; it confirms a landed item on screen.
+
 ### AI flight — external view, own build (F52 AI arm)
 
 - `PT-54` `[Own]` **AI plant A/B against the old plant (`docs/plans/PLAN-ai-flight.md` C21–C24, F52 AI

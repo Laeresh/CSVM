@@ -703,6 +703,16 @@ this path that takes a square root:
   neither takes splash nor shields anything from it. ⚠ The cast runs only for a candidate carrying
   node flag `0x400000`; that bit is not in the GameZ node flags and no instruction in the binary sets
   it by an immediate, so which objects opt in is not decoded. CSVM tests every candidate.
+- **One entry per collidable NODE, and the node is a leaf.** `FUN_004cb420` walks the spatial grid's
+  cells and hands each object it finds to `FUN_004cb950`, which recurses: a node with `node+0x24` bit
+  `0x40` clear is a group and contributes nothing itself, passing the walk to its children, while a
+  node carrying both `0x40` and `0x100` is a leaf and writes exactly one entry, keyed on its own
+  pointer at entry `+0x28`. Neither the gather nor `FUN_005acac0` dedupes further, so a model built
+  from several collidable leaves takes several shares, one per leaf, all against the same HP pool.
+  ⚠ This is NOT one entry per top-level object, and a reading that collapses a multi-part model to a
+  single share contradicts the recursion. What the original has no counterpart for is CSVM's split of
+  one leaf into a body per surface class (`SceneBuilder.AttachCollision`), which is why the pool
+  collapses those siblings (`WorldCollision.OwnerOf`) and nothing coarser.
 - **At most 32 objects** are collected. The gather checks `count < 0x20` before testing each
   candidate and, once the buffer is full, logs "Database intersections array is full" for every
   further candidate in the walk and adds nothing. The buffer is reset per query, so the cap is per

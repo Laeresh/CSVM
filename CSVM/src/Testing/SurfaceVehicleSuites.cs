@@ -156,6 +156,43 @@ internal static class SurfaceVehicleSuites
             ctx.Check(wakeEmitters >= BoatBlocks.Length * 2,
                 $"the wake reaches the hulls: {wakeEmitters} wake_emit* emitters over four boats");
 
+            // A woken hull is on VehicleList, the SAME candidate list the aircraft roster feeds
+            // (docs/org/aim-assist.md "The four lists"), so both the HUD's Enemy cycle and the
+            // player's own gun aim assist see it, asserted here without flying a mission.
+            var candidates = new AimCandidateSet();
+            vessels.CollectVehicles(candidates);
+            ctx.Same(BoatBlocks.Length, candidates.Vehicles.Count, $"every hull is a vehicle candidate");
+            foreach (var c in candidates.Vehicles)
+            {
+                ctx.Check(c.Live, $"'{TargetPool.NameOf(c.Source)}' is live once woken");
+            }
+            var pool = new TargetPool();
+            pool.Rebuild(candidates, subParts: null, AimAssist.PlayerTeam, self: null);
+            var marked = director.Vessels[BoatBlocks[0]];
+            bool onEnemyCycle = false;
+            foreach (var t in pool.Enemy)
+            {
+                onEnemyCycle |= ReferenceEquals(t.Source, marked);
+            }
+            ctx.Check(onEnemyCycle, $"'{marked.Name}' (team {marked.Team}) is on the Enemy cycle the HUD brackets");
+
+            var shooterPos = marked.Position + new Vector3(0f, 0f, 100f);
+            var aimScan = new AimScan
+            {
+                MuzzlePosition = shooterPos,
+                ShooterVelocity = Vector3.Zero,
+                Forward = (marked.Position - shooterPos).Normalized(),
+                Team = AimAssist.PlayerTeam,
+                Speed = 300f,
+                RangeSquared = 4000f * 4000f,
+                ConeCos = Mathf.Cos(Mathf.DegToRad(30f)),
+                DistFactor = 0f,
+                Self = null,
+            };
+            bool snapped = AimAssist.Scan(aimScan, candidates, out var aimResult);
+            ctx.Check(snapped && aimResult.Kind == AimTargetKind.Vehicle && ReferenceEquals(aimResult.Source, marked),
+                $"the gun aim assist snaps onto '{marked.Name}': found={snapped} kind={aimResult.Kind}");
+
             const float runS = 20f;
             for (int i = 0; i < (int)(runS / StepDt); i++)
             {

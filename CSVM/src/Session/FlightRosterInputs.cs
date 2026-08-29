@@ -105,6 +105,7 @@ internal sealed class FlightWorldBindings
     public SceneBuilder? WorldScene { get; init; }
     public AnimRuntime? WorldRuntime { get; init; }
     public AnimRuntime? WorldEffects { get; init; }
+    public SurfaceVehicleRuntime? SurfaceVehicles { get; init; }
     public SurfaceDefTable? TouchdownDefs { get; init; }
     public AnimProgram? CrashProgram { get; init; }
     public SoundArchive? Sounds { get; init; }

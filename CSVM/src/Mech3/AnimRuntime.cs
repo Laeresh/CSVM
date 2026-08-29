@@ -2043,6 +2043,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             Log.Info("anim", $"anim: {program.MissionLibrarySkipped.Count} reader def(s) superseded by this mission's compiled manifest (mission-scope + NAME1), not instantiated: {string.Join(", ", program.MissionLibrarySkipped.Take(8))}{(program.MissionLibrarySkipped.Count > 8 ? ", …" : "")}");
         if (program.SharedFilesSkipped.Count > 0)
             Log.Info("anim", $"anim: {program.SharedFilesSkipped.Count} shared reader file(s) no ANIMATION_DEFINITION_FILE list of this mission names, not loaded: {string.Join(", ", program.SharedFilesSkipped.Take(8))}{(program.SharedFilesSkipped.Count > 8 ? ", …" : "")}");
+        if (program.ChapterFilesSkipped.Count > 0)
+            Log.Info("anim", $"anim: {program.ChapterFilesSkipped.Count} chapter reader file(s) no ANIMATION_DEFINITION_FILE list of this mission names, not loaded: {string.Join(", ", program.ChapterFilesSkipped.Take(8))}{(program.ChapterFilesSkipped.Count > 8 ? ", …" : "")}");
         if (ran.Count > 0 || missing.Count > 0)
             Log.Info("anim", $"anim: start anims [{string.Join(", ", ran)}]{(missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : "")}");
         var emitterCensus = Emitters.Census;

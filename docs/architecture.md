@@ -491,7 +491,11 @@ owning node is visible in the scene tree and no ancestor is faded out. `Track` (
 collider-bearing node as it is built) binds it to the node's `VisibilityChanged` — which Godot
 propagates to descendants — plus `TreeEntered`, because a world is assembled and bootstrapped while
 still detached, where visibility writes emit nothing. `SetFaded` is the second input: an
-`OBJECT_OPACITY_*` fade is a shader parameter visibility knows nothing about.
+`OBJECT_OPACITY_*` fade is a shader parameter visibility knows nothing about. `OwnerOf` reads the
+same relation backwards, naming the world object a collider body stands for: `SurfaceIdMeta` marks
+the per-surface-class bodies `SceneBuilder` carved from one mesh node, so they answer their shared
+parent, and anything else answers itself. Callers that must count objects rather than bodies
+(`ProjectilePool.ApplyDamage`'s splash shares) key on it.
 
 ## src/Mech3/PlaneBuilder.cs
 Builds one aircraft from its GameZ subtree (shaded, cullBackfaces: true — interior lattice must be
@@ -1500,7 +1504,9 @@ radians via `ConeCosFor`). Survivors rank by `alignment − distance × dist_fac
 B5 rotates the winner world→local into the slot's target field. Proven in the `aim-assist` suite,
 every gate with its able-to-fail baseline.
 `AimCandidateSet` keeps the four lists **separately** and deliberately: `Vehicles` (the live
-`FlightController`s), `Turrets` (fed since M4 C9a by `ProjectilePool.CollectTurrets` — every
+`FlightController`s, joined by every built `SurfaceVehicle` through
+`SurfaceVehicleRuntime.CollectVehicles` — the decoded `VehicleList` holds "aircraft and AI
+ground/sea vehicles" alike, docs/org/aim-assist.md "The four lists"), `Turrets` (fed since M4 C9a by `ProjectilePool.CollectTurrets` — every
 registered aircraft's carried gunners, on their host's team), `Structures`
 (`AddStructures(DestructibleRegistry)` — an **approximation** of the original's `targets.zrd`
 `MStructList`, recorded as one; `MissionTargets` is not the analogue, it holds objective display
@@ -2286,8 +2292,13 @@ bounds cached per shape RID in `_shapeBounds`), never a node origin: a chapter m
 sits at ground level, so a ray to it ends on the terrain and every building reads as covered, an
 origin-parked root's is the world origin, and a clutter region body (`Clutter.BuildSolidCollision`,
 `MapEdgeExtender`) has server-side shapes with no `CollisionShape3D` owner at all, on which the
-`ShapeFindOwner` / `ShapeOwnerGetTransform` pair errors and returns identity. At most
-`MaxBlastTargets` 32 candidates take damage per burst, the original's hit-buffer size; when more
+`ShapeFindOwner` / `ShapeOwnerGetTransform` pair errors and returns identity. A burst deals one
+share per world OBJECT, not per collider body: the original's buffer holds one entry per collidable
+node, while `SceneBuilder.AttachCollision` splits one node into a body per surface class, so the
+nearest-first walk keeps the first body of each `WorldCollision.OwnerOf` group and skips its
+siblings (the struck node's group seeded as already spent, since it took the full figure). Bodies
+`SceneBuilder` did not build stand for themselves, so genuinely separate parts keep separate shares.
+At most `MaxBlastTargets` 32 candidates take damage per burst, the original's hit-buffer size; when more
 are inside the radius the pool prints one `blast limit:` line naming the weapon, the burst and how
 many were dropped (Decision 9 of PLAN-ordnance-types: never silent; not "cap", which this repo
 uses for captures). `MaxBlastBodies` 4096 is only the raw sphere
@@ -3141,8 +3152,18 @@ maneuver. Both refuse an engine-out aircraft and a re-engage while the boost or 
 is alive; the boost animation lives at least 1 s after an engage. `Installed` is the injector
 (the hangar's nitrous engine ids 3-5, or the roster block's `nitro` slot); `EngagedThisTick` and
 `ReleasedThisTick` are the edges `FlightController.AdvanceNitro` turns into the shake kick, the
-`nitro_boost`/`nitro_decay` defs and the `snd_nitro` loop. Every constant is censused by
-`FlightConstantInventoryTests`; `NitroSystemTests` pins the lifecycle and the force couplings.
+`nitro_boost`/`nitro_decay` defs and the `snd_nitro` loop. `AdvanceNitro` plays them with
+`AnimRuntime.Play(name, PlaneModel, applyReset: false)`, the same fallback-anchor shape
+`startprops`/`stopprops` already use: the defs' own anchor NAME (`warhawk`, `plane_props.zrd`)
+never resolves inside a per-plane crash rig's index, so `PlayWithin` (no fallback) silently played
+neither. That fix's visible effect is only the `nitropuffN` exhaust puffers at `exhaust1..4`,
+which every flyable `player_*` model carries; the disc swap (`nitropropN`) stays inert on any
+flyable aircraft, since no `player_*` model's own built subtree carries that geometry, though
+`extracted/planes/nodes.json` declares 34 `nitropropN` nodes under both a bare-named root and a
+`player_*` root per aircraft. Whether the original ever showed the swap on a flyable aircraft, or
+only ran it against the bare root, is open (`BL-546`). Regression: `nitro-boost-anchors`
+(exhaust half only). Every constant is censused by `FlightConstantInventoryTests`;
+`NitroSystemTests` pins the lifecycle and the force couplings.
 
 ## src/Flight/PathFollower.cs
 The engine's SECOND movement law, and the exclusive alternative to `FlightModel`: the dispatcher
@@ -5584,7 +5605,13 @@ nothing. Stepped from `_PhysicsProcess` on a realtime clock or `GameSession.Driv
 after the generators, like them. `GameSession` builds one lazily (`EnsureSurfaceVehicles`) for
 the roster phase and the generator block, only where a chapter world exists; `CampaignDirector`
 reaches it through `RosterInputs.SpawnSurface` and `WorldInputs.SurfaceVehicles`. Observability:
-one `surface: '<name>' … built at (…) water=…` line per hull. Pinned by `campaign-surface-vehicles`.
+one `surface: '<name>' … built at (…) water=…` line per hull. `CollectVehicles(AimCandidateSet)`
+appends every built hull to the SAME candidate list the aircraft roster feeds — never the
+structure or turret one, the decoded rule (docs/org/aim-assist.md "The four lists") — with an
+inert hull present but not live, the shape a crashed pilot already takes; `GameSession` wires the
+runtime onto every rig's `FlightController.SurfaceVehicles` through `FlightWorldBindings`, and
+`StepTargeting`/`ApplyFireOutcome` read it beside `CollectAircraft` for the HUD bracket and the
+gun aim assist alike. Pinned by `campaign-surface-vehicles`.
 
 ## src/Session/SurfaceVehicle.cs
 One built hull: no pilot, no flight model, no `FlightController`. Its movement is

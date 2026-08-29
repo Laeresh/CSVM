@@ -152,6 +152,7 @@ public static class SuiteCatalog
         "damage-stage-slots",
         "ai-damage-stages",
         "crash-rig-anchors",
+        "nitro-boost-anchors",
         "emitter-prewarm",
         "ai-crash-defs",
         "ai-wreck-fall",
@@ -747,6 +748,8 @@ public static class SuiteCatalog
             "an AI plane spawned through FlightRoster stages end to end: its hull falls through the take-hit path and the rig runtime starts six random_remote_damage instances plus one pfsmoketrail, all anchored inside that aircraft, a repair tears each stage down once, and the Bloodhawk's missing elevator pair is named (BL-385)", AiDamageStages));
         into.Add(new TestHarness.Suite("crash-rig-anchors",
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
+        into.Add(new TestHarness.Suite("nitro-boost-anchors",
+            "nitro_boost/nitro_decay author NAME \"warhawk\" as their anchor, which never resolves inside a per-plane crash rig; Play's PlaneModel fallback (the same shape startprops/stopprops already use) starts both defs on the flown Warhawk and sustains its nitropuff1 exhaust puffer, though no flyable model carries the nitropropN disc geometry itself", NitroBoostAnchors));
         into.Add(new TestHarness.Suite("emitter-prewarm",
             "a crash rig's and the world-effects stage's PUFFER_STATE emitters are built at bind, unstarted: a crash, a panel tear, a post-respawn crash and five sonic bursts over a four-slot pool all reach the factory for no emitter, and the claims still count as built", EmitterPrewarm));
         into.Add(new TestHarness.Suite("ai-crash-defs",
@@ -1335,9 +1338,10 @@ public static class SuiteCatalog
             + "spots on their Patrolboat nets, deactivated and hidden until woken, count for DEDG "
             + "only once woken, start their wake emitters on their own pt_emitter nodes, drive "
             + "their nets under the scripted-path law at the taxi speed with their height pinned "
-            + "to the water, and die once through the chapter's destructible pool; CM12's "
-            + "eshipg31 launch resolves a surface launch off Eshipg31_params, builds patrolboat_eg0 "
-            + "on the host's first take-off point kilometres from the world origin, runs the path "
+            + "to the water, land on the HUD's Enemy cycle and the gun aim assist's VehicleList "
+            + "once woken, and die once through the chapter's destructible pool; CM12's eshipg31 "
+            + "launch resolves a surface launch off Eshipg31_params, builds patrolboat_eg0 on the "
+            + "host's first take-off point kilometres from the world origin, runs the path "
             + "westward at the taxi speed, and never asks for an aircraft",
             SurfaceVehicleSuites.CampaignSurfaceVehicles));
 

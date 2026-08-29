@@ -1070,9 +1070,15 @@ internal static class AiSuites
                 live.Spawn(pit.Weapon, drop, Vector3.Zero, ProjectilePool.NoShooter, null, dropDir,
                     team: pit.Team, ownerBodies: guns[1].PlatformColliderRids());
                 Step(30);
-                int byNeighbour = hits.Skip(before).Count(h => h.Victim == pitName);
+                var dropped = hits.Skip(before).Where(h => h.Victim == pitName).ToList();
+                int byNeighbour = dropped.Count;
+                ctx.Note($"{pitName} drop: {string.Join(" ", dropped.Select(h => $"-{h.Damage:0.##}@{h.Struck?.GetParent()?.Name}/{h.Struck?.Name}"))}");
                 ctx.Check(byNeighbour > 0,
                     $"{pitName} takes a neighbour's flak dropped into its pit hits={byNeighbour}");
+                // One share per world OBJECT: the pit's two mesh nodes inside the radius each take
+                // one, not one per collider body (their per-surface-class halves doubled it).
+                ctx.Same(dropped.Select(h => h.Struck?.GetParent()?.GetInstanceId()).Distinct().Count(), byNeighbour,
+                    $"…one share per node, not per collider body shares={byNeighbour}");
                 before = hits.Count;
                 live.Spawn(pit.Weapon, drop, Vector3.Zero, ProjectilePool.NoShooter, null, dropDir,
                     team: pit.Team, ownerBodies: pit.PlatformColliderRids());

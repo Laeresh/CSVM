@@ -151,6 +151,7 @@ internal sealed class AiFlightAssembler
                 if (controller.Loadout != null)
                 {
                     controller.Destructibles = _world.WorldRuntime?.Destructibles;
+                    controller.SurfaceVehicles = _world.SurfaceVehicles;
                     controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _world.Projectiles, controller.InfiniteAmmo);
                 }
             }
