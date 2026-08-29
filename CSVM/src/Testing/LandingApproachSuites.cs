@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -31,8 +32,38 @@ internal static class LandingApproachSuites
     private const string ExtendHookAnim = "player_extend_hook";
     private const string HookupPlayerSeq = "move_player";
 
+    // CM02's own ending: the shared hookup row the mission finishes on, flown in the airframe the
+    // capture handed over, which is the one branch of that definition that folds a wing.
+    private const string DockAnim = "hooked_to_klondike";
+    private const string BalmoralPlane = "player_balmoral";
+
+    // The mission-completion code the docking ends on, which is the last thing the episode raises,
+    // and the authored run time of the wing fold the branch waits out before raising it.
+    private const int CompleteCode = 13;
+    private const float FoldRunS = 2f;
+
+    // How far before the fold's authored end the completion code may land. The two racing sequences
+    // reach the same call within a few frames of each other, and which one wins is not a claim this
+    // suite makes; that the wait is waited out is.
+    private const float FoldEndToleranceS = 0.25f;
+
+    // The animation runtime's own ANIM_STATE numbering, the numbering the objective script's
+    // condition is authored in: RUNNING while an instance is live, EXECUTED once it has ended.
+    private const int AnimRunning = 2;
+    private const int AnimExecuted = 3;
+
+    // How far the mission's outcome may lag the completion code and still count as the same
+    // moment: the code lands inside the animation advance and the graph reaches its wrap-up on the
+    // step that follows it, so one frame is the whole allowance.
+    private const float EndLagS = StepDt + 1e-4f;
+
     // How close a pose has to land on its authored value to count as that value.
     private const float PoseEpsilon = 1e-3f;
+
+    // How far short of its authored end the wing fold is when the mission's own ending stops the
+    // world: the fold turns 1.92 rad in 2.01 s and the branch that raises the code waits 2.0 s, so
+    // the last 0.06 s of the turn is never flown, whatever the frame rate.
+    private const float FoldFreezeEpsilon = 0.1f;
 
     // How long the mission's own intro is given to run out before a hookup is flown, and how long
     // the airframe's own wing-fold turn is given after the episode ends.
@@ -46,6 +77,15 @@ internal static class LandingApproachSuites
     private const float ApproachSpeedMps = 45f;
     private const float ApproachThrottle = 0.5f;
     private const float ApproachBudgetS = 6f;
+
+    // The pickup definition's own climb ladder: the second thing it calls, after stopping the
+    // hanging ladder's wind loop. It re-parents that same rope ladder to the caboose and drives its
+    // root and six rungs from one script (docs/org/ladderSwitch.md, "The ladder through the climb").
+    private const string ClimbLadderAnim = "cabpkup_ladder";
+
+    // How long the flare's smoke is sampled for. Short on purpose: the sample spends the pickup
+    // window's own seconds, and the rest of the drive still has to fly the approach inside it.
+    private const float FlareSampleS = 0.3f;
 
     // How long the parked rig waits at CM11's trailer for its range-armed definition to run the
     // authored hatch time and raise the actor the pickup requires, before the cone is flown.
@@ -152,6 +192,14 @@ internal static class LandingApproachSuites
     /// code put it rather than teleported when the definition runs out.</summary>
     internal static void DockingHold(TestContext ctx) =>
         DriveMission(ctx, DockingSeq, "test-docking-hold", DriveDockingHold);
+
+    /// <summary>Drives CM02's own ending, the docking the capture hands over to: the player arrives
+    /// on the pirate zeppelin in the Balmoral it just took, so the hookup runs the one branch that
+    /// folds a wing. The episode has to hold through that branch's authored turn, both wings reach
+    /// the angle the fold authors, and the mission-completion code lands at its end rather than
+    /// before it.</summary>
+    internal static void BalmoralDock(TestContext ctx) =>
+        DriveMission(ctx, WingWalkSeq, "test-balmoral-dock", DriveBalmoralDock);
 
     /// <summary>Drives CM07's zeppelin-hangar drop, the mission's other cutscene: the depot chain
     /// reaction's <c>CALL_ANIMATION</c> only ARMS it, because the definition is range-gated;
@@ -493,6 +541,270 @@ internal static class LandingApproachSuites
         report.AppendLine($"episode ran {played:0.##} s, playing={cutscene.Playing}");
     }
 
+    // CM02's ending: the shared hookup definition, flown in the captured Balmoral. Its move_player
+    // sequence branches on which airframe is active and only this one calls a fold, so the branch
+    // is decidable at all only because the flown airframe is in the runtime's node table.
+    private static void DriveBalmoralDock(TestContext ctx, TestWorld world, CampaignDirector director,
+        ObjectiveScript script, string missionZrdr, StringBuilder report)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        var rows = LandingApproaches.Resolve(
+            chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
+        var dock = RowFor(rows, DockAnim);
+        report.AppendLine($"docking row: '{dock?.Anim ?? "-"}' on '{dock?.Node ?? "-"}'");
+        ctx.Check(dock != null,
+            $"the chapter's landings.zrd carries the '{DockAnim}' row this mission ends on");
+        var stage = world.Session.Aircraft;
+        ctx.Check(stage != null,
+            $"the mission stages the aircraft archive, the frame the hookup poses the airframe in");
+        if (dock == null || stage == null)
+        {
+            return;
+        }
+
+        WithTrigger(ctx, world, director, rows, (trigger, cutscene, rig, graph) =>
+            RunBalmoralDock(ctx, world, director, graph, script, trigger, cutscene, rig, dock, report),
+            planeNode: BalmoralPlane, aircraft: stage);
+    }
+
+    // Flies the row and reads the branch out of the run: which definitions the episode started,
+    // when the fold ran, when the mission-completion code landed and when the host let go.
+    private static void RunBalmoralDock(
+        TestContext ctx, TestWorld world, CampaignDirector director, ObjectiveGraph graph,
+        ObjectiveScript script,
+        LandingApproachRuntime trigger, CutsceneController cutscene, FlightController rig,
+        LandingApproach dock, StringBuilder report)
+    {
+        for (float t = 0f; t < IntroSettleS; t += StepDt)
+        {
+            world.Runtime.Advance(StepDt);
+            cutscene.Tick();
+        }
+
+        report.AppendLine($"intro settled after {IntroSettleS:0}s, playing={cutscene.Playing}");
+        var fold = FoldOf(world, DockAnim, BalmoralPlane);
+        report.AppendLine($"fold definition: '{fold?.Anim ?? "(none)"}'");
+        ctx.Check(fold != null,
+            $"'{DockAnim}' authors a wing fold for '{BalmoralPlane}', the branch this run takes");
+        ArmRow(ctx, world, graph, script, dock, report);
+
+        var watcher = DockWatcherOf(script);
+        report.AppendLine($"the objective watching '{DockAnim}' for EXECUTED: " +
+            $"OBJECTIVE{watcher?.Number.ToString() ?? "?"}, instantwin={watcher?.InstantWin.ToString() ?? "-"}");
+        ctx.Check(watcher != null,
+            $"the mission carries an INSTANTWIN objective conditioned on '{DockAnim}' reaching EXECUTED, the second path to this ending");
+
+        float now = 0f;
+        float foldStartedAt = -1f;
+        float foldEndedAt = -1f;
+        float completedAt = -1f;
+        float handedBackAt = -1f;
+        float executedAt = -1f;
+        float wonAt = -1f;
+        float watcherAt = -1f;
+        float leftAt = -1f;
+        float lastFlownAt = -1f;
+        int stateAtCode = -1;
+        int flownAfterEnd = 0;
+        int endings = 0;
+        bool secondTook = false;
+        void Ended(MissionOutcome outcome)
+        {
+            endings++;
+            report.AppendLine($"  t={now,6:0.00} the mission ended {outcome}");
+        }
+
+        void CompletedOne(ObjectiveCompleted done)
+        {
+            if (watcher != null && done.Number == watcher.Number && watcherAt < 0f)
+            {
+                watcherAt = now;
+                report.AppendLine($"  t={now,6:0.00} OBJECTIVE{done.Number} completed");
+            }
+        }
+
+        void Started(AnimDefinition def, Node3D? anchor)
+        {
+            report.AppendLine($"  t={now,6:0.00} started '{def.AnimName}'");
+            if (foldStartedAt < 0f && fold != null
+                && string.Equals(def.AnimName, fold.Value.Anim, StringComparison.OrdinalIgnoreCase))
+            {
+                foldStartedAt = now;
+            }
+        }
+
+        void Finished(AnimDefinition def, Node3D? anchor)
+        {
+            report.AppendLine($"  t={now,6:0.00} finished '{def.AnimName}'");
+            if (foldEndedAt < 0f && fold != null
+                && string.Equals(def.AnimName, fold.Value.Anim, StringComparison.OrdinalIgnoreCase))
+            {
+                foldEndedAt = now;
+            }
+        }
+
+        world.Runtime.CallbackHost = (code, anim, root) =>
+        {
+            report.AppendLine($"  t={now,6:0.00} code {code} from '{anim}'");
+            if (code == CompleteCode && completedAt < 0f)
+            {
+                completedAt = now;
+                stateAtCode = world.Runtime.AnimStateOf(DockAnim);
+            }
+
+            return cutscene.Host(code, anim, root);
+        };
+        world.Runtime.OnInstanceStarted += Started;
+        world.Runtime.OnInstanceFinished += Finished;
+        graph.MissionEnded += Ended;
+        graph.Completed += CompletedOne;
+        try
+        {
+            ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, dock, report),
+                $"flying '{dock.Node}' starts '{dock.Anim}'");
+            ctx.Check(cutscene.Playing, $"and the cutscene host takes the session on it");
+            for (float t = 0f; t < DockBudgetS; t += StepDt)
+            {
+                // The session's own drive under an ended mission: while the leaving hold runs,
+                // GameSession advances nothing but the director, so the aeroplane takes no step and
+                // no stick reaches it, and the animation runtime stands where the ending left it.
+                bool leaving = director.Leaving;
+                bool endedBefore = completedAt >= 0f;
+                if (!leaving)
+                {
+                    rig.SimStep(StepDt);
+                    world.Runtime.Advance(StepDt);
+                    trigger.Tick();
+                    cutscene.Tick();
+                    lastFlownAt = now;
+                    if (endedBefore)
+                    {
+                        flownAfterEnd++;
+                    }
+                }
+
+                director.Step(StepDt);
+                now += StepDt;
+                if (director.ReturnToCabin)
+                {
+                    leftAt = now;
+                    report.AppendLine($"  t={now,6:0.00} the session left the world for the cabin");
+                    break;
+                }
+
+                if (handedBackAt < 0f && !cutscene.Playing)
+                {
+                    handedBackAt = now;
+                    report.AppendLine($"  t={now,6:0.00} the host handed the session back");
+                }
+
+                if (executedAt < 0f && world.Runtime.AnimStateOf(DockAnim) == AnimExecuted)
+                {
+                    executedAt = now;
+                    report.AppendLine($"  t={now,6:0.00} '{DockAnim}' reads EXECUTED");
+                }
+
+                if (wonAt < 0f && graph.Outcome == MissionOutcome.Won)
+                {
+                    wonAt = now;
+                }
+
+                if (completedAt >= 0f && now > completedAt + CampaignDirector.LeavingHoldS
+                    + AfterReleaseS)
+                {
+                    break;
+                }
+            }
+
+            // The second signal: the same code again, once the mission is over. The original's
+            // case for it is unguarded, and cannot fire twice only because the mission-end path it
+            // calls has already left the flying state behind; here the guard is the graph's.
+            secondTook = graph.NotifyDockingComplete();
+            report.AppendLine($"a second completion code after the win: " +
+                $"took={secondTook}, outcome={graph.Outcome}, endings={endings}");
+        }
+        finally
+        {
+            world.Runtime.OnInstanceStarted -= Started;
+            world.Runtime.OnInstanceFinished -= Finished;
+            graph.MissionEnded -= Ended;
+            graph.Completed -= CompletedOne;
+            world.Runtime.CallbackHost = cutscene.Host;
+        }
+
+        report.AppendLine($"fold started at {foldStartedAt:0.00} (finished at {foldEndedAt:0.00}, " +
+            $"-1 when the ending stopped the world first), " +
+            $"completion code at t={completedAt:0.00}, session handed back at t={handedBackAt:0.00}, " +
+            $"codes=[{string.Join(", ", cutscene.Codes)}]");
+        ctx.Check(foldStartedAt >= 0f,
+            $"the docking reaches '{BalmoralPlane}'s own branch and calls its wing fold");
+        ctx.Check(completedAt >= 0f && foldStartedAt >= 0f
+                  && completedAt - foldStartedAt >= FoldRunS - FoldEndToleranceS,
+            $"which turns through the branch's whole authored {FoldRunS:0.#} s wait before the ending stops the world");
+        ctx.Check(completedAt >= 0f,
+            $"the docking raises its mission-completion code {CompleteCode}");
+        ctx.Check(completedAt >= 0f && foldStartedAt >= 0f
+                  && completedAt >= foldStartedAt + FoldRunS - FoldEndToleranceS,
+            $"at the end of the branch's own two-second wait, not before it");
+        ctx.Check(handedBackAt < 0f || completedAt < 0f || handedBackAt >= completedAt - StepDt,
+            $"and the host keeps the session until then (handed back at t={handedBackAt:0.00})");
+        report.AppendLine($"mission outcome: {graph.Outcome}, ending={graph.Ending}, " +
+            $"won at t={wonAt:0.00}, '{DockAnim}' EXECUTED at t={executedAt:0.00} " +
+            $"(state when the code landed: {stateAtCode}), " +
+            $"OBJECTIVE{watcher?.Number.ToString() ?? "?"} completed at t={watcherAt:0.00}, endings={endings}");
+        ctx.Check(graph.Ending || graph.Outcome == MissionOutcome.Won,
+            $"the code the docking ends on wins the mission, which is the only ending a mission finishing on the hook has");
+
+        // The two paths to this ending and the order they resolve in. The code is raised by the
+        // definition's last sequence, so the definition is still RUNNING when it lands and the
+        // objective watching it for EXECUTED cannot have completed yet.
+        ctx.Check(stateAtCode == AnimRunning,
+            $"'{DockAnim}' is still RUNNING when it raises the code, so the objective's EXECUTED read cannot have won the mission first (read {stateAtCode})");
+        ctx.Check(executedAt < 0f || completedAt < 0f || executedAt >= completedAt,
+            $"and reads EXECUTED no earlier than that (EXECUTED at t={executedAt:0.00}, code at t={completedAt:0.00})");
+        ctx.Check(executedAt < 0f || foldStartedAt < 0f
+                  || executedAt >= foldStartedAt + FoldRunS - FoldEndToleranceS,
+            $"which is the end of the branch's own two-second wait, not a point inside the wing fold");
+        ctx.Check(watcherAt < 0f || completedAt < 0f || watcherAt >= completedAt,
+            $"the INSTANTWIN objective watching it completes no earlier than the code either");
+
+        // The original's case for this code sets the won flag and runs the mission-end path in one
+        // breath. Nothing waits out a wrap-up, so the debrief opens on the film's own last frame.
+        ctx.Check(wonAt >= 0f, $"the mission is won inside the run rather than left pending");
+        ctx.Check(wonAt < 0f || completedAt < 0f || wonAt <= completedAt + EndLagS,
+            $"on the frame the code lands, with no wrap-up in between (won at t={wonAt:0.00}, code at t={completedAt:0.00})");
+        ctx.Check(endings == 1, $"and the mission ends exactly once (ended {endings} time(s))");
+        ctx.Check(!secondTook, $"a second completion code after the win is refused and changes nothing");
+        ctx.Check(graph.Outcome == MissionOutcome.Won, $"the outcome after it is still Won");
+
+        // The other end of the same ending: the outcome is settled on the code's frame, and the
+        // session stays in the world for the leaving hold after it. The film's last live frame is
+        // the frame the code landed on, which is what the original leaves standing under its fade.
+        report.AppendLine($"the film's last live frame is t={lastFlownAt:0.00} " +
+            $"(the code's own frame), the session left at t={leftAt:0.00}, " +
+            $"{flownAfterEnd} world step(s) ran after the ending");
+        ctx.Check(leftAt >= 0f, $"the session leaves the world rather than staying in it");
+        ctx.Check(leftAt < 0f || wonAt < 0f || leftAt > wonAt + StepDt,
+            $"not on the frame the mission was won (won at t={wonAt:0.00}, left at t={leftAt:0.00})");
+        ctx.Check(leftAt < 0f || completedAt < 0f
+                  || leftAt >= completedAt + CampaignDirector.LeavingHoldS - EndLagS,
+            $"but a whole {CampaignDirector.LeavingHoldS:0.#} s leaving hold after the code (left at t={leftAt:0.00})");
+        ctx.Check(leftAt < 0f || completedAt < 0f
+                  || leftAt <= completedAt + CampaignDirector.LeavingHoldS + AfterReleaseS,
+            $"and not a second longer than the hold the original's fade runs for");
+        ctx.Check(flownAfterEnd == 0,
+            $"with the world standing still throughout: no aeroplane step, no animation advance and no stick between the ending and the cabin ({flownAfterEnd} step(s) ran)");
+        if (rig.PlaneModel is { } model)
+        {
+            // ⚠ The ending catches the fold a few frames short of its authored end (the branch
+            // waits 2.0 s where the fold runs 2.01), so that gap and not the pose epsilon is the
+            // tolerance the wings are read at here.
+            CheckWingFold(ctx, world, fold, model, report, FoldFreezeEpsilon);
+        }
+
+        world.Runtime.Stop(dock.Anim);
+    }
+
     // CM06's docking, a shape no other shipped row has: the row's own definition authors no
     // CALLBACK and calls the hookup, the drop, the hook state and the unhook in turn, waiting on the
     // first and the last. The hookup raises the first code and ends with the aeroplane still on the
@@ -614,6 +926,7 @@ internal static class LandingApproachSuites
         float biggestStepM = 0f;
         float biggestStepAt = -1f;
         float placedOffM = -1f;
+        var heldMarkerAt = AnimRuntime.WorldTransform(marker, out _).Origin;
         var prev = rig.WorldPosition;
         int frame = 0;
         while (now() < DockBudgetS && (releasedAt < 0f || now() < releasedAt + AfterReleaseS))
@@ -627,10 +940,18 @@ internal static class LandingApproachSuites
             frame++;
             bool locked = rig.Held && rig.Inert;
             var markerPose = AnimRuntime.WorldTransform(marker, out _);
+            if (locked)
+            {
+                heldMarkerAt = markerPose.Origin;
+            }
+
             if (!locked && releasedAt < 0f)
             {
                 releasedAt = now();
-                placedOffM = rig.WorldPosition.DistanceTo(markerPose.Origin);
+                // ⚠ Against the pose the definition last left the marker in, not against the marker:
+                // the handoff sends it home to the world root, so a live read on this very frame
+                // measures that trip and not the re-placement (CutsceneController.Restore).
+                placedOffM = rig.WorldPosition.DistanceTo(heldMarkerAt);
                 report.AppendLine($"  t={now(),6:0.00} released: {placedOffM:0.#} m off the '{AircraftStage.PlayerNode}' marker, " +
                     $"handoff code {(handoffAt() < 0f ? "not raised" : $"raised at t={handoffAt():0.00}")}");
                 if (handoffAt() < 0f)
@@ -737,10 +1058,31 @@ internal static class LandingApproachSuites
         return false;
     }
 
+    // The mission's other path to this ending: the objective whose ANIM_STATE watches the docking
+    // definition for EXECUTED and wins on it. Found by its condition rather than by number, so the
+    // suite reads the data's own shape.
+    private static ObjectiveDef? DockWatcherOf(ObjectiveScript script)
+    {
+        foreach (var def in script.Objectives)
+        {
+            foreach (var entry in def.AnimStates)
+            {
+                if (def.InstantWin && entry.State == AnimExecuted
+                    && string.Equals(entry.Name, DockAnim, StringComparison.OrdinalIgnoreCase))
+                {
+                    return def;
+                }
+            }
+        }
+
+        return null;
+    }
+
     // The wing fold's own two movers, checked against the rotations the fold definition authors.
     // An airframe that authors no fold is a coverage statement, not a failure (DIAG-22).
     private static void CheckWingFold(TestContext ctx, TestWorld world,
-        (string Anim, AnimDefinition Def)? fold, Node3D model, StringBuilder report)
+        (string Anim, AnimDefinition Def)? fold, Node3D model, StringBuilder report,
+        float epsilon = PoseEpsilon)
     {
         if (fold is not { } authored)
         {
@@ -764,7 +1106,7 @@ internal static class LandingApproachSuites
                 var got = node?.Basis.GetEuler(EulerOrder.Yxz) ?? Vector3.Zero;
                 report.AppendLine($"fold '{name}': authored {want}, measured {got}");
                 ctx.Check(node != null, $"'{authored.Anim}' reaches the flown airframe's '{name}'");
-                ctx.Check(node != null && Near(got, want),
+                ctx.Check(node != null && Near(got, want, epsilon),
                     $"and turns it to the {want} the definition authors");
                 checkedPairs++;
             }
@@ -857,7 +1199,8 @@ internal static class LandingApproachSuites
         return null;
     }
 
-    private static bool Near(Vector3 a, Vector3 b) => (a - b).Length() <= PoseEpsilon;
+    private static bool Near(Vector3 a, Vector3 b, float epsilon = PoseEpsilon) =>
+        (a - b).Length() <= epsilon;
 
     private static Node3D? NamedNode(Node3D root, string name)
     {
@@ -921,6 +1264,9 @@ internal static class LandingApproachSuites
                 },
             }, () => Array.Empty<FlightController>());
             cutscene.WorldHeld = director.HoldForCutscene;
+            // The session's own wiring for the docking's completion code, so a row that raises it
+            // reaches the same objectives graph a flown mission's would.
+            cutscene.MissionComplete = () => director.Graph?.NotifyDockingComplete();
             // The mission's own actors, before the bind: a row whose approach node arrives with a
             // roster spawn is only there to bind once that spawn has happened, which is the whole
             // ordering the session repeats when it re-binds after its roster build.
@@ -1240,6 +1586,53 @@ internal static class LandingApproachSuites
                 ctx.Check(trails.Count > 0,
                     $"the flare's smoke trail emitter is asserted on the passenger's hand");
 
+                // Which hand: a same-named node on the parked library figure would emit where
+                // nobody is standing, and the census row's NAME alone cannot tell the two apart.
+                var trailHost = trails.Count > 0 ? trails[0].HostNode : null;
+
+                // An emitter can read "emitting" and lay nothing, and the director above holds a
+                // fake (see TrainPickupRide), so the sprites are asserted one seam lower: the
+                // mission's own payload over a recording renderer, along this hand's own poses.
+                var smokeState = FlareTrailState(world, agent);
+                var gpu = new RecordingEmitterRenderer();
+                var smoke = smokeState != null ? Puffer.CreateWith(smokeState, gpu, sustained: true) : null;
+                if (smoke != null)
+                {
+                    ctx.Host.AddChild(smoke);
+                }
+                var handBefore = trailHost?.GlobalPosition ?? Vector3.Zero;
+                for (float t = 0f; t < FlareSampleS; t += StepDt)
+                {
+                    world.Runtime.Advance(StepDt);
+                    trigger.Tick();
+                    if (smoke != null && trailHost != null)
+                    {
+                        smoke.Emit(trailHost.GlobalPosition, trailHost.GlobalBasis, StepDt);
+                        smoke._Process(StepDt);
+                    }
+                }
+                float handTravel = trailHost != null
+                    ? trailHost.GlobalPosition.DistanceTo(handBefore) : -1f;
+                // What the authored cadence owes over that motion, halved: the hand's path is not a
+                // straight line, so the metres it covers are an upper bound on the trail's length.
+                int owed = smokeState is { DistanceInterval: > 0f } && handTravel > 0f
+                    ? (int)(handTravel / smokeState.DistanceInterval) / 2 : 0;
+                report.AppendLine($"flaretrail host chain: {(trailHost != null ? ChainOf(trailHost) : "-")} " +
+                    $"under-passenger={(trailHost != null && IsUnder(trailHost, agent))} " +
+                    $"hand-distance={(trailHost != null ? trailHost.GlobalPosition.DistanceTo(agent.GlobalPosition) : -1f):0.##}; " +
+                    $"state interval={smokeState?.DistanceInterval:0.##} m frames={smokeState?.TextureSequence.Count}" +
+                    $"+{smokeState?.Textures.Count} size={smokeState?.SizeMin:0.###}-{smokeState?.SizeMax:0.###}; " +
+                    $"hand travelled {handTravel:0.##} m in {FlareSampleS:0.##} s and drew {gpu.MaxShown} " +
+                    $"sprite(s), owed at least {owed}");
+                ctx.Check(trailHost != null && IsUnder(trailHost, agent),
+                    $"the trail's host node is the staged passenger's own hand, not the library figure's");
+                ctx.Check(smokeState is { DistanceInterval: > 0f }
+                        && smokeState.TextureSequence.Count + smokeState.Textures.Count > 0,
+                    $"the mission's own flaretrail state is a distance trail with sprites to draw");
+                ctx.Check(gpu.MaxShown > 0 && gpu.MaxShown >= owed,
+                    $"and driven along that hand's motion it lays the smoke the cadence owes");
+                smoke?.QueueFree();
+
                 // The ladder: level inside the sensor drops it, the settle callback lands it. The
                 // train has travelled on since the rig was parked, so the rig is re-parked level
                 // beside the sensor as it stands now.
@@ -1269,6 +1662,25 @@ internal static class LandingApproachSuites
                 ctx.Check(ladder.State == LadderState.Deployed,
                     $"the drop's own CALLBACK 123 settles the switch deployed");
 
+                // The wind sway: gen_drop_ladder leaves each rung's ladder_loop script in an
+                // infinite LOOP once the drop has landed, so a settled ladder keeps moving. The
+                // rungs hinge about their own origins, so the sample is a point out along a rung.
+                var settledRung = world.Runtime.FindNodes("rung1");
+                var settledLadder = ladders.Count > 0 ? ladders[0] : null;
+                var swayBefore = RungInLadder(settledRung, settledLadder);
+                float sway = 0f;
+                for (float t = 0f; t < FlareSampleS; t += StepDt)
+                {
+                    world.Runtime.Advance(StepDt);
+                    var swayNow = RungInLadder(settledRung, settledLadder);
+                    sway += swayNow.DistanceTo(swayBefore);
+                    swayBefore = swayNow;
+                }
+                report.AppendLine($"settled ladder over {FlareSampleS:0.##} s: rung1 swung " +
+                    $"{sway:0.###} m in the ladder's own frame");
+                ctx.Check(sway > 0.01f,
+                    $"the deployed ladder keeps swinging on its own looped wind script");
+
                 // The docking cone, then the cutscene's own call chain.
                 int waitsBefore = world.Runtime.WaitsInstalled;
                 ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, pickup, report),
@@ -1280,8 +1692,16 @@ internal static class LandingApproachSuites
                 ctx.Check(IsUnder(agent, caboose),
                     $"the passenger is still the caboose's child through the pickup");
 
+                // The climb REPLACES the hanging ladder's wind loop (docs/org/ladderSwitch.md), so
+                // what is owed is cabpkup_ladder's own motion, read in the ladder root's frame:
+                // measured globally the caboose's 60-odd metres would drown it.
+                var rung = world.Runtime.FindNodes("rung1");
+                var ladderRoot = ladders.Count > 0 ? ladders[0] : null;
+                var rungBefore = RungInLadder(rung, ladderRoot);
+                float rungTravel = 0f;
                 float played = 0f;
                 float climb = 0f;
+                int cabpkupLadder = 0;
                 for (float t = 0f; t < PlayBudgetS && cutscene.Playing; t += StepDt)
                 {
                     world.Runtime.Advance(StepDt);
@@ -1291,13 +1711,28 @@ internal static class LandingApproachSuites
                     if (world.Runtime.AnimStateOf("caboosepickup") == 2)
                     {
                         climb += StepDt;
+                        cabpkupLadder = Mathf.Max(cabpkupLadder,
+                            world.Runtime.AnimStateOf(ClimbLadderAnim));
+                        var rungNow = RungInLadder(rung, ladderRoot);
+                        rungTravel += rungNow.DistanceTo(rungBefore);
+                        rungBefore = rungNow;
                     }
                 }
                 report.AppendLine($"pickup episode ran {played:0.##} s, caboosepickup live for " +
-                    $"{climb:0.##} s of it");
+                    $"{climb:0.##} s of it; {ClimbLadderAnim} reached state {cabpkupLadder}, " +
+                    $"drop_ladder state {world.Runtime.AnimStateOf(LadderSwitch.DropAnim)}, " +
+                    $"rung1 swung {rungTravel:0.###} m in the ladder's own frame over the climb; " +
+                    $"ladder chain {(ladderRoot != null ? ChainOf(ladderRoot) : "-")}; script misses: " +
+                    string.Join(", ", world.Runtime.UnhandledEventCounts
+                        .Where(kv => kv.Key.StartsWith("ObjectMotionSiScript", StringComparison.Ordinal))
+                        .Select(kv => $"{kv.Key}={kv.Value}")));
                 ctx.Check(!cutscene.Playing && played > 2f,
                     $"the authored pickup camera episode runs to its handoff");
                 ctx.Check(climb > 1f, $"the person's climb plays for its scripted length");
+                ctx.Same(2, cabpkupLadder,
+                    $"'{ClimbLadderAnim}' runs over the climb, so the ladder is animated rather than parked");
+                ctx.Check(rungTravel > 0.05f,
+                    $"and its rungs actually move in the ladder's own frame while the person climbs them");
             }
             finally
             {
@@ -1305,6 +1740,40 @@ internal static class LandingApproachSuites
             }
         });
     }
+
+    // The flare's smoke as the mission authors it: waveloop's own PUFFER_STATE payload, decoded the
+    // way the runtime decodes it. Read out of the definition rather than restated here, so a change
+    // to the decode moves the assertion with it.
+    private static PufferState? FlareTrailState(TestWorld world, Node3D agent)
+    {
+        foreach (var def in world.Session.Program.ByAnimName("waveloop"))
+        {
+            if (!def.NodeRefs.ContainsKey(AnimRuntime.NameOf(agent)))
+            {
+                continue;
+            }
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind == "PufferState" && (ev.Data.Num("active_state") ?? 0f) >= 1f)
+                    {
+                        return PufferState.FromAnimEvent(ev.Data);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    // A rung's place in the ladder root's frame, so the train carrying the whole ladder does not
+    // read as the rungs moving. Zero when either node is missing, which the caller's own check sees.
+    // A metre out along the rung's own axis, not its origin: a rung hinges about its own origin,
+    // so a position-only read is blind to the whole animation.
+    private static Vector3 RungInLadder(IReadOnlyList<Node3D> rung, Node3D? ladder) =>
+        rung.Count > 0 && ladder != null
+            ? ladder.GlobalTransform.AffineInverse() * (rung[0].GlobalTransform * Vector3.Right)
+            : Vector3.Zero;
 
     private static string ChainOf(Node node)
     {

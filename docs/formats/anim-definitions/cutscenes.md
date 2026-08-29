@@ -601,6 +601,16 @@ aircraft a cutscene holds `Inert` while posing it must not read as "no airframe 
   handoff waits until every code-authoring definition in the row's call closure has ended as
   well; booking the episode to the first raiser handed the player flight at 7.3 s with the
   aeroplane still hung, and the unhook's 951 then re-placed them when it ran out.
+  The slot is not the landings table's alone. `DAT_0071b1dc` holds whatever instance the trigger
+  started, and the mission-script host is installed the same way whichever trigger started it, so
+  CSVM writes the slot from `AnimRuntime.PlayMissionTrigger` itself (the approach rows, the
+  objective script's `WAKE_ANIM`, the ladder switch) and from the world build for the opening
+  cutscene, which starts inside the start-list walk instead. C5/M02's ending is the shipped
+  objective-path case: `nypd_southward` raises no code and calls `nypd_player`, which raises 11, 2
+  and 13. No shipped `WAKE_ANIM` target reaches more than one code-authoring definition, so the
+  multi-raiser shape CM06 shows exists on the landings path alone.
+  A definition whose closure authors no `CALLBACK` never claims the slot: an ordinary `WAKE_ANIM`
+  goes through the same call, and the original's slot only ever holds a cutscene.
 - **Undecoded: when the landings slot clears.** `DAT_0071b1dc` holds the running instance and is
   cleared only by `SceneAnimCallback_0045e0f0` seeing callback **0**, which nothing authors. Read
   literally, one landings cutscene per mission load would lock out the rest, which C3/M01 (drop,
@@ -665,7 +675,7 @@ install; the compiled archives carry the same events.
 | 10 | 5 | restores the in-flight systems as a block: engine audio (`FUN_004a0af0`/`FUN_004a0a30`), `FUN_00455800(1)` chrome on, `FUN_00494b20`, `FUN_00443d60(1)`, `FUN_004696f0`, and `FUN_004b24d0` on the player. |
 | 11 | 21 | `FUN_004b1510` releases the vehicle's four sound handles, sets the player's `+0x91d` and `+0x91e` cutscene flags, `FUN_00455800(0)` chrome off. **Takes the player out of flight.** |
 | 12 | 4 | in multiplayer, hands control back through `FUN_00470a10`; otherwise re-arms the player's crash animation path. |
-| 13 | 3 | `FUN_00463c10(1)`, the same call the objectives runtime makes when a primary objective completes, then the mission-end path `FUN_00443090`. Partially decoded. |
+| 13 | 3 | `FUN_00463c10(1)`, the same call the objectives runtime makes when a primary objective completes, then the mission-end path `FUN_00443090` (decoded in full in [objectives.md](../objectives.md), "The mission-end path"). **The mission-completion code.** The three reader sources are `hooked_to_klondike` (the shared docking, compiled into twenty missions), C4/M01's `carpkup_player` and C5/M02's `nypd_player`, and no objective in the shipped data completes on a landing or on either drop, so this code is the only ending those missions have. **It takes no wrap-up:** the case sets the won flag and calls `FUN_00443090` in the same breath, never touching the wrap-up timer at mission `+0xc40` that the objective endings run down (0.1 s for `INSTANTWIN`, 3 s otherwise), so the ending lands on the frame the film raises it and the world stops there, under the mission-end path's own 2 s fade. CSVM hosts it into `ObjectiveGraph.NotifyDockingComplete`, and the hold after it is `CampaignDirector.LeavingHoldS`. |
 | 14 | 6 | **not handled.** Falls through the host's switch. See the gap note below. |
 | 15, 16 | 12, 12 | not this host's: the vehicle-death handler `LAB_00480710` takes these ([`org/vehicleDamage.md`](../../org/vehicleDamage.md), [`org/objectMotion.md`](../../org/objectMotion.md)). |
 | 20 | 4 | stores this animation in `DAT_0071c50c`, the active-cutscene slot. **Consequence: the per-frame world update `FUN_004897c0` and the objectives update `FUN_0046a490` both return immediately while the slot is set, so the simulation is suspended for the duration.** |

@@ -43,6 +43,7 @@ using static CSVM.Testing.WingmanSuites;
 using static CSVM.Testing.WorldAndToolSuites;
 using static CSVM.Testing.WorldFidelitySuites;
 using static CSVM.Testing.ZeppelinCannonBurnoutSuites;
+using static CSVM.Testing.ZeppelinHullActivationSuites;
 using static CSVM.Testing.ZeppelinIdentitySuites;
 using static CSVM.Testing.ZeppelinSuites;
 namespace CSVM.Testing;
@@ -87,6 +88,7 @@ public static class SuiteCatalog
         "inert-aircraft",
         "world-turrets",
         "turret-self-fire",
+        "c1-aa-guns",
         "mission-off-turrets",
         "carried-turrets",
         "graze-bounce",
@@ -105,6 +107,7 @@ public static class SuiteCatalog
         "zeppelin-damage",
         "zeppelin-broadside",
         "zeppelin-cannon-burnout",
+        "zeppelin-hull-activation",
         "damage-stages",
         "damage-hd",
         "stop-sequence",
@@ -225,6 +228,9 @@ public static class SuiteCatalog
         "perf-hud-layout",
         "campaign-briefing-note",
         "campaign-capture-group",
+        "campaign-capture-chutes",
+        "landings-balmoral-dock",
+        "campaign-cutscene-ownership",
         "airframe-hull-coverage",
     };
 
@@ -506,6 +512,15 @@ public static class SuiteCatalog
             "eight bearings so the line of fire crosses the fort's own structures: no gun ever " +
             "takes damage from its own rounds, whether by a muzzle-side strike on its own mount " +
             "or by its burst's splash, while a neighbour's burst still reaches it", TurretSelfFire));
+        into.Add(new TestHarness.Suite("c1-aa-guns",
+            "CM07's own flak on the mission it is flown in: C1/M02 places five aagun emplacements, "
+            + "all standing and shipped dormant, the mission's OBJECTIVE1 WAKEUP_TURRETS 'aagun**' "
+            + "arms exactly those five through the world lookup and the subtree write, each one "
+            + "acquires a plane parked inside DETECTION_RANGE and fires without taking its own "
+            + "rounds, and a chapter 1 persist log holding all five wrecked carries NOTHING into "
+            + "CM07, since it is that chapter's first mission and the engine's backwards walk finds "
+            + "no earlier carrier (the same log applied with a cut that reaches it kills them all)",
+            C1AaGuns));
         into.Add(new TestHarness.Suite("mission-off-turrets",
             "an emplacement whose site the mission's .gw switched OFF is out of the world: C3/M03's " +
             "six balloon turrets read dead, tick to Dead once woken, and are listed dead in the gunner " +
@@ -637,6 +652,14 @@ public static class SuiteCatalog
             "local-nodes scope), three finishers satisfy finish_locklear, lockleargoesdown brings " +
             "the hull down and the primary completes off lkgasbag05/panelleft1",
             ZeppelinCannonBurnout));
+        into.Add(new TestHarness.Suite("zeppelin-hull-activation",
+            "CM13's Pandora over C2/M03's real world: C2 alone ships the piratezep node with its " +
+            "gamez active bit clear and no mission .gw sets it back, so the world builds the hull " +
+            "hidden and the zeppelin record is what switches it on. With it on, the hook point, " +
+            "the hangar bay and both landing cones resolve UNDER the hull, and after pzhomebase " +
+            "(the anim OBJECTIVE8 wakes at the end of the race) has run its dock choreography the " +
+            "hull, the hook and the hangar bay all draw — rather than a live dock on an invisible " +
+            "Pandora", ZeppelinHullActivation));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -1047,8 +1070,9 @@ public static class SuiteCatalog
             "CM13's six hafury racers spawned from C2/M03's own aiv roster into its built world "
             + "with the colliders up: each resolves basic_airplane's single origin collision probe "
             + "(the decoded AI contact shape, so its wings clip through the dbase arch dzpath2 "
-            + "threads at rail height), and over the flown run every racer flies dzpath1 and then "
-            + "dzpath2 on rails end to end, returns to its net and never rams anything",
+            + "threads at rail height), and over the flown run every racer flies its net's seven "
+            + "tagged zones on rails in course order, each end to end and once only, returning to "
+            + "its net between them and never ramming anything",
             CampaignRacers));
 
         // BL-468: the objective-target store had no consumer, so a flown mission never showed the
@@ -1120,10 +1144,11 @@ public static class SuiteCatalog
             "CM07's caboose pickup as the original runs it, over the mission's real moving train: "
             + "the staged passenger is the caboose's child and keeps its offset while the caboose "
             + "travels, the pickup timing opening the switch selects the wave with the lit flare "
-            + "and its smoke trail on the passenger's hand, a level aircraft inside the 100 m sensor "
-            + "drops the rope ladder and the drop's own callback settles it deployed, and the "
-            + "pickup cutscene's call to caboosepickup holds a live instance for the person's climb "
-            + "through the whole episode",
+            + "and its smoke trail laying sprites on that passenger's own hand, a level aircraft "
+            + "inside the 100 m sensor drops the rope ladder and the drop's own callback settles it "
+            + "deployed swinging on its looped wind script, and the pickup cutscene's call to "
+            + "caboosepickup holds a live instance for the person's climb while cabpkup_ladder "
+            + "swings the rungs he climbs",
             TrainPickupRide));
 
         into.Add(new TestHarness.Suite("landings-trailer-pickup-gate",
@@ -1209,7 +1234,10 @@ public static class SuiteCatalog
             + "stays a stock Bloodhawk with no injector; the flown aeroplane rides the drop in "
             + "view: the hangar-floor Bloodhawk prop shows for the first leg and goes at the "
             + "swap, and after it the rig is drawn on the player marker, wearing the staged "
-            + "undercarriage, as the lift leg moves that marker",
+            + "undercarriage, as the lift leg moves that marker, and the parachutist the drop's "
+            + "own site-less chute call animates is the one staged figure, drawn for the whole "
+            + "leg, hanging under the actor the stage left where it stands and coming down at the "
+            + "hangar rather than kilometres off it",
             AirframeSwapSuites.HangarHandover));
 
         // BL-542: the capture cutscene's camera rides the wing walk's moving frame, and that frame
@@ -1392,6 +1420,32 @@ public static class SuiteCatalog
             + "the at-zero DEDG incomplete throughout and no exception, and the rebuilt rig's "
             + "death still ends the mission lost",
             CaptureGroupSuites.CaptureGroup));
+        into.Add(new TestHarness.Suite("campaign-capture-chutes",
+            "the crew bailing out at the end of CM02's capture over C3/M05's BUILT world, the "
+            + "capture played through the cutscene host from the approach row's trigger: the wing "
+            + "walk's player definition calls the chute definition three times, each figure is "
+            + "placed at the walk frame the call sites it on rather than at the archive's own "
+            + "origin, three hang in the air at once, and each stays drawn for its whole drift",
+            CaptureChuteSuites.CaptureChutes));
+        into.Add(new TestHarness.Suite("landings-balmoral-dock",
+            "CM02's own ending over C3/M05's BUILT world: the docking row flown in the Balmoral the "
+            + "capture hands over, whose branch of the shared hookup is the only one that folds a "
+            + "wing. The episode holds through that branch's authored two-second turn, both wings "
+            + "reach the angle the fold authors, and the mission-completion code lands at its end "
+            + "while the definition is still running, so it beats the objective watching that same "
+            + "definition for EXECUTED and wins the mission on its own frame, once, with a later "
+            + "completion code changing nothing; the world then stands still for the whole leaving "
+            + "hold, taking no aeroplane step, no animation advance and no stick, so the film's "
+            + "last live frame is the code's own and the session goes to the cabin two seconds "
+            + "after it rather than on it",
+            LandingApproachSuites.BalmoralDock));
+        into.Add(new TestHarness.Suite("campaign-cutscene-ownership",
+            "which definition an episode belongs to when the OBJECTIVE SCRIPT starts it rather than "
+            + "a landings row, over C5/M02's BUILT world and its own objective chain: an ordinary "
+            + "WAKE_ANIM left running claims no cutscene slot, the mission's ending is woken and "
+            + "its first code comes from a callee, yet the episode belongs to the definition the "
+            + "objective started and outlives that callee to the code the mission ends on",
+            CutsceneOwnershipSuites.CutsceneOwnership));
         into.Add(new TestHarness.Suite("airframe-hull-coverage",
             "every player airframe's collision hulls measured against its own mesh: each hull "
             + "inside the box it replaces, the whole silhouette's triangle area covered by some hull "

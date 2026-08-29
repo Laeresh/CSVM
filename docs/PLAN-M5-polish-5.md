@@ -142,6 +142,19 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 52. ☑ `BL-602`: CM13's first zone marker sits at the world origin; an origin-standing group site anchors on its built meshes, the race chain pinned
 53. ☑ `BL-601`: CM13's racers ram the hangar on dzpath2; an AI rig sweeps its def's one collision probe, as the original does
 54. ☑ `BL-604`: CM02 is still lost during the capture, before the swap: the wing walk's 913 park counted as a deactivation for DEDG
+55. ☑ `BL-615`: CM13's racers loop around zone 3 instead of going on; the run exit's net re-seat never refused the leg it entered on
+56. ☑ `BL-616`: CM13 docks with an invisible Pandora; a zeppelin record is what switches its hull on
+57. ☑ `BL-609`: no flare smoke and a frozen ladder in CM07's pickup, both disproved; the suite's two blind spots closed
+58. ☑ `BL-611`: CM07's AA guns never fire; the chapter persist log carried the mission's own wreckage into its own replay
+59. ☑ `BL-610`: CM07's hangar drop plays with no aeroplane and hands the pilot back at the world origin, because an earlier cutscene left the `player` marker parented to the train
+
+### Wave G — the CM02 capture's two ends (D32 follow-ups)
+
+60. ☑ `BL-607`: a cutscene episode books to the first raiser on every path but the landings one, so a parent that calls several raisers is cut short
+61. ☑ `BL-608`: CM02's crew bail out as one figure at the world origin, and the docking on the Pandora never ends the mission
+62. ☑ `BL-620`: CM02's ending waits out an objective wrap-up the completion code does not take
+63. ☑ `BL-621`: CM07's hangar drop loses its parachutist to G61's staged-actor pool
+64. ☑ `BL-623`: CM02's ending cuts to the cabin on the frame it is won, where the original holds the last flown frame for two seconds
 
 ## Dependency and parallelism notes
 
@@ -1225,7 +1238,13 @@ A2's in-tree liveness read).
 
 # Wave D — the sortie
 
-## D31 ☐ Fly CM04 to CM09 end to end and judge every item where it was reported
+## D31 ☑ Fly CM04 to CM09 end to end and judge every item where it was reported
+
+**Standing.** CM04, CM06, CM07, CM09 and CM13 are cleared at the controls, and CM02's capture is
+too. The sortie's own findings became Waves F and G, and what it left open is `BL-623` (CM02's end
+cut, the last item), `BL-597` and `BL-598` (CM08, recorded not fixed), `BL-612` (the frame rate in
+CM09 and CM13), `BL-618`, `BL-619` and `BL-622` (no debrief screen), with CM13's race pace and
+CM08's two items still owed at the controls.
 
 **Goal.** Every item above is judged at the controls in the mission it was reported in, by the
 user; a fix that does not read right at the controls is reopened, with the user's eyes outranking
@@ -1612,3 +1631,165 @@ on the flown path.
 **Verified.** On the merged plan tree, the full gate: build clean, 2558 unit tests, 174 engine suites in four shards with the error census clean (engine stage 104 s against its 100 s budget, awareness only), 16 goldens hash-identical.
 
 **⚠ Traps.** `Inert` is presence; `Deactivated` is the mission's dead byte. Any new objective or tally walk reads `Deactivated`. The park is set before `Inert` so an `InertChanged` listener reads a consistent pair. The hidden captured aircraft leaves both the parked list and `Parked`, or the player and the bomber count twice.
+
+## F55 ☑ `BL-615`: CM13's racers loop around zone 3 and never go on to the next zone
+
+**Goal.** A racer that finishes a `dzpathN` run rejoins its net going onward, so the six racers fly the seven tagged zones of `M3StuntCourse` in the net's own order and the race runs its full course.
+
+**Evidence (confidence: decoded).** At the controls after F53 every danger zone clears and nobody crashes, but the racers circle zone 3. Reproduced in `campaign-racers` extended past `dzpath2`: all six run `dzpath1, 2, 3, 3, 3, 3` for 540 s and never reach `dzpath10`. The decode: `FUN_00490590`'s rail exit reads the edge the walk was on at the entry off `+0x2e8`/`+0x2ec`, snaps to the nearest node (`FUN_00431900`) and hands that edge id to the nose pick `FUN_00431e40` as its exclusion, whose candidate loop skips it; the ordinary walk step `FUN_0041d8f0` excludes the flown leg the same way. `AiNetFollower.Reseat` excluded nothing, and `dzpath3`'s exit at (-7628, 174, -2788) leaves the leg back toward the tagged node as the best-aligned edge, so the racer flew back, reached the tag and re-locked. No cooldown backs it up: `FUN_00421500` writes the `+0x8a0` retry stamp on a refusal and never reads it. E41's `docs/org/aiPilot.md` already carried the clause; it was never ported.
+
+**Approach.** `AiNetFollower.Reseat` takes an optional edge to refuse, held as an unordered node pair and spent on the seat it applies to; `AiPilot` records the leg at the entry and hands it back at the exit. Every other `Reseat` caller keeps the unconstrained default.
+
+**Model recommendation.** A single session; the decode was four functions of the walk and the rail exit.
+
+**Verify.** `campaign-racers` extended from two zones to the net's whole seven-zone course with two new per-racer assertions (no zone flown twice, the tagged zones in the net's order): all six run `dzpath1, 2, 3, 10, 6, 7, 9` in 208 s of sim with no rams. `AiNetFollowerTests.ReseatRefusesTheEdgeItWasToldToAvoid`. Foreground: build clean, `dotnet test` 2559, and `campaign-danger-zones`, `ai-modes`, `ai-net-follow`, `campaign-roster`, `campaign-race-chain` PASS.
+
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
+
+**⚠ Traps.** The exclusion is an edge, not a node: refusing the tagged node itself would strand a racer whose course runs back through it. It is spent on one seat pick, so an interrupted run that re-approaches carries no stale refusal. The other `Reseat` callers (the Instant Action activation snap, `FlightController`) must keep the unconstrained default, or a teleported wave member loses its nearest-node seat.
+
+## F56 ☑ `BL-616`: CM13 docks with an invisible Pandora
+
+**Goal.** The Pandora's hull draws in CM13 (and CM11), so the docking hook and approach cones the end of the race arms sit on a zeppelin the player can see.
+
+**Evidence (confidence: decoded).** At the controls on CM13 the docking point is in position and the dock works while nothing is drawn. Not a regression: `WorldBuilder` and `GameZ` are byte-identical with main, and the defect became reachable only once F52, F53 and E41 let a player finish the race. `C2` is the only chapter shipping the `piratezep` node with `flags.active` clear (`support\c2\load.gw`: `LoadGameGen ... piratezep; NodeSetActive off`), and `WorldBuilder` honours that bit. Neither `m02.gw` nor `m03.gw` sets it back, `C2/M03`'s `zepstate.zrd` names only the vestigial `hk_zep`, and no `ObjectActiveState` in any of the mission's 200 compiled defs addresses `piratezep`. The dock still arms because arming reads poses: `pzhookpoint`, `hookbay` and both `land_on` cones all hang off `piratezep` in the gamez tree. The original's own activator is the record: Instant Action's builder re-activates its selected zeppelin with `FUN_004cca30` (`gwNodeSetActive`, bit 2 of node `+0x24`) at `0x0045b928`, mirroring the deactivation loop at `0x0045b8d6`. Two records in the whole install name a gamez-inactive node, `C2/M02` and `C2/M03`, both `piratezep`.
+
+**Approach.** `ZeppelinRuntime`'s placement loop switches the resolved hull node on, logging a `zep:` line when it was built inactive. Dormancy is opacity, so a `deactivated` record is unaffected.
+
+**Model recommendation.** A single session; the diagnosis is data, the fix is one line.
+
+**Verify.** New suite `zeppelin-hull-activation` over C2/M03's real world: the gamez ships the one `piratezep` node inactive, the world builds it hidden, the record places it and switches it on, the hook, bay and both cones resolve under the hull, and after `pzhomebase` runs 12 s the hull, the hook and the hangar bay all draw (four checks red with the line removed). Foreground: build clean, `dotnet test` 2558, and `campaign-zeppelins`, `zeppelin-identity`, `campaign-race-chain`, `campaign-racers`, `campaign-objectives`, `campaign-objective-markers` PASS.
+
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
+
+**⚠ Traps.** A working dock is not evidence that its host draws: the objective target, the stop-point release and the HUD marker all read poses and names, never visibility. `SetDormancy` writes opacity, not `Visible`, so the two switches are independent and must stay so. Both landing cones remain hidden after `pzhomebase` for a separate reason (`BL-618`, the `~n` dedup name).
+
+## F57 ☑ `BL-609`: no flare smoke on the caboose passenger, and the ladder stops swaying in the pickup
+
+**Goal.** The flare's authored smoke plays on the passenger's hand for the open wave phase, and the ladder's behaviour through the climb matches the original.
+
+**Evidence (confidence: traced, and measured in a flown session).** Both reports are disproofs. The `cuepuffer2`/`cuepuffer3` stop-misses in the suite artifact belong to `camera1`/`speed_cue` (puffers on `player`), not the flare; the report line prints the runtime's global unhandled counts beside `pickup_flare=`. The flare's puffer is `flaretrail` on `pickup_agent`/`waveloop` (`at_node cp_lh`, `DISTANCE_INTERVAL 0.4`, `fire_f01..06`). A freecam probe at the caboose reports 7 active puffers and 286 live particles including `flaretrail`, following the hand at one batch per 0.4 m. The suite could not see it: `TrainPickupRide` installs a counting emitter factory whose `LiveCount` is 1 whenever it sustains, and the census row carried only the host's name, so a same-named hand on the parked library figure would have read identically. On the ladder, `lookat_copilotpkup` opens with `STOP_ANIMATION [drop_ladder]`, which ends the per-rung `ladder_loop` wind loops inside `gen_drop_ladder`, then calls `cabpkup_ladder`, which re-parents the same ladder to the caboose, zeroes `ladder_roll` and drives its root and all six rungs from one `ALL_NAMES` record. The climb replaces the sway. Full decode: `docs/org/ladderSwitch.md`, "The ladder through the pickup".
+
+**Approach.** No behaviour change. `EmitterCensusRow` carries the host node, and `landings-train-pickup-ride` asserts the trail's host is the staged passenger's own hand, builds the mission's `flaretrail` state over a recording renderer and drives it along that hand's real poses, and measures the ladder as a point along `rung1` in the ladder root's frame.
+
+**Model recommendation.** A single session; the answer is in the mission data and one flown probe.
+
+**Verify.** The suite reads 22 sprites over 9.12 m against the 11 the 0.4 m cadence owes, and `rung1` swinging 0.318 m per 0.3 s hanging and 2.639 m over the 2.2 s climb with `cabpkup_ladder` live. Foreground: build clean, `dotnet test` 2558, 8 landings suites and 12 effect, emitter and puffer suites PASS.
+
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
+
+**⚠ Traps.** A rung hinges about its own origin, so a position-only read of one sees nothing. The harness retires the real puffer factory with its build, so anything about actual particles is asserted at the `Puffer` seam, never off the director's census. During the pickup cutscene there is no flare smoke by design (`lookat_copilotpkup` stops `waveloop`), and the sprites are 0.1 to 0.5 m across, so they read as a wisp: if the smoke still looks absent at the controls, the open question is sprite scale against footage, not the runtime.
+
+## F58 ☑ `BL-611`: CM07's AA guns never fire
+
+**Goal.** CM07's five `aagun` emplacements wake on `OBJECTIVE1`'s `WAKEUP_TURRETS aagun**` and engage the player on every replay, as they do at the original's controls.
+
+**Evidence (confidence: traced).** Reproduced on the flown campaign path: all five read `alive=False gate=Dead` at build and never wake. Not a turret change: `m02.gw` switches no `aagun` off, A2's tree-visibility read is correct (every site reads visible and in tree), and B13's owner exclusion never touched firing. What hides `healthy` is `CampaignPersistLog.ApplyTo` restoring the guns a previous CM07 sortie shot down: the log was keyed by chapter alone and folded the whole chapter at open, while `CampaignDirector` merges the mission's own capture into that chapter on a win, so a won CM07 wrote its wreckage into chapter 1 and the next CM07 read it back. `docs/formats/saved-games.md` already decodes the rule: the campaign object walks its mission list backwards for the most recent EARLIER entry in the same world folder (`FUN_0046b7e0` into `FUN_0046b560`, index at `+0xc18`), and CM07 is `seq` 6, the first campaign-1 entry, so the original finds no carrier for it at all. A1 (`BL-513`) is the trigger, not the cause: its silent `CarryState`/`ApplyDeathPose` path applies the destroyed pose cleanly where the old `DamageAt` route skipped what was already destroyed.
+
+**Approach.** `PersistedObject` gains the capturing mission's story position; `CampaignPersistLog` keys chapter, then seq, then node, and `Through`/`ApplyTo` carry only positions before the opening mission (the chapter's first mission carries nothing). A state stored without a position counts as an earlier mission's, so existing profiles keep their legitimate carries and need no surgery. `CampaignDirector` resolves the cut from `CampaignSequence.PreviousInSameChapter` and stamps the mission's seq on the end-of-mission merge.
+
+**Model recommendation.** A single session; no new decode, the reading was already committed.
+
+**Verify.** New suite `c1-aa-guns` (C1/M02's five emplacements placed and shipped dormant, `OBJECTIVE1` arming exactly those five, a chapter-1 log holding all five wrecked applying 0 and leaving them alive, each gun acquiring a plane 250 m out and firing with no self-hits, and the able-to-fail control with a cut that does reach them reading every gun dead); `world-turrets`, `turret-self-fire`, `target-pool`, `ai-gunnery`, `campaign-objectives`, `mission-off-turrets`, `campaign-persistence`, `carried-state-silent` green; `dotnet test` 2560.
+
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
+
+**⚠ Traps.** Guns destroyed in an earlier chapter-1 mission still carry into `C1/M04` and `C1/M05`; only a mission's own capture is refused. The turret census and the `WAKEUP_TURRETS` arm are `GD.Print`, so a sortie log cannot say whether a mission's emplacements woke, which is what made this look like a turret defect (`BL-619`).
+
+## F59 ☑ `BL-610`: the hangar drop's aeroplane is missing and the pilot is handed back at the world origin
+
+**Goal.** The Bloodhawk rides the lift in view and the pilot flies out at the hangar doors, in a mission whose earlier cutscenes have already run.
+
+**Evidence (confidence: traced).** `CutsceneController.Restore` returned `camera1` to the world root but left the staged `player` marker wherever a definition's own composition had parented it. CM07 plays two landing rows before the hangar: `hooked_to_klondike` leaves the marker under `pzhookpoint` and `lookat_copilotpkup` leaves it under `caboose`, a moving train. The drop's `hdplayer1/2/3` then write their pose as a LOCAL transform in that frame: the marker travels 605 m instead of 56 m, the aeroplane rides the resulting world pose out of the shot (while `chuteman`, posed off its own correctly parented node, still parachutes into the hangar), and the authored 951 reads the same pose and flies the pilot 6075 m from the doors. CSVM has a node to strand where the original has none, its `player` being the flown vehicle itself. Disproved: the 965-rebuilt rig, a racing marker re-assert (`player_setup`'s deactivation is a t=0 bootstrap event, so F48's evidence can be stated more strongly), a 951 on a freed controller, and the prop staging.
+
+**Approach.** `Restore` returns the marker to the runtime's world root at identity, beside the camera and after the restore codes, since the 951 must still read the pose the ending definition left.
+
+**Model recommendation.** A single session; a CSVM scene-graph consequence with no counterpart in the original.
+
+**Verify.** `campaign-hangar-handover` now binds the way `GameSession` does, plays the mission's earlier landing rows first, arms the drop from its own caller and lets the range gate start it: both earlier episodes hand off with the marker back under `world1`, the start anims leave it active, marker travel 55.98 m over the lift, hand-back 1.88 m off where the drop left it and 263.3 m from the hangar (red at three checks without the fix). 14 cutscene, landings and intro suites; `dotnet test` 2558.
+
+**⚠ Traps.** A suite that reads the marker on the frame after the handoff measures its trip home, not the re-placement: remember the pose from the last playing frame (`landings-docking-hold` had the same fault). The suite also has to start from a world with earlier-cutscene history, or the stranding cannot happen at all.
+
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
+
+## G60 ☑ `BL-607`: ownership is written by the landings trigger alone
+
+**Goal.** An episode's raisers come from the started definition's closure on every path that starts a hosting definition, not the landings path alone.
+
+**Evidence (confidence: traced).** F45 made an episode wait for every code-authoring definition in the started definition's closure, but only `LandingApproachRuntime` calls `Own`. The objective script's `WAKE_ANIM`, the ladder switch and the intro bootstrap all book the episode to the first raiser with that callee's own closure. A second gap: `Host` required the owner to be running, and the runtime is still null during the animation bind, so an intro could never have won the slot.
+
+**Approach.** The slot moves onto the runtime (`AnimRuntime.MissionTriggerOwner`, called at the top of `PlayMissionTrigger`), so every trigger path books it; `WorldSession` hands the opening cutscene's own name to the same seam before the bind, since an intro starts inside the start-list walk; `Own` declines a definition whose closure authors no `CALLBACK`, because an ordinary `WAKE_ANIM` goes through the same call and a slot it claimed would outrank the next episode's real raiser.
+
+**Model recommendation.** One session with `BL-608`, which shares the host.
+
+**A refinement to the item's premise.** A census over every chapter's `objectives.zrd` `WAKE_ANIM` targets and their call closures finds six woken definitions that author a `CALLBACK` anywhere, and each has exactly one raiser: the multi-raiser shape exists on the landings path alone (CM06). C5/M02's ending is the shipped objective-path case of the shape the slot exists for, and the suite pins it.
+
+**Verify.** `campaign-cutscene-ownership`: C5/M02's `nypd_southward` raises no code and calls `nypd_player`, which raises 11, 2 and 13; the episode books to `nypd_southward` and completes Won, while an ordinary `WAKE_ANIM` left running claims no slot.
+
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
+
+**⚠ Traps.** An ordinary `WAKE_ANIM` must not claim the slot, or it outranks the next episode's real raiser. The intro's first code arrives while the host has no runtime to ask, so the slot wins outright in that state.
+
+## G61 ☑ `BL-608`: CM02's bailing crew and its docking on the Pandora
+
+**Goal.** Three parachutists appear beside the aeroplane at the end of the capture and drift for their whole scripts, and landing the captured Balmoral on the Pandora ends the mission.
+
+**Evidence (confidence: traced).** The chutes: `ww_player` authors three `ww_chuteman` calls at `AT_NODE wingwalk_parent (0,-2,8.5)`, at `Animation+14.76`, `Event+1.0` and `Event+2.0`. `chuteman` has no node in C3's gamez at all (`AircraftStage` stages it from the aircraft archive), so the library-root resolver declined it, the figure was never moved to the call's site and played at the archive's own origin, and calls two and three hit the live-instance guard and did nothing: one figure at (0,0,0) for the whole run. The docking: the movie is not truncated (`hooked_to_klondike` runs 12.6 s on `player_balmoral`'s branch, calls `bal_wing_foldup` at 10.67 s and both wings reach the authored `1.9198622` rad, the branch's `Event+2.0` matching the fold's own `run_time`). What was missing is the last thing the definition does: `all_done` raises `Callback 13`, the mission-completion code (`FUN_0047e080` case 13 into `FUN_00463c10(1)`, then the mission-end path `FUN_00443090`), which reached no host in CSVM, so the movie ended and gave the player flight back inside the zeppelin. Nothing in the shipped objective data completes on a landing, so code 13 is the only ending the 20 missions carrying `hooked_to_klondike`, C4/M01's `carpkup_player` and C5/M02's `nypd_player` have. Disproved from the brief: a `RESET_STATE` on `RESET_TIME 0`, the `SequenceRunner` last-event rule, a dropped `WAIT`, and F54's freeing of the hidden Balmoral's children (the chutes hang off `chuteman`, not the bomber).
+
+**Approach.** `WorldSession.ResolveLibraryRoot` serves the staged actor and keys copies on the authored call event as well as the anchor; the mission-trigger right is remembered as the trigger's closure rather than a call-stack depth, since these calls fire 14.8 s after that dispatch returned; `data/effect_pools.json` sizes `chuteman` at 3, the authored call-site count. `CutsceneController.MissionComplete` hosts code 13 into `ObjectiveGraph.NotifyDockingComplete`.
+
+**Model recommendation.** One session with `BL-607`.
+
+**Verify.** `campaign-capture-chutes` (chutes started at 14.75, 15.77 and 17.78 s, three visible at once, each placed at the walk frame, spans 15.2, 14.2 and 12.2 s) and `landings-balmoral-dock` (fold 10.67 to 12.68 s, completion code at 12.62 s, `rwingbend` at the authored angle, the mission ends).
+
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
+
+**⚠ Traps.** A third caller of `ResolveLibraryRoot` must pass the authored event, or `null` to keep one copy per anchor. The staged actor is served only to a call that names a site; a site-less call gets the pre-pool behaviour (`BL-621` is what happens otherwise).
+
+## G62 ☑ `BL-620`: CM02's ending waits out a wrap-up the completion code does not take
+
+**Goal.** CM02 ends once, on the frame the docking film's last sequence raises its completion code, rather than three seconds later.
+
+**Evidence (confidence: traced).** C3/M05 has two paths to the same ending: `OBJECTIVE19` (`ANIM_STATE [ANIM [NAME [hooked_to_klondike], STATE [EXECUTED]]]`, `INSTANTWIN`) and the `Callback 13` the definition's `all_done` raises. The code always gets there first: `all_done` is the definition's own last sequence, so the definition still reads RUNNING when the code lands (measured: state 2 at t=12.62) and the objective's condition cannot be met until a frame later. The original's case for the code (`FUN_0047e080` case 13) re-syncs the player vehicle (`FUN_00494b20`), sets the won flag (`FUN_00463c10(1)`) and calls the mission-end path `FUN_00443090` in the same breath, never touching the wrap-up timer at mission `+0xc40` that `FUN_0046ba10` runs down (0.1 s for `INSTANTWIN`, 3 s otherwise). CSVM gave it the ordinary 3 s, so the debrief opened at 15.62 s where the original opens at 12.62 s. Disproved: the EXECUTED read is not early (one def of that name, and the original reads the definition's own state byte `+0xa0`, not its call closure's), and the mission never ended twice or raced.
+
+**Approach.** `ObjectiveGraph.NotifyDockingComplete` ends on `DockingWrapUpS = 0f`. The 0.06 s between the win and `bal_wing_foldup`'s last frame is authored: `move_camera`'s branch reaches `all_done` before `move_player`'s `Event+2.0` one, and the fold's 2.01 s `run_time` overruns the branch's 2.0 s wait in the data.
+
+**Model recommendation.** A single session; the decode was one case of the code dispatch.
+
+**Verify.** `landings-balmoral-dock` (the definition reads RUNNING when it raises the code, EXECUTED no earlier than that, the outcome turns Won within a frame of the code, `MissionEnded` fires once, a second completion code is refused) and a new `ObjectiveGraphTests` pin.
+
+**Verified.** On the merged plan tree, the full gate: build clean, 2562 unit tests, 179 engine suites in four shards with the error census clean, 16 goldens hash-identical.
+
+**⚠ Traps.** `WonWrapUpS` is still the ordinary objective win's 3 s; the two must not be re-merged. `Ending` is never observably true on this path, so a check written as `Ending || Outcome == Won` needs a `Step` after the code before it reads.
+
+## G63 ☑ `BL-621`: CM07's hangar drop loses its parachutist to the staged-actor pool
+
+**Goal.** The pilot parachutes into the hangar again, while CM02's three sited chute calls keep their per-call copies.
+
+**Evidence (confidence: traced).** `hangar_drop` calls `hdchute1` with no `AT_NODE` or `WITH_NODE` site at all, and `hdchute1` is rooted on `chuteman`, the actor `AircraftStage` stages out of the aircraft archive; its script poses `chutemanparent`, `pilot` and `stamp` with `OBJECT_MOTION_SI_SCRIPT` in world coordinates and never moves the root. G61's resolver served that staged actor to the site-less call, so the call relocated the root onto the caller's own anchor and pinned it top-level: the world-posed descent landed at (-8636, 292, -12790), 7.7 km off the hangar, and the never-started twin leg `hdchute1b` took a second pool slot, leaving a frozen duplicate drawn. Disproved: the drop places nothing by `OBJECT_ADD_CHILD`, and the mission-trigger right is not what opened the branch, the range gate having opened it already.
+
+**Approach.** The distinguishing rule is whether the call names a site: `AnimRuntime` passes the authored event to `ResolveLibraryRoot` only for a sited call, and the pool declines the staged actor outright to a site-less caller, which also covers the add-child fallback.
+
+**Model recommendation.** A single session; the regression is one branch of G61's own change.
+
+**Verify.** `campaign-hangar-handover` gains a chute sampler (one `chuteman` in the world, the actor never off its staged pose, the figure drawn on all 702 leg frames, 27.4 m of descent, 63.3 m from the hangar; FAIL with the guard reverted) and `campaign-capture-chutes` is unchanged.
+
+**Verified.** On the merged plan tree, the full gate: build clean, 2562 unit tests, 179 engine suites in four shards with the error census clean, 16 goldens hash-identical.
+
+**⚠ Traps.** `hdchute1b`'s prerequisite fails in this mission, so it never starts; a pool that hands it a slot anyway leaves a frozen duplicate in the world.
+
+## G64 ☑ `BL-623`: the ending cuts to the cabin on the frame it is won
+
+**Goal.** A won or lost mission holds its world for the two seconds the original spends fading the last flown frame out, with control never returning, before the session leaves.
+
+**Evidence (confidence: traced).** `FUN_00443090`, the path all four endings converge on (callers `FUN_0046ba10`, the wrap-up runner, and `FUN_0047e080` case 13), silences every playing sound (`FUN_00594040`, `FUN_00594580`, `FUN_00594680`), records the attempt (`FUN_004194e0`, or `FUN_00419700` for game type 3, the result slot through `FUN_00419630`) and then pushes the Fade State (`DAT_0071c200`, built by `FUN_00470000`, its name string at `0x006273c0`) onto the state machine at `DAT_0071d3a0` with the results state `DAT_0071d57c` behind it, at the fade's default duration `_DAT_006272b8` of 2.0 s. That state's entry copies the current framebuffer (`FUN_0046fc80` into `FUN_0059e2e0`), its tick blits the copy at a level ramping 0 to 1 over the duration and presents it itself (`FUN_0046fcc0` into `FUN_0046fe10`), and its exit frees it (`FUN_0046fd60`); `DAT_0071d290 = 0x1388` parks the flying state's presenter, where every ordinary cutscene callback writes 1, confirming G62's reading of that value. So the film does not play on after an ending: the last live frame is the frame the ending landed on, and C3/M05 never shows `bal_wing_foldup`'s last 0.06 s, `stopprops` past 13.47 s or `pzep_interior_light` at all. What was missing was not film, it was those two seconds.
+
+**Approach.** `CampaignDirector` banks the result on the ending's own frame and starts a `LeavingHoldS` of 2 s; `ReturnToCabin` and `MissionEnded` come at its far end. `GameSession` reads `Leaving` ahead of everything else in both drive paths, holds the sim clock and steps nothing but the director, so no aeroplane step, no animation advance and no stick input reaches the world in between.
+
+**Model recommendation.** A single session; the decode was the mission-end path and the fade state.
+
+**Verify.** `landings-balmoral-dock` drives the director and asserts the outcome turns Won on the code's frame (12.62 s), the session leaves a whole hold later (14.65 s) and not a frame before, and zero world steps run in between; `campaign-mission-end` separates the banking from the leaving.
+
+**Verified.** On the merged plan tree, the full gate: build clean, 2562 unit tests, 179 engine suites in four shards with the error census clean, 16 goldens hash-identical.
+
+**⚠ Traps.** The freeze catches the wing fold 0.048 rad short of its authored angle, which is decoded and not a defect, so the pose check reads it at that tolerance. `campaign-mission-end` steps the graph, not the director, so it needs the director stepped for the hold. CSVM paints no fade over the held frame and has no debrief on its far end (`BL-622`): the two seconds are currently held picture and then a cut.

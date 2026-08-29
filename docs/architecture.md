@@ -356,7 +356,7 @@ clusters they delegate to.
 - `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements: the standalone `ai.zrd` family placed at its `NODES` patterns against the built chapter world, shipped `ACTIVATED` honoured, `SetActivatedUnder` the Instant Action builder's subtree activation (what arms the objective zeppelin's rings), `--wake-turrets` the `WAKEUP_TURRETS` stand-in.
 - `src/Session/CampaignProfileStore.cs` — JSON persistence for a named campaign profile under `user://Profiles/<name>/profile.json`, following `ScoreStore`/`CustomPlaneStore`'s precedent: funds, owned planes (name-referenced into the global `user://Planes/` store, never a copy of it) with their per-gun ammo and per-pylon ordnance picks, mission results (the original's two halves, latest attempt and best-of merge), the completed-mission count, the granted aircraft awards and the cross-mission destruction log. `SessionSpec.CampaignProfile`/`CampaignMissionSeq` (`--campaign=<profile>:<seq>`) carry the launch-time selection as plain values; building the mission from them is the campaign director's job, not this store's.
 - `src/Session/CampaignProgression.cs` — the rules that write a profile: the best-of merge of one mission attempt (each field's rule is the original's), the monotonic position only a completed primary objective raises, the replay rule Previous Missions flies under, and the five aircraft awards granted once per profile, each with the build its special-plane template authors (`AwardBuild`, `docs/org/hangar.md`) so a reward aircraft flies its own guns, armour and engine tier rather than its stock airframe. The cash half of the reward table stays with the hangar economy; this class banks the money an attempt reports.
-- `src/Session/CampaignPersistLog.cs` — the cross-mission state log (`BL-243`): captures what `PERSIST_LOG` defs a mission left destroyed out of `AnimRuntime.Destructibles`, keyed by chapter and by gamez node index, and re-applies it to a later mission of that chapter through `AnimRuntime.CarryState`, silently: the pool reads destroyed at HP 0 (or the carried HP at its damage stage) and the nodes take the pose the death ends in, with no effect, sound or choreography, so a later hit on a carried kill is a no-op. ⚠ Never route the replay through `DamageAt`; that runs the previous mission's death choreography at mission open. Persistence is read from the READER def bound to a node, never from the compiled twin, which drops the flag. Regression: the `carried-state-silent` and `campaign-persistence` suites.
+- `src/Session/CampaignPersistLog.cs` — the cross-mission state log (`BL-243`): captures what `PERSIST_LOG` defs a mission left destroyed out of `AnimRuntime.Destructibles`, keyed by chapter, by the capturing mission's `cm_sequence` position and by gamez node index, and re-applies it to a later mission of that chapter through `AnimRuntime.CarryState`, silently: the pool reads destroyed at HP 0 (or the carried HP at its damage stage) and the nodes take the pose the death ends in, with no effect, sound or choreography, so a later hit on a carried kill is a no-op. `Through`/`ApplyTo` take the position of the most recent EARLIER mission of the chapter (`CampaignSequence.PreviousInSameChapter`, which `CampaignDirector` resolves once at construction) and carry only what positions at or before it captured. ⚠ Never fold a chapter without that cut, and never route the replay through `DamageAt`: the first opens a mission on its own previous sortie's wreckage (CM07 is chapter 1's first mission, so its fort came up with the AA guns already dead and silent), the second runs the previous mission's death choreography at mission open. A state stored without a position is an older profile's and belongs to whatever earlier mission wrote it. Persistence is read from the READER def bound to a node, never from the compiled twin, which drops the flag. Regression: the `carried-state-silent`, `campaign-persistence` and `c1-aa-guns` suites.
 - `src/Session/CampaignLoadout.cs` — the bridge between a profile's stored picks and a flying aircraft's fit: one `OwnedPlane`'s ammunition indices and ordnance table indices as the `LoadoutChoice` a launch hands the session, which `Loadout.Bind` then lays over the aircraft's base fit. Engine-free, and both encodings are the campaign screens' own rather than the original's per-pylon ordnance id, which is a rocket table index decoded in `docs/formats/saved-games.md` and deliberately not adopted here, so an unset pylon is left to the base rather than written back. ⚠ `PylonRow` is the one decoder of the stored one-based ordnance value, and every screen that reads the field calls it rather than subtracting one itself; a second reading of the field puts a different rocket on the flight check than the ammo screen just committed.
 - `src/Session/ObjectiveScript.cs` — one mission's parsed `objectives.zrd`: the file-level keys and the contiguous `OBJECTIVEn` blocks in the typed shape the graph runs, found by exact name so every shipped misspelling lands in no field and stays dead. Decode: `docs/formats/objectives.md`.
 - `src/Session/ObjectiveGraph.cs` — the objectives runtime, engine-free: the four-state machine per objective, the rotating one-completion-per-tick scan, the chaining executor with its already-awake truncation, the nap that clears a completed flag, the condition families' OR, the mission countdown, the win/loss flags and the display rows D33 reads. Reaches the world only through `IObjectiveWorld`.
@@ -985,7 +985,13 @@ deferred until range; range-triggered and explicit mission-trigger calls (`PlayM
 `landings.zrd` rows and the objective script's `WAKE_ANIM`) may then lazily build their
 library-root callees, and an add-child may do the same for an explicitly named child — except where
 the call's own `AT_NODE` site IS the callee's root node, which names the node to run on rather than
-asking for a copy. `IndexSpawnedVehicle` is the other half of that resolution: it makes one live
+asking for a copy. The authored site is passed on to the pool only when the call actually names
+one, so a site-less call keeps one copy per anchor and reaches no staged actor at all
+(`Mech3/WorldSession.cs` has why CM07's hangar drop needs that). The mission-trigger right is remembered as the started definition's whole call
+closure, not as a call-stack depth: a cutscene's later beats run off delayed sequence events seconds
+after the trigger's own dispatch has returned (CM02's crew is thrown out fourteen seconds in) and
+instance their library roots exactly as the beats inside it do. `MissionTriggerOwner`, called at the
+top of the same method, is the cutscene trigger slot; `Session/CutsceneController.cs` has it. `IndexSpawnedVehicle` is the other half of that resolution: it makes one live
 aircraft answer for the gamez library-root vehicle node its roster block was spawned from, by name
 and compiled index, which is what a cutscene posed `AT_NODE` that vehicle needs
 (`Mech3/RosterMarkers.cs` is the caller). It also keeps three things beside that rig which the
@@ -2361,6 +2367,15 @@ its only neighbour and shuttling the route forever (`BL-529`, `docs/formats/miss
 Pinned by `AiNetFollowerTests` + the `ai-net-follow` suite.
 `ArrivedNode` is the danger-zone report: the node the last `Update` reached and stepped past,
 which `AiPilot` reads for its tag, never the node being flown toward.
+`Reseat` is the original's activation snap (`FUN_004b0f40` into `FUN_00432010`): an Instant Action
+wave member ticks while it is inert, presence being no sim gate, so without it the member's first
+update latches a node near its parking pose and it flies back there after the teleport (`BL-364`).
+It optionally names an edge the next seat pick must refuse, which is how the danger-zone
+exit continues the course: the original's exit (`FUN_00490590`) hands `FUN_00431e40` the edge id
+the walk was on when the run began, so a racer set down by the ribbon beside its own entry node
+cannot fly that leg again and re-lock the zone it just flew (`BL-615`). An undirected neighbour
+list says the same thing by naming the edge's far end; the exclusion is spent on the seat it
+applies to.
 
 ## src/Flight/DangerZoneRibbon.cs
 The decoded danger-zone run (`docs/org/aiPilot.md` "The danger-zone run"), engine-free:
@@ -4601,6 +4616,23 @@ CM07's `carney_pickup_parent`). It is built `TopLevel` — see docs/org/objectMo
 mission that plays a cutscene, because a mid-mission definition poses the flown aeroplane on the
 same `player` marker an intro does and with no stage the pilot is held undrawn for the whole
 sequence. The archive is opened nowhere else in this build, so no other session pays for it.
+`Options.TriggerOwner` is installed on the runtime beside the callback host, and the opening
+cutscene's own name is handed to it directly before the bind, since that definition starts inside
+the start-list walk rather than through a trigger call (`BootstrapCutsceneOf`).
+`ResolveLibraryRoot` is the lazy pool behind a mission or death call that names a library root:
+copies are keyed on the caller's anchor AND on the authored call EVENT, so one definition calling
+the same actor several times from one anchor gets a copy each, which is what instance identity
+being `(def, anchor)` requires. Membership is the gamez's own parentless-root rule plus the one
+staged actor the chapter gamez has no record of at all, `AircraftStage`'s `chuteman`: the staged
+subtree is the first copy and further copies are duplicates of it, since the aircraft archive is
+closed by then. CM02's crew bailing out is the whole of that case, three calls one second apart at
+the same authored offset off the wing-walk frame; sizes are in `data/effect_pools.json`.
+That staged actor is served to a call that NAMES a site and to no other. A copy is relocated onto
+its call's site, and the figure's own script poses its children in world coordinates, so a call
+naming no site (CM07's hangar drop calls `hdchute1` with no `AT_NODE` at all) has to keep driving
+the actor where the stage put it: pooled there, the parachutist descends kilometres off the hangar
+and the twin leg's call takes a second copy nothing animates. A gamez library root keeps the older
+rule, its placement being the call anchor either way.
 
 ## src/Mech3/AircraftStage.cs
 The aircraft-archive subtrees a story-mission intro, a chuteman-carrying drop cutscene or a
@@ -5403,6 +5435,14 @@ an already-awake target, which TRUNCATES the rest of the caller's wake list;
 `NAP_OBJECTIVE_WHEN_I_COMPLETE` clearing the target's completed flag as the only re-run path;
 condition families OR-ing together with a conditionless objective completing on its first eligible
 tick; and `DANGER_ZONES_COMPLETED` counting only zones flagged while the objective was awake.
+`NotifyDockingComplete` is the one ending that comes from outside the script: callback 13, raised by
+the docking animation itself, which the original answers with the call its objectives runtime makes
+when a primary completes and then the mission-end path, in the same breath and with NO wrap-up, so
+the debrief opens on the frame the film raises the code. Where a mission also authors an
+`ANIM_STATE ... EXECUTED` objective over the same definition (C3/M05's `OBJECTIVE19`), the code
+always gets there first: it is raised by that definition's last sequence, so the definition is
+still `RUNNING` when it lands and the objective's `INSTANTWIN` arrives to an ended mission and does
+nothing. `Session/CutsceneController.cs` raises it.
 The world seam is `IObjectiveWorld`: a method returning `null` means "this engine cannot answer",
 which makes the family report FALSE and bumps `UnresolvedConditions` rather than guess — ⚠ reading
 an empty world as "the group is wiped out" would win missions on the first tick.
@@ -5439,8 +5479,14 @@ called from BOTH of `GameSession`'s drive paths. Every graph transition is one
 through `Log.Info`, so the file sink carries the chain a sortie report is about. Mission end records the attempt through
 `CampaignProgression`, merges `CampaignPersistLog.Capture` into the profile, saves it, writes any
 aircraft award's build into `CustomPlaneStore` (`SaveAwardedBuilds`, which is where the cabin's
-launch looks a plane's fit up by name), and raises
-`ReturnToCabin` plus `MissionEnded` for the session layer; the cabin screen itself is C22's.
+launch looks a plane's fit up by name), and starts the LEAVING HOLD; `ReturnToCabin` and
+`MissionEnded` come at the far end of it, `LeavingHoldS` (2 s) later, and the cabin screen itself
+is C22's. The hold is the original's `FUN_00443090`, which records the result and then pushes its
+"Fade State" over a copy of the frame the ending landed on for that fade's default 2 s before the
+next screen takes the state machine: the world is not advanced and the stick is not read while it
+runs, so the last flown frame is the frame the ending landed on. `Leaving` says the hold is
+running; `GameSession` reads it in BOTH drive paths ahead of everything else, holds `GameClock`'s
+sim on the realtime one, and steps nothing but the director until it expires.
 Which directives reach the engine today: `INACTIVEn` (node visibility, the decoded active bit),
 `ANIM_STATE` (`AnimRuntime.AnimStateOf`), both forms of `TRAVELERS` (the node form against
 `ListenerPosition`/a named node; the group form tallying the spawned roster's live, non-inert
@@ -5617,10 +5663,25 @@ whatever the swap hid then leaves the parked list, since 913 parks that aircraft
 and 914 would otherwise put it back.
 A swap sets the cutscene flags 11 and 2 set between them, and clears nothing: the definition
 ending is what gives the player flight back, now in the new airframe.
-Which definition the episode belongs to is the original's landings slot, not the raiser of the
-first code: `LandingApproachRuntime` calls `Own` with the row's definition BEFORE starting it, and
-the episode ends when that definition has ended AND no code-authoring definition in its call
-closure (seeded at the start, plus whatever actually raised a code) is still running. Both halves
+Which definition the episode belongs to is the original's trigger slot, not the raiser of the
+first code: the slot is written with the started definition BEFORE it starts, and the episode ends
+when that definition has ended AND no code-authoring definition in its call
+closure (seeded at the start, plus whatever actually raised a code) is still running.
+The slot is written on every path that starts a definition, not just the landings one:
+`AnimRuntime.MissionTriggerOwner` is called from `PlayMissionTrigger` itself, so the approach rows,
+the objective script's `WAKE_ANIM` and the ladder switch all book it, and `WorldSession` hands the
+opening cutscene's own name to the same seam before the bind, since the intro starts inside the
+start-list walk rather than through a trigger call. `Own` declines a definition whose call closure
+authors no `CALLBACK`: an ordinary `WAKE_ANIM` goes through the same call, and a slot it claimed
+would outrank the real raiser of the next episode while it was still running. C5/M02's ending is
+the shipped objective-path case (`nypd_southward` raises nothing and calls `nypd_player`, which
+raises 11, 2 and then 13); no shipped `WAKE_ANIM` target reaches more than one code-authoring
+definition, so the multi-raiser shape exists on the landings path alone.
+Code 13 is the mission-completion code, and the only ending a mission that finishes on a
+zeppelin's hook has: nothing in the shipped objective data completes on a landing. It reaches
+`ObjectiveGraph.NotifyDockingComplete` through the `MissionComplete` seam, which wins the mission on
+the ordinary wrap-up. Twenty missions' `hooked_to_klondike` and two mission-ending drop definitions
+raise it. Both halves
 come from CM06's docking, whose row definition raises nothing itself, calls the hookup that raises
 the first codes and ends with the aeroplane still hung, and calls the unhook last with a trailing
 `WAIT_FOR_COMPLETION` that holds no runner open (`docs/org/sequences.md`), so the row ends 2.6 s
@@ -5635,6 +5696,16 @@ the codes are recorded once), which is where a definition's authored calls and c
 CM07's hangar drop clears its objective node through a `CALL_ANIMATION` there and nowhere else. It
 also retracts the bars, returns `camera1` to the runtime's world root (a definition composes itself by
 reparenting it) and parks it at the origin, which other definitions pose against.
+The staged `player` marker goes home the same way, and for the same reason: a definition that poses
+it reparents it (CM07's train pickup leaves it under `caboose`, C1C/M01's docking under
+`pzhookpoint`), and CSVM has a node to strand where the original has none, its `player` being the
+flown vehicle itself and a pose written there a world pose. A marker left on another node's frame
+makes the NEXT episode pose the flown aeroplane in that frame: CM07's hangar drop then rides the
+moving train's coordinates instead of the hangar's, so the aeroplane is nowhere near the shot and
+the 951 flies the pilot out kilometres from the doors. The marker is returned AFTER the restore
+codes, since the 951 above reads the pose the ending definition left it in. ⚠ A suite that measures
+the handed-back aeroplane against the marker has to remember the pose from the last playing frame,
+not read the marker on the frame after: by then it is home at the origin.
 A re-placement (951) the ending definition authors in that same `RESET_STATE` is raised at the
 handoff too, ahead of the restore codes, since the reset walk suppresses callbacks: CM07's hangar
 drop leaves the pilot on the lift in front of the open doors rather than back on the approach. The
@@ -5743,7 +5814,9 @@ hook returning null (the wave has nothing parked left) is accounted exactly like
 ## src/Session/ZeppelinRuntime.cs
 Runs a mission's zeppelins (M4 F17 motion + F18 damage + F19 broadside, behind
 `--zeppelins`): each
-`ZeppelinDef` whose world node and net resolve gets a `ZeppelinMotion` on B5's `AiNetFollower`
+`ZeppelinDef` whose world node and net resolve has its hull node switched ON (the record is the
+activation: C2 ships `piratezep` with its gamez active bit clear and no mission `.gw` sets it back,
+so without this CM13 docks with a Pandora nothing draws), gets a `ZeppelinMotion` on B5's `AiNetFollower`
 (arrival radius widened per record to clear the turning circle, and the only follower that
 observes stop points), is placed at its authored
 position/yaw/pitch, and the NODE is flown kinematically — no FlightController.

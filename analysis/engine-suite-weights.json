@@ -44,6 +44,7 @@
     "inert-aircraft": 0.706,
     "world-turrets": 3.428,
     "turret-self-fire": 4.2,
+    "c1-aa-guns": 4.2,
     "mission-off-turrets": 2.81,
     "carried-turrets": 0.646,
     "graze-bounce": 0.774,
@@ -62,6 +63,7 @@
     "zeppelin-damage": 3.190,
     "zeppelin-broadside": 3.427,
     "zeppelin-cannon-burnout": 8.890,
+    "zeppelin-hull-activation": 2.800,
     "damage-stages": 0.067,
     "damage-hd": 1.089,
     "stop-sequence": 0.014,
@@ -182,6 +184,9 @@
     "perf-hud-layout": 0.009,
     "campaign-briefing-note": 0.161,
     "campaign-capture-group": 5.66,
+    "campaign-capture-chutes": 4.6,
+    "landings-balmoral-dock": 5.41,
+    "campaign-cutscene-ownership": 10.93,
     "airframe-hull-coverage": 3.109
   }
 }

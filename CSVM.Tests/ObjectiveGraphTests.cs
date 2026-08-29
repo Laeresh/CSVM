@@ -193,6 +193,22 @@ public class ObjectiveGraphTests
     }
 
     [Fact]
+    public void The_dockings_completion_code_ends_the_mission_with_no_wrap_up_and_only_once()
+    {
+        var (graph, _) = Build("\"OBJECTIVE1\",[\"INACTIVE1\",[\"never\"]]");
+        int ended = 0;
+        graph.MissionEnded += _ => ended++;
+        Assert.True(graph.NotifyDockingComplete());
+        graph.Step(1f / 60f);
+        Assert.Equal(MissionOutcome.Won, graph.Outcome);
+        Assert.Equal(1, ended);
+        Assert.False(graph.NotifyDockingComplete());
+        graph.Step(3f);
+        Assert.Equal(MissionOutcome.Won, graph.Outcome);
+        Assert.Equal(1, ended);
+    }
+
+    [Fact]
     public void Identity_rows_are_one_per_unique_priority_and_bit_zero_is_the_primary()
     {
         var (graph, _) = Build(

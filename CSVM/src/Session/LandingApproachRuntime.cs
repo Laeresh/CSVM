@@ -55,6 +55,10 @@ public sealed partial class LandingApproachRuntime : Node
     {
         _runtime = runtime;
         _cutscene = cutscene;
+        // The trigger slot, on the runtime rather than on this class: every path that starts a
+        // definition writes it, and a suite that binds a trigger onto a bare world runtime gets the
+        // same wiring a session's world build gives it.
+        runtime.MissionTriggerOwner = cutscene.Own;
         _player = player;
         _bound.Clear();
         _approaches.Clear();
@@ -166,12 +170,9 @@ public sealed partial class LandingApproachRuntime : Node
 
     // Starts the row's definition. The cutscene host is already registered for every definition
     // this chapter's table can reach, which is where the original's per-instance registration
-    // lands (CutsceneController.HostDefinitions).
+    // lands (CutsceneController.HostDefinitions), and the trigger call writes the slot itself.
     private void Start(LandingApproach approach)
     {
-        // The slot is written BEFORE the start: a callee raising the first code inside this very
-        // dispatch would otherwise become the episode, and end it with the aeroplane still hung.
-        _cutscene!.Own(approach.Anim);
         int started = _runtime!.PlayMissionTrigger(approach.Anim).Count;
         LastStarted = approach.Anim;
         GD.Print($"landings: '{approach.Node}' flown, started '{approach.Anim}' " +

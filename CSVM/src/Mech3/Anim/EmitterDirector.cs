@@ -83,12 +83,14 @@ public sealed class EmitterDirector
             foreach (var (key, entry) in _emitters)
             {
                 bool valid = entry.Emitter.IsValid;
+                bool hostAlive = GodotObject.IsInstanceValid(key.Node);
                 rows.Add(new EmitterCensusRow(
                     key.Name,
-                    GodotObject.IsInstanceValid(key.Node) ? AnimRuntime.NameOf(key.Node) : "?",
+                    hostAlive ? AnimRuntime.NameOf(key.Node) : "?",
                     entry.Def.AnimName ?? entry.Def.Name,
                     Emitting(entry.Emitter),
-                    valid ? entry.Emitter.LiveCount : 0));
+                    valid ? entry.Emitter.LiveCount : 0,
+                    hostAlive ? key.Node : null));
             }
             return rows;
         }

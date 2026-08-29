@@ -30,10 +30,24 @@ public sealed class CampaignDirector
     /// <see cref="WingmanFit"/> as.</summary>
     public const string WingmanName = "wingman_1";
 
+    /// <summary>How long the world stays up after an ending before the session leaves it. The
+    /// original's mission-end path (<c>FUN_00443090</c>) pushes its "Fade State" over a copy of the
+    /// frame the ending landed on and runs it for this, its default duration, before the next
+    /// screen takes the machine (docs/formats/objectives.md, "Win and loss"). The flown world does
+    /// not advance and does not answer the stick while it plays out, so the last flown frame is the
+    /// frame the ending landed on.</summary>
+    public const float LeavingHoldS = 2f;
+
     private readonly CampaignProfileDef _profile;
     private readonly CampaignProfileStore? _store;
     private readonly CampaignMission _mission;
     private readonly string _missionZrdrPath;
+
+    // The story position whose world state this mission opens on: the most recent EARLIER mission
+    // of the same chapter, or null when this IS that chapter's first and the original's backwards
+    // walk finds nothing. ⚠ Never the mission's own seq: CM07 is chapter 1's first mission, and a
+    // fold that included it opened the fort with the previous sortie's AA guns already wrecked.
+    private readonly int? _carryThroughSeq;
     private readonly HashSet<string> _gapsLogged = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FlightController> _roster = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
@@ -52,6 +66,9 @@ public sealed class CampaignDirector
     private DangerZoneRibbons? _ribbons;
     private bool _cutsceneHold;
 
+    // What is left of the leaving hold below, once an ending has started it.
+    private float _leaving;
+
     // The proximity scan's accumulator and the player aircraft the damage and death events are
     // subscribed on: the player's aircraft is built after Attach runs, so the hookup is made on
     // the first step that finds one, and an airframe swap rebuilds the rig, so a later step that
@@ -63,13 +80,15 @@ public sealed class CampaignDirector
 
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
-        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath)
+        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath,
+        int? carryThroughSeq)
     {
         Script = script;
         _mission = mission;
         _profile = profile;
         _store = store;
         _missionZrdrPath = missionZrdrPath;
+        _carryThroughSeq = carryThroughSeq;
     }
 
     /// <summary>The authored-aircraft spawner, handed in as a delegate for the same reason
@@ -125,7 +144,14 @@ public sealed class CampaignDirector
     /// to leave the world and put the player back in the cabin. The cabin screen itself is C22's.</summary>
     public bool ReturnToCabin { get; private set; }
 
-    /// <summary>The result of the flown mission, null until it ends.</summary>
+    /// <summary>Whether the mission has ended and the leaving hold is still running. The outcome is
+    /// already decided and the profile already written; what has not happened yet is leaving the
+    /// world. Nothing in the world may advance while this is true, and no input may reach the
+    /// player's aircraft.</summary>
+    public bool Leaving => _leaving > 0f;
+
+    /// <summary>The result of the flown mission, null until it ends. Set on the frame the ending
+    /// lands, which is <see cref="LeavingHoldS"/> before <see cref="ReturnToCabin"/>.</summary>
     public CampaignMissionResult? Result { get; private set; }
 
     /// <summary>How many danger-zone gates <see cref="Attach"/> armed from a real
@@ -180,7 +206,8 @@ public sealed class CampaignDirector
         var script = ObjectiveScript.Load(missionZrdrPath);
         GD.Print($"campaign: '{profile.Name}' flying {mission.ChapterFolder}/{mission.MissionFolder}, " +
                  $"{script.Objectives.Count} objective(s)");
-        var director = new CampaignDirector(script, mission, profile, store, missionZrdrPath);
+        var director = new CampaignDirector(script, mission, profile, store, missionZrdrPath,
+            CampaignSequence.PreviousInSameChapter(CampaignSequence.Load(zrdrPath), seq)?.Seq);
         director.BindWingman();
         return director;
     }
@@ -191,8 +218,9 @@ public sealed class CampaignDirector
     /// disable list); omitted, nothing is disabled.</summary>
     internal static CampaignDirector Create(
         ObjectiveScript script, CampaignMission mission,
-        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath = "") =>
-        new(script, mission, profile, store, missionZrdrPath);
+        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath = "",
+        int? carryThroughSeq = null) =>
+        new(script, mission, profile, store, missionZrdrPath, carryThroughSeq);
 
     /// <summary>The roster phase: spawns every non-player block of the mission's <c>aiv</c>
     /// roster, at the point of <c>GameSession</c>'s build where the human rigs exist. The plan is
@@ -371,7 +399,9 @@ public sealed class CampaignDirector
                 pilot.DangerZones = _ribbons;
         }
         int chapter = _mission.Campaign;
-        int applied = inputs.Runtime != null ? _profile.PersistLog.ApplyTo(inputs.Runtime, chapter) : 0;
+        int applied = inputs.Runtime != null
+            ? _profile.PersistLog.ApplyTo(inputs.Runtime, chapter, _carryThroughSeq)
+            : 0;
         GD.Print($"campaign: {Graph.Count} objective(s) armed, {Graph.Rows.Count} display row(s), " +
                  $"{applied} object(s) restored from the chapter {chapter} persist log" +
                  (_dangerZones is { } dz ? $", {dz.Count} danger zone(s) armed" : ""));
@@ -383,6 +413,20 @@ public sealed class CampaignDirector
     /// cutscene hold nothing advances, which is callback 20's objectives half.</summary>
     internal void Step(float dt)
     {
+        // ⚠ Before the cutscene hold, and before anything else: the ending that started the leaving
+        // hold usually lands under a cutscene that is still running, and the hold has to run down
+        // regardless of what is holding the world.
+        if (_leaving > 0f)
+        {
+            _leaving -= dt;
+            if (_leaving <= 0f)
+            {
+                Leave();
+            }
+
+            return;
+        }
+
         WirePlayerDeath();
         if (_cutsceneHold)
         {
@@ -612,18 +656,31 @@ public sealed class CampaignDirector
             plane?.Name ?? string.Empty);
         if (_world?.Runtime is { } runtime && CampaignPersistLog.CommitsOn(outcome))
         {
-            _profile.PersistLog.Merge(_mission.Campaign, CampaignPersistLog.Capture(runtime));
+            _profile.PersistLog.Merge(_mission.Campaign, _mission.Seq, CampaignPersistLog.Capture(runtime));
         }
 
         var recorded = CampaignProgression.Record(_profile, attempt);
         _store?.Save(_profile);
         SaveAwardedBuilds(recorded);
         Result = new CampaignMissionResult(outcome, attempt, recorded);
-        ReturnToCabin = true;
+        _leaving = LeavingHoldS;
         GD.Print($"campaign: mission {_mission.Ordinal} {outcome} — mask 0x{attempt.CompletedMask:x}, " +
                  $"{attempt.TimeMs / 1000}s, primary={recorded.PrimaryCompleted}, " +
-                 $"advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s)");
-        MissionEnded?.Invoke(Result.Value);
+                 $"advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s); " +
+                 $"holding the world {LeavingHoldS:0.#}s before leaving it");
+    }
+
+    // The far end of the leaving hold: the world has stood still for its length and the session may
+    // go. The original reaches here when its fade over the last flown frame has run out and the next
+    // screen takes the state machine.
+    private void Leave()
+    {
+        _leaving = 0f;
+        ReturnToCabin = true;
+        if (Result is { } result)
+        {
+            MissionEnded?.Invoke(result);
+        }
     }
 
     // An award is a whole aircraft in the original, not just an ownership row: its template record

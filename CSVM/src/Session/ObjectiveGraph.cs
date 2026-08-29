@@ -161,6 +161,15 @@ public readonly record struct ObjectiveRow(
 /// </summary>
 public sealed class ObjectiveGraph
 {
+    // The wrap-up the ordinary win takes before the debrief.
+    private const float WonWrapUpS = 3f;
+
+    // The docking's completion code takes none of it. The code's own case sets the won flag and
+    // calls the mission-end path in the same breath, never touching the wrap-up timer the objective
+    // endings run down, so the mission ends on the frame the film's last sequence raises it. What
+    // comes after that ending is the same for every ending, and is CampaignDirector's hold.
+    private const float DockingWrapUpS = 0f;
+
     private readonly ObjectiveScript _script;
     private readonly IObjectiveWorld _world;
     private readonly List<Live> _live = new();
@@ -318,6 +327,24 @@ public sealed class ObjectiveGraph
         Outcome = _pending == MissionOutcome.Won ? MissionOutcome.Won : MissionOutcome.Lost;
         _pending = Outcome;
         MissionEnded?.Invoke(Outcome);
+        return true;
+    }
+
+    /// <summary>The docking's own completion code, raised by the animation rather than by an
+    /// objective: the original answers it by setting the won flag and running the mission-end path
+    /// at once, with no wrap-up. It beats the <c>ANIM_STATE ... EXECUTED</c> objective watching the
+    /// same definition, which cannot read EXECUTED until the definition that raised the code has
+    /// ended (docs/formats/objectives.md, "Win and loss"). Answers whether this call ended the
+    /// mission.</summary>
+    public bool NotifyDockingComplete()
+    {
+        if (Ended || Ending)
+        {
+            return false;
+        }
+
+        PlayIfNamed(_script.ObjectivesWonSound);
+        End(MissionOutcome.Won, DockingWrapUpS);
         return true;
     }
 
@@ -863,7 +890,7 @@ public sealed class ObjectiveGraph
         if (AllFlaggedComplete(won: true))
         {
             PlayIfNamed(_script.ObjectivesWonSound);
-            End(MissionOutcome.Won, 3f);
+            End(MissionOutcome.Won, WonWrapUpS);
         }
         else if (AllFlaggedComplete(won: false))
         {

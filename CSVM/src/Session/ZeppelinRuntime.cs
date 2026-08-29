@@ -47,6 +47,15 @@ public sealed partial class ZeppelinRuntime : Node
                 GD.Print($"zep: '{def.Node}' skipped: world node unresolved");
                 continue;
             }
+            // ⚠ Do not drop this: a record is itself the hull's activation, so without it C2's
+            // Pandora is invisible under its own live docking hook (docs/formats/gamez.md).
+            // Dormancy is opacity, so a `deactivated` record may be activated here too.
+            if (!host.Visible)
+            {
+                GD.Print($"zep: '{def.Node}' hull switched on — its node was built inactive");
+            }
+
+            AnimRuntime.SetSubtreeActive(host, true);
             var net = AiNets.ByName(chapterNets, def.Net);
             if (net == null)
             {

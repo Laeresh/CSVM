@@ -843,6 +843,76 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
+- `BL-619` `[Task]` **The turret census and the `WAKEUP_TURRETS` arm are `GD.Print`, so a sortie log
+  cannot say whether a mission's emplacements woke.** *Evidence:* `BL-611` looked like a turret
+  defect for most of its investigation because the log reads identically whether the guns are alive
+  or dead: neither `turrets: N world emplacement(s) placed for <chapter>` nor `campaign:
+  WAKEUP_TURRETS armed N emplacement(s)` reaches the file sink. *Fix shape:* route both through
+  `Log.Info("flight", ...)` and add the per-gun alive and awake counts. *⚠ Traps:* `Log.Info` takes a
+  `FormattableString`, so fold each line into one interpolated string. *Cross-refs:* `Log.cs`'s
+  incremental migration note, `TurretController`, `BL-611`'s closing commit
+  (`git log --grep=BL-611`).
+
+- `BL-622` `[Feature]` **No debrief screen: a finished mission drops straight back to the cabin.**
+  *Evidence:* reported at the controls, on a won and on a lost mission alike. `CampaignDirector`
+  records the attempt, writes the profile and raises `ReturnToCabin`; `GameSession.
+  OnCampaignMissionEnded` prints one `GD.Print` and calls the launcher's return, which reopens the
+  launchscreen on the cabin, so nothing between the mission ending and the cabin exists. The
+  result the screen would show is already carried: `CampaignMissionResult` has the outcome, the
+  attempt, the recorded flags and the won mission's `CompletedMask`. *Fix shape:* a page in the
+  `CampaignFlow` board family (`CampaignCabinPage`, `CampaignPreviousMissionsPage` are the nearest
+  shapes) shown between the mission and the cabin, reading that result; the original's own debrief
+  layout, its per-objective lines and its scoring are undecoded and are the first job.
+  *⚠ Traps:* the world stays up for the rest of the frame after the end is raised, so the page
+  belongs to the launchscreen side, not the session's. *Cross-refs:* `CampaignFlow`,
+  `CampaignProgression`, `docs/formats/saved-games.md`, `BL-620`'s and `BL-623`'s closing commits
+  (`git log --grep=BL-620`); the held two seconds `BL-623` added are where this screen belongs.
+
+- `BL-621` `[Bug]` **CM07 (C1/M02): the parachutist is gone from the hangar drop since the chute
+  pool landed.** *Evidence:* reported at the controls; before `BL-608` the drop showed the pilot
+  parachuting into the hangar while the aeroplane was missing, and now the aeroplane is there and
+  the figure is not. `WorldSession`'s `ResolveLibraryRoot` serves `AircraftStage`'s staged
+  `chuteman` as pool copy 0 keyed on the call anchor and site, so a caller gets the staged actor
+  relocated to its authored site and later callers get duplicates; CM07's drop does not call the
+  figure at a site, `hdchute1` adopts it with `OBJECT_ADD_CHILD`. *Fix shape:* the placement kind
+  is the distinguishing rule, so let the pool serve the site-bearing call path alone and leave an
+  adoption's node where it is. *⚠ Traps:* CM02's three drifting chutes come from `ww_player`'s three
+  `ww_chuteman` calls and must keep their per-call copies (`campaign-capture-chutes`). *Cross-refs:*
+  `BL-608`'s closing commit (`git log --grep=BL-608`), `AircraftStage`, `docs/architecture.md`.
+
+- `BL-618` `[Bug]` **A compiled anim addressing a mech3ax `~n` dedup name resolves to nothing.**
+  *Evidence:* CM13's `pzhomebase` switches `land_on` and `land_on~2` on and neither of the
+  Pandora's two landing cones draws (`zeppelin-hull-activation`'s artifact records `cones 0/2`);
+  C2's gamez carries four `land_on` nodes, two under `piratezep`. The extraction renames the
+  second sibling `land_on~2` and the runtime's name resolver has no rule for the suffix, so the
+  bare name is ambiguous and the suffixed one matches nothing. *Fix shape:* resolve the suffix
+  scoped by the def's own node list, where `land_on` roots on `pz_manual_land` and `land_on~2` on
+  `pz_auto_land`. *⚠ Traps:* stripping `~n` and taking the first hit is wrong, the suffix identifies
+  which sibling. *Cross-refs:* `NameResolver`, `docs/formats/gamez.md`, `BL-616`'s closing commit
+  (`git log --grep=BL-616`).
+
+- `BL-612` `[Bug]` **CM09 (C1/M04): the frame rate falls under 60 for the rest of the mission once
+  the Promised Land is down and the next fighter squad spawns.** *Evidence:* reported at the
+  controls on the plan branch, and it is a sustained rate drop, not single hitches. The sortie
+  log's late `[perf] hitch` lines carry the shape in their baseline: 19 to 26 ms against 10 ms
+  earlier in the same sortie, with `script_ms` about 25 and `physics_ms` 17 to 18 while
+  `render_cpu_ms` stays near 1 and `gpu_ms` near 0.5, `nodes` about 37000 and `mem_mb` about 1300.
+  The frame is spent on the CPU in script and physics, not on the GPU. *Fix shape:* the hitch
+  detector reports outliers against a rolling baseline, so a whole-run slowdown reads only in that
+  baseline; measure the rate itself instead (a frame-time trace over the sortie, or the probe's
+  own timing), then attribute the script time with the sampler armed. Read whether the cost is the
+  zeppelin's death choreography left running (the burn, finisher and sink anims and their emitters
+  persist after the hull is down), the destroyed hull's colliders and debris still stepping, or the
+  new squad's rigs adding AI and physics on top; the node count says nothing was freed. Compare a
+  run that leaves the zeppelin alive. *⚠ Traps:* the hitch detector is opt-in (`RunTests.ps1 -Hitch`)
+  and answers a different question than this one; `attributed_ms` is 0 in these lines because the
+  sampler was not armed, so they name no culprit. CM13 (C2/M03) shows the same sustained drop and
+  is the likelier test case, since that mission spawns its whole field at the start and involves no
+  zeppelin death: if both share a cause it is the number of live aircraft, not the destruction
+  choreography, so measure CM13 first and treat CM09's zeppelin as the second variable.
+  *Cross-refs:* `HitchMonitor`, `Launcher`'s hitch tick, `BL-599`'s closing commit
+  (`git log --grep=BL-599`).
+
 - `BL-597` `[Bug]` **CM08 (C1B/M03): the Pandora does not halt exactly over the tanker and plays no
   hangar animation there.** *Evidence:* reported at the controls against the original: the Pandora
   holds level along Klondike1 now, but its armed stop lands short of or past the tanker, and the
@@ -2406,8 +2476,11 @@ usual.
   *Cross-refs:* `BL-256` is the adjacent snapshot work; `docs/PLAN-M5-campaign.md` Decision 3.
 
 - `BL-523` `[Bug]` **The AI's patrol/pursue/lay-off cycle does not match the original: CM05's
-  second patrol never pursues, and CM09's enemies fly up to 80 km away.** *Evidence:* two
-  symptoms of one mode machine, reported at the controls. In CM05 (C3/M04) the second enemy patrol
+  second patrol never pursues, CM07's friendly flights hold their net while enemies attack them,
+  and CM09's enemies fly up to 80 km away.** *Evidence:* three
+  symptoms of one mode machine, reported at the controls. In CM07 (C1/M02) friendly aircraft keep
+  flying their net instead of engaging enemies that are shooting at them, so the promotion gate is
+  wrong on the friendly side too, not only for the enemy patrol below. In CM05 (C3/M04) the second enemy patrol
   stays on its net around the Pandora with the player in range and never engages; in CM09 enemy
   aircraft leave the mission area and end up tens of kilometres out. `AiModeMachine` promotes
   `Patrol` to `Pursue` on its own gates (`AiModeMachine.cs:314`); a patrol that never leaves the

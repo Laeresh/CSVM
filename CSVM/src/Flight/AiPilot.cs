@@ -117,6 +117,10 @@ public sealed class AiPilot
     // The rail integrator of the run in progress, built at the lock and dropped at the exit.
     private DangerZoneRail? _rail;
 
+    // The net leg being flown when the run started, kept so the exit's re-seat can refuse it.
+    private int _zoneEntryLegFrom = -1;
+    private int _zoneEntryLegTo = -1;
+
     /// <summary>The danger-zone run in progress, from the approach through the rail to the exit;
     /// null between runs.</summary>
     public DangerZoneRun? ZoneRun { get; private set; }
@@ -520,6 +524,8 @@ public sealed class AiPilot
         }
         ZoneRun = new DangerZoneRun(ribbon, farEnd);
         _rail = null;
+        _zoneEntryLegFrom = Patrol?.LegStartIndex ?? -1;
+        _zoneEntryLegTo = Patrol?.CurrentIndex ?? -1;
         machine.Enter(AiMode.ApproachingDangerZone,
             $"'{ribbon.Name}' from its {(farEnd ? "far" : "near")} end, {pos.DistanceTo(ZoneRun.Point):0} m out");
     }
@@ -546,7 +552,8 @@ public sealed class AiPilot
     }
 
     // The rail (FUN_00490590): the pose comes off the integrator and the controls sit neutral;
-    // running off the ribbon hands the walk back to the net, re-seated where the run left it.
+    // running off the ribbon hands the walk back to the net, re-seated where the run left it and
+    // refused the leg it was flying at the entry, so the exit continues the course.
     private FlightInput FlyRail(FlightModel model, float dt, AiModeMachine machine)
     {
         var rail = _rail!;
@@ -561,7 +568,9 @@ public sealed class AiPilot
             rail.Run.Release();
             ZoneRun = null;
             _rail = null;
-            Patrol?.Reseat();
+            Patrol?.Reseat(_zoneEntryLegFrom, _zoneEntryLegTo);
+            _zoneEntryLegFrom = -1;
+            _zoneEntryLegTo = -1;
             machine.Enter(AiMode.Patrol, $"'{name}' flown, back to the net");
         }
         return new FlightInput { Throttle = Mathf.Clamp(Throttle, 0f, 1f) };

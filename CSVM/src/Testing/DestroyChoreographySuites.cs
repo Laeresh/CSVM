@@ -458,7 +458,8 @@ internal static class DestroyChoreographySuites
             float wornHp = worn.MaxHealth * 0.5f;
             const int chapter = 99;
             var log = new CampaignPersistLog();
-            log.Merge(chapter, new[]
+            const int earlierSeq = 3;   // an earlier mission of the same chapter recorded both
+            log.Merge(chapter, earlierSeq, new[]
             {
                 new PersistedObject((int)dead.Anchor.GetMeta(AnimRuntime.IndexMeta), dead.Def.Name, dead.Anchor.Name, true, 0f),
                 new PersistedObject((int)worn.Anchor.GetMeta(AnimRuntime.IndexMeta), worn.Def.Name, worn.Anchor.Name, false, wornHp),
@@ -474,7 +475,7 @@ internal static class DestroyChoreographySuites
             try
             {
                 Watch();
-                int applied = log.ApplyTo(runtime, chapter);
+                int applied = log.ApplyTo(runtime, chapter, earlierSeq + 1);
                 Unwatch();
                 for (int i = 0; i < 6; i++)
                 {

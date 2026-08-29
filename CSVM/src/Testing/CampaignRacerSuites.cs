@@ -10,18 +10,19 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>CM13's six racers over C2/M03's real world with its colliders up: spawned from the
-/// mission's own aiv roster, handed the world's dzpath ribbons by the director, they fly
-/// <c>dzpath1</c> and then <c>dzpath2</c> on rails off their net's tags and come back to the net
-/// without one of them ramming the dbase arch <c>dzpath2</c> threads at rail height.</summary>
+/// mission's own aiv roster, handed the world's dzpath ribbons by the director, they fly their
+/// net's seven tagged zones on rails in course order, each once, and come back to the net between
+/// them without one of them ramming the dbase arch <c>dzpath2</c> threads at rail height.</summary>
 internal static class CampaignRacerSuites
 {
     private const string Chapter = "C2";
     private const string Mission = "M03";
     private const float StepDt = 1f / 60f;
 
-    // The sortie log has every racer through dzpath2 inside 150 s of the spawn; the ceiling leaves
-    // room for the slower approach a collision world's ground blow gives the net legs.
-    private const float RunS = 240f;
+    // The sortie log has every racer round the whole seven-zone course inside 210 s of the spawn;
+    // the ceiling leaves room for the slower approach a collision world's ground blow gives the
+    // net legs, and the loop breaks as soon as the last racer is home.
+    private const float RunS = 420f;
 
     private const float LeaderThrottle = 0.3f;
     private const float LeaderSpeedMps = 55f;
@@ -31,7 +32,13 @@ internal static class CampaignRacerSuites
         "hafury_1", "hafury_2", "hafury_3", "hafury_4", "hafury_5", "hafury_6",
     };
 
-    private static readonly string[] Course = { "dzpath1", "dzpath2" };
+    // The seven tagged nodes of C2's M3StuntCourse in walk order, out of the mission's thirteen
+    // zones. Flying the whole course is what proves a finished run hands the walk ONWARD instead
+    // of back into the zone it just flew.
+    private static readonly string[] Course =
+    {
+        "dzpath1", "dzpath2", "dzpath3", "dzpath10", "dzpath6", "dzpath7", "dzpath9",
+    };
 
     internal static void CampaignRacers(TestContext ctx)
     {
@@ -152,7 +159,7 @@ internal static class CampaignRacerSuites
         });
 
         ctx.WriteArtifact($"test-campaign-racers-{Chapter}-{Mission}.txt", report.ToString());
-        ctx.Note($"flew {Chapter}/{Mission}'s six racers through dzpath1 and dzpath2 with the world's colliders up");
+        ctx.Note($"flew {Chapter}/{Mission}'s six racers through {string.Join(", ", Course)} with the world's colliders up");
     }
 
     // The flown run: every racer's rail runs are followed through the pilot's ZoneRun, a run
@@ -160,12 +167,12 @@ internal static class CampaignRacerSuites
     private static void Fly(TestContext ctx, List<FlightController> racers, List<FlightController> rigs,
         ProjectilePool live, CampaignDirector director, AnimRuntime runtime, StringBuilder report)
     {
-        var flown = new Dictionary<FlightController, HashSet<string>>();
+        var flown = new Dictionary<FlightController, List<string>>();
         var onRail = new Dictionary<FlightController, string?>();
         var crashedAt = new Dictionary<FlightController, string>();
         foreach (var racer in racers)
         {
-            flown[racer] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            flown[racer] = new List<string>();
             onRail[racer] = null;
         }
 
@@ -223,12 +230,31 @@ internal static class CampaignRacerSuites
 
         foreach (var racer in racers)
         {
+            var runs = flown[racer];
+            report.AppendLine($"{racer.Name} ran {string.Join(" -> ", runs)}");
             ctx.Check(!crashedAt.ContainsKey(racer),
                 $"{racer.Name} never rammed anything ({(crashedAt.TryGetValue(racer, out var where) ? where : "in play")})");
             foreach (var zone in Course)
             {
-                ctx.Check(flown[racer].Contains(zone), $"{racer.Name} flew '{zone}' end to end and returned to its net");
+                ctx.Check(runs.Contains(zone), $"{racer.Name} flew '{zone}' end to end and returned to its net");
             }
+
+            // The course order is the net's tag order, and no zone is flown twice: a finished run
+            // hands the walk onward, so the racer leaves each zone for the next instead of
+            // circling back into the one it just flew.
+            int at = 0;
+            var seen = new List<string>();
+            foreach (string run in runs)
+            {
+                if (at < Course.Length && run.Equals(Course[at], StringComparison.OrdinalIgnoreCase))
+                {
+                    at++;
+                }
+                ctx.Check(!seen.Contains(run), $"{racer.Name} flew '{run}' once, not again after leaving it");
+                seen.Add(run);
+            }
+            ctx.Same(Course.Length, Mathf.Min(at, Course.Length),
+                $"{racer.Name} took the tagged zones in the net's own order");
         }
     }
 

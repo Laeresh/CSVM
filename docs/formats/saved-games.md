@@ -328,6 +328,12 @@ backwards for the most recent earlier entry **in the same chapter** and loads th
 running animations, turret state and world state into the new mission. Turret sections are 280
 bytes, `AnimActivation` sections are 88, 328, 568, 628 or 700 bytes depending on the definition.
 
+**The walk starts strictly before the mission being opened**, so a mission never loads its own
+`Mission.NNN`: re-flying one opens on the world the mission before it left, and re-flying a
+chapter's FIRST mission (`FUN_0046b7e0` returns nothing) opens on the bootstrap alone. Chapter 1's
+first mission is `seq` 6, `c1/m02`, whose fort would otherwise come up with the AA guns the last
+sortie shot down.
+
 **The per-section payloads are not decoded.** Only the container, the section names and the
 per-owner section lengths are established here.
 

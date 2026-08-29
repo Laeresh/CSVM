@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -126,7 +127,7 @@ internal static class CampaignSuites
             ctx.Check(CampaignPersistLog.CommitsOn(MissionOutcome.Won)
                 && !CampaignPersistLog.CommitsOn(MissionOutcome.Lost),
                 $"only a won mission commits its capture to the log");
-            profile.PersistLog.Merge(chapter, captured);
+            profile.PersistLog.Merge(chapter, earlier.Seq, captured);
             store.Save(profile);
         });
 
@@ -164,7 +165,7 @@ internal static class CampaignSuites
             int applied;
             try
             {
-                applied = reloaded!.PersistLog.ApplyTo(world.Runtime, chapter);
+                applied = reloaded!.PersistLog.ApplyTo(world.Runtime, chapter, earlier.Seq);
                 foreach (int node in carried)
                 {
                     if (nodes.TryGetValue(node, out var anchor) && Live(registry, anchor) is { } live)
@@ -201,6 +202,11 @@ internal static class CampaignSuites
 
             ctx.Same(0, reloaded.PersistLog.For(chapter == 1 ? 2 : 1).Count,
                 $"nothing leaks into another chapter's log");
+            // The backwards walk never reaches the capturing mission itself, so re-flying it opens
+            // on the world its own previous sortie never touched.
+            var ownReplay = CampaignSequence.PreviousInSameChapter(missions, earlier.Seq)?.Seq;
+            ctx.Same(0, reloaded.PersistLog.Through(chapter, ownReplay).Count,
+                $"re-flying {earlier.MissionFolder} carries none of its own wreckage (through seq {ownReplay?.ToString(CultureInfo.InvariantCulture) ?? "none"})");
         });
 
         ctx.WriteArtifact($"test-campaign-persistence-{ctx.Chapter}.txt", report.ToString());
@@ -308,6 +314,10 @@ internal static class CampaignSuites
             ctx.Check(winner > 0, $"the mission authors an INSTANTWIN objective");
             graph.Wake(winner);
             Advance(graph, 2f);
+            ctx.Check(director.Result != null, $"the mission ended and banked its result");
+            ctx.Check(!director.ReturnToCabin,
+                $"but has not left the world yet: the leaving hold runs first");
+            Advance(director, CampaignDirector.LeavingHoldS + 0.2f);
             ctx.Check(director.ReturnToCabin, $"the mission end raised the return-to-cabin exit");
             var result = director.Result!.Value;
             ctx.Check(result.Outcome == MissionOutcome.Won, $"the outcome is the graph's own");
@@ -909,6 +919,16 @@ internal static class CampaignSuites
         for (float t = 0f; t < seconds; t += 0.1f)
         {
             graph.Step(0.1f);
+        }
+    }
+
+    // The same walk through the director rather than the graph, which is what an ended mission's
+    // leaving hold counts down on.
+    private static void Advance(CampaignDirector director, float seconds)
+    {
+        for (float t = 0f; t < seconds; t += 0.1f)
+        {
+            director.Step(0.1f);
         }
     }
 

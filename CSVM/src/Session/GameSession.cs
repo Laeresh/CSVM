@@ -538,6 +538,10 @@ public partial class GameSession : Node3D
                 if (_cutscene != null)
                 {
                     _cutscene.SwapAirframe = SwapPlayerAirframe;
+                    // The docking's own ending. Instant Action has no objectives graph to complete,
+                    // and its rows never raise the code, so an unbound seam is the right answer
+                    // there rather than a guarded one here.
+                    _cutscene.MissionComplete = () => _campaign?.Graph?.NotifyDockingComplete();
                 }
             }
             ApplyDestroyOverride(state);
@@ -713,6 +717,20 @@ public partial class GameSession : Node3D
     /// </summary>
     public override void _PhysicsProcess(double delta)
     {
+        // ⚠ Ahead of the clock and the simulation step, which it outranks: an ended mission's
+        // world stands still until the session goes (CampaignDirector.LeavingHoldS). On the
+        // frame's own delta, since the sim clock it halts yields none.
+        if (_campaign is { Leaving: true } leaving)
+        {
+            if (_clock != null)
+            {
+                _clock.SimHeld = true;
+            }
+
+            leaving.Step((float)delta);
+            return;
+        }
+
         if (delta <= 0.0 || _clock is not { ParentDriven: false })
             return;
         _simulation?.Step((float)delta);
@@ -1006,6 +1024,7 @@ public partial class GameSession : Node3D
                 LandingTriggers = _landings != null,
                 PlanesGamezPath = state.PlanesGamezPath,
                 CallbackHost = _cutscene != null ? _cutscene.Host : null,
+                TriggerOwner = _cutscene != null ? _cutscene.Own : null,
                 // The weather rig is built after the world, and the intro's fog fires inside the
                 // bootstrap, so the event is held until the rig has applied its zone.
                 FogStateSink = fog =>
@@ -3259,6 +3278,18 @@ public partial class GameSession : Node3D
     // outer-frame input injection; each clock substep below enters the same module as realtime.
     private void DriveParentSimulation(GameClock clock)
     {
+        // The leaving hold, the stepped path's half of the guard in _PhysicsProcess: an ended
+        // mission's world stands still until the session goes, so the only thing this drive still
+        // advances is the hold itself.
+        if (_campaign is { Leaving: true } leaving)
+        {
+            for (int i = 0; i < clock.Steps; i++)
+            {
+                leaving.Step(clock.Dt);
+            }
+
+            return;
+        }
         // --crash[=frame]: force every player's crash rig at a fixed sim frame, the only headless
         // trigger for a crash a live collision otherwise gates. Spawned AI planes crash too, while
         // an inert one declines, since DebugForceCrash is gated on InPlay.

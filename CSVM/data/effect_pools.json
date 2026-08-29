@@ -129,6 +129,10 @@
     "facdsticks": {
       "base": 6,
       "why": "C2's facade panels (fcpan01-39) each CALL_ANIMATION facade_parts, whose template facdsticks ships as exactly ONE gamez record — no authored duplicate count to read off. The original's own parallel debris (2026-08-04: several broken panels' four-log sets airborne at once) proves it clones the template at runtime, a count this format cannot supply. 6 is TUNE, not measured: a facade row at flight speed breaks panels roughly 0.2-0.5 s apart with each set's flight lasting 4-5 s, so a row of 8-10 panels can have 8-10 sets in the air; 6 covers most flight-through passes without recycling, at the cost of eventually wrapping (evicting the oldest still-flying set) on a longer burst."
+    },
+    "chuteman": {
+      "base": 3,
+      "why": "The parachutist, staged out of the aircraft archive rather than the chapter gamez (AircraftStage). This one is an AUTHORED CALL-SITE count, not a tune: CM02's ww_player calls ww_chuteman three times from wingwalk_parent, one second apart, at the same AT_NODE offset, which is the bomber crew being thrown out; each drifts for the length of its own script, so all three are in the air together. No other shipped caller asks for more than one at a time."
     }
   }
 }
