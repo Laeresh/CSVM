@@ -38,6 +38,12 @@ after `bl`, ignoring surrounding prefixes like `worktree-` or trailing descripti
 (`git diff main...HEAD`) and judge, on the entry's own terms, whether that bar is actually met —
 not just touched.
 
+⚠ `main...HEAD` diffs from the merge base, which is this branch's own work only while main's history
+is intact. A rewritten main (step 3) moves that base back to an old fork point, and the diff then
+carries everything since, which is no basis for judging one item. If the diff is far larger than
+this branch's own commits account for, run step 3's classification first and diff against the fork
+point it identifies instead.
+
 - **Not met** → state plainly which part of the entry's bar the diff doesn't satisfy (missing
   verification, partial fix, wrong symptom addressed, etc.), then **stop the entire skill here**.
   The step-1 commit stands; nothing merges; the worktree stays open for you to keep working in.
@@ -51,10 +57,20 @@ Note this commit hash too, if made.
 
 ## 3. Check whether main has moved
 
-`git -C Z:/CSVM fetch . <worktree-branch> --dry-run` isn't needed — just compare:
-`git -C Z:/CSVM merge-base --is-ancestor <main-tip-at-branch-creation> HEAD` is unreliable across
-worktrees, so instead: `git -C Z:/CSVM log --oneline <worktree-branch>..main`. Any output means
-main has moved since this branch diverged.
+⚠ **Run every git command in this step from inside the worktree, with no `-C` redirect.** A session
+that entered through `EnterWorktree` is isolated to that worktree, and a hook refuses any git
+command that redirects to the shared checkout (`git -C Z:/CSVM ...`) with "a worktree-isolated
+session's git operations must target its own worktree". No redirect is needed anyway: `main` is a
+shared ref, readable from any worktree of the same repository.
+
+No fetch and no `merge-base --is-ancestor` against a remembered tip: just read the branch's own
+divergence.
+
+```
+git log --oneline HEAD..main
+```
+
+Any output means main has moved since this branch diverged.
 
 **No output (main hasn't moved)** → skip to step 4.
 
@@ -127,30 +143,49 @@ optional.
   After a rebase this is the only surviving record of what was gated, since the rebased commits'
   own messages describe a tree that no longer exists.
 
-## 4. Merge back into main
+## 4. Leave the worktree, then merge back into main
 
-From the main checkout, not the worktree:
+The merge needs `main` checked out, so the session has to leave the worktree rather than reach into
+it. Call `ExitWorktree` with `action: "keep"`: it returns the session to `Z:/CSVM` and leaves the
+worktree and its branch on disk for step 5. Do not pass `"remove"` here, since nothing has merged
+yet.
 
-```
-git -C Z:/CSVM merge --no-ff <worktree-branch> -m "Merge <worktree-branch>: <one-line of what landed>"
-```
+- **It exits** → the session is in the main checkout. Merge with plain git, no redirect:
 
-This preserves the worktree's individual commits under a merge commit, matching the repo's
+  ```
+  git merge --no-ff <worktree-branch> -m "Merge <worktree-branch>: <one-line of what landed>"
+  ```
+
+- **It reports no active worktree session** → this session never entered through `EnterWorktree`, so
+  it is not isolated and the redirect is allowed from where it stands:
+
+  ```
+  git -C Z:/CSVM merge --no-ff <worktree-branch> -m "Merge <worktree-branch>: <one-line of what landed>"
+  ```
+
+⚠ **Re-read the divergence immediately before merging.** Other sessions land on main while this
+skill runs, so step 3's reading may already be stale: `git rev-list --count <worktree-branch>..main`
+must be 0. Anything else means main moved again — go back to step 3 and classify the new divergence
+before touching main.
+
+The `--no-ff` preserves the worktree's individual commits under a merge commit, matching the repo's
 existing convention (e.g. `Merge worktree-bl348-balloon-kill-chain: close BL-348`). Never push.
 
-If this merge itself conflicts (possible if step 3 was skipped because main hadn't moved *yet* but
-moved during this run), invoke `resolving-merge-conflicts` again, then re-run the mandatory
+If this merge itself conflicts, invoke `resolving-merge-conflicts` again, then re-run the mandatory
 verification battery from step 3 before continuing.
 
-## 5. Exit and clean up
+## 5. Clean up
 
-Try `ExitWorktree` with `action: "remove"` first — it only succeeds for a worktree this session
-entered via `EnterWorktree`, and will refuse if there are uncommitted changes (there shouldn't be
-any left at this point; if it refuses, something after step 1 wasn't actually committed — go back
-and fix that instead of forcing).
+Step 4 already left the worktree, so this is plain git in the main checkout with no redirect:
 
-If `ExitWorktree` reports no active worktree session (the common case — most worktrees here predate
-this session or were made by another tool), fall back to plain git against the main checkout:
+```
+git worktree remove <worktree-path>
+git branch -d <worktree-branch>
+```
+
+If step 4 took the `-C` fallback, the session is still standing inside the worktree it is about to
+delete. Change out of that directory first, since Windows refuses to remove a directory a process
+is sitting in, then keep the redirect:
 
 ```
 git -C Z:/CSVM worktree remove <worktree-path>
@@ -158,7 +193,9 @@ git -C Z:/CSVM branch -d <worktree-branch>
 ```
 
 `branch -d` (not `-D`) deliberately refuses if the branch isn't fully merged — treat that refusal
-as a signal something upstream of this step went wrong, not something to force past.
+as a signal something upstream of this step went wrong, not something to force past. `worktree
+remove` likewise refuses on uncommitted changes; there should be none left, and if there are,
+something after step 1 was never committed — go back and fix that rather than forcing.
 
 ## Report
 
