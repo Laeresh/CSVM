@@ -1635,7 +1635,7 @@ on the flown path.
 
 **Verify.** `campaign-racers` extended from two zones to the net's whole seven-zone course with two new per-racer assertions (no zone flown twice, the tagged zones in the net's order): all six run `dzpath1, 2, 3, 10, 6, 7, 9` in 208 s of sim with no rams. `AiNetFollowerTests.ReseatRefusesTheEdgeItWasToldToAvoid`. Foreground: build clean, `dotnet test` 2559, and `campaign-danger-zones`, `ai-modes`, `ai-net-follow`, `campaign-roster`, `campaign-race-chain` PASS.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
 
 **⚠ Traps.** The exclusion is an edge, not a node: refusing the tagged node itself would strand a racer whose course runs back through it. It is spent on one seat pick, so an interrupted run that re-approaches carries no stale refusal. The other `Reseat` callers (the Instant Action activation snap, `FlightController`) must keep the unconstrained default, or a teleported wave member loses its nearest-node seat.
 
@@ -1651,7 +1651,7 @@ on the flown path.
 
 **Verify.** New suite `zeppelin-hull-activation` over C2/M03's real world: the gamez ships the one `piratezep` node inactive, the world builds it hidden, the record places it and switches it on, the hook, bay and both cones resolve under the hull, and after `pzhomebase` runs 12 s the hull, the hook and the hangar bay all draw (four checks red with the line removed). Foreground: build clean, `dotnet test` 2558, and `campaign-zeppelins`, `zeppelin-identity`, `campaign-race-chain`, `campaign-racers`, `campaign-objectives`, `campaign-objective-markers` PASS.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
 
 **⚠ Traps.** A working dock is not evidence that its host draws: the objective target, the stop-point release and the HUD marker all read poses and names, never visibility. `SetDormancy` writes opacity, not `Visible`, so the two switches are independent and must stay so. Both landing cones remain hidden after `pzhomebase` for a separate reason (`BL-618`, the `~n` dedup name).
 
@@ -1667,7 +1667,7 @@ on the flown path.
 
 **Verify.** The suite reads 22 sprites over 9.12 m against the 11 the 0.4 m cadence owes, and `rung1` swinging 0.318 m per 0.3 s hanging and 2.639 m over the 2.2 s climb with `cabpkup_ladder` live. Foreground: build clean, `dotnet test` 2558, 8 landings suites and 12 effect, emitter and puffer suites PASS.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
 
 **⚠ Traps.** A rung hinges about its own origin, so a position-only read of one sees nothing. The harness retires the real puffer factory with its build, so anything about actual particles is asserted at the `Puffer` seam, never off the director's census. During the pickup cutscene there is no flare smoke by design (`lookat_copilotpkup` stops `waveloop`), and the sprites are 0.1 to 0.5 m across, so they read as a wisp: if the smoke still looks absent at the controls, the open question is sprite scale against footage, not the runtime.
 
@@ -1683,7 +1683,7 @@ on the flown path.
 
 **Verify.** New suite `c1-aa-guns` (C1/M02's five emplacements placed and shipped dormant, `OBJECTIVE1` arming exactly those five, a chapter-1 log holding all five wrecked applying 0 and leaving them alive, each gun acquiring a plane 250 m out and firing with no self-hits, and the able-to-fail control with a cut that does reach them reading every gun dead); `world-turrets`, `turret-self-fire`, `target-pool`, `ai-gunnery`, `campaign-objectives`, `mission-off-turrets`, `campaign-persistence`, `carried-state-silent` green; `dotnet test` 2560.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
 
 **⚠ Traps.** Guns destroyed in an earlier chapter-1 mission still carry into `C1/M04` and `C1/M05`; only a mission's own capture is refused. The turret census and the `WAKEUP_TURRETS` arm are `GD.Print`, so a sortie log cannot say whether a mission's emplacements woke, which is what made this look like a turret defect (`BL-619`).
 
@@ -1701,7 +1701,7 @@ on the flown path.
 
 **⚠ Traps.** A suite that reads the marker on the frame after the handoff measures its trip home, not the re-placement: remember the pose from the last playing frame (`landings-docking-hold` had the same fault). The suite also has to start from a world with earlier-cutscene history, or the stranding cannot happen at all.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
 
 ## G60 ☑ `BL-607`: ownership is written by the landings trigger alone
 
@@ -1717,7 +1717,7 @@ on the flown path.
 
 **Verify.** `campaign-cutscene-ownership`: C5/M02's `nypd_southward` raises no code and calls `nypd_player`, which raises 11, 2 and 13; the episode books to `nypd_southward` and completes Won, while an ordinary `WAKE_ANIM` left running claims no slot.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
 
 **⚠ Traps.** An ordinary `WAKE_ANIM` must not claim the slot, or it outranks the next episode's real raiser. The intro's first code arrives while the host has no runtime to ask, so the slot wins outright in that state.
 
@@ -1733,6 +1733,6 @@ on the flown path.
 
 **Verify.** `campaign-capture-chutes` (chutes started at 14.75, 15.77 and 17.78 s, three visible at once, each placed at the walk frame, spans 15.2, 14.2 and 12.2 s) and `landings-balmoral-dock` (fold 10.67 to 12.68 s, completion code at 12.62 s, `rwingbend` at the authored angle, the mission ends).
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
 
 **⚠ Traps.** `Props` and `Figures` on the aircraft stage are placed by `OBJECT_ADD_CHILD`, not by an `AT_NODE` call, so pooling them would change the hangar drop and the wing-walk pilot. A third caller of `ResolveLibraryRoot` must pass the authored event, or `null` to keep one copy per anchor.
