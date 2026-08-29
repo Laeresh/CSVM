@@ -34,6 +34,12 @@ public sealed class CampaignDirector
     private readonly CampaignProfileStore? _store;
     private readonly CampaignMission _mission;
     private readonly string _missionZrdrPath;
+
+    // The story position whose world state this mission opens on: the most recent EARLIER mission
+    // of the same chapter, or null when this IS that chapter's first and the original's backwards
+    // walk finds nothing. ⚠ Never the mission's own seq: CM07 is chapter 1's first mission, and a
+    // fold that included it opened the fort with the previous sortie's AA guns already wrecked.
+    private readonly int? _carryThroughSeq;
     private readonly HashSet<string> _gapsLogged = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FlightController> _roster = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
@@ -63,13 +69,15 @@ public sealed class CampaignDirector
 
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
-        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath)
+        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath,
+        int? carryThroughSeq)
     {
         Script = script;
         _mission = mission;
         _profile = profile;
         _store = store;
         _missionZrdrPath = missionZrdrPath;
+        _carryThroughSeq = carryThroughSeq;
     }
 
     /// <summary>The authored-aircraft spawner, handed in as a delegate for the same reason
@@ -180,7 +188,8 @@ public sealed class CampaignDirector
         var script = ObjectiveScript.Load(missionZrdrPath);
         GD.Print($"campaign: '{profile.Name}' flying {mission.ChapterFolder}/{mission.MissionFolder}, " +
                  $"{script.Objectives.Count} objective(s)");
-        var director = new CampaignDirector(script, mission, profile, store, missionZrdrPath);
+        var director = new CampaignDirector(script, mission, profile, store, missionZrdrPath,
+            CampaignSequence.PreviousInSameChapter(CampaignSequence.Load(zrdrPath), seq)?.Seq);
         director.BindWingman();
         return director;
     }
@@ -191,8 +200,9 @@ public sealed class CampaignDirector
     /// disable list); omitted, nothing is disabled.</summary>
     internal static CampaignDirector Create(
         ObjectiveScript script, CampaignMission mission,
-        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath = "") =>
-        new(script, mission, profile, store, missionZrdrPath);
+        CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath = "",
+        int? carryThroughSeq = null) =>
+        new(script, mission, profile, store, missionZrdrPath, carryThroughSeq);
 
     /// <summary>The roster phase: spawns every non-player block of the mission's <c>aiv</c>
     /// roster, at the point of <c>GameSession</c>'s build where the human rigs exist. The plan is
@@ -371,7 +381,9 @@ public sealed class CampaignDirector
                 pilot.DangerZones = _ribbons;
         }
         int chapter = _mission.Campaign;
-        int applied = inputs.Runtime != null ? _profile.PersistLog.ApplyTo(inputs.Runtime, chapter) : 0;
+        int applied = inputs.Runtime != null
+            ? _profile.PersistLog.ApplyTo(inputs.Runtime, chapter, _carryThroughSeq)
+            : 0;
         GD.Print($"campaign: {Graph.Count} objective(s) armed, {Graph.Rows.Count} display row(s), " +
                  $"{applied} object(s) restored from the chapter {chapter} persist log" +
                  (_dangerZones is { } dz ? $", {dz.Count} danger zone(s) armed" : ""));
@@ -612,7 +624,7 @@ public sealed class CampaignDirector
             plane?.Name ?? string.Empty);
         if (_world?.Runtime is { } runtime && CampaignPersistLog.CommitsOn(outcome))
         {
-            _profile.PersistLog.Merge(_mission.Campaign, CampaignPersistLog.Capture(runtime));
+            _profile.PersistLog.Merge(_mission.Campaign, _mission.Seq, CampaignPersistLog.Capture(runtime));
         }
 
         var recorded = CampaignProgression.Record(_profile, attempt);

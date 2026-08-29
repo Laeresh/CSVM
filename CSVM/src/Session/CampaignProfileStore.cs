@@ -244,6 +244,7 @@ public sealed class CampaignProfileStore
                     w.WriteString("nodeName", state.NodeName);
                     w.WriteBoolean("destroyed", state.Destroyed);
                     w.WriteNumber("health", state.Health);
+                    w.WriteNumber("seq", state.Seq);
                     w.WriteEndObject();
                 }
 
@@ -575,10 +576,17 @@ public sealed class CampaignProfileStore
                     o.TryGetProperty("destroyed", out var d) && d.ValueKind == JsonValueKind.True,
                     o.TryGetProperty("health", out var h) && h.ValueKind == JsonValueKind.Number
                         ? h.GetSingle()
-                        : 0f));
+                        : 0f,
+                    // -1 for a log written before the capturing position was stored: it belongs to
+                    // whichever earlier mission of the chapter wrote it (CampaignPersistLog.Through).
+                    ReadInt(o, "seq", -1)));
             }
 
-            def.PersistLog.Merge(ReadInt(entry, "chapter", 0), states);
+            int chapter = ReadInt(entry, "chapter", 0);
+            foreach (var state in states)
+            {
+                def.PersistLog.Merge(chapter, state.Seq, new[] { state });
+            }
         }
     }
 

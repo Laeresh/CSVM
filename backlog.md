@@ -843,6 +843,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
+- `BL-619` `[Task]` **The turret census and the `WAKEUP_TURRETS` arm are `GD.Print`, so a sortie log
+  cannot say whether a mission's emplacements woke.** *Evidence:* `BL-611` looked like a turret
+  defect for most of its investigation because the log reads identically whether the guns are alive
+  or dead: neither `turrets: N world emplacement(s) placed for <chapter>` nor `campaign:
+  WAKEUP_TURRETS armed N emplacement(s)` reaches the file sink. *Fix shape:* route both through
+  `Log.Info("flight", ...)` and add the per-gun alive and awake counts. *⚠ Traps:* `Log.Info` takes a
+  `FormattableString`, so fold each line into one interpolated string. *Cross-refs:* `Log.cs`'s
+  incremental migration note, `TurretController`, `BL-611`'s closing commit
+  (`git log --grep=BL-611`).
+
 - `BL-618` `[Bug]` **A compiled anim addressing a mech3ax `~n` dedup name resolves to nothing.**
   *Evidence:* CM13's `pzhomebase` switches `land_on` and `land_on~2` on and neither of the
   Pandora's two landing cones draws (`zeppelin-hull-activation`'s artifact records `cones 0/2`);

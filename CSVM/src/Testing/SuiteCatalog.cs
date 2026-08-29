@@ -88,6 +88,7 @@ public static class SuiteCatalog
         "inert-aircraft",
         "world-turrets",
         "turret-self-fire",
+        "c1-aa-guns",
         "mission-off-turrets",
         "carried-turrets",
         "graze-bounce",
@@ -509,6 +510,15 @@ public static class SuiteCatalog
             "eight bearings so the line of fire crosses the fort's own structures: no gun ever " +
             "takes damage from its own rounds, whether by a muzzle-side strike on its own mount " +
             "or by its burst's splash, while a neighbour's burst still reaches it", TurretSelfFire));
+        into.Add(new TestHarness.Suite("c1-aa-guns",
+            "CM07's own flak on the mission it is flown in: C1/M02 places five aagun emplacements, "
+            + "all standing and shipped dormant, the mission's OBJECTIVE1 WAKEUP_TURRETS 'aagun**' "
+            + "arms exactly those five through the world lookup and the subtree write, each one "
+            + "acquires a plane parked inside DETECTION_RANGE and fires without taking its own "
+            + "rounds, and a chapter 1 persist log holding all five wrecked carries NOTHING into "
+            + "CM07, since it is that chapter's first mission and the engine's backwards walk finds "
+            + "no earlier carrier (the same log applied with a cut that reaches it kills them all)",
+            C1AaGuns));
         into.Add(new TestHarness.Suite("mission-off-turrets",
             "an emplacement whose site the mission's .gw switched OFF is out of the world: C3/M03's " +
             "six balloon turrets read dead, tick to Dead once woken, and are listed dead in the gunner " +

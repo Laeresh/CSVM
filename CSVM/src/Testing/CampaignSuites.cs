@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -126,7 +127,7 @@ internal static class CampaignSuites
             ctx.Check(CampaignPersistLog.CommitsOn(MissionOutcome.Won)
                 && !CampaignPersistLog.CommitsOn(MissionOutcome.Lost),
                 $"only a won mission commits its capture to the log");
-            profile.PersistLog.Merge(chapter, captured);
+            profile.PersistLog.Merge(chapter, earlier.Seq, captured);
             store.Save(profile);
         });
 
@@ -164,7 +165,7 @@ internal static class CampaignSuites
             int applied;
             try
             {
-                applied = reloaded!.PersistLog.ApplyTo(world.Runtime, chapter);
+                applied = reloaded!.PersistLog.ApplyTo(world.Runtime, chapter, earlier.Seq);
                 foreach (int node in carried)
                 {
                     if (nodes.TryGetValue(node, out var anchor) && Live(registry, anchor) is { } live)
@@ -201,6 +202,11 @@ internal static class CampaignSuites
 
             ctx.Same(0, reloaded.PersistLog.For(chapter == 1 ? 2 : 1).Count,
                 $"nothing leaks into another chapter's log");
+            // The backwards walk never reaches the capturing mission itself, so re-flying it opens
+            // on the world its own previous sortie never touched.
+            var ownReplay = CampaignSequence.PreviousInSameChapter(missions, earlier.Seq)?.Seq;
+            ctx.Same(0, reloaded.PersistLog.Through(chapter, ownReplay).Count,
+                $"re-flying {earlier.MissionFolder} carries none of its own wreckage (through seq {ownReplay?.ToString(CultureInfo.InvariantCulture) ?? "none"})");
         });
 
         ctx.WriteArtifact($"test-campaign-persistence-{ctx.Chapter}.txt", report.ToString());

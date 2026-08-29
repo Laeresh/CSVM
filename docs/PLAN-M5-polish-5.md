@@ -145,6 +145,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 55. ☑ `BL-615`: CM13's racers loop around zone 3 instead of going on; the run exit's net re-seat never refused the leg it entered on
 56. ☑ `BL-616`: CM13 docks with an invisible Pandora; a zeppelin record is what switches its hull on
 57. ☑ `BL-609`: no flare smoke and a frozen ladder in CM07's pickup, both disproved; the suite's two blind spots closed
+58. ☑ `BL-611`: CM07's AA guns never fire; the chapter persist log carried the mission's own wreckage into its own replay
 
 ## Dependency and parallelism notes
 
@@ -1663,3 +1664,19 @@ on the flown path.
 **Verified.** <pending orchestrator run>
 
 **⚠ Traps.** A rung hinges about its own origin, so a position-only read of one sees nothing. The harness retires the real puffer factory with its build, so anything about actual particles is asserted at the `Puffer` seam, never off the director's census. During the pickup cutscene there is no flare smoke by design (`lookat_copilotpkup` stops `waveloop`), and the sprites are 0.1 to 0.5 m across, so they read as a wisp: if the smoke still looks absent at the controls, the open question is sprite scale against footage, not the runtime.
+
+## F58 ☑ `BL-611`: CM07's AA guns never fire
+
+**Goal.** CM07's five `aagun` emplacements wake on `OBJECTIVE1`'s `WAKEUP_TURRETS aagun**` and engage the player on every replay, as they do at the original's controls.
+
+**Evidence (confidence: traced).** Reproduced on the flown campaign path: all five read `alive=False gate=Dead` at build and never wake. Not a turret change: `m02.gw` switches no `aagun` off, A2's tree-visibility read is correct (every site reads visible and in tree), and B13's owner exclusion never touched firing. What hides `healthy` is `CampaignPersistLog.ApplyTo` restoring the guns a previous CM07 sortie shot down: the log was keyed by chapter alone and folded the whole chapter at open, while `CampaignDirector` merges the mission's own capture into that chapter on a win, so a won CM07 wrote its wreckage into chapter 1 and the next CM07 read it back. `docs/formats/saved-games.md` already decodes the rule: the campaign object walks its mission list backwards for the most recent EARLIER entry in the same world folder (`FUN_0046b7e0` into `FUN_0046b560`, index at `+0xc18`), and CM07 is `seq` 6, the first campaign-1 entry, so the original finds no carrier for it at all. A1 (`BL-513`) is the trigger, not the cause: its silent `CarryState`/`ApplyDeathPose` path applies the destroyed pose cleanly where the old `DamageAt` route skipped what was already destroyed.
+
+**Approach.** `PersistedObject` gains the capturing mission's story position; `CampaignPersistLog` keys chapter, then seq, then node, and `Through`/`ApplyTo` carry only positions before the opening mission (the chapter's first mission carries nothing). A state stored without a position counts as an earlier mission's, so existing profiles keep their legitimate carries and need no surgery. `CampaignDirector` resolves the cut from `CampaignSequence.PreviousInSameChapter` and stamps the mission's seq on the end-of-mission merge.
+
+**Model recommendation.** A single session; no new decode, the reading was already committed.
+
+**Verify.** New suite `c1-aa-guns` (C1/M02's five emplacements placed and shipped dormant, `OBJECTIVE1` arming exactly those five, a chapter-1 log holding all five wrecked applying 0 and leaving them alive, each gun acquiring a plane 250 m out and firing with no self-hits, and the able-to-fail control with a cut that does reach them reading every gun dead); `world-turrets`, `turret-self-fire`, `target-pool`, `ai-gunnery`, `campaign-objectives`, `mission-off-turrets`, `campaign-persistence`, `carried-state-silent` green; `dotnet test` 2560.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** Guns destroyed in an earlier chapter-1 mission still carry into `C1/M04` and `C1/M05`; only a mission's own capture is refused. The turret census and the `WAKEUP_TURRETS` arm are `GD.Print`, so a sortie log cannot say whether a mission's emplacements woke, which is what made this look like a turret defect (`BL-619`).
