@@ -312,6 +312,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     private int _p1Pad = -1;
     // The join strip as last drawn — _Process redraws when the live roster changes (hotplug).
     private string _stripText = "";
+    // --menu=campaign-guestcheck: which guest's flight check the aid asked for, applied by
+    // DebugJoin, since the aid runs inside ShowMenu and the players arrive right after it.
+    private int _aidGuest;
     private VBoxContainer _body = null!;
     private CenterContainer _center = null!;
     // The splitscreen plane-select root (one panel per player + a shared bottom strip). Shown
@@ -621,6 +624,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // Same rule for the campaign: its flow holds a selected profile and a screen stack, and
         // resuming one after a session would be continuing something nobody remembers starting.
         _campaign = null;
+        _aidGuest = 0;
         RefreshRoster();
         OpenHangarAid(startScreen);
         OpenCampaignAid(startScreen);
@@ -709,6 +713,20 @@ public sealed partial class LaunchMenu : CanvasLayer
                 Locked = i == extraPlayers - 1,
             });
         GD.Print($"launchscreen: --debug-join → {_slots.Count} players (the added ones have no device)");
+        // --menu=campaign-guestcheck's own walk, which needs the players this call just added: the
+        // aid ran inside ShowMenu, before anybody had joined.
+        if (_aidGuest > 0 && _campaign is { } flow)
+        {
+            flow.SetPlayers(_slots.Count);
+            int walked = 0;
+            while (walked < _aidGuest && flow.Field.Advance())
+            {
+                walked++;
+            }
+        }
+
+        _aidGuest = 0;
+
         if (Visible)
             Rebuild();
     }
@@ -973,11 +991,15 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     // Start on an unclaimed pad joins a new player, on the Plane screen and, C21, on the
     // Campaign screen — the same ordering rule (player 1 claims a pad first) keeps the gesture
-    // unambiguous on both. A campaign join stops on its own once FLY MISSION leaves the screen.
+    // unambiguous on both. A campaign join closes at the seated player's FLY MISSION (C22's lock).
     private bool ScanJoins()
     {
         bool dirty = false;
         if (_screen != Screen.Plane && _screen != Screen.Campaign)
+            return false;
+        // C22: the seated player's FLY MISSION no longer leaves the screen, it opens the first
+        // guest's check — so the field's own lock is what closes joining now.
+        if (_campaign is { Field.Locked: true })
             return false;
         foreach (int pad in Pads.Connected())
         {
@@ -1653,7 +1675,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         string value = colon < 0 ? startScreen : startScreen[..colon];
         if (value is not ("campaign" or "campaign-empty" or "campaign-roster" or "campaign-entry"
             or "campaign-cabin" or "campaign-previous" or "campaign-briefing"
-            or "campaign-flightcheck" or "campaign-ammo" or "campaign-hangar" or "campaign-fly"))
+            or "campaign-flightcheck" or "campaign-guestcheck" or "campaign-ammo"
+            or "campaign-hangar" or "campaign-fly"))
         {
             return;
         }
@@ -1704,7 +1727,8 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         // On every screen but the briefing the argument is a cursor step count instead, so a shot
         // can show focus on a plaque other than the opening one. Each step is one pad press.
-        for (int i = 0; value != "campaign-briefing" && i < (int)argument; i++)
+        // campaign-guestcheck reads it as a player number instead, which WalkCampaignAid took.
+        for (int i = 0; value is not ("campaign-briefing" or "campaign-guestcheck") && i < (int)argument; i++)
         {
             flow.Move(1);
         }
@@ -1751,6 +1775,13 @@ public sealed partial class LaunchMenu : CanvasLayer
             case "campaign-flightcheck":
                 flow.SetMission(CampaignProgression.NextMissionSeq(profile));
                 flow.GoTo(CampaignScreen.FlightCheck);
+                return;
+            case "campaign-guestcheck":
+                // C22's sequence: the same screen, headed for a guest. The argument names which
+                // one (default P2), and --debug-join= is what puts them on the field.
+                flow.SetMission(CampaignProgression.NextMissionSeq(profile));
+                flow.GoTo(CampaignScreen.FlightCheck);
+                _aidGuest = Math.Max(1, (int)seconds);
                 return;
             case "campaign-ammo":
                 flow.SetMission(CampaignProgression.NextMissionSeq(profile));
@@ -1836,9 +1867,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             return true;
         }
 
+        flow.SetPlayers(_slots.Count);
+        var driver = CampaignDriver(flow, p1);
         bool typing = flow.CapturesText;
-        int move = typing ? p1.PadMove : p1.Move;
-        int step = typing ? p1.PadMoveX : p1.MoveX;
+        int move = typing ? driver.PadMove : driver.Move;
+        int step = typing ? driver.PadMoveX : driver.MoveX;
         bool dirty = false;
         if (move != 0)
         {
@@ -1852,24 +1885,25 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         if (typing)
         {
-            dirty |= flow.Type(p1.Typed);
-            dirty |= p1.Erase && flow.Backspace();
+            dirty |= flow.Type(driver.Typed);
+            dirty |= driver.Erase && flow.Backspace();
         }
 
-        if (p1.Accept)
+        if (driver.Accept)
         {
             _pressFrames = PressFrames;
             dirty = true;
             flow.Accept();
         }
-        else if (p1.Back)
+        else if (driver.Back)
         {
             dirty |= flow.Back();
         }
 
-        // C21: everyone else can only drop out from here (HandleInput's own rule); p1's Back
-        // above is the flow's own navigation, never a leave.
-        for (int i = _slots.Count - 1; i >= 1; i--)
+        // C21: everyone else can only drop out from here; the driving player's Back above is the
+        // flow's own navigation. C22 closes even that once the sequence runs — the field is then
+        // settled, and every Back on screen is the walk back through the checks.
+        for (int i = _slots.Count - 1; i >= 1 && !flow.Field.Locked; i--)
         {
             if (!_slots[i].Input.Back)
                 continue;
@@ -1897,6 +1931,22 @@ public sealed partial class LaunchMenu : CanvasLayer
                 _error = "";
                 return true;
         }
+    }
+
+    // Whose presses steer the campaign board. Player 1's everywhere, except a guest's own flight
+    // check (C22), which is that guest's screen to fill in. A driver with no device — --debug-join's
+    // deviceless players — hands back to player 1, or a screenshot aid could never walk the
+    // sequence at all.
+    private MenuInput CampaignDriver(CampaignFlow flow, MenuInput p1)
+    {
+        int at = flow.Field.Current;
+        if (at <= 0 || at >= _slots.Count)
+        {
+            return p1;
+        }
+
+        var input = _slots[at].Input;
+        return input.Keyboard || input.Pads is { Length: > 0 } ? input : p1;
     }
 
     // PLANE CONSTRUCTION: the hangar over the profile's own wallet (B13's HangarCampaignContext),
@@ -1947,6 +1997,13 @@ public sealed partial class LaunchMenu : CanvasLayer
         _screen = Screen.Mode;
         _error = "";
         GD.Print($"launchscreen: campaign '{profile.Name}' flying mission seq {flow.MissionSeq} in \"{plane.Name}\"");
+        // C22 settles what each guest flies; C23 is what carries it into the launch. Until then the
+        // sequence is visible here rather than silently dropped.
+        foreach (var guest in flow.Field.Guests)
+        {
+            GD.Print($"launchscreen: campaign P{guest.Player + 1} flying \"{guest.Plane.Name}\"");
+        }
+
         LaunchCampaign(launch);
     }
 

@@ -172,6 +172,7 @@ public sealed class CampaignFlow
         DataRoot = dataRoot;
         Planes = planes;
         Stock = stock;
+        Field = new CampaignFlightField(this);
         Roster = store.List();
         // The opening screen gets its own page's opening row too, not just the screens arrived at
         // later, or the roster would be the one screen that ignores the seam.
@@ -195,6 +196,11 @@ public sealed class CampaignFlow
 
     /// <summary>The langui table the screens label themselves from.</summary>
     public UiStrings Strings { get; }
+
+    /// <summary>The humans flying this sortie: how many joined, whose flight check is showing, and
+    /// what each guest picked. Solo until the shell says otherwise, so a campaign nobody joined
+    /// behaves exactly as it did before C22.</summary>
+    public CampaignFlightField Field { get; }
 
     /// <summary>The folder <c>extracted/</c> sits in, or null when the caller has none.</summary>
     public string? DataRoot { get; }
@@ -374,6 +380,28 @@ public sealed class CampaignFlow
 
     /// <summary>Names the scrap <see cref="CampaignScreen.ScrapbookZoom"/> opens on.</summary>
     public void SetScrapbookZoom(int mission, int spread, int item) => ZoomTarget = (mission, spread, item);
+
+    /// <summary>Takes the joined-player count from the shell, once a frame.</summary>
+    public void SetPlayers(int players) => Field.SetPlayers(players);
+
+    /// <summary>The record the ammo screen is editing: a guest's own session-scoped aircraft while
+    /// their flight check is the screen showing, else the seated profile's plane for
+    /// <see cref="AmmoSlot"/>. Null when there is nothing to fit.</summary>
+    public OwnedPlane? AmmoTarget()
+    {
+        if (Field.Current > 0)
+        {
+            return Field.Plane(Field.Current);
+        }
+
+        if (Profile is not { } profile)
+        {
+            return null;
+        }
+
+        int at = AmmoSlot == 0 ? profile.SelectedPlane : profile.WingmanPlane;
+        return at >= 0 && at < profile.Planes.Count ? profile.Planes[at] : null;
+    }
 
     /// <summary>Seats the profile every screen after the roster reads, and opens the cabin.</summary>
     public void SelectProfile(CampaignProfileDef profile)

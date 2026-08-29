@@ -201,6 +201,28 @@ public class CampaignAmmoPageTests
         Directory.Delete(profileDir, true);
     }
 
+    // ⚠ C22/decision 4: a guest's ammunition edits are free and discarded. ACCEPT writes their own
+    // session-scoped record, and the seated profile's file is not rewritten at all.
+    [Fact]
+    public void AGuestsAcceptWritesTheirOwnRecordAndLeavesTheProfileFileUntouched()
+    {
+        var (flow, page, _) = NewFlow(out string profileDir);
+        flow.Store.Save(CampaignProfileDef.NewProfile("Zachary"));
+        flow.SelectProfile(flow.Store.Load("Zachary")!);
+        flow.SetPlayers(2);
+        flow.Field.Advance();
+        string file = Path.Combine(profileDir, "Zachary", "profile.json");
+        byte[] before = File.ReadAllBytes(file);
+
+        Assert.True(page.Step(0, 2));
+        Assert.True(page.Accept(AcceptRow));
+
+        Assert.Equal(2, flow.Field.Plane(1)!.Ammo[0]);
+        Assert.Equal(before, File.ReadAllBytes(file));
+
+        Directory.Delete(profileDir, true);
+    }
+
     private static (CampaignFlow Flow, CampaignAmmoPage Page, CustomPlaneStore Planes) NewFlow(out string profileDir)
     {
         profileDir = Path.Combine(TestData.TempDir(), "Profiles");

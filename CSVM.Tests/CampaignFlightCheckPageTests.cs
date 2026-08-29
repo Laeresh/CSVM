@@ -234,6 +234,88 @@ public class CampaignFlightCheckPageTests
         Assert.Equal(CampaignScreen.Briefing, flow.Screen);
     }
 
+    // C22: FLY MISSION advances to the next joined player's check and only the last one launches,
+    // and the screen says whose turn it is, since the whole walk happens in one window.
+    [Fact]
+    public void FlyMissionWalksEveryJoinedPlayerBeforeAskingForTheLaunch()
+    {
+        var page = NewPage(out var flow, out _, wingman: false);
+        flow.SetPlayers(3);
+        flow.GoTo(CampaignScreen.FlightCheck);
+
+        Assert.Equal("FLIGHT CHECK", page.Heading);
+        Assert.True(page.Accept(page.RowCount - 1));
+        Assert.Equal(CampaignExit.None, flow.Exit);
+        Assert.Equal("FLIGHT CHECK P2", page.Heading);
+
+        Assert.True(page.Accept(page.RowCount - 1));
+        Assert.Equal(CampaignExit.None, flow.Exit);
+        Assert.Equal("FLIGHT CHECK P3", page.Heading);
+
+        Assert.True(page.Accept(page.RowCount - 1));
+        Assert.Equal(CampaignExit.FlyMission, flow.Exit);
+    }
+
+    // A guest's page is one PILOT block and its two action rows: the wingman belongs to the seated
+    // profile, and CHANGE PLANE is always offered because a guest cycles the stock eleven.
+    [Fact]
+    public void AGuestsPageCarriesOnePilotBlockAndNoWingman()
+    {
+        var page = NewPage(out var flow, out _, wingman: true);
+        flow.SetPlayers(2);
+        flow.Field.Advance();
+
+        Assert.Equal(5, page.RowCount);
+        Assert.StartsWith("PILOT", page.RowText(0));
+        Assert.Equal("CHANGE AMMO", page.RowText(1));
+        Assert.StartsWith("CHANGE PLANE", page.RowText(2));
+        Assert.Equal("RETURN TO BRIEFING", page.RowText(3));
+        Assert.Equal("FLY MISSION", page.RowText(4));
+    }
+
+    [Fact]
+    public void TheSeatedPlayersOwnPageIsUnchangedWithGuestsJoined()
+    {
+        var solo = NewPage(out _, out _, wingman: true);
+        var page = NewPage(out var flow, out _, wingman: true);
+        flow.SetPlayers(3);
+
+        Assert.Equal(solo.RowCount, page.RowCount);
+        for (int row = 0; row < page.RowCount; row++)
+        {
+            Assert.Equal(solo.RowText(row), page.RowText(row));
+        }
+    }
+
+    // Back on a guest's check is the inverse of FLY MISSION; on the seated player's own it is
+    // unconsumed, so the flow leaves the screen the way it always did.
+    [Fact]
+    public void BackWalksTheSequenceInReverseAndThenLeavesTheScreen()
+    {
+        var page = NewPage(out var flow, out _, wingman: false);
+        flow.SetPlayers(2);
+        flow.Field.Advance();
+
+        Assert.True(page.Back());
+        Assert.Equal(0, flow.Field.Current);
+        Assert.False(page.Back());
+    }
+
+    // CHANGE PLANE on a guest's row cycles their own record and writes nothing to the profile,
+    // unlike the seated player's row, which is a stored pick.
+    [Fact]
+    public void AGuestsChangePlaneMovesTheirOwnPickAndSavesNothing()
+    {
+        var page = NewPage(out var flow, out _, wingman: false);
+        flow.SetPlayers(2);
+        flow.Field.Advance();
+        var before = flow.Field.Plane(1)!;
+
+        Assert.True(page.Step(2, 1));
+        Assert.NotSame(before, flow.Field.Plane(1));
+        Assert.Equal(0, flow.Store.Load("Zachary")!.SelectedPlane);
+    }
+
     // A custom-built plane's own guns/hardpoints, not the airframe's stock fit, drive the lists
     // when the plane's name has a CustomPlaneStore entry.
     [Fact]

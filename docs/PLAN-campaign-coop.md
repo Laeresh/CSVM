@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — The screens
 
 21. ☑ Joining and leaving from any campaign screen, with the player chip strip
-22. ☐ Sequential per-player flight checks
+22. ☑ Sequential per-player flight checks
 23. ☐ `CampaignLaunch` carries the whole human field
 
 ### Wave D — Recording, evidence and words
@@ -509,7 +509,7 @@ immediately, and every new entry point into joining needs the same priming. A co
 no join strip by design, so the chip strip is a deliberate exception and must not resurrect the
 full strip on a board.
 
-## C22 ☐ Sequential per-player flight checks
+## C22 ☑ Sequential per-player flight checks
 
 **Goal.** After the seated player's flight check, each joined guest gets the same window headed
 `FLIGHT CHECK P2` and so on, where they choose an aircraft and its ammunition, and FLY MISSION
@@ -533,10 +533,13 @@ record is a session-scoped `OwnedPlane`: seeded from the stock fit for a stock a
 from the seated profile's record for a campaign aircraft, and never written back. FLY MISSION on
 the last joined player launches; on any earlier one it advances. `CampaignFlow`'s screen stack is
 the mechanism, since a new screen there is one page factory plus one `Registry` line.
-<TODO: settle whether a guest flight check is a new `CampaignScreen` value with its own `Registry`
-entry, or the existing `FlightCheck` screen re-entered with a player index. Read
-`CampaignFlow.Registry` and `ICampaignPage.OpeningRow` before choosing; the stack returns to an
-already-open screen rather than stacking a second copy, which decides it.>
+
+**Settled: the existing `FlightCheck` screen re-entered with a player index**, not a
+`CampaignScreen` value of its own. `CampaignFlow` keeps ONE page instance per screen and `GoTo`
+returns to an already-open screen instead of stacking a second copy, so a `Registry` entry could
+only ever have drawn one guest check; four would have needed four screens. The player index lives
+on `CampaignFlightField`, and FLY MISSION re-enters the same screen through `GoTo`, which is also
+what re-opens the cursor on the page's `OpeningRow`.
 
 **Model recommendation.** high. The no-duplicate filter and the copy-not-reference rule for a
 guest's record are where decision 4 is actually enforced, and a reference where a copy belongs

@@ -3945,14 +3945,19 @@ below) rather than through the centred body every other screen uses: heading, ro
 footer all read off `_campaign.Page`, and the footer is the page's own, since a screen with an armed
 text field has a different control set from the same screen with the cursor on its list. The art
 column is shared with the hangar through `PageArt`/`PageRowArt`, so a campaign page that hands over
-a picture needs no change here. Navigation is player 1's alone: `HandleCampaignInput` reads `Move`/
-`MoveX` normally, and while `CampaignFlow.CapturesText` is true it reads `PadMove`/`PadMoveX`
-instead and feeds `Typed`/`Erase` into the field, because W, A, S and D are letters there. C21:
-joining is not — `ScanJoins` runs on `Screen.Campaign` the same as on `Screen.Plane`, so Start on an
-unclaimed pad joins a guest from any campaign screen up to and including the seated player's FLY
-MISSION (which leaves `Screen.Campaign` outright, so nothing has to lock the field explicitly), and
-every joined slot past player 1 reads its own `Back` as a leave — `HandleCampaignInput`'s own guest
-loop, the same "everyone else can only drop out" rule `HandleInput` applies elsewhere. More than one
+a picture needs no change here. Navigation is player 1's everywhere except a guest's own flight
+check, which is that guest's screen to fill in: `CampaignDriver` picks the slot
+`CampaignFlow.Field.Current` names, falling back to player 1 for a driver with no device, or
+`--debug-join=`'s deviceless players could not walk the sequence at all. The driver's `Move`/`MoveX`
+read normally, and while `CampaignFlow.CapturesText` is true they read `PadMove`/`PadMoveX` instead
+and feed `Typed`/`Erase` into the field, because W, A, S and D are letters there. C21:
+joining is not player 1's alone either — `ScanJoins` runs on `Screen.Campaign` the same as on
+`Screen.Plane`, so Start on an unclaimed pad joins a guest from any campaign screen up to and
+including the seated player's FLY MISSION, and every joined slot past player 1 reads its own `Back`
+as a leave — `HandleCampaignInput`'s own guest loop, the same "everyone else can only drop out" rule
+`HandleInput` applies elsewhere. ⚠ C22 is what closes both: FLY MISSION now opens the first guest's
+check instead of leaving the screen, so `Field.Locked` is the explicit lock joining and leaving both
+answer to, and while the walk runs the only `Back` on screen is the walk back through the checks. More than one
 joined draws `LaunchMenu._chipStrip`, a `P1 P2 P3 P4` shell overlay in `SplitScreen.PlayerColor`
 pinned to the window's top-right corner (PerfHud's `PlaceTopRight` pattern) and scaled through the
 same `BoardFit` the board itself draws at — a shell overlay rather than a page contribution, because
@@ -3963,13 +3968,16 @@ rides the same error line the hangar's gate uses. `--menu=campaign` opens the re
 roster; every other `campaign-*` value is a screenshot aid over a scratch profile directory, so
 those shots are the same on every machine and cannot write into a real campaign. The one exception
 is `campaign-fly`, which launches a mission and therefore has to use the real store, because the
-session's own director reads that one.
+session's own director reads that one. `campaign-guestcheck[:player]` opens a guest's own page of
+C22's walk; it reads its argument as a player number rather than a cursor step count, and is applied
+inside `DebugJoin`, since the aid runs during `ShowMenu` and the guests it needs arrive right after.
 
 The flow's three exits are the shell's three jobs. `Cancelled` returns to the Mode screen.
 `OpenHangar` opens `HangarFlow` over a `HangarCampaignContext` on the flow's own profile and leaves
 the campaign flow standing; `CloseHangar` calls `Resume` on it, built or cancelled alike, so a
 purchase or a sale shows on the cabin the moment the hangar closes. `FlyMission` saves the profile,
-stops the score and hands the host a `CampaignLaunch`: the profile, the story position, and the
+stops the score and hands the host a `CampaignLaunch`; with guests joined the flight check only asks
+for it on the LAST player's press, every earlier one advancing the walk instead (`C22`): the profile, the story position, and the
 pilot's aircraft as its stock node, its hangar build where it has one, and the fit
 `CampaignLoadout` derives from the profile's picks. The wingman is deliberately not in it, since
 `CampaignDirector` resolves that binding from the same profile it opens anyway.
@@ -4124,9 +4132,31 @@ screen says which row the cursor arrives on, and the roster page answers with th
 `Pictures`, `Strokes` and `Captions` and names which of the screen's authored buttons each row
 presses through `Button`, and `CampaignBoards` supplies the geometry. The `HangarArt` a page still
 hands over is the hangar's own art column and is unused on the campaign path.
+`CampaignFlow.Field` is the sortie's human field (below); `AmmoTarget` is the one place that turns
+"whose check is showing" plus `AmmoSlot` into the record the ammo screen edits, so neither page
+resolves an aircraft out of the profile by index any more.
 Off-engine coverage: `CSVM.Tests/CampaignFlowTests.cs`,
 `CSVM.Tests/CampaignRosterPageTests.cs`, `CSVM.Tests/CampaignTextEntryTests.cs`,
 `CSVM.Tests/CampaignCabinPageTests.cs`, `CSVM.Tests/CampaignPreviousMissionsPageTests.cs`.
+
+## src/UI/CampaignFlightField.cs
+The humans flying one campaign sortie, as the flight check walks them (`C22`): how many joined,
+whose check is showing, and what each guest picked. Player 0 is the seated player and keeps the
+profile's own aircraft; players 1 and up are guests, who bring no profile and fly a session-scoped
+`OwnedPlane` — a stock airframe at rest, or a COPY of one of the seated profile's aircraft.
+Engine-free, so the two rules that make a guest costless test off engine: the copy (a reference
+where a copy belongs writes a guest's ammunition edits into the seated profile) and the
+no-duplicate filter, whose identity is the airframe for a stock entry and the plane's NAME for a
+profile aircraft. `Advance`/`Retreat`/`Rewind` are the walk; `Locked` closes joining the moment it
+starts, which is what C21's "joinable up to and including FLY MISSION" means now that the press
+advances the screen rather than leaving it.
+⚠ `IsStock` exists because a stock record is NAMED for its airframe: a screen must ask before
+reading `CustomPlaneStore` under that name, or a hangar plane called "Devastator" would fit a guest
+with somebody else's build. The sequence draws on the one `FlightCheck` screen re-entered with a
+player index rather than a `CampaignScreen` per guest — the flow keeps one page instance per screen
+and `GoTo` returns to an open one, so a registry entry could only ever have drawn a single check.
+Off-engine coverage: `CSVM.Tests/CampaignFlightFieldTests.cs`, plus the guest cases in
+`CSVM.Tests/CampaignFlightCheckPageTests.cs` and `CSVM.Tests/CampaignAmmoPageTests.cs`.
 
 ## src/UI/BoardFit.cs
 How the original's fixed 800x600 campaign dialog space lands on an arbitrary window: one uniform
