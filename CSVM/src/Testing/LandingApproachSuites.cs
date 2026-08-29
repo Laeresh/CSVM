@@ -23,6 +23,7 @@ internal static class LandingApproachSuites
     private const int DockingSeq = 5;
     private const int TrainPickupSeq = 6;
     private const int TrailerPickupSeq = 10;
+    private const int CarPickupSeq = 15;
     private const float StepDt = 1f / 60f;
     private const string PlaneNode = "player_bhawk";
 
@@ -86,6 +87,29 @@ internal static class LandingApproachSuites
     // How long the flare's smoke is sampled for. Short on purpose: the sample spends the pickup
     // window's own seconds, and the rest of the drive still has to fly the approach inside it.
     private const float FlareSampleS = 0.3f;
+
+    // CM16's armoured-car pickup, every name read out of that mission's own data: the row's
+    // animation, the definition it calls last, the train its own film blows up, and the two
+    // definitions the mission's objectives wake to stage it.
+    private const string CarPickupAnim = "pickup_sparks";
+    private const string GotSparksAnim = "got_sparks";
+    private const string TrainNode = "train01";
+    private const string TrainAnim = "tsega1";
+    private const string CarGunNode = "tcargun01";
+    private const string IntroAnim = "generic_intro";
+
+    // How long the mission's own chain is given to raise that pickup's three node prerequisites.
+    // The passenger's climb starts 25 s into the armoured car's own definition, so the budget is
+    // that plus the climb, not a guess at the whole approach.
+    private const float CarStageBudgetS = 90f;
+
+    // The film's two authored beats, in seconds from the episode start, each the sum of its own
+    // scripts: 'carpkup_player.zan' (6.656 s) plus the EVENT_OFFSET 10 before destroy_car01, and
+    // 'sparkspickup.zan' + 'final_cpilot.zan' (6.656 + 14.849 s) before the WAIT_FOR_COMPLETION
+    // releases and the pickup calls got_sparks. The tolerance is a few frames of dispatch.
+    private const float WreckAtS = 16.66f;
+    private const float GotSparksAtS = 21.51f;
+    private const float FilmToleranceS = 0.2f;
 
     // How long the parked rig waits at CM11's trailer for its range-armed definition to run the
     // authored hatch time and raise the actor the pickup requires, before the cone is flown.
@@ -169,6 +193,15 @@ internal static class LandingApproachSuites
     /// cutscene and clears the dock objective.</summary>
     internal static void TrailerPickupGate(TestContext ctx) =>
         DriveMission(ctx, TrailerPickupSeq, "test-trailer-pickup-gate", DriveTrailerPickup);
+
+    /// <summary>Drives CM16's armoured-car pickup, the one pickup whose own film destroys the
+    /// thing the mission is watching: <c>carpkup_player</c> calls <c>destroy_car01</c> ten seconds
+    /// after its own script, and the pickup only calls <c>got_sparks</c> once the climb's
+    /// <c>WAIT_FOR_COMPLETION</c> releases, 4.85 s later. Both beats are pinned against the
+    /// authored script lengths, the row that started the episode must not fire again underneath
+    /// it, and the film's completion code is what wins the mission.</summary>
+    internal static void CarPickupCredit(TestContext ctx) =>
+        DriveMission(ctx, CarPickupSeq, "test-car-pickup-credit", DriveCarPickup);
 
     /// <summary>Drives the auto-land button over the campaign's first mission's BUILT world: flying
     /// into the chapter's <c>auto</c> row lights <see cref="LandingApproachRuntime.AutoLandOffered"/>
@@ -1890,6 +1923,184 @@ internal static class LandingApproachSuites
         });
     }
 
+    // CM16's armoured-car pickup. The mission stages it itself: the train's definition opens the
+    // approach cone, the three car guns going down and the fighters-destroyed actor let the waving
+    // passenger stand up, and only then does the row's own prerequisite read met.
+    private static void DriveCarPickup(TestContext ctx, TestWorld world, CampaignDirector director,
+        ObjectiveScript script, string missionZrdr, StringBuilder report)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        var rows = LandingApproaches.Resolve(
+            chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
+        var pickup = RowFor(rows, CarPickupAnim)
+            ?? throw new InvalidOperationException("CM16 carries no armoured-car pickup approach row");
+        var credited = ObjectiveForAnimState(script, GotSparksAnim);
+        var wrecked = ObjectiveForInactive(script, TrainNode);
+        var train = CallerOf(script, TrainAnim);
+        var guns = ObjectiveForInactive(script, CarGunNode);
+        report.AppendLine($"row '{pickup.Anim}' on '{pickup.Node}'; rescue is " +
+            $"OBJECTIVE{credited?.Number.ToString() ?? "?"} (ANIM_STATE {GotSparksAnim} EXECUTED), " +
+            $"wreck is OBJECTIVE{wrecked?.Number.ToString() ?? "?"} (INACTIVE {TrainNode}/healthy), " +
+            $"staged by OBJECTIVE{train?.Number.ToString() ?? "?"} and " +
+            $"OBJECTIVE{guns?.Number.ToString() ?? "?"}");
+        ctx.Check(credited != null, $"CM16 credits the rescue on '{GotSparksAnim}' reaching EXECUTED");
+        ctx.Check(wrecked != null, $"and reads the destroyed train on an objective of its own");
+        ctx.Check(train != null && guns != null, $"and stages the pickup from two of its own objectives");
+        if (credited is not { } rescue || wrecked is not { } wreck
+            || train is not { } runs || guns is not { } down)
+        {
+            return;
+        }
+
+        WithTrigger(ctx, world, director, rows, (trigger, cutscene, rig, graph) =>
+        {
+            int starts = 0;
+            float clock = -1f;
+            var wasStarted = world.Runtime.OnInstanceStarted;
+            var wasFinished = world.Runtime.OnInstanceFinished;
+            world.Runtime.OnInstanceStarted = (def, anchor) =>
+            {
+                if (string.Equals(def.AnimName, pickup.Anim, StringComparison.OrdinalIgnoreCase))
+                {
+                    starts++;
+                }
+
+                if (clock >= 0f)
+                {
+                    report.AppendLine($"  t={clock:0.00} start '{def.AnimName}' ({def.Name})");
+                }
+
+                wasStarted?.Invoke(def, anchor);
+            };
+            world.Runtime.OnInstanceFinished = (def, anchor) =>
+            {
+                if (clock >= 0f)
+                {
+                    report.AppendLine($"  t={clock:0.00} end   '{def.AnimName}' ({def.Name})");
+                }
+
+                wasFinished?.Invoke(def, anchor);
+            };
+            try
+            {
+                RunTheCarPickup(ctx, world, director, graph, trigger, cutscene, rig, pickup,
+                    rescue, wreck, runs, down, () => starts, t => clock = t, report);
+            }
+            finally
+            {
+                world.Runtime.OnInstanceStarted = wasStarted;
+                world.Runtime.OnInstanceFinished = wasFinished;
+            }
+        });
+    }
+
+    private static void RunTheCarPickup(
+        TestContext ctx, TestWorld world, CampaignDirector director, ObjectiveGraph graph,
+        LandingApproachRuntime trigger, CutsceneController cutscene, FlightController rig,
+        LandingApproach pickup, ObjectiveDef rescue, ObjectiveDef wreck, ObjectiveDef train,
+        ObjectiveDef guns, Func<int> starts, Action<float> clock, StringBuilder report)
+    {
+        // The mission's own intro drives the same `player` node the pickup does, so it has to be
+        // out of the way before anything here is timed against it.
+        float intro = 0f;
+        for (; intro < IntroSettleS
+            && world.Runtime.AnimStateOf(IntroAnim) == AnimRunning; intro += StepDt)
+        {
+            world.Runtime.Advance(StepDt);
+        }
+
+        report.AppendLine($"'{IntroAnim}' ran out at t={intro:0.#}s");
+        ctx.Check(world.Runtime.AnimStateOf(IntroAnim) != AnimRunning,
+            $"the mission's own intro is over before the pickup is staged");
+
+        graph.Wake(train.Number);
+        ProbeRunner.DriveInactive(world.Runtime, guns);
+        graph.Wake(guns.Number);
+
+        float staged = -1f;
+        for (float t = 0f; t < CarStageBudgetS && staged < 0f; t += StepDt)
+        {
+            world.Runtime.Advance(StepDt);
+            graph.Step(StepDt);
+            var reads = PrerequisitesOf(world, pickup.Anim);
+            if (reads.Count > 0 && reads.All(p => p.Met))
+            {
+                staged = t;
+            }
+        }
+
+        var prereqs = PrerequisitesOf(world, pickup.Anim);
+        report.AppendLine($"staged at t={staged:0.#}s: " + string.Join(", ",
+            prereqs.Select(p => $"{p.Node}={(p.Active ? "active" : "inactive")} (reads {p.Met})")));
+        ctx.Check(staged >= 0f,
+            $"the mission's own chain meets '{pickup.Anim}'s node prerequisites");
+        ctx.Check(!graph.CompletedOf(wreck.Number),
+            $"and leaves OBJECTIVE{wreck.Number} uncompleted: the train is still healthy");
+        if (staged < 0f)
+        {
+            return;
+        }
+
+        clock(0f);
+        ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, pickup, report),
+            $"flying CM16's armoured-car approach starts '{pickup.Anim}'");
+        ctx.Check(cutscene.Playing,
+            $"'{pickup.Anim}' takes ownership of the session instead of ending immediately");
+        if (!cutscene.Playing)
+        {
+            return;
+        }
+
+        float got = -1f, rescued = -1f, wreckedAt = -1f, played = 0f, ended = -1f;
+        for (float t = 0f; t < PlayBudgetS && cutscene.Playing; t += StepDt)
+        {
+            clock(t);
+            world.Runtime.Advance(StepDt);
+            trigger.Tick();
+            cutscene.Tick();
+            director.Step(StepDt);
+            played += StepDt;
+            if (got < 0f && world.Runtime.AnimStateOf(GotSparksAnim) == AnimExecuted)
+            {
+                got = played;
+            }
+
+            if (rescued < 0f && graph.CompletedOf(rescue.Number))
+            {
+                rescued = played;
+            }
+
+            if (wreckedAt < 0f && graph.CompletedOf(wreck.Number))
+            {
+                wreckedAt = played;
+            }
+
+            if (ended < 0f && graph.Ended)
+            {
+                ended = played;
+            }
+        }
+
+        report.AppendLine($"episode ran {played:0.##} s over {starts()} start(s): " +
+            $"'{GotSparksAnim}' EXECUTED at {got:0.##}s, OBJECTIVE{rescue.Number} (rescue) at " +
+            $"{rescued:0.##}s, OBJECTIVE{wreck.Number} (wreck) at {wreckedAt:0.##}s, " +
+            $"outcome {graph.Outcome} at {ended:0.##}s; rescue alive={graph.AliveOf(rescue.Number)}, " +
+            $"mask 0x{graph.CompletedMask:x}");
+        ctx.Same(1, starts(),
+            $"the row fires once: a cutscene owning the session locks its own trigger out");
+
+        // The film's own two moments, against the authored script lengths rather than a
+        // watched value: 'carpkup_player.zan' (6.66 s) then the EVENT_OFFSET 10 before
+        // destroy_car01, and 'sparkspickup.zan' + 'final_cpilot.zan' (6.66 + 14.85 s) before the
+        // WAIT_FOR_COMPLETION releases and the pickup calls got_sparks.
+        ctx.Check(Math.Abs(wreckedAt - WreckAtS) < FilmToleranceS,
+            $"the film calls destroy_car01 on its authored beat: OBJECTIVE{wreck.Number} at {wreckedAt:0.##}s (authored {WreckAtS:0.##}s)");
+        ctx.Check(Math.Abs(got - GotSparksAtS) < FilmToleranceS,
+            $"and reaches '{GotSparksAnim}' on its own: EXECUTED at {got:0.##}s (authored {GotSparksAtS:0.##}s)");
+        ctx.Check(graph.Outcome == MissionOutcome.Won,
+            $"the mission-completion code the film raises wins CM16 outcome={graph.Outcome}");
+    }
+
     // CM07's hangar drop, every name read out of the mission's own data: the one cutscene
     // definition it range-gates, whatever calls that, and the objective node the drop's own reset
     // block flips through its CALL_ANIMATION.
@@ -2908,6 +3119,22 @@ internal static class LandingApproachSuites
             {
                 if (path.Count > 0 && string.Equals(path[0], node,
                         StringComparison.OrdinalIgnoreCase))
+                {
+                    return def;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static ObjectiveDef? ObjectiveForAnimState(ObjectiveScript script, string anim)
+    {
+        foreach (var def in script.Objectives)
+        {
+            foreach (var entry in def.AnimStates)
+            {
+                if (string.Equals(entry.Name, anim, StringComparison.OrdinalIgnoreCase))
                 {
                     return def;
                 }
