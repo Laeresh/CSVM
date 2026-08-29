@@ -1132,10 +1132,11 @@ public static class SuiteCatalog
             "CM07's caboose pickup as the original runs it, over the mission's real moving train: "
             + "the staged passenger is the caboose's child and keeps its offset while the caboose "
             + "travels, the pickup timing opening the switch selects the wave with the lit flare "
-            + "and its smoke trail on the passenger's hand, a level aircraft inside the 100 m sensor "
-            + "drops the rope ladder and the drop's own callback settles it deployed, and the "
-            + "pickup cutscene's call to caboosepickup holds a live instance for the person's climb "
-            + "through the whole episode",
+            + "and its smoke trail laying sprites on that passenger's own hand, a level aircraft "
+            + "inside the 100 m sensor drops the rope ladder and the drop's own callback settles it "
+            + "deployed swinging on its looped wind script, and the pickup cutscene's call to "
+            + "caboosepickup holds a live instance for the person's climb while cabpkup_ladder "
+            + "swings the rungs he climbs",
             TrainPickupRide));
 
         into.Add(new TestHarness.Suite("landings-trailer-pickup-gate",

@@ -133,6 +133,41 @@ list: `pickups.zrd` exists for this switch. C1/M02's table is one row, `ladder_p
   cut short by the switch; the pickup-completion definition's `STOP_ANIMATION [drop_ladder]` is
   what ends it after the hookup.
 
+## The ladder through the pickup
+
+The switch's own rule stops at the cutscene boundary (the tick tail runs only while no cutscene
+owns the world), so what happens to the ladder during the pickup is authored, not native. The
+approach's definition `ladder_pickup_sensor`/`lookat_copilotpkup` (`C1/M02/zrdr/copilot_pkup.zrd`)
+carries one untimed sequence, and its order is the whole answer:
+
+1. `STOP_ANIMATION` on `drop_ladder`, `waveloop`, `get_up`, `hit_the_deck`.
+2. `INVALIDATE_ANIMATION` on `waveloop`, `get_up`, `hit_the_deck`.
+3. `CALL_ANIMATION [cabpkup_ladder]`, then `CALL_ANIMATION [cabpkup_player]`, neither waiting.
+4. `INVALIDATE_ANIMATION` on `caboosewave`, `cabpkup_ladder`, `cabpkup_player`, `drop_ladder`,
+   `retract_ladder`.
+5. `CALL_ANIMATION [got_the_pilot]`, `[trucktodepot1]`, then `[caboosepickup]` with
+   `WAIT_FOR_COMPLETION`, and `INVALIDATE_ANIMATION [caboosepickup]` after it.
+
+The invalidations in step 4 land immediately after the calls in step 3 and with no wait between
+them, so they mean "never runnable again" rather than "stop now": the instances started a moment
+earlier run on.
+
+**The climb replaces the wind sway, it does not play over it.** `drop_ladder` calls
+`gen_drop_ladder` with `WAIT_FOR_COMPLETION`, and it is inside `gen_drop_ladder` that each rung's
+`ladder_drop` script is followed by a `looprN` sequence holding `ladder_loop` in a `LOOP_COUNT -1`.
+Stopping `drop_ladder` at step 1 is what ends that loop. `cabpkup_ladder` then re-parents the very
+same `rope_ladder` object from the aircraft's `ladder_pos` to the `caboose`, zeroes `ladder_roll`,
+and drives the ladder root plus all six rungs from its own `OBJECT_MOTION_SI_SCRIPT` `ALL_NAMES`
+record (node index 2 and 4 through 9 against script slots 0 through 6), ending by setting
+`rope_ladder` inactive. No rung is left for a wind loop to move, and the ladder hangs in the
+train's frame rather than the aircraft's for the length of the climb.
+
+A ladder that stops swaying when the pickup cutscene starts is therefore the original's own
+behaviour, and the question to ask of a build is whether the climb's own motion is playing, not
+whether the sway survived. `landings-train-pickup-ride` measures both, as a point out along
+`rung1` read in the ladder root's frame: the rungs hinge about their own origins, so a
+position-only read of a rung sees nothing at all.
+
 ## Not built
 
 **The `ladder_roll` counter-rotation.** `FUN_004735b0` also resolves a node named `ladder_roll`

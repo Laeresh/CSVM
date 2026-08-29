@@ -144,6 +144,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 54. ☑ `BL-604`: CM02 is still lost during the capture, before the swap: the wing walk's 913 park counted as a deactivation for DEDG
 55. ☑ `BL-615`: CM13's racers loop around zone 3 instead of going on; the run exit's net re-seat never refused the leg it entered on
 56. ☑ `BL-616`: CM13 docks with an invisible Pandora; a zeppelin record is what switches its hull on
+57. ☑ `BL-609`: no flare smoke and a frozen ladder in CM07's pickup, both disproved; the suite's two blind spots closed
 
 ## Dependency and parallelism notes
 
@@ -1646,3 +1647,19 @@ on the flown path.
 **Verified.** <pending orchestrator run>
 
 **⚠ Traps.** A working dock is not evidence that its host draws: the objective target, the stop-point release and the HUD marker all read poses and names, never visibility. `SetDormancy` writes opacity, not `Visible`, so the two switches are independent and must stay so. Both landing cones remain hidden after `pzhomebase` for a separate reason (`BL-618`, the `~n` dedup name).
+
+## F57 ☑ `BL-609`: no flare smoke on the caboose passenger, and the ladder stops swaying in the pickup
+
+**Goal.** The flare's authored smoke plays on the passenger's hand for the open wave phase, and the ladder's behaviour through the climb matches the original.
+
+**Evidence (confidence: traced, and measured in a flown session).** Both reports are disproofs. The `cuepuffer2`/`cuepuffer3` stop-misses in the suite artifact belong to `camera1`/`speed_cue` (puffers on `player`), not the flare; the report line prints the runtime's global unhandled counts beside `pickup_flare=`. The flare's puffer is `flaretrail` on `pickup_agent`/`waveloop` (`at_node cp_lh`, `DISTANCE_INTERVAL 0.4`, `fire_f01..06`). A freecam probe at the caboose reports 7 active puffers and 286 live particles including `flaretrail`, following the hand at one batch per 0.4 m. The suite could not see it: `TrainPickupRide` installs a counting emitter factory whose `LiveCount` is 1 whenever it sustains, and the census row carried only the host's name, so a same-named hand on the parked library figure would have read identically. On the ladder, `lookat_copilotpkup` opens with `STOP_ANIMATION [drop_ladder]`, which ends the per-rung `ladder_loop` wind loops inside `gen_drop_ladder`, then calls `cabpkup_ladder`, which re-parents the same ladder to the caboose, zeroes `ladder_roll` and drives its root and all six rungs from one `ALL_NAMES` record. The climb replaces the sway. Full decode: `docs/org/ladderSwitch.md`, "The ladder through the pickup".
+
+**Approach.** No behaviour change. `EmitterCensusRow` carries the host node, and `landings-train-pickup-ride` asserts the trail's host is the staged passenger's own hand, builds the mission's `flaretrail` state over a recording renderer and drives it along that hand's real poses, and measures the ladder as a point along `rung1` in the ladder root's frame.
+
+**Model recommendation.** A single session; the answer is in the mission data and one flown probe.
+
+**Verify.** The suite reads 22 sprites over 9.12 m against the 11 the 0.4 m cadence owes, and `rung1` swinging 0.318 m per 0.3 s hanging and 2.639 m over the 2.2 s climb with `cabpkup_ladder` live. Foreground: build clean, `dotnet test` 2558, 8 landings suites and 12 effect, emitter and puffer suites PASS.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** A rung hinges about its own origin, so a position-only read of one sees nothing. The harness retires the real puffer factory with its build, so anything about actual particles is asserted at the `Puffer` seam, never off the director's census. During the pickup cutscene there is no flare smoke by design (`lookat_copilotpkup` stops `waveloop`), and the sprites are 0.1 to 0.5 m across, so they read as a wisp: if the smoke still looks absent at the controls, the open question is sprite scale against footage, not the runtime.

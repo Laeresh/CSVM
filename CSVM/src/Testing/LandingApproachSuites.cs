@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -46,6 +47,15 @@ internal static class LandingApproachSuites
     private const float ApproachSpeedMps = 45f;
     private const float ApproachThrottle = 0.5f;
     private const float ApproachBudgetS = 6f;
+
+    // The pickup definition's own climb ladder: the second thing it calls, after stopping the
+    // hanging ladder's wind loop. It re-parents that same rope ladder to the caboose and drives its
+    // root and six rungs from one script (docs/org/ladderSwitch.md, "The ladder through the climb").
+    private const string ClimbLadderAnim = "cabpkup_ladder";
+
+    // How long the flare's smoke is sampled for. Short on purpose: the sample spends the pickup
+    // window's own seconds, and the rest of the drive still has to fly the approach inside it.
+    private const float FlareSampleS = 0.3f;
 
     // How long the parked rig waits at CM11's trailer for its range-armed definition to run the
     // authored hatch time and raise the actor the pickup requires, before the cone is flown.
@@ -1240,6 +1250,53 @@ internal static class LandingApproachSuites
                 ctx.Check(trails.Count > 0,
                     $"the flare's smoke trail emitter is asserted on the passenger's hand");
 
+                // Which hand: a same-named node on the parked library figure would emit where
+                // nobody is standing, and the census row's NAME alone cannot tell the two apart.
+                var trailHost = trails.Count > 0 ? trails[0].HostNode : null;
+
+                // An emitter can read "emitting" and lay nothing, and the director above holds a
+                // fake (see TrainPickupRide), so the sprites are asserted one seam lower: the
+                // mission's own payload over a recording renderer, along this hand's own poses.
+                var smokeState = FlareTrailState(world, agent);
+                var gpu = new RecordingEmitterRenderer();
+                var smoke = smokeState != null ? Puffer.CreateWith(smokeState, gpu, sustained: true) : null;
+                if (smoke != null)
+                {
+                    ctx.Host.AddChild(smoke);
+                }
+                var handBefore = trailHost?.GlobalPosition ?? Vector3.Zero;
+                for (float t = 0f; t < FlareSampleS; t += StepDt)
+                {
+                    world.Runtime.Advance(StepDt);
+                    trigger.Tick();
+                    if (smoke != null && trailHost != null)
+                    {
+                        smoke.Emit(trailHost.GlobalPosition, trailHost.GlobalBasis, StepDt);
+                        smoke._Process(StepDt);
+                    }
+                }
+                float handTravel = trailHost != null
+                    ? trailHost.GlobalPosition.DistanceTo(handBefore) : -1f;
+                // What the authored cadence owes over that motion, halved: the hand's path is not a
+                // straight line, so the metres it covers are an upper bound on the trail's length.
+                int owed = smokeState is { DistanceInterval: > 0f } && handTravel > 0f
+                    ? (int)(handTravel / smokeState.DistanceInterval) / 2 : 0;
+                report.AppendLine($"flaretrail host chain: {(trailHost != null ? ChainOf(trailHost) : "-")} " +
+                    $"under-passenger={(trailHost != null && IsUnder(trailHost, agent))} " +
+                    $"hand-distance={(trailHost != null ? trailHost.GlobalPosition.DistanceTo(agent.GlobalPosition) : -1f):0.##}; " +
+                    $"state interval={smokeState?.DistanceInterval:0.##} m frames={smokeState?.TextureSequence.Count}" +
+                    $"+{smokeState?.Textures.Count} size={smokeState?.SizeMin:0.###}-{smokeState?.SizeMax:0.###}; " +
+                    $"hand travelled {handTravel:0.##} m in {FlareSampleS:0.##} s and drew {gpu.MaxShown} " +
+                    $"sprite(s), owed at least {owed}");
+                ctx.Check(trailHost != null && IsUnder(trailHost, agent),
+                    $"the trail's host node is the staged passenger's own hand, not the library figure's");
+                ctx.Check(smokeState is { DistanceInterval: > 0f }
+                        && smokeState.TextureSequence.Count + smokeState.Textures.Count > 0,
+                    $"the mission's own flaretrail state is a distance trail with sprites to draw");
+                ctx.Check(gpu.MaxShown > 0 && gpu.MaxShown >= owed,
+                    $"and driven along that hand's motion it lays the smoke the cadence owes");
+                smoke?.QueueFree();
+
                 // The ladder: level inside the sensor drops it, the settle callback lands it. The
                 // train has travelled on since the rig was parked, so the rig is re-parked level
                 // beside the sensor as it stands now.
@@ -1269,6 +1326,25 @@ internal static class LandingApproachSuites
                 ctx.Check(ladder.State == LadderState.Deployed,
                     $"the drop's own CALLBACK 123 settles the switch deployed");
 
+                // The wind sway: gen_drop_ladder leaves each rung's ladder_loop script in an
+                // infinite LOOP once the drop has landed, so a settled ladder keeps moving. The
+                // rungs hinge about their own origins, so the sample is a point out along a rung.
+                var settledRung = world.Runtime.FindNodes("rung1");
+                var settledLadder = ladders.Count > 0 ? ladders[0] : null;
+                var swayBefore = RungInLadder(settledRung, settledLadder);
+                float sway = 0f;
+                for (float t = 0f; t < FlareSampleS; t += StepDt)
+                {
+                    world.Runtime.Advance(StepDt);
+                    var swayNow = RungInLadder(settledRung, settledLadder);
+                    sway += swayNow.DistanceTo(swayBefore);
+                    swayBefore = swayNow;
+                }
+                report.AppendLine($"settled ladder over {FlareSampleS:0.##} s: rung1 swung " +
+                    $"{sway:0.###} m in the ladder's own frame");
+                ctx.Check(sway > 0.01f,
+                    $"the deployed ladder keeps swinging on its own looped wind script");
+
                 // The docking cone, then the cutscene's own call chain.
                 int waitsBefore = world.Runtime.WaitsInstalled;
                 ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, pickup, report),
@@ -1280,8 +1356,16 @@ internal static class LandingApproachSuites
                 ctx.Check(IsUnder(agent, caboose),
                     $"the passenger is still the caboose's child through the pickup");
 
+                // The climb REPLACES the hanging ladder's wind loop (docs/org/ladderSwitch.md), so
+                // what is owed is cabpkup_ladder's own motion, read in the ladder root's frame:
+                // measured globally the caboose's 60-odd metres would drown it.
+                var rung = world.Runtime.FindNodes("rung1");
+                var ladderRoot = ladders.Count > 0 ? ladders[0] : null;
+                var rungBefore = RungInLadder(rung, ladderRoot);
+                float rungTravel = 0f;
                 float played = 0f;
                 float climb = 0f;
+                int cabpkupLadder = 0;
                 for (float t = 0f; t < PlayBudgetS && cutscene.Playing; t += StepDt)
                 {
                     world.Runtime.Advance(StepDt);
@@ -1291,13 +1375,28 @@ internal static class LandingApproachSuites
                     if (world.Runtime.AnimStateOf("caboosepickup") == 2)
                     {
                         climb += StepDt;
+                        cabpkupLadder = Mathf.Max(cabpkupLadder,
+                            world.Runtime.AnimStateOf(ClimbLadderAnim));
+                        var rungNow = RungInLadder(rung, ladderRoot);
+                        rungTravel += rungNow.DistanceTo(rungBefore);
+                        rungBefore = rungNow;
                     }
                 }
                 report.AppendLine($"pickup episode ran {played:0.##} s, caboosepickup live for " +
-                    $"{climb:0.##} s of it");
+                    $"{climb:0.##} s of it; {ClimbLadderAnim} reached state {cabpkupLadder}, " +
+                    $"drop_ladder state {world.Runtime.AnimStateOf(LadderSwitch.DropAnim)}, " +
+                    $"rung1 swung {rungTravel:0.###} m in the ladder's own frame over the climb; " +
+                    $"ladder chain {(ladderRoot != null ? ChainOf(ladderRoot) : "-")}; script misses: " +
+                    string.Join(", ", world.Runtime.UnhandledEventCounts
+                        .Where(kv => kv.Key.StartsWith("ObjectMotionSiScript", StringComparison.Ordinal))
+                        .Select(kv => $"{kv.Key}={kv.Value}")));
                 ctx.Check(!cutscene.Playing && played > 2f,
                     $"the authored pickup camera episode runs to its handoff");
                 ctx.Check(climb > 1f, $"the person's climb plays for its scripted length");
+                ctx.Same(2, cabpkupLadder,
+                    $"'{ClimbLadderAnim}' runs over the climb, so the ladder is animated rather than parked");
+                ctx.Check(rungTravel > 0.05f,
+                    $"and its rungs actually move in the ladder's own frame while the person climbs them");
             }
             finally
             {
@@ -1305,6 +1404,40 @@ internal static class LandingApproachSuites
             }
         });
     }
+
+    // The flare's smoke as the mission authors it: waveloop's own PUFFER_STATE payload, decoded the
+    // way the runtime decodes it. Read out of the definition rather than restated here, so a change
+    // to the decode moves the assertion with it.
+    private static PufferState? FlareTrailState(TestWorld world, Node3D agent)
+    {
+        foreach (var def in world.Session.Program.ByAnimName("waveloop"))
+        {
+            if (!def.NodeRefs.ContainsKey(AnimRuntime.NameOf(agent)))
+            {
+                continue;
+            }
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind == "PufferState" && (ev.Data.Num("active_state") ?? 0f) >= 1f)
+                    {
+                        return PufferState.FromAnimEvent(ev.Data);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    // A rung's place in the ladder root's frame, so the train carrying the whole ladder does not
+    // read as the rungs moving. Zero when either node is missing, which the caller's own check sees.
+    // A metre out along the rung's own axis, not its origin: a rung hinges about its own origin,
+    // so a position-only read is blind to the whole animation.
+    private static Vector3 RungInLadder(IReadOnlyList<Node3D> rung, Node3D? ladder) =>
+        rung.Count > 0 && ladder != null
+            ? ladder.GlobalTransform.AffineInverse() * (rung[0].GlobalTransform * Vector3.Right)
+            : Vector3.Zero;
 
     private static string ChainOf(Node node)
     {
