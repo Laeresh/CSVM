@@ -521,6 +521,50 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-557`, `Flight/Difficulty`, `docs/org/weaponRay.md`,
   `analysis/aim-assist-ttk/FINDINGS.md`.
 
+- `BL-639` `[Bug]` `[Blocked: CAP-47]` **CM14 (C2B/M04): the Gemini's gasbags do not burn out
+  completely, so the zeppelin never dies by its gasbags.** *Evidence:* reported at the controls and
+  re-confirmed on the merged build. The authored death is a count:
+  `extracted/C2B/M04/mis_anim/geminizep-all_gmzep_gasbags.json` carries
+  `activ_prereq_min_to_satisfy: 3` over five `finish_gmzepgasbagN` animation prerequisites, and its
+  `call_all_bags` sequence invalidates itself, calls `killgmzep` and runs the remaining gasbag
+  animations, so three finished gasbags of five kill the Gemini and the rest burn for show. That is
+  the `MINIMUM_TO_SATISFY`/`ANIMATION_LIST` prerequisite form CSVM's reader does parse, with
+  `ZeppelinRuntime` its only consumer, so the gate exists in the port; what does not arrive is a
+  finished gasbag. *What to settle first:* whether the fire's own animation stops short, or whether
+  it completes and the `finish_*` state is never raised. Those are different faults with the same
+  symptom, and only the second is a prerequisite question. `BL-599`'s closing commit is the nearest
+  precedent, a zeppelin that stopped burning out because the compiled prerequisite state is bit 0
+  of `active_raw` (`git log --grep=BL-599`); read it before starting.
+  *⚠ Traps:* do not judge a fix by whether the mission ends sooner. The mission's own progress gate
+  is the cannons, not the gasbags: primary 3 completes when five of six `deploy_gmzep_lbroadNN`
+  animations go `INVALID`, and the briefing says so outright (`MSG_BRF_HWM4_OBJ3`, "Destroy the
+  GEMINI by shooting the open cannon hatches"). Gasbags are not an authored substitute for that.
+  *Blocked:* what a finished gasbag looks like in the original is unfilmed, so "completely" has no
+  reference to compare against; `CAP-47` is that clip.
+  *Cross-refs:* `BL-640` (the same zeppelin's cannons), `BL-525` (the other prerequisite form,
+  which is dropped).
+
+- `BL-640` `[Bug]` **CM14 (C2B/M04): a broadside cannon takes weapon damage while its hatch is
+  still shut.** *Evidence:* reported at the controls and re-confirmed on the merged build. The
+  mission's premise is the opposite: each cannon deploys, fires and retracts behind its door, and
+  the briefing tells the player to destroy the Gemini "by shooting the open cannon hatches"
+  (`MSG_BRF_HWM4_OBJ3`). Nothing in the data gates that damage.
+  `extracted/C2B/M04/mis_anim/lbroad11-destroy_gmzep_lbroad11-gunback.json` is
+  `activation: WeaponHit` with `health: 60.0`, `proximity_damage: false` and `activ_prereqs: null`;
+  its `DAMAGE_SEQUENCE` only tiers smoke at `AnimHealth` 18 and 36; and its objects are the hatch
+  (`upper_br_door`), `gun1` and the frame. So the original's gate is geometric rather than
+  scripted: a gun retracted behind a closed door is not reachable by a round.
+  *Fix shape:* establish what a round actually strikes when the cannon is stowed. The candidates
+  are a retracted gun that keeps a collider outside the hull, a door that carries none, and a hit
+  attributed by a bounding volume rather than by the geometry the ray met.
+  *⚠ Traps:* do not add a "hatch open" test to the definition's activation. The data authors no
+  such prerequisite, so the test would be invented behaviour, and it would leave whatever lets a
+  round reach an interior part free to do the same elsewhere on the hull. The
+  `deploy_gmzep_lbroadNN` animations are also the mission's progress counter, five of six
+  `INVALID` completing primary 3, so anything that changes how easily a cannon dies moves the
+  mission's pacing. *Playtest after fix:* CM14, firing at a retracted cannon and then at the same
+  one deployed. *Cross-refs:* `BL-639`, `docs/org/weaponRay.md`.
+
 ## Weapons & combat
 
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
@@ -937,6 +981,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   first question, not the magnitude. *Cross-refs:* `AimAssist.Scan`, `BL-523` (the boats' own
   gunnery, a separate item).
 
+- `BL-626` `[Bug]` **A turret acquires only aircraft, so no boat, balloon or emplacement gun ever
+  fires at a ship.** *Evidence:* reported at the controls in two missions. In CM10 (C1/M05) the
+  lifeboats a downed attack balloon drops reach the water, drive their nets and shoot at nothing
+  while the Red Cross hospital ship sits in front of them; in CM12 (C2/M01) the `eshipg31`
+  generator's patrol boats never attack the Spruce Goose they are launched against.
+  `TurretController.AcquireTarget` takes the nearest live hostile **aircraft** inside
+  `DETECTION_RANGE` (`Flight/TurretController.cs:621-624`), and the scan set it fills is an
+  aircraft list (`:53`), so a vessel is not a candidate at any range and no later gate in the tick
+  can rescue it. The mission data expects otherwise: CM10 authors twelve `patrolboat_1..12` blocks
+  in `aiv.zrd` at `y = 0` and nine `bbtur` balloon turrets, and each `lifesaverNM` carries its own
+  gun. *Fix shape:* settle from the decode which candidate classes the original's turret picker
+  holds, then widen the acquisition to match. The aim assist already keeps a vehicle list beside
+  its aircraft list ([`docs/org/aim-assist.md`](docs/org/aim-assist.md), "The four lists"), so the
+  classes exist to draw on. *⚠ Traps:* do not reach the behaviour by making a ship an
+  aircraft-class entity so that the existing list picks it up. `BL-605` is the neighbouring defect
+  on the aim assist's vehicle candidates and concerns the velocity field alone, not membership, so
+  the two must not be folded together. A patrol boat's own gunnery runs through the AI mode machine
+  (`BL-523`), so a turret-side fix by itself does not make a boat shoot.
+  *Playtest after fix:* CM10 with a dropped lifeboat and the hospital ship in frame, then CM12 as
+  the Goose passes the boats. The original's behaviour is on film in
+  `OriginalScreenshots/CM10.mkv`, where patrol boats attack the hospital ship shortly after the
+  start. *Cross-refs:* `BL-605`, `BL-523`, `docs/org/targeting.md`.
+
 ## Flight model & collision physics
 
 
@@ -993,6 +1060,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   lost steps. The measurement was taken with `--debug-objective=18` driving the mission, with nobody
   at the controls, so it under-weights projectiles and destruction cascades. *Cross-refs:*
   `docs/PLAN-M5-polish-6.md` C22, `BL-606` (the same per-sim-step suspects seen as an allocator).
+
+- `BL-627` `[Bug]` **CM12 (C2/M01): the Spruce Goose moves jittery.** *Evidence:* reported at the
+  controls, and re-confirmed on the merged build in the same sortie that cleared the mission's
+  patrol boats, its voice cues and its Bloodhawk wave. The Goose is what the mission is about
+  (`targets.zrd` names `sprucegoose` with `MSG_TRGT_SGOOSE` and `MSG_OBJ_DEFEND`), so it is in
+  frame for most of the sortie and its motion is the thing the player watches.
+  *Fix shape:* establish which owner writes its pose before touching anything, then log that pose
+  per sim step over a straight leg. A jitter of this kind is either two owners writing the same
+  transform in one step, or a follower that re-seats rather than advances.
+  *⚠ Traps:* do not judge it from a still or a held probe. The airframe is the largest in the game
+  and the leg runs far from the world origin, so the reading has to be taken flying, over
+  consecutive frames, with the camera not itself the source of the motion. Do not smooth the pose
+  to quiet the symptom: a filter over a double write hides the cause and costs a frame of latency
+  on every other object that shares the path.
+  *Playtest after fix:* CM12 from the harbour leg, formating on the Goose and holding station.
 
 ## Environment & world
 
@@ -1512,7 +1594,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Ruled out, do not re-chase:* collapsed clutter cards writing depth or a dark fragment (the fade-on frame is pixel-identical to `--no-clutter` in every row where the fade has culled every instance); C5's fog-volume clutter overlapping the templates fade (its field is 16,170 cloud sprites at `fade 1200-1800 m`, outside the 200–900 m the templates author); the gamez buildings carrying an ignored `far_fade_range` (`FUN_004d5de0` is reached only from the clutter instance list `FUN_004d5d90` and the clutter quadtree `FUN_004d6010`, both behind `CameraRenderClutter` in the world walk `FUN_004d5910`, while ordinary scene nodes draw through `FUN_004d4a20` and never reach the fade test); the alpha-texture lighting gate of `BL-613` (the band is a function of camera distance and lifts under a mip-policy switch that changes no lighting term); and decorrelating the dither lattice per stamp, which was probed and changes the frame barely at all.
   *Cross-refs:* `PT-85` (the flight that judges it, with the pose and the A/B), `BL-337` (closed; the fade), `docs/org/clutter.md`, `docs/formats/gamez.md` on the authored mip levels.
 
-- `BL-546` `[Bug]` **A nitro engage still shows no prop swap; the exhaust smoke half is fixed.**
+- `BL-546` `[Bug]` **A nitro engage shows no prop swap, and at the controls no exhaust smoke
+  either.**
   *Evidence:* `nitro_boost`/`nitro_decay` (`plane_props.zrd`) never started at all: they author
   their anchor as NAME `warhawk`, which never resolves inside a per-plane crash rig's own index
   (built only from the flown aircraft's own subtree), and `FlightController.AdvanceNitro` called
@@ -1523,6 +1606,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   exhaust half: `nitro_boost`'s own `PUFFER_STATE nitropuff1..4 AT_NODE exhaust1..4` now fires,
   confirmed by the `nitro-boost-anchors` suite (builds the real `player_warhawk` rig, plays
   `nitro_boost` through the production call shape, asserts the puffer sustains).
+  ⚠ **A sortie on the merged build contradicts that half:** an engage flown at the controls shows
+  no exhaust smoke at all, so the suite is green while the effect it guards is invisible in a real
+  session. Settle which of the two is describing the shipped path before going back to the prop
+  swap. The suite builds its own `player_warhawk` rig, so the difference between that rig and a
+  flown aircraft's is where to look first, and a fix that only satisfies the suite again would
+  leave the same gap. The same sortie reports no shake on the engage. `BL-447`'s ledger edge there
+  is the AI's `medium_aishake`, so whether the player's own engage is meant to shake at all is an
+  open question and not that entry's, and it is recorded here with the rest of what an engage does
+  not show.
   The prop swap (`OBJECT_ACTIVE_STATE`/`OBJECT_OPACITY_FROM_TO nitropropN`, `spin_nitrorotorN`,
   `snd_nitrostart AT_NODE nitroprop1`) is still not visible after that fix, and the open question
   is why. `extracted/planes/nodes.json` declares exactly 34 `nitropropN` nodes and carries BOTH a
@@ -1604,6 +1696,57 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   must be checked against the suites that pin it, not only against timings. This is a separate
   question from which half of the reset dominates, which is `BL-535`'s. *Cross-refs:* `BL-535`
   (the measurement this came out of), `PoseChannel.ApplyOpacity`, the `effect-pool-reset` suite.
+
+- `BL-628` `[Bug]` **A docking cutscene plays its hook animation three times inside its opening
+  camera shot.** *Evidence:* reported at the controls and re-confirmed on the merged build in
+  CM11's closing autodock. It is not airframe-specific: the Devastator and the Bloodhawk both show
+  it, and it has been there since CM01, so every docking in the campaign is affected. The hook
+  engages correctly, so this is the animation running repeatedly rather than the dock failing.
+  *Fix shape:* read the hookup definition's own call graph first and count the call sites that
+  reach the hook leg. `BL-525` records the shape this most likely takes: `wv_tailhook.zrd`'s
+  `wv_initiate_hookup` `CALL_ANIMATION`s its legs unconditionally and only each definition's
+  `ACTIVATION_PREREQUISITE` keeps the wrong one from running, a prerequisite form both of CSVM's
+  parse paths silently drop. Three plays from one call site is a different fault from three call
+  sites, and the log tells which before any code moves.
+  *⚠ Traps:* do not silence it by latching "already played" on the runtime. A repeat that a
+  definition authors is data the parse is dropping, and a latch would hide the same defect wherever
+  else those prerequisites are ignored, roughly fifty definitions across several chapters
+  (`BL-525`). The player-visible hook engagement is correct today and must stay correct.
+  *Playtest after fix:* any campaign docking, watching the opening shot alone: one hook swing.
+  *Cross-refs:* `BL-525` (the unconditional-call shape and the dropped prerequisite form),
+  `docs/formats/anim-definitions/cutscenes.md`.
+
+- `BL-629` `[Bug]` **CM10 (C1/M05): a shot-down attack balloon hangs in the air instead of bursting
+  and falling.** *Evidence:* reported at the controls. The parts of the chain that work are the
+  weapon hit itself, the model swap to `destroyed_balloon`, the death of the balloon's `bbtur`
+  turret and the lifeboat's drop, which falls, splashes and drives its net. What is left standing
+  is the destroyed balloon, suspended where it was killed. The authored death is more than a swap:
+  `extracted/C1/M05/mis_anim/lifesaver11-lifefall11-lifeballoon.json` (`activation: WeaponHit`,
+  `health: 60.0`) carries eight `ObjectMotion` events, of which only the first drives `lifeboat`
+  down under `gravity: -10`; the rest move `b_dbase` and `b_part1` through `b_part6`, the balloon's
+  own bursting pieces, alongside seven `ObjectOpacityFromTo` fades and fourteen puffer states. So
+  the balloon-side half of one definition is not taking effect while the boat-side half is.
+  *Fix shape:* run that definition headless and report which of its eight motions start, then
+  follow the first one that does not. Nine balloons author the same five definitions, so whatever
+  the answer is, it is the same nine times.
+  *⚠ Traps:* do not delete the balloon on death as a shortcut. The pieces are authored to fall and
+  fade, and a despawn would remove the wreck the original shows falling. `set_bbtur_off` and the
+  swap are already doing their jobs, so neither is the suspect.
+  *Playtest after fix:* CM10, shoot one balloon and watch what is left in the air.
+
+- `BL-630` `[Bug]` **CM02 (C3/M05): the docking hook's two inward-rotating side parts swing too
+  far on the captured Balmoral's auto-land.** *Evidence:* seen at the controls on that mission's
+  landing, judged by eye with no original reference open. ⚠ The sighting predates the run-5 and
+  run-6 merges and the mission has not been re-flown since, so re-confirm before digging.
+  The Balmoral's own docking choreography is pinned elsewhere and is not what this is about: the
+  `landings-balmoral-dock` suite asserts the wing fold and `rwingbend` at the authored angle, so
+  the parts in question are the hook rig's, not the airframe's.
+  *Fix shape:* read the hookup definition's animated nodes for those two side parts and compare
+  their authored travel with what the runtime applies. An over-rotation is either a channel applied
+  twice or an angle read in the wrong unit.
+  *⚠ Traps:* do not retune the angle to taste. It is authored, and the fold beside it is already
+  asserted against its authored value, so a hand-set number here would sit next to a pinned one.
+  *Cross-refs:* `BL-545` (the same landing's hook, height and wing-fold reads).
 
 ## Audio
 
@@ -2121,6 +2264,47 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   skip path that shares this restore), `docs/formats/anim-definitions/cutscenes.md` (what a
   definition owns during an episode).
 
+- `BL-631` `[Bug]` **Geometry nearer to the camera than the letterbox card draws over the bars.**
+  *Evidence:* seen at the controls in CM10 (C1/M05)'s closing docking cutscene, where a walkway
+  passes between the camera and the bars and is drawn on top of them, and re-confirmed on the
+  merged build. The bars are world geometry rather than a screen overlay: `CutsceneController`
+  binds the definition's own `letterbox` node (`BarsNode`, `Session/CutsceneController.cs:25`),
+  pins it to the cutscene camera by transform copy, and picks each camera's field of view as the
+  widest one the card still covers (`:846-863`). Anything closer than that card is therefore in
+  front of it, and depth decides the rest.
+  *Fix shape:* keep the card as data and make it unoccludable, by render priority or by taking it
+  out of the depth test, so its coverage no longer depends on what the episode flies past.
+  *⚠ Traps:* do not solve it by moving the camera or narrowing the field of view. Both are computed
+  from the card's own extent, so a change there moves the framing the definition authored. The card
+  is the original's geometry too, so `OriginalScreenshots/CM10.mkv` is the check on whether the
+  original occludes it before any depth behaviour changes.
+  *Playtest after fix:* CM10's docking, watching the walkway cross the frame.
+
+- `BL-632` `[Bug]` **CM15 (C2/M05): the capture cutscene frames no Balmoral.** *Evidence:*
+  reported at the controls. The missing aeroplane is an NPC actor, not the player's aircraft, and
+  the pilot was flying a Bloodhawk in the chase view when the episode started, which rules out the
+  cockpit-view visibility rules by construction. *Fix shape:* find the definition that stages the
+  Balmoral for that episode and establish whether the actor is served at all before asking why it
+  is not drawn. *⚠ Traps:* `BL-625` is a different mechanism, an airframe left hidden because the
+  cutscene silences the per-frame camera arm that re-asserts cockpit visibility, and its fix cannot
+  reach a staged NPC, so do not close this against it. The two nearest known shapes are the hangar
+  hand-over that played without its aeroplane and the staged actor served only to a call that names
+  a site (`git log --grep=BL-596`, and `BL-621`); read both before opening the definition, since
+  either answer has been written once already. *Cross-refs:* `BL-625`, `BL-621`.
+
+- `BL-633` `[Bug]` **CM15 (C2/M05): the player is left under the terrain when a cutscene hands
+  control back, and can only recover by crashing.** *Evidence:* reported at the controls. The
+  handoff leaves the aircraft below the ground surface rather than at the pose the episode ended
+  on, and since terrain colliders are single-sided a crossing from below is silent, so dying is the
+  only way out. *Fix shape:* log the pose the episode restores against the pose it ended on. The
+  restore is where a marker-relative position can survive the episode's own reparenting, which is
+  the failure fixed for a different episode in `BL-610` (`git log --grep=BL-610`), so the first
+  question is whether this one takes that path. *⚠ Traps:* do not add a ground clamp to the
+  handoff. It would hide a wrong restore everywhere else it happens, and it would fight an episode
+  that legitimately ends below a surface. The single-sided colliders that make the symptom
+  unrecoverable are a separate property, recorded from the air side in `BL-566`.
+  *Cross-refs:* `BL-566`, `BL-625`.
+
 ## HUD & UI
 
 - `BL-496` `[Feature]` **The aiv `ace` flag reaches the entity and nothing is known about what it
@@ -2243,6 +2427,72 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   mapping is decoded. ⚠ The binding is `F9` / left-stick click, not the original's `A`
   (`docs/controls.md`), so a resolved string that names the key needs the port's key substituted.
   *Cross-refs:* `docs/plans/PLAN-M5-polish-2.md` C10.
+
+- `BL-634` `[Bug]` **The campaign's Plane Construction lists every Instant Action build instead of
+  the profile's own aircraft, and offers Instant Action's verbs.** *Evidence:* reported at the
+  controls. The cabin opens the hangar over the global build store,
+  `CustomPlaneStore.UserPlanes()` (`UI/LaunchMenu.cs:1866-1869`), and the flow's first screen lists
+  it wholesale (`Saved = store.List()`, `UI/HangarFlow.cs:150`), which is the same
+  `user://Planes/` directory the Instant Action Build button writes into. The profile's ownership
+  list is not consulted anywhere in that screen, though it exists and is already wired for money:
+  `HangarCampaignContext` carries `Purchase`, `Sell`, `CanSell` and `SellPrice`
+  (`UI/HangarCampaignContext.cs:98-122`) with the decoded rules, a sell price equal to the full
+  build cost, reward aircraft unsellable, and a floor of two aircraft
+  ([`docs/org/hangar.md`](docs/org/hangar.md), "The sell price is the full build cost"). The rows
+  are Instant Action's as well, a New Plane row and a delete, where the campaign's are buy and
+  sell. *Fix shape:* filter the campaign flow's plane list through `Profile.Planes` and route its
+  rows to `Purchase` and `Sell`. Ownership is what separates the two modes, not storage: `Purchase`
+  already names a build into the profile, so the builds themselves can stay in the one
+  `user://Planes/` store. *⚠ Traps:* do not give the campaign its own build directory to get the
+  separation. The two starters a fresh profile is seeded with are never hangar-built and have no
+  entry there at all, which is why `SellPrice` falls back to the campaign's own Devastator spec
+  (`:74-93`); a per-mode store would strand them. The delete row is not the sell row: deleting a
+  build must not credit the wallet. *Playtest after fix:* a fresh profile shows exactly its two
+  starters, a purchase adds one and takes the money, a sale removes it and returns the full cost,
+  and Instant Action's list is unaffected by all three.
+  *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) (the wallet, the slot rules and the
+  reward table), `CampaignProfileStore`.
+
+- `BL-635` `[Bug]` **CM11 (C2/M02): the stunt planes carry no objective marker, though their roster
+  blocks name one.** *Evidence:* reported at the controls and still open after the mission's other
+  findings were fixed. `aiv.zrd` keys `secfury_5` and `secfury_6` with `MSG_STUNT_PLANE_NAME` and
+  `MSG_OBJ_FOLLOW`, so the objective label the marker would carry is authored on the block itself,
+  not inferred. *Fix shape:* follow how a roster block's objective key reaches the marker layer and
+  find where these two are dropped, then check the same path for the other blocks that carry an
+  objective key. *⚠ Traps:* the label is the block's, not `targets.zrd`'s, so a fix that adds a
+  target entry for these aircraft would put the marker in by inventing data the mission does not
+  author. Two aircraft share the key, so a marker that appears on only one is not a pass.
+  *Playtest after fix:* CM11, from the objective that starts the follow.
+
+- `BL-636` `[Bug]` **CM10 (C1/M05): the Destroy Attack Balloon marker sits at water level under
+  its balloon.** *Evidence:* reported at the controls, and unchanged on the merged build after the
+  mission's balloon and lifeboat behaviour was fixed. The marker tracks the right balloon
+  horizontally but hangs at the sea surface below it, which reads as a marker on the boat. Each
+  `lifesaverNM` group holds the balloon, its `bbtur` turret, the ropes and the lifeboat together,
+  so a marker anchored on the group rather than on the balloon node lands exactly there.
+  *Fix shape:* read which node the marker anchors on for these targets and move it to the balloon.
+  `BL-602`'s closing commit settled the neighbouring case, a group site anchoring on its built
+  meshes rather than on its own origin (`git log --grep=BL-602`), and is the first thing to read.
+  *⚠ Traps:* do not offset the marker upward by a constant. The balloons descend as they attack,
+  so a fixed lift is right at one altitude and wrong at every other. The marker must also retire
+  with the balloon rather than follow the boat that drops out of it.
+  *Playtest after fix:* CM10, with a wave in frame at two different heights.
+
+- `BL-637` `[Research]` **A targeted patrol boat shows no name line, and the original may show none
+  either.** *Evidence:* reported at the controls in CM12 (C2/M01), where the boats can be targeted
+  but carry no text. `targets.zrd` for that mission names only `sprucegoose`, its engine, the
+  propane tanks and the four `tugandbarge0N`, so no authored target entry covers a boat, and the
+  boats themselves are the `eshipg31` generator's. *What to settle:* whether the original draws a
+  name here at all. [`docs/org/targeting.md`](docs/org/targeting.md) (lines 512 to 540) records
+  three authors of the name string, the roster block's own `title` at `aiv` slot 20, Instant
+  Action's hardcoded ids, and a template-less generator spawn taking its `egen.zrd` value raw, and
+  notes that 239 of the install's 414 roster blocks author an empty `title`, so most enemies in the
+  original show a box and no name. CM12's generator record authors no `title` of its own and
+  resolves `Eshipg31_params` instead, so the answer turns on what that block carries.
+  *⚠ Traps:* do not reach for `MSG_VEH_PATROLBOAT`. The vehicle definition's own title is read by
+  none of the three authors (`targeting.md:537`), so displaying it would invent a name the original
+  never shows. The same page warns that a fourth author is not ruled out, only unfound.
+  *Cross-refs:* `BL-626` (the same boats, their guns).
 
 ## Splitscreen
 
