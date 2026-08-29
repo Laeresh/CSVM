@@ -897,21 +897,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   incremental migration note, `TurretController`, `BL-611`'s closing commit
   (`git log --grep=BL-611`).
 
-- `BL-622` `[Feature]` **No debrief screen: a finished mission drops straight back to the cabin.**
-  *Evidence:* reported at the controls, on a won and on a lost mission alike. `CampaignDirector`
-  records the attempt, writes the profile and raises `ReturnToCabin`; `GameSession.
-  OnCampaignMissionEnded` prints one `GD.Print` and calls the launcher's return, which reopens the
-  launchscreen on the cabin, so nothing between the mission ending and the cabin exists. The
-  result the screen would show is already carried: `CampaignMissionResult` has the outcome, the
-  attempt, the recorded flags and the won mission's `CompletedMask`. *Fix shape:* a page in the
-  `CampaignFlow` board family (`CampaignCabinPage`, `CampaignPreviousMissionsPage` are the nearest
-  shapes) shown between the mission and the cabin, reading that result; the original's own debrief
-  layout, its per-objective lines and its scoring are undecoded and are the first job.
-  *⚠ Traps:* the world stays up for the rest of the frame after the end is raised, so the page
-  belongs to the launchscreen side, not the session's. *Cross-refs:* `CampaignFlow`,
-  `CampaignProgression`, `docs/formats/saved-games.md`, `BL-620`'s and `BL-623`'s closing commits
-  (`git log --grep=BL-620`); the held two seconds `BL-623` added are where this screen belongs.
-
 - `BL-621` `[Bug]` **CM07 (C1/M02): the parachutist is gone from the hangar drop since the chute
   pool landed.** *Evidence:* reported at the controls; before `BL-608` the drop showed the pilot
   parachuting into the hangar while the aeroplane was missing, and now the aeroplane is there and
@@ -2945,6 +2930,48 @@ usual.
   count for "Destroy all enemy fighters" in the end (its ram death dropped group 2 to zero and
   primary 3 completed), so this is not an objective bug. *Cross-refs:* `docs/org/aiPilot.md` (the
   activation primitive and `FUN_00432010`).
+
+- `BL-622` `[Feature]` **No debrief screen: a finished mission drops straight back to the cabin.**
+  *Evidence:* reported at the controls, on a won and on a lost mission alike. `CampaignDirector`
+  records the attempt, writes the profile and raises `ReturnToCabin`; `GameSession.
+  OnCampaignMissionEnded` prints one `GD.Print` and calls the launcher's return, which reopens the
+  launchscreen on the cabin, so nothing between the mission ending and the cabin exists. The
+  result the screen would show is already carried: `CampaignMissionResult` has the outcome, the
+  attempt, the recorded flags and the won mission's `CompletedMask`. The original's own debrief is
+  decoded in `docs/org/debrief.md` (`FUN_004194e0`): what it writes into the profile's
+  mission-result record, the two sources its completed-objective mask is built from, and the offer
+  to skip a mission that opens on **every fourth failed attempt** at a mission never completed,
+  which takes effect by setting the campaign win flag. *Fix shape:* a page in the `CampaignFlow`
+  board family (`CampaignCabinPage`, `CampaignPreviousMissionsPage` are the nearest shapes) shown
+  between the mission and the cabin, reading that result; the skip offer is part of the screen, not
+  a separate feature. *⚠ Traps:* the world stays up for the rest of the frame after the end is
+  raised, so the page belongs to the launchscreen side, not the session's. The mask cannot be drawn
+  as it stands: `CampaignDirector.OnMissionEnded` banks `0` for the whole mask on a loss where the
+  original keeps every objective bit and clears only bit 0, so per-objective lines would read as
+  all-failed on every lost mission. The per-weapon shots and hits the original's screen shows are
+  `BL-624`, not this item. The wording of the skip offer (langui string 191) is absent from
+  `extracted/rof/ui_strings.json`, whose ids jump 136 to 200. *Cross-refs:*
+  `docs/org/debrief.md`, `docs/formats/saved-games.md` ("The mission-result array"), `CampaignFlow`,
+  `CampaignProgression`, `BL-624`, `BL-620`'s and `BL-623`'s closing commits
+  (`git log --grep=BL-620`); the held two seconds `BL-623` added are where this screen belongs.
+
+- `BL-624` `[Feature]` **Shots and hits are not counted per weapon class, so the debrief's
+  per-weapon breakdown cannot be drawn.** *Evidence:* decoded in `docs/org/debrief.md`.
+  The original's mission-result record carries two twelve-byte arrays, shots at `+0x08` and hits at
+  `+0x14`, filled from the mission statistics object at `0x0071d2a0` (shots at `+0x00 + 4i`, hits at
+  `+0x30 + 4i`, `i` in 0..10) with each dword truncated to a byte. The slot is not `i`: it is a
+  lookup over the pair table at `0x0061f670` (stride 8, key then slot) that falls through to slot 11,
+  so eleven classes map into twelve slots with slot 11 the catch-all. CSVM's `MissionAttempt` has
+  scalar `Shots` and `Hits` only, off `CampaignDirector`'s world view (`ProjectilePool`'s
+  `CannonRoundsFired`). *Fix shape:* count per weapon
+  class where the two scalars are counted today, carry the arrays on `MissionAttempt`, and merge
+  them per index by maximum the way `CampaignProgression` merges the rest of the record.
+  *⚠ Traps:* the eleven-into-twelve remap is the original's own table and is not the weapon
+  numbering; decode `0x0061f670` rather than assuming class equals slot. The arrays are written on
+  the campaign path only, and in game mode 3 the same two offsets hold a summed `ushort` and the
+  danger-zone count instead, so an Instant Action or multiplayer path must not fill them as arrays.
+  *Cross-refs:* `docs/org/debrief.md`, `docs/formats/saved-games.md` ("The mission-result array"),
+  `CampaignProgression`, `BL-622`.
 
 ## Tooling, platform & docs
 
