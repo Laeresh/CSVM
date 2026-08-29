@@ -181,7 +181,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 15. ☑ The results block: four rows, the outcome line and the two tabs
 16. ☑ The per-airframe kill stamps
-17. ☐ Enter the scrapbook at mission end, and Replay Mission
+17. ☑ Enter the scrapbook at mission end, and Replay Mission
 
 ### Wave D — the book
 
@@ -705,7 +705,7 @@ uniquely on airframe will drop one of CM02's three. **The slot positions are not
 `SB_KILL1` at `467,93` is left of and above `SB_KILL0` at `560,109`, so a layout that assigns slots
 by where they look on the screenshot will place CM02's first two the wrong way round.
 
-## C17 ☐ Enter the scrapbook at mission end, and Replay Mission
+## C17 ☑ Enter the scrapbook at mission end, and Replay Mission
 
 **Goal.** A finished mission opens the scrapbook at that mission on the far side of the two-second
 hold, with Replay Mission working, and Return to Cabin leading where the cabin return leads today.

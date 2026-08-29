@@ -142,9 +142,19 @@ sounds like, watched and frame-sampled, never measured into a constant.
   menu, start or continue a campaign profile and fly CM01 (C1's first mission) once to a win and
   once to a loss (bail or let the wingman/objectives fail it). *Look for:* the console prints
   `campaign: <Outcome> — returning '<profile>' to the cabin` when the world leaves, then
-  `campaign: <Outcome> — arrived at the cabin with '<profile>'` one frame later at the launchscreen
-  side, with the same outcome in both lines. *Blocks:* nothing else reads the carried result yet
-  (`C17` opens the debrief screen on it); a mismatch or a missing second line reopens `BL-622`.
+  `campaign: <Outcome> — arrived at the debrief with '<profile>'` one frame later at the
+  launchscreen side, with the same outcome in both lines. A mismatch or a missing second line
+  reopens `BL-622`; what the debrief screen itself shows is `PT-89`.
+- `PT-89` `[Own]` **C17: the scrapbook opens on the flown mission, not the cabin.** Continuing the
+  same flights, after each ending's hold the screen that opens is the scrapbook (`SB_BackGround`
+  behind a stat card), not the cabin. *Look for:* the outcome line and the four rows read the just-
+  flown attempt (win → Mission Completed, loss → Mission Failed, with that flight's own time/hit-
+  ratio/cash), any airframe downed carries a kill stamp with its name and count, REPLAY MISSION
+  re-opens the briefing for the flight just flown — fly the win case, let Next Mission's position
+  advance on the cabin, then come back and confirm Replay Mission still targets the mission that
+  was flown and not the new current one — and RETURN TO CABIN lands on the cabin with that
+  session's own state (funds, Next Mission). A wrong mission on Replay, stale numbers, a missing
+  stamp, or landing straight on the cabin reopens `BL-622`.
 
 ### C1 · Bloodhawk — the overcast sky, ground to above the deck
 

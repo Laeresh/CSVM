@@ -444,16 +444,27 @@ merge, not its author, and the two run in the same mission-end pass.
   Expended needs no source, since the original does not draw it.
 - **A board exists, but it is shaped like the wrong original screen.** `CampaignPreviousMissionsPage`
   is a flat mission list, closer to `SCRAPBOOK_TOC.SCRIPT` than to the two-page book the debrief
-  actually is; the mission-end entry and the Replay Mission button on that page still belong to the
-  book, which nothing in CSVM draws yet.
-- **The results block is computed (C15).** `CampaignScrapbookResults`, in the same file, renders the
-  outcome line and the four drawn rows off one `MissionResult` and either tab, including the Best to
-  Date tab's own bug: it always reads Mission Failed, since `0x0040a7e6` never reads the merged
-  mask for that tab. Not yet wired into a screen; C17 is the entry path.
+  actually is; the table of contents' own screen, `SCRAPBOOK_TOC.SCRIPT`, and the book's story page,
+  per-scrap detail and navigation (page/mission arrows, the Current Mission bookmark) are still
+  Wave D's.
+- **The results block is computed (C15).** `CampaignScrapbookResults`, in
+  `CampaignPreviousMissionsPage.cs`, renders the outcome line and the four drawn rows off one
+  `MissionResult` and either tab, including the Best to Date tab's own bug: it always reads Mission
+  Failed, since `0x0040a7e6` never reads the merged mask for that tab.
 - **The kill stamps are computed (C16).** The same class's `Stamps` walks the plain tally then the
   ace tally in ascending airframe order, skipping zeros, filling the eleven `SB_KILL`/`SB_KILLTEXT`
   slots densely; `StampPictures`/`StampLabels` place the strip frame and count at each slot's own
-  `LAYOUT.CSV` position. Not yet drawn by a screen.
+  `LAYOUT.CSV` position.
+- **The mission-end entry and Replay Mission are wired (C17).** `CampaignScreen.Scrapbook` and its
+  `CampaignScrapbookPage` (Most Recent tab only, C15/C16's content) are reached from
+  `Launcher.OpenDebrief`, renamed from `OpenCabin` since it now opens the debrief with the cabin on
+  its far side (`LaunchMenu.OpenCampaignScrapbook`, mirroring `OpenCampaignCabin`'s re-read-from-store
+  discipline). Replay Mission opens the briefing without touching `CampaignFlow.MissionSeq`, which
+  is already the flown mission and not the campaign's current position (they differ after a win);
+  Return to Cabin pops back to the cabin `SelectProfile` already pushed. The cabin's own PREVIOUS
+  MISSIONS button still opens `CampaignPreviousMissionsPage`'s flat list, not this page — the two
+  entry paths landing on different screens (A3) is Wave D's open scope call to close, if it closes
+  at all.
 - **The skip offer's counter and its answer are implemented; the asking is not (B14).**
   `MissionResult.Attempts` is the per-mission counter, moved by `CampaignProgression.Record` on a
   failure alone and only while `Best`'s bit 0 is clear, so it counts total rather than consecutive

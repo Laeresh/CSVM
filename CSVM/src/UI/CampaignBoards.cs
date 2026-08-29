@@ -66,6 +66,11 @@ public static class CampaignBoards
             new BoardSlot(BoardButton.ReplayMission, 0, PaperButton, 596, 505, true),
             new BoardSlot(BoardButton.ReturnToCabin, 0, ReturnToCabinArt, 593, 561),
         },
+        [CampaignScreen.Scrapbook] = new[]
+        {
+            new BoardSlot(BoardButton.ReplayMission, 0, PaperButton, 594, 505, true),
+            new BoardSlot(BoardButton.ReturnToCabin, 0, ReturnToCabinArt, 593, 561),
+        },
         [CampaignScreen.Briefing] = new[]
         {
             new BoardSlot(BoardButton.ReplayBriefing, 0, BriefButton, 197, 560, true),
@@ -101,6 +106,7 @@ public static class CampaignBoards
             new BoardPicture(Ui("CM_BackGround.png"), 193, 251),
         },
         [CampaignScreen.PreviousMissions] = new[] { new BoardPicture(Ui("SB_BackgroundTOC.jpg"), 0, 0) },
+        [CampaignScreen.Scrapbook] = new[] { new BoardPicture(Ui("SB_BackGround.jpg"), 0, 0) },
         [CampaignScreen.FlightCheck] = new[] { new BoardPicture(Ui("FC_BackGround.jpg"), 0, 0) },
         [CampaignScreen.Ammo] = new[] { new BoardPicture(Ui("OL_BackGround.jpg"), 0, 0) },
     };

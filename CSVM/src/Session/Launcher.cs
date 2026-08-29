@@ -128,7 +128,7 @@ public partial class Launcher : Node3D
     private System.Random _musicRng = new();
     // The profile a just-ended campaign mission belongs to, acted on at the top of the next frame:
     // the mission ends inside the session's own physics step, which is no place to free it.
-    private (string Profile, CampaignMissionResult Result)? _pendingCabin;
+    private (string Profile, CampaignMissionResult Result)? _pendingDebrief;
 
     // The load screen and the deferred build behind it (BeginLaunch → _Process). A build is one
     // synchronous block, so the screen has to be DRAWN before it starts: _launchFramesWaited counts
@@ -679,11 +679,11 @@ public partial class Launcher : Node3D
         _gltfExporter.Tick(_session?.Plane, GetTree(), _spec);
 
         // A campaign mission that ended during the session's own step: free it and reopen the
-        // launchscreen on the cabin, here where a QueueFree is safe.
-        if (_pendingCabin is { } cabin)
+        // launchscreen on the debrief, here where a QueueFree is safe.
+        if (_pendingDebrief is { } debrief)
         {
-            _pendingCabin = null;
-            OpenCabin(cabin.Profile, cabin.Result);
+            _pendingDebrief = null;
+            OpenDebrief(debrief.Profile, debrief.Result);
         }
 
         // Last in the frame, where the build used to happen anyway: the launchscreen and the boards
@@ -810,7 +810,7 @@ public partial class Launcher : Node3D
             ExitSession = ExitSession,
             RestartSession = RestartSession,
             ReturnToCabin = _menuDriven
-                ? (profile, result) => _pendingCabin = (profile, result)
+                ? (profile, result) => _pendingDebrief = (profile, result)
                 : null,
             Music = _music,
         });
@@ -1002,15 +1002,15 @@ public partial class Launcher : Node3D
         BeginLaunch();
     }
 
-    // A flown campaign mission is over: free the world and put the player back in the cabin, on a
-    // flow seated on the profile the director just wrote. Reached from the session's MissionEnded
-    // by way of _pendingCabin, one frame later, carrying the result the mission ended with (B12)
-    // so a debrief page can be opened on it (C17).
-    private void OpenCabin(string profile, CampaignMissionResult result)
+    // A flown campaign mission is over: free the world and open the scrapbook on the mission just
+    // flown, cabin on its far side, on a flow seated on the profile the director just wrote.
+    // Reached from the session's MissionEnded by way of _pendingDebrief, one frame later, carrying
+    // the result the mission ended with (B12).
+    private void OpenDebrief(string profile, CampaignMissionResult result)
     {
-        GD.Print($"campaign: {result.Outcome} — arrived at the cabin with '{profile}'");
+        GD.Print($"campaign: {result.Outcome} — arrived at the debrief with '{profile}'");
         ReturnToMenu();
-        _menu!.OpenCampaignCabin(profile);
+        _menu!.OpenCampaignScrapbook(profile, result.Attempt.Seq);
     }
 
     // The mission boards' Restart (Instant Action and campaign): free this session and build a

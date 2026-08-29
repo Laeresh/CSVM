@@ -649,6 +649,24 @@ public sealed partial class LaunchMenu : CanvasLayer
         Rebuild();
     }
 
+    /// <summary>Opens the campaign on the named profile's scrapbook, at the mission a finished
+    /// mission just flew, cabin on its far side (<see cref="Session.Launcher"/>'s deferred hop,
+    /// C17). The profile is re-read from the store, the same discipline as
+    /// <see cref="OpenCampaignCabin"/>, so the shown record is what the mission just wrote.</summary>
+    public void OpenCampaignScrapbook(string profileName, int seq)
+    {
+        OpenCampaign();
+        if (_campaign is { } flow && flow.Store.Load(profileName) is { } profile)
+        {
+            flow.SelectProfile(profile);
+            flow.SetMission(seq);
+            flow.GoTo(CampaignScreen.Scrapbook);
+        }
+
+        Music?.Enter(MusicState.Menu, MusicRng);
+        Rebuild();
+    }
+
     /// <summary>Show an error line on the current screen (e.g. a failed build sent us back here).</summary>
     public void ShowError(string message)
     {

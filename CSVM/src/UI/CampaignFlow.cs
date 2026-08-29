@@ -26,6 +26,10 @@ public enum CampaignScreen
 
     /// <summary>Ammunition and ordnance for one aircraft.</summary>
     Ammo,
+
+    /// <summary>The scrapbook's results page (spread 1), opened on the mission a finished mission
+    /// just flew, cabin on its far side (C17).</summary>
+    Scrapbook,
 }
 
 /// <summary>How a campaign flow ended, or that it is still running.</summary>
@@ -141,6 +145,7 @@ public sealed class CampaignFlow
         [CampaignScreen.Briefing] = flow => new CampaignBriefingPage(flow),
         [CampaignScreen.FlightCheck] = flow => new CampaignFlightCheckPage(flow),
         [CampaignScreen.Ammo] = flow => new CampaignAmmoPage(flow),
+        [CampaignScreen.Scrapbook] = flow => new CampaignScrapbookPage(flow),
     };
 
     private readonly Dictionary<CampaignScreen, ICampaignPage> _pages = new();
