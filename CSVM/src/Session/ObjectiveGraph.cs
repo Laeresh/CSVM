@@ -161,9 +161,13 @@ public readonly record struct ObjectiveRow(
 /// </summary>
 public sealed class ObjectiveGraph
 {
-    // The wrap-up the ordinary win takes before the debrief, shared with the docking's own ending
-    // so the two cannot drift apart.
+    // The wrap-up the ordinary win takes before the debrief.
     private const float WonWrapUpS = 3f;
+
+    // The docking's completion code takes none of it. The code's own case sets the won flag and
+    // calls the mission-end path in the same breath, never touching the wrap-up timer the objective
+    // endings run down, so the debrief opens on the frame the film's last sequence raises it.
+    private const float DockingWrapUpS = 0f;
 
     private readonly ObjectiveScript _script;
     private readonly IObjectiveWorld _world;
@@ -326,10 +330,11 @@ public sealed class ObjectiveGraph
     }
 
     /// <summary>The docking's own completion code, raised by the animation rather than by an
-    /// objective: the original answers it with the call its objectives runtime makes when a primary
-    /// completes and then the mission-end path, so the mission is won on the ordinary wrap-up.
-    /// Nothing in the shipped objective data completes on a landing, so this is the only ending a
-    /// mission that finishes on the hook has. Answers whether this call ended the mission.</summary>
+    /// objective: the original answers it by setting the won flag and running the mission-end path
+    /// at once, with no wrap-up. It beats the <c>ANIM_STATE ... EXECUTED</c> objective watching the
+    /// same definition, which cannot read EXECUTED until the definition that raised the code has
+    /// ended (docs/formats/objectives.md, "Win and loss"). Answers whether this call ended the
+    /// mission.</summary>
     public bool NotifyDockingComplete()
     {
         if (Ended || Ending)
@@ -338,7 +343,7 @@ public sealed class ObjectiveGraph
         }
 
         PlayIfNamed(_script.ObjectivesWonSound);
-        End(MissionOutcome.Won, WonWrapUpS);
+        End(MissionOutcome.Won, DockingWrapUpS);
         return true;
     }
 

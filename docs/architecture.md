@@ -5396,9 +5396,12 @@ condition families OR-ing together with a conditionless objective completing on 
 tick; and `DANGER_ZONES_COMPLETED` counting only zones flagged while the objective was awake.
 `NotifyDockingComplete` is the one ending that comes from outside the script: callback 13, raised by
 the docking animation itself, which the original answers with the call its objectives runtime makes
-when a primary completes and then the mission-end path. It wins the mission on the same wrap-up an
-ordinary win takes. Nothing in the shipped objective data completes on a landing, so a mission that
-finishes on the zeppelin's hook has no other ending; `Session/CutsceneController.cs` raises it.
+when a primary completes and then the mission-end path, in the same breath and with NO wrap-up, so
+the debrief opens on the frame the film raises the code. Where a mission also authors an
+`ANIM_STATE ... EXECUTED` objective over the same definition (C3/M05's `OBJECTIVE19`), the code
+always gets there first: it is raised by that definition's last sequence, so the definition is
+still `RUNNING` when it lands and the objective's `INSTANTWIN` arrives to an ended mission and does
+nothing. `Session/CutsceneController.cs` raises it.
 The world seam is `IObjectiveWorld`: a method returning `null` means "this engine cannot answer",
 which makes the family report FALSE and bumps `UnresolvedConditions` rather than guess — ⚠ reading
 an empty world as "the group is wiped out" would win missions on the first tick.

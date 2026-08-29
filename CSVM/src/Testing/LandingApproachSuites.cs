@@ -47,6 +47,16 @@ internal static class LandingApproachSuites
     // suite makes; that the wait is waited out is.
     private const float FoldEndToleranceS = 0.25f;
 
+    // The animation runtime's own ANIM_STATE numbering, the numbering the objective script's
+    // condition is authored in: RUNNING while an instance is live, EXECUTED once it has ended.
+    private const int AnimRunning = 2;
+    private const int AnimExecuted = 3;
+
+    // How far the mission's outcome may lag the completion code and still count as the same
+    // moment: the code lands inside the animation advance and the graph reaches its wrap-up on the
+    // step that follows it, so one frame is the whole allowance.
+    private const float EndLagS = StepDt + 1e-4f;
+
     // How close a pose has to land on its authored value to count as that value.
     private const float PoseEpsilon = 1e-3f;
 
@@ -572,11 +582,38 @@ internal static class LandingApproachSuites
             $"'{DockAnim}' authors a wing fold for '{BalmoralPlane}', the branch this run takes");
         ArmRow(ctx, world, graph, script, dock, report);
 
+        var watcher = DockWatcherOf(script);
+        report.AppendLine($"the objective watching '{DockAnim}' for EXECUTED: " +
+            $"OBJECTIVE{watcher?.Number.ToString() ?? "?"}, instantwin={watcher?.InstantWin.ToString() ?? "-"}");
+        ctx.Check(watcher != null,
+            $"the mission carries an INSTANTWIN objective conditioned on '{DockAnim}' reaching EXECUTED, the second path to this ending");
+
         float now = 0f;
         float foldStartedAt = -1f;
         float foldEndedAt = -1f;
         float completedAt = -1f;
         float handedBackAt = -1f;
+        float executedAt = -1f;
+        float wonAt = -1f;
+        float watcherAt = -1f;
+        int stateAtCode = -1;
+        int endings = 0;
+        bool secondTook = false;
+        void Ended(MissionOutcome outcome)
+        {
+            endings++;
+            report.AppendLine($"  t={now,6:0.00} the mission ended {outcome}");
+        }
+
+        void CompletedOne(ObjectiveCompleted done)
+        {
+            if (watcher != null && done.Number == watcher.Number && watcherAt < 0f)
+            {
+                watcherAt = now;
+                report.AppendLine($"  t={now,6:0.00} OBJECTIVE{done.Number} completed");
+            }
+        }
+
         void Started(AnimDefinition def, Node3D? anchor)
         {
             report.AppendLine($"  t={now,6:0.00} started '{def.AnimName}'");
@@ -603,12 +640,15 @@ internal static class LandingApproachSuites
             if (code == CompleteCode && completedAt < 0f)
             {
                 completedAt = now;
+                stateAtCode = world.Runtime.AnimStateOf(DockAnim);
             }
 
             return cutscene.Host(code, anim, root);
         };
         world.Runtime.OnInstanceStarted += Started;
         world.Runtime.OnInstanceFinished += Finished;
+        graph.MissionEnded += Ended;
+        graph.Completed += CompletedOne;
         try
         {
             ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, dock, report),
@@ -628,16 +668,36 @@ internal static class LandingApproachSuites
                     report.AppendLine($"  t={now,6:0.00} the host handed the session back");
                 }
 
+                if (executedAt < 0f && world.Runtime.AnimStateOf(DockAnim) == AnimExecuted)
+                {
+                    executedAt = now;
+                    report.AppendLine($"  t={now,6:0.00} '{DockAnim}' reads EXECUTED");
+                }
+
+                if (wonAt < 0f && graph.Outcome == MissionOutcome.Won)
+                {
+                    wonAt = now;
+                }
+
                 if (completedAt >= 0f && foldEndedAt >= 0f && now > completedAt + AfterReleaseS)
                 {
                     break;
                 }
             }
+
+            // The second signal: the same code again, once the mission is over. The original's
+            // case for it is unguarded, and cannot fire twice only because the mission-end path it
+            // calls has already left the flying state behind; here the guard is the graph's.
+            secondTook = graph.NotifyDockingComplete();
+            report.AppendLine($"a second completion code after the win: " +
+                $"took={secondTook}, outcome={graph.Outcome}, endings={endings}");
         }
         finally
         {
             world.Runtime.OnInstanceStarted -= Started;
             world.Runtime.OnInstanceFinished -= Finished;
+            graph.MissionEnded -= Ended;
+            graph.Completed -= CompletedOne;
             world.Runtime.CallbackHost = cutscene.Host;
         }
 
@@ -655,9 +715,34 @@ internal static class LandingApproachSuites
             $"at the end of the branch's own two-second wait, not before it");
         ctx.Check(handedBackAt < 0f || completedAt < 0f || handedBackAt >= completedAt - StepDt,
             $"and the host keeps the session until then (handed back at t={handedBackAt:0.00})");
-        report.AppendLine($"mission outcome: {graph.Outcome}, ending={graph.Ending}");
+        report.AppendLine($"mission outcome: {graph.Outcome}, ending={graph.Ending}, " +
+            $"won at t={wonAt:0.00}, '{DockAnim}' EXECUTED at t={executedAt:0.00} " +
+            $"(state when the code landed: {stateAtCode}), " +
+            $"OBJECTIVE{watcher?.Number.ToString() ?? "?"} completed at t={watcherAt:0.00}, endings={endings}");
         ctx.Check(graph.Ending || graph.Outcome == MissionOutcome.Won,
             $"the code the docking ends on wins the mission, which is the only ending a mission finishing on the hook has");
+
+        // The two paths to this ending and the order they resolve in. The code is raised by the
+        // definition's last sequence, so the definition is still RUNNING when it lands and the
+        // objective watching it for EXECUTED cannot have completed yet.
+        ctx.Check(stateAtCode == AnimRunning,
+            $"'{DockAnim}' is still RUNNING when it raises the code, so the objective's EXECUTED read cannot have won the mission first (read {stateAtCode})");
+        ctx.Check(executedAt < 0f || completedAt < 0f || executedAt >= completedAt,
+            $"and reads EXECUTED no earlier than that (EXECUTED at t={executedAt:0.00}, code at t={completedAt:0.00})");
+        ctx.Check(executedAt < 0f || foldStartedAt < 0f
+                  || executedAt >= foldStartedAt + FoldRunS - FoldEndToleranceS,
+            $"which is the end of the branch's own two-second wait, not a point inside the wing fold");
+        ctx.Check(watcherAt < 0f || completedAt < 0f || watcherAt >= completedAt,
+            $"the INSTANTWIN objective watching it completes no earlier than the code either");
+
+        // The original's case for this code sets the won flag and runs the mission-end path in one
+        // breath. Nothing waits out a wrap-up, so the debrief opens on the film's own last frame.
+        ctx.Check(wonAt >= 0f, $"the mission is won inside the run rather than left pending");
+        ctx.Check(wonAt < 0f || completedAt < 0f || wonAt <= completedAt + EndLagS,
+            $"on the frame the code lands, with no wrap-up in between (won at t={wonAt:0.00}, code at t={completedAt:0.00})");
+        ctx.Check(endings == 1, $"and the mission ends exactly once (ended {endings} time(s))");
+        ctx.Check(!secondTook, $"a second completion code after the win is refused and changes nothing");
+        ctx.Check(graph.Outcome == MissionOutcome.Won, $"the outcome after it is still Won");
         if (rig.PlaneModel is { } model)
         {
             CheckWingFold(ctx, world, fold, model, report);
@@ -917,6 +1002,26 @@ internal static class LandingApproachSuites
         }
 
         return false;
+    }
+
+    // The mission's other path to this ending: the objective whose ANIM_STATE watches the docking
+    // definition for EXECUTED and wins on it. Found by its condition rather than by number, so the
+    // suite reads the data's own shape.
+    private static ObjectiveDef? DockWatcherOf(ObjectiveScript script)
+    {
+        foreach (var def in script.Objectives)
+        {
+            foreach (var entry in def.AnimStates)
+            {
+                if (def.InstantWin && entry.State == AnimExecuted
+                    && string.Equals(entry.Name, DockAnim, StringComparison.OrdinalIgnoreCase))
+                {
+                    return def;
+                }
+            }
+        }
+
+        return null;
     }
 
     // The wing fold's own two movers, checked against the rotations the fold definition authors.

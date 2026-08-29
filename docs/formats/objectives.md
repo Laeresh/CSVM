@@ -227,8 +227,17 @@ matches (`FUN_004ad240`). Consequences, all decoded:
   `LOST`-marked ones are (`FUN_0046a490` tail), playing `OBJECTIVES_WON_SOUND` /
   `OBJECTIVES_LOST_SOUND`.
 - The mission countdown expiring is a third ending (see `MISSION_TIMER`).
+- A cutscene's completion code 13 sets the same won flag from outside this module and runs the
+  mission-end path itself, with no wrap-up
+  ([anim-definitions/cutscenes.md](anim-definitions/cutscenes.md)). Where a mission carries both,
+  the code always wins: it is raised by the docking definition's last sequence, so that definition
+  is still `RUNNING` when it lands and the `ANIM_STATE ... EXECUTED` objective watching it cannot
+  have completed yet. C3/M05 is the worked case, its `OBJECTIVE19` (`ANIM_STATE
+  hooked_to_klondike EXECUTED`, `INSTANTWIN`) reaching its condition one frame after the mission
+  is already over.
 
-Every shipped campaign mission ends through `INSTANTWIN`/`INSTANTLOSS` objectives; the
+Every shipped campaign mission authors `INSTANTWIN`/`INSTANTLOSS` objectives to end on (the
+missions finishing on a hook or a drop reach code 13 first); the
 `WON`/`LOST` aggregate rule and the timer are unexercised by the data. **Four of the 21 campaign
 missions author no loss at all** (`C3/M01`, `C3/M02`, `C4/M02`, `C5/M03`: zero `INSTANTLOSS`, zero
 `LOST`), which is the shape of the fourth ending below: those missions are losable only by dying.

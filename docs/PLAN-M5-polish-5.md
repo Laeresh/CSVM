@@ -152,6 +152,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 60. ☑ `BL-607`: a cutscene episode books to the first raiser on every path but the landings one, so a parent that calls several raisers is cut short
 61. ☑ `BL-608`: CM02's crew bail out as one figure at the world origin, and the docking on the Pandora never ends the mission
+62. ☑ `BL-620`: CM02's ending waits out an objective wrap-up the completion code does not take
 
 ## Dependency and parallelism notes
 

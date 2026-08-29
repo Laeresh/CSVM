@@ -1428,7 +1428,10 @@ public static class SuiteCatalog
             "CM02's own ending over C3/M05's BUILT world: the docking row flown in the Balmoral the "
             + "capture hands over, whose branch of the shared hookup is the only one that folds a "
             + "wing. The episode holds through that branch's authored two-second turn, both wings "
-            + "reach the angle the fold authors, and the mission-completion code lands at its end",
+            + "reach the angle the fold authors, and the mission-completion code lands at its end "
+            + "while the definition is still running, so it beats the objective watching that same "
+            + "definition for EXECUTED and wins the mission on its own frame, once, with a later "
+            + "completion code changing nothing",
             LandingApproachSuites.BalmoralDock));
         into.Add(new TestHarness.Suite("campaign-cutscene-ownership",
             "which definition an episode belongs to when the OBJECTIVE SCRIPT starts it rather than "
