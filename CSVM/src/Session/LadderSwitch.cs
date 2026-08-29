@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Godot;
 
 namespace CSVM.Session;
@@ -42,6 +43,33 @@ public sealed class LadderSwitch
     /// original compares squared distances.</summary>
     public static bool WithinSensor(Vector3 player, Vector3 sensor, float radius) =>
         sensor.DistanceSquaredTo(player) <= radius * radius;
+
+    /// <summary>Which human holds the switch, given who held it last: the incumbent keeps it for as
+    /// long as they qualify, and only once they stop is the field asked, first qualifier in player
+    /// order winning. Null when nobody qualifies, which is what retracts the ladder. ⚠ A single
+    /// owner rather than "any human qualifies", because both definitions hold a transient state
+    /// until their own <c>CALLBACK</c> settles it and an "any" rule thrashes the drop against the
+    /// retract as two humans drift through one sensor.</summary>
+    public static T? Holder<T>(T? held, IReadOnlyList<T> humans, Func<T, bool> qualifies)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(humans);
+        ArgumentNullException.ThrowIfNull(qualifies);
+        if (held != null && qualifies(held))
+        {
+            return held;
+        }
+
+        foreach (var human in humans)
+        {
+            if (qualifies(human))
+            {
+                return human;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>One evaluation. <paramref name="startAnimation"/> starts the named definition and
     /// reports whether one existed; without one the state flips at once, which is the original's

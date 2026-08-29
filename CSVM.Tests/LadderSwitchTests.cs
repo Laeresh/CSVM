@@ -88,9 +88,52 @@ public class LadderSwitchTests
         Assert.Equal(LadderState.Retracted, sw.State);
     }
 
+    [Fact]
+    public void OneHumanHoldsTheSwitchUntilTheyStopQualifying()
+    {
+        var p1 = new Human();
+        var p2 = new Human();
+        var field = new[] { p1, p2 };
+
+        // Nobody qualifies: nobody holds it, which is the answer that retracts the ladder.
+        Assert.Null(LadderSwitch.Holder<Human>(null, field, h => h.Qualifies));
+
+        // First in player order takes it.
+        p1.Qualifies = true;
+        p2.Qualifies = true;
+        var held = LadderSwitch.Holder<Human>(null, field, h => h.Qualifies);
+        Assert.Same(p1, held);
+
+        // The second human qualifying changes nothing while the first still does: this is the
+        // thrash the single-owner latch exists to stop.
+        Assert.Same(p1, LadderSwitch.Holder(held, field, h => h.Qualifies));
+
+        // The incumbent drops out and the other one is already there, so the switch moves rather
+        // than going empty: no retract is started between the two.
+        p1.Qualifies = false;
+        held = LadderSwitch.Holder(held, field, h => h.Qualifies);
+        Assert.Same(p2, held);
+
+        // And it does not go back to P1 on their return while P2 still qualifies.
+        p1.Qualifies = true;
+        Assert.Same(p2, LadderSwitch.Holder(held, field, h => h.Qualifies));
+
+        p2.Qualifies = false;
+        Assert.Same(p1, LadderSwitch.Holder(held, field, h => h.Qualifies));
+
+        p1.Qualifies = false;
+        Assert.Null(LadderSwitch.Holder(p1, field, h => h.Qualifies));
+    }
+
     private static Basis Rolled(float degrees) =>
         new(Vector3.Back, Mathf.DegToRad(degrees));
 
     private static Basis Pitched(float degrees) =>
         new(Vector3.Right, Mathf.DegToRad(degrees));
+
+    // One human of the field, as much of a rig as the holder rule reads.
+    private sealed class Human
+    {
+        public bool Qualifies;
+    }
 }

@@ -1066,10 +1066,8 @@ public partial class GameSession : Node3D
         if (_cutscene != null && _landings != null)
         {
             _cutscene.HostDefinitions(session.LandingCutsceneAnims);
-            _landings.Bind(session.Runtime, session.Landings, _cutscene,
-                () => _rigs.Count > 0 ? _rigs[0].Controller : null);
-            _ladder?.Bind(session.Runtime, _cutscene,
-                () => _rigs.Count > 0 ? _rigs[0].Controller : null, session.Pickups);
+            _landings.Bind(session.Runtime, session.Landings, _cutscene, () => _rigs);
+            _ladder?.Bind(session.Runtime, _cutscene, () => _rigs, session.Pickups);
         }
         // The screen wash. Set here rather than inside WorldSession for the same reason the
         // contact mask below is: the overlay is a session-owned surface and WorldSession builds
@@ -2281,10 +2279,8 @@ public partial class GameSession : Node3D
             if (grafted > 0 && _landings != null && _cutscene != null
                 && state.WorldRuntime is { } landingWorld && state.Landings is { } landingRows)
             {
-                _landings.Bind(landingWorld, landingRows, _cutscene,
-                    () => _rigs.Count > 0 ? _rigs[0].Controller : null);
-                _ladder?.Bind(landingWorld, _cutscene,
-                    () => _rigs.Count > 0 ? _rigs[0].Controller : null, state.Pickups);
+                _landings.Bind(landingWorld, landingRows, _cutscene, () => _rigs);
+                _ladder?.Bind(landingWorld, _cutscene, () => _rigs, state.Pickups);
             }
         }
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
@@ -3539,10 +3535,19 @@ public partial class GameSession : Node3D
         public void StepLandingApproaches()
         {
             session._landings?.Tick();
-            if (session._landings != null && session._rigs.Count > 0
-                && session._rigs[0].Controller is { } flown)
+            if (session._landings is not { } landings)
             {
-                flown.AutoLandOffered = session._landings.AutoLandOffered;
+                return;
+            }
+
+            // Per pane: only the human inside the sphere is shown the prompt, and only their own
+            // button starts the row.
+            foreach (var rig in session._rigs)
+            {
+                if (rig.Controller is { } flown)
+                {
+                    flown.AutoLandOffered = landings.OffersAutoLandTo(rig.Index);
+                }
             }
         }
 

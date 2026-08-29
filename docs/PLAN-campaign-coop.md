@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — In the mission
 
-11. ☐ Landing-approach rows, pickup sensors and the ladder switch read the human field
+11. ☑ Landing-approach rows, pickup sensors and the ladder switch read the human field
 12. ☐ Cutscene staging places the episode owner on the `player` marker
 13. ☐ A downed human spectates; the mission ends when the last one is lost
 14. ☐ A cutscene fills the window
@@ -293,7 +293,7 @@ trigger, resolved in `B11`, and nothing else.
 
 # Wave B — In the mission
 
-## B11 ☐ Landing-approach rows, pickup sensors and the ladder switch read the human field
+## B11 ☑ Landing-approach rows, pickup sensors and the ladder switch read the human field
 
 **Goal.** Any human can fly the cone that starts a mid-mission cutscene, sit in a pickup sensor, or
 hover the ladder into place, and the mission behaves as it does today for whichever human got there

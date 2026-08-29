@@ -127,6 +127,11 @@ internal static class LandingApproachSuites
     // How long the trigger is ticked after a handoff to catch the row re-firing.
     private const int RestartFrames = 30;
 
+    // The co-op leg's field, and how far out of the sphere the human who is not being offered the
+    // prompt is parked: well past any shipped row's radius, so "outside" is not a tolerance.
+    private const int CoopHumans = 2;
+    private const float CoopAwayM = 1000f;
+
     // The docking episode: how long the row's definition is given to play out through its whole
     // call chain (hookup, drop, hook state, unhook), how far past the handoff the aeroplane is
     // watched, the largest single-frame move a flying aeroplane can make against a teleport, and
@@ -209,6 +214,12 @@ internal static class LandingApproachSuites
     /// manual row would, and holding the button past the handoff does not re-fire it.</summary>
     internal static void AutoLandButton(TestContext ctx) =>
         DriveMission(ctx, FirstSeq, "test-autoland-button", DriveAutoLand);
+
+    /// <summary>Drives the campaign's first mission's own <c>auto</c> row with two humans flying:
+    /// the prompt is offered per pane, the row starts once however many humans stand in its sphere,
+    /// and the episode belongs to the human who pressed rather than to player 1.</summary>
+    internal static void CampaignCoopApproachRow(TestContext ctx) =>
+        DriveMission(ctx, FirstSeq, "test-campaign-coop-approach-row", DriveCoopApproachRow);
 
     /// <summary>Drives the hookup on two airframes and reads what it did to each: the flown
     /// aircraft's own subtree is in the runtime's node table, so the definition's per-airframe
@@ -321,6 +332,110 @@ internal static class LandingApproachSuites
 
         WithTrigger(ctx, world, director, armed, (trigger, cutscene, rig, graph) =>
             RunAutoLandButton(ctx, world, graph, script, trigger, cutscene, rig, auto, report));
+    }
+
+    private static void DriveCoopApproachRow(TestContext ctx, TestWorld world, CampaignDirector director,
+        ObjectiveScript script, string missionZrdr, StringBuilder report)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        var armed = LandingApproaches.Resolve(
+            chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
+        if (AutoFor(armed) is not { } auto)
+        {
+            ctx.Check(false, $"the chapter's landings.zrd carries an auto row to fly");
+            return;
+        }
+
+        WithCoopTrigger(ctx, world, director, armed, (trigger, cutscene, humans, graph) =>
+            RunCoopAutoLand(ctx, world, graph, script, trigger, cutscene, humans, auto, report));
+    }
+
+    // Two humans over one auto row: the prompt is drawn in the pane of whoever is inside the sphere,
+    // the row starts on the human who presses rather than on player 1, and standing a second human
+    // in the same sphere is not a second entry into it.
+    private static void RunCoopAutoLand(
+        TestContext ctx, TestWorld world, ObjectiveGraph graph, ObjectiveScript script,
+        LandingApproachRuntime trigger, CutsceneController cutscene, IReadOnlyList<PlayerRig> humans,
+        LandingApproach auto, StringBuilder report)
+    {
+        var nodes = world.Runtime.FindNodes(auto.Node);
+        ctx.Check(nodes.Count > 0, $"the auto row's own node '{auto.Node}' is built");
+        if (nodes.Count == 0)
+        {
+            return;
+        }
+
+        ArmRow(ctx, world, graph, script, auto, report);
+        var frame = nodes[0].GlobalTransform;
+        var inside = frame * Lerp(auto, AxisFraction);
+        var aim = frame * auto.Apex;
+        var away = inside + (Vector3.Up * CoopAwayM);
+
+        // The guest alone in the sphere, the scripted player a kilometre above it: the prompt is a
+        // per-pane surface, so the human outside sees nothing and their button does nothing.
+        Park(ctx, humans[0], away, away + Vector3.Forward);
+        Park(ctx, humans[1], inside, aim);
+        humans[0].Controller!.AutoLand = true;
+        Step(world, trigger, cutscene, graph, RestartFrames);
+        report.AppendLine($"guest alone inside: offered P1={trigger.OffersAutoLandTo(0)} " +
+            $"P2={trigger.OffersAutoLandTo(1)}, started='{trigger.LastStarted ?? "(none)"}'");
+        ctx.Check(trigger.OffersAutoLandTo(1),
+            $"the guest inside '{auto.Node}' is offered the auto-land in their own pane");
+        ctx.Check(!trigger.OffersAutoLandTo(0),
+            $"…and the scripted player {away.DistanceTo(inside):0} m out is not, so the prompt is per pane");
+        ctx.Check(trigger.LastStarted == null,
+            $"and the human outside the sphere holding the button down starts nothing");
+
+        // Both inside, and the one who presses is the guest: the row is started by the human who
+        // satisfied it, which is what the episode then belongs to.
+        Park(ctx, humans[0], inside, aim);
+        humans[0].Controller!.AutoLand = false;
+        Step(world, trigger, cutscene, graph, 1);
+        report.AppendLine($"both inside: offered P1={trigger.OffersAutoLandTo(0)} " +
+            $"P2={trigger.OffersAutoLandTo(1)}, started='{trigger.LastStarted ?? "(none)"}'");
+        ctx.Check(trigger.OffersAutoLandTo(0) && trigger.OffersAutoLandTo(1),
+            $"with both humans in the sphere both panes carry the prompt");
+
+        humans[1].Controller!.AutoLand = true;
+        Step(world, trigger, cutscene, graph, RestartFrames);
+        report.AppendLine($"guest pressed: started='{trigger.LastStarted ?? "(none)"}' by " +
+            $"P{(trigger.LastStartedBy ?? -1) + 1}, episode owner=" +
+            $"P{(cutscene.EpisodeOwner?.Index ?? -1) + 1}, playing={cutscene.Playing}");
+        ctx.Check(trigger.LastStarted != null, $"the guest's press starts '{auto.Anim}'");
+        ctx.Same(1, trigger.LastStartedBy ?? -1,
+            $"…started by the guest who pressed it, not by the scripted player beside them");
+        ctx.Check(ReferenceEquals(cutscene.EpisodeOwner, humans[1]),
+            $"and the episode belongs to that guest, which is the rig its own codes will act on");
+
+        // Both are still inside and both are now pressing: a second human in the volume is not a
+        // second entry into it, and the row is latched until the volume empties.
+        string started = trigger.LastStarted!;
+        humans[0].Controller!.AutoLand = true;
+        Step(world, trigger, cutscene, graph, RestartFrames);
+        report.AppendLine($"held down by both: started='{trigger.LastStarted ?? "(none)"}' by " +
+            $"P{(trigger.LastStartedBy ?? -1) + 1}");
+        ctx.Same(1, trigger.LastStartedBy ?? -1,
+            $"the row does not re-fire for the second human standing in the same volume");
+        ctx.Check(string.Equals(trigger.LastStarted, started, StringComparison.Ordinal),
+            $"…and '{started}' is still the last thing it started");
+    }
+
+    // Parks one human where it is asked, stopped: every gate this leg drives is a position and an
+    // attitude, so a flown approach would only add a speed the row's band has to be re-checked for.
+    private static void Park(TestContext ctx, PlayerRig rig, Vector3 at, Vector3 lookAt) =>
+        rig.Controller!.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null,
+            new CamParams(), at, lookAt, ApproachThrottle, ApproachSpeedMps);
+
+    private static void Step(TestWorld world, LandingApproachRuntime trigger,
+        CutsceneController cutscene, ObjectiveGraph graph, int frames)
+    {
+        for (int i = 0; i < frames; i++)
+        {
+            world.Runtime.Advance(StepDt);
+            trigger.Tick();
+            cutscene.Tick();
+            graph.Step(StepDt);
+        }
     }
 
     // Arms the row the mission's own way (whatever objective's WAKE_ANIM writes its land_on),
@@ -1286,7 +1401,9 @@ internal static class LandingApproachSuites
             // test camera kilometres off, and a range-armed definition on the flown approach
             // never fires under the rig. A drive wanting the player elsewhere overrides it.
             world.Runtime.PlayerPositions = () => new[] { craft.WorldPosition };
-            cutscene.BindRigs(new[]
+            // One rig, which is the human field a single-player mission flies: the trigger and the
+            // ladder both read it, and it is what the episode owner falls back to.
+            var rigs = new[]
             {
                 new PlayerRig
                 {
@@ -1295,7 +1412,8 @@ internal static class LandingApproachSuites
                     HudParent = ctx.Host,
                     Controller = craft,
                 },
-            }, () => Array.Empty<FlightController>());
+            };
+            cutscene.BindRigs(rigs, () => Array.Empty<FlightController>());
             cutscene.WorldHeld = director.HoldForCutscene;
             // The session's own wiring for the docking's completion code, so a row that raises it
             // reaches the same objectives graph a flown mission's would.
@@ -1304,7 +1422,7 @@ internal static class LandingApproachSuites
             // roster spawn is only there to bind once that spawn has happened, which is the whole
             // ordering the session repeats when it re-binds after its roster build.
             beforeBind?.Invoke(pool);
-            trigger.Bind(world.Runtime, armed, cutscene, () => craft);
+            trigger.Bind(world.Runtime, armed, cutscene, () => rigs);
             director.Attach(new CampaignDirector.WorldInputs
             {
                 Runtime = world.Runtime,
@@ -1328,6 +1446,85 @@ internal static class LandingApproachSuites
 
             world.Runtime.PlayerPositions = null;
             rig?.Free();
+            pool.Free();
+            textures.Dispose();
+            trigger.Free();
+            cutscene.Free();
+        }
+    }
+
+    // The same staging as WithTrigger with a human field of two: its own rigs, its own host and its
+    // own trigger, so a leg reading "which human" has two to tell apart. Separate rather than a flag
+    // on WithTrigger, whose twelve one-human legs must go on flying exactly one aeroplane.
+    private static void WithCoopTrigger(
+        TestContext ctx,
+        TestWorld world,
+        CampaignDirector director,
+        IReadOnlyList<LandingApproach> armed,
+        Action<LandingApproachRuntime, CutsceneController, IReadOnlyList<PlayerRig>, ObjectiveGraph> body)
+    {
+        var cutscene = new CutsceneController();
+        ctx.Host.AddChild(cutscene);
+        cutscene.BindWorld(world.Runtime, null);
+        cutscene.HostDefinitions(ClosureOf(world, armed));
+        world.Runtime.CallbackHost = cutscene.Host;
+        var trigger = new LandingApproachRuntime();
+        ctx.Host.AddChild(trigger);
+
+        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var pool = new ProjectilePool(textures, null, null);
+        ctx.Host.AddChild(pool);
+        var built = new List<FlightController>();
+        try
+        {
+            var rigs = new List<PlayerRig>();
+            for (int i = 0; i < CoopHumans; i++)
+            {
+                var craft = BuildRig(ctx, world, pool);
+                craft.Name = $"CoopApproachPlayer{i + 1}";
+                craft.PlayerIndex = FlightRoster.ShooterIdBase - CoopHumans + i;
+                built.Add(craft);
+                rigs.Add(new PlayerRig
+                {
+                    Index = i,
+                    Camera = ctx.Camera,
+                    HudParent = ctx.Host,
+                    Controller = craft,
+                });
+            }
+
+            // The session's nearest-human seam, over the whole field: a range-armed definition has
+            // to see whichever human is closest, not player 1 alone.
+            world.Runtime.PlayerPositions = () => built.ConvertAll(c => c.WorldPosition);
+            cutscene.BindRigs(rigs, () => Array.Empty<FlightController>());
+            cutscene.WorldHeld = director.HoldForCutscene;
+            cutscene.MissionComplete = () => director.Graph?.NotifyDockingComplete();
+            trigger.Bind(world.Runtime, armed, cutscene, () => rigs);
+            director.Attach(new CampaignDirector.WorldInputs
+            {
+                Runtime = world.Runtime,
+                Sounds = world.Runtime.Sounds,
+                ListenerPosition = () => built[0].WorldPosition,
+                PlayerAircraft = () => built[0],
+                Humans = () => built,
+                Projectiles = pool,
+                Rng = new Random(1),
+            });
+            body(trigger, cutscene, rigs, director.Graph!);
+        }
+        finally
+        {
+            foreach (var spawned in director.Roster.Values)
+            {
+                spawned.Free();
+            }
+
+            world.Runtime.PlayerPositions = null;
+            foreach (var craft in built)
+            {
+                craft.Free();
+            }
+
             pool.Free();
             textures.Dispose();
             trigger.Free();
@@ -1530,7 +1727,10 @@ internal static class LandingApproachSuites
             ctx.Host.AddChild(ladder);
             try
             {
-                ladder.Bind(world.Runtime, cutscene, () => rig, pickups);
+                // The one-human field this leg flies. Wrapped here rather than threaded through
+                // WithTrigger: the ladder is the only leg that needs the rig itself.
+                var field = new[] { new PlayerRig { Index = 0, Camera = ctx.Camera, HudParent = ctx.Host, Controller = rig } };
+                ladder.Bind(world.Runtime, cutscene, () => field, pickups);
                 world.Runtime.PlayerPositions = () => new[] { caboose.GlobalPosition };
                 rig.Setup(new FlightModel(PlaneStats.Load(ctx.ZrdrPath, PlaneNode)), null,
                     new CamParams(), caboose.GlobalPosition, caboose.GlobalPosition + Vector3.Forward,

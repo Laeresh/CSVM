@@ -237,6 +237,7 @@ public static class SuiteCatalog
         "airframe-hull-coverage",
         "campaign-coop-human-field",
         "campaign-coop-episode-owner",
+        "campaign-coop-approach-row",
     };
 
     // The suites `--run-tests=tier:quick` runs: one representative per failure surface, checked in
@@ -1502,6 +1503,13 @@ public static class SuiteCatalog
             + "their own shooter id and their one near-miss registration, the other pilot's is "
             + "untouched, and the same capture claimed by nobody swaps the scripted player",
             CoopEpisodeOwnerSuites.CampaignCoopEpisodeOwner));
+        into.Add(new TestHarness.Suite("campaign-coop-approach-row",
+            "the first story mission's own auto row flown by two humans: the guest inside the "
+            + "sphere is offered the prompt in their own pane while the scripted player a kilometre "
+            + "out is not and their held button starts nothing, the guest's press starts the row "
+            + "and the episode belongs to the guest rather than to player 1, and a second human "
+            + "standing in the same volume is not a second entry into it",
+            LandingApproachSuites.CampaignCoopApproachRow));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------
