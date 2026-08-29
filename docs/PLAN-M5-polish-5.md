@@ -1237,7 +1237,13 @@ A2's in-tree liveness read).
 
 # Wave D — the sortie
 
-## D31 ☐ Fly CM04 to CM09 end to end and judge every item where it was reported
+## D31 ☑ Fly CM04 to CM09 end to end and judge every item where it was reported
+
+**Standing.** CM04, CM06, CM07, CM09 and CM13 are cleared at the controls, and CM02's capture is
+too. The sortie's own findings became Waves F and G, and what it left open is `BL-623` (CM02's end
+cut, the last item), `BL-597` and `BL-598` (CM08, recorded not fixed), `BL-612` (the frame rate in
+CM09 and CM13), `BL-618`, `BL-619` and `BL-622` (no debrief screen), with CM13's race pace and
+CM08's two items still owed at the controls.
 
 **Goal.** Every item above is judged at the controls in the mission it was reported in, by the
 user; a fix that does not read right at the controls is reopened, with the user's eyes outranking
