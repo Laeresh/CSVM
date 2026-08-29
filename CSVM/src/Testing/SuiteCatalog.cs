@@ -235,6 +235,7 @@ public static class SuiteCatalog
         "landings-balmoral-dock",
         "campaign-cutscene-ownership",
         "airframe-hull-coverage",
+        "campaign-coop-human-field",
     };
 
     // The suites `--run-tests=tier:quick` runs: one representative per failure surface, checked in
@@ -1485,6 +1486,14 @@ public static class SuiteCatalog
             + "within the tolerance, the part names and their order the damage mapping relies on, "
             + "and the per-part box-to-hull volume the sweep no longer bridges",
             AirframeColliderSuites.AirframeHullCoverage));
+        into.Add(new TestHarness.Suite("campaign-coop-human-field",
+            "the human field over C3/M01's own shipped script and gate geometry: OBJECTIVE5's "
+            + "authored 'player' TRAVELERS completes on the guest who reaches the point while the "
+            + "scripted player stays 5 km out, and completes on nobody while the same aeroplane sits "
+            + "there outside the field, an escorting block's 'player' leader still resolves to P1's "
+            + "rig alone, and dzpath1's gate pair completes when P1 flies the green gate and the "
+            + "guest the red one, which neither half completes by itself",
+            CampaignHumanFieldSuites.CampaignCoopHumanField));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

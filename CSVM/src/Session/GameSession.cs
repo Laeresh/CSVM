@@ -84,6 +84,8 @@ public partial class GameSession : Node3D
     private readonly List<bool> _boardWasVisible = new();
     // scratch: the rigs' controllers plus AiPlanes, rebuilt on every AllAircraft() call
     private readonly List<FlightController> _aircraftScan = new();
+    // scratch: the rigs' controllers alone, rebuilt on every HumanAircraft() call
+    private readonly List<FlightController> _humanScan = new();
     // scratch: rig camera positions for the edge extender
     private readonly List<Vector3> _focusPoints = new();
     // Pickable subtrees that live beside the world content rather than under it — the anim lab's
@@ -826,6 +828,24 @@ public partial class GameSession : Node3D
         }
         _aircraftScan.AddRange(AiPlanes);
         return _aircraftScan;
+    }
+
+    /// <summary>The human field: every joined player's aircraft and no AI, in the same reused-list
+    /// shape as <see cref="AllAircraft"/> and read just as fresh, since an airframe swap rebuilds
+    /// a rig's controller. One entry outside splitscreen, which is the scripted player alone.
+    /// Not to be held across a step.</summary>
+    private IReadOnlyList<FlightController> HumanAircraft()
+    {
+        _humanScan.Clear();
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller is { } c)
+            {
+                _humanScan.Add(c);
+            }
+        }
+
+        return _humanScan;
     }
 
     // Loads the session's core archives (gamez, textures, sounds, sound defs/groups) and routes the
@@ -2584,6 +2604,7 @@ public partial class GameSession : Node3D
                 ? pilot.WorldPosition
                 : Vector3.Zero,
             PlayerAircraft = () => _rigs.Count > 0 ? _rigs[0].Controller : null,
+            Humans = HumanAircraft,
             Aircraft = AllAircraft,
             Rng = Rng.NewSystemRandom(Rng.Ai),
         });

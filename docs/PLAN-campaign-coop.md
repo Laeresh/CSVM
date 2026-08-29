@@ -93,7 +93,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `RaceGrid` becomes `StartGrid`, and answers a campaign mission's anchor
 2. ☑ A campaign session accepts more than one player
-3. ☐ `IObjectiveWorld` grows the human field, and the scripted player keeps its meaning
+3. ☑ `IObjectiveWorld` grows the human field, and the scripted player keeps its meaning
 4. ☐ The episode owner: a cutscene episode knows which human started it
 
 ### Wave B — In the mission
@@ -215,7 +215,7 @@ that named several planes for another reason; an explicit `--players=` must stil
 `:1535` already arranges. `SplitScreen.Build` is deliberately never constructed at one player, and
 that must stay true for the campaign path so the 1P story mode is untouched.
 
-## A3 ☐ `IObjectiveWorld` grows the human field, and the scripted player keeps its meaning
+## A3 ☑ `IObjectiveWorld` grows the human field, and the scripted player keeps its meaning
 
 **Goal.** Every objective condition that used to ask about one aeroplane now asks about every
 human and is satisfied by the first one, while the authored `player` token still resolves to a

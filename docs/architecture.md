@@ -414,6 +414,7 @@ clusters they delegate to.
 - `src/Session/CampaignLoadout.cs` — the bridge between a profile's stored picks and a flying aircraft's fit: one `OwnedPlane`'s ammunition indices and ordnance table indices as the `LoadoutChoice` a launch hands the session, which `Loadout.Bind` then lays over the aircraft's base fit. Engine-free, and both encodings are the campaign screens' own rather than the original's per-pylon ordnance id, which is a rocket table index decoded in `docs/formats/saved-games.md` and deliberately not adopted here, so an unset pylon is left to the base rather than written back. ⚠ `PylonRow` is the one decoder of the stored one-based ordnance value, and every screen that reads the field calls it rather than subtracting one itself; a second reading of the field puts a different rocket on the flight check than the ammo screen just committed.
 - `src/Session/ObjectiveScript.cs` — one mission's parsed `objectives.zrd`: the file-level keys and the contiguous `OBJECTIVEn` blocks in the typed shape the graph runs, found by exact name so every shipped misspelling lands in no field and stays dead. Decode: `docs/formats/objectives.md`.
 - `src/Session/ObjectiveGraph.cs` — the objectives runtime, engine-free: the four-state machine per objective, the rotating one-completion-per-tick scan, the chaining executor with its already-awake truncation, the nap that clears a completed flag, the condition families' OR, the mission countdown, the win/loss flags and the display rows D33 reads. Reaches the world only through `IObjectiveWorld`.
+- `src/Session/CampaignHumanField.cs` — the human field's rules, engine-free: what a condition that named one aeroplane asks once two to four humans fly the mission. The `TRAVELERS` proximity read (the nearest human decides) and the `DEDG` count of humans a capture stamped with a group. The scripted player is not here; it is one aircraft and `CampaignDirector` answers it.
 - `src/Session/ObjectiveSites.cs` — the flown campaign mission's objective sites as targeting candidates, which is what tells the player where to go: the set is `targets.zrd`'s own `objective` entries edited by `objectives.zrd`'s `ADD_`/`REMOVE_OBJECTIVE_TARGET`, offered to each player's `TargetPool` with the mission's objective flag so they head the Enemy cycle and the ordinary selection draws one at a time. Rebuilt from its live source every frame, so a site under a moving node moves with it. A site the mission names by a bare `TRAVELERS` point sits at that point, not at the world node of the same name.
 - `src/Session/CampaignDirector.cs` — the engine side of a campaign mission and the sibling of `InstantActionDirector`: resolves a `--campaign=<profile>:<seq>` launch to its chapter/mission, arms the graph against the built world's runtimes, and at mission end records the attempt through `CampaignProgression`, folds the destruction log into the profile and raises the return-to-cabin exit the session layer acts on. A failure that raises the skip offer captures the lost world's destruction state into `CampaignMissionResult.SkipCapture` beside the chapter, since that state exists only while the world is up and the offer's Yes has to be able to commit it; nothing commits it unless the offer is taken. It also owns the mission's two music duties: routing a `mu*` sound group to the process music channel instead of a positional emitter, and running the decoded proximity scan and player-damage ping that put the score into battle. The wingman's aircraft and fit are resolved here too, from the profile it already has open; nothing spawns that aircraft yet. A cutscene hold (callback 20) stops its whole step. `BuildRoster` also wires each spawned aircraft's `Downed` report to `CreditKill`, the single site (mirroring the original's one damage-resolver branch) that credits a player kill of a hostile airframe into the mission's plain or ace tally by the roster plan's own `Ace` flag.
 - `src/Session/CutsceneController.cs` — the host a cutscene definition raises its `CALLBACK` codes to: the letterbox bars and the cutscene camera the definition itself drives, the world/objectives hold, the player out of flight with the chrome off, the AI parked, then one hard cut back to gameplay on the definition's end or on a skip. It answers for the two story-mission intros always, and for whatever `HostDefinitions` registers (the landings trigger's own rows and their `CALL_ANIMATION` closure). Scoping is by definition name, never by authored code.
@@ -5512,6 +5513,24 @@ table loaded from the wrong scope looks like. `GameSession` binds it through
 `campaign-objective-target-path`, `campaign-objective-labels` and `campaign-race-chain` (the
 hangar anchor, and C2/M03's race chain of per-zone objectives with a racer-death DEDG each).
 
+## src/Session/CampaignHumanField.cs
+The human field's own rules, engine-free and pinned by `CSVM.Tests/CampaignHumanFieldTests.cs`:
+what a condition that used to ask about one aeroplane answers once two to four humans fly the
+mission. Two meanings live behind the word "player" in this area and the split between them is the
+whole of the design: the SCRIPTED PLAYER is the one aeroplane an authored `player` token names,
+always P1's, and the HUMAN FIELD is every human in the session. This type only ever answers "any of
+them", over `HumanState` (position, the AI group a capture stamped, whether it is a wreck), and
+`CampaignDirector.World.SnapshotHumans` is the only producer of those.
+`Travelers` is the `TRAVELERS` proximity read: the NEAREST human decides, so an approaching
+condition is met by the first human to arrive and a departing one only once the last has left. ⚠ A
+wreck still reports its position, deliberately: the single-player read this replaces is the pilot
+rig's own position, which a crash does not stop reporting. `LiveInGroup` is the `DEDG` count of
+humans holding a captured aeroplane of that group, crashed alone and never inert, since a human rig
+is inert under a cutscene. The two seams that deliberately do NOT read this type are
+`CampaignRosterPlan.ResolveLeader`'s `player` and `NetTrailerTargets`, each anchored on the scripted
+player because an escort and an anchored net must each follow ONE aeroplane; both carry a `⚠` at
+their input, since they are the two a later reader will assume were missed.
+
 ## src/Session/ObjectiveGraph.cs
 The objectives runtime over a parsed script, pure state over `Step` calls in the shape of
 `InstantActionWaves` — no Godot type, no logging, `CSVM.Tests/ObjectiveGraphTests.cs` pins it
@@ -5533,7 +5552,11 @@ still `RUNNING` when it lands and the objective's `INSTANTWIN` arrives to an end
 nothing. `Session/CutsceneController.cs` raises it.
 The world seam is `IObjectiveWorld`: a method returning `null` means "this engine cannot answer",
 which makes the family report FALSE and bumps `UnresolvedConditions` rather than guess — ⚠ reading
-an empty world as "the group is wiped out" would win missions on the first tick.
+an empty world as "the group is wiped out" would win missions on the first tick. Every condition on
+that interface reads the whole human field rather than one aeroplane
+(`Session/CampaignHumanField.cs`), which is why the interface doc carries the scripted-player split
+too: an implementer that answers `TravelersMet` off P1 alone leaves a co-op mission unwinnable by
+anybody else.
 The read model D33 consumes is `Rows` (one row per unique `IDENTITY` priority, ascending, the
 priority the row key and the sort key), `ObjectiveTargets`/`OtherTargets`/`HelpLabels`, and the
 `Woke`/`Completed`/`TargetsChanged`/`MissionEnded` events; wake and complete events carry the
@@ -5567,6 +5590,19 @@ which is what lets a golden pin a co-op campaign shot with no hand-authored prof
 entries 1 and up name guests and are left alone. The warning fires on the NODE differing, not on
 where the name came from, so a cabin launch (whose entry 0 is already that node) stays silent
 without this needing to know which factory built the spec.
+The world adapter answers TWO questions that both used to be spelled "the player", and keeping them
+apart is what makes a co-op mission playable: `Player()` is the scripted player, `WorldInputs.PlayerAircraft`'s
+one aeroplane, always P1's, and it is what the lost ending, the music damage ping and the escort
+leader read. `SnapshotHumans()` is the human field, `WorldInputs.Humans` (`GameSession.HumanAircraft`,
+the rigs' controllers and no AI) refilled into one reused buffer and handed to
+`Session/CampaignHumanField.cs`. Three reads moved onto the field: the `TRAVELERS` condition whose
+subject is the authored `player`, the `DEDG` walk's human arm, and the danger-zone update, which is
+now driven per human so a gate pair may be split between two of them. A session that names no field
+is one where the scripted player IS the field, which is every solo sortie and every suite that
+builds one rig, so the co-op read and the solo read stay on one code path and a 1P mission answers
+byte-identically. ⚠ A `TRAVELERS` with an empty field still falls back to
+`WorldInputs.ListenerPosition`, because a suite that builds no rig at all resolves its conditions
+that way and always has.
 `TryCreate` loads the profile and the script on the same "a failure warns and flies without a
 mission" contract `InstantActionDirector.TryCreate` has. `Attach(WorldInputs)` arms the graph once
 every runtime a directive can touch is up, applies the chapter's persist log and hands the world's
@@ -5670,7 +5706,9 @@ its stats; a def that is no `kind_of` variant of its airframe flies the plain ba
 block's own def still deciding the mode. A def with no airframe whose mode is `ship` plans as a
 `Surface` hull (`PlaneNode` is then the def, the chapter's library-root model; no `AiDef`), and
 `SpawnFor` refuses such a plan; any other airframe-less def is `Skipped`. `ResolveLeader` is the second-pass lookup (`player` = the
-first human). The `handover` argument is the airframe-swap counterpart of the wingman override:
+SCRIPTED PLAYER, P1's rig). ⚠ Not the human field, and one of the two reads deliberately left off
+it: an escorting block follows one aeroplane, and a leader chosen from whichever human is handiest
+would hand the wing a different lead every mission (`Session/CampaignHumanField.cs`). The `handover` argument is the airframe-swap counterpart of the wingman override:
 in the two missions that resolve `wingman_4`, that block flies the PLAYER's airframe and paint from
 mission start, because the swap is about to hand it that aeroplane. An `enabled 0` block is
 excluded from the initial roster and
@@ -5865,7 +5903,9 @@ Resolves a patrol net's TRAILER name to a live position supplier (`BL-377`), the
 "an anchored net rides its target", so `Flight/AiNetFollower` can do the arithmetic knowing nothing
 about players or world nodes. `For(net)` returns a `Func<Vector3?>` only for the anchored-and-named
 shape (`[nodeIndex, "name"]`, 76 nets); the other three shipped shapes get null, which means "fly
-the authored coordinates". `player` is the player rig; anything else is a world node through the
+the authored coordinates". `player` is the SCRIPTED PLAYER's rig, P1's, and ⚠ deliberately not the
+human field: a trailer target is ONE aircraft the graph is drawn behind, and there is no field-wide
+answer to what it should trail (`Session/CampaignHumanField.cs`). Anything else is a world node through the
 same `WorldRuntime.FindNodes` lookup `ZeppelinRuntime` uses. `OffsetOf(net)` is the overlay's read
 of the same offset. Every follower the session builds shares one instance (`GameSession._netTrailers`).
 Pinned by `NetTrailerTargetsTests` + the `ai-net-follow` suite.
