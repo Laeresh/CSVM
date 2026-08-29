@@ -31,6 +31,7 @@ choreography in [objectives.md](objectives.md).
 - [Flight check: `FLIGHTCHECK.SCRIPT`](#flight-check-flightcheckscript)
 - [Ammo selection: `ORDINANCELAYOUT.SCRIPT`](#ammo-selection-ordinancelayoutscript)
 - [The scrapbook: `SCRAPBOOK.SCRIPT`, `SCRAPBOOKZOOM.SCRIPT`, `SCRAPBOOK_TOC.SCRIPT`](#the-scrapbook-scrapbookscript-scrapbookzoomscript-scrapbook_tocscript)
+  - [Entry, exit and the table of contents](#entry-exit-and-the-table-of-contents)
 - [Callback reference](#callback-reference)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases)
 - [Evidence and limits](#evidence-and-limits)
@@ -397,13 +398,15 @@ the panel previews what the pointer is over.
 
 ## The scrapbook: `SCRAPBOOK.SCRIPT`, `SCRAPBOOKZOOM.SCRIPT`, `SCRAPBOOK_TOC.SCRIPT`
 
-The scrapbook is the book the cabin's PREVIOUS MISSIONS button opens, and it is the screen a
-finished campaign mission ends on. Three scripts share it: `SCRAPBOOK.SCRIPT` draws one two-page
-spread, `SCRAPBOOKZOOM.SCRIPT` is the detail view of a single scrap, and `SCRAPBOOK_TOC.SCRIPT` is
-the mission list behind VIEW ALL MISSIONS. The three hand off by pausing rather than ending, so the
-spread survives a trip into a scrap and back. The mission-end pass that fills the results record is
-[`org/debrief.md`](../org/debrief.md); the record itself is
-[saved-games.md](saved-games.md), "The mission-result array".
+The scrapbook is the two-page book a finished campaign mission ends on. Three scripts share it:
+`SCRAPBOOK.SCRIPT` draws one spread, `SCRAPBOOKZOOM.SCRIPT` is the detail view of a single scrap,
+and `SCRAPBOOK_TOC.SCRIPT` is the 25-row mission list behind VIEW ALL MISSIONS. The three hand off
+by pausing rather than ending, so a spread survives a trip into a scrap or the table of contents
+and back. **The cabin's PREVIOUS MISSIONS button does not open the book**: `PC_B_PREVIOUS`'s
+`ScriptToExe` is `ScrapBook_TOC`, so it opens the table of contents, and the book is reached only
+by picking a row there or by a mission ending. The mission-end pass that fills the results record
+is [`org/debrief.md`](../org/debrief.md); the record itself is [saved-games.md](saved-games.md),
+"The mission-result array".
 
 **None of the composition is in the scripts.** `SCRAPBOOK.SCRIPT` creates 32 empty pane slots, 32
 empty text slots and 11 kill-stamp slots, then asks the engine, item by item, what to put in them.
@@ -525,6 +528,51 @@ Brigand, Devastator, Firebrand, Fury, Kestrel, Peacemaker, Warhawk) with the air
 into the stamp, and frames 11 to 21 are the same eleven again over a star. The star is the ace
 variant; which kills earn it is in [`org/debrief.md`](../org/debrief.md).
 
+### Entry, exit and the table of contents
+
+Every button that leaves the book, the zoom or the table of contents, stated the same way as the
+[Screen flow](#screen-flow) table above: by its `LAYOUT.CSV` `ScriptToExe` column when it carries
+one, or by the script's own `script_run` / `script_pause` / `script_continue` / `script_end` /
+`mail` when it does not.
+
+| From | Control | Goes to | Stated by |
+|---|---|---|---|
+| Cabin | `PC_B_PREVIOUS` | `SCRAPBOOK_TOC.SCRIPT` | layout |
+| Mission end | (automatic) | `SCRAPBOOK.SCRIPT`, at the flown mission's spread 1 | `crimson.exe`, `FUN_0046fb60`; see [`org/debrief.md`](../org/debrief.md#the-pass-in-order) |
+| Book | a scrap | `SCRAPBOOKZOOM.SCRIPT`, paused rather than ended | script |
+| Book | `sb_b_toc`, or `sb_b_prev` at the front of the book | `SCRAPBOOK_TOC.SCRIPT`, paused rather than ended | script |
+| Book | `sb_b_replay` | ends the book; Replay Mission's own fork, below | script |
+| Book | `SB_B_RETURNPC` | the cabin | layout |
+| Zoom | Esc, or `sbz_b_return` | back to the paused book | script |
+| Zoom | `sbz_b_export` | `messagebox.script` (an export confirmation; does not return to the book) | script |
+| Table of contents | `sbtoc_b_view`, `sbtoc_b_current`, or a double-clicked row | the book, at the picked mission's spread 1 | script |
+| Table of contents | `sbtoc_b_replay` | ends the table of contents; Replay Mission's own fork, below | script |
+| Table of contents | `SBTOC_B_RETURN` | the cabin | layout |
+
+`SB_B_RETURNPC` and `SBTOC_B_RETURN` both carry `ScriptToExe = PassengerCabin`, the same
+layout-declared-transition pattern the [Reader rules](#reader-rules-and-edge-cases) already record
+for the cabin's own Return to Main Menu: neither button has a case in its script's `gui_mailbox`.
+
+**Replay Mission forks on a session flag the scripts only read, `$$SR$$`.**
+`PASSENGERCABIN.SCRIPT` zeroes it at its own `gui_create`; nothing in the three scrapbook scripts
+sets it, so only the mission-end path can leave it set. The book's `sb_b_replay` handler (the table
+of contents' `sbtoc_b_replay` is the same logic over its own selected row):
+
+```
+FRA = callback(uiData, 2405, 0)        // the mission the open page shows
+if (FRA == $$KP$$ && $$SR$$)           // still the mission just flown, same session
+    restart in place: callback(uiData, 2013, -1, ...), gosCallback 1
+else
+    the ordinary mission-select path: mail 11003, gosCallback 31, gosCallback 6
+```
+
+which is the same three calls (`mail` 11003, `gosCallback` 31, `gosCallback` 6) the cabin's own New
+Mission button makes. Replay Mission's *availability* does not fork this way: `uiData` 2411 gates
+it on the shown mission's own record alone, regardless of how the book was reached.
+[`org/debrief.md`](../org/debrief.md#entering-the-book-replay-mission-and-the-table-of-contents)
+has the full trace and what is still unread (which native function answers `PC_B_PREVIOUS` and
+where `$$SR$$` is set).
+
 ## Callback reference
 
 Only the ids these five scripts use. `uiData` dispatches ids 2000 to 2038 through a jump table at
@@ -573,8 +621,8 @@ with the rule above: byte at `0x0040f788 + (id - 2100)`, then dword at `0x0040f5
 | 2405 | `0x0040a633` | mode 1 opens a mission at spread 1, or the campaign's current mission when given -1; any other mode reads the open mission |
 | 2406 | `0x0040a7d4` | the outcome line and four result values for a tab, above |
 | 2407 | `0x0040aa52` | walk to the next drawable item of this spread, returning type 5 for an image and 6 for text |
-| 2408 | `0x0040a453` | the page title, mission name and area. Not decoded |
-| 2409 | `0x0040a4b8` | a table-of-contents row. Not decoded |
+| 2408 | `0x0040a453` | the page title: mission name and area, out through `ESA.BC` |
+| 2409 | `0x0040a4b8` | a table-of-contents row: given an ordinal, out a plane-icon selector and three text lines (mission name, area, plane flown) |
 | 2410 | `0x0040a935` | the zoom view: background, inset image and position, layout letter, and the title, caption and text ids |
 | 2411 | `0x0040a408` | is Replay Mission offered, which is true once either half of the mission's record holds a time |
 | 2412 | `0x0040a3d9` | export the open scrap to the desktop |
@@ -644,6 +692,7 @@ corroborate but do not establish them.
 | Chapter intro | the movie name, the skip gesture, the one-shot guard | not covered by any screenshot | the MPG decode itself, deliberately out of scope |
 | Flight check | both slots, all four lists, the wingman gate, both plane-change rules, the grant table, both exits | the title, plane lines, six of eight gun rows filled and two blank, the objectives note, the calibre label's string block, both buttons | the `10018`/`10000` state art |
 | Ammo selection | both callers, the working-copy commit, the greyed empty group, the pylon deactivation, all six string blocks | the greyed fourth group, two of four pylons per wing, both description panes, both plane diagrams | the rocket table's unread second field |
+| Scrapbook | every button's transition, the composition file, the results rows, the kill stamps, the table of contents, the Replay Mission fork | the three reference spreads scrap for scrap, the stamps and total on two of them | the native side of the cabin entry and of `$$SR$$`, both in `crimson.exe`, unreached this session |
 
 Where this decode stops:
 

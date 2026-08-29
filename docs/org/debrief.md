@@ -26,6 +26,7 @@ record is indexed by is [`formats/campaign-sequence.md`](../formats/campaign-seq
 - [The screen is the scrapbook](#the-screen-is-the-scrapbook)
   - [The stamps and the total](#the-stamps-and-the-total)
   - [Navigation and page composition: a data file, not code](#navigation-and-page-composition-a-data-file-not-code)
+  - [Entering the book, Replay Mission and the table of contents](#entering-the-book-replay-mission-and-the-table-of-contents)
   - [So this item reuses a board CSVM already has](#so-this-item-reuses-a-board-csvm-already-has)
 - [What the debrief does not write](#what-the-debrief-does-not-write)
 - [Where CSVM stands](#where-csvm-stands)
@@ -337,12 +338,88 @@ which case the limit is mission 24. That refusal is what leaves an unreached slo
 The `MS_P_` photographs are the cabin memento pool (`UIData +0x344`), and the book draws from the
 same directory: 15 rows name an `MS_P_*` scrap, 13 of them on a results page.
 
+### Entering the book, Replay Mission and the table of contents
+
+**The mission-end path is native and already traced**, in ["The pass, in
+order"](#the-pass-in-order) above: step 7's `FUN_0046fb60(0x0071d57c, …)` runs while
+`DAT_0071c098` still holds the mission the player just flew, opening `SCRAPBOOK.SCRIPT` directly
+at that mission's spread 1.
+
+**The cabin path does not reach the book at all.** `LAYOUT.CSV`'s `PC_B_PREVIOUS` row carries
+`ScriptToExe = ScrapBook_TOC`, one of the layout-declared transitions
+[`formats/campaign-screens.md`](../formats/campaign-screens.md) already established for this
+screen family: pressing PREVIOUS MISSIONS opens `SCRAPBOOK_TOC.SCRIPT`, the 25-row mission list,
+and `SCRAPBOOK.SCRIPT` itself does not run until a row is picked from there. `SBTOC_B_RETURN` and
+`SB_B_RETURNPC` both carry `ScriptToExe = PassengerCabin` the same way, which is why neither
+appears in either script's `gui_mailbox`: this whole family of transitions is authored in
+`LAYOUT.CSV`, and the scripts are silent about the buttons that carry one.
+
+**The two entry paths land on different screens, not on the same screen in different states.**
+Mission end opens the book; the cabin opens the table of contents. `SCRAPBOOK_TOC.SCRIPT`'s
+`sbtoc_b_view` (commit the picked row) and `sbtoc_b_current` (jump to the campaign's current
+mission) are what reach the book from there, both through `uiData` 2405 mode 1, the same call the
+book's own bookmark uses.
+
+**`$$SR$$` is a session flag the scripts only ever read**, and it is what makes Replay Mission
+behave differently depending on how the book was reached, not whether it is offered (`uiData` 2411
+gates that on the shown mission's own record alone, regardless of entry path).
+`PASSENGERCABIN.SCRIPT` zeroes it at its own `gui_create`; nothing in the three scrapbook scripts
+sets it, so only the native mission-end path can leave it set. `SCRAPBOOK.SCRIPT`'s `sb_b_replay`
+handler:
+
+```
+FRA = callback($$E$$, 2405, 0)        // the mission the open page shows
+if (FRA == $$KP$$ && $$SR$$)          // still the mission just flown, same session
+    NSA = 1
+callback($$E$$, 2104, (FRA))
+script_end @scrapbook@
+if (NSA)
+    callback($$E$$, 2013, -1, ...); callback($$A$$, 1, 0)     // restart in place
+else
+    mail(11003, @globals@RR); callback($$A$$, 31); callback($$A$$, 6)   // the cabin's New Mission path
+```
+
+`$$KP$$` is the campaign's current mission, 1-based
+([`formats/campaign-screens.md`](../formats/campaign-screens.md), "Evidence and limits"). Replay
+Mission restarts in place only on the mission just flown, in the session that flew it; browsed to
+from the cabin, or paged away from, it falls through to the identical three calls
+`PASSENGERCABIN.SCRIPT`'s own New Mission button makes (`mail` 11003, `gosCallback` 31,
+`gosCallback` 6). `SCRAPBOOK_TOC.SCRIPT`'s `sbtoc_b_replay` runs the same logic over its own
+selected row.
+
+**What is still unread.** Which native function recognises `PC_B_PREVIOUS`'s `ScriptToExe` and
+where `$$SR$$` is set are both in `crimson.exe`, and the `ghidra-mcp` bridge was not reachable this
+session to trace either. Neither claim above depends on the address: the screen each path reaches,
+and the behavioural fork Replay Mission takes, are both read off the scripts' and `LAYOUT.CSV`'s
+own text.
+
+**Every `script_run`, `script_pause`, `script_continue` and `script_end` in the three scripts**, so
+the flow above is exhaustive and not a sample of it:
+
+| Script | Trigger | Does |
+|---|---|---|
+| `SCRAPBOOK.SCRIPT` | a scrap clicked (the mailbox default case) | pause, run `scrapbookzoom.script` |
+| `SCRAPBOOK.SCRIPT` | `sb_b_toc`, or `sb_b_prev` returning 0 at the front of the book | pause, run or continue `scrapbook_toc.script` |
+| `SCRAPBOOK.SCRIPT` | `sb_b_replay` | end itself, then the Replay Mission fork above |
+| `SCRAPBOOK.SCRIPT` | `gui_destroy` | end `scrapbook_toc.script` if it is still paused |
+| `SCRAPBOOKZOOM.SCRIPT` | Esc, or `sbz_b_return` | continue `scrapbook.script`, end itself |
+| `SCRAPBOOKZOOM.SCRIPT` | `sbz_b_export` | run `messagebox.script` (an export confirmation; does not return to the book) |
+| `SCRAPBOOK_TOC.SCRIPT` | `sbtoc_b_view`, `sbtoc_b_current`, or a double-clicked row | pause, run or continue `scrapbook.script` |
+| `SCRAPBOOK_TOC.SCRIPT` | `sbtoc_b_replay` | end itself, then the Replay Mission fork above |
+| `SCRAPBOOK_TOC.SCRIPT` | `gui_destroy` | end `scrapbook.script` if it is still paused |
+
 ### So this item reuses a board CSVM already has
 
-`CampaignPreviousMissionsPage` is the scrapbook's finished-missions list. The debrief is that same
-screen opened on the mission just flown, so the work is the rest of the scrapbook rather than a new
-board: the second page, the per-scrap zoom, the navigation and bookmark, the results block, the
-mission-end entry path and the skip offer.
+`CampaignPreviousMissionsPage` is not quite either original screen, but closer in shape to
+`SCRAPBOOK_TOC.SCRIPT` than to the book: a flat list with a pick-then-act pair of buttons and a
+Return, which is the table of contents' VIEW SELECTED / REPLAY MISSION / CURRENT MISSION / RETURN
+over its 25-row list. The original keeps the two screens apart: the cabin's PREVIOUS MISSIONS
+button opens the table of contents, and only a picked row or the Current Mission jump reaches the
+two-page book. CSVM's one class currently stands in for both. The debrief itself is the
+book opened on the mission just flown, and nothing in CSVM draws that yet: the results block, the
+per-scrap pages, the zoom, the page and mission arrows and the bookmark are still to build, and
+where the original's book/table-of-contents split lands in CSVM's own page structure is a call for
+whichever Wave C/D item builds it, not settled here.
 
 ## What the debrief does not write
 
@@ -362,8 +439,10 @@ merge, not its author, and the two run in the same mission-end pass.
   `+0x08` or `+0x14`. Nothing counts kills per airframe, and nothing distinguishes an ace, so
   neither the stamps nor Overall Planes Downed have a source (`BL-624`). Rockets Expended needs no
   source, since the original does not draw it.
-- **The board exists.** `CampaignPreviousMissionsPage` is already the scrapbook; what is missing is
-  the mission-end entry into it, the Most Recent tab and the Replay Mission button.
+- **A board exists, but it is shaped like the wrong original screen.** `CampaignPreviousMissionsPage`
+  is a flat mission list, closer to `SCRAPBOOK_TOC.SCRIPT` than to the two-page book the debrief
+  actually is; the mission-end entry, the two tabs, the results block and the Replay Mission button
+  all belong to the book, which nothing in CSVM draws yet.
 - **The skip offer is unimplemented.** Four failed attempts at an uncompleted mission is a
   campaign-advancing decision the player is given, not a cosmetic prompt.
 - **`ObjectiveGraph.CompletedMask` is one of the original's two mask sources.** It is the
@@ -371,6 +450,10 @@ merge, not its author, and the two run in the same mission-end pass.
 
 ## What is not decoded
 
+- **The native side of the cabin entry and the `$$SR$$` flag.** Which function answers
+  `PC_B_PREVIOUS`'s `ScriptToExe = ScrapBook_TOC` and where `$$SR$$` is set before the mission-end
+  path opens the book are both unread; the `ghidra-mcp` bridge was not reachable in the session
+  that wrote the entry-path decode. Nothing above depends on either address (A3).
 - **The wording of string 191.** `extracted/rof/ui_strings.json` jumps from id 136 to id 200, so
   the skip offer's text is absent from the extraction. Its shape is known (a Yes/No message box
   taking a string and the number 4 as its two format arguments) and its wording is not.

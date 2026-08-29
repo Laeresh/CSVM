@@ -76,9 +76,9 @@ either claim from `FUN_00419630` alone.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, B11, B12, B13, C15, C16, C17, D18, D19, D21 | Confirm the trace, then implement. A1 supplies the geometry the Wave D items needed; A2 supplies the counting rule B13 and C16 were waiting on. |
-| **Direction sound, magnitude a judgement call** | D20 | The *what* is settled by the screenshots and by A1's callback map; the rest is A3's output. |
-| **Leads only, no mechanism yet** | A3, B14 | Budget for investigation. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, B11, B12, B13, C15, C16, C17, D18, D19, D21 | Confirm the trace, then implement. A1 supplies the geometry the Wave D items needed; A2 supplies the counting rule B13 and C16 were waiting on; A3 supplies the entry paths C17 and D20 were waiting on. |
+| **Direction sound, magnitude a judgement call** | D20 | The *what* is settled by the screenshots, A1's callback map and A3's entry-path split; the rest is a layout call. |
+| **Leads only, no mechanism yet** | B14 | Budget for investigation. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.
@@ -169,7 +169,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Decode the page composition: which scrap sits where, at what coordinates, with what zoom text
 2. ☑ Decode the two per-airframe tallies and the Overall Planes Downed row
-3. ☐ Decode the book's navigation and its entry paths
+3. ☑ Decode the book's navigation and its entry paths
 
 ### Wave B — the record and the director
 
@@ -196,7 +196,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 **A1 has landed**, so D18, D19 and D20 are unblocked and build against `SCRAPBOOK.CSV` and
 `LAYOUT.CSV` rather than invented geometry. **A2 has landed**, so B13 and C16 are unblocked: the
 counting rule and the stamp enumeration are both written down, and B13 should run before C16 since
-the stamps have nothing to draw until something counts. **A3 blocks C17 and D20.**
+the stamps have nothing to draw until something counts. **A3 has landed**, so C17 and D20 are
+unblocked: the mission-end entry is fully traced, and the arrows, bookmark and Replay Mission fork
+are all written down. Whether Wave D also builds `SCRAPBOOK_TOC.SCRIPT`'s table of contents as its
+own screen, given CSVM's `CampaignPreviousMissionsPage` is already shaped like it rather than like
+the book, is still an open scope call and blocks nothing.
 
 Wave B is independent of Wave A except for B13, so B11, B12 and B14 can run while Wave A is still
 prospecting. **B12 blocks C17** (the mission-end entry needs the result carried across the frame
@@ -362,40 +366,88 @@ non-aircraft counter with its own incrementer, and `+0x5c`/`+0x60` are the Gun H
 the callers of `FUN_004a2320` / `FUN_004a2340` / `FUN_004a2330` are the question, and there is
 exactly one.
 
-## A3 ☐ Decode the book's navigation and its entry paths
+## A3 ☑ Decode the book's navigation and its entry paths
 
-**Goal.** A statement of how the book is entered from a mission end and from the cabin, what the
-arrows step, when the Current Mission bookmark appears, and what Replay Mission and View All
-Missions do.
+**Landed.** The two entry paths do not converge on the same screen: a mission ending opens
+`SCRAPBOOK.SCRIPT` directly (`FUN_0046fb60(0x0071d57c, …)`, already traced in
+[`org/debrief.md`](org/debrief.md#the-pass-in-order)), but the cabin's PREVIOUS MISSIONS button
+opens `SCRAPBOOK_TOC.SCRIPT` instead (`LAYOUT.CSV`'s `PC_B_PREVIOUS` row carries
+`ScriptToExe = ScrapBook_TOC`), and the book is reached from there only by picking a row or by the
+Current Mission jump. A1's arrow-stepping and bookmark rule stand unchanged. Replay Mission forks
+on a session flag, `$$SR$$`, that only the mission-end path can leave set: restarting in place on
+the mission just flown in the same session, or otherwise falling through to the cabin's own New
+Mission call sequence. The trace, the full `script_run`/`pause`/`continue`/`end` inventory across
+all three scripts, and what remains unread are in
+[`org/debrief.md`](org/debrief.md#entering-the-book-replay-mission-and-the-table-of-contents); the
+transitions and the two previously-undecoded callbacks (2408, 2409) are in
+[`formats/campaign-screens.md`](formats/campaign-screens.md#entry-exit-and-the-table-of-contents).
 
-**Evidence (confidence: direction-sound; A1 settled the stepping, the entry paths are unread).** A1
-resolved the mechanics of the arrows. Position is two globals, `0x00647b78` the mission and
-`0x00647b7c` the spread. `uiData` 2402 takes 100 for forward and 101 for back, delegating to
-`FUN_00406170` and `FUN_00406100`, which probe item 1 of the neighbouring spread and roll to the
-next mission when the key is absent; 101 returning 0 at the front of the book is what opens the
-table of contents. 2402 with 0, and 2405 mode 1 with -1, both jump to the campaign's current mission
-at spread 1, which is the Current Mission bookmark. 2401 (`0x0040a682`, `FUN_004060a0`) reports
-which of next and bookmark to enable. Replay Mission is offered when `uiData` 2411 finds a time in
-either half of the record.
+**Verified.** Every `script_run`, `script_pause`, `script_continue` and `script_end` in
+`SCRAPBOOK.SCRIPT`, `SCRAPBOOKZOOM.SCRIPT` and `SCRAPBOOK_TOC.SCRIPT` is accounted for (nine
+transitions, tabulated in both pages above), and both entry paths are stated: mission end into the
+book, cabin into the table of contents. `LAYOUT.CSV`'s `ScriptToExe` column and the scripts'
+`gui_mailbox` cases were cross-checked against each other rather than read alone, the same method
+the format page's "Reader rules" already prescribes for this screen family.
 
-**There is a third script this plan did not know about.** `SCRAPBOOK_TOC.SCRIPT` is the VIEW ALL
-MISSIONS screen: a 25-row list filled by `uiData` 2409 with a plane icon and three text lines per
-row, its own Replay and Current Mission buttons, and an `ispy` cheat that turns on the debug overlay
-`SCRAPBOOK.SCRIPT` draws in `gui_draw`. It is reached from `SB_B_TOC` and from stepping back off the
-front of the book, and the two scripts pause rather than end each other.
+**What it changed elsewhere.** The plan's own trap below is corrected rather than confirmed: the
+two paths do not differ by "the tab opened on" (the tab resets to Most Recent on every entry
+regardless of path); they differ by which *screen* opens and by Replay Mission's restart-in-place
+fork. `docs/org/debrief.md#so-this-item-reuses-a-board-csvm-already-has` is rewritten: CSVM's
+`CampaignPreviousMissionsPage`, a flat pick-then-act list, is shaped like `SCRAPBOOK_TOC.SCRIPT`,
+not like the two-page book the debrief itself is, which changes what "the same board" means for
+Wave C and D. C17 (mission-end entry) is unblocked outright; D20 (bookmark and arrows) was already
+direction-sound and gains the entry-path split. Whether Wave D should build the table of contents
+as its own screen, matching the original's split, is left to whichever item builds it, per the
+plan's front-matter note that no item currently claims it.
 
-**Approach.** Read `FUN_0046fb60`'s argument at `0x0071d57c` for the entry, and `FUN_004194e0`'s
-tail for what the mission end sets before it. `uiData` 2409 (`0x0040a4b8`) is the remaining unread
-callback.
+**Not decoded.** Which native function answers `PC_B_PREVIOUS`'s layout-declared transition, and
+where `$$SR$$` is set before the mission-end path opens the book, are both in `crimson.exe` and
+unread: the `ghidra-mcp` bridge did not connect this session. Neither claim above depends on
+either address; both were read off `LAYOUT.CSV` and the scripts' own text, cross-checked against
+each other.
 
-**Model recommendation.** medium. Bounded reading, with A1's method already established.
+**Original approach (kept for reference).**
 
-**Verify.** The written flow accounts for every `script_run`, `script_pause`, `script_continue` and
-`script_end` in the three scripts, and for both entry paths.
+> **Goal.** A statement of how the book is entered from a mission end and from the cabin, what the
+> arrows step, when the Current Mission bookmark appears, and what Replay Mission and View All
+> Missions do.
+>
+> **Evidence (confidence: direction-sound; A1 settled the stepping, the entry paths are unread).** A1
+> resolved the mechanics of the arrows. Position is two globals, `0x00647b78` the mission and
+> `0x00647b7c` the spread. `uiData` 2402 takes 100 for forward and 101 for back, delegating to
+> `FUN_00406170` and `FUN_00406100`, which probe item 1 of the neighbouring spread and roll to the
+> next mission when the key is absent; 101 returning 0 at the front of the book is what opens the
+> table of contents. 2402 with 0, and 2405 mode 1 with -1, both jump to the campaign's current mission
+> at spread 1, which is the Current Mission bookmark. 2401 (`0x0040a682`, `FUN_004060a0`) reports
+> which of next and bookmark to enable. Replay Mission is offered when `uiData` 2411 finds a time in
+> either half of the record.
+>
+> **There is a third script this plan did not know about.** `SCRAPBOOK_TOC.SCRIPT` is the VIEW ALL
+> MISSIONS screen: a 25-row list filled by `uiData` 2409 with a plane icon and three text lines per
+> row, its own Replay and Current Mission buttons, and an `ispy` cheat that turns on the debug overlay
+> `SCRAPBOOK.SCRIPT` draws in `gui_draw`. It is reached from `SB_B_TOC` and from stepping back off the
+> front of the book, and the two scripts pause rather than end each other.
+>
+> **Approach.** Read `FUN_0046fb60`'s argument at `0x0071d57c` for the entry, and `FUN_004194e0`'s
+> tail for what the mission end sets before it. `uiData` 2409 (`0x0040a4b8`) is the remaining unread
+> callback.
+>
+> **Model recommendation.** medium. Bounded reading, with A1's method already established.
+>
+> **Verify.** The written flow accounts for every `script_run`, `script_pause`, `script_continue` and
+> `script_end` in the three scripts, and for both entry paths.
+>
+> **⚠ Traps.** Entering from the cabin and entering from a mission end differ by at least the tab
+> opened on and the presence of Replay Mission; do not assume one path. <TODO: confirm from a
+> cabin-entry screenshot whether anything else differs.>
 
-**⚠ Traps.** Entering from the cabin and entering from a mission end differ by at least the tab
-opened on and the presence of Replay Mission; do not assume one path. <TODO: confirm from a
-cabin-entry screenshot whether anything else differs.>
+The approach's premise about *what* differs between the two entry paths was wrong: the tab does not
+differ (both reset to Most Recent), and Replay Mission's *availability* does not either. What
+differs is which screen opens, and Replay Mission's restart-in-place fork on `$$SR$$` once you are
+looking at the book. `FUN_0046fb60`'s argument and `FUN_004194e0`'s tail were not re-read (the
+mission-end call was already traced in a prior session); `LAYOUT.CSV`'s `ScriptToExe` column, not a
+decompile, is what settled the cabin path. Its Verify line was met without the Ghidra reading the
+approach assumed it would need.
 
 # Wave B — the record and the director
 
@@ -601,8 +653,14 @@ different after a win.
 **The mission end opens on spread 1**, confirmed by `Campaign Mission End screen CM01.png`: mission
 1's first spread with the results block, Replay Mission, and **no** Current Mission bookmark, which
 is the bookmark behaving as `uiData` 2401 says it should when the open mission is the current one.
-The entry is therefore the same position the bookmark jumps to. What A3 still owes is the call that
-performs it, `FUN_0046fb60(0x0071d57c, …)` and `FUN_004194e0`'s tail, and which tab it opens on.
+The entry is therefore the same position the bookmark jumps to, and A3 traced the call that performs
+it, `FUN_0046fb60(0x0071d57c, …)` off the end of `FUN_004194e0`
+([`org/debrief.md`](org/debrief.md#the-pass-in-order)). The tab is Most Recent: it resets to that on
+every entry regardless of path, mission end included
+([`org/debrief.md`](org/debrief.md#entering-the-book-replay-mission-and-the-table-of-contents)).
+Replay Mission on this page restarts the just-flown mission in place, on the `$$SR$$` fork A3 found;
+the cabin never sets that flag, so `CSVM`'s Replay Mission need not distinguish the two once this
+page's own entry is the only caller that can leave it set.
 
 # Wave D — the book
 
@@ -660,9 +718,14 @@ one shows the bookmark that jumps back to it.
 
 **Evidence (confidence: direction-sound).** The bookmark is langui 1200 and is visible at the top
 right of `Campaign Scrapbook CM02 Mission select after another Mission.png`. A1 settled the stepping
-rule and A3's entry carries it: forward and back probe the neighbouring spread and roll to the next
-or previous mission, and the bookmark jumps to the campaign's current mission at spread 1. What
-remains for A3 is the entry paths and the table of contents the back arrow falls into.
+rule: forward and back probe the neighbouring spread and roll to the next or previous mission, and
+the bookmark jumps to the campaign's current mission at spread 1. A3 settled the back arrow's fall
+into the table of contents at the front of the book (`SB_B_PREV` returning 0 from `uiData` 2402
+mode 101) and traced the table of contents itself, `SCRAPBOOK_TOC.SCRIPT`
+([`org/debrief.md`](org/debrief.md#entering-the-book-replay-mission-and-the-table-of-contents)),
+including its own View/Current Mission jump back into the book. Whether this item also builds the
+table of contents as its own screen, given CSVM's `CampaignPreviousMissionsPage` is already shaped
+like it rather than like the book, is an open scope call A3 raised but did not settle.
 
 **Approach.** Step by probing `SCRAPBOOK.CSV` for the neighbouring spread's item 1, exactly as
 `FUN_00406170` does, rather than storing a per-mission page count.
