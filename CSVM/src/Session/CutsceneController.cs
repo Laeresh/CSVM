@@ -208,6 +208,14 @@ public sealed partial class CutsceneController : Node
     // they answered before there was a field to choose from.
     private PlayerRig? ScriptedPlayer => _rigs.Count > 0 ? _rigs[0] : null;
 
+    // The one pilot the staged `player` marker poses and the re-placement moves: the episode owner's,
+    // which is the scripted player's in an unclaimed episode and in every 1P session. There is
+    // exactly one marker, so the other humans hold the pose they were in when the code took them out
+    // of flight rather than stacking on that point, and no second staging geometry exists to give
+    // them. ⚠ Read live: a swap rebuilds the owner's controller mid-episode.
+    private FlightController? OwnerPilot =>
+        EpisodeOwner?.Controller is { IsHumanPiloted: true } pilot ? pilot : null;
+
     /// <summary>The vertical field of view, in degrees, at which the letterbox card of extent
     /// <paramref name="cardBox"/> covers a pane of ratio <paramref name="aspect"/>, or null when
     /// the card has no usable extent. Public because the fit is the whole of BL-452's first cause
@@ -830,16 +838,18 @@ public sealed partial class CutsceneController : Node
         var pose = OutOfFlight && _playerMarker.Visible
             ? AnimRuntime.WorldTransform(_playerMarker, out _)
             : (Transform3D?)null;
+        var owner = OwnerPilot;
         foreach (var pilot in Pilots())
         {
-            pilot.StageAt(pose);
+            pilot.StageAt(ReferenceEquals(pilot, owner) ? pose : null);
         }
     }
 
     // Where the pilot flies out of: the `player` node's world pose, read the moment the definition
     // asks for it. The original writes that pose straight into the vehicle's own position, rotation
     // and velocity, so this reads the marker whether or not it is drawn, and the aeroplane's own
-    // hand-back target moves with it (docs/formats/anim-definitions/cutscenes.md).
+    // hand-back target moves with it (docs/formats/anim-definitions/cutscenes.md). The episode
+    // owner's target alone, for the one-marker reason on OwnerPilot.
     private void ReplacePlayer()
     {
         if (_playerMarker == null)
@@ -850,12 +860,8 @@ public sealed partial class CutsceneController : Node
         }
 
         var pose = AnimRuntime.WorldTransform(_playerMarker, out _);
-        foreach (var pilot in Pilots())
-        {
-            pilot.ResumeAt(pose);
-        }
-
-        GD.Print($"cutscene: '{Anim}' re-places the pilot at {pose.Origin}");
+        OwnerPilot?.ResumeAt(pose);
+        GD.Print($"cutscene: '{Anim}' re-places P{(EpisodeOwner?.Index ?? 0) + 1} at {pose.Origin}");
     }
 
     private void MirrorCamera()

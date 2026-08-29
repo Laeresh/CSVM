@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — In the mission
 
 11. ☑ Landing-approach rows, pickup sensors and the ladder switch read the human field
-12. ☐ Cutscene staging places the episode owner on the `player` marker
+12. ☑ Cutscene staging places the episode owner on the `player` marker
 13. ☐ A downed human spectates; the mission ends when the last one is lost
 14. ☐ A cutscene fills the window
 15. ☐ Per-pane campaign chrome
@@ -329,7 +329,7 @@ re-phased the switch the passenger's wave-or-drop fork reads. A per-human loop m
 per-human *restart*. CM02 grafts its three Balmoral cones with the roster, so rows can bind after
 the humans exist; the per-human tick must tolerate a row arriving late.
 
-## B12 ☐ Cutscene staging places the episode owner on the `player` marker
+## B12 ☑ Cutscene staging places the episode owner on the `player` marker
 
 **Goal.** A drop-off, a hookup or a hand-back poses the human who earned it on the mission's staged
 `player` marker, and leaves the other humans held where they were rather than stacked on the same

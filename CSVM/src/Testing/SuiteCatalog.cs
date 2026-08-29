@@ -238,6 +238,7 @@ public static class SuiteCatalog
         "campaign-coop-human-field",
         "campaign-coop-episode-owner",
         "campaign-coop-approach-row",
+        "campaign-coop-dropoff",
     };
 
     // The suites `--run-tests=tier:quick` runs: one representative per failure surface, checked in
@@ -1510,6 +1511,13 @@ public static class SuiteCatalog
             + "and the episode belongs to the guest rather than to player 1, and a second human "
             + "standing in the same volume is not a second entry into it",
             LandingApproachSuites.CampaignCoopApproachRow));
+        into.Add(new TestHarness.Suite("campaign-coop-dropoff",
+            "the first story mission's own drop-off driven with two humans flying 2 km apart: the "
+            + "episode owner rides the staged 'player' marker for every frame of the episode and "
+            + "flies out of the re-placement the definition authors, while the other human is inert "
+            + "at its own coordinates throughout and back in play there at the handoff; the same "
+            + "definition claimed by nobody poses the scripted player and holds the guest instead",
+            CoopDropoffSuites.CampaignCoopDropoff));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------
