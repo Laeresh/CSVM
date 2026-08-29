@@ -624,6 +624,7 @@ internal static class LandingApproachSuites
         float biggestStepM = 0f;
         float biggestStepAt = -1f;
         float placedOffM = -1f;
+        var heldMarkerAt = AnimRuntime.WorldTransform(marker, out _).Origin;
         var prev = rig.WorldPosition;
         int frame = 0;
         while (now() < DockBudgetS && (releasedAt < 0f || now() < releasedAt + AfterReleaseS))
@@ -637,10 +638,18 @@ internal static class LandingApproachSuites
             frame++;
             bool locked = rig.Held && rig.Inert;
             var markerPose = AnimRuntime.WorldTransform(marker, out _);
+            if (locked)
+            {
+                heldMarkerAt = markerPose.Origin;
+            }
+
             if (!locked && releasedAt < 0f)
             {
                 releasedAt = now();
-                placedOffM = rig.WorldPosition.DistanceTo(markerPose.Origin);
+                // ⚠ Against the pose the definition last left the marker in, not against the marker:
+                // the handoff sends it home to the world root, so a live read on this very frame
+                // measures that trip and not the re-placement (CutsceneController.Restore).
+                placedOffM = rig.WorldPosition.DistanceTo(heldMarkerAt);
                 report.AppendLine($"  t={now(),6:0.00} released: {placedOffM:0.#} m off the '{AircraftStage.PlayerNode}' marker, " +
                     $"handoff code {(handoffAt() < 0f ? "not raised" : $"raised at t={handoffAt():0.00}")}");
                 if (handoffAt() < 0f)

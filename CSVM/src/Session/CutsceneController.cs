@@ -112,8 +112,10 @@ public sealed partial class CutsceneController : Node
     // The world root `camera1` belongs under, so Restore can undo a definition's own reparent.
     private Node3D? _cameraHome;
     private Node3D? _bars;
-    // The staged `player` marker an intro poses, or null in a session with no aircraft stage.
+    // The staged `player` marker an intro poses, or null in a session with no aircraft stage, and
+    // the world root it was built under, so Restore can undo a definition's own reparent of it.
     private Node3D? _playerMarker;
+    private Node3D? _markerHome;
     private AircraftStage? _aircraft;
     private Node3D? _card;
     private Aabb _cardBox;
@@ -248,6 +250,7 @@ public sealed partial class CutsceneController : Node
             return;
         }
 
+        _markerHome = runtime.WorldRoot;
         _cutsceneCamera = First(runtime.FindNodes(CameraNode));
         // ⚠ The runtime's root, not the camera's parent right now: this binds AFTER the bootstrap,
         // by which time an intro definition has already reparented the camera into what it frames.
@@ -532,6 +535,19 @@ public sealed partial class CutsceneController : Node
             }
 
             _cutsceneCamera.Transform = Transform3D.Identity;
+        }
+
+        // The `player` marker goes home too, and for the camera's reason above: left on the frame a
+        // definition composed itself onto, it poses the NEXT episode's aeroplane in that frame
+        // (docs/architecture.md). ⚠ After the restore codes, whose 951 reads the pose it was left in.
+        if (_playerMarker != null)
+        {
+            if (_markerHome != null && _playerMarker.GetParent() != _markerHome)
+            {
+                AnimRuntime.Reparent(_playerMarker, _markerHome);
+            }
+
+            _playerMarker.Transform = Transform3D.Identity;
         }
 
         foreach (var (camera, fov) in _fov)

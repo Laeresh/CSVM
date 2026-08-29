@@ -5605,6 +5605,16 @@ the codes are recorded once), which is where a definition's authored calls and c
 CM07's hangar drop clears its objective node through a `CALL_ANIMATION` there and nowhere else. It
 also retracts the bars, returns `camera1` to the runtime's world root (a definition composes itself by
 reparenting it) and parks it at the origin, which other definitions pose against.
+The staged `player` marker goes home the same way, and for the same reason: a definition that poses
+it reparents it (CM07's train pickup leaves it under `caboose`, C1C/M01's docking under
+`pzhookpoint`), and CSVM has a node to strand where the original has none, its `player` being the
+flown vehicle itself and a pose written there a world pose. A marker left on another node's frame
+makes the NEXT episode pose the flown aeroplane in that frame: CM07's hangar drop then rides the
+moving train's coordinates instead of the hangar's, so the aeroplane is nowhere near the shot and
+the 951 flies the pilot out kilometres from the doors. The marker is returned AFTER the restore
+codes, since the 951 above reads the pose the ending definition left it in. ⚠ A suite that measures
+the handed-back aeroplane against the marker has to remember the pose from the last playing frame,
+not read the marker on the frame after: by then it is home at the origin.
 A re-placement (951) the ending definition authors in that same `RESET_STATE` is raised at the
 handoff too, ahead of the restore codes, since the reset walk suppresses callbacks: CM07's hangar
 drop leaves the pilot on the lift in front of the open doors rather than back on the approach. The

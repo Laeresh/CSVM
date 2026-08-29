@@ -146,6 +146,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 56. ☑ `BL-616`: CM13 docks with an invisible Pandora; a zeppelin record is what switches its hull on
 57. ☑ `BL-609`: no flare smoke and a frozen ladder in CM07's pickup, both disproved; the suite's two blind spots closed
 58. ☑ `BL-611`: CM07's AA guns never fire; the chapter persist log carried the mission's own wreckage into its own replay
+59. ☑ `BL-610`: CM07's hangar drop plays with no aeroplane and hands the pilot back at the world origin, because an earlier cutscene left the `player` marker parented to the train
 
 ## Dependency and parallelism notes
 
@@ -1680,3 +1681,19 @@ on the flown path.
 **Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Guns destroyed in an earlier chapter-1 mission still carry into `C1/M04` and `C1/M05`; only a mission's own capture is refused. The turret census and the `WAKEUP_TURRETS` arm are `GD.Print`, so a sortie log cannot say whether a mission's emplacements woke, which is what made this look like a turret defect (`BL-619`).
+
+## F59 ☑ `BL-610`: the hangar drop's aeroplane is missing and the pilot is handed back at the world origin
+
+**Goal.** The Bloodhawk rides the lift in view and the pilot flies out at the hangar doors, in a mission whose earlier cutscenes have already run.
+
+**Evidence (confidence: traced).** `CutsceneController.Restore` returned `camera1` to the world root but left the staged `player` marker wherever a definition's own composition had parented it. CM07 plays two landing rows before the hangar: `hooked_to_klondike` leaves the marker under `pzhookpoint` and `lookat_copilotpkup` leaves it under `caboose`, a moving train. The drop's `hdplayer1/2/3` then write their pose as a LOCAL transform in that frame: the marker travels 605 m instead of 56 m, the aeroplane rides the resulting world pose out of the shot (while `chuteman`, posed off its own correctly parented node, still parachutes into the hangar), and the authored 951 reads the same pose and flies the pilot 6075 m from the doors. CSVM has a node to strand where the original has none, its `player` being the flown vehicle itself. Disproved: the 965-rebuilt rig, a racing marker re-assert (`player_setup`'s deactivation is a t=0 bootstrap event, so F48's evidence can be stated more strongly), a 951 on a freed controller, and the prop staging.
+
+**Approach.** `Restore` returns the marker to the runtime's world root at identity, beside the camera and after the restore codes, since the 951 must still read the pose the ending definition left.
+
+**Model recommendation.** A single session; a CSVM scene-graph consequence with no counterpart in the original.
+
+**Verify.** `campaign-hangar-handover` now binds the way `GameSession` does, plays the mission's earlier landing rows first, arms the drop from its own caller and lets the range gate start it: both earlier episodes hand off with the marker back under `world1`, the start anims leave it active, marker travel 55.98 m over the lift, hand-back 1.88 m off where the drop left it and 263.3 m from the hangar (red at three checks without the fix). 14 cutscene, landings and intro suites; `dotnet test` 2558.
+
+**⚠ Traps.** A suite that reads the marker on the frame after the handoff measures its trip home, not the re-placement: remember the pose from the last playing frame (`landings-docking-hold` had the same fault). The suite also has to start from a world with earlier-cutscene history, or the stranding cannot happen at all.
+
+**Verified.** <pending orchestrator run>
