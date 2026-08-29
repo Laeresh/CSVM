@@ -395,7 +395,11 @@ accident is not a result, it is a coincidence to rule out. The decode answers th
 the exemption A1 proposed and the one this item proposed are the same real mechanism, and it
 excludes both families.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the final merged tree carrying all eleven items:
+build clean, 2563 of 2563 units passed, 175 of 175 engine suites passed with engine errors clean
+across 4 shards, and all 16 golden shots hash-identical, exit 0. The engine stage ran over its
+100 s budget at 135.6 s, which is awareness only and never changes the exit code, and other
+sessions were running probes on the shared hidden desktop throughout.
 
 ## A3 ❌ `BL-538`: a dark band crosses the large buildings at the range the templates clutter fades out
 
@@ -484,7 +488,11 @@ phase off the stamp origin, so overlapping stamps at the same alpha stop discard
 pixels) was tried as a probe and changes the frame barely at all; it is not the mechanism and the
 dither still must not be touched.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the final merged tree carrying all eleven items:
+build clean, 2563 of 2563 units passed, 175 of 175 engine suites passed with engine errors clean
+across 4 shards, and all 16 golden shots hash-identical, exit 0. The engine stage ran over its
+100 s budget at 135.6 s, which is awareness only and never changes the exit code, and other
+sessions were running probes on the shared hidden desktop throughout.
 
 ---
 
@@ -736,7 +744,11 @@ separately. `--frames=N` alone never quits the probe; it needs `--screenshot=<pa
 pairing ends the run at N sim frames — `docs/tooling.md`'s perf-stage note), or `RunProbe.ps1` hits
 its `-TimeoutSec` and is killed with nothing captured.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the final merged tree carrying all eleven items:
+build clean, 2563 of 2563 units passed, 175 of 175 engine suites passed with engine errors clean
+across 4 shards, and all 16 golden shots hash-identical, exit 0. The engine stage ran over its
+100 s budget at 135.6 s, which is awareness only and never changes the exit code, and other
+sessions were running probes on the shared hidden desktop throughout.
 
 ---
 
@@ -949,7 +961,11 @@ terms are registered as awareness metrics with their reasons: the harness runs `
 the clock parent-driven, so the tick is empty there (`phys_tick_ms` reads 0.034 ms) and these are
 numbers for a `--no-det` hand-run.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the final merged tree carrying all eleven items:
+build clean, 2563 of 2563 units passed, 175 of 175 engine suites passed with engine errors clean
+across 4 shards, and all 16 golden shots hash-identical, exit 0. The engine stage ran over its
+100 s budget at 135.6 s, which is awareness only and never changes the exit code, and other
+sessions were running probes on the shared hidden desktop throughout.
 
 **What could NOT be verified here.** Nobody flew the mission. The loaded state was reached with
 `--debug-objective=18`, which drives the trailer chain and, 115 s later, objectives 19 → 58 → 57 and
