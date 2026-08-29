@@ -16,9 +16,9 @@ namespace CSVM.Session;
 /// <c>GameSession</c>'s one nullable director field — null outside a mission, which is what keeps
 /// every other session mode (free flight, Dogfight) untouched by its existence.
 ///
-/// Not a Node: <c>GameSession</c> owns the tick order (its ⚠ on <c>DriveSimSteps</c>) and calls
-/// the phases at its own decoded points, and every node built on this mission's behalf parents
-/// under the session's <c>_worldRoot</c>, so the session's no-Teardown rule holds unchanged.
+/// Not a Node: <see cref="SessionSimulation"/> owns the tick order and calls the phases at their
+/// decoded points. Every node built for this mission parents under the session's <c>_worldRoot</c>,
+/// so the session's no-Teardown rule holds unchanged.
 /// </summary>
 public sealed class InstantActionDirector
 {
@@ -439,9 +439,8 @@ public sealed class InstantActionDirector
     }
 
     /// <summary>One sim step of the mission: the wave sequencer's tick, the mission clock and the
-    /// wave-cleared win signal. ⚠ GameSession calls this from BOTH drive paths, like the match
-    /// clock: a realtime session never enters DriveSimSteps, so a sequencer stepped only there
-    /// advances no wave at the controls.</summary>
+    /// wave-cleared win signal. SessionSimulation calls it after aircraft and landing evaluation.
+    /// </summary>
     internal void Step(float dt)
     {
         var ia = Runtime;

@@ -1038,20 +1038,8 @@ public sealed partial class ProjectilePool : Node3D
         return inst;
     }
 
-    public override void _PhysicsProcess(double delta)
-    {
-        float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
-        if (dt <= 0f)
-        {
-            return;   // the session drives SimStep itself this frame (see GameClock.PhysicsDt)
-        }
-        SimStep(dt);
-    }
-
-    /// <summary>One ballistics step: integrate every live round, end it on whichever of the three
-    /// end conditions it reaches (<see cref="EndConditionMet"/>), raycast the segment a surviving
-    /// round swept, and age the muzzle/impact sprites. Public because a non-realtime clock has the
-    /// session call this instead of Godot's physics tick.</summary>
+    /// <summary>One ballistics step: integrate every live round and apply its first end condition.
+    /// Surviving rounds raycast their swept segment; muzzle and impact sprites age here too.</summary>
     public void SimStep(float dt)
     {
         _simClock += dt;

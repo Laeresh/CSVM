@@ -731,21 +731,6 @@ internal static class AiSuites
                     ctx.Check(Combined(zepBait) < baitBefore,
                         $"…with rounds striking it moved={baitBefore - Combined(zepBait):0.##}");
 
-                    // ⚠ Drive this the way Godot's physics tick does, with a realtime clock in Current. A runtime
-                    // stepped only from GameSession.DriveSimSteps is inert on the realtime clock every real session
-                    // uses, and every suite and golden runs fixed-step, which is exactly the blind spot (INSTR-14).
-                    var savedClock = Utils.GameClock.Current;
-                    Utils.GameClock.Current = new Utils.GameClock { Mode = Utils.GameClock.RunMode.Realtime };
-                    int shotsBeforeRealtime = ZepShots();
-                    for (int i = 0; i < 240; i++)
-                    {
-                        runtime._PhysicsProcess(1.0 / 60.0);
-                        live.SimStep(1f / 60f);
-                    }
-                    Utils.GameClock.Current = savedClock;
-                    ctx.Check(ZepShots() > shotsBeforeRealtime,
-                        $"the runtime steps ITSELF on a realtime clock: {ZepShots() - shotsBeforeRealtime} more shot(s) with nobody calling SimStep");
-
                     zepBait.PlaceHeld(ringPos + new Vector3(0f, -80f, 20000f), ringPos);
 
                     ctx.Same(14, runtime.SetActivatedUnder(mp1[0], false),
