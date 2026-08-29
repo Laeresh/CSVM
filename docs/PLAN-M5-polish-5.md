@@ -1751,7 +1751,7 @@ on the flown path.
 
 **Verify.** `landings-balmoral-dock` (the definition reads RUNNING when it raises the code, EXECUTED no earlier than that, the outcome turns Won within a frame of the code, `MissionEnded` fires once, a second completion code is refused) and a new `ObjectiveGraphTests` pin.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2562 unit tests, 179 engine suites in four shards with the error census clean, 16 goldens hash-identical.
 
 **⚠ Traps.** `WonWrapUpS` is still the ordinary objective win's 3 s; the two must not be re-merged. `Ending` is never observably true on this path, so a check written as `Ending || Outcome == Won` needs a `Step` after the code before it reads.
 
@@ -1767,6 +1767,6 @@ on the flown path.
 
 **Verify.** `campaign-hangar-handover` gains a chute sampler (one `chuteman` in the world, the actor never off its staged pose, the figure drawn on all 702 leg frames, 27.4 m of descent, 63.3 m from the hangar; FAIL with the guard reverted) and `campaign-capture-chutes` is unchanged.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan tree, the full gate: build clean, 2562 unit tests, 179 engine suites in four shards with the error census clean, 16 goldens hash-identical.
 
 **⚠ Traps.** `hdchute1b`'s prerequisite fails in this mission, so it never starts; a pool that hands it a slot anyway leaves a frozen duplicate in the world.
