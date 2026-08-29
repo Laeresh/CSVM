@@ -258,10 +258,24 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/CampaignPreviousMissionsPage.cs` — the scrapbook's finished-missions list, one row per completed mission in `seq` order (long name, area, plane flown from the best-of record) plus VIEW SELECTED (a no-op; the detail line already says everything it would), REPLAY MISSION (`SetMission` + `GoTo(Briefing)`, no advance) and RETURN TO CABIN. The same file carries `CampaignScrapbookResults` (static): the book's results page (spread 1) computed from one `MissionResult` — the outcome line, the four drawn rows (Run Time, Gun Hit Ratio, Cash Earned, Overall Planes Downed; Rockets Expended is authored and never drawn) and the two tab titles, at their `LAYOUT.CSV` positions. Row labels are literal strings, `IaWrapupBoard`'s own precedent. Reproduces the original's Best to Date bug: `0x0040a7e6` reads a never-written offset for that tab instead of the merged mask, so it always renders Mission Failed. `Stamps`/`StampPictures`/`StampLabels` fill the eleven `SB_KILL`/`SB_KILLTEXT` slots densely from the plain kill tally then the ace tally, skipping zeros, at the `SB_KILLMARKERCOMBINED.PNG` strip frame each names (0-10 plain, 11-21 starred); the eleven slot positions are not in reading order. Wired into `CampaignFlow` as `CampaignScreen.Scrapbook` by C17's `CampaignScrapbookPage.cs`.
 - `src/UI/CampaignScrapbookPage.cs` — the scrapbook's results page (spread 1), opened on
   `CampaignFlow.MissionSeq` (C17): `CampaignScrapbookResults`' rows and Most Recent kill stamps as
-  `Captions`/`Pictures`, then REPLAY MISSION (`GoTo(Briefing)` without touching `MissionSeq`, so a
-  win that already advanced the campaign position still replays the mission this page is showing)
-  and RETURN TO CABIN. A mission with no recorded result draws nothing rather than throwing. The
-  Best to Date toggle, the book's arrows/bookmark and the story page are Wave D's.
+  `Captions`/`Pictures`, spread 1's own shipped scraps under them
+  (`ScrapbookComposition.Pictures`, D18: "the results page is a story page with the card laid over
+  its right half"), then REPLAY MISSION (`GoTo(Briefing)` without touching `MissionSeq`, so a win
+  that already advanced the campaign position still replays the mission this page is showing) and
+  RETURN TO CABIN. A mission with no recorded result draws nothing rather than throwing. The Best
+  to Date toggle, the book's arrows/bookmark and the story pages beyond spread 1 are Wave D's
+  remaining items.
+- `src/UI/ScrapbookComposition.cs` — the scrapbook's per-spread scrap layout (D18), read from
+  `extracted\rof\ASSETS\SCRAPBOOK.CSV` rather than invented: `Items` enumerates a mission slot's
+  spread from item 1 upward and stops at the first missing key, the way the original's own reader
+  does; `Pictures` gates each row's `Objective` against the mission's merged best-to-date mask
+  (bit 0 "ever won", a positive value its own bit set, a negative value its own bit clear), skips a
+  `Snap_`-prefixed capture when a caller-supplied check says its file is not on disk (nothing saves
+  one yet, `BL-256`/D21), and stacks the survivors by ascending `DrawOrder`. The page extension
+  comes from `ImageType`'s first letter alone (`B` BMP, `J` JPG, else PNG); the shipped rows are
+  overwhelmingly `P0`/`PP`/`PJ`, so in practice almost every scrap resolves to a `.PNG`. Parsed
+  rows are cached per file path, misses included, `PlaneDiagrams`' own precedent. CSVM carries no
+  unlock-flag analogue, so unlike the original the objective gate cannot be bypassed.
 - `src/UI/CampaignBriefingPage.cs` — the mission briefing: everything resolved from `CampaignFlow.MissionSeq` alone, through `cm_sequence` to the storage address, `brief_c%d%d` to the dialog state, the state to its map bitmap and narration name, `sounds.zrd`'s `SETS` to the wav file, and the mission's own `objectives.zrd` to the note, so nothing is computed from the story position. REPLAY BRIEFING / RETURN TO CABIN / GO TO FLIGHT CHECK are the screen's only rows: an uncovered objective is written on the parchment through `Notes`, the `BoardNote` carrying the dialog's own `LIST` widget, so the mission's text is read and never a cursor stop (`BL-487`). The map is the page's `HangarArt`. Labels are `messages.json`'s own `MSG_BTN_*` and an unresolved objective key shows as the raw key, so a missing extraction degrades to the three buttons rather than throwing. It plays nothing: `NarrationWav` and `NarrationStarts` name what a shell must play, and `Advance(seconds)` is the clock a shell drives.
 - `src/UI/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`/`BriefingState`/`BriefingStep`, walking the root list where the 24 states actually live) and `BriefingReveal`, the interpreter that runs a state's 12-opcode beat sheet against a caller-advanced clock, blocking on `Wait`'s authored seconds and `WaitForMarker`'s cue times and keeping each element's opacity, rotation and position as its tweens land. Elements come out in placement order, which is draw order. With no cue points every marker releases at once, so the map finishes under the narration rather than a timing being invented. Decode: `docs/formats/briefing.md`.
 - `src/UI/BriefingObjectives.cs` — the briefing's parchment note from a mission's `objectives.zrd`: every `IDENTITY` carrying a `MSG_BRF_*` key, ordered by priority ascending, which is the list an `Objective id index` opcode indexes 0-based. Takes the reader list rather than a path, so it tests without an extraction; resolves text through `Messages`, leaving the raw key visible when the table cannot.

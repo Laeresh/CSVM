@@ -185,7 +185,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — the book
 
-18. ☐ The story page and its per-mission scrap composition
+18. ☑ The story page and its per-mission scrap composition
 19. ☐ The per-scrap detail view
 20. ☐ Navigation: page and mission arrows, and the Current Mission bookmark
 21. ☐ The danger-zone scrap slot
@@ -220,9 +220,10 @@ File contention, and these must not run in parallel worktrees:
 
 - `CSVM/src/Session/CampaignDirector.cs`: B11 and B14.
 - `CSVM/src/Session/Launcher.cs`: B12 and C17.
-- `CSVM/src/UI/CampaignPreviousMissionsPage.cs`: C15, C16, D18, D19 and D20 all edit it. Run them
-  in listed order in one worktree, or split the page into per-page classes as C15's first move and
-  give each later item its own file.
+- `CSVM/src/UI/CampaignScrapbookPage.cs`: C17 (new file) and D18 have landed, D19 and D20 remain.
+  C15's and C16's own rows/stamps landed in `CampaignPreviousMissionsPage.cs`'s
+  `CampaignScrapbookResults` instead, a deviation from the plan's assumed single file. Run D19 and
+  D20 in listed order in one worktree.
 - `CSVM/src/Session/CampaignProgression.cs` and `CampaignProfileStore.cs`: B13 and B14.
 
 ---
@@ -741,7 +742,44 @@ page's own entry is the only caller that can leave it set.
 
 # Wave D — the book
 
-## D18 ☐ The story page and its per-mission scrap composition
+## D18 ☑ The story page and its per-mission scrap composition
+
+**Landed.** `ScrapbookComposition.cs` (new file) reads `SCRAPBOOK.CSV` straight off the extraction
+(`Items`, enumerated from item 1 and stopped at the first missing key, cached per file path the way
+`PlaneDiagrams` caches misses too — no copy of the shipped file lands in the repo, keeping
+`CSVM.Tests/TestData.cs`'s fixture rule intact) and turns a spread into drawable `BoardPicture`s
+(`Pictures`): the `Objective` gate against the mission's merged best-to-date mask, a `Snap_` capture
+skipped when a caller-supplied check says its file is not on disk, and the survivors stacked by
+ascending `DrawOrder`. `CampaignScrapbookPage.Pictures` (C17) now prepends spread 1's own scraps
+ahead of C16's kill stamps, matching "the results page is a story page with the card laid over its
+right half." Stepping to spread 2/3 is D20's arrows, not yet wired, so the story pages beyond spread
+1 are exercised only by the composition model directly, not by a reachable screen.
+
+⚠ **The `ImageType` column's *first* letter alone picks the page extension**, not the letter that
+happens to look like the right one: `SB_01_01_coin`'s `PJ` resolves to `.PNG`, not `.JPG`, because
+`P` (not `B` or `J`) is the first letter — the second letter is the *zoom* image's extension, an
+independent choice `docs/formats/campaign-screens.md` already states but is easy to misread as "the
+row's own two-letter code names one file." Both extensions ship for `coin` (`.JPG` and `.PNG`), so
+this would have gone undetected without checking the doc's own wording twice.
+
+**Verified.** Unit tests over a hand-authored fixture (never a trimmed copy of `SCRAPBOOK.CSV`)
+cover the item-1-and-up enumeration and its stop at the first gap, the three-way extension
+resolution (`B`/`J`/else), position and draw-order pass-through, ascending-draw-order stacking
+regardless of item order (reproducing A1's coin-over-magazine-over-newspaper reading), the positive
+and negative `Objective` gate against the merged mask, and a capture drawn or skipped by file
+presence alone. Two tests run against the real extraction: every non-capture file every populated
+spread (mission 0-24, spread 1-3) names is present on disk (all 294, A1's own count), and CM01's own story
+page (`1_2_1` to `1_2_7`) enumerates its 7 rows in the CSV's own order with both `Snap_` rows
+correctly flagged as captures. `dotnet build`/`format` clean, `CheckCommentCaps.ps1` clean, and the
+complete `.\RunTests.ps1` passes: 2608 unit tests, 181 engine suites clean, 16 goldens
+hash-identical, 162.8s total.
+
+**What it changed elsewhere.** `CampaignPreviousMissionsPage.cs`'s `CampaignScrapbookResults` doc
+comment, stale since C17 actually wired the screen it said was "not yet wired," is corrected.
+`playtest.md`'s `PT-89` gains a look-for line for the new scraps. The results page still does not
+draw `SB_STATCARD`'s own background art (a gap in C15's landing, not this item's to fix: the card is
+a `LAYOUT.CSV` chrome widget, not a `SCRAPBOOK.CSV` row, so the composition model correctly has
+nothing to say about it).
 
 **Goal.** Every mission slot's second page draws its shipped scraps at the original's positions.
 

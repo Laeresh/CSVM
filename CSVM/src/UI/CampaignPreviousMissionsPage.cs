@@ -9,12 +9,11 @@ namespace CSVM.UI;
 /// draws and the two tabs, computed from one mission's record
 /// (<c>docs/org/debrief.md#the-screen-is-the-scrapbook</c>). Row titles and the outcome text are
 /// literal strings rather than read off <c>ui_strings.json</c> at runtime, following
-/// <see cref="Flight.IaWrapupBoard"/>'s own precedent for the original's fixed labels
-/// (<c>docs/formats/instant-action.md</c>, "The wrap-up screen"). Positions are
-/// <c>LAYOUT.CSV</c>'s <c>[@ScrapBook@]</c> <c>SB_T_*</c> rows. Not yet wired into
-/// <see cref="CampaignFlow"/>: the two entry paths, mission end and the table of contents, are
-/// C17's traced call and an open scope call respectively
-/// (<c>docs/org/debrief.md#so-this-item-reuses-a-board-csvm-already-has</c>).
+/// <see cref="Flight.IaWrapupBoard"/>'s own precedent. Positions are <c>LAYOUT.CSV</c>'s
+/// <c>[@ScrapBook@]</c> <c>SB_T_*</c> rows. Wired into <see cref="CampaignFlow"/> as
+/// <see cref="CampaignScreen.Scrapbook"/>'s <see cref="CampaignScrapbookPage"/> (C17), which also
+/// draws spread 1's shipped scraps alongside this class's rows and stamps
+/// (<see cref="ScrapbookComposition"/>, D18).
 /// </summary>
 public static class CampaignScrapbookResults
 {
