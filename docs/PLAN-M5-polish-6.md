@@ -109,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ◐ `BL-546`: the exhaust smoke lands, the prop swap does not and the anchor question stays open
 12. ☑ `BL-587`: chapter-scope animation files no mission lists still run
-13. ☐ `BL-535`: a repeat sonic burst pays a 10 to 14 ms slot re-reset from the third burst on
+13. ◐ `BL-535`: a repeat sonic burst pays a 10 to 14 ms slot re-reset from the third burst on
 
 ### Wave C — The allocation and tick budget
 
@@ -611,41 +611,79 @@ regress a milestone that was closed at the controls: the C1 goldens and the user
 and a green test run is not sufficient to land it. If the C1 clouds do change, the question the item
 raises is whether the original really ran without them, not whether to special-case `clouds.zrd`.
 
-## B13 ☐ `BL-535`: a repeat sonic burst pays a 10 to 14 ms slot re-reset from the third burst on
+## B13 ◐ `BL-535`: a repeat sonic burst pays a 10 to 14 ms slot re-reset once the pool recycles a still-live slot
 
-**Goal.** The third and every later sonic burst costs what the first two cost: about 0.6 ms of
-`effect_checkout`, rather than 10.2 to 13.9 ms.
+**Goal.** A sonic burst that recycles a still-live pool slot costs what a burst onto a fresh or
+idle slot costs: about 0.6 to 2.7 ms of `effect_checkout`, rather than 10 to 14 ms (or worse under
+instrumentation overhead, up to 38 ms measured — see below).
 
-**Evidence (confidence: traced).** With every emitter pre-built at bind
+**Evidence (confidence: traced, and the mechanism is corrected from this item's opening text).**
+Re-verified open against the code in this session. With every emitter pre-built at bind
 (`AnimRuntime.PrewarmEmitters`), the weapon-lab probe (`--chapter=C1 --weapon-lab=wep_08
---weapon-fire --infinite-ammo --weapon-surface=default --weapon-standoff=90`) still records one
-`effect_checkout` sample per burst once `hitchMonitor.floorMs` is 10 and `medianMultiple` 1.2 under
-`--no-det --no-vsync`: 0.6 ms for the first two bursts, then 10.2 to 13.9 ms for every burst from
-the third on, one call each. The step lands two bursts before a four-slot pool could recycle, so it
-is neither a wrap nor construction. It is the cost of re-resetting a slot copy that has run before,
-in `AnimRuntime.ResetCheckedOutCopies`, the re-reset that fixed the rings vanishing from the fifth
-burst on. Under the stock monitor it never trips, so it is a per-burst cost rather than a hitch, and
-at vsync it is inside a frame. <TODO: re-verify still-open against the code.>
+--weapon-fire --infinite-ammo --weapon-surface=default --weapon-standoff=90 --no-det --no-vsync
+--seed=1 --no-pads --frames=1200 --screenshot=<path>`, `hitchMonitor.floorMs` 10 and
+`medianMultiple` 1.2 in `CSVM/config.json`) reproduces the symptom: the `.hitches.jsonl` sidecar
+names `effect_checkout` samples of 15.6 ms (sim frame 464) and 12.2 ms (sim frame 1154), both well
+clear of the lowered 10 ms floor; the stock monitor never trips (PERF-14 still holds).
 
-**Approach.** Establish what the re-reset walks per copy: every template node of the subtree, or
-only the ones the last run posed. If it is the former, the fix shape is recording the END pose at
-stop time so the reset replays a short list. `BL-231` (closed) is the pool-size judgement this was
-measured under, and the `effect-pool-reset` suite is the pose contract the re-reset keeps, so read
-both before narrowing what gets walked.
+A per-burst `Stopwatch` placed around `ResetCheckedOutCopies`' own def/anchor loop (11 rocket
+launches, one `PlayEffectAt` each) shows that loop is NOT the cost: `closureDefs=17` and
+`matchedAnchors=17` on every single burst, and `Stop`/`RestoreRestPoses` together cost under 3 ms
+throughout. The cost sits inside `ApplyInstant`'s `RESET_STATE` dispatch, and within that almost
+entirely in one event kind: `ObjectOpacityState` on `sonic_ring1`..`sonic_ring5` (`PoseChannel.
+HandleActiveState` → `SetSubtreeOpacity` → `ApplyOpacity`, a plain recursive `GetChildren()` walk
+over the ring's own subtree calling `SetInstanceShaderParameter`/`EnsureOpacityPath` on every
+`GeometryInstance3D`, plus `WorldCollision.SetFaded` → `SyncSubtree`/`FadedAbove` re-deriving every
+collider under the ring). `EnsureOpacityPath`'s own `Shader.Code.Contains` scan, timed separately,
+is NOT the bottleneck (0.06–0.8 ms, mostly under 0.1 ms) — the cost is in the walk-and-resync
+itself, not in re-deriving fade-capability.
 
-**Model recommendation.** Medium. The measurement is exact and the suspect routine is named; the
-care needed is in not breaking the pose contract the suite pins.
+⚠ **This corrects the item's opening claim that the step is "neither a wrap nor construction."**
+Correlating the per-burst timings against the log's own recycle line shows the jump lands exactly
+at the wrap, not two bursts before it: burst 4 (`totalMs=2.236`, cheap) is immediately followed by
+`DEBUG [anim] anim: effect pool for 'sonic_ground_effect' recycled slot 0 of 4 while it was still
+live — overlapping calls beyond the pool size share a copy again`, and burst 5 is the first
+expensive one (`totalMs=13.315`, `applyMs=9.740`), with every burst after it landing on an
+already-recycled, still-live slot and costing 11.8–30.3 ms depending on run (30 ms figures are from
+a build carrying diagnostic `Stopwatch`es of their own and are not the clean number; the two clean
+sidecar samples above, 15.6 and 12.2 ms, are). This is consistent with, not contrary to, the
+mechanism `ResetCheckedOutCopies` exists for: `sonic_ground_effect`'s pool (root default, 4 base
+slots at 1 player) has no idle gap between bursts at this fire rate, so from the wrap on every
+checkout inherits a ring mid-fade rather than one already at rest, `SetSubtreeOpacity`'s
+last-pushed-value cache (`_opacity`) misses, and the full walk runs every time.
+
+**Approach.** The def/anchor walk in `ResetCheckedOutCopies` is already cheap and bounded (17/17,
+constant); it is not what to narrow. The candidate fix sits one level down, in
+`PoseChannel.EnsureOpacityPath`/`WorldCollision.SetFaded`, and needs its own isolated
+before/after timing (split `ApplyOpacity`'s material/shader-param cost from `SetFaded`'s
+collider-resync cost, which this session did not separate) before changing either, since both are
+shared machinery used far beyond the sonic burst — `WorldCollision._fadedRoots` in particular is a
+single process-wide counter, so its `FadedAbove` ancestor walk degrades for every faded object in
+the world, not just this one, once more than one is faded at a time.
+
+**Model recommendation.** Medium-to-large now that the mechanism is one level deeper than
+`ResetCheckedOutCopies` itself: the fix is in shared opacity/collision-sync plumbing other callers
+depend on, so isolating `ApplyOpacity` from `SetFaded` and re-verifying broadly (not just
+`effect-pool-reset`) is real work.
 
 **Verify.** The same weapon-lab probe with `hitchMonitor.floorMs` at 10 and `medianMultiple` at 1.2
-under `--no-det --no-vsync`, showing bursts three onward at the first two bursts' cost. Take the
-baseline first, since the point of the measurement is a number that must be seen able to fail. Then
-the `effect-pool-reset` suite and the full gate.
+under `--no-det --no-vsync`, reading the `.hitches.jsonl` sidecar for `effect_checkout` samples
+rather than console hitch lines (the stock monitor never trips, and console noise from the lowered
+floor is heavy). Take the baseline first. Then the `effect-pool-reset` suite (the pose contract)
+and the full gate.
 
 **⚠ Traps.** `docs/verification.md` PERF-14: the stock probe cannot fail on this, so a green stock
 run is not evidence. The lowered monitor is the only instrument that sees it and it needs both
 knobs, because the trigger is the larger of the floor and the median times the multiple. The
 re-reset exists to stop the rings vanishing from the fifth burst on, so a fix that makes the cost
-go away by resetting less must be checked against that symptom, not only against the timing.
+go away by resetting less must be checked against that symptom, not only against the timing — and
+per the corrected evidence above, "the fifth burst on" is not a coincidence with this item's own
+cost step, it is the same event (the wrap), so the two are not independent things to guard
+separately. `--frames=N` alone never quits the probe; it needs `--screenshot=<path>` too (only the
+pairing ends the run at N sim frames — `docs/tooling.md`'s perf-stage note), or `RunProbe.ps1` hits
+its `-TimeoutSec` and is killed with nothing captured.
+
+**Verified.** <pending orchestrator run>
 
 ---
 
