@@ -4,8 +4,11 @@ Read out of the retail executable with Ghidra (static analysis of the shipped x8
 `crimson.exe`, `language x86:LE:32:default`), 2026-08-29, settling the decode half of `BL-622`.
 Every claim below names the function or address it came from. No decompiler output is reproduced;
 the addresses are given so any claim can be re-checked at source. The screen's own layout and rows
-are additionally read off `OriginalScreenshots/Campaign Mission End screen CM01.png` and the
-extracted langui table (`extracted/rof/ui_strings.json`); the lines that came from those say so.
+are additionally read off three screenshots (`OriginalScreenshots/Campaign Mission End screen
+CM01.png`, `Campaign Scrapbook CM01 Story Scraps.png`, `Campaign Scrapbook CM02 Mission select after
+another Mission.png`), the extracted langui table (`extracted/rof/ui_strings.json`), a census of
+`extracted/rof/ASSETS/GRAPHICS/SCRAPBOOK/`, and the navigation as reported at the controls; the
+lines that came from those say so.
 
 **Where the other halves live.** The record this pass writes is the mission-result array documented
 in [`formats/saved-games.md`](../formats/saved-games.md), "The mission-result array"; that page
@@ -20,6 +23,9 @@ record is indexed by is [`formats/campaign-sequence.md`](../formats/campaign-seq
 - [The four-attempt skip offer](#the-four-attempt-skip-offer)
 - [Time and the shooting statistics](#time-and-the-shooting-statistics)
 - [The screen is the scrapbook](#the-screen-is-the-scrapbook)
+  - [The stamps are a per-airframe kill tally](#the-stamps-are-a-per-airframe-kill-tally)
+  - [Navigation: two pages per mission, twenty-five mission slots](#navigation-two-pages-per-mission-twenty-five-mission-slots)
+  - [So this item reuses a board CSVM already has](#so-this-item-reuses-a-board-csvm-already-has)
 - [What the debrief does not write](#what-the-debrief-does-not-write)
 - [Where CSVM stands](#where-csvm-stands)
 - [What is not decoded](#what-is-not-decoded)
@@ -159,11 +165,61 @@ scrapbook carries when it is opened from the cabin rather than from a mission en
 shows.
 
 The buttons are Replay Mission, View All Missions and Return to Cabin, with page arrows on both
-outer edges.
+outer edges. Replay Mission sits inside the results block and is on the results page only.
 
-**So this item reuses a board CSVM already has.** `CampaignPreviousMissionsPage` is the scrapbook's
-finished-missions list; the debrief is that same screen opened on the mission just flown, with a
-Replay Mission button and the mission-end entry path.
+### The stamps are a per-airframe kill tally
+
+Read off `OriginalScreenshots/Campaign Scrapbook CM02 Mission select after another Mission.png`: the
+right page carries three stamps, `3 Peacemaker`, `2 Balmoral` and a starred `1 Peacemaker`, over an
+Overall Planes Downed of **6**. The stamps sum to the total, and the same airframe appears twice
+with the second occurrence starred, so the page draws two per-airframe tallies and totals both.
+
+That is the shape of the record's two twelve-byte arrays at `+0x08` and `+0x14`, indexed 0 to 10
+over the eleven airframes, and it is the best available account of them. It is still an account
+from the screen's arithmetic and not a decode: neither array's increment site has been traced, and
+what distinguishes the starred tally from the plain one (an ace, a named pilot, a kill by a
+particular means) is unread. `BL-624` carries it.
+
+### Navigation: two pages per mission, twenty-five mission slots
+
+Reported at the controls and corroborated by the shipped art. Each mission has a **results page**
+(the mission's title and mementos on the left, the stamps, tabs and results block on the right) and
+a **story page** of scraps filling both leaves. The right arrow steps to the next page, and from a
+mission's story page to the next mission; the left arrow steps back. Opening a mission other than
+the current one raises a **Current Mission** bookmark (langui 1200) at the top of the right page,
+which jumps back to it.
+
+Every scrap is clickable and opens in detail, sometimes with text the small version does not show.
+`SCRAPBOOKZOOM.SCRIPT` is that view.
+
+The art is `assets\graphics\scrapbook\`, named `<kind>_<mission>_<page>_<name>`, 213 non-TIF files:
+
+- **`SB_`** (163) the scraps themselves. Missions run `00` to `24`, which is the 24 campaign
+  missions plus slot `00` for the not-yet-started career (langui 1217/1218). Page `01` is the story
+  page and carries almost everything, from 2 scraps (missions 10, 15) to 13 (mission 07). The
+  `SB_00_00_*` set (`NEWS1`, `NEWS2`, `MAG1`, `DOC1`, `DOC2`, `FHLOGO`) are the generic scraps the
+  results pages reuse, which is why the Aloha Daily masthead appears on both CM01's and CM02's.
+- **`NT_`** (8) blueprint scraps, one per aircraft or system the story introduces
+  (`NT_02_01_BPBALMORAL`, `NT_07_01_BPNITRO`, `NT_19_01_BPTORPEDO`).
+- **`MS_P_`** (41) the cabin memento photographs, not scrapbook pages; `UIData +0x344` names the
+  current one.
+- A `…S` suffix is the small version of a scrap that has a distinct zoom asset. Only four exist, so
+  most scraps are one bitmap shown at two sizes.
+
+**The danger-zone scrap is the player's own screenshot.** `SB_01_00_DZ.PNG` is a per-mission slot
+and `DZ_GENERIC_CORNERS.PNG` is the photo-corner mount drawn over it; the corners being generic and
+the content being per-mission is what makes this a captured image rather than authored art. CM01's
+story page shows exactly that, a dark photograph in mounted corners. `BL-256` is the capture half.
+
+**Which scrap sits where is not decoded.** The per-page composition (which assets, at which
+coordinates, with which zoom text) is authored somewhere this page has not read.
+
+### So this item reuses a board CSVM already has
+
+`CampaignPreviousMissionsPage` is the scrapbook's finished-missions list. The debrief is that same
+screen opened on the mission just flown, so the work is the rest of the scrapbook rather than a new
+board: the second page, the per-scrap zoom, the navigation and bookmark, the results block, the
+mission-end entry path and the skip offer.
 
 ## What the debrief does not write
 
