@@ -499,9 +499,7 @@ public static class SuiteCatalog
             "write on the objective zeppelin (14 rings armed and shooting back, nothing outside " +
             "the hull touched, the same call with the flag cleared stowing them again), keep " +
             "their own mounting SECTION out of their own sight line while the rest of the hull " +
-            "stays cover, step THEMSELVES on a realtime clock (the mode every real session runs, " +
-            "and the one no suite or golden uses), skip " +
-            "same-team targets, join the aim-assist candidate list, and go permanently quiet " +
+            "stays cover, skip same-team targets, join the aim-assist candidate list, and go permanently quiet " +
             "when the emplacement's own destructible dies", WorldTurrets));
         into.Add(new TestHarness.Suite("turret-self-fire",
             "C1's five aagun emplacements, each woken alone and fired at a plane parked low on " +
@@ -885,9 +883,7 @@ public static class SuiteCatalog
             "target station, the 80 m separation push, the 700 m and 20.576 m/s join gates) and " +
             "then flown against a scripted leader, a live wingman joining from 1200 m abeam, " +
             "staying with the leader for the rest of the run, and riding the aft station behind " +
-            "a player leader where it rides the forward one behind an AI leader; a last leg drives " +
-            "one wingman through its OWN realtime _PhysicsProcess to check a cutscene's world hold " +
-            "stops it there too, while the clock still reports the frame's sim time for the movie",
+            "a player leader where it rides the forward one behind an AI leader",
             WingmanStation));
         into.Add(new TestHarness.Suite("wingman-engage",
             "what a campaign wingman does about a hostile (BL-505): every escorting block CM02 " +
@@ -1221,7 +1217,7 @@ public static class SuiteCatalog
         into.Add(new TestHarness.Suite("campaign-wingwalk-camera",
             "CM02's capture cutscene framing over that mission's BUILT world: the mission's own "
             + "capture definition started through the mission-trigger seam its approach table "
-            + "starts it with, played on a realtime clock with each aircraft stepping itself, "
+            + "starts it with, played on a realtime clock as isolated camera choreography, "
             + "with the captured aeroplane spawned from its own roster block at the position the "
             + "mission authors it -- far from the world origin, so a shot posed off nothing is not "
             + "mistaken for a framed one -- and camera1 read once a second against that "
@@ -1234,7 +1230,7 @@ public static class SuiteCatalog
             "which cutscene episodes offer the player a skip, over CM02's BUILT world: the "
             + "mission's capture definition and its whole call closure author no hold code, "
             + "which is the code that arms a skip, so playing that capture on a realtime clock "
-            + "with each aircraft stepping itself and pressing the skip key two seconds in is "
+            + "and pressing the skip key two seconds in is "
             + "refused -- the episode keeps the session and its picture, and the swap, the hide "
             + "and the hand-over land at the same second and in the same end state as the run "
             + "played undisturbed -- while an episode that has raised the hold code takes the "

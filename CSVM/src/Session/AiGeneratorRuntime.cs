@@ -226,18 +226,7 @@ public sealed partial class AiGeneratorRuntime : Node
         return disabled;
     }
 
-    public override void _PhysicsProcess(double delta)
-    {
-        float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
-        if (dt <= 0f)
-        {
-            return;   // the session drives SimStep itself this frame (see GameClock.PhysicsDt)
-        }
-        SimStep(dt);
-    }
-
-    /// <summary>One step of every live cycle, door transitions included. Public for the same
-    /// reason the pool's is: a fixed or halted clock has the session drive it.</summary>
+    /// <summary>One session-simulation step of every live cycle, door transitions included.</summary>
     public void SimStep(float dt)
     {
         // Runs first, so a launch this step first moves on the next, as the original's does.

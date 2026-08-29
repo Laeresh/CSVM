@@ -74,7 +74,7 @@ public partial class GameSession : Node3D
     // ProjectilePool.Viewers takes this same instance; B11/B13 are its next consumers.
     private readonly ViewerSet _viewers = new();
 
-    // Every AI aircraft spawned into this session — stepped in DriveSimSteps after the
+    // Every AI aircraft spawned into this session — stepped by SessionSimulation after the
     // player rigs, freed with the world subtree.
     // Scratch for LockCandidateAircraft, reused so a target-key press allocates nothing.
     private readonly List<Node3D> _lockCandidates = new();
@@ -103,8 +103,8 @@ public partial class GameSession : Node3D
     private readonly bool _menuDriven;
     // The boards' Exit item, routed by the Launcher (launchscreen or quit).
     private readonly Action _exitSession;
-    // The boards' Restart item on an Instant Action mission: the Launcher frees this session and
-    // builds a fresh one. Nothing here can put a mission's opposition back on its own.
+    // The boards' Restart item on an Instant Action or campaign mission: the Launcher frees this
+    // session and builds a fresh one. Nothing here can put a mission's opposition back on its own.
     private readonly Action _restartSession;
     // A campaign mission's end: the Launcher frees this session and reopens the launchscreen on
     // the named profile's cabin. Null outside a menu-driven process (a --campaign= run from the
@@ -143,11 +143,11 @@ public partial class GameSession : Node3D
     private SpawnPicker _spawnPicker = null!;
     // --crash[=frame]: fires once, the frame the sim clock first reaches _spec.CrashFrame.
     private bool _crashFired;
-    // --debug-scoreboard --vs: fires once, on the first sim step — see DriveSimSteps.
+    // --debug-scoreboard --vs: fires once, on the first sim step — see DriveParentSimulation.
     private bool _versusDebugKillFired;
     // --debug-pause[=frame]: fires once, the frame the sim clock first reaches it.
     private bool _debugPauseFired;
-    // --debug-wash=N: how many of its two scripted washes have fired — see DriveSimSteps.
+    // --debug-wash=N: how many of its two scripted washes have fired — see DriveParentSimulation.
     private int _debugWashesFired;
     private SpectatorCamera? _spectator;
     // The session's shared world selection (--freecam/--anim-lab): the clicked leaf plus its
@@ -190,28 +190,29 @@ public partial class GameSession : Node3D
     // target; the list itself counts down here, after every aircraft, in both step paths.
     private BeeperTags<FlightController>? _beeperTags;
     private Node3D? _plane;
-    // The session's simulation clock (see GameClock). Also published as GameClock.Current, which
-    // is how the sim consumers scattered through the tree reach it; dropped by ReturnToMenu.
+    // The session's simulation clock (see GameClock). Also published as GameClock.Current for
+    // authored animation and the few consumers that read session time; dropped by ReturnToMenu.
     private GameClock? _clock;
-    // The physics-stepped consumers this node drives itself when the clock is not realtime, in
-    // the tree order Godot's physics tick would have used. Dropped by ReturnToMenu.
+    // The sole owner of haltable session advancement. Both clock adapters request its Step.
+    private SessionSimulation? _simulation;
+    // Combat owners retained by this orchestrator and advanced through SessionSimulation.
     private ProjectilePool? _projectiles;
     private IncomingFire? _incomingFire;   // --incoming: the near-miss test rig
     // The flight roster builds the human field and introduces AI aircraft later. Every AI it
-    // returns is stepped in DriveSimSteps after the player rigs and freed with the world.
+    // returns is stepped by SessionSimulation after the player rigs and freed with the world.
     private FlightRoster? _flightRoster;
     private AiSkills? _aiSkills; // ai_skill_parameters, loaded once on the first AI spawn
     // The roster's own AI stats reader, so a spawn can consult the def it is about to fly (pilot
     // skills, accent) before the roster builds it. Same cache: the read here is not a second parse.
     private Func<string, string?, PlaneStats>? _aiStatsFor;
     // The E16 voice dispatch (built with the rigs when the world has sounds; its mission clock
-    // steps in DriveSimSteps). Null in a soundless/world-less session — chatter simply off.
+    // steps in SessionSimulation). Null in a soundless/world-less session — chatter simply off.
     private AiVoiceRuntime? _aiVoice;
     // The mission radio queue the campaign's objective callouts speak on. Built with the rigs when
     // the world has sounds, stepped beside the director, freed with the world subtree.
     private MissionRadio? _radio;
     // The egen enemy generators (--generators): loaded with the rigs, stepped in
-    // DriveSimSteps before the AI planes it spawns into AiPlanes, freed with the world subtree.
+    // SessionSimulation before the AI planes it spawns into AiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
     private ZeppelinRuntime? _zeppelins;
     // The mission's surface vehicles (a mode ship roster block, a boat generator's launch):
@@ -235,7 +236,7 @@ public partial class GameSession : Node3D
     // The rope-ladder switch, bound with the landings trigger off the same pickup sensors.
     private LadderSwitchRuntime? _ladder;
     // The world AA emplacements: built with the rigs whenever a chapter world and the
-    // shared pool exist, stepped in DriveSimSteps after the zeppelins (slung mounts read the
+    // shared pool exist, stepped by SessionSimulation after the zeppelins (slung mounts read the
     // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
     private TurretEmplacementRuntime? _turretEmplacements;
     // The dogfight scorekeeping (--vs): built with the rigs, fed their Downed reports, its clock
@@ -468,9 +469,8 @@ public partial class GameSession : Node3D
         _cutscene = _spec.Fly && _spec.WorldMode ? new CutsceneController() : null;
         if (_cutscene != null)
         {
-            // ⚠ The hold reaches a self-stepping node through the clock, never a per-class guard:
-            // on a realtime tick each aircraft, projectile, zeppelin and turret paces itself from
-            // GameClock.PhysicsDt, and only that seam stops all of them together.
+            // The clock carries the authoritative hold into SessionSimulation; authored animation
+            // reads the same fact but remains outside the held session step.
             _cutscene.WorldHeld = held =>
             {
                 if (_clock != null)
@@ -564,6 +564,7 @@ public partial class GameSession : Node3D
         }
 
         FinishFraming(state);
+        _simulation = new SessionSimulation(new SessionSimulationRuntime(this));
         _startup?.EndBuild();
         InSession = true;
         return true;
@@ -654,7 +655,7 @@ public partial class GameSession : Node3D
             clock.BeginFrame(delta);
             if (clock.ParentDriven)
             {
-                DriveSimSteps(clock);
+                DriveParentSimulation(clock);
             }
             // --debug-wash=N: two scripted blend washes to viewer N, red on the first sim frame
             // and white two seconds in, overlapping so the blend and not just the routing is on
@@ -705,42 +706,16 @@ public partial class GameSession : Node3D
             _edgeExtender.Update(_focusPoints);
         }
 
-        // One frame behind: LandingApproachRuntime ticks after this node (ProcessPriority), so this
-        // reads last frame's verdict. The HUD prompt is not a fast-twitch readout, so the lag is
-        // fine, and Bind() already flies only _rigs[0] against the trigger.
-        if (_landings != null && _rigs.Count > 0 && _rigs[0].Controller is { } flown)
-        {
-            flown.AutoLandOffered = _landings.AutoLandOffered;
-        }
     }
 
-    /// <summary>The match clock and the Instant Action mission's own step on a realtime session:
-    /// like every physics-stepped consumer, advance on Godot's tick unless the clock is
-    /// parent-driven — then <see cref="DriveSimSteps"/> advances both itself, on the same dt as
-    /// the rigs.</summary>
+    /// <summary>The realtime clock adapter: request one complete session-simulation step from
+    /// Godot's physics tick. Parent-driven modes request their substeps from <see cref="_Process"/>.
+    /// </summary>
     public override void _PhysicsProcess(double delta)
     {
-        float dt = _clock?.PhysicsDt(delta) ?? (float)delta;
-        if (dt <= 0f)
+        if (delta <= 0.0 || _clock is not { ParentDriven: false })
             return;
-        // ⚠ A cutscene holds the world in BOTH drive paths, the way callback 20 stops the
-        // original's per-frame world update and its objectives update together. The animation
-        // runtime is deliberately outside the hold: the movie is animation.
-        if (_cutscene is { HoldsWorld: true })
-        {
-            return;
-        }
-        _versus?.Advance(dt);
-        // ⚠ Step the mission director from BOTH drive paths, like the match clock above: a
-        // realtime session never enters DriveSimSteps, so a sequencer stepped only there
-        // advances no wave at the controls.
-        _iaDirector?.Step(dt);
-        _campaign?.Step(dt);
-        _radio?.Tick(dt);
-        // On a realtime clock the walk reads whatever pose each aircraft holds at this node's
-        // tick; a step's stale pose is at most one 60 Hz frame of a 600 m cone.
-        _smokeScreens?.SimStep(dt);
-        _beeperTags?.SimStep(dt);
+        _simulation?.Step((float)delta);
     }
 
     // BL-451: a --campaign= launch never carries --zeppelins/--generators (FromCampaign resolves
@@ -3018,12 +2993,13 @@ public partial class GameSession : Node3D
         return playerIndex >= 0 && playerIndex < inputs.Length ? inputs[playerIndex] : inputs[0];
     }
 
-    // A board menu's Restart item. An Instant Action mission is REBUILT by the Launcher, because
-    // its opposition lives in the world and nothing here can put it back; every other mode reruns
-    // in place, the race and the match through their own bookkeeping and anything else per-plane.
+    // A board menu's Restart item. An Instant Action or campaign mission is REBUILT by the
+    // Launcher, because its opposition and objective state live in the world and nothing here can
+    // put them back; every other mode reruns in place, the race and the match through their own
+    // bookkeeping and anything else per-plane.
     private void Rerun()
     {
-        if (_iaDirector != null)
+        if (_iaDirector != null || _campaign != null)
         {
             _restartSession();
             return;
@@ -3279,11 +3255,9 @@ public partial class GameSession : Node3D
         _boardWasVisible.Clear();
     }
 
-    // Steps the consumers whose sim normally rides Godot's physics tick; they return early from
-    // _PhysicsProcess whenever the clock is not realtime, since a fixed or halted sim cannot be
-    // paced by a tick it does not own. ⚠ Keep the tree order those callbacks had, so a round fired
-    // this frame behaves exactly as it did.
-    private void DriveSimSteps(GameClock clock)
+    // Parent-driven clock adapter. Debug forces stay outside the session-simulation order as
+    // outer-frame input injection; each clock substep below enters the same module as realtime.
+    private void DriveParentSimulation(GameClock clock)
     {
         // --crash[=frame]: force every player's crash rig at a fixed sim frame, the only headless
         // trigger for a crash a live collision otherwise gates. Spawned AI planes crash too, while
@@ -3318,56 +3292,9 @@ public partial class GameSession : Node3D
         {
             _iaDirector?.ForceDebugScoreboard();
         }
-        // The cutscene's world hold, the same one _PhysicsProcess takes: nothing below this line
-        // steps while a definition owns the session.
-        if (_cutscene is { HoldsWorld: true })
-        {
-            return;
-        }
         for (int i = 0; i < clock.Steps; i++)
         {
-            float dt = clock.Dt;
-            _incomingFire?.SimStep(dt);   // fires into the pool, so it steps before it
-            _projectiles?.SimStep(dt);
-            foreach (var rig in _rigs)
-            {
-                rig.Controller?.SimStep(dt);
-            }
-            // Zeppelins move before the generators read their host altitude this step.
-            _zeppelins?.SimStep(dt);
-            // Emplacements after the zeppelins: a slung mount reads its ride's moved pose.
-            _turretEmplacements?.SimStep(dt);
-            // Generators step before the AI-plane loop below: a spawn appends to AiPlanes, which
-            // must not happen while that list is being enumerated (the new plane ticks next step).
-            _generators?.SimStep(dt);
-            _surfaceVehicles?.SimStep(dt);
-            // AI aircraft step after the player rigs — the tree order their _PhysicsProcess
-            // callbacks take on a realtime clock, since they spawn after every rig is built.
-            foreach (var ai in AiPlanes)
-            {
-                ai.SimStep(dt);
-            }
-            // E11/G13: one sequencer tick and one mission-clock step per sim step, after the AI
-            // planes above have taken this step's crashes — the alive count
-            // InstantActionWaves.Step reads must reflect them. The other drive path steps it too.
-            _iaDirector?.Step(dt);
-            // The objectives graph reads the same step's kills and node deactivations, so it ticks
-            // after the AI planes above, exactly where the IA sequencer does.
-            _campaign?.Step(dt);
-            _radio?.Tick(dt);
-            // The smoke screens after every aircraft has moved this step: the walk reads the
-            // layer's and the victims' poses as they stand now, as the original's does.
-            _smokeScreens?.SimStep(dt);
-            // The tags after the pool has hit and the aircraft have died this step: a tag on a
-            // crashed aircraft collapses on the same step's tick, and the per-step tag gate re-arms
-            // only once the pool's hits are in.
-            _beeperTags?.SimStep(dt);
-            // The voice dispatch's mission clock: the 2 s mute window and every 15 s
-            // slot cooldown run on sim time, so a halted clock halts the chatter too.
-            _aiVoice?.Step(dt);
-            // The weapon lab has no sim step of its own: it is hosted by player 1's
-            // FlightController, which owns the fire clock, and fires into _projectiles above.
-            _versus?.Advance(dt);
+            _simulation?.Step(clock.Dt);
         }
 
         DiagTraceRoster();
@@ -3514,6 +3441,58 @@ public partial class GameSession : Node3D
         int constitutionRating = constitutionOverride ?? _spec.AiAttackSkill ?? 5;
         _aiVoice.RegisterAi(ai, accent, _aiSkills.At("talker_chance", talkerRating),
             _aiSkills.At("constitution_chance", constitutionRating));
+    }
+
+    // Maps the simulation's named phases onto this session's concrete owners.
+    private sealed class SessionSimulationRuntime(GameSession session) : ISessionSimulationRuntime
+    {
+        private readonly List<FlightController> _eligibleAiAircraft = new();
+
+        public bool SimHeld => session._clock?.SimHeld ?? false;
+
+        public void CaptureAiAircraft()
+        {
+            _eligibleAiAircraft.Clear();
+            _eligibleAiAircraft.AddRange(session.AiPlanes);
+        }
+
+        public void StepIncomingFire(float dt) => session._incomingFire?.SimStep(dt);
+        public void StepProjectiles(float dt) => session._projectiles?.SimStep(dt);
+
+        public void StepHumanAircraft(float dt)
+        {
+            foreach (var rig in session._rigs)
+                rig.Controller?.SimStep(dt);
+        }
+
+        public void StepZeppelins(float dt) => session._zeppelins?.SimStep(dt);
+        public void StepTurretEmplacements(float dt) => session._turretEmplacements?.SimStep(dt);
+        public void StepGenerators(float dt) => session._generators?.SimStep(dt);
+        public void StepSurfaceVehicles(float dt) => session._surfaceVehicles?.SimStep(dt);
+
+        public void StepCapturedAiAircraft(float dt)
+        {
+            foreach (var aircraft in _eligibleAiAircraft)
+                aircraft.SimStep(dt);
+        }
+
+        public void StepLandingApproaches()
+        {
+            session._landings?.Tick();
+            if (session._landings != null && session._rigs.Count > 0
+                && session._rigs[0].Controller is { } flown)
+            {
+                flown.AutoLandOffered = session._landings.AutoLandOffered;
+            }
+        }
+
+        public void StepInstantAction(float dt) => session._iaDirector?.Step(dt);
+        public void StepCampaign(float dt) => session._campaign?.Step(dt);
+        public void StepRadio(float dt) => session._radio?.Tick(dt);
+        public void StepSmokeScreens(float dt) => session._smokeScreens?.SimStep(dt);
+        public void StepBeeperTags(float dt) => session._beeperTags?.SimStep(dt);
+        public void StepAiVoice(float dt) => session._aiVoice?.Step(dt);
+        public void StepVersus(float dt) => session._versus?.Advance(dt);
     }
 
     // Per-build state threaded through StartSession's phase methods: the archives, world-build

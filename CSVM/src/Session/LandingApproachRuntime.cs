@@ -25,13 +25,11 @@ public sealed partial class LandingApproachRuntime : Node
     private CutsceneController? _cutscene;
     private Func<FlightController?>? _player;
 
-    /// <summary>Constructs the trigger. It ticks before <see cref="CutsceneController"/>, whose
-    /// own priority puts it last, so a row that fires this frame is hosted and mirrored in the
-    /// same frame it started.</summary>
+    /// <summary>Constructs the trigger. SessionSimulation ticks it before mission objectives;
+    /// CutsceneController then mirrors a newly started row later in the same frame.</summary>
     public LandingApproachRuntime()
     {
         Name = "LandingApproaches";
-        ProcessPriority = 999;
     }
 
     /// <summary>How many rows bound to a node this world built. Zero when the mission carries none
@@ -71,10 +69,7 @@ public sealed partial class LandingApproachRuntime : Node
         }
     }
 
-    /// <inheritdoc/>
-    public override void _Process(double delta) => Tick();
-
-    /// <summary>One frame of the trigger. Cheap and inert when the world armed no rows.</summary>
+    /// <summary>One session-simulation step. Cheap and inert when the world armed no rows.</summary>
     public void Tick()
     {
         AutoLandOffered = false;

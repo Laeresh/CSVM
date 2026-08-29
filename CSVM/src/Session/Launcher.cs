@@ -17,7 +17,7 @@ namespace CSVM.Session;
 /// rig / sun / WorldEnvironment.
 /// Each launch instantiates a <see cref="GameSession"/> with the launch's spec and a
 /// <see cref="LauncherContext"/>; the boards' Exit frees it (<see cref="ReturnToMenu"/>) and their
-/// Restart on an Instant Action mission frees and rebuilds it (<see cref="RestartSession"/>). Both
+/// Restart on a mission frees and rebuilds it (<see cref="RestartSession"/>). Both
 /// interactive paths in draw the load screen and build a frame later. Full arg reference:
 /// docs/cli.md. Module notes: this file's docs/architecture.md entry.
 /// </summary>
@@ -1009,9 +1009,10 @@ public partial class Launcher : Node3D
         _menu!.OpenCampaignCabin(profile);
     }
 
-    // The Instant Action boards' Restart: free this session and build a fresh one from the same
-    // spec, behind the load screen. A rerun in place cannot put the mission's opposition back —
-    // waves, the ace and a killed zeppelin all live in the world — so the world is rebuilt instead.
+    // The mission boards' Restart (Instant Action and campaign): free this session and build a
+    // fresh one from the same spec, behind the load screen. A rerun in place cannot put the
+    // mission's opposition or objectives back (waves, the ace, a killed zeppelin and the campaign
+    // graph all live in the world), so the world is rebuilt instead.
     // ⚠ Steps the seed exactly as flying again from the menu does, so an unpinned restart is a new
     // mission and a pinned one (--seed=/--det) still repeats.
     private void RestartSession()
@@ -1250,8 +1251,9 @@ public sealed class LauncherContext
     public required System.Action ExitSession { get; init; }
 
     /// <summary>Frees this session and builds a fresh one from the same settings, behind the load
-    /// screen — the Instant Action boards' Restart item. The mission's opposition lives in the
-    /// world, so putting it back means rebuilding the world, which only the Launcher can do.</summary>
+    /// screen — the mission boards' Restart item (Instant Action and campaign). The mission's
+    /// opposition lives in the world, so putting it back means rebuilding the world, which only
+    /// the Launcher can do.</summary>
     public required System.Action RestartSession { get; init; }
 
     /// <summary>Frees this session and reopens the launchscreen on the named profile's campaign

@@ -82,12 +82,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
         IEnumerable<(Vector3 Position, float Range, Color Color, float Energy)>? flashes = null)
     {
         MirrorFlashes(flashes, camera.EyePosition);
-        bool shown = GodotObject.IsInstanceValid(_interior) && _interior.Visible;
-        Visible = shown;
-        _view.RenderTargetUpdateMode = shown
-            ? SubViewport.UpdateMode.Always
-            : SubViewport.UpdateMode.Disabled;
-        if (!shown)
+        if (!Shown(GodotObject.IsInstanceValid(_interior) && _interior.Visible))
         {
             return;
         }
@@ -107,6 +102,11 @@ public sealed partial class CockpitOverlay : CanvasLayer
             _light.Basis = _sun.GlobalBasis;
         }
     }
+
+    /// <summary>Take the pass off the screen for a caller that has stopped syncing it. The crash
+    /// cut is that caller: it leaves first person while the rig's per-frame camera work is already
+    /// halted, so nothing would reach <see cref="Sync"/> to notice the interior went away.</summary>
+    public void Deactivate() => Shown(false);
 
     // The whole node graph, assembled before anything is added to a tree so a failed build frees
     // cleanly. The viewport owns its World3D outright: sharing the main one would put the interior
@@ -149,6 +149,17 @@ public sealed partial class CockpitOverlay : CanvasLayer
             Name = "cockpit_pass",
             Layer = UI.HudLayers.CockpitPass,
         };
+    }
+
+    // Whether the pass draws this frame, as the two writes that decide it: the layer's own
+    // visibility and the viewport's update mode, which together also stop it re-rendering.
+    private bool Shown(bool shown)
+    {
+        Visible = shown;
+        _view.RenderTargetUpdateMode = shown
+            ? SubViewport.UpdateMode.Always
+            : SubViewport.UpdateMode.Disabled;
+        return shown;
     }
 
     private void AddViewportChildren(Node3D interior)

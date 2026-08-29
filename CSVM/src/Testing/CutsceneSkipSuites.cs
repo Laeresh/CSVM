@@ -209,8 +209,6 @@ internal static class CutsceneSkipSuites
                 clock.BeginFrame(StepDt);
                 world.Runtime.Advance(StepDt);
                 cutscene.Tick();
-                rig.Controller?._PhysicsProcess(StepDt);
-                captured._PhysicsProcess(StepDt);
                 if (!outcome.Swapped && !ReferenceEquals(rig.Controller, before))
                 {
                     outcome.Swapped = true;

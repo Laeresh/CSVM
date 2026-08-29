@@ -50,19 +50,8 @@ public sealed partial class AiVoiceRuntime : Node
     public float Now => _now;
 
     /// <summary>Advances the mission clock one sim step (the 2 s mute window and every cooldown
-    /// run on this, so a halted clock halts the chatter too). Called by the session on a
-    /// parent-driven clock; <see cref="_PhysicsProcess"/> is the realtime path, same split as
-    /// every other sim consumer.</summary>
+    /// run on this, so a halted clock halts the chatter too). Called by SessionSimulation.</summary>
     public void Step(float dt) => _now += dt;
-
-    public override void _PhysicsProcess(double delta)
-    {
-        float dt = Utils.GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
-        if (dt > 0f)
-        {
-            Step(dt);
-        }
-    }
 
     /// <summary>Registers an AI aircraft as a voiced speaker: resolves the accent chain to one
     /// pilot VO id (a seeded pick over the accent's pool), then subscribes the wired event
