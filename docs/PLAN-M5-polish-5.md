@@ -143,6 +143,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 53. ☑ `BL-601`: CM13's racers ram the hangar on dzpath2; an AI rig sweeps its def's one collision probe, as the original does
 54. ☑ `BL-604`: CM02 is still lost during the capture, before the swap: the wing walk's 913 park counted as a deactivation for DEDG
 55. ☑ `BL-615`: CM13's racers loop around zone 3 instead of going on; the run exit's net re-seat never refused the leg it entered on
+56. ☑ `BL-616`: CM13 docks with an invisible Pandora; a zeppelin record is what switches its hull on
 
 ## Dependency and parallelism notes
 
@@ -1629,3 +1630,19 @@ on the flown path.
 **Verified.** <pending orchestrator run>
 
 **⚠ Traps.** The exclusion is an edge, not a node: refusing the tagged node itself would strand a racer whose course runs back through it. It is spent on one seat pick, so an interrupted run that re-approaches carries no stale refusal. The other `Reseat` callers (the Instant Action activation snap, `FlightController`) must keep the unconstrained default, or a teleported wave member loses its nearest-node seat.
+
+## F56 ☑ `BL-616`: CM13 docks with an invisible Pandora
+
+**Goal.** The Pandora's hull draws in CM13 (and CM11), so the docking hook and approach cones the end of the race arms sit on a zeppelin the player can see.
+
+**Evidence (confidence: decoded).** At the controls on CM13 the docking point is in position and the dock works while nothing is drawn. Not a regression: `WorldBuilder` and `GameZ` are byte-identical with main, and the defect became reachable only once F52, F53 and E41 let a player finish the race. `C2` is the only chapter shipping the `piratezep` node with `flags.active` clear (`support\c2\load.gw`: `LoadGameGen ... piratezep; NodeSetActive off`), and `WorldBuilder` honours that bit. Neither `m02.gw` nor `m03.gw` sets it back, `C2/M03`'s `zepstate.zrd` names only the vestigial `hk_zep`, and no `ObjectActiveState` in any of the mission's 200 compiled defs addresses `piratezep`. The dock still arms because arming reads poses: `pzhookpoint`, `hookbay` and both `land_on` cones all hang off `piratezep` in the gamez tree. The original's own activator is the record: Instant Action's builder re-activates its selected zeppelin with `FUN_004cca30` (`gwNodeSetActive`, bit 2 of node `+0x24`) at `0x0045b928`, mirroring the deactivation loop at `0x0045b8d6`. Two records in the whole install name a gamez-inactive node, `C2/M02` and `C2/M03`, both `piratezep`.
+
+**Approach.** `ZeppelinRuntime`'s placement loop switches the resolved hull node on, logging a `zep:` line when it was built inactive. Dormancy is opacity, so a `deactivated` record is unaffected.
+
+**Model recommendation.** A single session; the diagnosis is data, the fix is one line.
+
+**Verify.** New suite `zeppelin-hull-activation` over C2/M03's real world: the gamez ships the one `piratezep` node inactive, the world builds it hidden, the record places it and switches it on, the hook, bay and both cones resolve under the hull, and after `pzhomebase` runs 12 s the hull, the hook and the hangar bay all draw (four checks red with the line removed). Foreground: build clean, `dotnet test` 2558, and `campaign-zeppelins`, `zeppelin-identity`, `campaign-race-chain`, `campaign-racers`, `campaign-objectives`, `campaign-objective-markers` PASS.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** A working dock is not evidence that its host draws: the objective target, the stop-point release and the HUD marker all read poses and names, never visibility. `SetDormancy` writes opacity, not `Visible`, so the two switches are independent and must stay so. Both landing cones remain hidden after `pzhomebase` for a separate reason (`BL-618`, the `~n` dedup name).

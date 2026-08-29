@@ -843,6 +843,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
+- `BL-618` `[Bug]` **A compiled anim addressing a mech3ax `~n` dedup name resolves to nothing.**
+  *Evidence:* CM13's `pzhomebase` switches `land_on` and `land_on~2` on and neither of the
+  Pandora's two landing cones draws (`zeppelin-hull-activation`'s artifact records `cones 0/2`);
+  C2's gamez carries four `land_on` nodes, two under `piratezep`. The extraction renames the
+  second sibling `land_on~2` and the runtime's name resolver has no rule for the suffix, so the
+  bare name is ambiguous and the suffixed one matches nothing. *Fix shape:* resolve the suffix
+  scoped by the def's own node list, where `land_on` roots on `pz_manual_land` and `land_on~2` on
+  `pz_auto_land`. *⚠ Traps:* stripping `~n` and taking the first hit is wrong, the suffix identifies
+  which sibling. *Cross-refs:* `NameResolver`, `docs/formats/gamez.md`, `BL-616`'s closing commit
+  (`git log --grep=BL-616`).
+
 - `BL-612` `[Bug]` **CM09 (C1/M04): the frame rate falls under 60 for the rest of the mission once
   the Promised Land is down and the next fighter squad spawns.** *Evidence:* reported at the
   controls on the plan branch, and it is a sustained rate drop, not single hitches. The sortie

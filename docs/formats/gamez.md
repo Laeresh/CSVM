@@ -22,6 +22,12 @@ This page documents format facts only and contains no game asset data.
   is the direct shipped case: `barracuda` begins inactive, then `sub_movement` activates and moves
   the submarine before its enemy generator is credited. A world builder must therefore stage an
   inactive placed root and hide it; dropping the root makes the later name/index references fail.
+  A **zeppelin record is one such activator**: C2's gamez alone ships `piratezep` inactive (the
+  chapter's `support\c2\load.gw` switches it off right after loading it) and neither `m02.gw` nor
+  `m03.gw` sets it back, so `zeppelins.zrd` naming the node is what puts the hull on screen, the
+  same act Instant Action's builder performs with `gwNodeSetActive`
+  ([instant-action.md](instant-action.md)). Two records in this install exercise it, both C2's
+  `piratezep`; every other record names an already-active node.
 - **Node origins locate nothing reliably.** A node's transform origin is frequently nowhere near its mesh geometry, and many world nodes share a single origin (measured in C1 flight: origin-anchored labels drew 6 distinct labels out of 183 candidate nodes; mesh-AABB-centre anchoring drew 14, on the objects). Anything needing "where the object is" must derive it from mesh vertex data (e.g. the mesh AABB centre), not the node origin. The player planes' `_h` damage panels are the extreme case — identity node transforms with the placement baked into the mesh vertices (see the damage-states bullet below).
 - `meshes.json` has `null` entries (empty slots) — keep them to preserve `mesh_index` alignment.
 - Polygons are n-gons (3..35 verts): triangulate as fan, or as strip when `flags.triangle_strip`; `normal_indices`/`uv_coords` may be null (272 polys have no normals → flat-shade fallback).

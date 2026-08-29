@@ -43,6 +43,7 @@ using static CSVM.Testing.WingmanSuites;
 using static CSVM.Testing.WorldAndToolSuites;
 using static CSVM.Testing.WorldFidelitySuites;
 using static CSVM.Testing.ZeppelinCannonBurnoutSuites;
+using static CSVM.Testing.ZeppelinHullActivationSuites;
 using static CSVM.Testing.ZeppelinIdentitySuites;
 using static CSVM.Testing.ZeppelinSuites;
 namespace CSVM.Testing;
@@ -105,6 +106,7 @@ public static class SuiteCatalog
         "zeppelin-damage",
         "zeppelin-broadside",
         "zeppelin-cannon-burnout",
+        "zeppelin-hull-activation",
         "damage-stages",
         "damage-hd",
         "stop-sequence",
@@ -638,6 +640,14 @@ public static class SuiteCatalog
             "local-nodes scope), three finishers satisfy finish_locklear, lockleargoesdown brings " +
             "the hull down and the primary completes off lkgasbag05/panelleft1",
             ZeppelinCannonBurnout));
+        into.Add(new TestHarness.Suite("zeppelin-hull-activation",
+            "CM13's Pandora over C2/M03's real world: C2 alone ships the piratezep node with its " +
+            "gamez active bit clear and no mission .gw sets it back, so the world builds the hull " +
+            "hidden and the zeppelin record is what switches it on. With it on, the hook point, " +
+            "the hangar bay and both landing cones resolve UNDER the hull, and after pzhomebase " +
+            "(the anim OBJECTIVE8 wakes at the end of the race) has run its dock choreography the " +
+            "hull, the hook and the hangar bay all draw — rather than a live dock on an invisible " +
+            "Pandora", ZeppelinHullActivation));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
