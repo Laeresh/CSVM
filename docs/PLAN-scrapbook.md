@@ -173,7 +173,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the record and the director
 
-11. ☐ A lost attempt keeps its objective bits
+11. ☑ A lost attempt keeps its objective bits
 12. ☐ Carry the mission result across the launcher's deferred hop
 13. ☐ Count the per-airframe tallies and merge them per index
 14. ☐ The per-mission attempt counter and the four-attempt skip offer
@@ -451,31 +451,32 @@ approach assumed it would need.
 
 # Wave B — the record and the director
 
-## B11 ☐ A lost attempt keeps its objective bits
+## B11 ☑ A lost attempt keeps its objective bits
 
-**Goal.** A failed mission records exactly which objectives it met, with only the primary bit clear,
-so the results page can show per-objective state on a loss.
-
-**Evidence (confidence: traced).** `CSVM/src/Session/CampaignDirector.cs:650` writes
-`outcome == MissionOutcome.Won ? graph.CompletedMask : 0`. The original runs both of its
-mask-building loops regardless of outcome and sets bit 0 from the campaign win flag alone
+**Landed.** `CampaignDirector.OnMissionEnded` (`CSVM/src/Session/CampaignDirector.cs:648`) now banks
+`graph.CompletedMask` with only bit 0 forced clear on a loss, instead of banking zero outright:
+`outcome == MissionOutcome.Won ? graph.CompletedMask : graph.CompletedMask &
+~CampaignProgression.PrimaryObjectiveMask`. This matches the original, whose two mask-building loops
+run regardless of outcome and whose bit 0 comes from the campaign win flag alone
 (`docs/org/debrief.md`, "The pass, in order" and "The completed-objective mask has two sources").
+`CampaignProgression.Record` needed no change: it already gates its best-of merge and the position
+advance on bit 0 alone (`CampaignProgression.cs:145`-`150`), so a non-zero mask on a loss records
+statistics into `Latest` and nothing else.
 
-**Approach.** Bank `graph.CompletedMask` with bit 0 forced clear on a loss instead of banking zero.
-Check `CampaignProgression.Record`'s best-of merge still gates the advance on bit 0 alone, since it
-will now see non-zero masks on failed attempts.
+**Verified.** `CSVM/src/Testing/CampaignSuites.cs`'s `campaign-mission-end` suite gained a second,
+independent leg (`CampaignMissionLossKeepsObjectiveBits`) on its own fresh world: it drives a
+non-primary objective to completion, ends the mission through the player-death path
+(`ObjectiveGraph.NotifyPlayerLost`/`EndAfterPlayerLost`) rather than the graph's own win ending, and
+asserts the recorded mask keeps the driven objective's bit while bit 0 stays clear and neither
+`MissionRecorded.PrimaryCompleted` nor `.Advanced` fires. Taken as a baseline against the pre-fix
+code (`outcome == MissionOutcome.Won ? graph.CompletedMask : 0`), this leg fails with a zero mask,
+so the pass on the fixed code is not vacuous. `.\RunTests.ps1 -Suite campaign-mission-end -SkipUnits
+-SkipGoldens` and the `CampaignProgressionTests` unit suite both pass.
 
-**Model recommendation.** medium. A one-line behaviour change with a merge rule downstream of it
-that must be re-read, not a mechanical edit.
-
-**Verify.** `.\RunTests.ps1 -Suite campaign-mission-end -SkipUnits -SkipGoldens` plus the campaign
-suites that assert the recorded mask (`CSVM/src/Testing/CampaignSuites.cs:324`). Take a baseline
-first: the assertion currently passes against a zero mask on the loss path, so an unchanged pass
-proves nothing until it has been seen able to fail.
-
-**⚠ Traps.** `CampaignProgression`'s advance and its best-of merge are both gated on bit 0; a
-non-zero mask on a loss must not advance the campaign or overwrite the best record. The persist-log
-commit (`CampaignPersistLog.CommitsOn`) is a separate outcome test and is not part of this change.
+**⚠ Traps, held.** `CampaignProgression`'s advance and its best-of merge are both gated on bit 0
+alone (unchanged), so a non-zero mask on a loss neither advances the campaign nor overwrites the
+best record. The persist-log commit (`CampaignPersistLog.CommitsOn`) is untouched, a separate
+outcome test.
 
 ## B12 ☐ Carry the mission result across the launcher's deferred hop
 

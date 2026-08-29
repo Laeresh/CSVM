@@ -331,6 +331,9 @@ internal static class CampaignSuites
                 + $"{result.Attempt.TimeMs} ms, persist log {profile.PersistLog.Count}");
         });
 
+        ctx.WithWorld(ctx.Chapter, collision: false, mission.MissionFolder,
+            world => CampaignMissionLossKeepsObjectiveBits(ctx, world, script, mission, report));
+
         ctx.WriteArtifact($"test-campaign-mission-end-{ctx.Chapter}.txt", report.ToString());
         ctx.Note($"flew {mission.ChapterFolder}/{mission.MissionFolder} to a graph-derived end");
     }
@@ -801,6 +804,50 @@ internal static class CampaignSuites
         ctx.Check(graph.CompletedOf(2), $"it ran again, which no plain wake could have done");
     }
 
+    // BL-622/B11: the original runs both mask-building loops regardless of outcome, so a lost
+    // attempt still records whichever non-primary objectives it completed, with only bit 0 (the
+    // primary) forced clear (docs/org/debrief.md, "The completed-objective mask has two sources").
+    // Driven independently of the win leg above, on its own fresh world, since a player death is
+    // not a graph ending any shipped mission authors on its own.
+    private static void CampaignMissionLossKeepsObjectiveBits(
+        TestContext ctx, TestWorld world, ObjectiveScript script, CampaignMission mission, StringBuilder report)
+    {
+        var profile = CampaignProfileDef.NewProfile("Amelia");
+        var director = CampaignDirector.Create(script, mission, profile, null);
+        director.Attach(new CampaignDirector.WorldInputs { Runtime = world.Runtime });
+        var graph = director.Graph!;
+
+        int driven = DriveOneNonPrimaryInactive(ctx, world, script, graph, report);
+        if (driven == 0)
+        {
+            throw new SuiteSkippedException(
+                $"{mission.ChapterFolder}/{mission.MissionFolder} authors no non-primary INACTIVE "
+                + "objective to drive ahead of the loss");
+        }
+
+        if ((graph.CompletedMask & CampaignProgression.PrimaryObjectiveMask) != 0)
+        {
+            throw new SuiteSkippedException(
+                $"{mission.ChapterFolder}/{mission.MissionFolder}'s driven objective chained into "
+                + "the primary, so this mission cannot show a non-zero mask with the primary clear");
+        }
+
+        ctx.Check(graph.NotifyPlayerLost(), $"the player's own death is reported once");
+        graph.EndAfterPlayerLost();
+        Advance(director, CampaignDirector.LeavingHoldS + 0.2f);
+        ctx.Check(director.ReturnToCabin, $"a player-death loss still raised the return-to-cabin exit");
+        var result = director.Result!.Value;
+        ctx.Check(result.Outcome == MissionOutcome.Lost, $"the player's own death ends the mission lost");
+        ctx.Check((result.Attempt.CompletedMask & CampaignProgression.PrimaryObjectiveMask) == 0,
+            $"the primary bit is still forced clear on a loss, mask 0x{result.Attempt.CompletedMask:x}");
+        ctx.Check(result.Attempt.CompletedMask != 0,
+            $"…but the driven objective's own bit survives, mask 0x{result.Attempt.CompletedMask:x}");
+        ctx.Check(!result.Recorded.PrimaryCompleted && !result.Recorded.Advanced,
+            $"a non-zero mask on a loss still does not complete the primary or advance the campaign");
+        report.AppendLine($"loss leg: ended {result.Outcome}, mask 0x{result.Attempt.CompletedMask:x}, "
+            + $"advanced={result.Recorded.Advanced}");
+    }
+
     // Destroys (or deactivates) every node of one objective's INACTIVE paths, then ticks until it
     // completes. Two passes: an objective whose nodes are all real destructibles first, so the
     // condition is driven by a WEAPON kill through DamageAt rather than by a bare deactivation.
@@ -809,7 +856,25 @@ internal static class CampaignSuites
     {
         for (int pass = 0; pass < 2; pass++)
         {
-            int found = DriveInactivePass(ctx, world, script, graph, report, pass == 0);
+            int found = DriveInactivePass(ctx, world, script, graph, report, pass == 0, def => true);
+            if (found > 0)
+            {
+                return found;
+            }
+        }
+
+        return 0;
+    }
+
+    // The same drive, restricted to an objective that carries a display row of its own that is not
+    // the primary: what a lost attempt needs to prove it keeps a non-primary bit (B11).
+    private static int DriveOneNonPrimaryInactive(
+        TestContext ctx, TestWorld world, ObjectiveScript script, ObjectiveGraph graph, StringBuilder report)
+    {
+        bool NonPrimary(ObjectiveDef def) => def.Identity is { Class: not ObjectiveClass.Primary };
+        for (int pass = 0; pass < 2; pass++)
+        {
+            int found = DriveInactivePass(ctx, world, script, graph, report, pass == 0, NonPrimary);
             if (found > 0)
             {
                 return found;
@@ -821,11 +886,11 @@ internal static class CampaignSuites
 
     private static int DriveInactivePass(
         TestContext ctx, TestWorld world, ObjectiveScript script, ObjectiveGraph graph,
-        StringBuilder report, bool destructiblesOnly)
+        StringBuilder report, bool destructiblesOnly, System.Func<ObjectiveDef, bool> extra)
     {
         foreach (var def in script.Objectives)
         {
-            if (def.Inactive.Count == 0 || def.InstantLoss)
+            if (def.Inactive.Count == 0 || def.InstantLoss || !extra(def))
             {
                 continue;
             }

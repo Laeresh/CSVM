@@ -643,11 +643,14 @@ public sealed class CampaignDirector
         var plane = _profile.SelectedPlane >= 0 && _profile.SelectedPlane < _profile.Planes.Count
             ? _profile.Planes[_profile.SelectedPlane]
             : null;
-        // The money an attempt banks is the hangar economy's per-objective reward table, not this
-        // director's: it reports zero and CampaignProgression banks what it is told.
+        // The money an attempt banks is the hangar economy's, not this director's: it reports zero.
+        // Both of the original's mask loops run whatever the outcome, only bit 0 from the win flag
+        // (docs/org/debrief.md, "The completed-objective mask has two sources").
         var attempt = new MissionAttempt(
             _mission.Seq,
-            outcome == MissionOutcome.Won ? graph.CompletedMask : 0,
+            outcome == MissionOutcome.Won
+                ? graph.CompletedMask
+                : graph.CompletedMask & ~CampaignProgression.PrimaryObjectiveMask,
             (int)(graph.Elapsed * 1000f),
             _world?.Shots ?? 0,
             _world?.Hits ?? 0,

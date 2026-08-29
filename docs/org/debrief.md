@@ -429,11 +429,12 @@ merge, not its author, and the two run in the same mission-end pass.
 
 ## Where CSVM stands
 
-- **A lost attempt keeps its objective bits in the original and loses them in CSVM.** Both loops
-  above run whatever the outcome, so a failed attempt records exactly which objectives were met
-  with only bit 0 clear. `CampaignDirector.OnMissionEnded` writes
-  `outcome == MissionOutcome.Won ? graph.CompletedMask : 0`, which discards them. A debrief drawn
-  from today's mask would report every objective failed on a loss.
+- **A lost attempt keeps its objective bits (B11).** `CampaignDirector.OnMissionEnded` banks
+  `graph.CompletedMask` with only bit 0 forced clear on a loss, matching the original: both loops
+  above run whatever the outcome, and only the primary bit comes from the win flag rather than the
+  graph. `CampaignProgression.Record` already gated its best-of merge and the position advance on
+  bit 0 alone, so a non-zero mask on a loss records statistics without completing the primary or
+  advancing the campaign.
 - **The two per-airframe kill arrays have no CSVM counterpart.** `MissionAttempt` carries the
   record's `+0x00`, `+0x04`, `+0x20`, `+0x22`, `+0x28`, `+0x2c` and `+0x30` fields and nothing at
   `+0x08` or `+0x14`. Nothing counts kills per airframe, and nothing distinguishes an ace, so
