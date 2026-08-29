@@ -1398,9 +1398,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-535` `[Bug]` **A repeat sonic burst pays a 10 to 14 ms slot re-reset on every play from the third on.** With every emitter pre-built at bind (`AnimRuntime.PrewarmEmitters`), the weapon-lab probe (`--chapter=C1 --weapon-lab=wep_08 --weapon-fire --infinite-ammo --weapon-surface=default --weapon-standoff=90`) still records one `effect_checkout` sample per burst once `hitchMonitor.floorMs` is 10 and `medianMultiple` 1.2 under `--no-det --no-vsync`: 0.6 ms for the first two bursts, 10.2 to 13.9 ms for every burst from the third on, one call each. The step lands two bursts before a 4-slot pool could recycle, so it is not a wrap and not construction; it is the cost of re-resetting a slot copy that has run before, in `AnimRuntime.ResetCheckedOutCopies` (the re-reset that fixed the rings vanishing from the fifth burst on). Under the stock monitor it never trips, so it is a per-burst cost rather than a hitch, and at vsync it is inside a frame.
   *Where to look:* what the re-reset walks per copy (every template node of the subtree, or only the ones the last run posed), and whether the END pose can be recorded at stop time so the reset is a replay of a short list. ⚠ `docs/verification.md` PERF-14: the stock probe cannot fail on this; the lowered monitor is the only instrument that sees it, and it needs both knobs, since the trigger is the larger of the floor and median × multiple.
   *Cross-refs:* `BL-231` (closed; the pool-size judgement this was measured under), the `effect-pool-reset` suite (the pose contract the re-reset keeps).
-- `BL-536` `[Bug]` **Every .NET collection in flight is a gen1 collection with ~45k objects pending finalization and ~30 MB promoted, pausing 24 to 29 ms about every 12 s.** The 90 to 120 ms stall every ~190 frames that this item was filed on is gone: it was the `EXECUTION_BY_RANGE` sweep re-measuring 69 deferred anchors' mesh bounds on every 8 m cell crossing, ~25 MB/s of finalizable `StringName`/`Godot.Collections.Array` wrappers (now measured once per anchor, `AnimRuntime._rangeOriginLocal`). What remains is under `HitchMonitor`'s 40 ms floor and no longer trips, but a `dotnet-trace` GC-verbose capture on `--fly --chapter=C1 --plane=player_bhawk --perf --no-vsync` still shows every collection as gen1 (`gc0_delta` and `gc1_delta` move together), `FinalizationPendingCount` ~45k at each one and a residual 1.7 MB per 60-frame `--perf` window, of which `GodotWorldQuery.Ray` (a `PhysicsRayQueryParameters3D`, an `Array<Rid>` and a result `Dictionary` per cast, several casts a sim step), `AnimInstance.Live()` (an iterator per frame from `AnimRuntime.Retirable`) and `GaugeCluster.DrawGaugePoly` (a `Color[]` and `Vector2[]` per polygon per draw) are the sampled allocators.
-  *Where to look:* what keeps promoting ~30 MB into gen1 per collection when the allocation rate is 3 MB/s (finalizable Godot wrappers survive their first collection by construction, so the ray-query objects are the first suspect: reuse one `PhysicsRayQueryParameters3D` per caster), and whether the 24 to 29 ms pause is the finalizer queue's registration rather than marking. ⚠ PERF-13: compare only within one vsync mode; the residual pause needs `hitchMonitor.floorMs` lowered to be seen at all (PERF-14's lowered-monitor caveat).
-  *Cross-refs:* `BL-355` (closed; the capture that first showed the unexplained trip), `PLAN-perf-hitches`.
 - `BL-537` `[Owed-playtest]` **Effect pools at four players, judged in play.** The pool sizes in `CSVM/data/effect_pools.json` were re-judged on a build with no first-use construction cost: rockets and the sonic burst never wrap, a four-object simultaneous death wraps `flame_ball_01` at 4 and 6 slots and is quiet at 8 (now shipped), and seven or more identical deaths in one frame wrap at the 16 ceiling and cannot be sized away. At the controls the single-player half reads right: four fireballs burn out in place, and the seven-death wrap is not visible under the debris. Still owed: a 4-player splitscreen session with everyone firing, judged for anything that reads as shared between panes, and the ceiling for many-player builds (at 16 players the default root wants 19 and gets 16). The instrument is `AnimRuntime.PoolRecycles` and the `anim: effect pool for '<name>' recycled slot` DEBUG line in the log file sink; the sizes staged print on the world-effects build line. ⚠ Raise only a root that logs a recycle, never the default; the three gun roots stay at 1; a root sized 0 clamps to 1. Each slot copies the root's subtree (155 templates at 1 player, 263 at 4).
   *Cross-refs:* `BL-535` (the per-burst re-reset cost measured under the same instrument), `BL-296`/`BL-299` (the other splitscreen-scoped items).
 - `BL-538` `[Bug]` **A dark band on the large buildings at the distance the templates clutter fades out.** Reported at the controls in C5 with the authored `far_fade_range` applied: in the original the fade reaches the other buildings as well as downtown, and in the remake the larger (gamez) buildings show a dark area at the range where the downtown clutter vanishes, with buildings nearer and farther than that band reading brighter. Not the dither itself, which reads as the original's fade in motion.
@@ -1471,6 +1468,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/plans/PLAN-overcast-match.md`) was judged with it in place, so the C1 goldens and the
   user's eyes decide before it lands. *Cross-refs:* `BL-521`'s closing commit
   (`git log --grep=BL-521`), `docs/formats/anim-definitions.md`.
+
+- `BL-606` `[Perf]` **The settled GC pause is set by the finalizable-object count, and about 2000
+  finalizable Godot objects a second keep it there.** *Evidence (traced):* with the session's
+  build-settling transient excluded, a GC-verbose capture of a C1 cruise shows the pause tracking
+  the finalization-promoted COUNT at 0.4 to 0.5 ms per thousand objects, consistent across two
+  builds and 26k to 85k objects per collection, while ms per promoted MB varies several-fold over
+  the same collections. `MarkFinalizeQueueRoots` promotes 0.00 MB at every collection, so it is the
+  per-object queue walk and not resurrection marking, and queue registration happens at allocation,
+  outside the suspension window, so it cannot contribute. `Godot.StringName` is the largest single
+  source, ahead of the physics query parameters. *Fix shape:* reduce the RATE of finalizable Godot
+  object creation on the per-frame path, or take the objects off the finalization queue where the
+  binding allows it; caching `StringName` instances at their construction sites is the first move.
+  *⚠ Traps:* **cutting ordinary allocation does not shrink this pause, it only batches it.** Halving
+  the allocation rate moved the settled collection from gen0 every 13 s at 10 to 13 ms to gen1
+  every 31 to 36 s at 25 to 27 ms, leaving total pause per wall second unchanged at about 0.8 ms.
+  Judge any change on pause per second, never on per-collection pause or on collection frequency
+  alone. Exclude the first 50 s of process life, which is the world build tenuring and reproduces
+  to the byte. `docs/verification.md` PERF-13 (compare within one vsync mode) and PERF-19/PERF-20
+  apply. *Cross-refs:* `BL-536`'s closing commit (`git log --grep=BL-536`), which corrected the
+  premise this succeeds and landed the two allocator fixes, `BL-562` (the CM11 physics tick, which
+  shares the per-sim-step suspects), `PLAN-perf-hitches`.
 
 ## Audio
 
@@ -2569,7 +2587,7 @@ usual.
   known; the one reading remains unexplained rather than explained-and-fixed. **On recurrence,
   capture the binary hash and the concurrent-class list from the TRX**, neither of which was
   captured the one time this fired, and reopen from there. *⚠ Traps:* do not widen the assertion
-  to a tolerance; zero allocations is the contract `PerfSample` makes, and `BL-536`/`BL-562` need
+  to a tolerance; zero allocations is the contract `PerfSample` makes, and `BL-562` needs
   this test able to catch a real regression. A handful of green runs is not evidence at the
   observed rate: at a 1-in-10 base rate, 30 consecutive clean unit stages give about 95%
   confidence the rate has moved and 44 give about 99%. *Cross-refs:* `docs/verification.md` PERF

@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — The allocation and tick budget
 
-21. ☐ `BL-536`: every collection in flight is a gen1 collection pausing 24 to 29 ms about every 12 s
+21. ☑ `BL-536`: the gen1/24-29 ms reading is the session build settling; the settled pause is set by finalizable-object count
 22. ☐ `BL-562`: the physics tick costs about 39 ms late in CM11, so the sim runs at half wall time
 23. ❌ `BL-584`: `PerfSampleTests.AScopeAllocatesNothing` is not same-build stable in the parallel unit stage
 
@@ -393,7 +393,82 @@ go away by resetting less must be checked against that symptom, not only against
 
 # Wave C — The allocation and tick budget
 
-## C21 ☐ `BL-536`: every collection in flight is a gen1 collection pausing 24 to 29 ms about every 12 s
+## C21 ☑ `BL-536`: the gen1/24-29 ms reading is the session build settling; the settled pause is set by finalizable-object count
+
+**Landed.** The premise the item was filed on does not survive a capture that runs long enough.
+"Every collection is gen1, about 30 MB promoted, about 45k pending finalization, 24 to 29 ms every
+12 s" is the **world build settling**, and it ends. A GC-verbose capture opened at process start
+shows seven collections in the first three seconds of session life (six gen1 and one gen2,
+18 to 52 MB promoted, 20 to 45 ms), then a gen1 at 34 MB and 26 ms, then a gen1 at 9 MB and 20 ms,
+and from about 50 s of process life onward nothing but **gen0**, promoting 2.7 MB with a 10 to
+13 ms pause every 13 s. Both regimes reproduce to the byte between independent runs (the first
+settled collection promotes 2.69 MB over 26,053 finalization-promoted objects in each), so the
+short capture the item was filed on was not noisy, it was measuring the transient.
+
+**What promotes.** Nothing is unaccounted for. `GCMarkWithType` attributes the settling
+collections' promotion to stack and older-generation roots, which is the built world being tenured,
+and gen2 grows from zero to about 70 MB across them and then stops. In the settled regime the
+2.7 MB breaks down as 1.73 MB from older-generation roots, 0.95 MB from finalization promotion and
+0.08 MB from handles, which is the whole of it. The finalizable Godot wrappers do survive their
+first collection by construction, as the item said, but they are 0.95 MB of it, not 30 MB.
+
+**Registration or marking: neither.** Registration onto the finalization queue happens at
+allocation, outside the suspension window, so it cannot appear in a `GCSuspendEE` to
+`GCRestartEEStop` interval at all. `MarkFinalizeQueueRoots` promotes 0.00 MB at every one of the 20
+collections captured, so it is not resurrection marking either. What the pause does track is the
+finalization-promoted object COUNT: across two builds and 26k to 85k objects per collection it
+holds at 0.4 to 0.5 ms per thousand, while ms-per-promoted-MB varies several-fold over the same
+collections. The cost is the per-object queue walk and the move to the ready-to-finalize list.
+
+**The consequence, and it is the useful part.** The pause is set by how many finalizable objects
+died, and a settled flight retires about 2000 a second whatever else changes, because every Godot
+wrapper is finalizable and drags Godot's own instance-tracking weak references with it. So cutting
+ordinary allocation cannot shrink the pause; it can only batch the same work into fewer, longer
+ones. Two allocators were cut anyway, since both were plain waste:
+
+- `AnimInstance.Live()` was a `yield return` iterator called once per live instance per frame from
+  the retirement scan, and was the largest single allocator of a flight session at 39 MB of a
+  134 MB sampled window. It is now a struct enumerator, so the call sites are unchanged and the
+  allocation is gone.
+- `GaugeCluster.DrawGaugePoly` built a fresh `Vector2[]` and `Color[]` per polygon per draw, 40 MB
+  of the same window. `DrawPolygon` marshals both into packed arrays before it returns, so they are
+  now scratch buffers kept per vertex count. All 16 goldens stay hash-identical.
+
+`GodotWorldQuery.Ray`, the item's first suspect and the one whose fix carried a re-entrancy risk,
+was left alone: the ray-query objects are **1.6%** of sampled allocation
+(`PhysicsRayQueryParameters3D` 0.43 MB, the result `Dictionary` 0.43 MB, `Array<Rid>` 0.53 MB,
+`PhysicsShapeQueryParameters3D` 0.75 MB, against 134 MB), so reusing a query object per caster
+would have bought nothing and could have corrupted a query. `Godot.StringName` is the larger
+finalizable source and is where a follow-up would go.
+
+**Baseline and post-change numbers**, both from
+`--fly --chapter=C1 --plane=player_bhawk --perf --no-vsync`, `dotnet-trace` on
+`Microsoft-Windows-DotNETRuntime:0x1:5`, compared within the one vsync mode (PERF-13):
+
+| | baseline | after |
+|---|---|---|
+| sampled allocation | 3.84 MB/s | 1.53 MB/s |
+| settled collection | gen0 every 13.1 s | gen1 every 31 to 36 s |
+| promoted | 2.69, 2.76, 2.84 MB | 7.82, 6.93, 7.39 MB |
+| finalization-promoted | 26053, 26328, 26404 | 63859, 67674, 72803 |
+| pause | 9.80, 11.97, 12.65 ms | 27.11, 25.43, 27.18 ms |
+| total pause per wall second | 0.88 ms | 0.79 ms |
+
+The per-collection pause is larger and the total per second is not, which is the trade the finding
+predicts. In dropped frames it is a mild improvement: one dropped frame every 13 s becomes two
+every 33 s. The item's goal as written, that the 24 to 29 ms pause goes, is not reachable by
+attacking allocators, and the reading it was written from was the transient.
+
+**Verified.** <pending orchestrator run>
+
+**For C22.** This item changed nothing in `GodotWorldQuery` or on the physics tick, so C22's
+baseline is unaffected by it; the `--fly` C1 `physics_ms` sat at 0.06 to 0.09 ms throughout, and the
+per-sim-step ray casts are not a meaningful allocator, so C22 should not expect allocation to
+explain its 39 ms step. The instrument used here is worth reusing: a `dotnet-trace` GC-verbose
+capture parsed for `GCStart`, `GCHeapStats` and `GCMarkWithType`, with the window opened at least
+50 s after launch so it does not land in the settling regime (PERF-19, PERF-20).
+
+**Original approach (kept for reference).**
 
 **Goal.** Collections in flight stop being uniformly gen1 with about 45k objects pending
 finalization and about 30 MB promoted, and the 24 to 29 ms pause every 12 s goes.

@@ -357,6 +357,26 @@ loss. What the engine renders was decodable from the authored constants + oscill
   50 %, and a stage past one prints `over budget` beside a summary whose exit code is unchanged. The
   budget's job is to make a verification-time regression visible in the run that caused it; deciding
   whether it is one is still a paired A/B against a freshly measured same-build band.
+- **PERF-19** — **A GC capture that ends inside the first minute of a session measures the world
+  build settling, not the steady state, and the two look nothing alike.** Under
+  `--fly --chapter=C1 --plane=player_bhawk --perf --no-vsync` the first seven or eight collections
+  are gen1 and gen2, promote 18 to 52 MB and pause 20 to 45 ms, because the build's own long-lived
+  data is being tenured (`GCMarkWithType` attributes it to stack and older-generation roots, and
+  gen2 grows to about 70 MB and then stops). Only after that does the session settle to a gen0
+  collection every 13 s promoting 2.7 MB with a 10 to 13 ms pause. Both regimes reproduce to the
+  byte across runs, so a short capture is not noisy, it is measuring a different thing; let the
+  session settle before the window opens and say which regime a number comes from.
+- **PERF-20** — **A .NET GC pause here is set by how many FINALIZABLE objects died, not by how
+  many bytes were promoted, so cutting ordinary allocation makes the pauses rarer and longer
+  rather than smaller.** Every Godot wrapper is finalizable and drags Godot's own instance-tracking
+  weak references with it, so a settled flight retires about 2000 finalizable objects a second
+  whatever else changes. Measured across two builds and 26k to 85k objects per collection, the
+  pause tracks the `GCHeapStats` finalization-promoted COUNT at roughly 0.4 to 0.5 ms per thousand,
+  while ms-per-promoted-MB varies several-fold over the same collections; `MarkFinalizeQueueRoots`
+  promotes nothing at any of them, so the cost is the queue walk, not resurrection marking. Halving
+  the non-finalizable allocation rate stretched the interval from 13 s to 33 s and took the pause
+  from 10 to 13 ms up to 25 to 31 ms, leaving total pause per wall second unchanged. Judge such a
+  change on pause per second and on dropped frames, never on the per-collection figure alone.
 
 ## LOG — logs, error censuses, and exit codes
 

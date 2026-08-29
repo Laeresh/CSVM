@@ -245,14 +245,10 @@ public sealed class AnimInstance
 
     // Slots in index order, then the unslotted. Order matters only to Advance, which walks the
     // slots itself; every other caller is a membership test.
-    private IEnumerable<SequenceRunner> Live()
-    {
-        foreach (var r in _slots)
-            if (r != null)
-                yield return r;
-        foreach (var r in _unslotted)
-            yield return r;
-    }
+    // ⚠ A struct enumerator, not a yield-return iterator: Finished runs once per live instance
+    // per frame from the runtime's retirement scan, and the iterator object allocated there was
+    // the largest single allocator of a flight session. Do not simplify it back.
+    private LiveRunners Live() => new(_slots, _unslotted);
 
     // Identity is the sequence OBJECT, never its name — see IsRunning: the empty name is not
     // unique, so a name-keyed lookup would collapse two sequences onto one slot.
@@ -262,6 +258,60 @@ public sealed class AnimInstance
             if (ReferenceEquals(Def.Sequences[i], seq))
                 return i;
         return -1;
+    }
+
+    // The slot array in index order followed by the unslotted list, allocating nothing. `foreach`
+    // binds to GetEnumerator by pattern rather than through IEnumerable, so the call sites read
+    // exactly as they did over the iterator this replaced.
+    private readonly struct LiveRunners
+    {
+        private readonly SequenceRunner?[] _slots;
+        private readonly List<SequenceRunner> _unslotted;
+
+        public LiveRunners(SequenceRunner?[] slots, List<SequenceRunner> unslotted)
+        {
+            _slots = slots;
+            _unslotted = unslotted;
+        }
+
+        public Enumerator GetEnumerator() => new(_slots, _unslotted);
+
+        public struct Enumerator
+        {
+            private readonly SequenceRunner?[] _slots;
+            private readonly List<SequenceRunner> _unslotted;
+            // One cursor across both: below _slots.Length it indexes the slots, at or above it
+            // the offset into the unslotted list.
+            private int _index;
+
+            public Enumerator(SequenceRunner?[] slots, List<SequenceRunner> unslotted)
+            {
+                _slots = slots;
+                _unslotted = unslotted;
+                _index = -1;
+                Current = null!;
+            }
+
+            public SequenceRunner Current { get; private set; }
+
+            public bool MoveNext()
+            {
+                while (++_index < _slots.Length)
+                {
+                    if (_slots[_index] is { } slotted)
+                    {
+                        Current = slotted;
+                        return true;
+                    }
+                }
+
+                int unslotted = _index - _slots.Length;
+                if (unslotted >= _unslotted.Count)
+                    return false;
+                Current = _unslotted[unslotted];
+                return true;
+            }
+        }
     }
 }
 

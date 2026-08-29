@@ -155,6 +155,11 @@ public sealed partial class GaugeCluster : Control
     // Belt-indicator colour variants (0 green / 1 yellow / 2 red) — the hilite bar and the light.
     private readonly Texture2D?[] _indHilite = new Texture2D?[3];
     private readonly Texture2D?[] _indLight = new Texture2D?[3];
+    // DrawGaugePoly's per-vertex scratch, one pair per vertex count the face uses. DrawPolygon
+    // marshals both arrays into packed arrays before it returns, so the next poly of the same
+    // size may have them back; the arrays must be exactly as long as the poly, which is why this
+    // is keyed by vertex count rather than grown to a high-water mark.
+    private readonly Dictionary<int, (Vector2[] Points, Color[] Colors)> _polyScratch = new();
 
     private GaugePoly? _altHundreds, _altThousands;
     private GaugePoly? _spdNeedle;
@@ -876,7 +881,12 @@ public sealed partial class GaugeCluster : Control
     {
         var tex = overrideTex ?? p.Tex;
         int n = p.Points.Length;
-        var pts = new Vector2[n];
+        if (!_polyScratch.TryGetValue(n, out var scratch))
+        {
+            scratch = (new Vector2[n], new Color[n]);
+            _polyScratch[n] = scratch;
+        }
+        var pts = scratch.Points;
         float rad = Mathf.DegToRad(rotDeg);
         float cos = Mathf.Cos(rad), sin = Mathf.Sin(rad);
         for (int i = 0; i < n; i++)
@@ -887,7 +897,7 @@ public sealed partial class GaugeCluster : Control
             float y = -v.X * sin + v.Y * cos;
             pts[i] = new Vector2(center.X + x * radius, center.Y - y * radius);
         }
-        var colors = new Color[n];
+        var colors = scratch.Colors;
         var flat = tex != null ? Colors.White
             : missingTint ?? new Color(0.85f, 0.85f, 0.8f);
         for (int i = 0; i < n; i++)
