@@ -2941,37 +2941,49 @@ usual.
   decoded in `docs/org/debrief.md` (`FUN_004194e0`): what it writes into the profile's
   mission-result record, the two sources its completed-objective mask is built from, and the offer
   to skip a mission that opens on **every fourth failed attempt** at a mission never completed,
-  which takes effect by setting the campaign win flag. *Fix shape:* a page in the `CampaignFlow`
-  board family (`CampaignCabinPage`, `CampaignPreviousMissionsPage` are the nearest shapes) shown
-  between the mission and the cabin, reading that result; the skip offer is part of the screen, not
-  a separate feature. *⚠ Traps:* the world stays up for the rest of the frame after the end is
+  which takes effect by setting the campaign win flag. **The screen is the scrapbook**, not a board
+  of its own: every label on it is an `IDS_SB_*` langui row (the Instant Action wrap-up's are
+  `IDS_IAWU_*`), the authored screens are `SCRAPBOOK.SCRIPT` and `SCRAPBOOKZOOM.SCRIPT`, and
+  `OriginalScreenshots/Campaign Mission End screen CM01.png` is it as the original draws it. Its
+  Best to Date / Most Recent tabs are the mission-result record's merged and attempt halves, its
+  five rows are Run Time (`mm:ss`), Rockets Expended, Gun Hit Ratio, Cash Earned and Overall Planes
+  Downed, and each memento on the left page is its own interactive element with its own display.
+  *Fix shape:* `CampaignPreviousMissionsPage` already IS the scrapbook, so this extends that page
+  rather than adding one: a mission-end entry path into it, the Most Recent tab and the results
+  block, the Replay Mission button, and the per-memento zoom. The skip offer is part of the screen,
+  not a separate feature. *⚠ Traps:* the world stays up for the rest of the frame after the end is
   raised, so the page belongs to the launchscreen side, not the session's. The mask cannot be drawn
   as it stands: `CampaignDirector.OnMissionEnded` banks `0` for the whole mask on a loss where the
   original keeps every objective bit and clears only bit 0, so per-objective lines would read as
-  all-failed on every lost mission. The per-weapon shots and hits the original's screen shows are
+  all-failed on every lost mission. The Rockets Expended and Overall Planes Downed rows are
   `BL-624`, not this item. The wording of the skip offer (langui string 191) is absent from
   `extracted/rof/ui_strings.json`, whose ids jump 136 to 200. *Cross-refs:*
   `docs/org/debrief.md`, `docs/formats/saved-games.md` ("The mission-result array"), `CampaignFlow`,
   `CampaignProgression`, `BL-624`, `BL-620`'s and `BL-623`'s closing commits
   (`git log --grep=BL-620`); the held two seconds `BL-623` added are where this screen belongs.
 
-- `BL-624` `[Feature]` **Shots and hits are not counted per weapon class, so the debrief's
-  per-weapon breakdown cannot be drawn.** *Evidence:* decoded in `docs/org/debrief.md`.
-  The original's mission-result record carries two twelve-byte arrays, shots at `+0x08` and hits at
-  `+0x14`, filled from the mission statistics object at `0x0071d2a0` (shots at `+0x00 + 4i`, hits at
-  `+0x30 + 4i`, `i` in 0..10) with each dword truncated to a byte. The slot is not `i`: it is a
-  lookup over the pair table at `0x0061f670` (stride 8, key then slot) that falls through to slot 11,
-  so eleven classes map into twelve slots with slot 11 the catch-all. CSVM's `MissionAttempt` has
-  scalar `Shots` and `Hits` only, off `CampaignDirector`'s world view (`ProjectilePool`'s
-  `CannonRoundsFired`). *Fix shape:* count per weapon
-  class where the two scalars are counted today, carry the arrays on `MissionAttempt`, and merge
-  them per index by maximum the way `CampaignProgression` merges the rest of the record.
-  *⚠ Traps:* the eleven-into-twelve remap is the original's own table and is not the weapon
-  numbering; decode `0x0061f670` rather than assuming class equals slot. The arrays are written on
-  the campaign path only, and in game mode 3 the same two offsets hold a summed `ushort` and the
-  danger-zone count instead, so an Instant Action or multiplayer path must not fill them as arrays.
-  *Cross-refs:* `docs/org/debrief.md`, `docs/formats/saved-games.md` ("The mission-result array"),
-  `CampaignProgression`, `BL-622`.
+- `BL-624` `[Research]` **Three of the debrief's five rows have no source in CSVM, and what the
+  record's two twelve-byte arrays count is undecoded.** *Evidence:* `docs/org/debrief.md`, and
+  `OriginalScreenshots/Campaign Mission End screen CM01.png` for the screen. Of the scrapbook's
+  results block, Run Time, Gun Hit Ratio and Cash Earned map onto record fields CSVM already carries
+  (`+0x04`, the `+0x20`/`+0x22` pair, `+0x28`); **Rockets Expended** (langui 1204) and **Overall
+  Planes Downed** (1207) do not, and neither does the per-airframe kill stamp on the same page. The
+  two twelve-byte arrays at record `+0x08` and `+0x14` are filled from the mission tally object at
+  `0x0071d2a0` (`+0x00 + 4i` and `+0x30 + 4i`, `i` in 0..10, each dword truncated to a byte) through
+  `FUN_00416de0`, whose table at `0x0061f670` is the identity map for 0..10 with 11 as a never-taken
+  fall-through, so the slot is `i` and the lookup says nothing about what `i` is. CSVM's
+  `MissionAttempt` has the scalar `Shots` and `Hits` only, off `CampaignDirector`'s world view
+  (`ProjectilePool`'s `CannonRoundsFired`). *What to settle:* trace the increment sites of the two
+  arrays on `0x0071d2a0` and of whatever feeds the two unmapped rows; eleven is also the number of
+  airframes and the page's kill stamp is per-airframe, which makes a per-airframe tally the obvious
+  candidate for one array. Then count the same things in CSVM, carry them on `MissionAttempt`, and
+  merge them per index by maximum the way `CampaignProgression` merges the rest of the record.
+  *⚠ Traps:* do not assume the arrays are per-weapon shots and hits; that reading was tried against
+  the screen and does not survive it, since the shot/hit pair is the separate `+0x20`/`+0x22` fields
+  the Gun Hit Ratio row divides. The arrays are written on the campaign path only, and in game mode 3
+  the same two offsets hold a summed `ushort` and the danger-zone count instead, so an Instant Action
+  or multiplayer path must not fill them as arrays. *Cross-refs:* `docs/org/debrief.md`,
+  `docs/formats/saved-games.md` ("The mission-result array"), `CampaignProgression`, `BL-622`.
 
 ## Tooling, platform & docs
 

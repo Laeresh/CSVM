@@ -3,7 +3,9 @@
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
 `crimson.exe`, `language x86:LE:32:default`), 2026-08-29, settling the decode half of `BL-622`.
 Every claim below names the function or address it came from. No decompiler output is reproduced;
-the addresses are given so any claim can be re-checked at source.
+the addresses are given so any claim can be re-checked at source. The screen's own layout and rows
+are additionally read off `OriginalScreenshots/Campaign Mission End screen CM01.png` and the
+extracted langui table (`extracted/rof/ui_strings.json`); the lines that came from those say so.
 
 **Where the other halves live.** The record this pass writes is the mission-result array documented
 in [`formats/saved-games.md`](../formats/saved-games.md), "The mission-result array"; that page
@@ -17,6 +19,7 @@ record is indexed by is [`formats/campaign-sequence.md`](../formats/campaign-seq
 - [The completed-objective mask has two sources](#the-completed-objective-mask-has-two-sources)
 - [The four-attempt skip offer](#the-four-attempt-skip-offer)
 - [Time and the shooting statistics](#time-and-the-shooting-statistics)
+- [The screen is the scrapbook](#the-screen-is-the-scrapbook)
 - [What the debrief does not write](#what-the-debrief-does-not-write)
 - [Where CSVM stands](#where-csvm-stands)
 - [What is not decoded](#what-is-not-decoded)
@@ -95,27 +98,72 @@ save gate in `FUN_0046b450` pass where the failed attempt itself wrote nothing.
 float, `FMUL [0x00603464]` multiplies it by the `1000.0f` stored there, and `ftol` writes the
 result to record `+0x04`.
 
-**The two twelve-byte arrays are per-weapon-class shots and hits.** The mission statistics object
-is at `0x0071d2a0`: shots at `+0x00 + 4i` (`FUN_004a23a0`) and hits at `+0x30 + 4i`
-(`FUN_004a23c0`), for `i` in 0 to 10. Each dword is truncated to a byte into the record, shots into
-the array at `+0x08` and hits into the one at `+0x14`.
+**The two twelve-byte arrays come from an eleven-slot pair of tallies.** The mission tally object is
+at `0x0071d2a0`, and the debrief reads two arrays off it: `+0x00 + 4i` through `FUN_004a23a0` and
+`+0x30 + 4i` through `FUN_004a23c0`, for `i` in 0 to 10. Each dword is truncated to a byte into the
+record, the first array into `+0x08` and the second into `+0x14`.
 
-The array slot is not `i`. It is `FUN_00416de0(i)`, a linear lookup over the pair table at
-`0x0061f670` (stride 8: key, then slot) that **falls through to slot 11** when the key is absent.
-That is why the arrays are twelve bytes wide while only eleven classes feed them: slot 11 is the
-catch-all.
+The array slot is `FUN_00416de0(i)`, a linear lookup over the pair table at `0x0061f670` (stride 8:
+key, then value) that falls through to `11` when the key is absent. **The shipped table is the
+identity map**, eleven pairs with key equal to value for 0 to 10, so the slot is `i` today and the
+twelfth slot is never written from this path. The function is a general-purpose lookup used
+elsewhere in the executable, so it says nothing about what the arrays index.
+
+⚠ **What the two arrays count is not decoded.** Eleven is also the number of airframes, and the
+screen shows a per-airframe kill stamp beside its total (see below), which makes a per-airframe
+tally the obvious candidate for one of them. That is a candidate, not a reading: neither array's
+increment site has been traced. `BL-624` carries the question.
 
 **The shot and hit totals** at record `+0x20` and `+0x22` are `[0x0071d2fc]` and `[0x0071d300]`,
-two dwords sitting immediately after those arrays in the same object, truncated to `ushort`.
-`0x0071d300` is incremented in three damage-resolution paths (`FUN_004b9bc0`, `FUN_004bab50`,
-`FUN_004c0880`), each gated on `[target + 0x210] & 0x40`; `0x0071d2fc` is incremented in a per-gun
-loop in `FUN_004b6820`.
+read as words out of the same object and stored as a pair. `0x0071d300` is incremented in three
+damage-resolution paths (`FUN_004b9bc0`, `FUN_004bab50`, `FUN_004c0880`), each gated on
+`[target + 0x210] & 0x40`; `0x0071d2fc` is incremented in a per-gun loop in `FUN_004b6820`. The
+screen divides the pair and shows it as **Gun Hit Ratio**, which is the same reading the format
+page reached from the merge rule alone.
 
-**Mode 3 reuses the same two offsets as scalars.** When `DAT_0071bb80` is `3`, the per-weapon
-breakdown is not written at all: `+0x08` becomes a single `ushort` holding the sum of all eleven
-shot counters plus all eleven hit counters, and `+0x14` becomes `[0x0071d328]`, the
-danger-zones-completed counter the zone module `FUN_00446990` increments. The per-weapon arrays are
-therefore a campaign-only shape.
+**Mode 3 reuses the same two offsets as scalars.** When `DAT_0071bb80` is `3`, neither array is
+written: `+0x08` becomes a single `ushort` holding the sum of all eleven entries of both arrays, and
+`+0x14` becomes `[0x0071d328]`, a further counter on the same object which the danger-zone module
+`FUN_00446990` increments. The arrays are therefore a campaign-only shape.
+
+## The screen is the scrapbook
+
+`FUN_0046fb60(0x0071d57c, …)` opens the **scrapbook**, not a screen of its own. The evidence is the
+screen's own strings: every label on it is an `IDS_SB_*` langui row, and the Instant Action wrap-up
+uses a separate `IDS_IAWU_*` set. `extracted/rof/ASSETS/SCRIPTS/` has a `SCRAPBOOK.SCRIPT` and no
+debrief script. Measured off `OriginalScreenshots/Campaign Mission End screen CM01.png`, which is
+the screen as the original draws it at the end of CM01.
+
+It is a two-page book spread. The left page carries the mission title through langui 1215
+(`%1!s! - %2!s!`, name and area) over the mission's mementos, and **each memento is an interactive
+element with a display of its own**: the newspaper clippings, the magazine and the coin are
+individually selectable and open their own view rather than being one painted collage. That is
+`SCRAPBOOKZOOM.SCRIPT`, the second of the two scrapbook scripts. The right page carries a
+per-airframe kill stamp (a count over the airframe's name), the two tabs, and the results block:
+
+| Row | Title | Value format | Record field |
+|---|---|---|---|
+| outcome | 1201 `Mission Completed` | 1213 `Mission Completed` / 1214 `Mission Failed` | mask bit 0 |
+| heading | 1202 `Mission Results` | | |
+| 1 | 1203 `Run Time` | 1208 `%1!02d!:%2!02d!` | `+0x04`, milliseconds rendered as `mm:ss` |
+| 2 | 1204 `Rockets Expended` | 1209 `%1!d!` | not located |
+| 3 | 1205 `Gun Hit Ratio` | 1210 `%1!d!%%` | `+0x22` over `+0x20` |
+| 4 | 1206 `Cash Earned` | 1211 `$%1!d!` | `+0x28` |
+| 5 | 1207 `Overall Planes Downed` | 1212 `%1!d!` | not located |
+
+**The two tabs are the record's two halves.** Langui 1159 `Best to Date` selects the merged half at
+`+0x54` and 1160 `Most Recent` the attempt half at `+0x00`, which is the same two-halves layout the
+format page reaches from the merge rules. Langui 1200 `Current Mission` is the third tab the
+scrapbook carries when it is opened from the cabin rather than from a mission end, and 1217 to 1219
+(`Starting My Career`, `Above the clouds`, `Not yet flown `) are what an unflown mission's page
+shows.
+
+The buttons are Replay Mission, View All Missions and Return to Cabin, with page arrows on both
+outer edges.
+
+**So this item reuses a board CSVM already has.** `CampaignPreviousMissionsPage` is the scrapbook's
+finished-missions list; the debrief is that same screen opened on the mission just flown, with a
+Replay Mission button and the mission-end entry path.
 
 ## What the debrief does not write
 
@@ -130,10 +178,12 @@ merge, not its author, and the two run in the same mission-end pass.
   with only bit 0 clear. `CampaignDirector.OnMissionEnded` writes
   `outcome == MissionOutcome.Won ? graph.CompletedMask : 0`, which discards them. A debrief drawn
   from today's mask would report every objective failed on a loss.
-- **The per-weapon breakdown has no CSVM counterpart.** `MissionAttempt` carries the record's
+- **The two twelve-byte arrays have no CSVM counterpart.** `MissionAttempt` carries the record's
   `+0x00`, `+0x04`, `+0x20`, `+0x22`, `+0x28`, `+0x2c` and `+0x30` fields and nothing at `+0x08` or
-  `+0x14`. Those two arrays exist to be displayed, so the screen cannot show what the original's
-  shows until they are tracked (`BL-624`).
+  `+0x14`. Whatever they count is tracked nowhere, and neither is the Rockets Expended row nor the
+  Overall Planes Downed total (`BL-624`).
+- **The board exists.** `CampaignPreviousMissionsPage` is already the scrapbook; what is missing is
+  the mission-end entry into it, the Most Recent tab and the Replay Mission button.
 - **The skip offer is unimplemented.** Four failed attempts at an uncompleted mission is a
   campaign-advancing decision the player is given, not a cosmetic prompt.
 - **`ObjectiveGraph.CompletedMask` is one of the original's two mask sources.** It is the

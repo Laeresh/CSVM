@@ -280,25 +280,27 @@ each field's merge rule is what identifies it:
 |---|---|---|---|
 | `+0x00` | `+0x54` | bitwise OR | completed-objective mask; bit 0 is the primary objective and gates the whole merge |
 | `+0x04` | `+0x58` | keep the smaller, ignoring 0 | mission time in **milliseconds**, the writer multiplying the mission clock in seconds by a stored `1000.0f` |
-| `+0x08` | `+0x5c` | per-index maximum | **shots fired per weapon class**, twelve single-byte slots |
-| `+0x14` | `+0x68` | per-index maximum | **hits per weapon class**, twelve single-byte slots on the same indexing |
+| `+0x08` | `+0x5c` | per-index maximum | twelve single-byte counters, eleven of them written; what they count is not decoded |
+| `+0x14` | `+0x68` | per-index maximum | twelve more single-byte counters on the same indexing |
 | `+0x20` | `+0x74` | keep the pair with the larger second/first ratio | a `ushort` pair, shots and hits |
 | `+0x28` | `+0x7c` | accumulate | money paid for this mission, the same amount added to funds |
 | `+0x2c` | `+0x80` | copied when the attempt completed more objectives | airframe id of the plane flown |
 | `+0x30` | `+0x84` | copied with the airframe id | name of the plane flown, 36 bytes |
 
-Eleven weapon classes feed twelve slots: the writer maps a class to its slot through a lookup
-table and falls through to slot 11 for any class the table does not name, so slot 11 is a
-catch-all. The two arrays are written only on the campaign path. In game mode 3 the same two
-offsets hold scalars instead, `+0x08` a single `ushort` summing every shot and hit counter and
-`+0x14` the count of danger zones completed.
+Eleven sources feed twelve slots through an identity lookup, so eleven bytes of each array are
+written and the twelfth is a never-taken fall-through slot. The two arrays are written only on the
+campaign path; in game mode 3 the same two offsets hold scalars instead, `+0x08` a single `ushort`
+summing all twenty-two counters and `+0x14` the count of danger zones completed. **What the arrays
+count is still open**, and eleven is also the number of airframes.
 
 The attempt half is written at mission end by the debrief, which zeroes the whole `0x54` bytes
 first and leaves the merged half alone; money, the airframe and the plane name are the completion
 recorder's, and they are the only attempt-half fields the debrief does not fill. The mask's bits
 above bit 0 are set whether the mission was won or lost, so a failed attempt still records which
-objectives it met. That pass, the bit numbering and the per-mission retry counter behind the
-original's skip-this-mission offer are [`org/debrief.md`](../org/debrief.md).
+objectives it met. The screen that displays the record is the **scrapbook**, whose Best to Date and
+Most Recent tabs are this record's merged and attempt halves. That pass, the bit numbering, the
+per-mission retry counter behind the original's skip-this-mission offer and the screen's rows are
+[`org/debrief.md`](../org/debrief.md).
 
 The sample profile's records 1 to 20 are complete, record 21 has an attempt with no merged result
 (its objective mask lacks bit 0), and records 22 to 24 are zero.
