@@ -286,10 +286,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>Lazily builds, indexes and RESET_STATE-poses a pooled copy of a named library root
     /// (<see cref="GameZ.IsLibraryRoot"/>, docs/formats/gamez.md), returning the copy this exact
-    /// call owns; another gets a fresh one until the pool wraps. Null off a library root, and on
-    /// every runtime that stages its templates eagerly. The third argument is the AUTHORED CALL
-    /// EVENT, which ownership is keyed on beside the anchor. ⚠ Drive the returned copy, never the
-    /// def's whole <see cref="TemplateStage{TNode}.RootsFor"/> set.</summary>
+    /// call owns; another gets a fresh one until the pool wraps. Null off a library root and on
+    /// every runtime staging templates eagerly. The third argument is the authored call event,
+    /// null when that call names no site: a staged actor is served to a placing call alone.
+    /// ⚠ Drive the copy, never the def's whole <see cref="TemplateStage{TNode}.RootsFor"/>.</summary>
     internal Func<string, Node3D, object?, Node3D?>? ResolveLibraryRoot;
 
     /// <summary>The world-space velocity an <c>IMPACT_FORCE</c> launch adds, transformed into the
@@ -2583,7 +2583,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                 if (!string.Equals(NameOf(callAnchor), rootName,
                                         StringComparison.OrdinalIgnoreCase))
                                 {
-                                    libraryCopy = ResolveLibraryRoot(rootName, callAnchor, ev);
+                                    // ⚠ The site the call NAMES, never the caller's own anchor: a
+                                    // placeless call must not move its callee's root, and a staged
+                                    // actor's script poses its children in WORLD coordinates.
+                                    libraryCopy = ResolveLibraryRoot(rootName, callAnchor,
+                                        siteNode != null ? ev : null);
                                     relocate = libraryCopy != null;
                                 }
                             }

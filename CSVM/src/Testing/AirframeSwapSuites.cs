@@ -195,6 +195,7 @@ internal static class AirframeSwapSuites
 
         report.AppendLine($"'{drop.Value.Root}-{drop.Value.Anim}' authors callback {drop.Value.Code}");
         CheckLegPrerequisites(ctx, world, report);
+        CheckChuteCall(ctx, world, drop.Value.Anim, report);
         WithStagedHangar(ctx, world, chapter,
             staged => PlayTheDrop(ctx, world, staged, drop.Value, report));
     }
@@ -223,6 +224,38 @@ internal static class AirframeSwapSuites
         }
     }
 
+    // The drop's chute leg as the data authors it: a CALL_ANIMATION with no site at all, onto a
+    // definition rooted on the staged parachutist. That pairing is the whole reason the figure has
+    // to stay where it was staged, so the suite reads it rather than assuming it.
+    private static void CheckChuteCall(TestContext ctx, TestWorld world, string dropAnim,
+        StringBuilder report)
+    {
+        var caller = First(world.Session.Program.ByAnimName(dropAnim));
+        var leg = First(world.Session.Program.ByAnimName(HangarChute.ChuteLeg));
+        ctx.Check(leg != null && string.Equals(leg.RootName, AircraftStage.ChuteNode, StringComparison.OrdinalIgnoreCase),
+            $"'{HangarChute.ChuteLeg}' is rooted on the staged '{AircraftStage.ChuteNode}' the aircraft archive supplies");
+        bool sited = true;
+        bool called = false;
+        foreach (var seq in caller?.Sequences ?? new List<AnimSequence>())
+        {
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Kind != "CallAnimation"
+                    || !string.Equals(ev.Data.Str("name"), HangarChute.ChuteLeg, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                called = true;
+                sited = ev.Data.Obj("parameters") != null || ev.Data.Str("operand_node") != null;
+            }
+        }
+
+        report.AppendLine($"'{dropAnim}' calls '{HangarChute.ChuteLeg}': called={called} sited={sited}");
+        ctx.Check(called && !sited,
+            $"and '{dropAnim}' calls it with no AT_NODE site of its own, so the call asks for the figure where it stands rather than at a placement");
+    }
+
     private static string Describe(IReadOnlyList<AnimNodePrereq> prereqs) =>
         prereqs.Count == 0 ? "none"
             : string.Join(", ", prereqs.Select(p => $"{string.Join("/", p.Path)}={(p.Active ? "active" : "inactive")}{(p.Required ? "" : " (optional)")}"));
@@ -244,6 +277,7 @@ internal static class AirframeSwapSuites
         ctx.Check(aircraft is { PlayerMarker: not null },
             $"the mission's world stages the aircraft archive's '{AircraftStage.PlayerNode}' marker, the node the drop poses the flown aeroplane on");
         var ride = new HangarRide(aircraft);
+        var chute = new HangarChute(aircraft);
         try
         {
             var clock = new GameClock { Mode = GameClock.RunMode.Realtime };
@@ -291,6 +325,9 @@ internal static class AirframeSwapSuites
                 bool liftLeg = started.Contains(HangarRide.LiftLeg, StringComparer.OrdinalIgnoreCase)
                     && !started.Contains(HangarRide.AfterLift, StringComparer.OrdinalIgnoreCase);
                 ride.Sample(rig.Controller, swapped, cutscene.Playing && liftLeg, cutscene.Playing);
+                chute.Sample(world,
+                    started.Contains(HangarChute.ChuteLeg, StringComparer.OrdinalIgnoreCase)
+                    && cutscene.Playing);
             }
 
             report.AppendLine($"played '{drop.Anim}' for {PlayBudgetS:0} s: codes {string.Join(",", cutscene.Codes)}, " +
@@ -308,6 +345,7 @@ internal static class AirframeSwapSuites
             report.AppendLine(Describe("after", after));
             CheckBlueStreakFit(ctx, before, after, textures, report);
             CheckRide(ctx, ride, cutscene, hangar, report);
+            CheckChute(ctx, chute, hangar, report);
             CheckStockStaysStock(ctx, roster, rig, report);
         }
         finally
@@ -558,6 +596,29 @@ internal static class AirframeSwapSuites
         report.AppendLine($"handoff {fromHangar?.ToString("0.#") ?? "-"} m from the hangar at {hangar}");
         ctx.Check(fromHangar is { } gap && gap < HangarDoorsM,
             $"and stands at the hangar doors ({fromHangar?.ToString("0.#") ?? "-"} m from '{hangar}'), not at the world origin: a marker put back at its rest pose by the reset would read on the marker and nowhere in the mission");
+    }
+
+    // The parachutist the drop drops into the hangar, read over the leg that animates him.
+    private static void CheckChute(TestContext ctx, HangarChute chute, Vector3 hangar,
+        StringBuilder report)
+    {
+        report.AppendLine(chute.Describe());
+        ctx.Check(chute.LegFrames > 0,
+            $"'{HangarChute.ChuteLeg}' runs inside the played drop ({chute.LegFrames} frame(s))");
+        ctx.Same(1, chute.MostActors,
+            $"with exactly one '{AircraftStage.ChuteNode}' in the world: the drop's site-less call asks for the staged figure itself, so a pooled copy beside it would be a second parachutist");
+        ctx.Check(chute.LegFrames > 0 && chute.ActorMoved == 0,
+            $"the staged '{AircraftStage.ChuteNode}' stays where the archive staged it ({chute.ActorMoved} frame(s) moved off it), the frame its own script poses the figure in");
+        ctx.Check(chute.LegFrames > 0 && chute.FigureHidden == 0,
+            $"the '{HangarChute.FigureNode}' figure is drawn on every frame of the leg ({chute.FigureHidden} frame(s) undrawn)");
+        ctx.Check(chute.FigureUnderActor,
+            $"hanging under that '{AircraftStage.ChuteNode}' rather than under a copy of it");
+        float? gap = chute.FigureEnd is { } near ? near.DistanceTo(hangar) : null;
+        report.AppendLine($"figure {gap?.ToString("0.#") ?? "-"} m from the hangar at {hangar}");
+        ctx.Check(gap is { } metres && metres < HangarChute.AtHangarM,
+            $"and comes down at the hangar ({gap?.ToString("0.#") ?? "-"} m from '{hangar}'), not kilometres out over the map where a relocated root would carry a world-posed script");
+        ctx.Check(chute.Descent > HangarChute.MinDescentM,
+            $"descending {chute.Descent:0.#} m over the leg, the drop into the hangar the clip shows");
     }
 
     // The trap: the build is 965's, not the airframe's. A plain swap onto the same node hands
@@ -1222,6 +1283,97 @@ internal static class AirframeSwapSuites
 
             return starts;
         }
+    }
+
+    // The per-frame record of the parachutist the drop's own chute leg animates. That leg poses the
+    // staged actor's CHILDREN with world-coordinate scripts and never moves the actor itself, so
+    // the reading that matters is where the figure hangs while the actor stays put: a root carried
+    // to a call site would take the whole descent with it and leave the shot empty.
+    private sealed class HangarChute
+    {
+        public const string ChuteLeg = "hdchute1";
+        public const string FigureNode = "chutemanparent";
+        public const float StagedTolerance = 1f;
+        public const float AtHangarM = 200f;
+        public const float MinDescentM = 10f;
+
+        private readonly Node3D? _actor;
+        private readonly Vector3 _stagedAt;
+        private float _highest = float.MinValue;
+        private float _lowest = float.MaxValue;
+
+        public HangarChute(AircraftStage? aircraft)
+        {
+            _actor = aircraft?.Chuteman;
+            _stagedAt = _actor != null ? AnimRuntime.WorldTransform(_actor, out _).Origin : Vector3.Zero;
+        }
+
+        /// <summary>The most <c>chuteman</c> nodes the world held at once. One: the drop names no
+        /// site, so the staged figure is the figure, and a second is a pooled copy nothing drives.
+        /// </summary>
+        public int MostActors { get; private set; }
+
+        public int LegFrames { get; private set; }
+
+        public int ActorMoved { get; private set; }
+
+        public int FigureHidden { get; private set; }
+
+        public bool FigureUnderActor { get; private set; }
+
+        /// <summary>Where the figure hung on the leg's last frame, in world coordinates.</summary>
+        public Vector3? FigureEnd { get; private set; }
+
+        public float Descent => _highest > _lowest ? _highest - _lowest : 0f;
+
+        public void Sample(TestWorld world, bool legRunning)
+        {
+            MostActors = Math.Max(MostActors, world.Runtime.FindNodes(AircraftStage.ChuteNode).Count);
+            if (!legRunning)
+            {
+                return;
+            }
+
+            LegFrames++;
+            if (_actor == null)
+            {
+                FigureHidden++;
+                return;
+            }
+
+            if (AnimRuntime.WorldTransform(_actor, out _).Origin.DistanceTo(_stagedAt) > StagedTolerance)
+            {
+                ActorMoved++;
+            }
+
+            Node3D? figure = null;
+            foreach (var candidate in world.Runtime.FindNodes(FigureNode))
+            {
+                if (_actor.IsAncestorOf(candidate))
+                {
+                    figure = candidate;
+                    break;
+                }
+            }
+
+            if (figure == null || !figure.IsVisibleInTree())
+            {
+                FigureHidden++;
+                return;
+            }
+
+            FigureUnderActor = true;
+            var at = AnimRuntime.WorldTransform(figure, out _).Origin;
+            FigureEnd = at;
+            _highest = Math.Max(_highest, at.Y);
+            _lowest = Math.Min(_lowest, at.Y);
+        }
+
+        public string Describe() =>
+            $"chute: '{AircraftStage.ChuteNode}' most in world={MostActors}, leg {LegFrames} frame(s), " +
+            $"actor moved off its staged pose {ActorMoved}, figure undrawn {FigureHidden}, " +
+            $"under the actor={FigureUnderActor}, descent {Descent:0.#} m, " +
+            $"figure ends at {FigureEnd?.ToString() ?? "-"}";
     }
 
     // The per-frame record of the drop's ride, sampled after the cutscene host has posed the rig.

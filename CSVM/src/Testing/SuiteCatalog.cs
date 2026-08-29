@@ -1235,7 +1235,10 @@ public static class SuiteCatalog
             + "stays a stock Bloodhawk with no injector; the flown aeroplane rides the drop in "
             + "view: the hangar-floor Bloodhawk prop shows for the first leg and goes at the "
             + "swap, and after it the rig is drawn on the player marker, wearing the staged "
-            + "undercarriage, as the lift leg moves that marker",
+            + "undercarriage, as the lift leg moves that marker, and the parachutist the drop's "
+            + "own site-less chute call animates is the one staged figure, drawn for the whole "
+            + "leg, hanging under the actor the stage left where it stands and coming down at the "
+            + "hangar rather than kilometres off it",
             AirframeSwapSuites.HangarHandover));
 
         // BL-542: the capture cutscene's camera rides the wing walk's moving frame, and that frame

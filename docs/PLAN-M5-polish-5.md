@@ -153,6 +153,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 60. ☑ `BL-607`: a cutscene episode books to the first raiser on every path but the landings one, so a parent that calls several raisers is cut short
 61. ☑ `BL-608`: CM02's crew bail out as one figure at the world origin, and the docking on the Pandora never ends the mission
 62. ☑ `BL-620`: CM02's ending waits out an objective wrap-up the completion code does not take
+63. ☑ `BL-621`: CM07's hangar drop loses its parachutist to G61's staged-actor pool
 
 ## Dependency and parallelism notes
 
@@ -1736,4 +1737,36 @@ on the flown path.
 
 **Verified.** On the merged plan tree, the full gate: build clean, 2561 unit tests, 179 engine suites in four shards with the error census clean (engine stage 103 s against its 100 s budget, awareness only), 16 goldens hash-identical.
 
-**⚠ Traps.** `Props` and `Figures` on the aircraft stage are placed by `OBJECT_ADD_CHILD`, not by an `AT_NODE` call, so pooling them would change the hangar drop and the wing-walk pilot. A third caller of `ResolveLibraryRoot` must pass the authored event, or `null` to keep one copy per anchor.
+**⚠ Traps.** A third caller of `ResolveLibraryRoot` must pass the authored event, or `null` to keep one copy per anchor. The staged actor is served only to a call that names a site; a site-less call gets the pre-pool behaviour (`BL-621` is what happens otherwise).
+
+## G62 ☑ `BL-620`: CM02's ending waits out a wrap-up the completion code does not take
+
+**Goal.** CM02 ends once, on the frame the docking film's last sequence raises its completion code, rather than three seconds later.
+
+**Evidence (confidence: traced).** C3/M05 has two paths to the same ending: `OBJECTIVE19` (`ANIM_STATE [ANIM [NAME [hooked_to_klondike], STATE [EXECUTED]]]`, `INSTANTWIN`) and the `Callback 13` the definition's `all_done` raises. The code always gets there first: `all_done` is the definition's own last sequence, so the definition still reads RUNNING when the code lands (measured: state 2 at t=12.62) and the objective's condition cannot be met until a frame later. The original's case for the code (`FUN_0047e080` case 13) re-syncs the player vehicle (`FUN_00494b20`), sets the won flag (`FUN_00463c10(1)`) and calls the mission-end path `FUN_00443090` in the same breath, never touching the wrap-up timer at mission `+0xc40` that `FUN_0046ba10` runs down (0.1 s for `INSTANTWIN`, 3 s otherwise). CSVM gave it the ordinary 3 s, so the debrief opened at 15.62 s where the original opens at 12.62 s. Disproved: the EXECUTED read is not early (one def of that name, and the original reads the definition's own state byte `+0xa0`, not its call closure's), and the mission never ended twice or raced.
+
+**Approach.** `ObjectiveGraph.NotifyDockingComplete` ends on `DockingWrapUpS = 0f`. The 0.06 s between the win and `bal_wing_foldup`'s last frame is authored: `move_camera`'s branch reaches `all_done` before `move_player`'s `Event+2.0` one, and the fold's 2.01 s `run_time` overruns the branch's 2.0 s wait in the data.
+
+**Model recommendation.** A single session; the decode was one case of the code dispatch.
+
+**Verify.** `landings-balmoral-dock` (the definition reads RUNNING when it raises the code, EXECUTED no earlier than that, the outcome turns Won within a frame of the code, `MissionEnded` fires once, a second completion code is refused) and a new `ObjectiveGraphTests` pin.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** `WonWrapUpS` is still the ordinary objective win's 3 s; the two must not be re-merged. `Ending` is never observably true on this path, so a check written as `Ending || Outcome == Won` needs a `Step` after the code before it reads.
+
+## G63 ☑ `BL-621`: CM07's hangar drop loses its parachutist to the staged-actor pool
+
+**Goal.** The pilot parachutes into the hangar again, while CM02's three sited chute calls keep their per-call copies.
+
+**Evidence (confidence: traced).** `hangar_drop` calls `hdchute1` with no `AT_NODE` or `WITH_NODE` site at all, and `hdchute1` is rooted on `chuteman`, the actor `AircraftStage` stages out of the aircraft archive; its script poses `chutemanparent`, `pilot` and `stamp` with `OBJECT_MOTION_SI_SCRIPT` in world coordinates and never moves the root. G61's resolver served that staged actor to the site-less call, so the call relocated the root onto the caller's own anchor and pinned it top-level: the world-posed descent landed at (-8636, 292, -12790), 7.7 km off the hangar, and the never-started twin leg `hdchute1b` took a second pool slot, leaving a frozen duplicate drawn. Disproved: the drop places nothing by `OBJECT_ADD_CHILD`, and the mission-trigger right is not what opened the branch, the range gate having opened it already.
+
+**Approach.** The distinguishing rule is whether the call names a site: `AnimRuntime` passes the authored event to `ResolveLibraryRoot` only for a sited call, and the pool declines the staged actor outright to a site-less caller, which also covers the add-child fallback.
+
+**Model recommendation.** A single session; the regression is one branch of G61's own change.
+
+**Verify.** `campaign-hangar-handover` gains a chute sampler (one `chuteman` in the world, the actor never off its staged pose, the figure drawn on all 702 leg frames, 27.4 m of descent, 63.3 m from the hangar; FAIL with the guard reverted) and `campaign-capture-chutes` is unchanged.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** `hdchute1b`'s prerequisite fails in this mission, so it never starts; a pool that hands it a slot anyway leaves a frozen duplicate in the world.

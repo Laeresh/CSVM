@@ -980,7 +980,9 @@ deferred until range; range-triggered and explicit mission-trigger calls (`PlayM
 `landings.zrd` rows and the objective script's `WAKE_ANIM`) may then lazily build their
 library-root callees, and an add-child may do the same for an explicitly named child — except where
 the call's own `AT_NODE` site IS the callee's root node, which names the node to run on rather than
-asking for a copy. The mission-trigger right is remembered as the started definition's whole call
+asking for a copy. The authored site is passed on to the pool only when the call actually names
+one, so a site-less call keeps one copy per anchor and reaches no staged actor at all
+(`Mech3/WorldSession.cs` has why CM07's hangar drop needs that). The mission-trigger right is remembered as the started definition's whole call
 closure, not as a call-stack depth: a cutscene's later beats run off delayed sequence events seconds
 after the trigger's own dispatch has returned (CM02's crew is thrown out fourteen seconds in) and
 instance their library roots exactly as the beats inside it do. `MissionTriggerOwner`, called at the
@@ -4603,6 +4605,12 @@ staged actor the chapter gamez has no record of at all, `AircraftStage`'s `chute
 subtree is the first copy and further copies are duplicates of it, since the aircraft archive is
 closed by then. CM02's crew bailing out is the whole of that case, three calls one second apart at
 the same authored offset off the wing-walk frame; sizes are in `data/effect_pools.json`.
+That staged actor is served to a call that NAMES a site and to no other. A copy is relocated onto
+its call's site, and the figure's own script poses its children in world coordinates, so a call
+naming no site (CM07's hangar drop calls `hdchute1` with no `AT_NODE` at all) has to keep driving
+the actor where the stage put it: pooled there, the parachutist descends kilometres off the hangar
+and the twin leg's call takes a second copy nothing animates. A gamez library root keeps the older
+rule, its placement being the call anchor either way.
 
 ## src/Mech3/AircraftStage.cs
 The aircraft-archive subtrees a story-mission intro, a chuteman-carrying drop cutscene or a

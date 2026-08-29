@@ -327,6 +327,11 @@ public sealed class WorldSession
             {
                 bool fromStage = stagedChute != null
                     && string.Equals(name, AircraftStage.ChuteNode, StringComparison.OrdinalIgnoreCase);
+                // ⚠ A caller naming no site asks for the actor where it stands, and this figure's
+                // script poses its children in WORLD coordinates: relocated onto that caller's
+                // anchor it would hang kilometres from the shot (docs/architecture.md).
+                if (fromStage && callSite == null)
+                    return null;
                 if (!libraryPools.TryGetValue(name, out var copies))
                 {
                     if (!fromStage
