@@ -22,8 +22,9 @@ record is indexed by is [`formats/campaign-sequence.md`](../formats/campaign-seq
 - [The completed-objective mask has two sources](#the-completed-objective-mask-has-two-sources)
 - [The four-attempt skip offer](#the-four-attempt-skip-offer)
 - [Time and the shooting statistics](#time-and-the-shooting-statistics)
+  - [What the tallies count](#what-the-tallies-count)
 - [The screen is the scrapbook](#the-screen-is-the-scrapbook)
-  - [The stamps are a per-airframe kill tally](#the-stamps-are-a-per-airframe-kill-tally)
+  - [The stamps and the total](#the-stamps-and-the-total)
   - [Navigation and page composition: a data file, not code](#navigation-and-page-composition-a-data-file-not-code)
   - [So this item reuses a board CSVM already has](#so-this-item-reuses-a-board-csvm-already-has)
 - [What the debrief does not write](#what-the-debrief-does-not-write)
@@ -104,21 +105,17 @@ save gate in `FUN_0046b450` pass where the failed attempt itself wrote nothing.
 float, `FMUL [0x00603464]` multiplies it by the `1000.0f` stored there, and `ftol` writes the
 result to record `+0x04`.
 
-**The two twelve-byte arrays come from an eleven-slot pair of tallies.** The mission tally object is
-at `0x0071d2a0`, and the debrief reads two arrays off it: `+0x00 + 4i` through `FUN_004a23a0` and
-`+0x30 + 4i` through `FUN_004a23c0`, for `i` in 0 to 10. Each dword is truncated to a byte into the
-record, the first array into `+0x08` and the second into `+0x14`.
+**The two twelve-byte arrays are per-airframe kill tallies, one for ordinary kills and one for
+aces.** The mission tally object is at `0x0071d2a0`, and the debrief reads two arrays off it:
+`+0x00 + 4i` through `FUN_004a23a0` and `+0x30 + 4i` through `FUN_004a23c0`, for `i` in 0 to 10.
+Each dword is truncated to a byte into the record, the first array into `+0x08` and the second into
+`+0x14`. What fills them is [below](#what-the-tallies-count).
 
 The array slot is `FUN_00416de0(i)`, a linear lookup over the pair table at `0x0061f670` (stride 8:
 key, then value) that falls through to `11` when the key is absent. **The shipped table is the
 identity map**, eleven pairs with key equal to value for 0 to 10, so the slot is `i` today and the
 twelfth slot is never written from this path. The function is a general-purpose lookup used
 elsewhere in the executable, so it says nothing about what the arrays index.
-
-⚠ **What the two arrays count is not decoded.** Eleven is also the number of airframes, and the
-screen shows a per-airframe kill stamp beside its total (see below), which makes a per-airframe
-tally the obvious candidate for one of them. That is a candidate, not a reading: neither array's
-increment site has been traced. `BL-624` carries the question.
 
 **The shot and hit totals** at record `+0x20` and `+0x22` are `[0x0071d2fc]` and `[0x0071d300]`,
 read as words out of the same object and stored as a pair. `0x0071d300` is incremented in three
@@ -130,7 +127,75 @@ page reached from the merge rule alone.
 **Mode 3 reuses the same two offsets as scalars.** When `DAT_0071bb80` is `3`, neither array is
 written: `+0x08` becomes a single `ushort` holding the sum of all eleven entries of both arrays, and
 `+0x14` becomes `[0x0071d328]`, a further counter on the same object which the danger-zone module
-`FUN_00446990` increments. The arrays are therefore a campaign-only shape.
+`FUN_00446990` increments. The arrays are therefore a campaign-only shape. That sum is the same
+quantity the campaign screen computes at draw time out of the two arrays, so Instant Action's
+wrap-up and the scrapbook's Overall Planes Downed are the same number reached two ways.
+
+### What the tallies count
+
+**One function credits every kill, `FUN_004b9bc0`**, the damage resolver, on the branch it takes
+when the victim's health at `+0x2d0` has reached zero. It is the only caller of all three
+incrementers, so there is no second path to account for.
+
+A kill is credited only when all of these hold:
+
+- **The player did it.** Either the shooter object is the player (`param_5 == [0x0071c298]`) or,
+  when it is not, the call's originator argument is (`param_6`), which is how a player-launched
+  weapon that outlives its launcher still scores.
+- **The victim is hostile.** `[victim + 8]`, the side, must be 2 or more; the player's own side and
+  side 1 fall out. Wingmen and neutrals therefore never reach a tally.
+- **It is not the player's own death**, and not a remote kill in a networked session
+  (`FUN_00440ad0`).
+
+The victim's class at `[victim + 0x67c]` then forks the count three ways:
+
+| Class | Incrementer | Where it lands |
+|---|---|---|
+| 0 or 4 (an aircraft), ace flag clear | `FUN_004a2320(i)` | tally `+0x00 + 4i`, the record's `+0x08` array |
+| 0 or 4 (an aircraft), ace flag set | `FUN_004a2340(i)` | tally `+0x30 + 4i`, the record's `+0x14` array |
+| anything else | `FUN_004a2330()` | tally `+0x2c`, a single counter |
+
+**The third counter is never shown.** `FUN_00419630` copies only `i` in 0 to 10 out of each array,
+so `+0x2c` reaches neither the record nor the screen: a mission spent destroying ground targets and
+shipping reads zero planes downed. It is reset with everything else by `FUN_004a22a0`.
+
+**The airframe index `i` is a nodename lookup.** `FUN_00426e30` takes the victim's model root node
+name (`[[victim + 0x64] + 4]`, `vehicle.json`'s `nodename`) and walks an eleven-record table at
+`0x00620c70`, 7 dwords each, comparing the record's second and sixth strings, which are the
+airframe's player model node and its AI model node. The eleven records in order:
+
+| i | Airframe | player node | AI node |
+|---|---|---|---|
+| 0 | Hoplite (`Autogyro`) | `player_autogyro` | `autogyro` |
+| 1 | Hellhound | `player_avenger` | `avenger` |
+| 2 | Balmoral | `player_balmoral` | `balmoral` |
+| 3 | Bloodhawk | `player_bhawk` | `bloodhawk` |
+| 4 | Brigand | `player_brigand` | `brigand` |
+| 5 | Devastator | `player_pfighter` | `piratefighter` |
+| 6 | Firebrand | `player_fbrand` | `firebrand` |
+| 7 | Fury | `player_fury` | `fury` |
+| 8 | Kestrel | `player_kestrel` | `kestrel` |
+| 9 | Peacemaker | `player_peacemaker` | `peacemaker` |
+| 10 | Warhawk | `player_warhawk` | `warhawk` |
+
+Those 22 names are exactly the 22 distinct `nodename` values the shipped `vehicle.zrd` resolves to,
+so the function's fall-through to `11` cannot fire on any aircraft this install can spawn. That
+matters because slot 11 is out of bounds in both arrays: it would land on the non-aircraft counter at
+`+0x2c` for the first and on the gun-shots word at `+0x5c` for the second.
+
+**The ace flag is the mission roster's**, slot 67, the one 26 of the 414 shipped blocks author. The
+block reader stores it at the block's `+0xa4`, the spawn path `FUN_0047c210` copies it to the AI
+entity's `+0x988` (`0x0047ca42`–`0x0047ca4b`), and `0x004ba23a` is where the debrief reads it. See
+[`formats/ai-rosters.md`](../formats/ai-rosters.md#field-table); the other read of the same flag,
+at `0x0047cde2` on the skill path, is still undecoded.
+
+**The tally object's field boundaries.** The arrays are eleven wide, not twelve: `+0x2c` has its own
+incrementer and its own meaning, and `+0x5c` and `+0x60` are the gun shot and hit words. Reading the
+reset in `FUN_004a22a0` alone cannot tell those apart from a twelfth slot, because it zeroes an
+eleven-iteration stride and then names `+0x2c`, `+0x5c` and `+0x60` one by one; the increment sites
+are what settle it. Three linked lists live at `+0x64`, `+0x70` and `+0x7c`, appended through
+`FUN_004a2350`, and the debrief reads none of them.
+
 
 ## The screen is the scrapbook
 
@@ -163,7 +228,7 @@ per-airframe kill stamp (a count over the airframe's name), the two tabs, and th
 | 2 | 1204 `Rockets Expended` | 1209 `%1!d!` | **not drawn**, below |
 | 3 | 1205 `Gun Hit Ratio` | 1210 `%1!d!%%` | `+0x22` over `+0x20` |
 | 4 | 1206 `Cash Earned` | 1211 `$%1!d!` | `+0x28` |
-| 5 | 1207 `Overall Planes Downed` | 1212 `%1!d!` | not located |
+| 5 | 1207 `Overall Planes Downed` | 1212 `%1!d!` | no field: the sum of both arrays, below |
 
 **Rockets Expended is authored and never drawn.** `uiData` 2406 returns five strings, the outcome
 line and four values, and `SCRAPBOOK.SCRIPT` binds exactly those five. `SB_T_ROCKETSTITLE` and
@@ -175,7 +240,10 @@ show four. This is the same shape as the Instant Action wrap-up's own dead row, 
 
 **The two tabs are the record's two halves.** Langui 1159 `Best to Date` selects the merged half at
 `+0x54` and 1160 `Most Recent` the attempt half at `+0x00`, which is the same two-halves layout the
-format page reaches from the merge rules. Langui 1200 `Current Mission` is the third tab the
+format page reaches from the merge rules. ⚠ The outcome line is the one row that does not read the
+same offset in both: `0x0040a7e6` takes the mask from the half's `+0x00` for one tab and from its
+`+0x24` for the other. Every other row and both kill arrays are read at the same offset in whichever
+half the tab picked. Langui 1200 `Current Mission` is the third tab the
 scrapbook carries when it is opened from the cabin rather than from a mission end, and 1217 to 1219
 (`Starting My Career`, `Above the clouds`, `Not yet flown `) are what an unflown mission's page
 shows.
@@ -183,18 +251,37 @@ shows.
 The buttons are Replay Mission, View All Missions and Return to Cabin, with page arrows on both
 outer edges. Replay Mission sits inside the results block and is on the results page only.
 
-### The stamps are a per-airframe kill tally
+### The stamps and the total
 
-Read off `OriginalScreenshots/Campaign Scrapbook CM02 Mission select after another Mission.png`: the
-right page carries three stamps, `3 Peacemaker`, `2 Balmoral` and a starred `1 Peacemaker`, over an
-Overall Planes Downed of **6**. The stamps sum to the total, and the same airframe appears twice
-with the second occurrence starred, so the page draws two per-airframe tallies and totals both.
+Both come out of the record half the open tab selects. `uiData` 2406 and 2404 index the record the
+same way: `0x0064cba8 + (tab + mission * 2) * 84`, so tab 0 lands on the attempt half at `+0x00` and
+tab 1 on the merged half at `+0x54`.
 
-That is the shape of the record's two twelve-byte arrays at `+0x08` and `+0x14`, indexed 0 to 10
-over the eleven airframes, and it is the best available account of them. It is still an account
-from the screen's arithmetic and not a decode: neither array's increment site has been traced, and
-what distinguishes the starred tally from the plain one (an ace, a named pilot, a kill by a
-particular means) is unread. `BL-624` carries it.
+**Overall Planes Downed is computed, not stored.** `0x0040a8df` runs `i` from 0 to 10 and sums
+`record[+0x08 + i] + record[+0x14 + i]`, truncating the result to sixteen bits before formatting it
+through langui 1212. There is no total field anywhere in the record, and the non-aircraft counter is
+not part of it, so the row counts aircraft the player shot down and nothing else.
+
+**The stamps are an enumeration, not a per-airframe grid.** `uiData` 2404 takes an ordinal 0 to 10
+and the tab, walks the first array's slots 0 to 10 and then the second's, skips every zero slot, and
+returns the ordinal'th non-zero one as a frame index and a count. The frame is `i` for the first
+array and `i + 11` for the second, which is why `SB_killMARKERcombined.png` carries 22 frames for 11
+airframes: the second eleven are the same airframes over a star. It returns -1 once the tab is
+exhausted, and `SCRAPBOOK.SCRIPT` stops asking at the first -1, so the eleven `SB_KILL` slots fill
+densely from slot 0 in ascending airframe order, plain kills before ace kills.
+
+⚠ **`SB_KILL0` to `SB_KILL10` are not in reading order.** `SB_KILL1` at `467,93` is left of and
+above `SB_KILL0` at `560,109`, so the leftmost stamp on a page is the second one the engine
+reported, not the first. Reading a screenshot left to right gives the wrong slot order.
+
+Read off `OriginalScreenshots/Campaign Scrapbook CM02 Mission select after another Mission.png`, the
+right page carries `2 Balmoral` in slot 0, `3 Peacemaker` in slot 1 and a starred `1 Peacemaker` in
+slot 2, over an Overall Planes Downed of **6**. That is Balmoral (`i` 2) and Peacemaker (`i` 9) in
+the plain array and Peacemaker again in the ace array, ascending as the enumerator requires, and the
+ace is `britpeace_7`, the one block in that mission's roster carrying slot 67
+([`formats/ai-rosters.md`](../formats/ai-rosters.md#what-binds-a-block-to-the-ace-role)).
+`Campaign Mission End screen CM01.png` is the one-stamp case: `3 Kestrel` in slot 0 over a total
+of 3.
 
 ### Navigation and page composition: a data file, not code
 
@@ -270,10 +357,11 @@ merge, not its author, and the two run in the same mission-end pass.
   with only bit 0 clear. `CampaignDirector.OnMissionEnded` writes
   `outcome == MissionOutcome.Won ? graph.CompletedMask : 0`, which discards them. A debrief drawn
   from today's mask would report every objective failed on a loss.
-- **The two twelve-byte arrays have no CSVM counterpart.** `MissionAttempt` carries the record's
-  `+0x00`, `+0x04`, `+0x20`, `+0x22`, `+0x28`, `+0x2c` and `+0x30` fields and nothing at `+0x08` or
-  `+0x14`. Whatever they count is tracked nowhere, and neither is the Overall Planes Downed total
-  (`BL-624`). Rockets Expended needs no source, since the original does not draw it.
+- **The two per-airframe kill arrays have no CSVM counterpart.** `MissionAttempt` carries the
+  record's `+0x00`, `+0x04`, `+0x20`, `+0x22`, `+0x28`, `+0x2c` and `+0x30` fields and nothing at
+  `+0x08` or `+0x14`. Nothing counts kills per airframe, and nothing distinguishes an ace, so
+  neither the stamps nor Overall Planes Downed have a source (`BL-624`). Rockets Expended needs no
+  source, since the original does not draw it.
 - **The board exists.** `CampaignPreviousMissionsPage` is already the scrapbook; what is missing is
   the mission-end entry into it, the Most Recent tab and the Replay Mission button.
 - **The skip offer is unimplemented.** Four failed attempts at an uncompleted mission is a

@@ -503,10 +503,27 @@ script binds exactly those five to `sb_t_completetitle`, `sb_t_time`, `sb_t_hit`
 is absent, while `SLINE3` is stranded at 388 between the first two. The row was cut and the
 remaining five were re-spaced over it.
 
-The eleven kill stamps are fixed positions `SB_KILL0` to `SB_KILL10` with matching
-`SB_KILLTEXT0` to `SB_KILLTEXT10`, filled in the order the engine reports them rather than by
-airframe. Their shared art `SB_killMARKERcombined.png` declares 22 frames for 11 airframes, which is
-where the starred variant on the reference screenshot comes from.
+The five strings are the outcome line (langui 1213 or 1214 on bit 0 of the tab's objective mask),
+the run time as `mm:ss` out of the millisecond field, the gun hit ratio as a percentage of the
+hit and shot words, the cash field, and the sum of the two per-airframe kill arrays. Only the last
+is computed rather than read: [`org/debrief.md`](../org/debrief.md) has the arithmetic and where the
+arrays come from.
+
+### The kill stamps
+
+The eleven stamps are fixed positions `SB_KILL0` to `SB_KILL10` with matching `SB_KILLTEXT0` to
+`SB_KILLTEXT10`. The positions are scattered over the page rather than laid out in reading order
+(`SB_KILL1` at `467,93` sits left of and above `SB_KILL0` at `560,109`), so a page with three stamps
+puts its first in the middle, its second at the left and its third at the lower right.
+
+The script asks `uiData` 2404 for ordinals 0 to 10 and stops at the first negative return, so the
+slots fill densely from `SB_KILL0` in the order the engine reports rather than by airframe. Each
+answer is a frame index for the shared art and a count string formatted through langui 520
+`IDS_KILLCOUNT`. `SB_killMARKERcombined.png` is a vertical strip of **22 frames of 70x100**: frames
+0 to 10 are the eleven airframes in the engine's own order (Hoplite, Hellhound, Balmoral, Bloodhawk,
+Brigand, Devastator, Firebrand, Fury, Kestrel, Peacemaker, Warhawk) with the airframe name drawn
+into the stamp, and frames 11 to 21 are the same eleven again over a star. The star is the ace
+variant; which kills earn it is in [`org/debrief.md`](../org/debrief.md).
 
 ## Callback reference
 
@@ -552,9 +569,9 @@ with the rule above: byte at `0x0040f788 + (id - 2100)`, then dword at `0x0040f5
 | 2401 | `0x0040a682` | out flags: whether a next spread and a Current Mission jump are available |
 | 2402 | `0x0040a6a2` | 0 jumps to the current mission at spread 1; 100 steps forward, 101 back, returning 0 at the front of the book |
 | 2403 | `0x0040a30f` | the current spread number; 1 is the results page |
-| 2404 | `0x0040a714` | a kill stamp slot: frame and text, per tab. Not decoded |
+| 2404 | `0x0040a714` | the nth non-empty kill stamp of a tab: a frame index 0 to 21 and a count string, or -1 once the tab has no more |
 | 2405 | `0x0040a633` | mode 1 opens a mission at spread 1, or the campaign's current mission when given -1; any other mode reads the open mission |
-| 2406 | `0x0040a7d4` | the outcome line and four result values for a tab. Not decoded |
+| 2406 | `0x0040a7d4` | the outcome line and four result values for a tab, above |
 | 2407 | `0x0040aa52` | walk to the next drawable item of this spread, returning type 5 for an image and 6 for text |
 | 2408 | `0x0040a453` | the page title, mission name and area. Not decoded |
 | 2409 | `0x0040a4b8` | a table-of-contents row. Not decoded |

@@ -2971,44 +2971,46 @@ usual.
   original keeps every objective bit and clears only bit 0, so per-objective lines would read as
   all-failed on every lost mission. The Overall Planes Downed row is
   `BL-624`, not this item, and Rockets Expended needs no source at all since the original never
-  draws it. The wording of the skip offer (langui string 191) is absent from
+  draws it. The original stores no total either: the row is the sum of the two kill arrays, computed
+  where it is drawn. The wording of the skip offer (langui string 191) is absent from
   `extracted/rof/ui_strings.json`, whose ids jump 136 to 200. *Cross-refs:*
   `docs/org/debrief.md`, `docs/formats/saved-games.md` ("The mission-result array"),
   `docs/formats/campaign-screens.md` (the memento pane reads the same art directory), `CampaignFlow`,
-  `CampaignProgression`, `BL-624` (the stamps and the two unmapped rows), `BL-256` (the danger-zone
+  `CampaignProgression`, `BL-624` (the stamps and the planes-downed row), `BL-256` (the danger-zone
   screenshot the scrapbook mounts), `BL-463` (Change Memento, the same `MS_P_` art), `BL-620`'s and
   `BL-623`'s closing commits (`git log --grep=BL-620`); the held two seconds `BL-623` added are
   where this screen belongs.
 
-- `BL-624` `[Research]` **Two of the debrief's four drawn rows have no source in CSVM, and what the
-  record's two twelve-byte arrays count is undecoded.** *Evidence:* `docs/org/debrief.md`, and
-  `OriginalScreenshots/Campaign Mission End screen CM01.png` for the
-  screen. Of the scrapbook's
-  results block, Run Time, Gun Hit Ratio and Cash Earned map onto record fields CSVM already carries
-  (`+0x04`, the `+0x20`/`+0x22` pair, `+0x28`); **Overall
-  Planes Downed** (1207) does not, and neither does the per-airframe kill stamp on the same page.
-  **Rockets Expended (1204) is out of this item**: the original authors the string and the
-  `SB_T_ROCKETS` layout row and draws neither, so there is nothing to feed. The
-  two twelve-byte arrays at record `+0x08` and `+0x14` are filled from the mission tally object at
-  `0x0071d2a0` (`+0x00 + 4i` and `+0x30 + 4i`, `i` in 0..10, each dword truncated to a byte) through
-  `FUN_00416de0`, whose table at `0x0061f670` is the identity map for 0..10 with 11 as a never-taken
-  fall-through, so the slot is `i` and the lookup says nothing about what `i` is. CSVM's
-  `MissionAttempt` has the scalar `Shots` and `Hits` only, off `CampaignDirector`'s world view
-  (`ProjectilePool`'s `CannonRoundsFired`). **The screen's own arithmetic says the arrays are two
-  per-airframe kill tallies:** CM02's page draws `3 Peacemaker`, `2 Balmoral` and a starred
-  `1 Peacemaker` over an Overall Planes Downed of 6, so the stamps sum to the total and the same
-  airframe appears twice with one occurrence starred. *What to settle:* trace the increment sites of
-  the two arrays on `0x0071d2a0` to confirm that and to read what the starred tally distinguishes
-  (an ace, a named pilot, a kill by a particular means). The stamps' shared art
-  `SB_killMARKERcombined.png` declares 22 frames for 11 airframes, so the starred variant is the
-  second frame block, and `uiData` 2404 at `0x0040a714` is the callback that picks one. Then
-  count the same things in CSVM, carry them on `MissionAttempt`, and merge them per index by maximum
-  the way `CampaignProgression` merges the rest of the record.
+- `BL-624` `[Research]` **Nothing in CSVM counts kills per airframe, so the debrief's kill stamps and
+  its Overall Planes Downed row have no source.** *Evidence:* `docs/org/debrief.md`
+  ("What the tallies count"), and `OriginalScreenshots/Campaign Mission End screen CM01.png` for the
+  screen. Of the scrapbook's results block, Run Time, Gun Hit Ratio and Cash Earned map onto record
+  fields CSVM already carries (`+0x04`, the `+0x20`/`+0x22` pair, `+0x28`). **Rockets Expended (1204)
+  is out of this item**: the original authors the string and the `SB_T_ROCKETS` layout row and draws
+  neither, so there is nothing to feed. **Overall Planes Downed (1207) maps onto no field either**,
+  in the original as much as in CSVM: `0x0040a8df` sums `record[+0x08 + i] + record[+0x14 + i]` over
+  `i` 0..10 at draw time, so it is computed from the same tallies the stamps draw and must never be
+  stored separately. The decode is done. The two arrays are per-airframe kill tallies, plain and ace:
+  `FUN_004b9bc0`, the damage resolver, credits a kill on the branch where the victim's health at
+  `+0x2d0` reaches zero, requiring that the player did it (the shooter object or the call's
+  originator is `[0x0071c298]`) and that the victim's side at `[victim + 8]` is 2 or more, then
+  forking on the victim's class at `[victim + 0x67c]`: 0 or 4 is an aircraft and goes to
+  `FUN_004a2320(i)` or, if the victim's `+0x988` ace flag is set, `FUN_004a2340(i)`; anything else
+  goes to a third counter at tally `+0x2c` that the debrief never copies. The index `i` is the
+  victim's `vehicle.json` `nodename` looked up in an eleven-record table at `0x00620c70`
+  (`FUN_00426e30`), in the order Hoplite, Hellhound, Balmoral, Bloodhawk, Brigand, Devastator,
+  Firebrand, Fury, Kestrel, Peacemaker, Warhawk. The ace flag is the mission roster's slot 67
+  (`docs/formats/ai-rosters.md`). CSVM's `MissionAttempt` has the scalar `Shots` and `Hits` only, off
+  `CampaignDirector`'s world view (`ProjectilePool`'s `CannonRoundsFired`). *What to settle:* count
+  the same things in CSVM, carry two eleven-slot tallies on `MissionAttempt`, and merge them per
+  index by maximum the way `CampaignProgression` merges the rest of the record.
   *⚠ Traps:* do not assume the arrays are per-weapon shots and hits; that reading was tried against
   the screen and does not survive it, since the shot/hit pair is the separate `+0x20`/`+0x22` fields
   the Gun Hit Ratio row divides. The arrays are written on the campaign path only, and in game mode 3
   the same two offsets hold a summed `ushort` and the danger-zone count instead, so an Instant Action
-  or multiplayer path must not fill them as arrays. *Cross-refs:* `docs/org/debrief.md`,
+  or multiplayer path must not fill them as arrays. A downed wingman scores nothing (the side test),
+  and ground and shipping kills are counted where the screen cannot see them.
+  *Cross-refs:* `docs/org/debrief.md`, `docs/formats/ai-rosters.md` (the `ace` flag, slot 67),
   `docs/formats/saved-games.md` ("The mission-result array"), `CampaignProgression`, `BL-622`.
 
 ## Tooling, platform & docs

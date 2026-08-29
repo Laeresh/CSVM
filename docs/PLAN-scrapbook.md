@@ -76,9 +76,9 @@ either claim from `FUN_00419630` alone.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | A1, B11, B12, C15, C17, D18, D19, D21 | Confirm the trace, then implement. A1 landed and supplies the geometry the three Wave D items needed. |
-| **Direction sound, magnitude a judgement call** | C16, D20 | The *what* is settled by the screenshots and by A1's callback map; the rest is A2's and A3's output. |
-| **Leads only, no mechanism yet** | A2, A3, B13, B14 | Budget for investigation; A2 may end in a disproof. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, B11, B12, B13, C15, C16, C17, D18, D19, D21 | Confirm the trace, then implement. A1 supplies the geometry the Wave D items needed; A2 supplies the counting rule B13 and C16 were waiting on. |
+| **Direction sound, magnitude a judgement call** | D20 | The *what* is settled by the screenshots and by A1's callback map; the rest is A3's output. |
+| **Leads only, no mechanism yet** | A3, B14 | Budget for investigation. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.
@@ -120,7 +120,7 @@ Both are decoded in [`formats/campaign-screens.md`](formats/campaign-screens.md)
 | 2 | 1204 `Rockets Expended` | 1209 `%1!d!` | **authored, never drawn** (A1) |
 | 3 | 1205 `Gun Hit Ratio` | 1210 `%1!d!%%` | `+0x22` over `+0x20` |
 | 4 | 1206 `Cash Earned` | 1211 `$%1!d!` | `+0x28` |
-| 5 | 1207 `Overall Planes Downed` | 1212 `%1!d!` | not located (A2) |
+| 5 | 1207 `Overall Planes Downed` | 1212 `%1!d!` | no field: the sum of both kill arrays (A2) |
 
 Tabs are 1159 `Best to Date` (the merged half at `+0x54`) and 1160 `Most Recent` (the attempt half
 at `+0x00`); 1200 `Current Mission` is the bookmark. 1215 `%1!s! - %2!s!` is the page title (name
@@ -168,7 +168,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — decode what is still unread
 
 1. ☑ Decode the page composition: which scrap sits where, at what coordinates, with what zoom text
-2. ☐ Decode the two per-airframe tallies and the Overall Planes Downed row
+2. ☑ Decode the two per-airframe tallies and the Overall Planes Downed row
 3. ☐ Decode the book's navigation and its entry paths
 
 ### Wave B — the record and the director
@@ -194,9 +194,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ## Dependency and parallelism notes
 
 **A1 has landed**, so D18, D19 and D20 are unblocked and build against `SCRAPBOOK.CSV` and
-`LAYOUT.CSV` rather than invented geometry. **A2 blocks B13 and C16**: the stamps cannot be drawn until something
-counts them, and nothing should be counted until the decode says what the original counts. **A3
-blocks C17 and D20.**
+`LAYOUT.CSV` rather than invented geometry. **A2 has landed**, so B13 and C16 are unblocked: the
+counting rule and the stamp enumeration are both written down, and B13 should run before C16 since
+the stamps have nothing to draw until something counts. **A3 blocks C17 and D20.**
 
 Wave B is independent of Wave A except for B13, so B11, B12 and B14 can run while Wave A is still
 prospecting. **B12 blocks C17** (the mission-end entry needs the result carried across the frame
@@ -283,38 +283,84 @@ reading them settles the protocol and none of the content. The id-resolution rul
 false (the `…S` suffix and the shared `SB_00_00_*` set); only "slot `00` is not mission 1" held. Its
 Verify line was met in full, on all three screenshots.
 
-## A2 ☐ Decode the two per-airframe tallies and the Overall Planes Downed row
+## A2 ☑ Decode the two per-airframe tallies and the Overall Planes Downed row
 
-**Goal.** A statement of what each of the record's two twelve-byte arrays counts, what distinguishes
-the starred stamp from the plain one, and what feeds the Overall Planes Downed row, each with the
-address it came from. **Rockets Expended is no longer part of this item**: A1 established that the
-original does not draw it. `uiData` 2404 (`0x0040a714`) is the stamp callback and 2406
-(`0x0040a7d4`) the results-row callback, both unread, and the stamps' shared art declares 22 frames
-for 11 airframes, which is where the starred variant comes from.
+**Landed.** Both arrays are per-airframe kill tallies over the same eleven airframes, and what
+separates them is the mission roster's own `ace` flag. `FUN_004b9bc0`, the damage resolver, is the
+single credit site: on the branch where the victim's health reaches zero it checks that the player
+did it, that the victim's side is 2 or more, and that the victim's class is an aircraft, then
+increments the plain array through `FUN_004a2320` or the ace array through `FUN_004a2340` according
+to the victim's `+0x988`. Anything that is not an aircraft goes to a third counter at tally `+0x2c`
+that the debrief never copies, so a mission spent on ground targets reads zero planes downed. The
+airframe index is a nodename lookup, `FUN_00426e30` over an eleven-record table at `0x00620c70`.
 
-**Evidence (confidence: lead-only).** `docs/org/debrief.md`: the arrays are filled from the tally
-object at `0x0071d2a0` (`+0x00 + 4i` through `FUN_004a23a0`, `+0x30 + 4i` through `FUN_004a23c0`,
-`i` in 0 to 10, each dword truncated to a byte). The screen's arithmetic says they are two
-per-airframe kill tallies: CM02 draws `3 Peacemaker`, `2 Balmoral` and a starred `1 Peacemaker` over
-a total of 6. Neither increment site has been traced. Already ruled out: the per-weapon shots/hits
-reading (see the disproven table) and `FUN_00416de0` as a meaningful remap.
+**Overall Planes Downed is computed, not stored.** `0x0040a8df` sums
+`record[+0x08 + i] + record[+0x14 + i]` for `i` 0 to 10 and truncates to sixteen bits; there is no
+total field. The stamps are an enumeration rather than a grid: `uiData` 2404 walks the plain array
+then the ace array, skips zeros, and answers the nth non-zero slot with a frame index (`i`, or
+`i + 11` for an ace) and a count, returning -1 when the tab is exhausted. That is where the art's 22
+frames for 11 airframes come from. The record is in
+[`org/debrief.md`](org/debrief.md#what-the-tallies-count) and the screen side in
+[`formats/campaign-screens.md`](formats/campaign-screens.md), "The kill stamps".
 
-**Approach.** Take the xrefs to `0x0071d2a0` that write rather than read (`FUN_0046a490` at two
-sites, `FUN_004b9bc0` at two, `FUN_00464680`, `FUN_00495310`, `FUN_004a2210`) and read what indexes
-them. The Ghidra project is **read-only**: no renames, no comments, no `save_program`. Land the
-answer in `docs/org/debrief.md`, replacing its ⚠ "not decoded" note, and amend `BL-624`.
+**Verified.**
 
-**Model recommendation.** high. A decode whose wrong answer already cost this plan one withdrawn
-commit.
+- **The frame order is the art's own.** `SB_KILLMARKERCOMBINED.PNG` is a strip of 22 frames of
+  70x100 reading Hoplite, Hellhound, Balmoral, Bloodhawk, Brigand, Devastator, Firebrand, Fury,
+  Kestrel, Peacemaker, Warhawk and then the same eleven starred, which is exactly the order of the
+  eleven records in the executable's table.
+- **The lookup cannot miss.** The 22 strings the table compares are exactly the 22 distinct
+  `nodename` values the shipped `vehicle.zrd` resolves to, so `FUN_00426e30`'s fall-through to slot
+  11 (out of bounds in both arrays) cannot fire on any aircraft this install can spawn.
+- **CM02 reproduces slot for slot.** Balmoral (`i` 2) and Peacemaker (`i` 9) in the plain array and
+  Peacemaker again in the ace array fill `SB_KILL0`, `SB_KILL1` and `SB_KILL2`, whose scattered
+  coordinates put them where the screenshot puts them, and sum to the drawn total of 6. The ace is
+  `britpeace_7`, the one block in that mission's roster carrying slot 67. CM01 is the one-stamp
+  case: `3 Kestrel` in slot 0 over a total of 3.
 
-**Verify.** The decoded rule reproduces CM02's stamps and its total of 6 from the same flight's
-events, and reproduces CM01's single `3 Kestrel` stamp with a total of 3.
+**What it changed elsewhere.** B13 and C16 are unblocked and both move to traced; C15 gains the
+sum rule for its last row. `formats/ai-rosters.md`'s slot-67 row said the read at `0x004ba23a` was
+undecoded and now names it, and its CM02 ace case gains a fourth confirming witness. The A2 trap
+about the tally object's field boundaries is settled: the arrays are eleven wide, `+0x2c` is the
+non-aircraft counter with its own incrementer, and `+0x5c`/`+0x60` are the Gun Hit Ratio pair.
 
-**⚠ Traps.** Do not re-reach for the per-weapon reading. The tally object's own field boundaries are
-ambiguous between an eleven-wide array with trailing scalars and a twelve-wide one: `FUN_004a22a0`'s
-reset loop fits both, so settle it from an indexed write site and not from the reset. `0x0071d2fc`
-and `0x0071d300` sit immediately after the arrays and are the Gun Hit Ratio pair; do not fold them
-into the arrays.
+**Original approach (kept for reference).**
+
+> **Goal.** A statement of what each of the record's two twelve-byte arrays counts, what
+> distinguishes the starred stamp from the plain one, and what feeds the Overall Planes Downed row,
+> each with the address it came from. **Rockets Expended is no longer part of this item**: A1
+> established that the original does not draw it. `uiData` 2404 (`0x0040a714`) is the stamp callback
+> and 2406 (`0x0040a7d4`) the results-row callback, both unread, and the stamps' shared art declares
+> 22 frames for 11 airframes, which is where the starred variant comes from.
+>
+> **Evidence (confidence: lead-only).** `docs/org/debrief.md`: the arrays are filled from the tally
+> object at `0x0071d2a0` (`+0x00 + 4i` through `FUN_004a23a0`, `+0x30 + 4i` through `FUN_004a23c0`,
+> `i` in 0 to 10, each dword truncated to a byte). The screen's arithmetic says they are two
+> per-airframe kill tallies: CM02 draws `3 Peacemaker`, `2 Balmoral` and a starred `1 Peacemaker`
+> over a total of 6. Neither increment site has been traced. Already ruled out: the per-weapon
+> shots/hits reading (see the disproven table) and `FUN_00416de0` as a meaningful remap.
+>
+> **Approach.** Take the xrefs to `0x0071d2a0` that write rather than read (`FUN_0046a490` at two
+> sites, `FUN_004b9bc0` at two, `FUN_00464680`, `FUN_00495310`, `FUN_004a2210`) and read what
+> indexes them. The Ghidra project is **read-only**: no renames, no comments, no `save_program`.
+> Land the answer in `docs/org/debrief.md`, replacing its ⚠ "not decoded" note, and amend `BL-624`.
+>
+> **Model recommendation.** high. A decode whose wrong answer already cost this plan one withdrawn
+> commit.
+>
+> **Verify.** The decoded rule reproduces CM02's stamps and its total of 6 from the same flight's
+> events, and reproduces CM01's single `3 Kestrel` stamp with a total of 3.
+>
+> **⚠ Traps.** Do not re-reach for the per-weapon reading. The tally object's own field boundaries
+> are ambiguous between an eleven-wide array with trailing scalars and a twelve-wide one:
+> `FUN_004a22a0`'s reset loop fits both, so settle it from an indexed write site and not from the
+> reset. `0x0071d2fc` and `0x0071d300` sit immediately after the arrays and are the Gun Hit Ratio
+> pair; do not fold them into the arrays.
+
+⚠ The listed write xrefs to `0x0071d2a0` were a dead end: all but `FUN_004b9bc0`'s two are
+`FUN_004a22a0` reset calls with the object as `this`. The tallies are reached through methods, so
+the callers of `FUN_004a2320` / `FUN_004a2340` / `FUN_004a2330` are the question, and there is
+exactly one.
 
 ## A3 ☐ Decode the book's navigation and its entry paths
 
@@ -403,28 +449,37 @@ free earlier to simplify the carry, and do not read the world from the launchscr
 
 ## B13 ☐ Count the per-airframe tallies and merge them per index
 
-**Goal.** `MissionAttempt` carries whatever A2 decodes the two arrays to be, and
+**Goal.** `MissionAttempt` carries two eleven-slot per-airframe kill tallies, plain and ace, and
 `CampaignProgression` merges them per index by maximum the way the original does.
 
-**Evidence (confidence: lead-only, and blocked on A2).** `MissionAttempt`
+**Evidence (confidence: traced).** A2 decoded both arrays and the credit rule, in
+[`org/debrief.md`](org/debrief.md#what-the-tallies-count): the player kills a hostile aircraft, its
+`vehicle.json` `nodename` gives the airframe index 0 to 10, and the roster's `ace` flag (slot 67)
+chooses which of the two arrays is incremented. `MissionAttempt`
 (`CSVM/src/Session/CampaignProgression.cs:11`) has scalar `Shots` and `Hits` only, off
 `CampaignDirector`'s world view (`CampaignDirector.cs:811`, `ProjectilePool.CannonRoundsFired`). The
 record's merge rule for both arrays is per-index maximum
 (`docs/formats/saved-games.md`, "The mission-result array").
 
-**Approach.** <TODO: name the count sites once A2 says what is counted.> Then extend
-`MissionAttempt`, the merge in `CampaignProgression`, and the profile serialisation in
-`CampaignProfileStore`.
+**Approach.** Credit a kill where CSVM already resolves a destroyed aircraft to its killer; the
+index is the airframe, the array is chosen by the roster's ace flag, and a non-aircraft kill is
+counted nowhere the screen can see it. Then extend `MissionAttempt`, the merge in
+`CampaignProgression`, and the profile serialisation in `CampaignProfileStore`. Overall Planes Downed
+is not stored: the screen sums both arrays at draw time, so C15 computes it rather than reading a
+field.
 
-**Model recommendation.** medium. Mechanical once A2 has answered, with a serialisation format to
+**Model recommendation.** medium. Mechanical now A2 has answered, with a serialisation format to
 keep compatible.
 
-**Verify.** <TODO: a flown mission whose kills are known, with the tallies read back off the saved
-profile.>
+**Verify.** A flown mission whose kills are known, with the tallies read back off the saved profile:
+a mission downing two Balmorals and three Peacemakers plus the mission's ace reproduces CM02's
+`2 / 3 / starred 1` and a total of 6.
 
 **⚠ Traps.** The arrays are written on the campaign path only; in game mode 3 the same two record
 offsets hold a summed `ushort` and the danger-zone count, so an Instant Action or multiplayer path
-must not fill them as arrays. Changing the profile record's shape is a save-compatibility change:
+must not fill them as arrays. Only hostile aircraft count: the original tests the victim's side is
+2 or more, so a downed wingman scores nothing, and ground and shipping kills go to a counter the
+screen never reads. Changing the profile record's shape is a save-compatibility change:
 <TODO: confirm how `CampaignProfileStore` versions its JSON.>
 
 ## B14 ☐ The per-mission attempt counter and the four-attempt skip offer
@@ -462,12 +517,14 @@ pass, so this interacts with what a skipped mission leaves behind for the next o
 **Goal.** The results page shows the outcome line, the four rows and the Best to Date / Most Recent
 tabs, reading the flown mission's record.
 
-**Evidence (confidence: traced for the field mapping, blocked on A2 for one row).** The row and
-format table is in "What the data actually ships" above. **Four rows, not five**: A1 established
-that Rockets Expended is authored in langui and `LAYOUT.CSV` and drawn by nothing. Run Time, Gun Hit
-Ratio and Cash Earned map onto fields CSVM already carries; Overall Planes Downed does not (A2). The
-tabs are the record's two halves. `CampaignPreviousMissionsPage` is the page to grow, and
-`CampaignBriefingPage` is the nearest example of a text-heavy composed board.
+**Evidence (confidence: traced).** The row and format table is in "What the data actually ships"
+above. **Four rows, not five**: A1 established that Rockets Expended is authored in langui and
+`LAYOUT.CSV` and drawn by nothing. Run Time, Gun Hit Ratio and Cash Earned map onto fields CSVM
+already carries. **Overall Planes Downed maps onto no field at all**: A2 established that the screen
+sums the two per-airframe kill arrays over their eleven slots at draw time, so the row is computed
+from what B13 counts. The tabs are the record's two halves.
+`CampaignPreviousMissionsPage` is the page to grow, and `CampaignBriefingPage` is the nearest
+example of a text-heavy composed board.
 
 **Approach.** Follow `docs/org/campaign-board.md`'s authored-space rule: place at the original's
 coordinates, which are `LAYOUT.CSV`'s `SB_*` rows, over the page's own background. The stat card is
@@ -484,27 +541,40 @@ gives the second case at `03:19`, `18%` and 6.
 
 **⚠ Traps.** Do not read `ui_strings.json` at runtime. `Gun Hit Ratio` is a ratio of the `+0x22`
 pair member over `+0x20` and not either one alone. Do not restore the Rockets row because langui and
-`LAYOUT.CSV` carry it; the original cut it, and `SLINE3` at 388 would collide with the heading. One
-row is a placeholder until A2 lands; mark it visibly rather than showing a plausible zero.
+`LAYOUT.CSV` carry it; the original cut it, and `SLINE3` at 388 would collide with the heading. Do
+not add an Overall Planes Downed field to the record to make the row easy: the original has none and
+a stored total would drift from the stamps it has to agree with. ⚠ The outcome line is the one row
+whose source offset differs between the two tabs (`0x0040a7e6`, `+0x00` against `+0x24` inside the
+half); every other row and both kill arrays sit at the same offset in whichever half is selected.
 
 ## C16 ☐ The per-airframe kill stamps
 
 **Goal.** The results page draws one stamp per airframe with a kill count, and the starred variant
 where the original draws it.
 
-**Evidence (confidence: direction-sound, magnitude blocked on A2).** CM02's page draws three stamps
-summing to its Overall Planes Downed of 6; CM01's draws one `3 Kestrel` with a total of 3. What the
-star means is A2's.
+**Evidence (confidence: traced).** The art is `extracted/rof/ASSETS/GRAPHICS/SB_KILLMARKERCOMBINED.PNG`,
+a vertical strip of 22 frames of 70x100: frames 0 to 10 are the eleven airframes in the engine's
+order (Hoplite, Hellhound, Balmoral, Bloodhawk, Brigand, Devastator, Firebrand, Fury, Kestrel,
+Peacemaker, Warhawk) with the name drawn into the stamp, frames 11 to 21 the same eleven over a
+star. The eleven slots are `SB_KILL0` to `SB_KILL10` in `LAYOUT.CSV` with `SB_KILLTEXT0` to
+`SB_KILLTEXT10` for the counts, and the enumeration rule is A2's, in
+[`org/debrief.md`](org/debrief.md#the-stamps-and-the-total).
 
-**Approach.** <TODO: name the stamp art once A1 has found it; it is not in the `SB_`/`NT_` census, so
-it is either drawn from the airframe icon set or lives outside `SCRAPBOOK/`.>
+**Approach.** Draw the strip frame the enumeration names into the slot the ordinal names. Fill slots
+densely from `SB_KILL0`, walking the plain tally's airframes in ascending index order and then the
+ace tally's, skipping zeros and stopping at eleven. The count is langui 520 `IDS_KILLCOUNT` in the
+matching `SB_KILLTEXT` slot.
 
 **Model recommendation.** medium.
 
-**Verify.** A flight downing a known mix of airframes reproduces the stamp set and the total.
+**Verify.** A flight downing a known mix of airframes reproduces the stamp set and the total. CM02
+is the shipped case: slot 0 `2 Balmoral`, slot 1 `3 Peacemaker`, slot 2 a starred `1 Peacemaker`,
+over 6.
 
 **⚠ Traps.** The same airframe can appear twice, once plain and once starred; a stamp layout keyed
-uniquely on airframe will drop one of CM02's three.
+uniquely on airframe will drop one of CM02's three. **The slot positions are not in reading order**:
+`SB_KILL1` at `467,93` is left of and above `SB_KILL0` at `560,109`, so a layout that assigns slots
+by where they look on the screenshot will place CM02's first two the wrong way round.
 
 ## C17 ☐ Enter the scrapbook at mission end, and Replay Mission
 
