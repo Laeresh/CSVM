@@ -2604,6 +2604,7 @@ public partial class GameSession : Node3D
             PlayerAircraft = () => _rigs.Count > 0 ? _rigs[0].Controller : null,
             Humans = HumanAircraft,
             Aircraft = AllAircraft,
+            BeginSpectate = BeginCampaignSpectate,
             Rng = Rng.NewSystemRandom(Rng.Ai),
         });
 
@@ -3173,6 +3174,25 @@ public partial class GameSession : Node3D
         GD.Print($"--debug-spectate: {_rigs.Count} human(s) pinned, inert and untargetable; " +
                  (follow != null ? $"camera following {follow.Name}" : "camera free at the spawn") +
                  $" ({AiPlanes.Count} AI aircraft flying)");
+    }
+
+    // A co-op campaign human whose aircraft is lost while the others fly on (B13): the same
+    // hand-off Instant Action's last life runs, with the campaign's own loss rule deciding when.
+    private void BeginCampaignSpectate(FlightController pilot)
+    {
+        foreach (var rig in _rigs)
+        {
+            if (!ReferenceEquals(rig.Controller, pilot))
+            {
+                continue;
+            }
+
+            SpectateHandoff.Begin(rig, _rigs, _worldRoot!, LockCandidateAircraft,
+                _spectatorCameras, out var follow);
+            GD.Print($"campaign: P{rig.Index + 1}'s pane is spectating" +
+                     (follow != null ? $", following P{follow.PlayerIndex + 1}" : " from the crash camera"));
+            return;
+        }
     }
 
     /// <summary>What a <see cref="SpectatorCamera"/>'s target key may lock onto: every aircraft

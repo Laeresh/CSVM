@@ -239,6 +239,7 @@ public static class SuiteCatalog
         "campaign-coop-episode-owner",
         "campaign-coop-approach-row",
         "campaign-coop-dropoff",
+        "campaign-coop-death",
     };
 
     // The suites `--run-tests=tier:quick` runs: one representative per failure surface, checked in
@@ -1518,6 +1519,13 @@ public static class SuiteCatalog
             + "at its own coordinates throughout and back in play there at the handoff; the same "
             + "definition claimed by nobody poses the scripted player and holds the guest instead",
             CoopDropoffSuites.CampaignCoopDropoff));
+        into.Add(new TestHarness.Suite("campaign-coop-death",
+            "the co-op loss rule over C3/M01, a mission whose script authors no loss at all: one "
+            + "human down leaves the mission running and hands that pane a spectator camera with "
+            + "the wreck pinned, while the other keeps flying; the LAST human's death is what ends "
+            + "it lost once no wreck is still falling, whichever of them went first; "
+            + "--no-crash-loss pins neither, and a solo death answers exactly as it did before",
+            CoopDeathSuites.CampaignCoopDeath));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

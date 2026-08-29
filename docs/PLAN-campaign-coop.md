@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Landing-approach rows, pickup sensors and the ladder switch read the human field
 12. ☑ Cutscene staging places the episode owner on the `player` marker
-13. ☐ A downed human spectates; the mission ends when the last one is lost
+13. ☑ A downed human spectates; the mission ends when the last one is lost
 14. ☐ A cutscene fills the window
 15. ☐ Per-pane campaign chrome
 
@@ -116,6 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 32. ☐ Goldens and playtest items
 33. ☐ The 4P cost of a heavy campaign mission
 34. ☐ The five terms in `CONTEXT.md`
+35. ☐ Land the branch: rebase onto the rewritten `main`, never merge it
 
 ## Dependency and parallelism notes
 
@@ -131,7 +132,8 @@ Wave C depends on `A2` for the spec shape and on `C23` as its own internal chain
 then `C23`. It does not depend on Wave B and can run in parallel with it.
 
 `D31` depends on `A2` and on nothing in Wave C. `D32` depends on every behaviour item landing.
-`D33` depends on Wave A and `B15`. `D34` is independent of everything and can land first.
+`D33` depends on Wave A and `B15`. `D34` is independent of everything and can land first. `D35` is
+the branch's landing and depends on every other item, so it is strictly last.
 
 **File contention.** `GameSession.cs` is edited by `A2`, `A4`, `B13`, `B14` and `B15`; never run
 those in parallel worktrees. `CampaignDirector.cs` is edited by `A3`, `B13` and `D31`, and
@@ -361,7 +363,7 @@ unchanged. Full `.\RunTests.ps1`.
 back; do not route a held human through that path. Nothing in this item ends the presentation, and
 the definition ending is still what does that.
 
-## B13 ☐ A downed human spectates; the mission ends when the last one is lost
+## B13 ☑ A downed human spectates; the mission ends when the last one is lost
 
 **Goal.** Losing one aeroplane in a four-player sortie costs that player their aircraft and nothing
 else. The mission ends only when every human is down, and a dead player watches from a camera they
@@ -699,3 +701,82 @@ other item in this plan, and no item's prose uses a word its `_Avoid_` line forb
 
 **⚠ Traps.** `CONTEXT.md` holds no implementation detail; the mechanism for each term lives in
 `docs/architecture.md` and in this plan, not there.
+
+## D35 ☐ Land the branch: rebase onto the rewritten `main`, never merge it
+
+**Goal.** This branch's own commits land on `main` as themselves, with nothing else replayed
+alongside them.
+
+**Evidence (confidence: traced).** `main`'s history was rewritten by a deliberate `Co-Authored-By`
+trailer backfill: about 110 commits carry NEW hashes with IDENTICAL trees, the same authors and the
+same commit dates, differing only by a trailer in the message body. This branch still sits on the
+old lineage, so it reads as roughly 107 commits diverged from `main` when almost all of that is the
+same content twice. Its fork point is `b485fe7b` ("Backlog: BL-625, a cutscene entered from the
+cockpit view frames an invisible aeroplane"); the rewritten twin of that commit on `main` is
+`511cab5b`, and the two trees are byte-identical (`646175dd`), so nothing moves underneath a
+replay. `main` was `4e998677` when this was reported, and other sessions are landing on it.
+
+**Approach.** Confirm the range holds only this branch's own commits, then replay exactly those
+onto a pinned tip:
+
+```
+git log --oneline b485fe7b..worktree-campaign-coop
+git rebase --onto <pinned main sha> b485fe7b worktree-campaign-coop
+```
+
+Pin `main`'s tip by SHA rather than passing the bare `main` ref, because it moves under other
+sessions mid-rebase.
+
+**Model recommendation.** medium. The commands are short, but the failure is a history nobody can
+read afterwards, and it is the kind that is noticed a week later.
+
+**The conflict surface is suite bookkeeping, not code.** Both histories add engine suites, and three
+places record the registered set. Two of them are checked-in constants that fail the UNIT stage
+while the engine stage stays green, so an iteration loop running `-SkipUnits` never sees them:
+
+- `CSVM/src/Testing/SuiteCatalog.cs` holds the registration block AND the separate `Names` array.
+  Two edits in one file, and doing one and missing the other is the easy mistake.
+- `CSVM.Tests/SuiteCatalogTests.cs` asserts the exact suite count and the last registered name.
+- `analysis/engine-suite-weights.json` must name every registered suite, or
+  `SuiteShardsTests.The_checked_in_weights_file_names_only_registered_suites` fails. Take the
+  seconds from the SHARDED run, which is the context the weights are used in, never from a single
+  `-Suite` run. Where the two differ the gap is the chapter's archive decode and world build, not
+  the suite's own body: `campaign-coop-death` reads 4.13 s alone and 3.03 s in a shard where an
+  earlier suite has already decoded C3. ⚠ Not a rule that the shard number is always lower. A suite
+  that is the only consumer of its chapter has nothing to warm it and reads the same either way,
+  which is a correct measurement rather than a missed one.
+
+Both histories insert into these, and `SuiteCatalog.Names` is an ORDERED array, so expect
+adjacent-line conflicts in `SuiteCatalog.cs` TWICE, once in the registration block and once in
+`Names`, with different surrounding context each time. Keep every suite from both sides in both
+places, in the same order in each, because `Names_preserve_the_registered_order` asserts that
+pairing along with the first and last names. Taking one side wholesale drops the other's suite
+silently and still compiles; the unit stage is the only thing that catches it. Same shape in the
+weights file. In `SuiteCatalogTests.cs` both sides edit the same two lines: the count is re-derived
+from the merged registration, and the last name is whichever suite is genuinely last once the two
+orders are merged.
+
+Derive the count on the rebased tree, then check it against the arithmetic rather than the other
+way round. The fork point `b485fe7b` asserts 180; this plan adds 5 suites, so a `main` at 182 must
+merge to 187. A short count is the silent-drop case and says how much went: 186 is one of `main`'s
+suites lost, 182 is all five of this branch's lost to a wholesale "take theirs". Both compile, and
+`Names_preserve_the_registered_order` is the only thing that reports it. ⚠ 187 holds only while
+`main` sits at 182. Re-derive both numbers if anything lands on `main` first; the rule is the
+subtraction, not the total.
+
+**Verify.** The rebased branch is ahead of the pinned tip by exactly this plan's own commits and
+behind it by none. Then the full `.\RunTests.ps1` before merging back, because `main` has gained
+real work since the fork, including CM16's Sparks-pickup diagnosis, the ending-hold and
+surface-stepping fixes across `GameSession`/`SessionSimulation`/`SurfaceVehicleRuntime`/`GameClock`
+and a `campaign-blacke-search` engine suite, which are new to this branch and untested against it.
+
+**⚠ Traps.** The `close-worktree` skill's step 3 said "`main` has moved, so `git merge main`", which
+a rewritten history turns into about 100 replayed commits folded into one merge commit. The skill
+on `main` has since been corrected to classify a rewrite and prescribe the rebase, so re-read it
+AFTER rebasing and take the version that is then in the tree.
+⚠ Re-derive the suite and unit counts from the rebased tree rather than carrying this branch's own
+numbers or arithmetic on them: `main`'s totals moved more than once while this branch was open, and
+a count that disagrees after the rebase is the two histories meeting rather than a regression.
+⚠ The commit hook runs `CheckCommentCaps.ps1` over the WHOLE tree, not the changed files, so a
+block that lands over cap anywhere on `main` blocks this branch's commit. Trimming it is the way
+through, and it is somebody else's comment.

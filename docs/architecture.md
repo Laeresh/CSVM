@@ -3138,9 +3138,10 @@ already consumed the key — `BL-279`'s mechanism. The same rule is why the anim
 moved from `F` to `F18` (`BL-428`) rather than the two sharing a key. Pad button events are gated
 through `ReadsPad`, the event-side twin of `Pads.For`, so `--no-pads`, an unfocused window and a
 per-seat binding all still hold.
-It is also the pane an Instant Action pilot out of lives watches from
-(`InstantActionDirector`'s spectate hand-off): the lab's own `FollowNode` orbit is what "follow a
-live aircraft" needed, so nothing was added for it. Constructor params `padDevices`/`useKeyboard` (
+It is also the pane a pilot out of the mission watches from, an Instant Action pilot out of lives
+and a co-op campaign human whose aircraft is lost while the others fly on, both through
+`Session/SpectateHandoff.cs`: the lab's own `FollowNode` orbit is what "follow a live aircraft"
+needed, so nothing was added for it. Constructor params `padDevices`/`useKeyboard` (
 `BL-375`) default to null/true — every connected pad plus the keyboard, unchanged for `--freecam`,
 the anim lab and the weapon lab — but the director passes its rig's own
 `FlightController.PadDevices`/`UseKeyboard`, the same filter the flying panes use, so two
@@ -5433,8 +5434,8 @@ whatever wave it returns, and reports `WavesCleared` when the sequencer finishes
 goes out, never polled; both zeppelin signals filtered to the OBJECTIVE node, engines first; the
 sequencer's exhausted counter from `Step`), a mission whose win signal cannot arrive disabled with
 a WARN at build; every human seat on the lives ledger with the 3 s respawn delay and a `Downed`
-handler that logs the lives left or hands the pane to the spectate path (the pilot's own pad
-filter, so two downed splitscreen pilots move independently); and the whole-window wrap-up board,
+handler that logs the lives left or hands the pane over through `Session/SpectateHandoff.cs`, which
+the campaign's own loss rule shares; and the whole-window wrap-up board,
 its counters summed across every seat (`enemiesShotDown` filtered on `killer != null` — a bare
 terrain crash never reaches the take-hit body the original counts in — Shot % through
 `ProjectilePool.ScoredShooters`, zones read live at `MissionEnded` time, P1's stunt best recorded
@@ -5443,6 +5444,20 @@ under the mission's own score key).
 `dogfight_ace`/`dogfight_squadron` through `DebugForceCrash`; `stunt_flying` needs nothing,
 already forced by `HumanFlightAdapter`'s own `DebugCompleteStunt` wiring; `zeppelin_run` has no
 force, its verification drove the mode through real damage.
+
+## src/Session/SpectateHandoff.cs
+What both directors do to a pane whose pilot is out of the mission for good, in one place because
+only the rule that reaches it differs: Instant Action's last life, and a co-op campaign human whose
+aircraft is lost while the others fly on. `Begin` pins the wreck through
+`FlightController.Spectating` (so neither `R` nor an armed `AutoRespawnAfter` flies it again),
+takes the camera off the controller with `CameraOwned`, and parents a `SpectatorCamera` at the pane
+camera's current pose, which is where `CameraController.CrashView` left it. It orbit-locks onto the
+first other rig still `InPlay` and answers that aircraft, or null when it starts free at the crash
+camera; false back means this pilot was already spectating, which is what keeps a second report of
+the same death from stacking a second camera on the pane. ⚠ The spectator takes the pilot's OWN
+`PadDevices`/`UseKeyboard` filter: two downed pilots watching at once otherwise move in lockstep.
+`LockCandidates` and the tracking list are both optional, for a caller with no roster to offer and
+no rerun to hand panes back to.
 
 ## src/Session/InstantActionRuntime.cs
 Owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's spawn draw
@@ -5600,7 +5615,9 @@ subject is the authored `player`, the `DEDG` walk's human arm, and the danger-zo
 now driven per human so a gate pair may be split between two of them. A session that names no field
 is one where the scripted player IS the field, which is every solo sortie and every suite that
 builds one rig, so the co-op read and the solo read stay on one code path and a 1P mission answers
-byte-identically. ⚠ A `TRAVELERS` with an empty field still falls back to
+byte-identically. `HumanRigs()` is that same field held as the aeroplanes themselves, for the two
+seams that need one rather than a reading of one: the per-seat death wiring and the wreck wait.
+⚠ A `TRAVELERS` with an empty field still falls back to
 `WorldInputs.ListenerPosition`, because a suite that builds no rig at all resolves its conditions
 that way and always has.
 `TryCreate` loads the profile and the script on the same "a failure warns and flies without a
@@ -5668,13 +5685,24 @@ generator's launch (`CommandedVessel`, through the runtime), and `DEDG` and the 
 `TRAVELERS` count a woken, undestroyed hull as a live member of its group.
 `HoldForCutscene(bool)` is callback 20's objectives half: a held director advances no dormancy
 timer or reminder fuse while a cutscene owns the session (`Session/CutsceneController.cs`).
-The player's `Downed` (the lost ending) and `DamageApplied` (the music ping) hooks are subscribed
-on the aircraft `WorldInputs.PlayerAircraft` answers and re-subscribed whenever it answers a
-different one: an airframe swap rebuilds the rig, and a death in the new one has to end the
-mission too. `BuildRoster` also stamps each spawned rig's `FlightController.Group` from its plan.
-The player's own death is the graph's fourth ending, in the original's two stages: the aircraft's
-`Downed` report closes the graph's gate, and the wreck no longer falling ends the mission.
+`DamageApplied` (the music ping) is subscribed on the aircraft `WorldInputs.PlayerAircraft` answers
+and re-subscribed whenever it answers a different one; `Downed` (the lost ending) is subscribed the
+same way but per SEAT of `World.HumanRigs()`, the human field held as the aeroplanes themselves
+rather than as a reading of them. Both re-subscribe by identity, because an airframe swap rebuilds
+a rig and a death in the new aeroplane has to count too. `BuildRoster` also stamps each spawned
+rig's `FlightController.Group` from its plan.
+Losing the aircraft is the graph's fourth ending, in the original's two stages, with a human field
+widening each: the LAST seat's `Downed` report closes the graph's gate, and the mission ends once
+no human's wreck is still falling. An earlier seat's death only takes that human out of the flight
+(decision 9 rejects respawning): the seat latches down, and `WorldInputs.BeginSpectate` hands that
+pane over through `Session/SpectateHandoff.cs`. ⚠ The director decides WHEN and builds no camera
+itself, which is the same "this class adds no node" rule the rest of it keeps. The last seat is not
+handed a camera, because the mission ends with it and there is nothing left to watch, which is also
+what keeps a 1P death answering exactly as it did before there was a field.
 `EndsOnPlayerDeath` (false under `--no-crash-loss`) is the only switch; `GameSession` is its writer.
+⚠ It gates the whole rule, the spectate hand-off included: a debugging session flying on past a
+crash needs its wreck unpinned so `R` still flies it again, and a pane already given away would
+leave that pilot blind.
 A lost attempt is recorded like any other and commits nothing to the persist log, so a retry starts
 from the chapter state the profile already held (`CampaignPersistLog.CommitsOn`). It does count
 against the mission's own failed-attempt counter, and the fourth failure of a mission never yet
