@@ -29,7 +29,10 @@
     { "metric": "fps", "why": "paced by the display or driver, so it is a floor, not a cost (PERF-2)" },
     { "metric": "frame_ms", "why": "the same floor as fps; only a value ABOVE the cap means anything" },
     { "metric": "script_ms", "why": "Godot's TIME_PROCESS, ~2.2x real (PERF-1), and it collapses onto the frame cap when the loop is paced" },
-    { "metric": "physics_ms", "why": "--det makes the clock parent-driven, so _PhysicsProcess consumers no-op and this term is empty by construction" },
+    { "metric": "physics_ms", "why": "Godot's TIME_PHYSICS_PROCESS, which the engine refreshes about once a second and fills with the WORST single physics tick of that second -- not a per-frame cost and not a mean, so it routinely exceeds max_ms in the same window (verification PERF-21). Empty here on top of that, since --det makes the clock parent-driven and _PhysicsProcess consumers no-op" },
+    { "metric": "phys_tick_ms", "why": "the measured mean wall cost of one physics tick, which is the honest form of physics_ms -- but --det empties the tick here the same way, so this reads near zero in this suite and is a number for a --no-det hand-run" },
+    { "metric": "phys_tick_max_ms", "why": "the worst single tick in the window, the quantity physics_ms actually holds; same --det caveat as phys_tick_ms, and a per-window maximum has no meaningful ratio (same reasoning as max_ms)" },
+    { "metric": "phys_hz", "why": "physics ticks per wall second, so it IS sim seconds per wall second on a realtime clock -- but under --det the sim rides _Process instead, so 60 here says nothing about whether a flown session keeps up" },
     { "metric": "mem_mb", "why": "the managed heap high-water, which climbs monotonically inside a run -- read a big step, never a ratio" },
     { "metric": "max_ms", "why": "the worst single frame in a 60-frame window (A2); a median-of-per-window-maxima across a handful of windows is not a distribution with a meaningful ratio" },
     { "metric": "p95_ms", "why": "same population as max_ms (A2), same caveat" },
@@ -55,6 +58,11 @@
       "name": "c4-terrain",
       "exercises": "the heaviest draw-call pose in the set (~2180 calls) -- dense terrain, snow precipitation and the chapter's UV-scroll models",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731"]
+    },
+    {
+      "name": "c2m02-hollywood",
+      "exercises": "the world CM11 is flown over: its 52 emplacements and the destructible registry the AI target ranking scans, with a plane above them. The campaign roster and objectives are NOT here -- they need a profile the manifest cannot make",
+      "args": ["--chapter=C2", "--mission=M02", "--plane=player_bhawk", "--hold=0.2,0.1,0,1"]
     },
     {
       "name": "c5-city",

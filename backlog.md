@@ -900,24 +900,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
   so the ledger keeps "a wreck flies the near-field plant" as an exception. Decode when and by
   whom it is set so the wreck can fly the decoded arm.
-- `BL-562` `[Perf]` **The physics tick costs ~39 ms per frame late in CM11 (C2/M02), so the sim runs
-  at about half of wall time.** *Evidence:* a flown CM11 session's hitch records
-  (`.scratch/logs/game-*.out`, `[perf] hitch … physics_ms=…`) show the frame baseline rising from
-  9 ms at launch to 30–40 ms with `physics_ms` at ~39 ms of it once six aircraft, the trailer's dust
-  puffers and the roadblocks are live; 2770 rendered frames then covered 52 sim seconds (one
-  parked-plane `flight:` line per sim second). Godot caps physics catch-up per frame, so a
-  physics-bound frame lets the sim clock fall behind the wall clock: the mission takes about twice
-  as long to play as its `TimeMs` records, and every `_Process`-driven consumer that still reads wall
-  time drifts against the aircraft (the animation runtime moved onto the physics tick for this
-  reason, see `AnimRuntime._PhysicsProcess` and the `anim-clock-realtime` suite). *Fix shape:* profile
-  one CM11 session past the roadblocks with `--perf` and the hitch sidecar's `samples`, attribute
-  the physics step (`FlightController._PhysicsProcess` chain: six flight models, AI mode machines,
-  projectile sweeps, the objective graph's per-tick scans, puffer emitters at 1 m distance
-  intervals on the trailer) and bring the step under the 16.7 ms budget on the reference rig; a
-  perf scenario in `analysis/perf/scenarios.json` for the late-CM11 state is the regression gate.
-  *⚠ Traps:* a wall-clock measurement of anything in that session is not a sim measurement, so
-  compare durations in sim seconds (the log's 1 Hz `flight:` cadence, `GameClock.Frame`), never in
-  wall seconds; do not raise `max_physics_steps_per_frame`, which only deepens the catch-up spiral.
+- `BL-562` `[Perf]` **Single physics ticks reach 70 to 180 ms in CM11 (C2/M02), and Godot's 8-step
+  catch-up cap turns each one into sim time the mission never gets back.** *Evidence (traced):* the
+  bracketed instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` /
+  `phys_hz`) over 333 windows of a loaded CM11 session puts the **mean** tick at 1.81 ms (p95
+  3.20 ms) and the tick rate at a median of 60.0 per wall second, but `phys_tick_max_ms` hit 72,
+  102 and 177 ms on individual ticks. `max_physics_steps_per_frame` is at Godot's default 8, so a
+  177 ms stall leaves about six sim steps undeliverable and they are discarded, not deferred. *Fix
+  shape:* find what a spiking tick is doing. The chain map's candidate is
+  `NameResolver.ClearFindCache`, which drops the whole find memo, so the next tick's ~60 objective
+  name resolutions re-walk the ~5000-row index calling `GodotObject.IsInstanceValid` on every row;
+  its callers are the `IndexStage` / `IndexSpawnedCopy` / `IndexRebasedStage` / `IndexPooledCopy`
+  spawn and warm-up paths in `AnimRuntime`, which is the right shape for a spike that lands on a
+  spawn rather than steadily. Confirm by bracketing a spiking tick rather than by inference. *⚠
+  Traps:* **do not chase the sustained step.** The entry used to claim a ~39 ms step and a sim at
+  half wall time; both were a misreading of Godot's `physics_ms` monitor, which holds the WORST tick
+  of the last wall second and refreshes about 1 Hz (`docs/verification.md` PERF-21, and the
+  disproof's own commit, `git log --grep=BL-562`). The mean step is a ninth of its 16.7 ms budget and
+  the sim tracks the wall clock at a ratio of 0.9999 over 306 wall seconds, so there is nothing to
+  win by optimising the steady tick. Compare durations in sim seconds, never wall seconds, and do
+  not raise `max_physics_steps_per_frame`: it deepens the catch-up spiral rather than recovering the
+  lost steps. The measurement was taken with `--debug-objective=18` driving the mission, with nobody
+  at the controls, so it under-weights projectiles and destruction cascades. *Cross-refs:*
+  `docs/PLAN-M5-polish-6.md` C22, `BL-606` (the same per-sim-step suspects seen as an allocator).
 
 ## Environment & world
 
@@ -1469,8 +1474,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   alone. Exclude the first 50 s of process life, which is the world build tenuring and reproduces
   to the byte. `docs/verification.md` PERF-13 (compare within one vsync mode) and PERF-19/PERF-20
   apply. *Cross-refs:* `BL-536`'s closing commit (`git log --grep=BL-536`), which corrected the
-  premise this succeeds and landed the two allocator fixes, `BL-562` (the CM11 physics tick, which
-  shares the per-sim-step suspects), `PLAN-perf-hitches`.
+  premise this succeeds and landed the two allocator fixes, `BL-562` (the CM11 physics tick, now
+  rewritten onto single-tick spikes: its steady step is 1.81 ms and its ray casts are 13.4 % of it,
+  so the per-sim-step query objects cost measurable physics time even though C21 showed they are
+  1.6 % of allocation), `PLAN-perf-hitches`.
 
 ## Audio
 
@@ -2574,6 +2581,23 @@ usual.
   observed rate: at a 1-in-10 base rate, 30 consecutive clean unit stages give about 95%
   confidence the rate has moved and 44 give about 99%. *Cross-refs:* `docs/verification.md` PERF
   rules, `docs/plans/PLAN-fast-verification.md` C23.
+
+- `BL-617` `[Perf]` **`--perf`'s `script_ms` is the same once-a-second worst-frame monitor that
+  `physics_ms` turned out to be, so PERF-1's "about 2.2x real" is a symptom rather than a
+  calibration.** *Evidence (traced):* `physics_ms` is Godot's `TIME_PHYSICS_PROCESS`, which holds
+  the worst step of the last wall second and refreshes about 1 Hz, which is why a window can report
+  27.52 ms against a worst frame of 8.33 ms in the same window and why a flown log repeats one
+  value byte-for-byte across a second of records (`docs/verification.md` PERF-21, and `BL-562`'s
+  closing commit). `TIME_PROCESS` is set from the same block in the same engine pass, and a C1
+  window showed `script_ms` equal to `frame_ms` to the digit while another read 212 ms against an
+  8.33 ms frame cap. *Fix shape:* bracket the `_Process` pass the way `PhysicsTickCost` brackets
+  the physics tick, report a measured `proc_ms` beside it, then rewrite PERF-1 onto what the
+  monitor actually is rather than onto a ratio fitted to it. *⚠ Traps:* the 2.2x figure is quoted
+  in existing analysis, so anything resting on it needs re-reading once this lands rather than
+  silent correction. Keep the raw monitor reported alongside the measured value, since it is what
+  older records hold. *Cross-refs:* `BL-562`'s closing commit (the same misreading, found there),
+  `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
+  PERF-21.
 
 ## Misc
 
