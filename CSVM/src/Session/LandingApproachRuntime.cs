@@ -46,7 +46,10 @@ public sealed partial class LandingApproachRuntime : Node
     public string? LastStarted { get; private set; }
 
     /// <summary>Binds the resolved rows to the built world. Rows whose approach node the build
-    /// never created are dropped, so <see cref="Armed"/> counts what can actually fire.</summary>
+    /// never created are dropped, so <see cref="Armed"/> counts what can actually fire. The trigger
+    /// slot is booked with a definition name and no rig, so an episode started through this seam
+    /// belongs to the scripted player; a row ticked per human names the human that satisfied it at
+    /// the call site instead.</summary>
     public void Bind(
         AnimRuntime runtime,
         IReadOnlyList<LandingApproach> approaches,
@@ -58,7 +61,7 @@ public sealed partial class LandingApproachRuntime : Node
         // The trigger slot, on the runtime rather than on this class: every path that starts a
         // definition writes it, and a suite that binds a trigger onto a bare world runtime gets the
         // same wiring a session's world build gives it.
-        runtime.MissionTriggerOwner = cutscene.Own;
+        runtime.MissionTriggerOwner = anim => cutscene.Own(anim);
         _player = player;
         _bound.Clear();
         _approaches.Clear();

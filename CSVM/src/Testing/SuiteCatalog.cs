@@ -236,6 +236,7 @@ public static class SuiteCatalog
         "campaign-cutscene-ownership",
         "airframe-hull-coverage",
         "campaign-coop-human-field",
+        "campaign-coop-episode-owner",
     };
 
     // The suites `--run-tests=tier:quick` runs: one representative per failure surface, checked in
@@ -1494,6 +1495,13 @@ public static class SuiteCatalog
             + "rig alone, and dzpath1's gate pair completes when P1 flies the green gate and the "
             + "guest the red one, which neither half completes by itself",
             CampaignHumanFieldSuites.CampaignCoopHumanField));
+        into.Add(new TestHarness.Suite("campaign-coop-episode-owner",
+            "the episode owner over CM02's own capture with two humans flying: the mission's swap "
+            + "rebuilds the rig whose trigger claimed the episode, on the record the code names, "
+            + "while the other human keeps the aeroplane it was flying; the swapped pilot keeps "
+            + "their own shooter id and their one near-miss registration, the other pilot's is "
+            + "untouched, and the same capture claimed by nobody swaps the scripted player",
+            CoopEpisodeOwnerSuites.CampaignCoopEpisodeOwner));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

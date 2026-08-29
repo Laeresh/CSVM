@@ -1032,7 +1032,9 @@ public partial class GameSession : Node3D
                 LandingTriggers = _landings != null,
                 PlanesGamezPath = state.PlanesGamezPath,
                 CallbackHost = _cutscene != null ? _cutscene.Host : null,
-                TriggerOwner = _cutscene != null ? _cutscene.Own : null,
+                // No owner named: the opening cutscene has no triggering human, so the episode is
+                // the scripted player's, which is what the intro has always meant.
+                TriggerOwner = _cutscene is { } host ? anim => host.Own(anim) : null,
                 // The weather rig is built after the world, and the intro's fog fires inside the
                 // bootstrap, so the event is held until the rig has applied its zone.
                 FogStateSink = fog =>
@@ -3101,10 +3103,12 @@ public partial class GameSession : Node3D
         _orbit.Frame(aabb, _spec.CamPos, pivot);
     }
 
-    // The mission-script host's airframe swap (callback codes 965 to 967). Player 1 alone: the
-    // original has one player vehicle and the codes name it, so a splitscreen pane cannot be given
-    // an answer the data does not carry. A failed swap is reported rather than thrown: the player
-    // keeps the aircraft the exception left them without, and the mission goes on.
+    // The mission-script host's airframe swap (callback codes 965 to 967). The episode owner's rig,
+    // which is the human whose trigger started the episode: the original has one player vehicle and
+    // the codes name it, and with a field the aeroplane it names is the one that earned the swap.
+    // An episode nobody claimed is the scripted player's, so a 1P mission swaps exactly what it
+    // swapped before. A failed swap is reported rather than thrown: the player keeps the aircraft
+    // the exception left them without, and the mission goes on.
     private AirframeSwapResult SwapPlayerAirframe(AirframeSwapOrder order)
     {
         if (_flightRoster == null || _rigs.Count == 0)
@@ -3114,7 +3118,7 @@ public partial class GameSession : Node3D
 
         try
         {
-            return _flightRoster.RunSwap(_rigs[0], order,
+            return _flightRoster.RunSwap(order.Owner ?? _rigs[0], order,
                 AirframeHandover.Resolves(_spec.Chapter, _spec.Mission));
         }
         catch (Exception e)

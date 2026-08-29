@@ -5826,6 +5826,16 @@ would outrank the real raiser of the next episode while it was still running. C5
 the shipped objective-path case (`nypd_southward` raises nothing and calls `nypd_player`, which
 raises 11, 2 and then 13); no shipped `WAKE_ANIM` target reaches more than one code-authoring
 definition, so the multi-raiser shape exists on the landings path alone.
+WHICH HUMAN the episode belongs to rides the same slot: `Own` takes the triggering rig beside the
+definition name, and `EpisodeOwner` is that rig latched when the episode took the session, or the
+scripted player's (P1's) where the trigger named none, which is every mission intro and every
+1P session. The owner is what the airframe swap rebuilds (`AirframeSwapOrder.Owner`, read by
+`GameSession.SwapPlayerAirframe` in place of the rig list's first entry) and what `StageFlown`
+puts in the runtime's node table, so a guest who flies the capture ends up in the captured
+aeroplane and a hookup definition resolves that aeroplane's own hook. ⚠ The rig rides the slot and
+not the raiser: a slot whose definition is no longer running loses the episode to the raiser, and
+its claim on the owner with it. The owner is rewritten as the NEXT episode takes the session rather
+than at the handoff, the way the code record is, so a swap's replacement stays staged afterwards.
 Code 13 is the mission-completion code, and the only ending a mission that finishes on a
 zeppelin's hook has: nothing in the shipped objective data completes on a landing. It reaches
 `ObjectiveGraph.NotifyDockingComplete` through the `MissionComplete` seam, which wins the mission on
@@ -5861,7 +5871,7 @@ drop leaves the pilot on the lift in front of the open doors rather than back on
 staged archive props (`AircraftStage.Props`) are switched off again at the handoff, because the
 reset's own `OBJECT_DELETE_CHILD` detaches one to the world root, where the original's walk no
 longer reaches it but this scene still draws it.
-It also owns when player 1's flown airframe reaches the runtime's node table
+It also owns when the episode owner's flown airframe reaches the runtime's node table
 (`AircraftStage.StageFlown`), from `BindRigs` and again after a swap, which is what lets a hookup
 definition resolve that aeroplane's own hook, wings and mount offset. `BindRigs` with no cutscene
 playing also re-asserts the `player` marker ACTIVE: `player_setup`, on every mission's start list,

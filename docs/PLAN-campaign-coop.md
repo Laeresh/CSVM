@@ -94,7 +94,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ `RaceGrid` becomes `StartGrid`, and answers a campaign mission's anchor
 2. ☑ A campaign session accepts more than one player
 3. ☑ `IObjectiveWorld` grows the human field, and the scripted player keeps its meaning
-4. ☐ The episode owner: a cutscene episode knows which human started it
+4. ☑ The episode owner: a cutscene episode knows which human started it
 
 ### Wave B — In the mission
 
@@ -253,7 +253,7 @@ that quirk is decoded and deliberate; unioning across humans must not quietly wi
 condition that becomes true for two humans on the same tick still yields one completion, which is
 correct and must not be "fixed".
 
-## A4 ☐ The episode owner: a cutscene episode knows which human started it
+## A4 ☑ The episode owner: a cutscene episode knows which human started it
 
 **Goal.** When a human triggers a cutscene, that episode belongs to them: the airframe swap puts
 *them* in the new aeroplane, and later items place *them* on the staged marker.
