@@ -1187,17 +1187,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   in-cloud frames) once such footage is reviewed for timing rather than just colour.
   *Cross-refs:* `docs/architecture.md`'s `Session/WeatherRig.cs` entry (D32 bullet).
 
-- `BL-304` `[Bug]` **Water gets the WorldLight dim; the original renders it unmodulated** (`CAP-11`
-  A/B, 2026-08-07; surfaced closing `BL-110`; evidence `playtest/CAP-11/README.md`). C2B ocean
-  foreground, same world, matched spawn pose: original 53.9 vs ours 42.0–42.5 — ratio
-  **0.78 ≈ our `world_light` 0.784 exactly**, i.e. dividing our value by the dim reproduces the
-  original within 7%. C1B's night ocean points the same way (original 37–42 vs ours 9–23) but is
-  noisy — moon glitter and wave texture vary with screen position — so the night number is
-  support, not proof. Candidate: exempt the water material from `csky_world_light`, the same
-  should-be-exempt family as `BL-070`'s poleflare glows.
-  *Playtest after fix:* the C2B low pose (`--pos=-3843,200,-1101`) against
-  `playtest/CAP-11/t0.5-c2b-spawn-ocean.png`.
-
 - `BL-341` `[Research]` **Reopened `BL-250`: with the real `no_clutter` gate landed, 7.6% of C5's ground
   (13.8 million m², the flagged overlay area with no base layer beneath it) renders bare, and
   whether that is what the original does is untested.** `BL-250` closed 2026-08-07 on a curated
