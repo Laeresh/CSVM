@@ -4,8 +4,10 @@ Part of the [format documentation](README.md). This page is the behavioural deco
 scripts that drive the out-of-mission campaign flow: the player profile screen
 (`CAMPAIGN.SCRIPT`), the cabin hub (`PASSENGERCABIN.SCRIPT`), the chapter-intro movie player
 (`CAMPAIGNINTRO.SCRIPT`), the flight check screen (`FLIGHTCHECK.SCRIPT`) and the ammo selection
-screen (`ORDINANCELAYOUT.SCRIPT`). It documents which widget triggers what, how each list is
-filled, which engine callback each screen makes, and where every screen transition goes.
+screen (`ORDINANCELAYOUT.SCRIPT`), and of the three that drive the scrapbook (`SCRAPBOOK.SCRIPT`,
+`SCRAPBOOKZOOM.SCRIPT` and `SCRAPBOOK_TOC.SCRIPT`). It documents which widget triggers what, how
+each list is filled, which engine callback each screen makes, and where every screen transition
+goes.
 
 The sources are the scripts in `extracted\rof\ASSETS\SCRIPTS\`, the widget table
 `extracted\rof\ASSETS\LAYOUT.CSV`, the `langui` string table
@@ -28,6 +30,7 @@ choreography in [objectives.md](objectives.md).
 - [Chapter intro: `CAMPAIGNINTRO.SCRIPT`](#chapter-intro-campaignintroscript)
 - [Flight check: `FLIGHTCHECK.SCRIPT`](#flight-check-flightcheckscript)
 - [Ammo selection: `ORDINANCELAYOUT.SCRIPT`](#ammo-selection-ordinancelayoutscript)
+- [The scrapbook: `SCRAPBOOK.SCRIPT`, `SCRAPBOOKZOOM.SCRIPT`, `SCRAPBOOK_TOC.SCRIPT`](#the-scrapbook-scrapbookscript-scrapbookzoomscript-scrapbook_tocscript)
 - [Callback reference](#callback-reference)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases)
 - [Evidence and limits](#evidence-and-limits)
@@ -392,6 +395,119 @@ not use. The description panes update on `10015` (a pick), on `10013` (the point
 row of an open dropdown) and on `10001` (the pointer leaving, which restores the current pick), so
 the panel previews what the pointer is over.
 
+## The scrapbook: `SCRAPBOOK.SCRIPT`, `SCRAPBOOKZOOM.SCRIPT`, `SCRAPBOOK_TOC.SCRIPT`
+
+The scrapbook is the book the cabin's PREVIOUS MISSIONS button opens, and it is the screen a
+finished campaign mission ends on. Three scripts share it: `SCRAPBOOK.SCRIPT` draws one two-page
+spread, `SCRAPBOOKZOOM.SCRIPT` is the detail view of a single scrap, and `SCRAPBOOK_TOC.SCRIPT` is
+the mission list behind VIEW ALL MISSIONS. The three hand off by pausing rather than ending, so the
+spread survives a trip into a scrap and back. The mission-end pass that fills the results record is
+[`org/debrief.md`](../org/debrief.md); the record itself is
+[saved-games.md](saved-games.md), "The mission-result array".
+
+**None of the composition is in the scripts.** `SCRAPBOOK.SCRIPT` creates 32 empty pane slots, 32
+empty text slots and 11 kill-stamp slots, then asks the engine, item by item, what to put in them.
+What each page holds is a fourth data file, `extracted\rof\ASSETS\SCRAPBOOK.CSV`, and the widget
+geometry is `LAYOUT.CSV` as for every other screen.
+
+### `SCRAPBOOK.CSV`
+
+One `[SCRAPBOOK]` section of 461 rows, keyed `<mission>_<spread>_<item>` and read by
+`FUN_004061d0(mission, spread, item, existsOnly, forZoom)`, which looks the key up and splits the
+value on commas into engine globals the script then reads back. The file carries its own column
+header as a comment, and the handler agrees with it field for field:
+
+| # | Column | Meaning |
+|---|---|---|
+| 0 | `Objective` | visibility gate, below |
+| 1 | `ResourceID` | langui id of the zoom **caption** |
+| 2 | `ImageName` | art file, without extension |
+| 3 | `ImageType` | two letters: page extension, then zoom extension |
+| 4, 5 | `X`, `Y` | position of the scrap on the 800×600 spread |
+| 6 | `Alpha` | alpha type for an image; for a text item, an `%x` ARGB colour |
+| 7, 8 | `Width`, `Height` | unused in the shipped rows, every one is 0 |
+| 9 | `DrawOrder` | z, written back one higher, and 1000 higher again for a text item |
+| 10 | `"Left,Top,Right,Bottom"` | the clickable region, one quoted field |
+| 11 | `Zoom` | letter `A` to `Z` selecting a zoom layout family, or `0` for no zoom |
+| 12, 13 | `ZoomX`, `ZoomY` | where the inset image sits in the zoom view |
+| 14, 15 | `TitleResID`, `TextResID` | langui ids of the zoom title and body |
+
+Item numbers are contiguous from 1 in all 47 populated spreads, which the enumerator requires: it
+walks upwards and stops at the first missing key.
+
+**Mission slots and spreads.** Slots run 0 to 24, slot 0 being the not-yet-started career. Spreads
+are numbered from 1, and **a mission has one, two or three of them**, not always two: 8 missions
+stop at one spread (3, 4, 5, 6, 10, 14, 15, 20), 10 have two, and 6 have three (16, 17, 19, 21, 23,
+24). Spread 1 carries 2 to 10 items, spread 2 carries 5 to 24, spread 3 carries 12 to 24. Nothing
+declares a count anywhere: `uiData` 2402's next-page helper `FUN_00406170` probes item 1 of the
+following spread and, when the key is absent, rolls to spread 1 of the next mission, so the book's
+extent is exactly the file's extent.
+
+**Spread 1 is the results page.** The script activates the stat card, the two tabs, the kill stamps
+and the results rows only when `uiData` 2403, the current spread, equals 1; the remaining spreads
+are story pages and show scraps alone. Both kinds draw scraps, so the results page is a story page
+with the card laid over its right half.
+
+### Resolving a row to a file
+
+The `ImageType` letters select extensions independently: `B` gives `.BMP`, `J` gives `.JPG`, and
+anything else gives `.PNG` for the page image, while for the zoom image `0` means the scrap does not
+open at all and an empty second letter defaults to `.JPG`. Shipped rows are `P0` (245, a PNG that
+does not zoom), `PP` (167), `PJ` (43) and blank (6, six `DZ_generic_corners` mounts that take the
+`.PNG` default). The page image is `Scrapbook\` plus the name, which
+the script prefixes with `assets\graphics\`; the zoom background is
+`Assets\Graphics\ScrapBook\SB_BG_<Zoom>.jpg` and the zoom's inset image is `Assets\Graphics\` plus
+the name. All 294 page images, all 43 zoom images and all 26 `SB_BG_*.jpg` backgrounds are present
+in the shipped install.
+
+The `Zoom` letter also names the text layout: `SBZ_T_TITLE<letter>`, `SBZ_T_CAPTION<letter>` and
+`SBZ_T_TEXT<letter>` in `LAYOUT.CSV` give each family its own box, colour and justification, 26
+families in all. Two of those rows carry typos the engine will not parse as colours,
+`xff000000` in `SBZ_T_CAPTIONA` and `oxff1E283C` throughout family `J`.
+
+### The `Objective` gate
+
+A row with `Objective` 0 always draws. Any other value first requires bit 0 of the mission's
+**merged best-to-date** completion mask, meaning the mission has been won at least once; a positive
+value then requires that bit of the same mask, and **a negative value requires that bit to be
+clear**, so a scrap can be authored for having failed a secondary objective. Three rows use this
+(`-11` and `-12`). The gate is skipped entirely while the unlock flag at `0x00647b80` is set. A
+mission is readable at all only up to the campaign's current position, which is what leaves an
+unreached slot showing langui 1219 `Not yet flown`.
+
+### The danger-zone slot
+
+A scrap whose name begins `Snap_` is a player capture, not shipped art: it resolves against the
+profile directory instead of `assets\graphics\`, is skipped when the file is not on disk, is forced
+to a 164×123 region, and is drawn at 25% on the page but full size in the zoom. 167 of the 461 rows
+are these, named `Snap_<mission>_<objective>` and gated on that objective, with a
+`DZ_generic_corners` row at identical coordinates one step higher in draw order supplying the
+photo-corner mount. This is the read half of `BL-256`.
+
+### The grime
+
+`uiData` 2413 is a small deterministic random generator for the smudge overlay. Called with -1 it
+seeds from `(mission << 8) | spread` and clears a ten-bit used-mask; called with an item index it
+returns an unused value 0 to 9 and marks it used, resetting once all ten are taken; called with -2
+it reseeds from the clock. The overlay is therefore stable for a given page and varies between
+pages, and `SB_P_GRIME` is drawn one z above the scrap it dirties.
+
+### The results rows, and the one that is not drawn
+
+`uiData` 2406 returns five strings for the tab it is given: the outcome line and four values. The
+script binds exactly those five to `sb_t_completetitle`, `sb_t_time`, `sb_t_hit`, `sb_t_cash` and
+`sb_t_planes`. **`LAYOUT.CSV` and langui both carry a Rockets Expended row that nothing draws**:
+`SB_T_ROCKETSTITLE` and `SB_T_ROCKETS` exist, `IDS_SB_ROCKETS_TITLE` is langui 1204, and
+`SCRAPBOOK.SCRIPT` never creates either widget. Its y macro is the tell: the drawn rows sit at
+`SLINE1` 369, `SLINE2` 412, `SLINE4` 436, `SLINE5` 460 and `SLINE6` 484, evenly spaced once Rockets
+is absent, while `SLINE3` is stranded at 388 between the first two. The row was cut and the
+remaining five were re-spaced over it.
+
+The eleven kill stamps are fixed positions `SB_KILL0` to `SB_KILL10` with matching
+`SB_KILLTEXT0` to `SB_KILLTEXT10`, filled in the order the engine reports them rather than by
+airframe. Their shared art `SB_killMARKERcombined.png` declares 22 frames for 11 airframes, which is
+where the starred variant on the reference screenshot comes from.
+
 ## Callback reference
 
 Only the ids these five scripts use. `uiData` dispatches ids 2000 to 2038 through a jump table at
@@ -427,6 +543,28 @@ or wingman slot, and any other value is a plane index.
 | 2150 | mode, arg, out | read (mode 0) or write (mode 1) the profile's memento file name |
 | 2151 | out | the chapter number when that chapter has not been started, else 0 |
 | 2600 | | non-zero while a next mission exists |
+
+The scrapbook's own ids, `0x0040a30f` upwards in the same dispatcher. Resolve any of them by hand
+with the rule above: byte at `0x0040f788 + (id - 2100)`, then dword at `0x0040f5b4 + entry * 4`.
+
+| id | Handler | Behaviour |
+|---|---|---|
+| 2401 | `0x0040a682` | out flags: whether a next spread and a Current Mission jump are available |
+| 2402 | `0x0040a6a2` | 0 jumps to the current mission at spread 1; 100 steps forward, 101 back, returning 0 at the front of the book |
+| 2403 | `0x0040a30f` | the current spread number; 1 is the results page |
+| 2404 | `0x0040a714` | a kill stamp slot: frame and text, per tab. Not decoded |
+| 2405 | `0x0040a633` | mode 1 opens a mission at spread 1, or the campaign's current mission when given -1; any other mode reads the open mission |
+| 2406 | `0x0040a7d4` | the outcome line and four result values for a tab. Not decoded |
+| 2407 | `0x0040aa52` | walk to the next drawable item of this spread, returning type 5 for an image and 6 for text |
+| 2408 | `0x0040a453` | the page title, mission name and area. Not decoded |
+| 2409 | `0x0040a4b8` | a table-of-contents row. Not decoded |
+| 2410 | `0x0040a935` | the zoom view: background, inset image and position, layout letter, and the title, caption and text ids |
+| 2411 | `0x0040a408` | is Replay Mission offered, which is true once either half of the mission's record holds a time |
+| 2412 | `0x0040a3d9` | export the open scrap to the desktop |
+| 2413 | `0x0040a321` | the grime generator, above |
+
+2414 and 2502 are outside the `2100`–`2413` table and are answered by a different widget; 2414 asks
+whether a name resolves outside `assets\graphics\`, which is true only for a `Snap_` capture.
 
 `gosCallback` ops:
 

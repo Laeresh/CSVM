@@ -24,7 +24,7 @@ record is indexed by is [`formats/campaign-sequence.md`](../formats/campaign-seq
 - [Time and the shooting statistics](#time-and-the-shooting-statistics)
 - [The screen is the scrapbook](#the-screen-is-the-scrapbook)
   - [The stamps are a per-airframe kill tally](#the-stamps-are-a-per-airframe-kill-tally)
-  - [Navigation: two pages per mission, twenty-five mission slots](#navigation-two-pages-per-mission-twenty-five-mission-slots)
+  - [Navigation and page composition: a data file, not code](#navigation-and-page-composition-a-data-file-not-code)
   - [So this item reuses a board CSVM already has](#so-this-item-reuses-a-board-csvm-already-has)
 - [What the debrief does not write](#what-the-debrief-does-not-write)
 - [Where CSVM stands](#where-csvm-stands)
@@ -138,7 +138,15 @@ written: `+0x08` becomes a single `ushort` holding the sum of all eleven entries
 screen's own strings: every label on it is an `IDS_SB_*` langui row, and the Instant Action wrap-up
 uses a separate `IDS_IAWU_*` set. `extracted/rof/ASSETS/SCRIPTS/` has a `SCRAPBOOK.SCRIPT` and no
 debrief script. Measured off `OriginalScreenshots/Campaign Mission End screen CM01.png`, which is
-the screen as the original draws it at the end of CM01.
+the screen as the original draws it at the end of CM01, and corroborated by
+`Campaign Scrapbook CM02 Mission select after another Mission.png`.
+
+**The mission end opens the mission's first spread**, the one carrying the results block. CM01's end
+screen is mission 1 spread 1 (rows `1_1_1` to `1_1_3` of the composition table), and it shows no
+Current Mission bookmark because the open mission is the campaign's current one. CM02's is that same
+first spread for mission 2, reached later, so the bookmark is up.
+`Campaign Scrapbook CM01 Story Scraps.png` is the second spread of the same mission, rows `1_2_1` to
+`1_2_7`, and has no results block at all.
 
 It is a two-page book spread. The left page carries the mission title through langui 1215
 (`%1!s! - %2!s!`, name and area) over the mission's mementos, and **each memento is an interactive
@@ -152,10 +160,18 @@ per-airframe kill stamp (a count over the airframe's name), the two tabs, and th
 | outcome | 1201 `Mission Completed` | 1213 `Mission Completed` / 1214 `Mission Failed` | mask bit 0 |
 | heading | 1202 `Mission Results` | | |
 | 1 | 1203 `Run Time` | 1208 `%1!02d!:%2!02d!` | `+0x04`, milliseconds rendered as `mm:ss` |
-| 2 | 1204 `Rockets Expended` | 1209 `%1!d!` | not located |
+| 2 | 1204 `Rockets Expended` | 1209 `%1!d!` | **not drawn**, below |
 | 3 | 1205 `Gun Hit Ratio` | 1210 `%1!d!%%` | `+0x22` over `+0x20` |
 | 4 | 1206 `Cash Earned` | 1211 `$%1!d!` | `+0x28` |
 | 5 | 1207 `Overall Planes Downed` | 1212 `%1!d!` | not located |
+
+**Rockets Expended is authored and never drawn.** `uiData` 2406 returns five strings, the outcome
+line and four values, and `SCRAPBOOK.SCRIPT` binds exactly those five. `SB_T_ROCKETSTITLE` and
+`SB_T_ROCKETS` sit unused in `LAYOUT.CSV`, and their y macro `SLINE3` is stranded at 388 between
+`SLINE1` at 369 and `SLINE2` at 412 while the four drawn values run 412, 436, 460, 484 at an even
+24 apart. The row was cut and the rest re-spaced over it, which is why both results-page screenshots
+show four. This is the same shape as the Instant Action wrap-up's own dead row, recorded in
+[`formats/instant-action/wrap-up.md`](../formats/instant-action/wrap-up.md).
 
 **The two tabs are the record's two halves.** Langui 1159 `Best to Date` selects the merged half at
 `+0x54` and 1160 `Most Recent` the attempt half at `+0x00`, which is the same two-halves layout the
@@ -180,39 +196,59 @@ from the screen's arithmetic and not a decode: neither array's increment site ha
 what distinguishes the starred tally from the plain one (an ace, a named pilot, a kill by a
 particular means) is unread. `BL-624` carries it.
 
-### Navigation: two pages per mission, twenty-five mission slots
+### Navigation and page composition: a data file, not code
 
-Reported at the controls and corroborated by the shipped art. Each mission has a **results page**
-(the mission's title and mementos on the left, the stamps, tabs and results block on the right) and
-a **story page** of scraps filling both leaves. The right arrow steps to the next page, and from a
-mission's story page to the next mission; the left arrow steps back. Opening a mission other than
-the current one raises a **Current Mission** bookmark (langui 1200) at the top of the right page,
-which jumps back to it.
+**Which scrap sits where is authored in `extracted\rof\ASSETS\SCRAPBOOK.CSV`**, one `[SCRAPBOOK]`
+section keyed `<mission>_<spread>_<item>`. The full column semantics, the filename rules, the
+objective gate and the grime generator are in
+[`formats/campaign-screens.md`](../formats/campaign-screens.md), "The scrapbook", because they are a
+data format rather than a decode. What belongs here is the code that reads it.
 
-Every scrap is clickable and opens in detail, sometimes with text the small version does not show.
-`SCRAPBOOKZOOM.SCRIPT` is that view.
+`FUN_004061d0(mission, spread, item, existsOnly, forZoom)` is the whole composition lookup. It
+formats the key, fetches the row through the table reader at `FUN_00411bb0`, splits it on commas
+with `FUN_00404830`, and writes the results into the engine globals the script reads back:
+`0x0064b33c` the resolved image path, `0x0064b328` and `0x0064b32c` the page and zoom extensions,
+`0x0064b2a4`/`0x0064b2a8` the position, `0x0064b2b0` to `0x0064b2bc` the clickable region,
+`0x0064b2ac` the z, `0x0064b324` the zoom layout letter, and `0x0064b2d0`, `0x0064b31c`,
+`0x0064b320` the caption, title and text string ids. It returns 1 for a drawable item, `-0x66` for
+one the gate suppressed, and `-0x65` when the key does not exist.
 
-The art is `assets\graphics\scrapbook\`, named `<kind>_<mission>_<page>_<name>`, 213 non-TIF files:
+Four callers use it, and between them they are the entire book:
 
-- **`SB_`** (163) the scraps themselves. Missions run `00` to `24`, which is the 24 campaign
-  missions plus slot `00` for the not-yet-started career (langui 1217/1218). Page `01` is the story
-  page and carries almost everything, from 2 scraps (missions 10, 15) to 13 (mission 07). The
-  `SB_00_00_*` set (`NEWS1`, `NEWS2`, `MAG1`, `DOC1`, `DOC2`, `FHLOGO`) are the generic scraps the
-  results pages reuse, which is why the Aloha Daily masthead appears on both CM01's and CM02's.
-- **`NT_`** (8) blueprint scraps, one per aircraft or system the story introduces
-  (`NT_02_01_BPBALMORAL`, `NT_07_01_BPNITRO`, `NT_19_01_BPTORPEDO`).
-- **`MS_P_`** (41) the cabin memento photographs, not scrapbook pages; `UIData +0x344` names the
-  current one.
-- A `…S` suffix is the small version of a scrap that has a distinct zoom asset. Only four exist, so
-  most scraps are one bitmap shown at two sizes.
+- **`uiData` 2407** (`0x0040aa52`) walks the items of the open spread, skipping `-0x66` and stopping
+  at `-0x65`. It reports type 5 when `0x0064b33c` holds a name and type 6 when it does not, which is
+  how the script tells an image slot from a text slot.
+- **`uiData` 2410** (`0x0040a935`) repeats the lookup with `forZoom` set, which suppresses the 25%
+  downscale a capture gets on the page, and hands the zoom view its background, inset image,
+  position, layout letter and three string ids.
+- **`FUN_00406170`** and **`FUN_00406100`**, the next and previous helpers behind `uiData` 2402,
+  probe item 1 of a neighbouring spread with `existsOnly` set. This is why no spread count is stored
+  anywhere: the book ends where the file does.
 
-**The danger-zone scrap is the player's own screenshot.** `SB_01_00_DZ.PNG` is a per-mission slot
-and `DZ_GENERIC_CORNERS.PNG` is the photo-corner mount drawn over it; the corners being generic and
-the content being per-mission is what makes this a captured image rather than authored art. CM01's
-story page shows exactly that, a dark photograph in mounted corners. `BL-256` is the capture half.
+The current position is two globals, `0x00647b78` the mission and `0x00647b7c` the spread. `uiData`
+2405 mode 1 sets them, taking -1 to mean the campaign's current mission at `0x0064b340`, and always
+opens at spread 1. `uiData` 2403 returns the spread, and the script draws the results block only
+when it is 1.
 
-**Which scrap sits where is not decoded.** The per-page composition (which assets, at which
-coordinates, with which zoom text) is authored somewhere this page has not read.
+The readable range is guarded at the top of `FUN_004061d0`: a mission past both `0x0064b678` and
+the campaign position is refused with `-0x65` unless the unlock flag at `0x00647b80` is set, in
+which case the limit is mission 24. That refusal is what leaves an unreached slot showing langui
+1219 `Not yet flown`.
+
+**Three readings of the shipped art did not survive the table.**
+
+- `SB_01_00_DZ.PNG` is not the danger-zone slot and no row references it. A capture is any name
+  beginning `Snap_`, tested by `FUN_00406db0`, and the rows are `Snap_<mission>_<objective>` gated
+  on that objective, with a `DZ_generic_corners` row at the same coordinates for the mount.
+- The `SB_00_00_*` set is not a generic pool the results pages reuse. Its six rows appear in mission
+  slot 0 alone. The Aloha Daily masthead recurs because it is drawn into each mission's own
+  newspaper art, `SB_02_01_news4` and `SB_02_01_news5` on CM02's page.
+- There is no small-version mechanism. `SB_00_00_MAG1S.PNG` and `SB_01_01_WANTED1S.PNG` are
+  unreferenced; a scrap is one bitmap, scaled on hover, and its detail view is the same base name
+  under the second extension of the `ImageType` field.
+
+The `MS_P_` photographs are the cabin memento pool (`UIData +0x344`), and the book draws from the
+same directory: 15 rows name an `MS_P_*` scrap, 13 of them on a results page.
 
 ### So this item reuses a board CSVM already has
 
@@ -236,8 +272,8 @@ merge, not its author, and the two run in the same mission-end pass.
   from today's mask would report every objective failed on a loss.
 - **The two twelve-byte arrays have no CSVM counterpart.** `MissionAttempt` carries the record's
   `+0x00`, `+0x04`, `+0x20`, `+0x22`, `+0x28`, `+0x2c` and `+0x30` fields and nothing at `+0x08` or
-  `+0x14`. Whatever they count is tracked nowhere, and neither is the Rockets Expended row nor the
-  Overall Planes Downed total (`BL-624`).
+  `+0x14`. Whatever they count is tracked nowhere, and neither is the Overall Planes Downed total
+  (`BL-624`). Rockets Expended needs no source, since the original does not draw it.
 - **The board exists.** `CampaignPreviousMissionsPage` is already the scrapbook; what is missing is
   the mission-end entry into it, the Most Recent tab and the Replay Mission button.
 - **The skip offer is unimplemented.** Four failed attempts at an uncompleted mission is a

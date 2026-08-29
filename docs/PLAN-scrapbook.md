@@ -21,6 +21,11 @@ with no shipped scrap gets an empty page, not an invented one. `BL-256`'s danger
 capture is in scope only as the slot that mounts it (D21); whether the capture itself lands here or
 stays `BL-256` is D21's own first question.
 
+**A third screen surfaced after this plan was written.** `SCRAPBOOK_TOC.SCRIPT`, the VIEW ALL
+MISSIONS list, is a screen of its own with a 25-row mission list, its own Replay and Current Mission
+buttons, and its own entry and exit paths. A3 decodes it; **no item builds it**, and whether it
+becomes one is an open scope call rather than an assumed inclusion.
+
 **Backlog provenance.** `BL-622` and `BL-624` were both re-verified still-open in the session that
 wrote this plan: `git log --grep=BL-622` returns only its minting commit and this session's three,
 and the code path from `CampaignDirector.OnMissionEnded` to `Launcher.OpenCabin` was read end to
@@ -32,7 +37,7 @@ where it is used.
 - A finished campaign mission, won or lost, ends on the scrapbook opened at that mission, with the
   outcome, the five results rows and the per-airframe kill stamps reading what the flight actually
   did.
-- The scrapbook is navigable as a book: two pages per mission, arrows that step page then mission, a
+- The scrapbook is navigable as a book: one to three spreads per mission, arrows that step page then mission, a
   Current Mission bookmark when the reader has wandered, and Replay Mission on the results page.
 - Every scrap is clickable and opens in its own detail view.
 - A mission failed four times offers to skip it, and taking the offer advances the campaign the way
@@ -59,6 +64,10 @@ empty slot stays empty.
 | 1 | The record's two twelve-byte arrays at `+0x08` and `+0x14` are per-weapon-class shots and hits. | `OriginalScreenshots/Campaign Mission End screen CM01.png` and `…CM02 Mission select after another Mission.png`. Shots and hits are the separate `+0x20`/`+0x22` pair that the Gun Hit Ratio row divides (16% and 18% on the two shots). CM02's stamps read `3 Peacemaker`, `2 Balmoral` and a starred `1 Peacemaker` over an Overall Planes Downed of 6, so the arrays sum per airframe to the total. |
 | 2 | `FUN_00416de0` remaps eleven weapon classes into twelve record slots with slot 11 as a catch-all. | Reading its table at `0x0061f670`: eleven pairs, key equal to value for 0 to 10. It is the identity map, the fall-through to 11 is never taken on this path, and the function is a general-purpose lookup called elsewhere with a constant. It is not evidence about what the arrays index. |
 | 3 | The debrief is a screen of its own and needs a new `CampaignScreen` and board. | The langui symbol prefixes (`IDS_SB_*` against `IDS_IAWU_*`) and the script listing. See Decision 1. |
+| 4 | Every mission has exactly two pages. | `SCRAPBOOK.CSV` (A1). A mission has one, two or three spreads: 8 have one, 10 have two, 6 have three. Nothing stores a count; the next-page helper probes the file. |
+| 5 | The results block has five rows, one of them Rockets Expended. | `SCRAPBOOK.SCRIPT` binds four values, `uiData` 2406 returns four, and `SB_T_ROCKETS`' y macro is stranded between two others while the four drawn rows sit evenly spaced (A1). The row was cut before release; both results-page screenshots show four. |
+| 6 | `SB_01_00_DZ.PNG` is the danger-zone slot and `SB_00_00_*` is a generic pool the results pages reuse. | `SCRAPBOOK.CSV` references neither. A capture is any name beginning `Snap_`, and the `SB_00_00_*` rows appear in mission slot 0 alone (A1). |
+| 7 | A `…S` file is a scrap's small version. | `SB_00_00_MAG1S.PNG` and `SB_01_01_WANTED1S.PNG` are unreferenced. There is no small-version mechanism: one bitmap is scaled, and the detail view is the same base name under a second extension (A1). |
 
 ⚠ **Claims 1 and 2 were committed to `docs/org/debrief.md` before the screenshots arrived and were
 withdrawn in `2361cfe8`.** The lesson is the one this repo keeps relearning: a decode of the
@@ -67,9 +76,9 @@ either claim from `FUN_00419630` alone.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | B11, B12, C15, C17 | Confirm the trace, then implement. |
-| **Direction sound, magnitude a judgement call** | C16, D18, D20 | The *what* is settled by the screenshots; the exact geometry is not, and is A1's output. |
-| **Leads only, no mechanism yet** | A1, A2, A3, B13, B14, D19, D21 | Budget for investigation; A1 and A2 may end in a disproof. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, B11, B12, C15, C17, D18, D19, D21 | Confirm the trace, then implement. A1 landed and supplies the geometry the three Wave D items needed. |
+| **Direction sound, magnitude a judgement call** | C16, D20 | The *what* is settled by the screenshots and by A1's callback map; the rest is A2's and A3's output. |
+| **Leads only, no mechanism yet** | A2, A3, B13, B14 | Budget for investigation; A2 may end in a disproof. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.
@@ -86,11 +95,20 @@ dropped. Named `<kind>_<mission>_<page>_<name>`:
 | `MS_P_` | 41 | The cabin memento photographs, not scrapbook pages. `UIData +0x344` names the current one. Out of scope (`BL-463`). |
 | `DZ_GENERIC_CORNERS.PNG` | 1 | The photo-corner mount drawn over a danger-zone scrap. |
 
-Page `01` is the story page and carries almost everything, from 2 scraps (missions 10 and 15) to 13
-(mission 07). The `SB_00_00_*` set (`NEWS1`, `NEWS2`, `MAG1`, `MAG1S`, `DOC1`, `DOC2`, `FHLOGO`) are
-the generic scraps the results pages reuse, which is why the Aloha Daily masthead appears on both
-CM01's and CM02's. Only four scraps carry a distinct `…S` small version, so most are one bitmap
-shown at two sizes.
+The `<page>` field of a filename is **not** the spread the scrap appears on: nearly every scrap is
+named `_01_` whatever spread it sits on, so the names sort the art by mission and nothing more. What
+draws where is `SCRAPBOOK.CSV` alone. Six `SB_*` files are referenced by nothing at all
+(`SB_00_00_MAG1S`, `SB_01_01_WANTED1S`, `SB_01_00_DZ`, `SB_07_01_HANGAR COPY`,
+`SB_12_01_BETTYSSCREENTEST2`, `SB_BG_BZOOMNEWS`), and the 11 unreferenced `MS_P_` files belong to
+the cabin's picker rather than the book.
+
+**The composition (A1).** `extracted/rof/ASSETS/SCRAPBOOK.CSV`, one `[SCRAPBOOK]` section of 461
+rows keyed `<mission>_<spread>_<item>`, is the whole book: art name, extensions, position, region,
+draw order, a per-objective visibility gate, and the three langui ids of the detail view. Spreads
+are numbered from 1 and a mission has one to three; spread 1 is the results page. 167 rows are
+`Snap_<mission>_<objective>` player captures. The widget geometry is `extracted/rof/ASSETS/LAYOUT.CSV`
+as for every other screen, including the eleven kill-stamp slots and the 26 zoom text families.
+Both are decoded in [`formats/campaign-screens.md`](formats/campaign-screens.md), "The scrapbook".
 
 **The rows.** Every label is a langui `IDS_SB_*` row in `extracted/rof/ui_strings.json`:
 
@@ -99,7 +117,7 @@ shown at two sizes.
 | outcome | 1201 | 1213 `Mission Completed` / 1214 `Mission Failed` | mask bit 0 |
 | heading | 1202 `Mission Results` | | |
 | 1 | 1203 `Run Time` | 1208 `%1!02d!:%2!02d!` | `+0x04`, milliseconds as `mm:ss` |
-| 2 | 1204 `Rockets Expended` | 1209 `%1!d!` | not located (A2) |
+| 2 | 1204 `Rockets Expended` | 1209 `%1!d!` | **authored, never drawn** (A1) |
 | 3 | 1205 `Gun Hit Ratio` | 1210 `%1!d!%%` | `+0x22` over `+0x20` |
 | 4 | 1206 `Cash Earned` | 1211 `$%1!d!` | `+0x28` |
 | 5 | 1207 `Overall Planes Downed` | 1212 `%1!d!` | not located (A2) |
@@ -114,11 +132,14 @@ screen push is `FUN_0046fb60(0x0071d57c, …)`; the campaign win flag is `campai
 `FUN_00463be0` / `FUN_00463c10`; the attempt counter is `[0x0071b494 + idx*0x10]` with
 `idx = mission + 10*chapter`; the tally object is `0x0071d2a0`.
 
-**Three screenshots** are the visual ground truth, all under `OriginalScreenshots/`:
-`Campaign Mission End screen CM01.png` (the results page as a mission ends),
-`Campaign Scrapbook CM01 Story Scraps.png` (a story page, with the danger-zone photograph in its
-corners), `Campaign Scrapbook CM02 Mission select after another Mission.png` (the Current Mission
-bookmark and three kill stamps).
+**Three screenshots** are the visual ground truth, all under `OriginalScreenshots/`.
+`Campaign Mission End screen CM01.png` is the screen a finished mission ends on, mission 1's **first**
+spread (rows `1_1_1` to `1_1_3`), with the results block, one `3 Kestrel` stamp and no Current
+Mission bookmark. `Campaign Scrapbook CM01 Story Scraps.png` is mission 1's second spread (rows
+`1_2_1` to `1_2_7`), with the danger-zone photograph in its corners and no results block.
+`Campaign Scrapbook CM02 Mission select after another Mission.png` is mission 2's first spread (rows
+`2_1_1` to `2_1_4`), reached from a later mission, so it carries the Current Mission bookmark and
+three kill stamps.
 
 ## Ground rules
 
@@ -146,8 +167,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — decode what is still unread
 
-1. ☐ Decode the page composition: which scrap sits where, at what coordinates, with what zoom text
-2. ☐ Decode the two per-airframe tallies and the two unmapped rows
+1. ☑ Decode the page composition: which scrap sits where, at what coordinates, with what zoom text
+2. ☐ Decode the two per-airframe tallies and the Overall Planes Downed row
 3. ☐ Decode the book's navigation and its entry paths
 
 ### Wave B — the record and the director
@@ -159,7 +180,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — the results page
 
-15. ☐ The results block: five rows, the outcome line and the two tabs
+15. ☐ The results block: four rows, the outcome line and the two tabs
 16. ☐ The per-airframe kill stamps
 17. ☐ Enter the scrapbook at mission end, and Replay Mission
 
@@ -172,8 +193,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ## Dependency and parallelism notes
 
-**A1 blocks D18, D19 and D20**; nothing in Wave D can be built against invented geometry, and A1 is
-the census that supplies it. **A2 blocks B13 and C16**: the stamps cannot be drawn until something
+**A1 has landed**, so D18, D19 and D20 are unblocked and build against `SCRAPBOOK.CSV` and
+`LAYOUT.CSV` rather than invented geometry. **A2 blocks B13 and C16**: the stamps cannot be drawn until something
 counts them, and nothing should be counted until the decode says what the original counts. **A3
 blocks C17 and D20.**
 
@@ -195,43 +216,81 @@ File contention, and these must not run in parallel worktrees:
 
 # Wave A — decode what is still unread
 
-## A1 ☐ Decode the page composition: which scrap sits where, at what coordinates, with what zoom text
+## A1 ☑ Decode the page composition: which scrap sits where, at what coordinates, with what zoom text
 
-**Goal.** A written record, per mission slot and page, of which scrap assets are drawn, where, at
-what size, and which carry detail text, sufficient to lay out all twenty-five slots without opening
-the original again.
+**Landed.** The composition is not in the executable and not in the scripts. It is a shipped data
+file, `extracted\rof\ASSETS\SCRAPBOOK.CSV`: one `[SCRAPBOOK]` section of 461 rows keyed
+`<mission>_<spread>_<item>`, carrying per scrap the art name, the extensions, the position, the
+clickable region, the draw order, a visibility gate and the three langui ids its detail view shows.
+The file states its own column header. The record is
+[`formats/campaign-screens.md`](formats/campaign-screens.md), "The scrapbook"; the code that reads
+it, `FUN_004061d0` and the four callers that are between them the whole book, is in
+[`org/debrief.md`](org/debrief.md).
 
-**Evidence (confidence: lead-only).** The assets and their naming are censused above, so *what*
-exists is settled; *where each goes* is not. `docs/formats/campaign-screens.md` is the model for how
-this repo records an authored screen, and it already documents the cabin's `pc_memento` pane reading
-`"assets\graphics\scrapbook\" + <name>` from `uiData` 2150, so the same callback family very likely
-serves the book. The scripts are `extracted/rof/ASSETS/SCRIPTS/SCRAPBOOK.SCRIPT` and
-`SCRAPBOOKZOOM.SCRIPT`. `docs/org/hangar.md` documents the two callback dispatchers those scripts
-call and the id-resolution rule for the `2100`–`2413` range, which is the tool for reading any id
-they use.
+**Verified.** Every row resolved against the shipped install: 294 page images, 43 zoom images and
+all 26 `SB_BG_*.jpg` zoom backgrounds are present, none missing. Item numbering is contiguous from 1
+in all 47 populated spreads, which is what the enumerator requires. All three reference spreads
+reproduce exactly, scrap for scrap and in the draw order the rows give:
 
-**Approach.** Read the two scripts first; they are pure layout, as the hangar page records for its
-own four. Resolve every `uiData` callback id they invoke through the dispatchers in
-`docs/org/hangar.md`. Write the result into `docs/formats/campaign-screens.md` as a scrapbook
-section, matching that page's existing per-screen shape, and keep function-level prose in
-`docs/org/debrief.md` per Decision 3.
+- **CM01's mission-end screen** is mission 1 spread 1, rows `1_1_1` to `1_1_3`: the coin at
+  `49,250` order 100 over the magazine at `135,197` order 90 over the Aloha Daily at `49,70`
+  order 60, stacked in the image in exactly that order.
+- **CM01's story page** is rows `1_2_1` to `1_2_7`, including both photo-corner mounts and the
+  danger-zone capture in the lower one.
+- **CM02's results page** is rows `2_1_1` to `2_1_4`, blueprint behind clippings behind medal.
 
-**Model recommendation.** high. A reverse-engineering pass over an unread screen family whose output
-every Wave D item is built on, so a wrong reading here is expensive downstream.
+**What it changed elsewhere.** Four readings this plan carried did not survive the table; they are
+rows 4 to 7 of the disproven list above, and the milestone goal, the data survey and C15's title
+were corrected with them. D18, D19 and D20 are unblocked and now have a source to build from rather
+than geometry to invent.
 
-**Verify.** The written layout reproduces all three reference screenshots: CM01's results page,
-CM01's story page and CM02's results page, scrap for scrap and position for position.
+**Original approach (kept for reference).**
 
-**⚠ Traps.** The `…S` suffix is a small version, not a separate scrap; four exist, and treating
-every scrap as having one will send you looking for 159 missing files. Slot `00` is the
-not-yet-started career and is not mission 1. Do not assume the results page's mementos are authored
-per mission: the generic `SB_00_00_*` set appears on more than one.
+> **Goal.** A written record, per mission slot and page, of which scrap assets are drawn, where, at
+> what size, and which carry detail text, sufficient to lay out all twenty-five slots without opening
+> the original again.
+>
+> **Evidence (confidence: lead-only).** The assets and their naming are censused above, so *what*
+> exists is settled; *where each goes* is not. `docs/formats/campaign-screens.md` is the model for how
+> this repo records an authored screen, and it already documents the cabin's `pc_memento` pane reading
+> `"assets\graphics\scrapbook\" + <name>` from `uiData` 2150, so the same callback family very likely
+> serves the book. The scripts are `extracted/rof/ASSETS/SCRIPTS/SCRAPBOOK.SCRIPT` and
+> `SCRAPBOOKZOOM.SCRIPT`. `docs/org/hangar.md` documents the two callback dispatchers those scripts
+> call and the id-resolution rule for the `2100`–`2413` range, which is the tool for reading any id
+> they use.
+>
+> **Approach.** Read the two scripts first; they are pure layout, as the hangar page records for its
+> own four. Resolve every `uiData` callback id they invoke through the dispatchers in
+> `docs/org/hangar.md`. Write the result into `docs/formats/campaign-screens.md` as a scrapbook
+> section, matching that page's existing per-screen shape, and keep function-level prose in
+> `docs/org/debrief.md` per Decision 3.
+>
+> **Model recommendation.** high. A reverse-engineering pass over an unread screen family whose output
+> every Wave D item is built on, so a wrong reading here is expensive downstream.
+>
+> **Verify.** The written layout reproduces all three reference screenshots: CM01's results page,
+> CM01's story page and CM02's results page, scrap for scrap and position for position.
+>
+> **⚠ Traps.** The `…S` suffix is a small version, not a separate scrap; four exist, and treating
+> every scrap as having one will send you looking for 159 missing files. Slot `00` is the
+> not-yet-started career and is not mission 1. Do not assume the results page's mementos are authored
+> per mission: the generic `SB_00_00_*` set appears on more than one.
 
-## A2 ☐ Decode the two per-airframe tallies and the two unmapped rows
+The approach's premise was wrong in a way worth keeping: the scripts are **not** pure layout the way
+the hangar's four are. They declare empty slots and ask the engine to fill them item by item, so
+reading them settles the protocol and none of the content. The id-resolution rule from
+`org/hangar.md` was the tool that worked. Two of that approach's three stated traps were themselves
+false (the `…S` suffix and the shared `SB_00_00_*` set); only "slot `00` is not mission 1" held. Its
+Verify line was met in full, on all three screenshots.
+
+## A2 ☐ Decode the two per-airframe tallies and the Overall Planes Downed row
 
 **Goal.** A statement of what each of the record's two twelve-byte arrays counts, what distinguishes
-the starred stamp from the plain one, and what feeds the Rockets Expended and Overall Planes Downed
-rows, each with the address it came from.
+the starred stamp from the plain one, and what feeds the Overall Planes Downed row, each with the
+address it came from. **Rockets Expended is no longer part of this item**: A1 established that the
+original does not draw it. `uiData` 2404 (`0x0040a714`) is the stamp callback and 2406
+(`0x0040a7d4`) the results-row callback, both unread, and the stamps' shared art declares 22 frames
+for 11 airframes, which is where the starred variant comes from.
 
 **Evidence (confidence: lead-only).** `docs/org/debrief.md`: the arrays are filled from the tally
 object at `0x0071d2a0` (`+0x00 + 4i` through `FUN_004a23a0`, `+0x30 + 4i` through `FUN_004a23c0`,
@@ -263,19 +322,30 @@ into the arrays.
 arrows step, when the Current Mission bookmark appears, and what Replay Mission and View All
 Missions do.
 
-**Evidence (confidence: lead-only).** Reported at the controls: the right arrow steps to the next
-page and, from a mission's story page, to the next mission; a mission other than the current one
-raises the Current Mission bookmark, which jumps back. The screenshots show Replay Mission inside
-the results block on the results page only, and View All Missions plus Return to Cabin on both
-pages. `docs/formats/campaign-screens.md` records that "the scrapbook screens mail `11003`", so the
-screens are already partly touched there.
+**Evidence (confidence: direction-sound; A1 settled the stepping, the entry paths are unread).** A1
+resolved the mechanics of the arrows. Position is two globals, `0x00647b78` the mission and
+`0x00647b7c` the spread. `uiData` 2402 takes 100 for forward and 101 for back, delegating to
+`FUN_00406170` and `FUN_00406100`, which probe item 1 of the neighbouring spread and roll to the
+next mission when the key is absent; 101 returning 0 at the front of the book is what opens the
+table of contents. 2402 with 0, and 2405 mode 1 with -1, both jump to the campaign's current mission
+at spread 1, which is the Current Mission bookmark. 2401 (`0x0040a682`, `FUN_004060a0`) reports
+which of next and bookmark to enable. Replay Mission is offered when `uiData` 2411 finds a time in
+either half of the record.
 
-**Approach.** The same script-and-callback read as A1, plus `FUN_0046fb60`'s argument at
-`0x0071d57c` for the entry, and `FUN_004194e0`'s tail for what the mission end sets before it.
+**There is a third script this plan did not know about.** `SCRAPBOOK_TOC.SCRIPT` is the VIEW ALL
+MISSIONS screen: a 25-row list filled by `uiData` 2409 with a plane icon and three text lines per
+row, its own Replay and Current Mission buttons, and an `ispy` cheat that turns on the debug overlay
+`SCRAPBOOK.SCRIPT` draws in `gui_draw`. It is reached from `SB_B_TOC` and from stepping back off the
+front of the book, and the two scripts pause rather than end each other.
+
+**Approach.** Read `FUN_0046fb60`'s argument at `0x0071d57c` for the entry, and `FUN_004194e0`'s
+tail for what the mission end sets before it. `uiData` 2409 (`0x0040a4b8`) is the remaining unread
+callback.
 
 **Model recommendation.** medium. Bounded reading, with A1's method already established.
 
-**Verify.** <TODO: state the check once A1 has established how a screen's flow is recorded here.>
+**Verify.** The written flow accounts for every `script_run`, `script_pause`, `script_continue` and
+`script_end` in the three scripts, and for both entry paths.
 
 **⚠ Traps.** Entering from the cabin and entering from a mission end differ by at least the tab
 opened on and the presence of Replay Mission; do not assume one path. <TODO: confirm from a
@@ -387,30 +457,35 @@ pass, so this interacts with what a skipped mission leaves behind for the next o
 
 # Wave C — the results page
 
-## C15 ☐ The results block: five rows, the outcome line and the two tabs
+## C15 ☐ The results block: four rows, the outcome line and the two tabs
 
-**Goal.** The results page shows the outcome line, the five rows and the Best to Date / Most Recent
+**Goal.** The results page shows the outcome line, the four rows and the Best to Date / Most Recent
 tabs, reading the flown mission's record.
 
-**Evidence (confidence: traced for the field mapping, blocked on A2 for two rows).** The row and
-format table is in "What the data actually ships" above. Run Time, Gun Hit Ratio and Cash Earned map
-onto fields CSVM already carries; Rockets Expended and Overall Planes Downed do not (A2). The tabs
-are the record's two halves. `CampaignPreviousMissionsPage` is the page to grow, and
+**Evidence (confidence: traced for the field mapping, blocked on A2 for one row).** The row and
+format table is in "What the data actually ships" above. **Four rows, not five**: A1 established
+that Rockets Expended is authored in langui and `LAYOUT.CSV` and drawn by nothing. Run Time, Gun Hit
+Ratio and Cash Earned map onto fields CSVM already carries; Overall Planes Downed does not (A2). The
+tabs are the record's two halves. `CampaignPreviousMissionsPage` is the page to grow, and
 `CampaignBriefingPage` is the nearest example of a text-heavy composed board.
 
 **Approach.** Follow `docs/org/campaign-board.md`'s authored-space rule: place at the original's
-coordinates from A1 over the page's own background. Use the langui ids as literal strings the way
-`IaWrapupBoard` does, since `ui_strings.json` is a build-time extraction artifact and not one of the
-archives `SessionArchives.OpenFor` loads.
+coordinates, which are `LAYOUT.CSV`'s `SB_*` rows, over the page's own background. The stat card is
+`SB_STATCARD` at `403,297`; the value column is x 642 and the title column x 417, with the four rows
+at y 412, 436, 460 and 484 and the outcome and heading lines at 339 and 369. Use the langui ids as
+literal strings the way `IaWrapupBoard` does, since `ui_strings.json` is a build-time extraction
+artifact and not one of the archives `SessionArchives.OpenFor` loads.
 
 **Model recommendation.** medium. Board work with an established pattern in the same directory.
 
 **Verify.** A flown CM01 reproduces `Campaign Mission End screen CM01.png` row for row, including
-`03:35` from the milliseconds field and `16%` from the shot/hit pair.
+`03:35` from the milliseconds field, `16%` from the shot/hit pair, `$0` cash and 3 planes; CM02
+gives the second case at `03:19`, `18%` and 6.
 
 **⚠ Traps.** Do not read `ui_strings.json` at runtime. `Gun Hit Ratio` is a ratio of the `+0x22`
-pair member over `+0x20` and not either one alone. Two rows are placeholders until A2 lands; mark
-them visibly rather than showing a plausible zero.
+pair member over `+0x20` and not either one alone. Do not restore the Rockets row because langui and
+`LAYOUT.CSV` carry it; the original cut it, and `SLINE3` at 388 would collide with the heading. One
+row is a placeholder until A2 lands; mark it visibly rather than showing a plausible zero.
 
 ## C16 ☐ The per-airframe kill stamps
 
@@ -453,53 +528,74 @@ Return to Cabin reaches the cabin re-read from the profile the director just wro
 re-enter the mission the player just flew and not the campaign's current position, which are
 different after a win.
 
+**The mission end opens on spread 1**, confirmed by `Campaign Mission End screen CM01.png`: mission
+1's first spread with the results block, Replay Mission, and **no** Current Mission bookmark, which
+is the bookmark behaving as `uiData` 2401 says it should when the open mission is the current one.
+The entry is therefore the same position the bookmark jumps to. What A3 still owes is the call that
+performs it, `FUN_0046fb60(0x0071d57c, …)` and `FUN_004194e0`'s tail, and which tab it opens on.
+
 # Wave D — the book
 
 ## D18 ☐ The story page and its per-mission scrap composition
 
 **Goal.** Every mission slot's second page draws its shipped scraps at the original's positions.
 
-**Evidence (confidence: direction-sound, geometry from A1).** The census above: 163 `SB_` and 8 `NT_`
-assets over slots `00` to `24`, page `01` carrying 2 to 13 scraps.
-`Campaign Scrapbook CM01 Story Scraps.png` is the worked example.
+**Evidence (confidence: traced, geometry from A1).** `SCRAPBOOK.CSV` is the composition, one row per
+scrap with its position, region and draw order. 16 missions have a second spread carrying 5 to 24
+items, and 6 of those have a third carrying 12 to 24. `Campaign Scrapbook CM01 Story Scraps.png` is
+the worked example and is mission 1's rows `1_2_1` to `1_2_7`.
 
-**Approach.** Drive the page from A1's composition record. A slot with no shipped scrap draws an
-empty page.
+**Approach.** Parse `SCRAPBOOK.CSV` into the composition model and drive every spread from it,
+results pages included, since spread 1 draws scraps too. Honour `DrawOrder`, the `Objective` gate
+and the `Snap_` capture rule. Enumerate items upward from 1 and stop at the first absent key, the
+way the original does, so the spread count stays data-driven.
 
 **Model recommendation.** medium.
 
-**Verify.** All twenty-five slots render without a missing-asset error, and CM01's page matches its
-screenshot.
+**Verify.** All 47 populated spreads render without a missing-asset error, and mission 1's second
+spread matches its screenshot scrap for scrap.
 
-**⚠ Traps.** No art is authored. A slot with nothing shipped is not a bug.
+**⚠ Traps.** No art is authored, and a slot with nothing shipped is not a bug. A mission has one,
+two or three spreads, so nothing may assume two. The `<page>` field in an art filename is not the
+spread the scrap appears on.
 
 ## D19 ☐ The per-scrap detail view
 
 **Goal.** Clicking a scrap opens it in detail, with the text the small version does not carry.
 
-**Evidence (confidence: lead-only).** Reported at the controls, and `SCRAPBOOKZOOM.SCRIPT` is the
-second scrapbook script. Only four scraps ship a distinct `…S` small version, so most are one bitmap
-shown at two sizes. Where the detail text comes from is A1's.
+**Evidence (confidence: traced).** A1: the `ImageType` field's second letter says whether a scrap
+opens at all and under which extension, and `Zoom`, `ZoomX`, `ZoomY`, `ResourceID`, `TitleResID` and
+`TextResID` carry the rest. 210 of the 461 rows open (43 to a separate zoom image, 167 captures);
+the other 245 are `P0` and do not. The `Zoom` letter picks one of 26 text-layout families,
+`SBZ_T_TITLE<letter>` and its caption and text siblings in `LAYOUT.CSV`, and the background is
+`SB_BG_<letter>.jpg`.
 
-**Approach.** <TODO: after A1.>
+**Approach.** Build the detail view from those six columns plus the chosen family's boxes. The
+background is the family's, the inset image is the scrap's own second extension placed at
+`ZoomX`/`ZoomY`, and the three langui ids fill title, caption and body.
 
 **Model recommendation.** medium.
 
-**Verify.** <TODO: name a scrap with detail text once A1 has found where the text lives.>
+**Verify.** `1_1_3` (`SB_01_02_mag2`, family `M`) opens with `IDS_SB_01_01_mag2_t` as its title and
+`IDS_SB_01_01_mag2_b` as its body; a `P0` row such as `1_2_4` does not open at all.
 
-**⚠ Traps.** Do not assume every scrap has a zoom asset; four do.
+**⚠ Traps.** Do not assume every scrap opens: over half do not, and the tell is the `ImageType`
+second letter, not the presence of a second file. Two `LAYOUT.CSV` colour fields are typo'd
+(`xff000000` in family `A`'s caption, `oxff1E283C` throughout family `J`) and will not parse.
 
 ## D20 ☐ Navigation: page and mission arrows, and the Current Mission bookmark
 
 **Goal.** The arrows step page then mission in both directions, and a mission other than the current
 one shows the bookmark that jumps back to it.
 
-**Evidence (confidence: direction-sound).** Reported at the controls; the bookmark is langui 1200
-and is visible at the top right of
-`Campaign Scrapbook CM02 Mission select after another Mission.png`. The exact behaviour at the ends
-of the book is A3's.
+**Evidence (confidence: direction-sound).** The bookmark is langui 1200 and is visible at the top
+right of `Campaign Scrapbook CM02 Mission select after another Mission.png`. A1 settled the stepping
+rule and A3's entry carries it: forward and back probe the neighbouring spread and roll to the next
+or previous mission, and the bookmark jumps to the campaign's current mission at spread 1. What
+remains for A3 is the entry paths and the table of contents the back arrow falls into.
 
-**Approach.** <TODO: after A3.>
+**Approach.** Step by probing `SCRAPBOOK.CSV` for the neighbouring spread's item 1, exactly as
+`FUN_00406170` does, rather than storing a per-mission page count.
 
 **Model recommendation.** medium.
 
@@ -514,11 +610,15 @@ all twenty-five slots and not only the completed ones.
 **Goal.** A flown danger zone leaves a photograph on that mission's story page, mounted in the
 original's photo corners.
 
-**Evidence (confidence: lead-only).** `SB_01_00_DZ.PNG` is a per-mission slot and
-`DZ_GENERIC_CORNERS.PNG` is the mount drawn over it; generic corners over per-mission content is
-what makes the content captured rather than authored, and `Campaign Scrapbook CM01 Story Scraps.png`
-shows a dark photograph in exactly that mount. `BL-256` is the capture half, recorded as intent with
-no design, and it names `snd_dangerzone_camera` as the shutter sting.
+**Evidence (confidence: traced).** A1: 167 rows name a `Snap_<mission>_<objective>` capture, each
+gated on that objective and paired with a `DZ_generic_corners` row at identical coordinates one
+step higher in draw order. A capture is any name beginning `Snap_`, tested by `FUN_00406db0`; it
+resolves against the profile directory rather than `assets\graphics\`, is **skipped when the file is
+absent**, is forced to a 164×123 region and is drawn at 25% on the page and full size in the zoom.
+The danger-zone objective ids run 18 to 31. `SB_01_00_DZ.PNG` is not the slot and is referenced by
+nothing, and captures appear on results pages too, not only story pages (`10_1_5`).
+`BL-256` is the capture half, recorded as intent with no design, and it names
+`snd_dangerzone_camera` as the shutter sting.
 <TODO: re-verify `BL-256` still-open against `git log --grep=BL-256` and the code.>
 
 **Approach.** First question, and it is a scope call rather than a technical one: whether the

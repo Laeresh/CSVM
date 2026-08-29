@@ -2943,29 +2943,35 @@ usual.
   to skip a mission that opens on **every fourth failed attempt** at a mission never completed,
   which takes effect by setting the campaign win flag. **The screen is the scrapbook**, not a board
   of its own: every label on it is an `IDS_SB_*` langui row (the Instant Action wrap-up's are
-  `IDS_IAWU_*`), the authored screens are `SCRAPBOOK.SCRIPT` and `SCRAPBOOKZOOM.SCRIPT`, and
-  `OriginalScreenshots/Campaign Mission End screen CM01.png` is it as the original draws it. Its
-  Best to Date / Most Recent tabs are the mission-result record's merged and attempt halves, its
-  five rows are Run Time (`mm:ss`), Rockets Expended, Gun Hit Ratio, Cash Earned and Overall Planes
-  Downed. **The scrapbook is a book, not a screen**, and this is plan-sized rather than one page:
-  each mission has a results page and a story page of scraps across both leaves, the arrows step
+  `IDS_IAWU_*`), the authored screens are `SCRAPBOOK.SCRIPT`, `SCRAPBOOKZOOM.SCRIPT` and
+  `SCRAPBOOK_TOC.SCRIPT`, and
+  `OriginalScreenshots/Campaign Mission End screen CM01.png` is it as the original draws it. **The
+  mission end opens the mission's first spread**, the one carrying the results block. Its
+  Best to Date / Most Recent tabs are the mission-result record's merged and attempt halves, and it
+  draws **four** rows, Run Time (`mm:ss`), Gun Hit Ratio, Cash Earned and Overall Planes Downed;
+  Rockets Expended is authored in langui and `LAYOUT.CSV` and drawn by nothing.
+  **The scrapbook is a book, not a screen**, and this is plan-sized rather than one page:
+  a mission has one, two or three spreads, the first being the results page and the rest story
+  pages, the arrows step
   page then mission, a mission other than the current one raises a Current Mission bookmark that
-  jumps back, and every scrap is clickable and opens in detail (`SCRAPBOOKZOOM.SCRIPT`), sometimes
-  with text the small version does not show. The art is `assets\graphics\scrapbook\`, 213 non-TIF
-  files named `<kind>_<mission>_<page>_<name>` over mission slots 00 to 24, page 01 carrying 2 to 13
-  scraps per mission. A flown danger zone leaves the player's own screenshot as a scrap, mounted in
+  jumps back, and every scrap may open in detail (`SCRAPBOOKZOOM.SCRIPT`), 210 of the 461 authored
+  scraps doing so. **The composition is a shipped data file**,
+  `extracted/rof/ASSETS/SCRAPBOOK.CSV`, keyed `<mission>_<spread>_<item>` and decoded in
+  `docs/formats/campaign-screens.md`; the widget geometry is `LAYOUT.CSV`. A flown danger zone leaves
+  the player's own screenshot as a scrap named `Snap_<mission>_<objective>`, mounted in
   `DZ_GENERIC_CORNERS.PNG`. *Fix shape:* `CampaignPreviousMissionsPage` already IS the scrapbook, so
   this extends that page rather than adding one, but the extension is the whole book: the story
   page, the per-scrap zoom, the navigation and bookmark, the results block and Replay Mission, the
   mission-end entry path, and the skip offer. **Scaffold a plan rather than starting this as one
-  backlog item.** *⚠ Traps:* which scrap sits where is not decoded (per-page composition,
-  coordinates and zoom text are authored somewhere unread), and that census is the first job of any
-  plan. The world stays up for the rest of the frame after the end is
+  backlog item.** *⚠ Traps:* a mission does not always have two spreads, and an art filename's
+  `<page>` field is not the spread the scrap appears on; `SCRAPBOOK.CSV` is the only authority on
+  what draws where. The world stays up for the rest of the frame after the end is
   raised, so the page belongs to the launchscreen side, not the session's. The mask cannot be drawn
   as it stands: `CampaignDirector.OnMissionEnded` banks `0` for the whole mask on a loss where the
   original keeps every objective bit and clears only bit 0, so per-objective lines would read as
-  all-failed on every lost mission. The Rockets Expended and Overall Planes Downed rows are
-  `BL-624`, not this item. The wording of the skip offer (langui string 191) is absent from
+  all-failed on every lost mission. The Overall Planes Downed row is
+  `BL-624`, not this item, and Rockets Expended needs no source at all since the original never
+  draws it. The wording of the skip offer (langui string 191) is absent from
   `extracted/rof/ui_strings.json`, whose ids jump 136 to 200. *Cross-refs:*
   `docs/org/debrief.md`, `docs/formats/saved-games.md` ("The mission-result array"),
   `docs/formats/campaign-screens.md` (the memento pane reads the same art directory), `CampaignFlow`,
@@ -2974,12 +2980,15 @@ usual.
   `BL-623`'s closing commits (`git log --grep=BL-620`); the held two seconds `BL-623` added are
   where this screen belongs.
 
-- `BL-624` `[Research]` **Three of the debrief's five rows have no source in CSVM, and what the
+- `BL-624` `[Research]` **Two of the debrief's four drawn rows have no source in CSVM, and what the
   record's two twelve-byte arrays count is undecoded.** *Evidence:* `docs/org/debrief.md`, and
-  `OriginalScreenshots/Campaign Mission End screen CM01.png` for the screen. Of the scrapbook's
+  `OriginalScreenshots/Campaign Mission End screen CM01.png` for the
+  screen. Of the scrapbook's
   results block, Run Time, Gun Hit Ratio and Cash Earned map onto record fields CSVM already carries
-  (`+0x04`, the `+0x20`/`+0x22` pair, `+0x28`); **Rockets Expended** (langui 1204) and **Overall
-  Planes Downed** (1207) do not, and neither does the per-airframe kill stamp on the same page. The
+  (`+0x04`, the `+0x20`/`+0x22` pair, `+0x28`); **Overall
+  Planes Downed** (1207) does not, and neither does the per-airframe kill stamp on the same page.
+  **Rockets Expended (1204) is out of this item**: the original authors the string and the
+  `SB_T_ROCKETS` layout row and draws neither, so there is nothing to feed. The
   two twelve-byte arrays at record `+0x08` and `+0x14` are filled from the mission tally object at
   `0x0071d2a0` (`+0x00 + 4i` and `+0x30 + 4i`, `i` in 0..10, each dword truncated to a byte) through
   `FUN_00416de0`, whose table at `0x0061f670` is the identity map for 0..10 with 11 as a never-taken
@@ -2990,7 +2999,9 @@ usual.
   `1 Peacemaker` over an Overall Planes Downed of 6, so the stamps sum to the total and the same
   airframe appears twice with one occurrence starred. *What to settle:* trace the increment sites of
   the two arrays on `0x0071d2a0` to confirm that and to read what the starred tally distinguishes
-  (an ace, a named pilot, a kill by a particular means), and find what feeds Rockets Expended. Then
+  (an ace, a named pilot, a kill by a particular means). The stamps' shared art
+  `SB_killMARKERcombined.png` declares 22 frames for 11 airframes, so the starred variant is the
+  second frame block, and `uiData` 2404 at `0x0040a714` is the callback that picks one. Then
   count the same things in CSVM, carry them on `MissionAttempt`, and merge them per index by maximum
   the way `CampaignProgression` merges the rest of the record.
   *⚠ Traps:* do not assume the arrays are per-weapon shots and hits; that reading was tried against
