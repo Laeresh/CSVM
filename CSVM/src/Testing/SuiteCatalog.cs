@@ -205,6 +205,7 @@ public static class SuiteCatalog
         "landings-train-pickup-gate",
         "landings-train-pickup-ride",
         "landings-trailer-pickup-gate",
+        "landings-car-pickup-credit",
         "landings-auto-land-button",
         "landings-hookup-airframe",
         "landings-hangar-drop-gate",
@@ -1157,6 +1158,14 @@ public static class SuiteCatalog
             + "trailer's sensor, the landing trigger discovers that late-created cone, and flying "
             + "it starts the hosted pickup cutscene, runs to handoff and clears the dock objective",
             TrailerPickupGate));
+
+        into.Add(new TestHarness.Suite("landings-car-pickup-credit",
+            "CM16's armoured-car pickup, the one whose own film destroys what the mission is "
+            + "watching: the mission's chain stages the cone and the waving passenger, flying it "
+            + "starts the pickup, the row does not fire again underneath the episode, the film "
+            + "calls destroy_car01 on its authored beat and reaches got_sparks on its own, and the "
+            + "mission-completion code it raises wins the mission",
+            CarPickupCredit));
 
         into.Add(new TestHarness.Suite("landings-auto-land-button",
             "the auto-land button over the first story mission's BUILT world: flying the chapter's "
