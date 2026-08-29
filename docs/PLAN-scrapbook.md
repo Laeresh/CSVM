@@ -76,8 +76,7 @@ either claim from `FUN_00419630` alone.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, B11, B12, B13, B14, C15, C16, C17, D18, D19, D21 | Confirm the trace, then implement. A1 supplies the geometry the Wave D items needed; A2 supplies the counting rule B13 and C16 were waiting on; A3 supplies the entry paths C17 and D20 were waiting on. |
-| **Direction sound, magnitude a judgement call** | D20 | The *what* is settled by the screenshots, A1's callback map and A3's entry-path split; the rest is a layout call. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, B11, B12, B13, B14, C15, C16, C17, D18, D19, D20, D21 | Confirm the trace, then implement. A1 supplies the geometry the Wave D items needed; A2 supplies the counting rule B13 and C16 were waiting on; A3 supplies the entry paths C17 and D20 were waiting on. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.
@@ -187,7 +186,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 18. ☑ The story page and its per-mission scrap composition
 19. ☑ The per-scrap detail view
-20. ☐ Navigation: page and mission arrows, and the Current Mission bookmark
+20. ☑ Navigation: page and mission arrows, and the Current Mission bookmark
 21. ☐ The danger-zone scrap slot
 
 ### Closing — worktree housekeeping
@@ -220,7 +219,7 @@ File contention, and these must not run in parallel worktrees:
 
 - `CSVM/src/Session/CampaignDirector.cs`: B11 and B14.
 - `CSVM/src/Session/Launcher.cs`: B12 and C17.
-- `CSVM/src/UI/CampaignScrapbookPage.cs`: C17 (new file), D18 and D19 have landed, D20 remains.
+- `CSVM/src/UI/CampaignScrapbookPage.cs`: C17 (new file), D18, D19 and D20 have all landed.
   C15's and C16's own rows/stamps landed in `CampaignPreviousMissionsPage.cs`'s
   `CampaignScrapbookResults` instead, a deviation from the plan's assumed single file.
   `CampaignScrapbookZoomPage.cs` (new file, D19) is its own screen and not part of this contention.
@@ -866,32 +865,72 @@ background is the family's, the inset image is the scrap's own second extension 
 second letter, not the presence of a second file. Two `LAYOUT.CSV` colour fields are typo'd
 (`xff000000` in family `A`'s caption, `oxff1E283C` throughout family `J`) and will not parse.
 
-## D20 ☐ Navigation: page and mission arrows, and the Current Mission bookmark
+## D20 ☑ Navigation: page and mission arrows, and the Current Mission bookmark
 
-**Goal.** The arrows step page then mission in both directions, and a mission other than the current
-one shows the bookmark that jumps back to it.
+**Landed.** `CampaignScrapbookPage` now browses a `(mission, spread)` position of its own, separate
+from `CampaignFlow.MissionSeq`: it defaults to the flown mission's spread 1 and resets there
+whenever `MissionSeq` changes underneath a reused page instance. The page/mission arrows
+(`sb_b_prev`/`sb_b_next`) step by probing `SCRAPBOOK.CSV` for the neighbouring spread's item 1
+exactly as `FUN_00406170` does, walking within a mission's own spreads and then rolling to the
+next/previous mission's own spread; each row appears only when it leads somewhere, and that check
+is data, not attempt state, so unflown missions are pages too. The Current Mission bookmark
+(`sb_b_current`, langui 1200) appears only while the browsed mission differs from `MissionSeq` and
+jumps back to its spread 1. REPLAY MISSION and RETURN TO CABIN now act on the browsed mission
+(`uiData` 2405's own "the mission the open page shows" read) rather than a fixed one, correcting a
+latent assumption C17/D18/D19 could get away with only because the book had no way yet to browse
+away from the flown mission. A spread-1 view of a mission with no recorded attempt shows
+`CampaignScrapbookResults.NotYetFlown` (langui 1219) instead of an empty results block.
 
-**Evidence (confidence: direction-sound).** The bookmark is langui 1200 and is visible at the top
-right of `Campaign Scrapbook CM02 Mission select after another Mission.png`. A1 settled the stepping
-rule: forward and back probe the neighbouring spread and roll to the next or previous mission, and
-the bookmark jumps to the campaign's current mission at spread 1. A3 settled the back arrow's fall
-into the table of contents at the front of the book (`SB_B_PREV` returning 0 from `uiData` 2402
-mode 101) and traced the table of contents itself, `SCRAPBOOK_TOC.SCRIPT`
-([`org/debrief.md`](org/debrief.md#entering-the-book-replay-mission-and-the-table-of-contents)),
-including its own View/Current Mission jump back into the book. Whether this item also builds the
-table of contents as its own screen, given CSVM's `CampaignPreviousMissionsPage` is already shaped
-like it rather than like the book, is an open scope call A3 raised but did not settle.
+**What it did not build.** The front of the book (mission 1, spread 1) offers no back arrow: the
+original falls into `SCRAPBOOK_TOC.SCRIPT`'s table of contents there, and A3's own open scope call
+on whether this plan also builds that screen is still open. Slot 0 (the not-yet-started career) and
+the table of contents itself stay out of this screen's reach until that call is made; every mission
+slot this screen can actually enter from (1 to 24) is fully walkable in both directions. The page
+title (mission name and area, `uiData` 2408) and the Best to Date toggle remain unwired, unchanged
+from D18/D19.
 
-**Approach.** Step by probing `SCRAPBOOK.CSV` for the neighbouring spread's item 1, exactly as
-`FUN_00406170` does, rather than storing a per-mission page count.
+**Verified.** Unit tests over a hand-authored three-mission book (mission 1 carrying two spreads,
+missions 2 and 3 one each) walk forward from the front of the book to its last page and confirm the
+forward arrow disappears there, walk back and confirm rolling into a previous mission lands on its
+own *last* spread rather than its first, confirm the back arrow is absent at the front, confirm the
+bookmark is absent on the current mission and appears the moment the browsed mission differs (and
+disappears again once it jumps back), confirm REPLAY MISSION re-enters the browsed mission rather
+than the one the book opened on, and confirm an unflown mission's spread 1 reads "Not yet flown".
+`dotnet build`/`format` clean, `CheckCommentCaps.ps1` clean, and the complete `.\RunTests.ps1`
+passes: 2627 unit tests, 181 engine suites clean, 16 goldens hash-identical, 154.6s total.
 
-**Model recommendation.** medium.
+**Original approach (kept for reference).**
 
-**Verify.** Walk the whole book from slot 00 to slot 24 and back, and confirm the bookmark appears
-exactly when the shown mission is not the campaign's current one.
+> **Goal.** The arrows step page then mission in both directions, and a mission other than the current
+> one shows the bookmark that jumps back to it.
+>
+> **Evidence (confidence: direction-sound).** The bookmark is langui 1200 and is visible at the top
+> right of `Campaign Scrapbook CM02 Mission select after another Mission.png`. A1 settled the stepping
+> rule: forward and back probe the neighbouring spread and roll to the next or previous mission, and
+> the bookmark jumps to the campaign's current mission at spread 1. A3 settled the back arrow's fall
+> into the table of contents at the front of the book (`SB_B_PREV` returning 0 from `uiData` 2402
+> mode 101) and traced the table of contents itself, `SCRAPBOOK_TOC.SCRIPT`
+> ([`org/debrief.md`](org/debrief.md#entering-the-book-replay-mission-and-the-table-of-contents)),
+> including its own View/Current Mission jump back into the book. Whether this item also builds the
+> table of contents as its own screen, given CSVM's `CampaignPreviousMissionsPage` is already shaped
+> like it rather than like the book, is an open scope call A3 raised but did not settle.
+>
+> **Approach.** Step by probing `SCRAPBOOK.CSV` for the neighbouring spread's item 1, exactly as
+> `FUN_00406170` does, rather than storing a per-mission page count.
+>
+> **Model recommendation.** medium.
+>
+> **Verify.** Walk the whole book from slot 00 to slot 24 and back, and confirm the bookmark appears
+> exactly when the shown mission is not the campaign's current one.
+>
+> **⚠ Traps.** Unflown missions are still pages (langui 1219 `Not yet flown `), so navigation is over
+> all twenty-five slots and not only the completed ones.
 
-**⚠ Traps.** Unflown missions are still pages (langui 1219 `Not yet flown `), so navigation is over
-all twenty-five slots and not only the completed ones.
+The approach's premise held, with one narrowing worth keeping: the arrows and REPLAY MISSION/RETURN
+TO CABIN act on the *browsed* mission, not `MissionSeq`, which the original approach's evidence
+implied (`uiData` 2405's "the mission the open page shows") but did not call out as a change to
+existing rows. The table-of-contents scope call stays open; this item's own floor is the whole
+range a mission end can actually reach, slots 1 to 24.
 
 ## D21 ☐ The danger-zone scrap slot
 

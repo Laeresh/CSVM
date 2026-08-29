@@ -6,10 +6,10 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The scrapbook's results page (C17): opened on the mission a finished mission just
-/// flew, drawing C15/C16's results block and kill stamps off it, with REPLAY MISSION re-entering
-/// that same mission (not the campaign's current position) and RETURN TO CABIN landing on the
-/// cabin already on the stack.</summary>
+/// <summary>The scrapbook's results page: opened on the mission a finished mission just flew,
+/// drawing the results block and kill stamps off it, with the page/mission arrows and the Current
+/// Mission bookmark browsing the rest of the book and REPLAY MISSION acting on whichever mission
+/// is currently shown rather than a fixed one.</summary>
 public class CampaignScrapbookPageTests
 {
     [Fact]
@@ -61,12 +61,14 @@ public class CampaignScrapbookPageTests
         Assert.Equal(CampaignScreen.Roster, flow.Screen); // no second cabin stacked underneath
     }
 
+    /// <summary>A never-attempted mission draws no art (nothing to compose without a data root) but
+    /// still names itself "Not yet flown" (D20) rather than drawing an empty results block.</summary>
     [Fact]
-    public void ANeverAttemptedMissionDrawsNothingRatherThanThrowing()
+    public void ANeverAttemptedMissionShowsNotYetFlownRatherThanThrowing()
     {
         var flow = OpenedOnScrapbook(CampaignProfileDef.NewProfile("Zachary"), seq: 5);
 
-        Assert.Empty(flow.Page.Captions);
+        Assert.Contains(flow.Page.Captions, l => l.Text == "Not yet flown");
         Assert.Empty(flow.Page.Pictures);
     }
 
@@ -101,6 +103,140 @@ public class CampaignScrapbookPageTests
         var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
 
         Assert.Equal(string.Empty, flow.Page.RowText(2));
+    }
+
+    /// <summary>The forward arrow steps within mission 1's two spreads, then rolls to mission 2's
+    /// and mission 3's own spread 1, and offers no further forward step past the book's last
+    /// page.</summary>
+    [Fact]
+    public void ArrowsStepForwardThenRollToTheNextMission()
+    {
+        string root = ScrapbookCompositionFixture.WriteBook(TestData.TempDir());
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        StepNext(flow); // (1,1) -> (1,2)
+        Assert.EndsWith("01_02_a.PNG", flow.Page.Pictures[0].Art.Name);
+
+        StepNext(flow); // (1,2) -> (2,1)
+        Assert.EndsWith("02_01_a.PNG", flow.Page.Pictures[0].Art.Name);
+
+        StepNext(flow); // (2,1) -> (3,1)
+        Assert.EndsWith("03_01_a.PNG", flow.Page.Pictures[0].Art.Name);
+
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ScrapbookNext)); // no page past the book's end
+    }
+
+    /// <summary>The back arrow steps within a mission's own spreads, then rolls into the previous
+    /// mission's own last spread rather than its first, and offers no further back step at the
+    /// front of the book.</summary>
+    [Fact]
+    public void ArrowsStepBackAndRollToThePreviousMissionsLastSpread()
+    {
+        string root = ScrapbookCompositionFixture.WriteBook(TestData.TempDir());
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ScrapbookPrev)); // front of the book
+
+        StepNext(flow); // (1,1) -> (1,2)
+        StepNext(flow); // (1,2) -> (2,1)
+
+        StepPrev(flow); // (2,1) -> (1,2), the previous mission's own last spread, not its first
+        Assert.EndsWith("01_02_a.PNG", flow.Page.Pictures[0].Art.Name);
+    }
+
+    /// <summary>The Current Mission bookmark shows only while the browsed mission differs from the
+    /// campaign's own current one, and jumps back to that mission's spread 1.</summary>
+    [Fact]
+    public void BookmarkAppearsOnlyAwayFromTheCurrentMissionAndJumpsBackToIt()
+    {
+        string root = ScrapbookCompositionFixture.WriteBook(TestData.TempDir());
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.CurrentMission)); // opened on the current mission
+
+        StepNext(flow); // (1,1) -> (1,2), still mission 1
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.CurrentMission));
+
+        StepNext(flow); // (1,2) -> (2,1), no longer the current mission
+        int bookmarkRow = RowOf(flow.Page, BoardButton.CurrentMission);
+        Assert.NotEqual(-1, bookmarkRow);
+
+        flow.FocusRow(bookmarkRow);
+        flow.Accept();
+        Assert.EndsWith("01_01_a.PNG", flow.Page.Pictures[0].Art.Name); // back to mission 1, spread 1
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.CurrentMission));
+    }
+
+    /// <summary>REPLAY MISSION acts on whichever mission is browsed, not
+    /// <see cref="CampaignFlow.MissionSeq"/>: pressing it after stepping away from the flown mission
+    /// re-enters the mission the page is now showing.</summary>
+    [Fact]
+    public void ReplayMissionActsOnTheBrowsedMissionRatherThanMissionSeq()
+    {
+        string root = ScrapbookCompositionFixture.WriteBook(TestData.TempDir());
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        StepNext(flow); // (1,1) -> (1,2)
+        StepNext(flow); // (1,2) -> (2,1), mission slot 2 -- seq 1
+
+        flow.FocusRow(CampaignScrapbookPage.ReplayRow);
+        flow.Accept();
+
+        Assert.Equal(CampaignScreen.Briefing, flow.Screen);
+        Assert.Equal(1, flow.MissionSeq); // the browsed mission, not the one the book opened on
+    }
+
+    /// <summary>A spread-1 view of a mission with no recorded attempt shows the "Not yet flown"
+    /// placeholder rather than a results block or nothing at all.</summary>
+    [Fact]
+    public void AnUnflownMissionsResultsPageShowsNotYetFlown()
+    {
+        string root = ScrapbookCompositionFixture.WriteBook(TestData.TempDir());
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0)); // only mission 1 (seq 0) is flown
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        StepNext(flow); // (1,1) -> (1,2)
+        StepNext(flow); // (1,2) -> (2,1), never flown
+
+        Assert.Contains(flow.Page.Captions, l => l.Text == "Not yet flown");
+    }
+
+    // Presses whichever row currently carries the named arrow/bookmark button, failing loudly if
+    // the layout ever stops offering it where a test expects one.
+    private static void StepNext(CampaignFlow flow) => Press(flow, BoardButton.ScrapbookNext);
+
+    private static void StepPrev(CampaignFlow flow) => Press(flow, BoardButton.ScrapbookPrev);
+
+    private static void Press(CampaignFlow flow, BoardButton button)
+    {
+        int row = RowOf(flow.Page, button);
+        Assert.NotEqual(-1, row);
+        flow.FocusRow(row);
+        flow.Accept();
+    }
+
+    // The row layout shifts as arrows/bookmark come and go, so tests locate a button by scanning
+    // rather than assuming a fixed index.
+    private static int RowOf(ICampaignPage page, BoardButton button)
+    {
+        for (int row = 0; row < page.RowCount; row++)
+        {
+            if (page.Button(row).Button == button)
+            {
+                return row;
+            }
+        }
+
+        return -1;
     }
 
     private static MissionAttempt Attempt(int seq) =>

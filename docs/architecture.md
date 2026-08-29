@@ -255,19 +255,29 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/CampaignRosterPage.cs` — the player-profile screen: the name field over the roster, CONTINUE creating or continuing a player and opening the cabin, a roster row selecting then continuing, DELETE PLAYER as a confirmed second stage, CANCEL back to the launchscreen, and the original's own name refusals (langui 200/202/212/707).
 - `src/UI/CampaignTextEntry.cs` — a campaign screen's one-line text field: the original's alphanumeric-and-space rule and 32-character cap, typed from the keyboard and stepped from the pad through one alphabet, so the field needs no keyboard and produces nothing the profile store would have to sanitise.
 - `src/UI/CampaignCabinPage.cs` — the cabin hub: NEXT MISSION (opens the briefing for the profile's next mission, or refuses in the campaign's own words once all 24 are complete), PREVIOUS MISSIONS, PLANE CONSTRUCTION (a `CampaignExit.OpenHangar` request the shell fulfils), and RETURN TO MAIN MENU; `Pictures` layers the pilot's own aircraft photo (`PC_P_HANGAR<airframe>.JPG`) under the painted cabin, whose colour-keyed hole is the window, and the board draws it; `Art` is the flat cabin scene alone, for a caller that wants pixels. `MapPinCount` is a pure, tested stand-in for pins nothing places yet.
-- `src/UI/CampaignPreviousMissionsPage.cs` — the scrapbook's finished-missions list, one row per completed mission in `seq` order (long name, area, plane flown from the best-of record) plus VIEW SELECTED (a no-op; the detail line already says everything it would), REPLAY MISSION (`SetMission` + `GoTo(Briefing)`, no advance) and RETURN TO CABIN. The same file carries `CampaignScrapbookResults` (static): the book's results page (spread 1) computed from one `MissionResult` — the outcome line, the four drawn rows (Run Time, Gun Hit Ratio, Cash Earned, Overall Planes Downed; Rockets Expended is authored and never drawn) and the two tab titles, at their `LAYOUT.CSV` positions. Row labels are literal strings, `IaWrapupBoard`'s own precedent. Reproduces the original's Best to Date bug: `0x0040a7e6` reads a never-written offset for that tab instead of the merged mask, so it always renders Mission Failed. `Stamps`/`StampPictures`/`StampLabels` fill the eleven `SB_KILL`/`SB_KILLTEXT` slots densely from the plain kill tally then the ace tally, skipping zeros, at the `SB_KILLMARKERCOMBINED.PNG` strip frame each names (0-10 plain, 11-21 starred); the eleven slot positions are not in reading order. Wired into `CampaignFlow` as `CampaignScreen.Scrapbook` by `CampaignScrapbookPage.cs`.
-- `src/UI/CampaignScrapbookPage.cs` — the scrapbook's results page (spread 1), opened on
-  `CampaignFlow.MissionSeq`: `CampaignScrapbookResults`' rows and Most Recent kill stamps as
-  `Captions`/`Pictures`, spread 1's own shipped scraps under them
+- `src/UI/CampaignPreviousMissionsPage.cs` — the scrapbook's finished-missions list, one row per completed mission in `seq` order (long name, area, plane flown from the best-of record) plus VIEW SELECTED (a no-op; the detail line already says everything it would), REPLAY MISSION (`SetMission` + `GoTo(Briefing)`, no advance) and RETURN TO CABIN. The same file carries `CampaignScrapbookResults` (static): the book's results page (spread 1) computed from one `MissionResult` — the outcome line, the four drawn rows (Run Time, Gun Hit Ratio, Cash Earned, Overall Planes Downed; Rockets Expended is authored and never drawn) and the two tab titles, at their `LAYOUT.CSV` positions. Row labels are literal strings, `IaWrapupBoard`'s own precedent. Reproduces the original's Best to Date bug: `0x0040a7e6` reads a never-written offset for that tab instead of the merged mask, so it always renders Mission Failed. `Stamps`/`StampPictures`/`StampLabels` fill the eleven `SB_KILL`/`SB_KILLTEXT` slots densely from the plain kill tally then the ace tally, skipping zeros, at the `SB_KILLMARKERCOMBINED.PNG` strip frame each names (0-10 plain, 11-21 starred); the eleven slot positions are not in reading order. `NotYetFlown` is the results card's own placeholder (langui 1219) for a mission with no recorded attempt, at the outcome line's own position. Wired into `CampaignFlow` as `CampaignScreen.Scrapbook` by `CampaignScrapbookPage.cs`.
+- `src/UI/CampaignScrapbookPage.cs` — the scrapbook's results page, opened on a browsed
+  `(mission, spread)` position that defaults to `CampaignFlow.MissionSeq`'s own spread 1 and resets
+  there whenever `MissionSeq` changes underneath a reused page instance. `CampaignScrapbookResults`'
+  rows and Most Recent kill stamps draw as `Captions`/`Pictures` on spread 1 only; a spread-1 view
+  of a mission with no recorded attempt shows `CampaignScrapbookResults.NotYetFlown` (langui 1219)
+  instead. Every spread draws its own shipped scraps under that
   (`ScrapbookComposition.Pictures`: "the results page is a story page with the card laid over its
-  right half"), then REPLAY MISSION (`GoTo(Briefing)` without touching `MissionSeq`, so a win that
-  already advanced the campaign position still replays the mission this page is showing) and
-  RETURN TO CABIN. A mission with no recorded result draws nothing rather than throwing. Every
-  scrap that opens (`ScrapbookComposition.Openable`) gets its own row after those two, drawing no
-  `RowText` of its own (its picture already stands at its authored position) but naming itself on
-  the hint line (title, else caption, else body, else the image name); confirming one opens
-  `CampaignScreen.ScrapbookZoom` via `CampaignFlow.SetScrapbookZoom`. The Best to Date toggle, the
-  book's arrows/bookmark and the story pages beyond spread 1 are not yet wired.
+  right half"), gated on the mission's merged best-to-date mask (0 for an unattempted one). The
+  page/mission arrows (`sb_b_prev`/`sb_b_next`) step by probing `SCRAPBOOK.CSV` for the neighbouring
+  spread's item 1, exactly as `FUN_00406170` does, rather than storing a page count, and appear only
+  when they lead somewhere: no back arrow at the front of the book (mission 1, spread 1), since the
+  original falls into a table of contents there this shell does not build yet (A3's own open scope
+  call), and no forward arrow past the last spread `SCRAPBOOK.CSV` carries. The Current Mission
+  bookmark (`sb_b_current`, langui 1200) appears only while the browsed mission differs from
+  `MissionSeq` and jumps back to its spread 1. REPLAY MISSION and RETURN TO CABIN act on whichever
+  mission is browsed (`uiData` 2405's own "the mission the open page shows" read), not necessarily
+  `MissionSeq`: REPLAY MISSION calls `SetMission` on the browsed mission before opening the
+  briefing. Every scrap that opens (`ScrapbookComposition.Openable`) gets its own row after the
+  fixed rows, drawing no `RowText` of its own (its picture already stands at its authored position)
+  but naming itself on the hint line (title, else caption, else body, else the image name);
+  confirming one opens `CampaignScreen.ScrapbookZoom` via `CampaignFlow.SetScrapbookZoom`. The Best
+  to Date toggle and the page title (mission name and area) are not yet wired.
 - `src/UI/CampaignScrapbookZoomPage.cs` — one scrap's detail view, opened on
   `CampaignFlow.ZoomTarget` and closing back to `Scrapbook` (CLOSE, or the default `Back()`): the
   zoom family's background (`SB_BG_<letter>.jpg`), the scrap's inset image at its own

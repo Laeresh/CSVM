@@ -145,8 +145,9 @@ sounds like, watched and frame-sampled, never measured into a constant.
   `campaign: <Outcome> — arrived at the debrief with '<profile>'` one frame later at the
   launchscreen side, with the same outcome in both lines. A mismatch or a missing second line
   reopens `BL-622`; what the debrief screen itself shows is `PT-89`.
-- `PT-89` `[Own]` **C17/D18/D19: the scrapbook opens on the flown mission, not the cabin, with its
-  own shipped scraps under the stat card and each one opening into its own detail view.**
+- `PT-89` `[Own]` **C17/D18/D19/D20: the scrapbook opens on the flown mission, not the cabin, with
+  its own shipped scraps under the stat card, each one opening into its own detail view, and the
+  page/mission arrows and Current Mission bookmark browsing the rest of the book.**
   Continuing the same flights, after each ending's hold the screen that opens is the scrapbook
   (`SB_BackGround` behind a stat card), not the cabin. *Look for:* the outcome line and the four
   rows read the just-flown attempt (win → Mission Completed, loss → Mission Failed, with that
@@ -155,12 +156,17 @@ sounds like, watched and frame-sampled, never measured into a constant.
   stat card at their own positions, stepping the cursor onto one of those scraps and confirming
   opens a full-screen detail view (a family background, the scrap's own picture, and up to three
   lines of raw `IDS_SB_...` text since the original English was never shipped) that RETURN closes
-  back to the same page, REPLAY MISSION re-opens the briefing for the flight just flown — fly the
-  win case, let Next Mission's position advance on the cabin, then come back and confirm Replay
-  Mission still targets the mission that was flown and not the new current one — and RETURN TO
-  CABIN lands on the cabin with that session's own state (funds, Next Mission). A wrong mission on
-  Replay, stale numbers, a missing stamp or scrap, a scrap that will not open, or landing straight
-  on the cabin reopens `BL-622`.
+  back to the same page, the forward arrow steps onto CM01's second spread (its story page) and
+  keeps stepping into later missions' own pages, the back arrow returns the same way and offers
+  nothing at the very front of the book, stepping away from the flown mission's page shows a Current
+  Mission bookmark that jumps straight back to it and disappears once there, REPLAY MISSION acts on
+  whichever page is currently shown rather than always the flight just flown — fly the win case, let
+  Next Mission's position advance on the cabin, browse back to the flown mission with the bookmark,
+  then confirm Replay Mission still targets it and not the new current one — and RETURN TO CABIN
+  lands on the cabin with that session's own state (funds, Next Mission). A wrong mission on Replay,
+  stale numbers, a missing stamp or scrap, a scrap that will not open, an arrow or the bookmark
+  appearing where it should not (or not appearing where it should), or landing straight on the cabin
+  reopens `BL-622`.
 
 ### C1 · Bloodhawk — the overcast sky, ground to above the deck
 

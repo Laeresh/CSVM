@@ -23,4 +23,21 @@ public static class ScrapbookCompositionFixture
             "SBZ_T_TEXTM     =T,!,60,113,0,525,487,0xff000000,0\n");
         return root;
     }
+
+    /// <summary>Writes a fresh temp <c>dataRoot</c> holding a three-mission book: mission 1 carries
+    /// two spreads, missions 2 and 3 carry one each, so the book runs (1,1) -&gt; (1,2) -&gt; (2,1)
+    /// -&gt; (3,1) with no spread beyond it -- enough to exercise both the within-mission and
+    /// roll-to-the-next/previous-mission steps (D20).</summary>
+    public static string WriteBook(string root)
+    {
+        string dir = Path.Combine(root, "extracted", "rof", "ASSETS");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "SCRAPBOOK.CSV"),
+            "[SCRAPBOOK]\n" +
+            "1_1_1=0,0,SB_01_01_a,P0,10,10,1,0,0,10,\"0,0,0,0\",0,0,0,0,0\n" +
+            "1_2_1=0,0,SB_01_02_a,P0,10,10,1,0,0,10,\"0,0,0,0\",0,0,0,0,0\n" +
+            "2_1_1=0,0,SB_02_01_a,P0,10,10,1,0,0,10,\"0,0,0,0\",0,0,0,0,0\n" +
+            "3_1_1=0,0,SB_03_01_a,P0,10,10,1,0,0,10,\"0,0,0,0\",0,0,0,0,0\n");
+        return root;
+    }
 }

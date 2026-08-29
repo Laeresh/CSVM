@@ -105,6 +105,15 @@ public enum BoardButton
 
     /// <summary><c>SBZ_B_RETURN</c>, the scrap detail view's close button (D19).</summary>
     CloseZoom,
+
+    /// <summary><c>sb_b_prev</c>, the book's page-back arrow.</summary>
+    ScrapbookPrev,
+
+    /// <summary><c>sb_b_next</c>, the book's page-forward arrow.</summary>
+    ScrapbookNext,
+
+    /// <summary><c>sb_b_current</c>, the Current Mission bookmark.</summary>
+    CurrentMission,
 }
 
 /// <summary>One bitmap a board draws, and how many stacked frames it holds. A button strip is four

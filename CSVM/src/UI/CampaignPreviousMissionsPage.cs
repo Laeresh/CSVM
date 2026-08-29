@@ -37,6 +37,7 @@ public static class CampaignScrapbookResults
 
     private const string MissionCompletedText = "Mission Completed"; // langui 1213
     private const string MissionFailedText = "Mission Failed"; // langui 1214
+    private const string NotYetFlownText = "Not yet flown"; // langui 1219
     private const string ResultsHeadingText = "Mission Results"; // langui 1202
     private const string RunTimeTitle = "Run Time"; // langui 1203
     private const string GunHitRatioTitle = "Gun Hit Ratio"; // langui 1205
@@ -146,6 +147,11 @@ public static class CampaignScrapbookResults
 
         return lines;
     }
+
+    /// <summary>The results card's own placeholder for a page whose mission has no recorded
+    /// attempt yet: langui 1219, at the outcome line's own position.</summary>
+    public static BoardLine NotYetFlown() =>
+        new(NotYetFlownText, TitleX, OutcomeY, 0, RowFont, BoardInk.Heading);
 
     /// <summary>The outcome line, the heading and the four drawn rows (title then value), at
     /// their <c>LAYOUT.CSV</c> positions. Time is <c>mm:ss</c> off milliseconds truncated the way

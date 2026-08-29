@@ -70,6 +70,9 @@ public static class CampaignBoards
         {
             new BoardSlot(BoardButton.ReplayMission, 0, PaperButton, 594, 505, true),
             new BoardSlot(BoardButton.ReturnToCabin, 0, ReturnToCabinArt, 593, 561),
+            new BoardSlot(BoardButton.ScrapbookPrev, 0, Ui("SB_B_back_tab.png", StripFrames), 0, 465),
+            new BoardSlot(BoardButton.ScrapbookNext, 0, Ui("SB_B_more_tab.png", StripFrames), 708, 465),
+            new BoardSlot(BoardButton.CurrentMission, 0, Ui("SB_B_Currentmissiontab.png", StripFrames), 558, 7, true),
         },
         [CampaignScreen.ScrapbookZoom] = new[]
         {
