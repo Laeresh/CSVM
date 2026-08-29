@@ -13,11 +13,11 @@ namespace CSVM.Mech3;
 /// names, the SI motion scripts); readers fill in what was never compiled. Full decode, including
 /// why the mission zrdr scope is a library rather than a manifest: docs/formats/anim-definitions.md.
 /// ⚠ A mission-scope reader def applies only when the mission's compiled archive contains it, and
-/// a shared-scope reader FILE only when an <c>ANIMATION_DEFINITION_FILE</c> list the mission
-/// sees names it (the shared <c>anim.zrd</c> closure, the chapter's <c>cam_anim.zrd</c>, the
-/// mission's <c>mis_anim.zrd</c>): the shared archive holds per-mission content too, and loading
-/// it everywhere re-activates objects a mission's <c>.gw</c> switched off. The chapter scope is
-/// unconditional (docs/formats/anim-definitions.md "Mission library scope").</summary>
+/// a shared- or chapter-scope reader FILE only when an <c>ANIMATION_DEFINITION_FILE</c> list the
+/// mission sees names it (the shared <c>anim.zrd</c> closure, the chapter's <c>cam_anim.zrd</c>,
+/// the mission's <c>mis_anim.zrd</c>): both archives hold per-mission content too, and loading
+/// them everywhere re-activates objects a mission's <c>.gw</c> switched off, matching the original
+/// (docs/formats/anim-definitions.md "Shared-scope files are listed per mission too").</summary>
 public sealed class AnimProgram
 {
     private const string SharedIndex = "anim";
@@ -26,6 +26,7 @@ public sealed class AnimProgram
     private readonly List<string> _startAnims = new();
     private readonly List<string> _missionLibrarySkipped = new();
     private readonly SortedSet<string> _sharedFilesSkipped = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SortedSet<string> _chapterFilesSkipped = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, List<AnimDefinition>> _byAnimName =
         new(StringComparer.OrdinalIgnoreCase);
@@ -53,6 +54,12 @@ public sealed class AnimProgram
     /// sees names, so none of their defs loaded (diagnostics, by file stem). Empty on a
     /// reader-only extraction and when the shared <c>anim.zrd</c> index is missing.</summary>
     public IReadOnlyCollection<string> SharedFilesSkipped => _sharedFilesSkipped;
+
+    /// <summary>Chapter-scope reader files no <c>ANIMATION_DEFINITION_FILE</c> list this mission
+    /// sees names, so none of their defs loaded (diagnostics, by file stem). Empty on a
+    /// reader-only extraction, matching <see cref="SharedFilesSkipped"/>'s policy for the shared
+    /// scope.</summary>
+    public IReadOnlyCollection<string> ChapterFilesSkipped => _chapterFilesSkipped;
 
     public int CompiledCount { get; private set; }
     public int ReaderCount { get; private set; }
@@ -86,11 +93,14 @@ public sealed class AnimProgram
             }
         }
 
-        // The readers fill in what was never compiled. Shared/chapter are unconditional; the
-        // mission scope is gated by the compiled manifest when one loaded (docs/formats/
-        // anim-definitions.md), else this degrades to reader-only behaviour.
+        // The readers fill in what was never compiled. Both shared and chapter scope are gated by
+        // the compiled manifest when one loaded (docs/formats/anim-definitions.md "Shared-scope
+        // files are listed per mission too"), else this degrades to reader-only behaviour.
         var listedShared = haveMissionManifest
             ? ListedSharedFiles(sharedZrdr, chapterZrdr, missionZrdr)
+            : null;
+        var listedChapter = haveMissionManifest
+            ? ListedChapterFiles(chapterZrdr, missionZrdr)
             : null;
         foreach (var zrdr in new[] { sharedZrdr, chapterZrdr })
         {
@@ -100,6 +110,12 @@ public sealed class AnimProgram
                     && !listedShared.Contains(StemOf(def.SourceFile)))
                 {
                     program._sharedFilesSkipped.Add(StemOf(def.SourceFile));
+                    continue;
+                }
+                if (listedChapter != null && zrdr == chapterZrdr
+                    && !listedChapter.Contains(StemOf(def.SourceFile)))
+                {
+                    program._chapterFilesSkipped.Add(StemOf(def.SourceFile));
                     continue;
                 }
 
@@ -240,6 +256,21 @@ public sealed class AnimProgram
         foreach (var (zrdr, index) in new[] { (chapterZrdr, "cam_anim"), (missionZrdr, "mis_anim") })
             foreach (var path in ListedPaths(zrdr, index))
                 if (IsSharedPath(path))
+                    listed.Add(StemOf(path));
+        return listed;
+    }
+
+    /// <summary>The chapter-scope reader files a mission sees, by stem: the chapter's own
+    /// <c>cam_anim.zrd</c> listing plus any chapter files a mission's <c>mis_anim.zrd</c> adds
+    /// directly (C2's <c>game_targets</c>/<c>police_*</c>/<c>security_destroy</c>, two at a time
+    /// per mission). No index closure to walk, unlike the shared scope: empty means neither list
+    /// names a chapter file, which gates the scope shut rather than leaving it ungated.</summary>
+    private static HashSet<string> ListedChapterFiles(string chapterZrdr, string missionZrdr)
+    {
+        var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (zrdr, index) in new[] { (chapterZrdr, "cam_anim"), (missionZrdr, "mis_anim") })
+            foreach (var path in ListedPaths(zrdr, index))
+                if (!IsSharedPath(path))
                     listed.Add(StemOf(path));
         return listed;
     }
