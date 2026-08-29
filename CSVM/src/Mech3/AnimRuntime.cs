@@ -173,6 +173,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
     public Func<int, string?, string?, bool>? CallbackHost;
 
+    /// <summary>Told the name of every definition a mission trigger starts, before it starts, so
+    /// the session can book the episode that definition raises to the definition itself rather
+    /// than to whichever callee raised its first code. This is the original's own trigger slot,
+    /// which holds the started instance for as long as it runs, and it is the SAME slot on every
+    /// path a trigger takes: an approach row, the objective script's <c>WAKE_ANIM</c>, the ladder
+    /// switch. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public Action<string>? MissionTriggerOwner;
+
     /// <summary>Animation names whose <c>EXECUTION_BY_RANGE</c> is an ARMING gate, not a LOD one:
     /// a <c>CALL_ANIMATION</c> only arms them and the player reaching the band is what runs them.
     /// Bind the mission's own cutscene definitions; left empty, every call starts its callee at
@@ -278,11 +286,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>Lazily builds, indexes and RESET_STATE-poses a pooled copy of a named library root
     /// (<see cref="GameZ.IsLibraryRoot"/>, docs/formats/gamez.md), returning the copy this exact
-    /// caller owns; a different caller gets a fresh one until the pool wraps. Null when the name is
-    /// no library root, and on every runtime that stages its templates eagerly instead.
-    /// ⚠ It returns the node rather than a permission bool on purpose. Drive that one copy, never
-    /// the def's name-wide <see cref="TemplateStage{TNode}.RootsFor"/> set.</summary>
-    internal Func<string, Node3D, Node3D?>? ResolveLibraryRoot;
+    /// call owns; another gets a fresh one until the pool wraps. Null off a library root, and on
+    /// every runtime that stages its templates eagerly. The third argument is the AUTHORED CALL
+    /// EVENT, which ownership is keyed on beside the anchor. ⚠ Drive the returned copy, never the
+    /// def's whole <see cref="TemplateStage{TNode}.RootsFor"/> set.</summary>
+    internal Func<string, Node3D, object?, Node3D?>? ResolveLibraryRoot;
 
     /// <summary>The world-space velocity an <c>IMPACT_FORCE</c> launch adds, transformed into the
     /// launched node's parent frame. Written only by <c>Callback 16</c>, which is the original's
@@ -495,6 +503,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // which carry the aircraft's presence rather than any gamez node's active bit: see
     // SetTargetActive.
     private readonly Dictionary<ulong, List<Node3D>> _vehicleShell = new();
+
+    // Every definition a mission trigger has started, its CALL_ANIMATION closure included. The
+    // _missionCallDepth counter below only covers the trigger's own dispatch; a cutscene's later
+    // beats run off delayed sequence events outside it and are still that trigger's work.
+    private readonly HashSet<string> _missionTriggerDefs = new(StringComparer.OrdinalIgnoreCase);
 
     private Node3D _root = null!;
 
@@ -893,6 +906,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public List<(AnimDefinition Def, Node3D? Anchor)> PlayMissionTrigger(string animName,
         Node3D? fallbackAnchor = null)
     {
+        // ⚠ Before the start, not after: the first CALLBACK can land inside this very dispatch,
+        // and a slot written behind it would arrive to an episode already booked to a callee.
+        MissionTriggerOwner?.Invoke(animName);
+        // ⚠ The depth below covers this dispatch and nothing after it, while a cutscene's later
+        // beats run off delayed events outside it (docs/architecture.md), so the closure is what is
+        // remembered rather than the call stack.
+        foreach (var reached in CallClosureOf(animName))
+        {
+            if (reached.AnimName is { Length: > 0 } reachedName)
+                _missionTriggerDefs.Add(reachedName);
+        }
         _missionCallDepth++;
         try
         {
@@ -2548,7 +2572,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                 relocate = true;
                             }
                             else if ((_deathCallDepth > 0 || _rangeCallDepth > 0
-                                    || _missionCallDepth > 0)
+                                    || _missionCallDepth > 0 || StartedByMissionTrigger(def))
                                 && !operandRedirect && ResolveLibraryRoot != null)
                             {
                                 string rootName = string.IsNullOrEmpty(target.Name)
@@ -2559,7 +2583,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                 if (!string.Equals(NameOf(callAnchor), rootName,
                                         StringComparison.OrdinalIgnoreCase))
                                 {
-                                    libraryCopy = ResolveLibraryRoot(rootName, callAnchor);
+                                    libraryCopy = ResolveLibraryRoot(rootName, callAnchor, ev);
                                     relocate = libraryCopy != null;
                                 }
                             }
@@ -2958,7 +2982,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (child == null && adopt && ResolveLibraryRoot != null
             && (_deathCallDepth > 0 || _rangeCallDepth > 0 || _missionCallDepth > 0
                 || StagedCopyRootOf(anchor) != null))
-            child = ResolveLibraryRoot(childName, named);
+            child = ResolveLibraryRoot(childName, named, null);
         if (child == null)
             return false;
         // A delete names the parent it detaches FROM, so a child hanging somewhere else is a
@@ -3578,6 +3602,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 Log.Debug("anim", $"anim/debug: '{landing.Target.Name}' landed at {landing.Target.GlobalPosition} — bounce sequence '{landing.Bounce}'{(live ? "" : " — NO LIVE INSTANCE, dispatched nothing")}");
         }
     }
+
+    // Was this definition reached by a mission trigger? Asked of the CALLING definition rather than
+    // of the call stack, so a beat the trigger scheduled for seconds later still instances the
+    // library roots it names.
+    private bool StartedByMissionTrigger(AnimDefinition def) =>
+        def.AnimName is { Length: > 0 } name && _missionTriggerDefs.Contains(name);
 
     // The staged library copy a node sits inside (its root), or null: the resolver narrows a
     // symbol-table claim to it, and an add-child dispatched inside one may build a further root.

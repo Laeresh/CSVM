@@ -227,6 +227,9 @@ public static class SuiteCatalog
         "perf-hud-layout",
         "campaign-briefing-note",
         "campaign-capture-group",
+        "campaign-capture-chutes",
+        "landings-balmoral-dock",
+        "campaign-cutscene-ownership",
         "airframe-hull-coverage",
     };
 
@@ -1414,6 +1417,26 @@ public static class SuiteCatalog
             + "the at-zero DEDG incomplete throughout and no exception, and the rebuilt rig's "
             + "death still ends the mission lost",
             CaptureGroupSuites.CaptureGroup));
+        into.Add(new TestHarness.Suite("campaign-capture-chutes",
+            "the crew bailing out at the end of CM02's capture over C3/M05's BUILT world, the "
+            + "capture played through the cutscene host from the approach row's trigger: the wing "
+            + "walk's player definition calls the chute definition three times, each figure is "
+            + "placed at the walk frame the call sites it on rather than at the archive's own "
+            + "origin, three hang in the air at once, and each stays drawn for its whole drift",
+            CaptureChuteSuites.CaptureChutes));
+        into.Add(new TestHarness.Suite("landings-balmoral-dock",
+            "CM02's own ending over C3/M05's BUILT world: the docking row flown in the Balmoral the "
+            + "capture hands over, whose branch of the shared hookup is the only one that folds a "
+            + "wing. The episode holds through that branch's authored two-second turn, both wings "
+            + "reach the angle the fold authors, and the mission-completion code lands at its end",
+            LandingApproachSuites.BalmoralDock));
+        into.Add(new TestHarness.Suite("campaign-cutscene-ownership",
+            "which definition an episode belongs to when the OBJECTIVE SCRIPT starts it rather than "
+            + "a landings row, over C5/M02's BUILT world and its own objective chain: an ordinary "
+            + "WAKE_ANIM left running claims no cutscene slot, the mission's ending is woken and "
+            + "its first code comes from a callee, yet the episode belongs to the definition the "
+            + "objective started and outlives that callee to the code the mission ends on",
+            CutsceneOwnershipSuites.CutsceneOwnership));
         into.Add(new TestHarness.Suite("airframe-hull-coverage",
             "every player airframe's collision hulls measured against its own mesh: each hull "
             + "inside the box it replaces, the whole silhouette's triangle area covered by some hull "

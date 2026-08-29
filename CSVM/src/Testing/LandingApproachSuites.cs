@@ -32,6 +32,21 @@ internal static class LandingApproachSuites
     private const string ExtendHookAnim = "player_extend_hook";
     private const string HookupPlayerSeq = "move_player";
 
+    // CM02's own ending: the shared hookup row the mission finishes on, flown in the airframe the
+    // capture handed over, which is the one branch of that definition that folds a wing.
+    private const string DockAnim = "hooked_to_klondike";
+    private const string BalmoralPlane = "player_balmoral";
+
+    // The mission-completion code the docking ends on, which is the last thing the episode raises,
+    // and the authored run time of the wing fold the branch waits out before raising it.
+    private const int CompleteCode = 13;
+    private const float FoldRunS = 2f;
+
+    // How far before the fold's authored end the completion code may land. The two racing sequences
+    // reach the same call within a few frames of each other, and which one wins is not a claim this
+    // suite makes; that the wait is waited out is.
+    private const float FoldEndToleranceS = 0.25f;
+
     // How close a pose has to land on its authored value to count as that value.
     private const float PoseEpsilon = 1e-3f;
 
@@ -162,6 +177,14 @@ internal static class LandingApproachSuites
     /// code put it rather than teleported when the definition runs out.</summary>
     internal static void DockingHold(TestContext ctx) =>
         DriveMission(ctx, DockingSeq, "test-docking-hold", DriveDockingHold);
+
+    /// <summary>Drives CM02's own ending, the docking the capture hands over to: the player arrives
+    /// on the pirate zeppelin in the Balmoral it just took, so the hookup runs the one branch that
+    /// folds a wing. The episode has to hold through that branch's authored turn, both wings reach
+    /// the angle the fold authors, and the mission-completion code lands at its end rather than
+    /// before it.</summary>
+    internal static void BalmoralDock(TestContext ctx) =>
+        DriveMission(ctx, WingWalkSeq, "test-balmoral-dock", DriveBalmoralDock);
 
     /// <summary>Drives CM07's zeppelin-hangar drop, the mission's other cutscene: the depot chain
     /// reaction's <c>CALL_ANIMATION</c> only ARMS it, because the definition is range-gated;
@@ -501,6 +524,146 @@ internal static class LandingApproachSuites
         }
 
         report.AppendLine($"episode ran {played:0.##} s, playing={cutscene.Playing}");
+    }
+
+    // CM02's ending: the shared hookup definition, flown in the captured Balmoral. Its move_player
+    // sequence branches on which airframe is active and only this one calls a fold, so the branch
+    // is decidable at all only because the flown airframe is in the runtime's node table.
+    private static void DriveBalmoralDock(TestContext ctx, TestWorld world, CampaignDirector director,
+        ObjectiveScript script, string missionZrdr, StringBuilder report)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, world.Chapter);
+        var rows = LandingApproaches.Resolve(
+            chapterZrdr, world.Gamez, name => world.Runtime.Handles(name));
+        var dock = RowFor(rows, DockAnim);
+        report.AppendLine($"docking row: '{dock?.Anim ?? "-"}' on '{dock?.Node ?? "-"}'");
+        ctx.Check(dock != null,
+            $"the chapter's landings.zrd carries the '{DockAnim}' row this mission ends on");
+        var stage = world.Session.Aircraft;
+        ctx.Check(stage != null,
+            $"the mission stages the aircraft archive, the frame the hookup poses the airframe in");
+        if (dock == null || stage == null)
+        {
+            return;
+        }
+
+        WithTrigger(ctx, world, director, rows, (trigger, cutscene, rig, graph) =>
+            RunBalmoralDock(ctx, world, graph, script, trigger, cutscene, rig, dock, report),
+            planeNode: BalmoralPlane, aircraft: stage);
+    }
+
+    // Flies the row and reads the branch out of the run: which definitions the episode started,
+    // when the fold ran, when the mission-completion code landed and when the host let go.
+    private static void RunBalmoralDock(
+        TestContext ctx, TestWorld world, ObjectiveGraph graph, ObjectiveScript script,
+        LandingApproachRuntime trigger, CutsceneController cutscene, FlightController rig,
+        LandingApproach dock, StringBuilder report)
+    {
+        for (float t = 0f; t < IntroSettleS; t += StepDt)
+        {
+            world.Runtime.Advance(StepDt);
+            cutscene.Tick();
+        }
+
+        report.AppendLine($"intro settled after {IntroSettleS:0}s, playing={cutscene.Playing}");
+        var fold = FoldOf(world, DockAnim, BalmoralPlane);
+        report.AppendLine($"fold definition: '{fold?.Anim ?? "(none)"}'");
+        ctx.Check(fold != null,
+            $"'{DockAnim}' authors a wing fold for '{BalmoralPlane}', the branch this run takes");
+        ArmRow(ctx, world, graph, script, dock, report);
+
+        float now = 0f;
+        float foldStartedAt = -1f;
+        float foldEndedAt = -1f;
+        float completedAt = -1f;
+        float handedBackAt = -1f;
+        void Started(AnimDefinition def, Node3D? anchor)
+        {
+            report.AppendLine($"  t={now,6:0.00} started '{def.AnimName}'");
+            if (foldStartedAt < 0f && fold != null
+                && string.Equals(def.AnimName, fold.Value.Anim, StringComparison.OrdinalIgnoreCase))
+            {
+                foldStartedAt = now;
+            }
+        }
+
+        void Finished(AnimDefinition def, Node3D? anchor)
+        {
+            report.AppendLine($"  t={now,6:0.00} finished '{def.AnimName}'");
+            if (foldEndedAt < 0f && fold != null
+                && string.Equals(def.AnimName, fold.Value.Anim, StringComparison.OrdinalIgnoreCase))
+            {
+                foldEndedAt = now;
+            }
+        }
+
+        world.Runtime.CallbackHost = (code, anim, root) =>
+        {
+            report.AppendLine($"  t={now,6:0.00} code {code} from '{anim}'");
+            if (code == CompleteCode && completedAt < 0f)
+            {
+                completedAt = now;
+            }
+
+            return cutscene.Host(code, anim, root);
+        };
+        world.Runtime.OnInstanceStarted += Started;
+        world.Runtime.OnInstanceFinished += Finished;
+        try
+        {
+            ctx.Check(Fly(ctx, world, trigger, cutscene, graph, rig, dock, report),
+                $"flying '{dock.Node}' starts '{dock.Anim}'");
+            ctx.Check(cutscene.Playing, $"and the cutscene host takes the session on it");
+            for (float t = 0f; t < DockBudgetS; t += StepDt)
+            {
+                rig.SimStep(StepDt);
+                world.Runtime.Advance(StepDt);
+                trigger.Tick();
+                cutscene.Tick();
+                graph.Step(StepDt);
+                now += StepDt;
+                if (handedBackAt < 0f && !cutscene.Playing)
+                {
+                    handedBackAt = now;
+                    report.AppendLine($"  t={now,6:0.00} the host handed the session back");
+                }
+
+                if (completedAt >= 0f && foldEndedAt >= 0f && now > completedAt + AfterReleaseS)
+                {
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            world.Runtime.OnInstanceStarted -= Started;
+            world.Runtime.OnInstanceFinished -= Finished;
+            world.Runtime.CallbackHost = cutscene.Host;
+        }
+
+        report.AppendLine($"fold ran {foldStartedAt:0.00}..{foldEndedAt:0.00}, " +
+            $"completion code at t={completedAt:0.00}, session handed back at t={handedBackAt:0.00}, " +
+            $"codes=[{string.Join(", ", cutscene.Codes)}]");
+        ctx.Check(foldStartedAt >= 0f,
+            $"the docking reaches '{BalmoralPlane}'s own branch and calls its wing fold");
+        ctx.Check(foldEndedAt >= 0f && foldEndedAt - foldStartedAt >= FoldRunS - StepDt,
+            $"which runs its whole authored {FoldRunS:0.#} s turn");
+        ctx.Check(completedAt >= 0f,
+            $"the docking raises its mission-completion code {CompleteCode}");
+        ctx.Check(completedAt >= 0f && foldStartedAt >= 0f
+                  && completedAt >= foldStartedAt + FoldRunS - FoldEndToleranceS,
+            $"at the end of the branch's own two-second wait, not before it");
+        ctx.Check(handedBackAt < 0f || completedAt < 0f || handedBackAt >= completedAt - StepDt,
+            $"and the host keeps the session until then (handed back at t={handedBackAt:0.00})");
+        report.AppendLine($"mission outcome: {graph.Outcome}, ending={graph.Ending}");
+        ctx.Check(graph.Ending || graph.Outcome == MissionOutcome.Won,
+            $"the code the docking ends on wins the mission, which is the only ending a mission finishing on the hook has");
+        if (rig.PlaneModel is { } model)
+        {
+            CheckWingFold(ctx, world, fold, model, report);
+        }
+
+        world.Runtime.Stop(dock.Anim);
     }
 
     // CM06's docking, a shape no other shipped row has: the row's own definition authors no
@@ -940,6 +1103,9 @@ internal static class LandingApproachSuites
                 },
             }, () => Array.Empty<FlightController>());
             cutscene.WorldHeld = director.HoldForCutscene;
+            // The session's own wiring for the docking's completion code, so a row that raises it
+            // reaches the same objectives graph a flown mission's would.
+            cutscene.MissionComplete = () => director.Graph?.NotifyDockingComplete();
             // The mission's own actors, before the bind: a row whose approach node arrives with a
             // roster spawn is only there to bind once that spawn has happened, which is the whole
             // ordering the session repeats when it re-binds after its roster build.

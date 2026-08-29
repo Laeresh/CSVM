@@ -63,12 +63,20 @@ public sealed partial class CutsceneController : Node
     /// swap says no aircraft changed.</summary>
     public Func<AirframeSwapOrder, AirframeSwapResult>? SwapAirframe;
 
+    /// <summary>Code 13, which the original answers with the call its objectives runtime makes when
+    /// a primary completes and then the mission-end path. Every mission that ends by docking on a
+    /// zeppelin's hook ends on this code and on nothing else: no objective in the shipped data
+    /// completes on a landing, so unbound the docking plays out and the mission simply carries on.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public Action? MissionComplete;
+
     // The rest of the mission-script host's codes the intro definitions author. Each is the whole
     // message: the definition it sits in never qualifies it
     // (docs/formats/anim-definitions/cutscenes.md).
     private const int CodeHandoff = 1;
     private const int CodePresentation = 2;
     private const int CodeRestoreSystems = 10;
+    private const int CodeMissionComplete = 13;
     private const int CodeCamParamsFree = 666;
     private const int CodeCamParamsRestore = 667;
     private const int CodeParkAi = 913;
@@ -230,10 +238,15 @@ public sealed partial class CutsceneController : Node
     /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
     public void Own(string animName)
     {
-        if (!Playing)
+        // ⚠ Not every mission trigger starts a cutscene: an objective's WAKE_ANIM and the ladder
+        // switch go through the same call, and a slot one of those claimed would outrank the next
+        // episode's real raiser for as long as it ran.
+        if (Playing || (_runtime != null && !RaisesInClosure(animName)))
         {
-            _owner = animName;
+            return;
         }
+
+        _owner = animName;
     }
 
     /// <summary>The world's animation runtime and the two nodes a cutscene definition drives. Run
@@ -321,6 +334,7 @@ public sealed partial class CutsceneController : Node
             case CodeCamParamsRestore:
             case CodeHandoff:
             case CodeRestoreSystems:
+            case CodeMissionComplete:
             case CodeReplacePlayer:
                 break;
             default:
@@ -353,9 +367,12 @@ public sealed partial class CutsceneController : Node
         if (!Playing)
         {
             Playing = true;
-            // The slot beats the raiser only while its definition is live: a stale slot from a
-            // row whose definition ended raising nothing must not outlast that definition.
-            Anim = _owner != null && _runtime?.AnimStateOf(_owner) == AnimRunning ? _owner : animName;
+            // The slot beats the raiser only while its definition is live, so a stale one cannot
+            // outlast it. ⚠ With no runtime yet to ask it wins outright: the intro's first code
+            // lands in the bootstrap, before the build has handed this host a runtime.
+            Anim = _owner != null
+                   && (_runtime == null || _runtime.AnimStateOf(_owner) == AnimRunning)
+                ? _owner : animName;
             _owner = null;
             SeedRaisers();
             _barsFlipsThisEpisode = 0;
@@ -451,6 +468,21 @@ public sealed partial class CutsceneController : Node
         }
 
         return null;
+    }
+
+    // The question the slot is claimed on, asked of the whole call closure: a row that raises no
+    // code itself and calls the definitions that do is the shape the slot exists for.
+    private bool RaisesInClosure(string animName)
+    {
+        foreach (var def in _runtime!.CallClosureOf(animName))
+        {
+            if (AuthorsCode(def))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // BL-452: the bars are separately-called data (docs/formats/anim-definitions/cutscenes.md),
@@ -605,6 +637,9 @@ public sealed partial class CutsceneController : Node
                 break;
             case CodeReplacePlayer:
                 ReplacePlayer();
+                break;
+            case CodeMissionComplete:
+                MissionComplete?.Invoke();
                 break;
             case CodeRestoreSystems:
                 foreach (var pilot in Pilots())

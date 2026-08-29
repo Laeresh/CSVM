@@ -271,6 +271,7 @@ public sealed class WorldSession
         };
         s.Runtime = animRuntime;
         animRuntime.CallbackHost = o.CallbackHost;
+        animRuntime.MissionTriggerOwner = o.TriggerOwner;
         animRuntime.FogStateSink = o.FogStateSink;
         // A mission cutscene the mission ALSO lists in startanims is armed at the bootstrap, where
         // the range gate already holds it; only one armed by a runtime CALL_ANIMATION needs the
@@ -286,7 +287,8 @@ public sealed class WorldSession
                 }
             }
         }
-        bool intro = BootstrapsCutscene(animProgram);
+        string? introAnim = BootstrapCutsceneOf(animProgram);
+        bool intro = introAnim != null;
         bool cutscenes = intro || s.Landings.Count > 0 || s.MissionCutsceneAnims.Count > 0;
         if (o.CutsceneRoots && cutscenes)
         {
@@ -313,40 +315,66 @@ public sealed class WorldSession
         if (o.NodeSubtree == null)
         {
             var pools = EffectPools.Load();
-            var libraryPools = new Dictionary<string, List<(Node3D Copy, ulong Owner)>>(StringComparer.OrdinalIgnoreCase);
-            animRuntime.ResolveLibraryRoot = (name, callAnchor) =>
+            var libraryPools = new Dictionary<string, List<(Node3D Copy, ulong Owner, object Site)>>(StringComparer.OrdinalIgnoreCase);
+            // Stands in for the authored event when a caller names none, so a site-less caller
+            // keeps one copy per anchor rather than one per call.
+            var unkeyedSite = new object();
+            // The aircraft archive's own parachutist, staged into this world rather than reachable
+            // through the chapter gamez: the original instances it out of a library root its world
+            // walk never reaches, which is exactly what this pool is for (docs/architecture.md).
+            var stagedChute = s.Aircraft?.Chuteman;
+            animRuntime.ResolveLibraryRoot = (name, callAnchor, callSite) =>
             {
+                bool fromStage = stagedChute != null
+                    && string.Equals(name, AircraftStage.ChuteNode, StringComparison.OrdinalIgnoreCase);
                 if (!libraryPools.TryGetValue(name, out var copies))
                 {
-                    if (gamez.FindByName(name) is not { } firstLookup || !gamez.IsLibraryRoot(firstLookup))
+                    if (!fromStage
+                        && (gamez.FindByName(name) is not { } firstLookup || !gamez.IsLibraryRoot(firstLookup)))
                         return null;
-                    copies = new List<(Node3D, ulong)>();
+                    copies = new List<(Node3D, ulong, object)>();
                     libraryPools[name] = copies;
                 }
                 ulong ownerId = callAnchor.GetInstanceId();
-                foreach (var (copy, owner) in copies)
-                    if (owner == ownerId)
-                        return copy; // this caller's own prior copy — reuse it, not a fresh one
-                if (gamez.FindByName(name) is not { } gzNode)
-                    return null; // unreachable past the first successful lookup above
+                object site = callSite ?? unkeyedSite;
+                foreach (var (copy, owner, claimed) in copies)
+                    if (owner == ownerId && ReferenceEquals(claimed, site))
+                        return copy; // this call's own prior copy — reuse it, not a fresh one
                 if (copies.Count < pools.LocalCallPoolSize(name))
                 {
-                    if (builder.Scene.BuildSubtree(gzNode, collisionSkip: _ => true) is not { } subtree)
+                    // The staged actor IS the first copy: it is already in the tree and already in
+                    // the runtime's node table, and a mission with one caller must keep using it.
+                    Node3D? made = fromStage
+                        ? (copies.Count == 0 ? stagedChute : stagedChute!.Duplicate() as Node3D)
+                        : (gamez.FindByName(name) is { } gzNode
+                            ? builder.Scene.BuildSubtree(gzNode, collisionSkip: _ => true) : null);
+                    if (made == null)
                         return null;
-                    subtree.Transform = Transform3D.Identity;
-                    root.AddChild(subtree);
-                    animRuntime.IndexPooledCopy(subtree);
-                    copies.Add((subtree, ownerId));
-                    return subtree;
+                    if (!ReferenceEquals(made, stagedChute))
+                    {
+                        made.Transform = Transform3D.Identity;
+                        root.AddChild(made);
+                        animRuntime.IndexPooledCopy(made);
+                    }
+                    copies.Add((made, ownerId, site));
+                    return made;
                 }
                 // Pool at capacity: recycle the oldest-owned copy (round-robin), same wrap the
                 // single-copy path always had.
-                var (recycled, _) = copies[0];
+                var (recycled, _, _) = copies[0];
                 copies.RemoveAt(0);
-                copies.Add((recycled, ownerId));
+                copies.Add((recycled, ownerId, site));
                 return recycled;
             };
         }
+        // The opening cutscene starts inside the bind's own start-list walk rather than through a
+        // trigger call, so its slot is written here instead, for the same reason and just as early
+        // (docs/formats/anim-definitions/cutscenes.md).
+        if (introAnim != null)
+        {
+            o.TriggerOwner?.Invoke(introAnim);
+        }
+
         mark = StartupProfile.Mark();
         animRuntime.Bind(root, animProgram);
         StartupProfile.Record("bind", mark);
@@ -399,22 +427,22 @@ public sealed class WorldSession
         return s;
     }
 
-    // Does this mission bootstrap one of the story-mission opening cutscenes? Read over the start
+    // Which story-mission opening cutscene does this mission bootstrap, if any? Read over the start
     // list's whole CALL_ANIMATION closure, not the list alone: C3/M03's `cgzep_camera` is reached
     // from its start anim `calldestroy_the_cargozep` and appears in no list. ⚠ Ask by name, not
     // by the callback codes: Instant Action's own `player_setup` authors the same nine, so a code
     // test would give every mission in the install a cutscene camera and a held world.
-    private static bool BootstrapsCutscene(AnimProgram program)
+    private static string? BootstrapCutsceneOf(AnimProgram program)
     {
         foreach (var def in program.Subset(program.StartAnims).Defs)
         {
             if (Session.CutsceneController.IsIntro(def.AnimName))
             {
-                return true;
+                return def.AnimName;
             }
         }
 
-        return false;
+        return null;
     }
 
     // Every definition the chapter's approach triggers can raise a callback from: the row's own
@@ -706,6 +734,12 @@ public sealed class WorldSession
         /// starts anything, since an intro definition raises its codes the instant it starts. Null
         /// leaves every code to the runtime's own two seams and its census.</summary>
         public Func<int, string?, string?, bool>? CallbackHost { get; init; }
+
+        /// <summary>The trigger slot the started definition is handed to, installed on the runtime
+        /// beside <see cref="CallbackHost"/> and told the mission's opening definition directly:
+        /// the intro starts in the bootstrap rather than through a trigger call, and its episode
+        /// belongs to it however deep the callee that raises its first code sits.</summary>
+        public Action<string>? TriggerOwner { get; init; }
 
         /// <summary>Where a <c>FOG_STATE</c> event goes, installed before the bootstrap for the
         /// same reason as <see cref="CallbackHost"/>: the one shipped use is in an intro

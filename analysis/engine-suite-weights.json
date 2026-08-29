@@ -183,6 +183,9 @@
     "perf-hud-layout": 0.009,
     "campaign-briefing-note": 0.161,
     "campaign-capture-group": 5.66,
+    "campaign-capture-chutes": 4.6,
+    "landings-balmoral-dock": 5.41,
+    "campaign-cutscene-ownership": 10.93,
     "airframe-hull-coverage": 3.109
   }
 }

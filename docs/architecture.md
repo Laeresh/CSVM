@@ -980,7 +980,11 @@ deferred until range; range-triggered and explicit mission-trigger calls (`PlayM
 `landings.zrd` rows and the objective script's `WAKE_ANIM`) may then lazily build their
 library-root callees, and an add-child may do the same for an explicitly named child — except where
 the call's own `AT_NODE` site IS the callee's root node, which names the node to run on rather than
-asking for a copy. `IndexSpawnedVehicle` is the other half of that resolution: it makes one live
+asking for a copy. The mission-trigger right is remembered as the started definition's whole call
+closure, not as a call-stack depth: a cutscene's later beats run off delayed sequence events seconds
+after the trigger's own dispatch has returned (CM02's crew is thrown out fourteen seconds in) and
+instance their library roots exactly as the beats inside it do. `MissionTriggerOwner`, called at the
+top of the same method, is the cutscene trigger slot; `Session/CutsceneController.cs` has it. `IndexSpawnedVehicle` is the other half of that resolution: it makes one live
 aircraft answer for the gamez library-root vehicle node its roster block was spawned from, by name
 and compiled index, which is what a cutscene posed `AT_NODE` that vehicle needs
 (`Mech3/RosterMarkers.cs` is the caller). It also keeps three things beside that rig which the
@@ -4588,6 +4592,17 @@ CM07's `carney_pickup_parent`). It is built `TopLevel` — see docs/org/objectMo
 mission that plays a cutscene, because a mid-mission definition poses the flown aeroplane on the
 same `player` marker an intro does and with no stage the pilot is held undrawn for the whole
 sequence. The archive is opened nowhere else in this build, so no other session pays for it.
+`Options.TriggerOwner` is installed on the runtime beside the callback host, and the opening
+cutscene's own name is handed to it directly before the bind, since that definition starts inside
+the start-list walk rather than through a trigger call (`BootstrapCutsceneOf`).
+`ResolveLibraryRoot` is the lazy pool behind a mission or death call that names a library root:
+copies are keyed on the caller's anchor AND on the authored call EVENT, so one definition calling
+the same actor several times from one anchor gets a copy each, which is what instance identity
+being `(def, anchor)` requires. Membership is the gamez's own parentless-root rule plus the one
+staged actor the chapter gamez has no record of at all, `AircraftStage`'s `chuteman`: the staged
+subtree is the first copy and further copies are duplicates of it, since the aircraft archive is
+closed by then. CM02's crew bailing out is the whole of that case, three calls one second apart at
+the same authored offset off the wing-walk frame; sizes are in `data/effect_pools.json`.
 
 ## src/Mech3/AircraftStage.cs
 The aircraft-archive subtrees a story-mission intro, a chuteman-carrying drop cutscene or a
@@ -5379,6 +5394,11 @@ an already-awake target, which TRUNCATES the rest of the caller's wake list;
 `NAP_OBJECTIVE_WHEN_I_COMPLETE` clearing the target's completed flag as the only re-run path;
 condition families OR-ing together with a conditionless objective completing on its first eligible
 tick; and `DANGER_ZONES_COMPLETED` counting only zones flagged while the objective was awake.
+`NotifyDockingComplete` is the one ending that comes from outside the script: callback 13, raised by
+the docking animation itself, which the original answers with the call its objectives runtime makes
+when a primary completes and then the mission-end path. It wins the mission on the same wrap-up an
+ordinary win takes. Nothing in the shipped objective data completes on a landing, so a mission that
+finishes on the zeppelin's hook has no other ending; `Session/CutsceneController.cs` raises it.
 The world seam is `IObjectiveWorld`: a method returning `null` means "this engine cannot answer",
 which makes the family report FALSE and bumps `UnresolvedConditions` rather than guess — ⚠ reading
 an empty world as "the group is wiped out" would win missions on the first tick.
@@ -5587,10 +5607,25 @@ whatever the swap hid then leaves the parked list, since 913 parks that aircraft
 and 914 would otherwise put it back.
 A swap sets the cutscene flags 11 and 2 set between them, and clears nothing: the definition
 ending is what gives the player flight back, now in the new airframe.
-Which definition the episode belongs to is the original's landings slot, not the raiser of the
-first code: `LandingApproachRuntime` calls `Own` with the row's definition BEFORE starting it, and
-the episode ends when that definition has ended AND no code-authoring definition in its call
-closure (seeded at the start, plus whatever actually raised a code) is still running. Both halves
+Which definition the episode belongs to is the original's trigger slot, not the raiser of the
+first code: the slot is written with the started definition BEFORE it starts, and the episode ends
+when that definition has ended AND no code-authoring definition in its call
+closure (seeded at the start, plus whatever actually raised a code) is still running.
+The slot is written on every path that starts a definition, not just the landings one:
+`AnimRuntime.MissionTriggerOwner` is called from `PlayMissionTrigger` itself, so the approach rows,
+the objective script's `WAKE_ANIM` and the ladder switch all book it, and `WorldSession` hands the
+opening cutscene's own name to the same seam before the bind, since the intro starts inside the
+start-list walk rather than through a trigger call. `Own` declines a definition whose call closure
+authors no `CALLBACK`: an ordinary `WAKE_ANIM` goes through the same call, and a slot it claimed
+would outrank the real raiser of the next episode while it was still running. C5/M02's ending is
+the shipped objective-path case (`nypd_southward` raises nothing and calls `nypd_player`, which
+raises 11, 2 and then 13); no shipped `WAKE_ANIM` target reaches more than one code-authoring
+definition, so the multi-raiser shape exists on the landings path alone.
+Code 13 is the mission-completion code, and the only ending a mission that finishes on a
+zeppelin's hook has: nothing in the shipped objective data completes on a landing. It reaches
+`ObjectiveGraph.NotifyDockingComplete` through the `MissionComplete` seam, which wins the mission on
+the ordinary wrap-up. Twenty missions' `hooked_to_klondike` and two mission-ending drop definitions
+raise it. Both halves
 come from CM06's docking, whose row definition raises nothing itself, calls the hookup that raises
 the first codes and ends with the aeroplane still hung, and calls the unhook last with a trailing
 `WAIT_FOR_COMPLETION` that holds no runner open (`docs/org/sequences.md`), so the row ends 2.6 s

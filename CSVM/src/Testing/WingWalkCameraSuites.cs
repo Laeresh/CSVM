@@ -96,6 +96,90 @@ internal static class WingWalkCameraSuites
         ctx.Note($"played {chapter}/{folder}'s '{CaptureAnim}' and read the camera it poses");
     }
 
+    // Every definition the capture can reach, its own plus the CALL_ANIMATION closure: what the
+    // session's own host answers for, and the only way the called wing walk's codes are hosted.
+    internal static IReadOnlyList<string> ClosureOf(TestWorld world, string anim)
+    {
+        var names = new List<string>();
+        foreach (var def in world.Session.Program.Subset(new[] { anim }).Defs)
+        {
+            if (def.AnimName is { } name && !names.Contains(name))
+            {
+                names.Add(name);
+            }
+        }
+
+        return names;
+    }
+
+    internal static RosterSpawnPlan? PlanNamed(TestContext ctx, string chapter, string folder,
+        string name)
+    {
+        var blocks = AiSkills.LoadRoster(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder));
+        var plan = CampaignRosterPlan.Build(blocks, VehicleDefs.Load(ctx.ZrdrPath),
+            Array.Empty<AiNet>());
+        foreach (var spawn in plan.Spawns)
+        {
+            if (string.Equals(spawn.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return spawn;
+            }
+        }
+
+        return null;
+    }
+
+    internal static FlightRoster BuildRoster(TestContext ctx, TestWorld world, string chapter,
+        TextureArchive textures, ProjectilePool pool, IReadOnlyList<PlayerRig> rigs, Vector3 near)
+    {
+        var spec = SessionSpec.Parse(new[] { $"--plane={StartPlane}" });
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var resources = new AircraftAssemblyResources
+        {
+            PlanesGamez = planesGamez,
+            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            CamParamsFor = _ => new CamParams(),
+            PaintRng = new RandomNumberGenerator(),
+            ZrdrPath = ctx.ZrdrPath,
+            StockLoadouts = StockLoadouts.Load(),
+            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            WeaponMessages = Messages.Load(ctx.MessagesPath),
+            Textures = textures,
+            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+        };
+        return new FlightRoster(FlightRosterPolicy.From(spec),
+            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host, resources,
+            new FlightWorldBindings
+            {
+                Projectiles = pool,
+                Gamez = planesGamez,
+                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter),
+            },
+            new HumanRosterBindings
+            {
+                RigCount = rigs.Count,
+                Rigs = rigs,
+                PauseState = new PauseState(),
+                MenuInputFor = _ => new MenuInput(),
+                ExitSession = () => { },
+            }, new WingWalkStarts(near));
+    }
+
+    internal static CampaignMission? MissionOf(IReadOnlyList<CampaignMission> missions, int seq)
+    {
+        foreach (var mission in missions)
+        {
+            if (mission.Seq == seq)
+            {
+                return mission;
+            }
+        }
+
+        return null;
+    }
+
     private static void Drive(TestContext ctx, TestWorld world, string chapter, string folder,
         StringBuilder report)
     {
@@ -473,91 +557,7 @@ internal static class WingWalkCameraSuites
         return string.Join(", ", parts);
     }
 
-    // Every definition the capture can reach, its own plus the CALL_ANIMATION closure: what the
-    // session's own host answers for, and the only way the called wing walk's codes are hosted.
-    private static IReadOnlyList<string> ClosureOf(TestWorld world, string anim)
-    {
-        var names = new List<string>();
-        foreach (var def in world.Session.Program.Subset(new[] { anim }).Defs)
-        {
-            if (def.AnimName is { } name && !names.Contains(name))
-            {
-                names.Add(name);
-            }
-        }
-
-        return names;
-    }
-
-    private static RosterSpawnPlan? PlanNamed(TestContext ctx, string chapter, string folder,
-        string name)
-    {
-        var blocks = AiSkills.LoadRoster(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder));
-        var plan = CampaignRosterPlan.Build(blocks, VehicleDefs.Load(ctx.ZrdrPath),
-            Array.Empty<AiNet>());
-        foreach (var spawn in plan.Spawns)
-        {
-            if (string.Equals(spawn.Name, name, StringComparison.OrdinalIgnoreCase))
-            {
-                return spawn;
-            }
-        }
-
-        return null;
-    }
-
     private static Node3D? First(IReadOnlyList<Node3D> found) => found.Count > 0 ? found[0] : null;
-
-    private static FlightRoster BuildRoster(TestContext ctx, TestWorld world, string chapter,
-        TextureArchive textures, ProjectilePool pool, IReadOnlyList<PlayerRig> rigs, Vector3 near)
-    {
-        var spec = SessionSpec.Parse(new[] { $"--plane={StartPlane}" });
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var resources = new AircraftAssemblyResources
-        {
-            PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-            CamParamsFor = _ => new CamParams(),
-            PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
-            StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-            WeaponMessages = Messages.Load(ctx.MessagesPath),
-            Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
-        };
-        return new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
-            new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host, resources,
-            new FlightWorldBindings
-            {
-                Projectiles = pool,
-                Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter),
-            },
-            new HumanRosterBindings
-            {
-                RigCount = rigs.Count,
-                Rigs = rigs,
-                PauseState = new PauseState(),
-                MenuInputFor = _ => new MenuInput(),
-                ExitSession = () => { },
-            }, new WingWalkStarts(near));
-    }
-
-    private static CampaignMission? MissionOf(IReadOnlyList<CampaignMission> missions, int seq)
-    {
-        foreach (var mission in missions)
-        {
-            if (mission.Seq == seq)
-            {
-                return mission;
-            }
-        }
-
-        return null;
-    }
 
     // The player flown alongside the captured aeroplane rather than at the gamez origin, so the
     // camera reading below separates the two places instead of finding them the same.

@@ -161,6 +161,10 @@ public readonly record struct ObjectiveRow(
 /// </summary>
 public sealed class ObjectiveGraph
 {
+    // The wrap-up the ordinary win takes before the debrief, shared with the docking's own ending
+    // so the two cannot drift apart.
+    private const float WonWrapUpS = 3f;
+
     private readonly ObjectiveScript _script;
     private readonly IObjectiveWorld _world;
     private readonly List<Live> _live = new();
@@ -318,6 +322,23 @@ public sealed class ObjectiveGraph
         Outcome = _pending == MissionOutcome.Won ? MissionOutcome.Won : MissionOutcome.Lost;
         _pending = Outcome;
         MissionEnded?.Invoke(Outcome);
+        return true;
+    }
+
+    /// <summary>The docking's own completion code, raised by the animation rather than by an
+    /// objective: the original answers it with the call its objectives runtime makes when a primary
+    /// completes and then the mission-end path, so the mission is won on the ordinary wrap-up.
+    /// Nothing in the shipped objective data completes on a landing, so this is the only ending a
+    /// mission that finishes on the hook has. Answers whether this call ended the mission.</summary>
+    public bool NotifyDockingComplete()
+    {
+        if (Ended || Ending)
+        {
+            return false;
+        }
+
+        PlayIfNamed(_script.ObjectivesWonSound);
+        End(MissionOutcome.Won, WonWrapUpS);
         return true;
     }
 
@@ -863,7 +884,7 @@ public sealed class ObjectiveGraph
         if (AllFlaggedComplete(won: true))
         {
             PlayIfNamed(_script.ObjectivesWonSound);
-            End(MissionOutcome.Won, 3f);
+            End(MissionOutcome.Won, WonWrapUpS);
         }
         else if (AllFlaggedComplete(won: false))
         {

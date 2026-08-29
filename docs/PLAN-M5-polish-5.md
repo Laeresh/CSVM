@@ -148,6 +148,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 58. ☑ `BL-611`: CM07's AA guns never fire; the chapter persist log carried the mission's own wreckage into its own replay
 59. ☑ `BL-610`: CM07's hangar drop plays with no aeroplane and hands the pilot back at the world origin, because an earlier cutscene left the `player` marker parented to the train
 
+### Wave G — the CM02 capture's two ends (D32 follow-ups)
+
+60. ☑ `BL-607`: a cutscene episode books to the first raiser on every path but the landings one, so a parent that calls several raisers is cut short
+61. ☑ `BL-608`: CM02's crew bail out as one figure at the world origin, and the docking on the Pandora never ends the mission
+
 ## Dependency and parallelism notes
 
 A5 is upstream of A4, A6 and C21 in one respect only: it settles what `rnd_xz` and `ObjectMotion`
@@ -1697,3 +1702,37 @@ on the flown path.
 **⚠ Traps.** A suite that reads the marker on the frame after the handoff measures its trip home, not the re-placement: remember the pose from the last playing frame (`landings-docking-hold` had the same fault). The suite also has to start from a world with earlier-cutscene history, or the stranding cannot happen at all.
 
 **Verified.** <pending orchestrator run>
+
+## G60 ☑ `BL-607`: ownership is written by the landings trigger alone
+
+**Goal.** An episode's raisers come from the started definition's closure on every path that starts a hosting definition, not the landings path alone.
+
+**Evidence (confidence: traced).** F45 made an episode wait for every code-authoring definition in the started definition's closure, but only `LandingApproachRuntime` calls `Own`. The objective script's `WAKE_ANIM`, the ladder switch and the intro bootstrap all book the episode to the first raiser with that callee's own closure. A second gap: `Host` required the owner to be running, and the runtime is still null during the animation bind, so an intro could never have won the slot.
+
+**Approach.** The slot moves onto the runtime (`AnimRuntime.MissionTriggerOwner`, called at the top of `PlayMissionTrigger`), so every trigger path books it; `WorldSession` hands the opening cutscene's own name to the same seam before the bind, since an intro starts inside the start-list walk; `Own` declines a definition whose closure authors no `CALLBACK`, because an ordinary `WAKE_ANIM` goes through the same call and a slot it claimed would outrank the next episode's real raiser.
+
+**Model recommendation.** One session with `BL-608`, which shares the host.
+
+**A refinement to the item's premise.** A census over every chapter's `objectives.zrd` `WAKE_ANIM` targets and their call closures finds six woken definitions that author a `CALLBACK` anywhere, and each has exactly one raiser: the multi-raiser shape exists on the landings path alone (CM06). C5/M02's ending is the shipped objective-path case of the shape the slot exists for, and the suite pins it.
+
+**Verify.** `campaign-cutscene-ownership`: C5/M02's `nypd_southward` raises no code and calls `nypd_player`, which raises 11, 2 and 13; the episode books to `nypd_southward` and completes Won, while an ordinary `WAKE_ANIM` left running claims no slot.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** An ordinary `WAKE_ANIM` must not claim the slot, or it outranks the next episode's real raiser. The intro's first code arrives while the host has no runtime to ask, so the slot wins outright in that state.
+
+## G61 ☑ `BL-608`: CM02's bailing crew and its docking on the Pandora
+
+**Goal.** Three parachutists appear beside the aeroplane at the end of the capture and drift for their whole scripts, and landing the captured Balmoral on the Pandora ends the mission.
+
+**Evidence (confidence: traced).** The chutes: `ww_player` authors three `ww_chuteman` calls at `AT_NODE wingwalk_parent (0,-2,8.5)`, at `Animation+14.76`, `Event+1.0` and `Event+2.0`. `chuteman` has no node in C3's gamez at all (`AircraftStage` stages it from the aircraft archive), so the library-root resolver declined it, the figure was never moved to the call's site and played at the archive's own origin, and calls two and three hit the live-instance guard and did nothing: one figure at (0,0,0) for the whole run. The docking: the movie is not truncated (`hooked_to_klondike` runs 12.6 s on `player_balmoral`'s branch, calls `bal_wing_foldup` at 10.67 s and both wings reach the authored `1.9198622` rad, the branch's `Event+2.0` matching the fold's own `run_time`). What was missing is the last thing the definition does: `all_done` raises `Callback 13`, the mission-completion code (`FUN_0047e080` case 13 into `FUN_00463c10(1)`, then the mission-end path `FUN_00443090`), which reached no host in CSVM, so the movie ended and gave the player flight back inside the zeppelin. Nothing in the shipped objective data completes on a landing, so code 13 is the only ending the 20 missions carrying `hooked_to_klondike`, C4/M01's `carpkup_player` and C5/M02's `nypd_player` have. Disproved from the brief: a `RESET_STATE` on `RESET_TIME 0`, the `SequenceRunner` last-event rule, a dropped `WAIT`, and F54's freeing of the hidden Balmoral's children (the chutes hang off `chuteman`, not the bomber).
+
+**Approach.** `WorldSession.ResolveLibraryRoot` serves the staged actor and keys copies on the authored call event as well as the anchor; the mission-trigger right is remembered as the trigger's closure rather than a call-stack depth, since these calls fire 14.8 s after that dispatch returned; `data/effect_pools.json` sizes `chuteman` at 3, the authored call-site count. `CutsceneController.MissionComplete` hosts code 13 into `ObjectiveGraph.NotifyDockingComplete`.
+
+**Model recommendation.** One session with `BL-607`.
+
+**Verify.** `campaign-capture-chutes` (chutes started at 14.75, 15.77 and 17.78 s, three visible at once, each placed at the walk frame, spans 15.2, 14.2 and 12.2 s) and `landings-balmoral-dock` (fold 10.67 to 12.68 s, completion code at 12.62 s, `rwingbend` at the authored angle, the mission ends).
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** `Props` and `Figures` on the aircraft stage are placed by `OBJECT_ADD_CHILD`, not by an `AT_NODE` call, so pooling them would change the hangar drop and the wing-walk pilot. A third caller of `ResolveLibraryRoot` must pass the authored event, or `null` to keep one copy per anchor.

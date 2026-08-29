@@ -538,6 +538,10 @@ public partial class GameSession : Node3D
                 if (_cutscene != null)
                 {
                     _cutscene.SwapAirframe = SwapPlayerAirframe;
+                    // The docking's own ending. Instant Action has no objectives graph to complete,
+                    // and its rows never raise the code, so an unbound seam is the right answer
+                    // there rather than a guarded one here.
+                    _cutscene.MissionComplete = () => _campaign?.Graph?.NotifyDockingComplete();
                 }
             }
             ApplyDestroyOverride(state);
@@ -1031,6 +1035,7 @@ public partial class GameSession : Node3D
                 LandingTriggers = _landings != null,
                 PlanesGamezPath = state.PlanesGamezPath,
                 CallbackHost = _cutscene != null ? _cutscene.Host : null,
+                TriggerOwner = _cutscene != null ? _cutscene.Own : null,
                 // The weather rig is built after the world, and the intro's fog fires inside the
                 // bootstrap, so the event is held until the rig has applied its zone.
                 FogStateSink = fog =>
