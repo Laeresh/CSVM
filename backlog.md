@@ -521,6 +521,50 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-557`, `Flight/Difficulty`, `docs/org/weaponRay.md`,
   `analysis/aim-assist-ttk/FINDINGS.md`.
 
+- `BL-639` `[Bug]` `[Blocked: CAP-47]` **CM14 (C2B/M04): the Gemini's gasbags do not burn out
+  completely, so the zeppelin never dies by its gasbags.** *Evidence:* reported at the controls and
+  re-confirmed on the merged build. The authored death is a count:
+  `extracted/C2B/M04/mis_anim/geminizep-all_gmzep_gasbags.json` carries
+  `activ_prereq_min_to_satisfy: 3` over five `finish_gmzepgasbagN` animation prerequisites, and its
+  `call_all_bags` sequence invalidates itself, calls `killgmzep` and runs the remaining gasbag
+  animations, so three finished gasbags of five kill the Gemini and the rest burn for show. That is
+  the `MINIMUM_TO_SATISFY`/`ANIMATION_LIST` prerequisite form CSVM's reader does parse, with
+  `ZeppelinRuntime` its only consumer, so the gate exists in the port; what does not arrive is a
+  finished gasbag. *What to settle first:* whether the fire's own animation stops short, or whether
+  it completes and the `finish_*` state is never raised. Those are different faults with the same
+  symptom, and only the second is a prerequisite question. `BL-599`'s closing commit is the nearest
+  precedent, a zeppelin that stopped burning out because the compiled prerequisite state is bit 0
+  of `active_raw` (`git log --grep=BL-599`); read it before starting.
+  *⚠ Traps:* do not judge a fix by whether the mission ends sooner. The mission's own progress gate
+  is the cannons, not the gasbags: primary 3 completes when five of six `deploy_gmzep_lbroadNN`
+  animations go `INVALID`, and the briefing says so outright (`MSG_BRF_HWM4_OBJ3`, "Destroy the
+  GEMINI by shooting the open cannon hatches"). Gasbags are not an authored substitute for that.
+  *Blocked:* what a finished gasbag looks like in the original is unfilmed, so "completely" has no
+  reference to compare against; `CAP-47` is that clip.
+  *Cross-refs:* `BL-640` (the same zeppelin's cannons), `BL-525` (the other prerequisite form,
+  which is dropped).
+
+- `BL-640` `[Bug]` **CM14 (C2B/M04): a broadside cannon takes weapon damage while its hatch is
+  still shut.** *Evidence:* reported at the controls and re-confirmed on the merged build. The
+  mission's premise is the opposite: each cannon deploys, fires and retracts behind its door, and
+  the briefing tells the player to destroy the Gemini "by shooting the open cannon hatches"
+  (`MSG_BRF_HWM4_OBJ3`). Nothing in the data gates that damage.
+  `extracted/C2B/M04/mis_anim/lbroad11-destroy_gmzep_lbroad11-gunback.json` is
+  `activation: WeaponHit` with `health: 60.0`, `proximity_damage: false` and `activ_prereqs: null`;
+  its `DAMAGE_SEQUENCE` only tiers smoke at `AnimHealth` 18 and 36; and its objects are the hatch
+  (`upper_br_door`), `gun1` and the frame. So the original's gate is geometric rather than
+  scripted: a gun retracted behind a closed door is not reachable by a round.
+  *Fix shape:* establish what a round actually strikes when the cannon is stowed. The candidates
+  are a retracted gun that keeps a collider outside the hull, a door that carries none, and a hit
+  attributed by a bounding volume rather than by the geometry the ray met.
+  *⚠ Traps:* do not add a "hatch open" test to the definition's activation. The data authors no
+  such prerequisite, so the test would be invented behaviour, and it would leave whatever lets a
+  round reach an interior part free to do the same elsewhere on the hull. The
+  `deploy_gmzep_lbroadNN` animations are also the mission's progress counter, five of six
+  `INVALID` completing primary 3, so anything that changes how easily a cannon dies moves the
+  mission's pacing. *Playtest after fix:* CM14, firing at a retracted cannon and then at the same
+  one deployed. *Cross-refs:* `BL-639`, `docs/org/weaponRay.md`.
+
 ## Weapons & combat
 
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
