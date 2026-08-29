@@ -58,20 +58,74 @@ main has moved since this branch diverged.
 
 **No output (main hasn't moved)** → skip to step 4.
 
-**Main has moved** → in the worktree, merge main in:
+**Main has moved** → classify what moved before choosing the operation, because a rewritten history
+and ordinary new work need opposite treatment.
+
+### Is it new work, or a rewritten history?
+
+A history rewrite (a trailer backfill, an author correction, any filter over old commits) leaves main
+carrying the same content under new hashes. A branch still on the old lineage then reads as deeply
+diverged from main when nearly all of that divergence is the same content counted twice. Merging in
+that state replays every rewritten commit as though it were new work, folding a second copy of the
+project's history under one merge commit.
+
+Read both directions before deciding:
+
+```
+git log --oneline <worktree-branch>..main
+git log --oneline main..<worktree-branch>
+```
+
+**A commit subject that appears in BOTH lists is the tell.** Confirm it on the trees, which a rewrite
+leaves untouched:
+
+```
+git rev-parse <commit-on-your-side>^{tree} <same-subject-commit-on-main>^{tree}
+```
+
+Identical trees, with the same author and the same commit date, mean only the message changed: that
+is a rewrite. Differing trees mean ordinary new work. A rewrite you cannot account for is worth
+raising with the user before going further; either way, do not merge.
+
+**Rewritten history** → replay only your own commits onto main's new tip instead of merging:
+
+1. Find the fork point. Your own commits are the entries of `main..<worktree-branch>` whose subjects
+   do NOT also appear in `<worktree-branch>..main`; everything else in that range is old-lineage.
+   The fork point is the parent of the oldest of your own: `git log -1 --format=%H <oldest-own>^`.
+2. Confirm the range holds your work and nothing else:
+   `git log --oneline <fork-point>..<worktree-branch>`.
+3. Pin main's tip by SHA rather than using the bare `main` ref, since other sessions land on main
+   while this runs: `git rev-parse main`.
+4. `git rebase --onto <pinned-main-sha> <fork-point> <worktree-branch>`
+
+A rewrite leaves the fork point with a content-identical twin on main, so nothing moves under the
+branch; what it picks up is only whatever is genuinely new on main since the fork. Conflicts here are
+real conflicts against that new work, so `resolving-merge-conflicts` applies as it does for a merge.
+The rebase rewrites this branch's own hashes, so record the new ones for the final report and treat
+any verification recorded in an earlier commit message as describing a tree that no longer exists.
+
+**Ordinary new work** → in the worktree, merge main in:
 - `git merge main`
 - **Conflicts** → invoke the `resolving-merge-conflicts` skill to resolve them; do not hand-weave
   conflict markers yourself. If that skill itself cannot resolve a conflict and stops, this skill
   stops too — report where it left off.
-- Once merged clean (with or without conflicts to resolve), this combination has never been
-  tested together. Run the project's full verification battery on the merged worktree —
-  `dotnet build CSVM/CSVM.sln` and `.\RunTests.ps1` (or the narrower check that fits what the
-  merge touched, per CLAUDE.md's own hook logic) — and treat this as **mandatory**, not optional.
-  - **Failure** → report the failure output and **stop the entire skill here**. Do not proceed to
-    step 4 with a broken merge sitting in the worktree.
-  - If the merge touched `analysis/goldens/manifest.json`, don't naively take either side —
-    regenerate goldens on the merged tree and commit the re-pin naming the shots, per the
-    worktree-merge lessons already learned on this project.
+
+### Verification after either path
+
+Once main is folded in (merged or rebased onto, with or without conflicts to resolve), this
+combination has never been tested together. Run the project's full verification battery on the
+worktree — `dotnet build CSVM/CSVM.sln` and `.\RunTests.ps1` (or the narrower check that fits what
+the sync brought in, per CLAUDE.md's own hook logic) — and treat this as **mandatory**, not
+optional.
+
+- **Failure** → report the failure output and **stop the entire skill here**. Do not proceed to
+  step 4 with a broken tree sitting in the worktree.
+- If the sync touched `analysis/goldens/manifest.json`, don't naively take either side —
+  regenerate goldens on the synced tree and commit the re-pin naming the shots, per the
+  worktree-merge lessons already learned on this project.
+- Record the result in its own `Verification:` commit, matching the convention already in the log.
+  After a rebase this is the only surviving record of what was gated, since the rebased commits'
+  own messages describe a tree that no longer exists.
 
 ## 4. Merge back into main
 
@@ -110,6 +164,7 @@ as a signal something upstream of this step went wrong, not something to force p
 
 One final message: what got committed in steps 1-2 (hashes + one-line subjects, or "nothing to
 commit"), the BL-NNN outcome (closed / not applicable / aborted-with-reason), whether main had
-moved and what verification ran, the merge-back commit, and confirmation the worktree and branch
+moved and whether it was merged in or rebased onto (say which, and why, when it was a rewrite),
+what verification ran, the merge-back commit, and confirmation the worktree and branch
 are gone. If the skill stopped early (steps 2 or 3's abort paths), say so clearly and name exactly
 what's left in the worktree for you to pick back up.
