@@ -186,7 +186,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — the book
 
 18. ☑ The story page and its per-mission scrap composition
-19. ☐ The per-scrap detail view
+19. ☑ The per-scrap detail view
 20. ☐ Navigation: page and mission arrows, and the Current Mission bookmark
 21. ☐ The danger-zone scrap slot
 
@@ -220,10 +220,10 @@ File contention, and these must not run in parallel worktrees:
 
 - `CSVM/src/Session/CampaignDirector.cs`: B11 and B14.
 - `CSVM/src/Session/Launcher.cs`: B12 and C17.
-- `CSVM/src/UI/CampaignScrapbookPage.cs`: C17 (new file) and D18 have landed, D19 and D20 remain.
+- `CSVM/src/UI/CampaignScrapbookPage.cs`: C17 (new file), D18 and D19 have landed, D20 remains.
   C15's and C16's own rows/stamps landed in `CampaignPreviousMissionsPage.cs`'s
-  `CampaignScrapbookResults` instead, a deviation from the plan's assumed single file. Run D19 and
-  D20 in listed order in one worktree.
+  `CampaignScrapbookResults` instead, a deviation from the plan's assumed single file.
+  `CampaignScrapbookZoomPage.cs` (new file, D19) is its own screen and not part of this contention.
 - `CSVM/src/Session/CampaignProgression.cs` and `CampaignProfileStore.cs`: B13 and B14.
 
 ---
@@ -802,7 +802,47 @@ spread matches its screenshot scrap for scrap.
 two or three spreads, so nothing may assume two. The `<page>` field in an art filename is not the
 spread the scrap appears on.
 
-## D19 ☐ The per-scrap detail view
+## D19 ☑ The per-scrap detail view
+
+**Landed.** `ScrapbookScrap.Opens` corrects D18's own Evidence line below: the gate is the `Zoom`
+column alone (`!= '0'`), not `ImageType`'s second letter. Every one of the 167
+`DZ_generic_corners` mount rows carries `Zoom=0` and never opens; every one of the other 294 rows
+(167 captures, 127 ordinary scraps) carries a real family letter and always does. `1_1_3`
+(`SB_01_02_mag2`), the item this plan's own worked example rests on, ships `ImageType` `P0` and
+opens, which is what falsified the old reading. `ScrapbookComposition.Openable` narrows the same
+gate `Pictures` uses to `Opens`; `ScrapbookComposition.ZoomFamily` reads `LAYOUT.CSV`'s
+`SBZ_T_TITLE`/`CAPTION`/`TEXT<letter>` rows for a family's three text boxes (position and wrap
+width only — a `BoardLine` carries no colour of its own, so the two typo'd colour fields the Traps
+line below warns about were never a blocker). `CampaignScrapbookZoomPage` (new file, wired as
+`CampaignScreen.ScrapbookZoom`) draws the family background, the scrap's own inset image and up to
+three text lines, closing back to the results page on RETURN or Back. `CampaignScrapbookPage` gives
+every openable scrap on spread 1 its own row after REPLAY MISSION and RETURN TO CABIN, stepped into
+by the cursor (this shell has no pointer hit-testing over freely-positioned art) rather than
+clicked; a row draws no text of its own but names itself on the hint line.
+
+**The title/caption/body text is unresolvable, not merely undecoded.** `SCRAPBOOK.CSV`'s
+`ResourceID`/`TitleResID`/`TextResID` columns are langui *symbols* (`IDS_SB_01_01_mag2_t`), not
+numeric ids. `RESRC1.H`, a leaked developer header shipped alongside the scripts, assigns them
+numbers under `ScrapBook.Rc` starting at 40000 — a resource script never extracted, so no string
+table anywhere (not `ui_strings.json`, not `RESOURCE.H`) carries the words those numbers pointed
+at. The detail view shows the raw symbol, the same degrade `CampaignBriefingPage` and
+`BriefingObjectives` already use for an unresolved key, rather than inventing English.
+
+**Verified.** Unit tests over hand-authored fixtures cover the corrected `Opens` gate, the zoom
+inset's own extension (`ImageType`'s second letter, independent of the page extension),
+`Openable`'s combined objective-and-opens filter, and `ZoomFamily`'s box parsing. Two tests against
+the real extraction reproduce this item's own worked example exactly (`1_1_3` opens with
+`IDS_SB_01_01_mag2_t`/`IDS_SB_01_01_mag2_b`, `1_2_4` does not open at all) and confirm every zoom
+family letter any shipped scrap actually uses has a `LAYOUT.CSV` text layout. An integration suite
+opens a fixture scrap end to end (background, inset position, both text lines) and closes back to
+the results page. `dotnet build`/`format` clean, `CheckCommentCaps.ps1` clean, and the complete
+`.\RunTests.ps1` passes: 2622 unit tests, 181 engine suites clean, 16 goldens hash-identical,
+166.8s total.
+
+**What it changed elsewhere.** `docs/formats/campaign-screens.md`'s "Resolving a row to a file"
+section is corrected to the `Zoom`-column gate, with the exact row counts behind it. The results
+page's own worked example (`docs/PLAN-scrapbook.md`'s D18 entry, and `docs/architecture.md`) is
+unaffected, since D18 never read `Opens` itself.
 
 **Goal.** Clicking a scrap opens it in detail, with the text the small version does not carry.
 

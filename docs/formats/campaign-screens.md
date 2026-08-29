@@ -453,15 +453,21 @@ with the card laid over its right half.
 
 ### Resolving a row to a file
 
-The `ImageType` letters select extensions independently: `B` gives `.BMP`, `J` gives `.JPG`, and
-anything else gives `.PNG` for the page image, while for the zoom image `0` means the scrap does not
-open at all and an empty second letter defaults to `.JPG`. Shipped rows are `P0` (245, a PNG that
-does not zoom), `PP` (167), `PJ` (43) and blank (6, six `DZ_generic_corners` mounts that take the
-`.PNG` default). The page image is `Scrapbook\` plus the name, which
-the script prefixes with `assets\graphics\`; the zoom background is
+⚠ **Whether a row opens at all is the `Zoom` column alone (`!= 0`), not `ImageType`'s second
+letter.** `ImageType`'s letters select extensions independently (`B` gives `.BMP`, `J` gives
+`.JPG`, anything else `.PNG`), the same three-way rule applying to the page image (first letter)
+and, when the row opens, the zoom inset (second letter). An earlier reading of this file blamed the
+second letter for the open/closed split itself; it does not survive the data. `1_1_3`
+(`SB_01_02_mag2`) ships `ImageType` `P0` and a real `Zoom` letter (`M`), and opens. What actually
+splits the 461 rows: the 167 `DZ_generic_corners` photo-corner mounts all carry `Zoom=0` and never
+open; the other 294 (167 captures, 127 ordinary scraps) all carry a real family letter and always
+do. `ImageType` itself is `P0` (245: 161 of the mounts plus 84 ordinary scraps), `PP` (167, every
+capture), `PJ` (43, ordinary scraps whose zoom inset is a distinct `.JPG`) or blank (6, the
+remaining mounts, both letters absent). The page image is `Scrapbook\` plus the name, which the
+script prefixes with `assets\graphics\`; the zoom background is
 `Assets\Graphics\ScrapBook\SB_BG_<Zoom>.jpg` and the zoom's inset image is `Assets\Graphics\` plus
-the name. All 294 page images, all 43 zoom images and all 26 `SB_BG_*.jpg` backgrounds are present
-in the shipped install.
+the name under its own (second-letter) extension. All 294 page images, all 43 `.JPG` zoom insets
+and all 26 `SB_BG_*.jpg` backgrounds are present in the shipped install.
 
 The `Zoom` letter also names the text layout: `SBZ_T_TITLE<letter>`, `SBZ_T_CAPTION<letter>` and
 `SBZ_T_TEXT<letter>` in `LAYOUT.CSV` give each family its own box, colour and justification, 26

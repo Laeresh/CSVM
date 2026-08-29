@@ -11,9 +11,9 @@ namespace CSVM.UI;
 /// literal strings rather than read off <c>ui_strings.json</c> at runtime, following
 /// <see cref="Flight.IaWrapupBoard"/>'s own precedent. Positions are <c>LAYOUT.CSV</c>'s
 /// <c>[@ScrapBook@]</c> <c>SB_T_*</c> rows. Wired into <see cref="CampaignFlow"/> as
-/// <see cref="CampaignScreen.Scrapbook"/>'s <see cref="CampaignScrapbookPage"/> (C17), which also
-/// draws spread 1's shipped scraps alongside this class's rows and stamps
-/// (<see cref="ScrapbookComposition"/>, D18).
+/// <see cref="CampaignScreen.Scrapbook"/>'s <see cref="CampaignScrapbookPage"/>, which also draws
+/// spread 1's shipped scraps alongside this class's rows and stamps
+/// (<see cref="ScrapbookComposition"/>).
 /// </summary>
 public static class CampaignScrapbookResults
 {

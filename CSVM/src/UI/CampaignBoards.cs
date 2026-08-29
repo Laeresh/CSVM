@@ -71,6 +71,10 @@ public static class CampaignBoards
             new BoardSlot(BoardButton.ReplayMission, 0, PaperButton, 594, 505, true),
             new BoardSlot(BoardButton.ReturnToCabin, 0, ReturnToCabinArt, 593, 561),
         },
+        [CampaignScreen.ScrapbookZoom] = new[]
+        {
+            new BoardSlot(BoardButton.CloseZoom, 0, Ui("GN_B_Continue.png", StripFrames), 640, 519),
+        },
         [CampaignScreen.Briefing] = new[]
         {
             new BoardSlot(BoardButton.ReplayBriefing, 0, BriefButton, 197, 560, true),

@@ -145,18 +145,22 @@ sounds like, watched and frame-sampled, never measured into a constant.
   `campaign: <Outcome> — arrived at the debrief with '<profile>'` one frame later at the
   launchscreen side, with the same outcome in both lines. A mismatch or a missing second line
   reopens `BL-622`; what the debrief screen itself shows is `PT-89`.
-- `PT-89` `[Own]` **C17/D18: the scrapbook opens on the flown mission, not the cabin, with its own
-  shipped scraps under the stat card.** Continuing the same flights, after each ending's hold the
-  screen that opens is the scrapbook (`SB_BackGround` behind a stat card), not the cabin. *Look
-  for:* the outcome line and the four rows read the just-flown attempt (win → Mission Completed,
-  loss → Mission Failed, with that flight's own time/hit-ratio/cash), any airframe downed carries a
-  kill stamp with its name and count, mission-specific scraps (CM01: a coin, a magazine and a
-  newspaper masthead) show behind the stat card at their own positions, REPLAY MISSION re-opens the
-  briefing for the flight just flown — fly the win case, let Next Mission's position advance on the
-  cabin, then come back and confirm Replay Mission still targets the mission that was flown and not
-  the new current one — and RETURN TO CABIN lands on the cabin with that session's own state (funds,
-  Next Mission). A wrong mission on Replay, stale numbers, a missing stamp or scrap, or landing
-  straight on the cabin reopens `BL-622`.
+- `PT-89` `[Own]` **C17/D18/D19: the scrapbook opens on the flown mission, not the cabin, with its
+  own shipped scraps under the stat card and each one opening into its own detail view.**
+  Continuing the same flights, after each ending's hold the screen that opens is the scrapbook
+  (`SB_BackGround` behind a stat card), not the cabin. *Look for:* the outcome line and the four
+  rows read the just-flown attempt (win → Mission Completed, loss → Mission Failed, with that
+  flight's own time/hit-ratio/cash), any airframe downed carries a kill stamp with its name and
+  count, mission-specific scraps (CM01: a coin, a magazine and a newspaper masthead) show behind the
+  stat card at their own positions, stepping the cursor onto one of those scraps and confirming
+  opens a full-screen detail view (a family background, the scrap's own picture, and up to three
+  lines of raw `IDS_SB_...` text since the original English was never shipped) that RETURN closes
+  back to the same page, REPLAY MISSION re-opens the briefing for the flight just flown — fly the
+  win case, let Next Mission's position advance on the cabin, then come back and confirm Replay
+  Mission still targets the mission that was flown and not the new current one — and RETURN TO
+  CABIN lands on the cabin with that session's own state (funds, Next Mission). A wrong mission on
+  Replay, stale numbers, a missing stamp or scrap, a scrap that will not open, or landing straight
+  on the cabin reopens `BL-622`.
 
 ### C1 · Bloodhawk — the overcast sky, ground to above the deck
 

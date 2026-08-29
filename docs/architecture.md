@@ -251,31 +251,46 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/Flight/HangarPaintTables.cs` — the paint screen's decoded tables as CSVM data: the swatch table (`data/hangar_swatches.json`, 27 rows of base colour, default variant and shade ramp) and the pattern table plus the 50 decal names (`data/hangar_patterns.json`). `Resolve(colour, shade)` is the original's own resolver; `Available(pattern, airframe)` is the availability mask; `Nearest(rgb)` maps a version-1 store file's free triple onto an authored swatch. Engine-free and pure, so the whole colour model resolves without a session.
 - `src/UI/HangarNamePage.cs` — the PLANENAME screen: one row per character stepped through a filename-safe alphabet plus a length row that adds and removes them, capped at the original's 32-character name, with the detail line assembling the name and marking the focused character.
 - `src/UI/HangarPurchasePage.cs` — the PURCHASE screen: the itemised review, one row per priced thing the scratch plane carries (airframe always, engine when chosen, armed gun slots, armoured zones via 1191-1194, wings with hardpoints via 1176/1177) with its decoded cost and weight, a totals row, and the Purchase Now row that commits, flagged with the problems text (1182 + 1227 / 1171) whenever the verdict is not Ok.
-- `src/UI/CampaignFlow.cs` — the campaign's out-of-mission flow, engine-free: a stack of screens over one selected `CampaignProfileDef`, the `ICampaignPage` mount point the later screens fill (rows, detail, footer, optional `HangarArt`, optional text field), a registry keyed by `CampaignScreen` (`Roster`, `Cabin`, `PreviousMissions`, `Briefing`, `FlightCheck`, `Ammo`, `Scrapbook`), and the navigation API (`GoTo`, `Back`, `SelectProfile`, `Cancel`) those pages steer with.
+- `src/UI/CampaignFlow.cs` — the campaign's out-of-mission flow, engine-free: a stack of screens over one selected `CampaignProfileDef`, the `ICampaignPage` mount point the later screens fill (rows, detail, footer, optional `HangarArt`, optional text field), a registry keyed by `CampaignScreen` (`Roster`, `Cabin`, `PreviousMissions`, `Briefing`, `FlightCheck`, `Ammo`, `Scrapbook`, `ScrapbookZoom`), and the navigation API (`GoTo`, `Back`, `SelectProfile`, `Cancel`) those pages steer with. `ZoomTarget` names the mission/spread/item a `ScrapbookZoom` screen opens on, set by `SetScrapbookZoom` and re-read fresh rather than cached.
 - `src/UI/CampaignRosterPage.cs` — the player-profile screen: the name field over the roster, CONTINUE creating or continuing a player and opening the cabin, a roster row selecting then continuing, DELETE PLAYER as a confirmed second stage, CANCEL back to the launchscreen, and the original's own name refusals (langui 200/202/212/707).
 - `src/UI/CampaignTextEntry.cs` — a campaign screen's one-line text field: the original's alphanumeric-and-space rule and 32-character cap, typed from the keyboard and stepped from the pad through one alphabet, so the field needs no keyboard and produces nothing the profile store would have to sanitise.
 - `src/UI/CampaignCabinPage.cs` — the cabin hub: NEXT MISSION (opens the briefing for the profile's next mission, or refuses in the campaign's own words once all 24 are complete), PREVIOUS MISSIONS, PLANE CONSTRUCTION (a `CampaignExit.OpenHangar` request the shell fulfils), and RETURN TO MAIN MENU; `Pictures` layers the pilot's own aircraft photo (`PC_P_HANGAR<airframe>.JPG`) under the painted cabin, whose colour-keyed hole is the window, and the board draws it; `Art` is the flat cabin scene alone, for a caller that wants pixels. `MapPinCount` is a pure, tested stand-in for pins nothing places yet.
-- `src/UI/CampaignPreviousMissionsPage.cs` — the scrapbook's finished-missions list, one row per completed mission in `seq` order (long name, area, plane flown from the best-of record) plus VIEW SELECTED (a no-op; the detail line already says everything it would), REPLAY MISSION (`SetMission` + `GoTo(Briefing)`, no advance) and RETURN TO CABIN. The same file carries `CampaignScrapbookResults` (static): the book's results page (spread 1) computed from one `MissionResult` — the outcome line, the four drawn rows (Run Time, Gun Hit Ratio, Cash Earned, Overall Planes Downed; Rockets Expended is authored and never drawn) and the two tab titles, at their `LAYOUT.CSV` positions. Row labels are literal strings, `IaWrapupBoard`'s own precedent. Reproduces the original's Best to Date bug: `0x0040a7e6` reads a never-written offset for that tab instead of the merged mask, so it always renders Mission Failed. `Stamps`/`StampPictures`/`StampLabels` fill the eleven `SB_KILL`/`SB_KILLTEXT` slots densely from the plain kill tally then the ace tally, skipping zeros, at the `SB_KILLMARKERCOMBINED.PNG` strip frame each names (0-10 plain, 11-21 starred); the eleven slot positions are not in reading order. Wired into `CampaignFlow` as `CampaignScreen.Scrapbook` by C17's `CampaignScrapbookPage.cs`.
+- `src/UI/CampaignPreviousMissionsPage.cs` — the scrapbook's finished-missions list, one row per completed mission in `seq` order (long name, area, plane flown from the best-of record) plus VIEW SELECTED (a no-op; the detail line already says everything it would), REPLAY MISSION (`SetMission` + `GoTo(Briefing)`, no advance) and RETURN TO CABIN. The same file carries `CampaignScrapbookResults` (static): the book's results page (spread 1) computed from one `MissionResult` — the outcome line, the four drawn rows (Run Time, Gun Hit Ratio, Cash Earned, Overall Planes Downed; Rockets Expended is authored and never drawn) and the two tab titles, at their `LAYOUT.CSV` positions. Row labels are literal strings, `IaWrapupBoard`'s own precedent. Reproduces the original's Best to Date bug: `0x0040a7e6` reads a never-written offset for that tab instead of the merged mask, so it always renders Mission Failed. `Stamps`/`StampPictures`/`StampLabels` fill the eleven `SB_KILL`/`SB_KILLTEXT` slots densely from the plain kill tally then the ace tally, skipping zeros, at the `SB_KILLMARKERCOMBINED.PNG` strip frame each names (0-10 plain, 11-21 starred); the eleven slot positions are not in reading order. Wired into `CampaignFlow` as `CampaignScreen.Scrapbook` by `CampaignScrapbookPage.cs`.
 - `src/UI/CampaignScrapbookPage.cs` — the scrapbook's results page (spread 1), opened on
-  `CampaignFlow.MissionSeq` (C17): `CampaignScrapbookResults`' rows and Most Recent kill stamps as
+  `CampaignFlow.MissionSeq`: `CampaignScrapbookResults`' rows and Most Recent kill stamps as
   `Captions`/`Pictures`, spread 1's own shipped scraps under them
-  (`ScrapbookComposition.Pictures`, D18: "the results page is a story page with the card laid over
-  its right half"), then REPLAY MISSION (`GoTo(Briefing)` without touching `MissionSeq`, so a win
-  that already advanced the campaign position still replays the mission this page is showing) and
-  RETURN TO CABIN. A mission with no recorded result draws nothing rather than throwing. The Best
-  to Date toggle, the book's arrows/bookmark and the story pages beyond spread 1 are Wave D's
-  remaining items.
-- `src/UI/ScrapbookComposition.cs` — the scrapbook's per-spread scrap layout (D18), read from
+  (`ScrapbookComposition.Pictures`: "the results page is a story page with the card laid over its
+  right half"), then REPLAY MISSION (`GoTo(Briefing)` without touching `MissionSeq`, so a win that
+  already advanced the campaign position still replays the mission this page is showing) and
+  RETURN TO CABIN. A mission with no recorded result draws nothing rather than throwing. Every
+  scrap that opens (`ScrapbookComposition.Openable`) gets its own row after those two, drawing no
+  `RowText` of its own (its picture already stands at its authored position) but naming itself on
+  the hint line (title, else caption, else body, else the image name); confirming one opens
+  `CampaignScreen.ScrapbookZoom` via `CampaignFlow.SetScrapbookZoom`. The Best to Date toggle, the
+  book's arrows/bookmark and the story pages beyond spread 1 are not yet wired.
+- `src/UI/CampaignScrapbookZoomPage.cs` — one scrap's detail view, opened on
+  `CampaignFlow.ZoomTarget` and closing back to `Scrapbook` (CLOSE, or the default `Back()`): the
+  zoom family's background (`SB_BG_<letter>.jpg`), the scrap's inset image at its own
+  `ZoomX`/`ZoomY`, and up to three text lines at the family's own boxes
+  (`ScrapbookComposition.ZoomFamily`). The title/caption/body are the shipped row's own langui
+  *symbols* (`IDS_SB_...`): `RESRC1.H` assigns them numeric ids under `ScrapBook.Rc`, a resource
+  script never extracted, so nothing resolves them to real text. Shown as the raw symbol, the same
+  degrade `CampaignBriefingPage`/`BriefingObjectives` use for an unresolved key, rather than
+  invented English. A target with no such item draws nothing rather than throwing.
+- `src/UI/ScrapbookComposition.cs` — the scrapbook's per-spread scrap layout, read from
   `extracted\rof\ASSETS\SCRAPBOOK.CSV` rather than invented: `Items` enumerates a mission slot's
   spread from item 1 upward and stops at the first missing key, the way the original's own reader
   does; `Pictures` gates each row's `Objective` against the mission's merged best-to-date mask
   (bit 0 "ever won", a positive value its own bit set, a negative value its own bit clear), skips a
   `Snap_`-prefixed capture when a caller-supplied check says its file is not on disk (nothing saves
-  one yet, `BL-256`/D21), and stacks the survivors by ascending `DrawOrder`. The page extension
-  comes from `ImageType`'s first letter alone (`B` BMP, `J` JPG, else PNG); the shipped rows are
-  overwhelmingly `P0`/`PP`/`PJ`, so in practice almost every scrap resolves to a `.PNG`. Parsed
-  rows are cached per file path, misses included, `PlaneDiagrams`' own precedent. CSVM carries no
-  unlock-flag analogue, so unlike the original the objective gate cannot be bypassed.
+  one yet), and stacks the survivors by ascending `DrawOrder`. `Openable` narrows the same gate to
+  `ScrapbookScrap.Opens`, the `Zoom` column alone (`!= '0'`) rather than `ImageType`'s second
+  letter (`docs/formats/campaign-screens.md`, "Resolving a row to a file"). `ZoomFamily` reads
+  `LAYOUT.CSV`'s `SBZ_T_TITLE`/`CAPTION`/`TEXT<letter>` rows for a family's three text boxes (X, Y,
+  wrap width only; colour is unreadable by a `BoardLine` regardless, and two families' colour
+  fields are typo'd). Parsed rows are cached per file path, misses included, `PlaneDiagrams`' own
+  precedent. CSVM carries no unlock-flag analogue, so unlike the original the objective gate cannot
+  be bypassed.
 - `src/UI/CampaignBriefingPage.cs` — the mission briefing: everything resolved from `CampaignFlow.MissionSeq` alone, through `cm_sequence` to the storage address, `brief_c%d%d` to the dialog state, the state to its map bitmap and narration name, `sounds.zrd`'s `SETS` to the wav file, and the mission's own `objectives.zrd` to the note, so nothing is computed from the story position. REPLAY BRIEFING / RETURN TO CABIN / GO TO FLIGHT CHECK are the screen's only rows: an uncovered objective is written on the parchment through `Notes`, the `BoardNote` carrying the dialog's own `LIST` widget, so the mission's text is read and never a cursor stop (`BL-487`). The map is the page's `HangarArt`. Labels are `messages.json`'s own `MSG_BTN_*` and an unresolved objective key shows as the raw key, so a missing extraction degrades to the three buttons rather than throwing. It plays nothing: `NarrationWav` and `NarrationStarts` name what a shell must play, and `Advance(seconds)` is the clock a shell drives.
 - `src/UI/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`/`BriefingState`/`BriefingStep`, walking the root list where the 24 states actually live) and `BriefingReveal`, the interpreter that runs a state's 12-opcode beat sheet against a caller-advanced clock, blocking on `Wait`'s authored seconds and `WaitForMarker`'s cue times and keeping each element's opacity, rotation and position as its tweens land. Elements come out in placement order, which is draw order. With no cue points every marker releases at once, so the map finishes under the narration rather than a timing being invented. Decode: `docs/formats/briefing.md`.
 - `src/UI/BriefingObjectives.cs` — the briefing's parchment note from a mission's `objectives.zrd`: every `IDENTITY` carrying a `MSG_BRF_*` key, ordered by priority ascending, which is the list an `Objective id index` opcode indexes 0-based. Takes the reader list rather than a path, so it tests without an extraction; resolves text through `Messages`, leaving the raw key visible when the table cannot.
@@ -4104,7 +4119,7 @@ it holds; the renderer, not the model, resolves it to a file, which is what keep
 backgrounds ship as out of the engine-free half.
 
 ## src/UI/CampaignBoards.cs
-The authored geometry of all seven campaign screens plus the composer that turns a page and a
+The authored geometry of all eight campaign screens plus the composer that turns a page and a
 cursor into a `ComposedBoard`. Every coordinate is the original's own: `ASSETS\LAYOUT.CSV` for the
 script-driven screens, `Briefing.zrd`'s own chrome for the briefing, and, for the rows the shipped
 layout leaves as unresolved authoring macros, a measurement off the reference screenshots recorded
@@ -4114,9 +4129,11 @@ in `docs/org/campaign-board.md`. A page names one of these buttons per row throu
 entries, so it carries a wrap box and a spacing instead of a pitch and the renderer measures it.
 ⚠ `Labelled` on a slot, not the frame count, decides whether a plaque's words are drawn over it: the
 generic paper buttons are four-frame strips that still carry an `IDS_*` label. `CampaignScreen.Scrapbook`
-(C17) reuses the results page's own `SB_BackGround.jpg` and its `SB_B_REPLAY`/`SB_B_RETURNPC`
-positions; `CampaignScrapbookPage.cs` supplies its rows and `CampaignScrapbookResults` (C15/C16)
-its content. Off-engine coverage: `CSVM.Tests/ComposedBoardTests.cs`.
+reuses the results page's own `SB_BackGround.jpg` and its `SB_B_REPLAY`/`SB_B_RETURNPC` positions;
+`CampaignScrapbookPage.cs` supplies its rows and `CampaignScrapbookResults` its content.
+`CampaignScreen.ScrapbookZoom` carries no static `Chrome` (its background is per-scrap, supplied by
+the page's own `Pictures`), only its `CLOSE` button (`GN_B_Continue.png`). Off-engine coverage:
+`CSVM.Tests/ComposedBoardTests.cs`.
 
 ## src/UI/ComposedBoardView.cs
 The Godot half of the campaign boards: draws one `ComposedBoard` over the whole window through

@@ -8,13 +8,11 @@ namespace CSVM.UI;
 /// <summary>
 /// The scrapbook's results page (spread 1), opened on the mission a finished mission just flew
 /// (<c>docs/org/debrief.md#the-screen-is-the-scrapbook</c>): the outcome line, the four results
-/// rows and the per-airframe kill stamps <see cref="CampaignScrapbookResults"/> (C15/C16)
-/// computes off <see cref="CampaignFlow.MissionSeq"/>, plus spread 1's own shipped scraps (D18):
-/// "the results page is a story page with the card laid over its right half"
-/// (<c>docs/formats/campaign-screens.md</c>, "The scrapbook"). Then REPLAY MISSION and RETURN TO
-/// CABIN. The tab is always Most Recent here, the original's own reset on every entry; the Best
-/// to Date toggle, the book's page/mission arrows, the Current Mission bookmark and the story
-/// pages beyond spread 1 are Wave D's remaining items.
+/// rows, the kill stamps and spread 1's own shipped scraps. Every scrap that opens
+/// (<see cref="ScrapbookScrap.Opens"/>) gets its own row after REPLAY MISSION and RETURN TO CABIN,
+/// stepped into rather than clicked (no pointer hit-testing over freely-positioned art);
+/// confirming one opens <see cref="CampaignScreen.ScrapbookZoom"/>. The Best to Date toggle, the
+/// book's arrows/bookmark and the story pages beyond spread 1 are not yet wired.
 /// </summary>
 public sealed class CampaignScrapbookPage : CampaignPage
 {
@@ -24,10 +22,11 @@ public sealed class CampaignScrapbookPage : CampaignPage
     /// <summary>RETURN TO CABIN's row.</summary>
     public const int CabinRow = 1;
 
-    private const int RowTotal = 2;
+    // Scrap rows start here, one per ScrapRows().Count.
+    private const int ScrapRowBase = 2;
 
-    // Mission-end always opens the book on spread 1 (A3, C17); stepping to a story page is D20's
-    // arrows, not yet wired.
+    // Mission-end always opens the book on spread 1; stepping to a story page needs the book's
+    // page/mission arrows, not yet wired.
     private const int Spread = 1;
 
     /// <summary>Binds the page to its flow.</summary>
@@ -43,7 +42,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
     public override string Title => "SCRAPBOOK";
 
     /// <inheritdoc/>
-    public override int RowCount => RowTotal;
+    public override int RowCount => ScrapRowBase + ScrapRows().Count;
 
     /// <summary>The results block's rows and the kill stamps' counts, off the Most Recent
     /// half.</summary>
@@ -62,9 +61,9 @@ public sealed class CampaignScrapbookPage : CampaignPage
         }
     }
 
-    /// <summary>The spread's shipped scraps (D18, <c>SCRAPBOOK.CSV</c>) under the kill stamps
-    /// (C16), gated on the mission's merged best-to-date mask and with a capture skipped when the
-    /// profile carries no such file (nothing saves one yet, per D21).</summary>
+    /// <summary>The spread's shipped scraps (<c>SCRAPBOOK.CSV</c>) under the kill stamps, gated on
+    /// the mission's merged best-to-date mask and with a capture skipped when the profile carries
+    /// no such file (nothing saves one yet).</summary>
     public override IReadOnlyList<BoardPicture> Pictures
     {
         get
@@ -74,10 +73,8 @@ public sealed class CampaignScrapbookPage : CampaignPage
                 return Array.Empty<BoardPicture>();
             }
 
-            string profileDir = Flow.Store.DirFor(profile.Name);
             var pictures = new List<BoardPicture>(ScrapbookComposition.Pictures(
-                Flow.DataRoot, Flow.MissionSeq + 1, Spread, result.Best.CompletedMask,
-                scrap => File.Exists(Path.Combine(profileDir, scrap.FileName))));
+                Flow.DataRoot, Flow.MissionSeq + 1, Spread, result.Best.CompletedMask, CaptureExists));
             pictures.AddRange(CampaignScrapbookResults.StampPictures(result, bestToDate: false));
             return pictures;
         }
@@ -91,7 +88,9 @@ public sealed class CampaignScrapbookPage : CampaignPage
         _ => BoardButtonRef.None,
     };
 
-    /// <inheritdoc/>
+    /// <summary>A scrap row draws no list text of its own: its picture already stands at its
+    /// authored position, and drawing its name over it too would be the shell inventing a caption
+    /// the original never had.</summary>
     public override string RowText(int row) => row switch
     {
         ReplayRow => "REPLAY MISSION",
@@ -104,12 +103,13 @@ public sealed class CampaignScrapbookPage : CampaignPage
     {
         ReplayRow => "Flies this mission again",
         CabinRow => "Back to the cabin",
+        _ when ScrapAt(row) is { } scrap => ScrapHint(scrap),
         _ => string.Empty,
     };
 
     /// <summary>REPLAY MISSION opens the briefing without touching <see cref="CampaignFlow.MissionSeq"/>,
     /// which is already the mission this page is showing, not the campaign's current position
-    /// (they differ after a win, C17's own trap).</summary>
+    /// (they differ after a win). A scrap row opens its detail view.</summary>
     public override bool Accept(int row)
     {
         switch (row)
@@ -121,10 +121,50 @@ public sealed class CampaignScrapbookPage : CampaignPage
                 Flow.GoTo(CampaignScreen.Cabin);
                 return true;
             default:
-                return false;
+                if (ScrapAt(row) is not { } scrap)
+                {
+                    return false;
+                }
+
+                Flow.SetScrapbookZoom(Flow.MissionSeq + 1, Spread, scrap.Item);
+                Flow.GoTo(CampaignScreen.ScrapbookZoom);
+                return true;
         }
+    }
+
+    // The first of title, caption, then the image's own name, so the hint line never reads empty
+    // for a scrap this page actually offers to open.
+    private static string ScrapHint(ScrapbookScrap scrap)
+    {
+        foreach (var key in new[] { scrap.TitleKey, scrap.CaptionKey, scrap.TextKey })
+        {
+            if (key.Length > 0 && key != "0")
+            {
+                return key;
+            }
+        }
+
+        return scrap.ImageName;
     }
 
     private MissionResult? Result() =>
         Flow.Profile is { } profile ? CampaignProgression.ResultOf(profile, Flow.MissionSeq) : null;
+
+    // The spread's openable scraps, in item order -- the row order the cursor steps.
+    private IReadOnlyList<ScrapbookScrap> ScrapRows() =>
+        Result() is { } result && Flow.Profile != null
+            ? ScrapbookComposition.Openable(
+                Flow.DataRoot, Flow.MissionSeq + 1, Spread, result.Best.CompletedMask, CaptureExists)
+            : Array.Empty<ScrapbookScrap>();
+
+    private ScrapbookScrap? ScrapAt(int row)
+    {
+        var scraps = ScrapRows();
+        int index = row - ScrapRowBase;
+        return index >= 0 && index < scraps.Count ? scraps[index] : null;
+    }
+
+    private bool CaptureExists(ScrapbookScrap scrap) =>
+        Flow.Profile is { } profile
+        && File.Exists(Path.Combine(Flow.Store.DirFor(profile.Name), scrap.FileName));
 }

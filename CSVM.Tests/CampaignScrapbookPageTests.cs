@@ -70,6 +70,39 @@ public class CampaignScrapbookPageTests
         Assert.Empty(flow.Page.Pictures);
     }
 
+    /// <summary>An openable scrap on spread 1 gets its own row after the two buttons, and
+    /// confirming it opens the detail view naming exactly that scrap.</summary>
+    [Fact]
+    public void AnOpenableScrapGetsARowThatOpensItsDetailView()
+    {
+        string root = ScrapbookCompositionFixture.WriteMinimalOpenableScrap(TestData.TempDir(), mission: 1);
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        Assert.Equal(3, flow.Page.RowCount); // Replay, Cabin, the one openable scrap
+
+        flow.FocusRow(2);
+        Assert.Equal("IDS_TEST_TITLE", flow.Page.Detail(2));
+        flow.Accept();
+
+        Assert.Equal(CampaignScreen.ScrapbookZoom, flow.Screen);
+        Assert.Equal((1, 1, 1), flow.ZoomTarget);
+    }
+
+    /// <summary>A scrap row draws no list text of its own: its picture already stands at its
+    /// authored position.</summary>
+    [Fact]
+    public void AScrapRowDrawsNoRowTextOfItsOwn()
+    {
+        string root = ScrapbookCompositionFixture.WriteMinimalOpenableScrap(TestData.TempDir(), mission: 1);
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        Assert.Equal(string.Empty, flow.Page.RowText(2));
+    }
+
     private static MissionAttempt Attempt(int seq) =>
         new(seq, CompletedMask: 1, TimeMs: 40000, Shots: 10, Hits: 5, Money: 0,
             Airframe: 5, PlaneName: "Gypsy Magic");
@@ -85,13 +118,13 @@ public class CampaignScrapbookPageTests
         return array;
     }
 
-    private static CampaignFlow OpenedOnScrapbook(CampaignProfileDef profile, int seq)
+    private static CampaignFlow OpenedOnScrapbook(CampaignProfileDef profile, int seq, string? dataRoot = null)
     {
         var dir = Path.Combine(TestData.TempDir(), "Profiles");
         Directory.CreateDirectory(dir);
         var store = new CampaignProfileStore(dir);
         store.Save(profile);
-        var flow = new CampaignFlow(store, UiStrings.Empty);
+        var flow = new CampaignFlow(store, UiStrings.Empty, dataRoot);
         flow.SelectProfile(store.Load(profile.Name)!);
         flow.SetMission(seq);
         flow.GoTo(CampaignScreen.Scrapbook);

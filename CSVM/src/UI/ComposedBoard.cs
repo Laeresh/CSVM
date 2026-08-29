@@ -102,6 +102,9 @@ public enum BoardButton
 
     /// <summary><c>OL_B_CANCEL</c>.</summary>
     CancelLoadout,
+
+    /// <summary><c>SBZ_B_RETURN</c>, the scrap detail view's close button (D19).</summary>
+    CloseZoom,
 }
 
 /// <summary>One bitmap a board draws, and how many stacked frames it holds. A button strip is four

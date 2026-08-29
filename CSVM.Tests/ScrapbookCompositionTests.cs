@@ -5,7 +5,7 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>D18: the scrapbook's per-spread scrap composition, read from <c>SCRAPBOOK.CSV</c>
+/// <summary>The scrapbook's per-spread scrap composition, read from <c>SCRAPBOOK.CSV</c>
 /// rather than invented. Parser-level behaviour (extension resolution, the item-1-and-up
 /// enumeration, the <c>Objective</c> gate, the capture skip and the draw-order stack) is exercised
 /// against hand-authored fixtures, never a copy of the shipped file
@@ -150,6 +150,80 @@ public class ScrapbookCompositionTests
         Assert.False(ScrapbookComposition.Items(Root(), 4, 1)[1].IsCapture); // the corner mount
     }
 
+    [Fact]
+    public void OpensIsGatedByTheZoomColumnAloneNotImageType()
+    {
+        // mag2 (1_1_3) ships ImageType "P0", the letter the plan's own Evidence line blamed for
+        // "does not open"; its Zoom column ("M") is what actually decides it, and it opens.
+        var mag2 = ScrapbookComposition.Items(Root(), 1, 1)[2];
+        Assert.Equal('M', mag2.Zoom);
+        Assert.True(mag2.Opens);
+
+        // The corner mount (4_1_2) carries the same ImageType "P0" but Zoom "0": it does not open.
+        var mount = ScrapbookComposition.Items(Root(), 4, 1)[1];
+        Assert.Equal('0', mount.Zoom);
+        Assert.False(mount.Opens);
+    }
+
+    [Fact]
+    public void TheZoomInsetsExtensionComesFromImageTypesSecondLetterOnly()
+    {
+        // coin: "PJ" -> zoom inset is JPG even though the page image is PNG.
+        var coin = ScrapbookComposition.Items(Root(), 1, 1)[0];
+        Assert.Equal("PNG", coin.Extension);
+        Assert.Equal("JPG", coin.ZoomExtension);
+
+        // mag2: "P0" -> the second letter falls into the same else-PNG bucket as the first.
+        var mag2 = ScrapbookComposition.Items(Root(), 1, 1)[2];
+        Assert.Equal("PNG", mag2.ZoomExtension);
+    }
+
+    [Fact]
+    public void OpenableCombinesTheObjectiveGateWithOpens()
+    {
+        const int primary = 1;
+        var withoutBit3 = ScrapbookComposition.Openable(Root(), 2, 1, primary, scrap => true);
+        Assert.Single(withoutBit3);
+        Assert.Equal("SB_02_01_notgated", withoutBit3[0].ImageName);
+
+        var withBit3 = ScrapbookComposition.Openable(Root(), 2, 1, primary | (1 << 3), scrap => true);
+        Assert.Single(withBit3);
+        Assert.Equal("SB_02_01_gated", withBit3[0].ImageName);
+    }
+
+    [Fact]
+    public void ItemCarriesItsOwn1BasedOrdinal()
+    {
+        var items = ScrapbookComposition.Items(Root(), 1, 1);
+        Assert.Equal(1, items[0].Item);
+        Assert.Equal(2, items[1].Item);
+        Assert.Equal(3, items[2].Item);
+    }
+
+    [Fact]
+    public void ZoomFamilyReadsTheThreeBoxesForItsLetter()
+    {
+        string root = Root();
+        WriteLayout(root, "SBZ_T_TITLEM    =T,!,60,25,0,525,85,0xff000000,0\n" +
+                           "SBZ_T_CAPTIONM  =T,!,0,0,0,700,550,0xff000000,0\n" +
+                           "SBZ_T_TEXTM     =T,!,60,113,0,525,487,0xff000000,0\n");
+
+        var family = ScrapbookComposition.ZoomFamily(root, 'M');
+
+        Assert.NotNull(family);
+        Assert.Equal(60f, family!.Value.TitleX);
+        Assert.Equal(25f, family.Value.TitleY);
+        Assert.Equal(525f, family.Value.TitleWidth);
+        Assert.Equal(525f, family.Value.TextWidth);
+    }
+
+    [Fact]
+    public void ZoomFamilyIsNullForAnUnknownLetterOrAMissingFile()
+    {
+        Assert.Null(ScrapbookComposition.ZoomFamily(Root(), 'Z')); // no LAYOUT.CSV written
+        Assert.Null(ScrapbookComposition.ZoomFamily(null, 'M'));
+    }
+
     // Writes the fixture into a fresh temp dataRoot's extracted/rof/ASSETS/SCRAPBOOK.CSV, the
     // path ScrapbookComposition.Items resolves against -- never the shipped file itself.
     private static string Root()
@@ -160,14 +234,21 @@ public class ScrapbookCompositionTests
         File.WriteAllText(Path.Combine(dir, "SCRAPBOOK.CSV"), Fixture);
         return root;
     }
+
+    // Writes a minimal LAYOUT.CSV fixture (SBZ_T_* rows only) under an already-rooted dataRoot.
+    private static void WriteLayout(string root, string body)
+    {
+        string dir = Path.Combine(root, "extracted", "rof", "ASSETS");
+        File.WriteAllText(Path.Combine(dir, "LAYOUT.CSV"), body);
+    }
 }
 
-/// <summary>The two claims D18's Verify step makes against the shipped install: every populated
-/// spread's art is present, and CM01's story page reproduces scrap for scrap
+/// <summary>The two claims that need the shipped install to check: every populated spread's art is
+/// present, and CM01's story page reproduces scrap for scrap
 /// (<c>OriginalScreenshots/Campaign Scrapbook CM01 Story Scraps.png</c>).</summary>
 public class ScrapbookCompositionExtractedTests
 {
-    // Slots 1-24, spreads 1-3 (A1: 8 missions have one, 10 have two, 6 have three).
+    // Slots 1-24, spreads 1-3 (8 missions have one spread, 10 have two, 6 have three).
     [ExtractedDataFact]
     public void EveryPopulatedSpreadsArtIsPresentOnDisk()
     {
@@ -220,5 +301,53 @@ public class ScrapbookCompositionExtractedTests
         int mask = 1 | (1 << 1) | (1 << 3) | (1 << 12);
         var pictures = ScrapbookComposition.Pictures(root, 1, 2, mask, scrap => false);
         Assert.Equal(5, pictures.Count);
+    }
+
+    [ExtractedDataFact]
+    public void Mag2OpensWithItsOwnTitleAndBodyKeys()
+    {
+        var mag2 = ScrapbookComposition.Items(TestData.DataRoot, mission: 1, spread: 1)[2];
+
+        Assert.Equal("SB_01_02_mag2", mag2.ImageName);
+        Assert.True(mag2.Opens);
+        Assert.Equal("IDS_SB_01_01_mag2_t", mag2.TitleKey);
+        Assert.Equal("IDS_SB_01_01_mag2_b", mag2.TextKey);
+    }
+
+    [ExtractedDataFact]
+    public void APhotoCornerMountDoesNotOpen()
+    {
+        var mount = ScrapbookComposition.Items(TestData.DataRoot, mission: 1, spread: 2)[3];
+
+        Assert.Equal("DZ_generic_corners", mount.ImageName);
+        Assert.False(mount.Opens);
+    }
+
+    [ExtractedDataFact]
+    public void EveryFamilyLetterAScrapNamesHasATextLayout()
+    {
+        string root = TestData.DataRoot!;
+        var letters = new HashSet<char>();
+        for (int mission = 0; mission <= 24; mission++)
+        {
+            for (int spread = 1; spread <= 3; spread++)
+            {
+                foreach (var scrap in ScrapbookComposition.Items(root, mission, spread))
+                {
+                    if (scrap.Opens)
+                    {
+                        letters.Add(scrap.Zoom);
+                    }
+                }
+            }
+        }
+
+        Assert.NotEmpty(letters);
+        foreach (var letter in letters)
+        {
+            Assert.True(
+                ScrapbookComposition.ZoomFamily(root, letter) != null,
+                $"no LAYOUT.CSV text layout for zoom family '{letter}'");
+        }
     }
 }
