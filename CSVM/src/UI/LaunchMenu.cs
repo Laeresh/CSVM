@@ -1911,7 +1911,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                      ?? CampaignProgression.BuildForOwned(plane);
         var launch = new CampaignLaunch(
             profile.Name, flow.MissionSeq, PlanePickerRoster.AirframeNode(plane.Airframe),
-            custom, CampaignLoadout.For(plane, Fits));
+            custom, CampaignLoadout.For(plane, Fits), _slots.Count);
         StopNarration();
         Music?.Stop();
         _campaign = null;
@@ -3029,9 +3029,12 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// three things binding it needs — its stock node, its hangar build (null for a profile
     /// starter or a reward aircraft, neither of which is hangar-built), and the ammunition and
     /// ordnance the ammo screen stored. The wingman is NOT here: <c>CampaignDirector</c> resolves
-    /// its binding from the same profile it already opens.</summary>
+    /// its binding from the same profile it already opens. <c>Players</c> is how many humans joined;
+    /// the aircraft above is the seated pilot's, and a guest falls back to it until each player
+    /// brings an entry of their own.</summary>
     public readonly record struct CampaignLaunch(
-        string Profile, int Seq, string PlaneNode, CustomPlaneDef? Custom, LoadoutChoice? Fit);
+        string Profile, int Seq, string PlaneNode, CustomPlaneDef? Custom, LoadoutChoice? Fit,
+        int Players);
 
     // One editable line of a loadout list. Key is the gun slot (1-4) or the physical pylon
     // number (1-8) — slot identity, the same key LoadoutChoice uses, never a row index.

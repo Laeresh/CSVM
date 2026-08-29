@@ -305,7 +305,8 @@ public partial class GameSession : Node3D
         Name = "GameSession";
         // ⚠ Resolved here, before any consumer reads Chapter/Mission: a --campaign= launch names a
         // story position, not a chapter, and every path below is derived from those two fields.
-        _spec = ResolveCampaignZeppelins(CampaignDirector.ResolveSpec(spec, ctx.ZrdrPath), ctx.DataRoot);
+        _spec = CampaignDirector.ResolveSeatedPlane(
+            ResolveCampaignZeppelins(CampaignDirector.ResolveSpec(spec, ctx.ZrdrPath), ctx.DataRoot));
         _repoRoot = ctx.RepoRoot;
         _dataRoot = ctx.DataRoot;
         _planesGamezPath = ctx.PlanesGamezPath;

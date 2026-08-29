@@ -114,7 +114,8 @@ public sealed record SessionSpec
     /// Action) puts every human on <see cref="AimAssist.PlayerTeam"/> instead of the per-pilot
     /// default (plain flight's default stays FFA, this is the opt-in
     /// to co-op). Dropped with a warning when combined with <c>--vs</c>, whose FFA is explicit and
-    /// outranks it.</summary>
+    /// outranks it. A campaign session resolves it true on its own and ignores the flag in
+    /// silence, because the flag asks for what a co-op campaign already is.</summary>
     public bool Coop { get; private set; }
     /// <summary><c>--vs-kills=N</c>: the kill target that ends a match early. Default 5; 0
     /// disables the kill limit (the match then runs to the time limit alone).</summary>
@@ -1181,13 +1182,13 @@ public sealed record SessionSpec
     }
 
     /// <summary>The campaign cabin's FLY MISSION, <see cref="FromMenu"/>'s counterpart for a story
-    /// mission: the profile and story position <c>--campaign=</c> would name, plus the pilot's
-    /// aircraft. The chapter and mission are NOT settled here: they come out of
-    /// <c>cm_sequence.zrd</c>, so <see cref="Session.CampaignDirector.ResolveSpec"/> resolves them
-    /// in the session's constructor as for a command-line <c>--campaign=</c>. ⚠ Derived from
-    /// <paramref name="cli"/>, the pristine command line, as <see cref="FromMenu"/> is.</summary>
+    /// mission: the profile and story position <c>--campaign=</c> would name, the joined player
+    /// count, and <paramref name="planeNode"/>, the SEATED pilot's aircraft and the only one named.
+    /// The chapter and mission are NOT settled here: they come out of <c>cm_sequence.zrd</c>, so
+    /// <see cref="Session.CampaignDirector.ResolveSpec"/> resolves them in the session's constructor
+    /// as for a command line. ⚠ Derived from the pristine <paramref name="cli"/>.</summary>
     public static SessionSpec FromCampaign(SessionSpec cli, string profile, int seq,
-        string planeNode, LoadoutChoice? fit = null, CustomPlaneDef? custom = null) =>
+        string planeNode, int players, LoadoutChoice? fit = null, CustomPlaneDef? custom = null) =>
         cli with
         {
             CampaignProfile = profile,
@@ -1196,7 +1197,8 @@ public sealed record SessionSpec
             MenuCustomPlanes = new[] { custom },
             PlaneNames = new[] { planeNode },
             PlaneName = planeNode,
-            Players = 1,
+            Players = Mathf.Clamp(players, 1, UI.SplitScreen.MaxPlayers),
+            Coop = true,
             Stunt = false,
             Versus = false,
             IaDef = null,
@@ -1347,6 +1349,21 @@ public sealed record SessionSpec
     public SessionSpec WithCampaignZeppelins(bool hasZeppelins, bool hasGenerators) =>
         this with { Zeppelins = Zeppelins || hasZeppelins, Generators = Generators || hasGenerators };
 
+    /// <summary>A copy flying <paramref name="planeNode"/> as the seated pilot's aircraft, with the
+    /// hangar build and stored fit that go with it. The counterpart of <see cref="FromCampaign"/>'s
+    /// seat for a command-line <c>--campaign=</c>, whose spec never passed a launchscreen: reading
+    /// the profile needs the store off disk, which this type never touches, so
+    /// <see cref="Session.CampaignDirector.ResolveSeatedPlane"/> reads it and calls this. Guests
+    /// keep falling back to entry 0 the way <see cref="FromCampaign"/> leaves them.</summary>
+    public SessionSpec WithSeatedAircraft(string planeNode, CustomPlaneDef? custom, LoadoutChoice? fit) =>
+        this with
+        {
+            PlaneNames = new[] { planeNode },
+            PlaneName = planeNode,
+            MenuCustomPlanes = new[] { custom },
+            MenuLoadouts = new[] { fit },
+        };
+
     private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 
     // Turns the parsed votes into the one answer each: the mode, its modifiers, the world
@@ -1448,6 +1465,13 @@ public sealed record SessionSpec
         {
             Warn("core", "--coop has no effect with --vs (its FFA is explicit); ignoring --coop");
             Coop = false;
+        }
+
+        // A campaign sortie is co-op by construction: the authored AI teams assume one player side.
+        // Silent, not warned — --coop asks for exactly this. !Versus so the rule above still holds.
+        if (CampaignProfile != null && !Versus)
+        {
+            Coop = true;
         }
 
         // The numpad views orbit a FLYING plane; the other modes have their own cameras (the

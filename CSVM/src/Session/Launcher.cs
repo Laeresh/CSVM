@@ -990,7 +990,7 @@ public partial class Launcher : Node3D
     private void StartCampaignFromMenu(LaunchMenu.CampaignLaunch launch)
     {
         _spec = SessionSpec.FromCampaign(_cli, launch.Profile, launch.Seq, launch.PlaneNode,
-            launch.Fit, launch.Custom);
+            launch.Players, launch.Fit, launch.Custom);
         if (!_spec.SeedPinned)
         {
             _sortie++;

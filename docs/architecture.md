@@ -4640,6 +4640,16 @@ they are testable. `SessionMode` is closed — Menu/Fly/Viewer/Freecam/AnimLab �
 `Versus` (`--vs`, `--vs-kills=`, `--vs-time=`) beats `Stunt` by fixed precedence, not last-wins.
 `Resolve`'s step order and the purity contract (DET-9) are on the class and method themselves;
 `FromMenu`'s no-re-resolve/Dogfight-lock/`iaDef` rules are on `FromMenu` and `IaDef`.
+`FromCampaign` is the cabin's counterpart, taking the joined player count and the SEATED pilot's
+aircraft, the only one it names; a guest falls back to that entry through `PlaneRoster.PlaneFor`
+until `CampaignLaunch` carries one per player. A campaign session is co-op with no flag: `Resolve`
+sets `Coop` for any `--campaign=` that is not also `--vs`, and `FromCampaign` sets it directly
+because that factory deliberately does not re-resolve. `--coop` on a campaign command line is
+therefore ignored in silence, which is the one ignored flag here that prints nothing, because it
+asks for exactly what the mode already gives. A `--campaign= --players=N` command line needs no
+new gate: a campaign resolves to `SessionMode.Fly`, so the existing "splitscreen is a flight mode"
+clamp passes it through, and the multi-entry `--plane=` count inference still loses to an
+explicit `--players=`.
 
 ## src/Mech3/WorldSession.cs
 Builds one chapter world and binds its `AnimProgram` — the world+anim half of a session build;
@@ -5548,6 +5558,15 @@ the sibling of `InstantActionDirector`: a plain sealed class that builds no node
 `ResolveSpec` runs in `GameSession`'s CONSTRUCTOR, before any chapter-dependent path is derived: a
 `--campaign=<profile>:<seq>` launch names a story position, so the sequence is read and
 `SessionSpec.WithCampaignMission` points the rest of the build at an ordinary chapter/mission.
+`ResolveSeatedPlane` runs in the same constructor chain, last, and is the command line's
+counterpart to the cabin's seat: a `--campaign=` launch passed no launchscreen and so names
+nobody's aeroplane, so the profile's `SelectedPlane` is read here (with its `CustomPlaneStore`
+build, or its award template where a granted aircraft has no file) and installed through
+`SessionSpec.WithSeatedAircraft`. `--plane=` entry 0 beats it and warns naming what it overrode,
+which is what lets a golden pin a co-op campaign shot with no hand-authored profile on disk;
+entries 1 and up name guests and are left alone. The warning fires on the NODE differing, not on
+where the name came from, so a cabin launch (whose entry 0 is already that node) stays silent
+without this needing to know which factory built the spec.
 `TryCreate` loads the profile and the script on the same "a failure warns and flies without a
 mission" contract `InstantActionDirector.TryCreate` has. `Attach(WorldInputs)` arms the graph once
 every runtime a directive can touch is up, applies the chapter's persist log and hands the world's

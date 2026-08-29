@@ -92,7 +92,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — The seams
 
 1. ☑ `RaceGrid` becomes `StartGrid`, and answers a campaign mission's anchor
-2. ☐ A campaign session accepts more than one player
+2. ☑ A campaign session accepts more than one player
 3. ☐ `IObjectiveWorld` grows the human field, and the scripted player keeps its meaning
 4. ☐ The episode owner: a cutscene episode knows which human started it
 
@@ -180,7 +180,7 @@ the rename rather than failing; that is accepted, but say so in the landing comm
 the spawn list entry for a heading: the grid takes its heading from the anchor pair precisely so
 `--direction` is not silently ignored, and that reasoning survives the rename.
 
-## A2 ☐ A campaign session accepts more than one player
+## A2 ☑ A campaign session accepts more than one player
 
 **Goal.** `--campaign=<profile>:<seq> --players=3` builds a three-pane campaign session, and the
 cabin's FLY MISSION can do the same for however many players have joined.

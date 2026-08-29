@@ -191,6 +191,46 @@ public sealed class CampaignDirector
             mission.ChapterFolder.ToUpperInvariant(), mission.MissionFolder.ToUpperInvariant());
     }
 
+    /// <summary>Seats the profile's own selected aircraft on a command-line
+    /// <c>--campaign=</c> launch, which passed no launchscreen and so carries nobody's aeroplane.
+    /// <c>--plane=</c> entry 0 beats the profile and says so; entries 1 and up name guests and are
+    /// left alone. Returns the spec unchanged outside a campaign launch, and for a profile that
+    /// cannot be read (<see cref="TryCreate"/> reports that one).</summary>
+    public static SessionSpec ResolveSeatedPlane(SessionSpec spec)
+    {
+        if (spec.CampaignProfile == null
+            || CampaignProfileStore.UserProfiles().Load(spec.CampaignProfile) is not { } profile
+            || profile.Planes.Count == 0)
+        {
+            return spec;
+        }
+
+        int at = Math.Clamp(profile.SelectedPlane, 0, profile.Planes.Count - 1);
+        var plane = profile.Planes[at];
+        string node = UI.PlanePickerRoster.AirframeNode(plane.Airframe);
+        // A named entry 0 wins whether it came from --plane= or from the launchscreen's own seat,
+        // which is already this node. Comparing the node rather than tracking where the name came
+        // from is what keeps a cabin launch silent: it seated the same aeroplane.
+        if (spec.PlaneNames.Count > 0)
+        {
+            if (!string.Equals(spec.PlaneNames[0], node, StringComparison.OrdinalIgnoreCase))
+            {
+                GD.PushWarning($"--plane={spec.PlaneNames[0]} overrides the seated aircraft: " +
+                               $"'{profile.Name}' flies \"{plane.Name}\" ({node}) at story position " +
+                               $"{spec.CampaignMissionSeq}, and it is flying stock {spec.PlaneNames[0]} instead");
+            }
+
+            return spec;
+        }
+
+        // The same three things CampaignLaunch carries, resolved the way FlyCampaignMission does:
+        // a reward aircraft with no file in the build store falls back to its own award template.
+        var custom = CustomPlaneStore.UserPlanes().Load(plane.Name)
+                     ?? CampaignProgression.BuildForOwned(plane);
+        GD.Print($"campaign: '{profile.Name}' seated in \"{plane.Name}\" as {node}");
+        return spec.WithSeatedAircraft(node, custom, CampaignLoadout.For(plane, StockLoadouts.Load()));
+    }
+
     /// <summary>Construction, the shape <see cref="InstantActionDirector.TryCreate"/> has: null
     /// outside a campaign launch, and a profile that cannot be loaded warns and flies without a
     /// director rather than aborting the launch.</summary>
