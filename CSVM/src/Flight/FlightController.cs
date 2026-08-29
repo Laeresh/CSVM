@@ -1928,14 +1928,20 @@ public partial class FlightController : Node3D
         {
             if (IsHumanPiloted)
                 Shake?.NitroEngaged();
+            // Play, not PlayWithin: the def's anchor NAME ("warhawk") never resolves in this
+            // per-plane index, same as startprops/stopprops above — Play's fallback to
+            // PlaneModel is what makes those work; PlayWithin has no such fallback.
             if (PlaneModel != null)
-                CrashRuntime?.PlayWithin(PlaneModel, "nitro_boost", applyReset: false);
+                CrashRuntime?.Play("nitro_boost", PlaneModel, applyReset: false);
             Log.Debug("flight", $"nitro engaged charge={Nitro.Charge:0.0}");
         }
         if (Nitro.ReleasedThisTick && PlaneModel != null && CrashRuntime != null)
         {
-            CrashRuntime.StopWithin(PlaneModel, "nitro_boost");
-            CrashRuntime.PlayWithin(PlaneModel, "nitro_decay", applyReset: false);
+            // Unscoped Stop is safe here: this runtime is bound to this one aircraft only
+            // (WorldEffectsFactory.BuildFlightCrashRuntime), so every live instance it holds is
+            // already this plane's own.
+            CrashRuntime.Stop("nitro_boost");
+            CrashRuntime.Play("nitro_decay", PlaneModel, applyReset: false);
             _nitroDecayLeftS = NitroDecayAnimSeconds;
             Log.Debug("flight", $"nitro released charge={Nitro.Charge:0.0}");
         }
