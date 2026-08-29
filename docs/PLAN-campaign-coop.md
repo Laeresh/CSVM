@@ -102,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ Cutscene staging places the episode owner on the `player` marker
 13. ☑ A downed human spectates; the mission ends when the last one is lost
 14. ☑ A cutscene fills the window
-15. ☐ Per-pane campaign chrome
+15. ☑ Per-pane campaign chrome
 
 ### Wave C — The screens
 

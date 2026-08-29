@@ -18,10 +18,10 @@ public readonly record struct ObjectivesHudLine(int Priority, string Text, bool 
 /// <see cref="CampaignDirector"/>'s read model (<see cref="ObjectiveGraph.Rows"/>), text resolved
 /// through <see cref="Messages"/>, completion marked rather than dropped. Every row is shown
 /// unconditionally, never filtered by its own Awake flag: see docs/architecture.md's entry for
-/// why. The reference frame fixes the corner (a top-right parchment beside the mission map) and
-/// nothing else, so the glyphs and metrics below stay TUNE. Self-mounting, the shape
-/// <see cref="PerfHud"/> uses: the session hands it the shared pause state and adds it, and
-/// nothing else here reaches <c>GameSession</c>.
+/// why. The reference frame fixes the corner and nothing else, so the glyphs/metrics below stay
+/// TUNE. Self-mounting, but unlike <see cref="PerfHud"/>'s one-for-the-window instance, a
+/// splitscreen session builds ONE PER RIG (B15) under that rig's own <c>HudParent</c>, so every
+/// pane polls the shared <see cref="ObjectiveGraph"/> on its own.
 /// </summary>
 public sealed partial class ObjectivesHud : Node
 {

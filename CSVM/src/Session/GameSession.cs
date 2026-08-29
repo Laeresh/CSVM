@@ -2641,7 +2641,12 @@ public partial class GameSession : Node3D
         if (_campaign is { } campaign)
         {
             var objectiveMessages = Messages.Load(state.MessagesPath);
-            _worldRoot!.AddChild(UI.ObjectivesHud.Build(campaign, objectiveMessages, _pauseState!));
+            // B15: one readout per rig, under that rig's own HudParent, so every pane draws its own
+            // copy over the one shared PauseState — the pattern every other per-rig HUD follows.
+            foreach (var rig in _rigs)
+            {
+                rig.HudParent.AddChild(UI.ObjectivesHud.Build(campaign, objectiveMessages, _pauseState!));
+            }
             var sites = new ObjectiveSites(campaign, objectiveMessages,
                 MissionTargets.Load(state.MissionZrdrPath,
                     SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter)),
