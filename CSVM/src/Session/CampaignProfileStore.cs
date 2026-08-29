@@ -32,8 +32,9 @@ public sealed class OwnedPlane
     public bool Special { get; set; }
 }
 
-/// <summary>One run of a mission, the eight fields <c>saved-games.md</c>'s mission-result decode
-/// closed. The two twelve-byte counter arrays it left undecoded are not carried.</summary>
+/// <summary>One run of a mission, the eight scalar fields <c>saved-games.md</c>'s mission-result
+/// decode closed, plus the two per-airframe kill tallies A2 decoded
+/// (<c>docs/org/debrief.md#what-the-tallies-count</c>).</summary>
 public sealed class MissionRun
 {
     /// <summary>Completed-objective bitmask; bit 0 is the primary objective.</summary>
@@ -44,6 +45,14 @@ public sealed class MissionRun
     public int Money { get; set; }
     public int Airframe { get; set; }
     public string PlaneName { get; set; } = string.Empty;
+
+    /// <summary>Plain per-airframe kill counts, <see cref="CampaignProgression.AirframeCount"/>
+    /// slots wide. A file saved before this field existed reads all zero, which is the correct
+    /// reading: an earlier attempt left no per-airframe record to reconstruct.</summary>
+    public int[] Kills { get; set; } = new int[CampaignProgression.AirframeCount];
+
+    /// <summary>Ace per-airframe kill counts, same shape as <see cref="Kills"/>.</summary>
+    public int[] AceKills { get; set; } = new int[CampaignProgression.AirframeCount];
 }
 
 /// <summary>One mission's record, the original's two halves (<c>saved-games.md</c>, "The
@@ -521,6 +530,8 @@ public sealed class CampaignProfileStore
         w.WriteNumber("money", run.Money);
         w.WriteNumber("airframe", run.Airframe);
         w.WriteString("planeName", run.PlaneName);
+        WriteInts(w, "kills", run.Kills);
+        WriteInts(w, "aceKills", run.AceKills);
         w.WriteEndObject();
     }
 
@@ -531,7 +542,7 @@ public sealed class CampaignProfileStore
             return new MissionRun();
         }
 
-        return new MissionRun
+        var run = new MissionRun
         {
             CompletedMask = ReadInt(r, "completedMask", 0),
             TimeMs = ReadInt(r, "timeMs", 0),
@@ -543,6 +554,9 @@ public sealed class CampaignProfileStore
                 ? n.GetString() ?? string.Empty
                 : string.Empty,
         };
+        ReadInts(r, "kills", run.Kills);
+        ReadInts(r, "aceKills", run.AceKills);
+        return run;
     }
 
     private static void ReadPersistLog(JsonElement root, CampaignProfileDef def)

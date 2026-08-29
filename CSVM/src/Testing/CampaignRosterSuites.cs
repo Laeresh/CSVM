@@ -193,6 +193,145 @@ internal static class CampaignRosterSuites
         ctx.Note($"spawned {RosterChapter}/{RosterMission}'s roster from its aiv blocks and flew wingman_1 on the player");
     }
 
+    /// <summary>BL-622/B13: the debrief's two per-airframe kill tallies, credited off real
+    /// <see cref="FlightController.Downed"/> reports over C3/M05's shipped roster. Forces down two
+    /// netted <c>britbalmoral</c> bombers, three plain <c>britpeace</c> Peacemakers and the ace
+    /// <c>britpeace_7</c>, reproducing CM02's own drawn stamps (2/3/starred 1, total 6); a friendly
+    /// wingman's loss and an unattributed one must reach neither tally.</summary>
+    internal static void CampaignKillCredit(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BomberChapter, BomberMission);
+        ctx.RequireData(missionZrdr, $"{BomberChapter}/{BomberMission} zrdr");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BomberChapter);
+        ctx.RequireData(texturesPath, $"{BomberChapter} textures");
+
+        CampaignMission? found = null;
+        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        {
+            if (m.ChapterFolder.Equals(BomberChapter, StringComparison.OrdinalIgnoreCase)
+                && m.MissionFolder.Equals(BomberMission, StringComparison.OrdinalIgnoreCase))
+            {
+                found = m;
+            }
+        }
+        if (found is not { } mission)
+        {
+            throw new SuiteSkippedException($"{BomberChapter}/{BomberMission} is not in cm_sequence");
+        }
+
+        var blocks = AiSkills.LoadRoster(missionZrdr);
+        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var script = ObjectiveScript.Load(missionZrdr);
+        var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
+        var report = new StringBuilder();
+        report.AppendLine($"{BomberChapter}/{BomberMission} seq={mission.Seq}: {blocks.Count} roster block(s)");
+
+        ctx.WithWorld(BomberChapter, collision: false, BomberMission, world =>
+        {
+            var textures = new TextureArchive(texturesPath);
+            var rigs = new List<FlightController>();
+            ProjectilePool? pool = null;
+            FlightController? player = null;
+            try
+            {
+                var live = new ProjectilePool(textures, null, null);
+                pool = live;
+                ctx.Host.AddChild(live);
+
+                var playerPose = PlayerPose(blocks);
+                var playerStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+                player = Rig(ctx, planesGamez, textures, playerStats, live, ctx.PlaneName,
+                    playerPose.Position, playerPose.Position + playerPose.Forward, human: true,
+                    pilot: null, FlightRoster.ShooterIdBase, AimAssist.PlayerTeam);
+                var human = player;
+
+                director.Attach(new CampaignDirector.WorldInputs
+                {
+                    Runtime = world.Runtime,
+                    PlayerAircraft = () => human,
+                });
+
+                int shooterId = FlightRoster.ShooterIdBase + 1;
+                director.BuildRoster(new CampaignDirector.RosterInputs
+                {
+                    ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, BomberChapter),
+                    MissionZrdrPath = missionZrdr,
+                    ZrdrPath = ctx.ZrdrPath,
+                    MinAiActiveDist = skills.MinAiActiveDist,
+                    Player = () => human,
+                    NetTrailers = new NetTrailerTargets(
+                        () => human.WorldPosition,
+                        name => world.Runtime.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null),
+                    FindNodes = name => world.Runtime.FindNodes(name),
+                    Spawn = (plan, pos, look, pilot) =>
+                    {
+                        var stats = StatsFor(ctx, plan, report);
+                        var rig = Rig(ctx, planesGamez, textures, stats, live, plan.PlaneNode, pos, look,
+                            human: false, pilot, shooterId++, plan.Team ?? AimAssist.PlayerTeam);
+                        rigs.Add(rig);
+                        return rig;
+                    },
+                    Rng = new System.Random(1),
+                });
+
+                var roster = director.Roster;
+                string[] plainKills =
+                {
+                    "britbalmoral_1", "britbalmoral_2", "britpeace_1", "britpeace_2", "britpeace_3",
+                };
+                foreach (var name in plainKills)
+                {
+                    ctx.Check(roster.TryGetValue(name, out var rig), $"'{name}' is in the built roster");
+                    rig?.DebugForceCrash(player.PlayerIndex);
+                }
+
+                ctx.Check(roster.TryGetValue("britpeace_7", out var ace), $"the ace 'britpeace_7' is in the built roster");
+                ace?.DebugForceCrash(player.PlayerIndex);
+
+                // Neither a friendly loss nor an unattributed one may reach either tally: the
+                // credit rule gates on the player's own kill against a hostile airframe.
+                ctx.Check(roster.TryGetValue("wingman_3", out var friendly), $"a friendly wingman is in the built roster");
+                friendly?.DebugForceCrash(player.PlayerIndex);
+                ctx.Check(roster.TryGetValue("britpeace_8", out var spared), $"a fourth plain Peacemaker is in the built roster");
+                spared?.DebugForceCrash(killer: null);
+
+                var graph = director.Graph!;
+                ctx.Check(graph.NotifyPlayerLost(), $"the player's own death is reported once");
+                graph.EndAfterPlayerLost();
+                Advance(director, CampaignDirector.LeavingHoldS + 0.2f);
+                ctx.Check(director.Result != null, $"the mission ended and banked its result");
+                var attempt = director.Result!.Value.Attempt;
+
+                ctx.Same(2, attempt.Kills[2], $"two Balmorals (airframe 2) credited into the plain tally");
+                ctx.Same(3, attempt.Kills[9], $"three plain Peacemakers (airframe 9) credited");
+                ctx.Same(1, attempt.AceKills[9], $"the ace Peacemaker credited into the starred tally instead");
+                int total = 0;
+                for (int i = 0; i < CampaignProgression.AirframeCount; i++)
+                {
+                    total += attempt.Kills[i] + attempt.AceKills[i];
+                }
+                ctx.Same(6, total, $"both arrays sum to CM02's own drawn Overall Planes Downed");
+                report.AppendLine($"kills={string.Join(",", attempt.Kills)} aceKills={string.Join(",", attempt.AceKills)}");
+            }
+            finally
+            {
+                player?.Free();
+                foreach (var rig in rigs)
+                {
+                    rig.Free();
+                }
+                pool?.Free();
+                textures.Dispose();
+            }
+        });
+
+        ctx.WriteArtifact($"test-campaign-kill-credit-{BomberChapter}-{BomberMission}.txt", report.ToString());
+        ctx.Note($"credited two Balmorals, three plain Peacemakers and the ace over {BomberChapter}/{BomberMission}'s real roster, and excluded a friendly loss and an unattributed one");
+    }
+
     /// <summary>BL-401: a campaign spawn wears its roster block's own name, so the patterns
     /// <c>rating_biases</c> is authored with reach it, and an authored bias then moves the pick.
     /// Spawns run through the session's own <see cref="FlightRoster"/> and the same
@@ -972,6 +1111,14 @@ internal static class CampaignRosterSuites
 
     private static string Bias(AiRatingBias? entry) =>
         entry?.Bias.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) ?? "-";
+
+    private static void Advance(CampaignDirector director, float seconds)
+    {
+        for (float t = 0f; t < seconds; t += 0.1f)
+        {
+            director.Step(0.1f);
+        }
+    }
 
     private static RosterSpawnPlan? PlanNamed(CampaignRosterPlan plan, string name)
     {

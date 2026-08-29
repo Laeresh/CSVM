@@ -435,11 +435,13 @@ merge, not its author, and the two run in the same mission-end pass.
   graph. `CampaignProgression.Record` already gated its best-of merge and the position advance on
   bit 0 alone, so a non-zero mask on a loss records statistics without completing the primary or
   advancing the campaign.
-- **The two per-airframe kill arrays have no CSVM counterpart.** `MissionAttempt` carries the
-  record's `+0x00`, `+0x04`, `+0x20`, `+0x22`, `+0x28`, `+0x2c` and `+0x30` fields and nothing at
-  `+0x08` or `+0x14`. Nothing counts kills per airframe, and nothing distinguishes an ace, so
-  neither the stamps nor Overall Planes Downed have a source (`BL-624`). Rockets Expended needs no
-  source, since the original does not draw it.
+- **The two per-airframe kill arrays are counted (B13).** `MissionAttempt` and `MissionRun` carry
+  `Kills`/`AceKills`, eleven-slot per-airframe tallies mirroring the record's `+0x08`/`+0x14`, and
+  `CampaignDirector.CreditKill` fills them off each roster aircraft's own `Downed` report: the
+  player did it, the victim's roster-authored side is hostile, and the roster's `ace` flag (slot 67)
+  picks plain or starred. `CampaignProgression.MergeBest` merges both per index by maximum. The
+  screen side (the stamps and the Overall Planes Downed sum) still draws nothing yet; Rockets
+  Expended needs no source, since the original does not draw it.
 - **A board exists, but it is shaped like the wrong original screen.** `CampaignPreviousMissionsPage`
   is a flat mission list, closer to `SCRAPBOOK_TOC.SCRIPT` than to the two-page book the debrief
   actually is; the mission-end entry, the two tabs, the results block and the Replay Mission button

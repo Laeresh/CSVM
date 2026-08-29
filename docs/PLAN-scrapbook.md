@@ -175,7 +175,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ A lost attempt keeps its objective bits
 12. ☑ Carry the mission result across the launcher's deferred hop
-13. ☐ Count the per-airframe tallies and merge them per index
+13. ☑ Count the per-airframe tallies and merge them per index
 14. ☐ The per-mission attempt counter and the four-attempt skip offer
 
 ### Wave C — the results page
@@ -517,7 +517,29 @@ construction rather than a positive check of the carry). `PT-88` is the at-the-c
 item's Verify (a flown CM01 to a win and to a loss, console line for console line at both ends of
 the hop) and is owed, not exercised this session.
 
-## B13 ☐ Count the per-airframe tallies and merge them per index
+## B13 ☑ Count the per-airframe tallies and merge them per index
+
+**Landed.** `CampaignDirector.BuildRoster` wires each spawned aircraft's `Downed` report to a new
+`CreditKill` (`CampaignDirector.cs`): the player did it, the victim's roster-authored `Team` is
+hostile to `AimAssist.PlayerTeam`, and `UI.PlanePickerRoster.AirframeOf` (the inverse of the
+existing `AirframeNode` table) turns the roster plan's own `PlaneNode` back into the airframe index
+0 to 10 — no new nodename decode was needed, since every AI spawn's `PlaneNode` is already the
+player-side node A2's table indexes. The roster's `ace` flag (slot 67, `AiSkills.RosterAce`, newly
+read and threaded onto `RosterSpawnPlan.Ace`) then picks the plain or starred tally.
+`MissionAttempt`, `MissionRun` and `CampaignProfileStore`'s JSON all carry the two eleven-slot
+arrays (`CampaignProgression.AirframeCount`), and `CampaignProgression.MergeBest` merges each index
+by maximum alongside its other fields. A generator-launched aircraft's kill is not credited yet
+(`AiGeneratorRuntime`'s launches never enter `_roster`), noted in `docs/architecture.md` as a known
+gap rather than an invented behaviour.
+
+**Verified.** `campaign-kill-credit`, a new suite over C3/M05's real shipped roster (CM02's own
+mission): force-crashing two of the three netted `britbalmoral` bombers, three of the five plain
+`britpeace` Peacemakers and the ace `britpeace_7`, plus a friendly wingman and an unattributed
+crash, reproduces CM02's own drawn stamps exactly — `Kills[2]==2` (Balmoral), `Kills[9]==3` and
+`AceKills[9]==1` (Peacemaker, plain and starred), and both arrays sum to 6, the screen's Overall
+Planes Downed. Taken as a baseline against `CreditKill` short-circuited to a no-op, this suite
+fails, so the pass is not vacuous. `dotnet format`/`dotnet build` are clean, the full unit suite
+(2574 tests) and the complete `.\RunTests.ps1` (181 engine suites, goldens included) pass.
 
 **Goal.** `MissionAttempt` carries two eleven-slot per-airframe kill tallies, plain and ace, and
 `CampaignProgression` merges them per index by maximum the way the original does.
@@ -549,8 +571,11 @@ a mission downing two Balmorals and three Peacemakers plus the mission's ace rep
 offsets hold a summed `ushort` and the danger-zone count, so an Instant Action or multiplayer path
 must not fill them as arrays. Only hostile aircraft count: the original tests the victim's side is
 2 or more, so a downed wingman scores nothing, and ground and shipping kills go to a counter the
-screen never reads. Changing the profile record's shape is a save-compatibility change:
-<TODO: confirm how `CampaignProfileStore` versions its JSON.>
+screen never reads. Changing the profile record's shape is a save-compatibility change: resolved by
+NOT bumping `CampaignProfileStore.Version` — `Deserialize` rejects the whole profile on a version
+mismatch, so bumping it would drop every existing profile's progress, while the reader's own
+missing-field tolerance already gives an old file all-zero tallies, the correct reading for an
+attempt with no per-airframe record to reconstruct.
 
 ## B14 ☐ The per-mission attempt counter and the four-attempt skip offer
 

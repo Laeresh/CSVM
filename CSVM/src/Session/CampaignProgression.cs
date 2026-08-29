@@ -7,10 +7,18 @@ namespace CSVM.Session;
 
 /// <summary>One flown mission's raw statistics, as a mission director hands them over at mission
 /// end. <c>Seq</c> is the <c>cm_sequence</c> story position; <c>CompletedMask</c> is the run's
-/// completed-objective bitmask, whose bit 0 is the primary objective.</summary>
+/// completed-objective bitmask, whose bit 0 is the primary objective. <c>Kills</c> and
+/// <c>AceKills</c> are <see cref="CampaignProgression.AirframeCount"/>-slot per-airframe kill
+/// tallies, plain and ace (<c>docs/org/debrief.md#what-the-tallies-count</c>); a caller that omits
+/// them reports a mission with no aircraft kills.</summary>
 public readonly record struct MissionAttempt(
     int Seq, int CompletedMask, int TimeMs, int Shots, int Hits, int Money,
-    int Airframe, string PlaneName);
+    int Airframe, string PlaneName, int[]? Kills = null, int[]? AceKills = null)
+{
+    public int[] Kills { get; init; } = Kills ?? new int[CampaignProgression.AirframeCount];
+
+    public int[] AceKills { get; init; } = AceKills ?? new int[CampaignProgression.AirframeCount];
+}
 
 /// <summary>What recording an attempt changed: whether it completed the primary objective, whether
 /// it raised the campaign position, the airframe ids of any aircraft awards it granted, and the
@@ -38,6 +46,11 @@ public static class CampaignProgression
     /// <summary>The completed-objective mask bit that means the primary objective, and with it the
     /// mission itself. It gates the whole best-of merge and the advance.</summary>
     public const int PrimaryObjectiveMask = 1;
+
+    /// <summary>The eleven airframes the debrief's kill tallies index, in the engine's own order
+    /// (Hoplite, Hellhound, Balmoral, Bloodhawk, Brigand, Devastator, Firebrand, Fury, Kestrel,
+    /// Peacemaker, Warhawk; docs/org/debrief.md#what-the-tallies-count).</summary>
+    public const int AirframeCount = 11;
 
     /// <summary>The five aircraft awards, keyed by the 1-based mission ordinal (not by <c>seq</c>
     /// and not by the save id). Each is granted once per profile: the original marks a per-airframe
@@ -213,7 +226,8 @@ public static class CampaignProgression
 
     // The merge rules are the original's own, one per field (docs/formats/saved-games.md, "The
     // mission-result array"): OR the mask, keep the faster time ignoring 0, keep the pair with the
-    // better hit ratio, accumulate the money, and take the plane of a run that completed more.
+    // better hit ratio, accumulate the money, take the plane of a run that completed more, and
+    // merge both kill tallies per index by maximum.
     private static void MergeBest(MissionRun best, MissionAttempt attempt)
     {
         if (attempt.TimeMs > 0 && (best.TimeMs == 0 || attempt.TimeMs < best.TimeMs))
@@ -235,6 +249,19 @@ public static class CampaignProgression
 
         best.Money += attempt.Money;
         best.CompletedMask |= attempt.CompletedMask;
+        MergeMax(best.Kills, attempt.Kills);
+        MergeMax(best.AceKills, attempt.AceKills);
+    }
+
+    private static void MergeMax(int[] best, int[] attempt)
+    {
+        for (int i = 0; i < AirframeCount; i++)
+        {
+            if (attempt[i] > best[i])
+            {
+                best[i] = attempt[i];
+            }
+        }
     }
 
     private static (List<int> Airframes, List<CustomPlaneDef> Builds) GrantAwards(
@@ -292,6 +319,8 @@ public static class CampaignProgression
         Money = attempt.Money,
         Airframe = attempt.Airframe,
         PlaneName = attempt.PlaneName ?? string.Empty,
+        Kills = (int[])attempt.Kills.Clone(),
+        AceKills = (int[])attempt.AceKills.Clone(),
     };
 
     private static float Ratio(int hits, int shots) => shots <= 0 ? 0f : hits / (float)shots;

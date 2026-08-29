@@ -280,18 +280,20 @@ each field's merge rule is what identifies it:
 |---|---|---|---|
 | `+0x00` | `+0x54` | bitwise OR | completed-objective mask; bit 0 is the primary objective and gates the whole merge |
 | `+0x04` | `+0x58` | keep the smaller, ignoring 0 | mission time in **milliseconds**, the writer multiplying the mission clock in seconds by a stored `1000.0f` |
-| `+0x08` | `+0x5c` | per-index maximum | twelve single-byte counters, eleven of them written; what they count is not decoded |
-| `+0x14` | `+0x68` | per-index maximum | twelve more single-byte counters on the same indexing |
+| `+0x08` | `+0x5c` | per-index maximum | twelve single-byte counters, eleven of them written: per-airframe kill tallies, plain kills |
+| `+0x14` | `+0x68` | per-index maximum | twelve more single-byte counters on the same indexing: the same eleven airframes' ace kills |
 | `+0x20` | `+0x74` | keep the pair with the larger second/first ratio | a `ushort` pair, shots and hits |
 | `+0x28` | `+0x7c` | accumulate | money paid for this mission, the same amount added to funds |
 | `+0x2c` | `+0x80` | copied when the attempt completed more objectives | airframe id of the plane flown |
 | `+0x30` | `+0x84` | copied with the airframe id | name of the plane flown, 36 bytes |
 
 Eleven sources feed twelve slots through an identity lookup, so eleven bytes of each array are
-written and the twelfth is a never-taken fall-through slot. The two arrays are written only on the
-campaign path; in game mode 3 the same two offsets hold scalars instead, `+0x08` a single `ushort`
-summing all twenty-two counters and `+0x14` the count of danger zones completed. **What the arrays
-count is still open**, and eleven is also the number of airframes.
+written and the twelfth is a never-taken fall-through slot. The two arrays are per-airframe kill
+tallies over the eleven stock airframes, plain kills and ace kills, credited by the single damage
+resolver that reaches every kill in the game
+([`org/debrief.md`](../org/debrief.md#what-the-tallies-count)). The two arrays are written only on
+the campaign path; in game mode 3 the same two offsets hold scalars instead, `+0x08` a single
+`ushort` summing all twenty-two counters and `+0x14` the count of danger zones completed.
 
 The attempt half is written at mission end by the debrief, which zeroes the whole `0x54` bytes
 first and leaves the merged half alone; money, the airframe and the plane name are the completion

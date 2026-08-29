@@ -52,6 +52,12 @@ public sealed class CampaignDirector
     private readonly Dictionary<string, FlightController> _roster = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SurfaceVehicle> _vessels = new(StringComparer.OrdinalIgnoreCase);
+
+    // The two per-airframe kill tallies A2 decoded (docs/org/debrief.md#what-the-tallies-count),
+    // credited as the roster's own aircraft go down. Read into the mission-end attempt; never
+    // written from anywhere else.
+    private readonly int[] _kills = new int[CampaignProgression.AirframeCount];
+    private readonly int[] _aceKills = new int[CampaignProgression.AirframeCount];
     private World? _world;
     private ScriptedPathVehicles? _paths;
 
@@ -302,6 +308,7 @@ public sealed class CampaignDirector
             _roster[spawn.Name] = rig;
             _rosterPlans[spawn.Name] = spawn;
             rig.Group = spawn.Group;
+            rig.Downed += (_, killer) => CreditKill(spawn, killer);
             // The chapter's own copy of this vehicle is never placed, so anything it authors past
             // the shared airframe is grafted onto the rig here, while the rig is the plane the
             // block named and is already in the tree.
@@ -637,6 +644,38 @@ public sealed class CampaignDirector
         Log.Info("campaign", $"objective {t.Number} {kind}{by}{nap} at {t.Elapsed:0.0}s{gated}");
     }
 
+    // The single credit site, mirroring the original's one damage-resolver branch
+    // (docs/org/debrief.md#what-the-tallies-count): the player did it, the victim is hostile to
+    // the player, and the victim's airframe resolves against the eleven stock nodes. Everything
+    // else (a wingman going down, a mutual kill between two enemies, a surface or turret target,
+    // which never reaches this event) scores nowhere the debrief can see.
+    private void CreditKill(RosterSpawnPlan victim, int? killer)
+    {
+        if (killer is not int shooter || _world?.Player() is not { } player || shooter != player.PlayerIndex)
+        {
+            return;
+        }
+
+        if (victim.Team is not int side || !AimAssist.Hostile(AimAssist.PlayerTeam, side))
+        {
+            return;
+        }
+
+        if (UI.PlanePickerRoster.AirframeOf(victim.PlaneNode) is not { } airframe)
+        {
+            return;
+        }
+
+        if (victim.Ace)
+        {
+            _aceKills[airframe]++;
+        }
+        else
+        {
+            _kills[airframe]++;
+        }
+    }
+
     private void OnMissionEnded(MissionOutcome outcome)
     {
         var graph = Graph!;
@@ -656,7 +695,9 @@ public sealed class CampaignDirector
             _world?.Hits ?? 0,
             0,
             plane?.Airframe ?? 0,
-            plane?.Name ?? string.Empty);
+            plane?.Name ?? string.Empty,
+            (int[])_kills.Clone(),
+            (int[])_aceKills.Clone());
         if (_world?.Runtime is { } runtime && CampaignPersistLog.CommitsOn(outcome))
         {
             _profile.PersistLog.Merge(_mission.Campaign, _mission.Seq, CampaignPersistLog.Capture(runtime));
