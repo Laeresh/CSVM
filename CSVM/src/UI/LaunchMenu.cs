@@ -99,6 +99,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // there is no decoded range to match; TUNE.
     private const int MaxLives = 9;
 
+    // The chip strip's own font size and corner inset, in authored board points — scaled through
+    // the same BoardFit the board itself draws at, so the chips read like part of that screen.
+    private const float ChipFont = 16f;
+    private const float ChipInset = 14f;
+
     // The three top-level modes, in MenuMode's ordinal order so the row index doubles as the
     // enum value. The enum member stays named Stunt (SessionSpec.cs) though this row reads
     // "Instant Action"; picking it opens the Environment wizard, not the plain Chapter screen.
@@ -316,6 +321,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The campaign's composed-board surface, drawn instead of _center on every campaign screen.
     private ComposedBoardView _boardRoot = null!;
 
+    // C21's chip strip: `P1 P2 P3 P4` in `SplitScreen.PlayerColor`, top-right, shown only while a
+    // campaign board is up AND more than one has joined — a solo campaign board looks exactly as
+    // it does today. A composed board draws no full join strip by design (RebuildBoard's own
+    // comment), so this is a deliberate exception drawn as a shell overlay rather than a page
+    // contribution: CampaignBoards' authored geometry has nowhere to put a live, per-frame roster.
+    private HBoxContainer _chipStrip = null!;
+
     // Frames left to draw the pressed plaque depressed. The original's own button art carries that
     // frame, and a confirm that changes nothing on screen reads as a dead button on a pad.
     private int _pressFrames;
@@ -429,6 +441,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         menu._boardRoot = ComposedBoardView.Build(dataRoot);
         menu._boardRoot.Visible = false;
         root.AddChild(menu._boardRoot);
+
+        // C21's chip strip: a zero-size box pinned to the top-right corner, GrowHorizontal.Begin
+        // spending its minimum width leftward from there (PerfHud's own PlaceTopRight pattern), so
+        // the right edge stays on the inset however many chips are joined.
+        menu._chipStrip = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+        menu._chipStrip.SetAnchorsPreset(Control.LayoutPreset.TopRight);
+        menu._chipStrip.GrowHorizontal = Control.GrowDirection.Begin;
+        root.AddChild(menu._chipStrip);
 
         return menu;
     }
@@ -951,16 +971,13 @@ public sealed partial class LaunchMenu : CanvasLayer
             _joinPrev[pad] = MenuInput.JoinPressed(pad);
     }
 
-    // Start on an unclaimed pad joins a new player (up to the splitscreen rig's
-    // capacity). Only on the Plane screen: player 1 sets the mode and the chapter first —
-    // claiming its own pad in the process (ClaimP1Pad) — and everybody else joins
-    // once the aircraft list is up. That ordering is what makes the gesture unambiguous; when
-    // joining was allowed everywhere, Start on the pad player 1 was steering split it off as
-    // player 2 and dumped player 1 back on the keyboard.
+    // Start on an unclaimed pad joins a new player, on the Plane screen and, C21, on the
+    // Campaign screen — the same ordering rule (player 1 claims a pad first) keeps the gesture
+    // unambiguous on both. A campaign join stops on its own once FLY MISSION leaves the screen.
     private bool ScanJoins()
     {
         bool dirty = false;
-        if (_screen != Screen.Plane)
+        if (_screen != Screen.Plane && _screen != Screen.Campaign)
             return false;
         foreach (int pad in Pads.Connected())
         {
@@ -1614,6 +1631,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _campaign = NewCampaignFlow(CampaignProfileStore.UserProfiles());
         _screen = Screen.Campaign;
         _error = "";
+        PrimeJoins(); // C21: joining opens here too — a Start held on the way in must not fire
     }
 
     // A campaign flow over one store, with the two stores its later screens resolve fits through:
@@ -1662,6 +1680,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _campaign = NewCampaignFlow(AidProfileStore(seeded, progressed: value != "campaign-roster"));
         _screen = Screen.Campaign;
         _error = "";
+        PrimeJoins(); // C21: this is its own entry point into Screen.Campaign, same rule as OpenCampaign
         if (_campaign is not { } flow)
         {
             return;
@@ -1846,6 +1865,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         else if (p1.Back)
         {
             dirty |= flow.Back();
+        }
+
+        // C21: everyone else can only drop out from here (HandleInput's own rule); p1's Back
+        // above is the flow's own navigation, never a leave.
+        for (int i = _slots.Count - 1; i >= 1; i--)
+        {
+            if (!_slots[i].Input.Back)
+                continue;
+            Unjoin(i);
+            dirty = true;
         }
 
         // A refusal (an empty name, a name the original's own rule rejects, a full roster) rides
@@ -2164,6 +2193,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _center.Visible = !split && !board;
         _paneRoot.Visible = split;
         _boardRoot.Visible = board;
+        _chipStrip.Visible = board && _slots.Count > 1;
         if (board)
         {
             RebuildBoard();
@@ -2306,6 +2336,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // whatever the last centred screen wrote. Otherwise _Process's own strip comparison never
         // settles on a campaign screen, and a board repaints for a reason that is not its own.
         _stripText = JoinStripText();
+        RebuildChipStrip();
         var page = flow.Page;
         int row = flow.Row;
         string detail = _error.Length > 0 ? _error : page.Detail(row);
@@ -2317,6 +2348,33 @@ public sealed partial class LaunchMenu : CanvasLayer
             BoardPalette.For(page.Screen),
             banded ? detail : string.Empty,
             page.Footer);
+    }
+
+    // C21's chip strip content — called only while the board is up (RebuildBoard); visibility
+    // itself is Rebuild's, off the same slot count, so a Back that drops the last guest hides the
+    // strip on the same frame instead of leaving one stale chip behind.
+    private void RebuildChipStrip()
+    {
+        foreach (var c in _chipStrip.GetChildren())
+            c.QueueFree();
+        if (_slots.Count <= 1)
+        {
+            return;
+        }
+
+        var size = GetViewport().GetVisibleRect().Size;
+        var fit = BoardFit.For(size.X, size.Y);
+        float inset = fit.Length(ChipInset);
+        _chipStrip.OffsetRight = -inset;
+        _chipStrip.OffsetLeft = _chipStrip.OffsetRight;
+        _chipStrip.OffsetTop = inset;
+        _chipStrip.OffsetBottom = _chipStrip.OffsetTop;
+        _chipStrip.AddThemeConstantOverride("separation", Mathf.RoundToInt(fit.Length(10f)));
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            _chipStrip.AddChild(Label(SplitScreen.PlayerTag(i), Mathf.RoundToInt(fit.Length(ChipFont)),
+                SplitScreen.PlayerColor(i), HorizontalAlignment.Center));
+        }
     }
 
     // The splitscreen aircraft select: one panel per player in that player's pane of the

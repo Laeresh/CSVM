@@ -3940,18 +3940,30 @@ values, the hangar is reached only through interactive menu input — no `Sessio
 nothing a `--det` run can touch.
 
 The campaign (`CampaignFlow`) has one door, the `Campaign` row between the three modes and the
-hangar's, and `Screen.Campaign` draws through the same centred body: heading, rows, detail and
+hangar's, and `Screen.Campaign` draws as a composed board (`ComposedBoardView`/`CampaignBoards`,
+below) rather than through the centred body every other screen uses: heading, rows, detail and
 footer all read off `_campaign.Page`, and the footer is the page's own, since a screen with an armed
 text field has a different control set from the same screen with the cursor on its list. The art
 column is shared with the hangar through `PageArt`/`PageRowArt`, so a campaign page that hands over
-a picture needs no change here. Input is player 1's alone: `HandleCampaignInput` reads `Move`/
+a picture needs no change here. Navigation is player 1's alone: `HandleCampaignInput` reads `Move`/
 `MoveX` normally, and while `CampaignFlow.CapturesText` is true it reads `PadMove`/`PadMoveX`
-instead and feeds `Typed`/`Erase` into the field, because W, A, S and D are letters there. The
-flow's `Message` rides the same error line the hangar's gate uses. `--menu=campaign` opens the real
-`user://Profiles` roster; every other `campaign-*` value is a screenshot aid over a scratch profile
-directory, so those shots are the same on every machine and cannot write into a real campaign. The
-one exception is `campaign-fly`, which launches a mission and therefore has to use the real store,
-because the session's own director reads that one.
+instead and feeds `Typed`/`Erase` into the field, because W, A, S and D are letters there. C21:
+joining is not — `ScanJoins` runs on `Screen.Campaign` the same as on `Screen.Plane`, so Start on an
+unclaimed pad joins a guest from any campaign screen up to and including the seated player's FLY
+MISSION (which leaves `Screen.Campaign` outright, so nothing has to lock the field explicitly), and
+every joined slot past player 1 reads its own `Back` as a leave — `HandleCampaignInput`'s own guest
+loop, the same "everyone else can only drop out" rule `HandleInput` applies elsewhere. More than one
+joined draws `LaunchMenu._chipStrip`, a `P1 P2 P3 P4` shell overlay in `SplitScreen.PlayerColor`
+pinned to the window's top-right corner (PerfHud's `PlaceTopRight` pattern) and scaled through the
+same `BoardFit` the board itself draws at — a shell overlay rather than a page contribution, because
+`CampaignBoards`' authored per-screen geometry has nowhere to put a live, per-frame roster and every
+page would otherwise need the same field. A solo campaign draws no strip, matching every other
+composed board's "no full join strip" rule (`RebuildBoard`'s own comment). The flow's `Message`
+rides the same error line the hangar's gate uses. `--menu=campaign` opens the real `user://Profiles`
+roster; every other `campaign-*` value is a screenshot aid over a scratch profile directory, so
+those shots are the same on every machine and cannot write into a real campaign. The one exception
+is `campaign-fly`, which launches a mission and therefore has to use the real store, because the
+session's own director reads that one.
 
 The flow's three exits are the shell's three jobs. `Cancelled` returns to the Mode screen.
 `OpenHangar` opens `HangarFlow` over a `HangarCampaignContext` on the flow's own profile and leaves

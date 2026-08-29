@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — The screens
 
-21. ☐ Joining and leaving from any campaign screen, with the player chip strip
+21. ☑ Joining and leaving from any campaign screen, with the player chip strip
 22. ☐ Sequential per-player flight checks
 23. ☐ `CampaignLaunch` carries the whole human field
 
@@ -436,7 +436,7 @@ per-player visual-layer band and the pane cull masks are allocated once at build
 camera deliberately stands down in splitscreen and must stay down, which is why the collapse
 expands a pane rather than re-arming it.
 
-## B15 ☐ Per-pane campaign chrome
+## B15 ☑ Per-pane campaign chrome
 
 **Goal.** Every player reads the objective list and the mission text in their own pane.
 
@@ -470,7 +470,7 @@ suite, and merging them would put a campaign-only surface into every session sha
 
 # Wave C — The screens
 
-## C21 ☐ Joining and leaving from any campaign screen, with the player chip strip
+## C21 ☑ Joining and leaving from any campaign screen, with the player chip strip
 
 **Goal.** A second, third or fourth player presses Start on any campaign screen and is in; they
 press B and they are out; and whenever more than one is joined, a coloured `P1 P2 P3 P4` strip in
@@ -491,9 +491,9 @@ seated player's FLY MISSION, after which the field is locked. Add a chip strip d
 composed board in the top right, one chip per joined slot in `SplitScreen.PlayerColor(index)`,
 shown only when more than one player is joined so a solo campaign looks exactly as it does today.
 Handle B as leave for a guest slot; B on the seated player's slot keeps its existing screen-back
-meaning. <TODO: the chip strip's geometry over a composed board is unspecified. `CampaignBoards`
-supplies board geometry and a page contributes `Pictures`/`Strokes`/`Captions`; settle whether the
-strip is a page contribution or a shell overlay before drawing it.>
+meaning. Settled: the strip is a shell overlay (`LaunchMenu._chipStrip`, top-right-anchored,
+`GrowHorizontal.Begin`), not a page contribution — `CampaignBoards`' authored geometry has nowhere
+to put a live, per-frame roster, and every page would otherwise need the same field.
 
 **Model recommendation.** medium. Additive UI over an existing join system, with the composed-board
 overlay as the one new drawing surface.
