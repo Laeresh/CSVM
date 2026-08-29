@@ -102,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — World lighting and the fade band
 
 1. ❌ `BL-304`: water takes the WorldLight dim the original renders it without
-2. ☐ `BL-322`: C5's lit facades render at 0.58 to 0.66 of the original with WorldLight already at clamp
+2. ☑ `BL-322`: C5's lit facades render at 0.58 to 0.66 of the original with WorldLight already at clamp
 3. ☐ `BL-538`: a dark band crosses the large buildings at the range the templates clutter fades out
 
 ### Wave B — Effects and the animation scope
@@ -305,10 +305,50 @@ The one failure the merged tree produced was `destructible-census`, which no per
 have seen, and it was B12's intended effect meeting a pinned count rather than a regression: see
 the census re-pin's own commit.
 
-## A2 ☐ `BL-322`: C5's lit facades render at 0.58 to 0.66 of the original with WorldLight already at clamp
+## A2 ☑ `BL-322`: C5's lit facades render at 0.58 to 0.66 of the original with WorldLight already at clamp
 
-**Goal.** C5's night facades reach the original's measured brightness: tower faces about 15.5 where
-they now read 10.2, low-rise about 37.6 where it now reads 21.7.
+**Re-scoped to DECODE ONLY, and the decode landed. No rendering code was written, by instruction.**
+The user's ruling is that footage- and screenshot-derived measurements are not admissible evidence
+for a fidelity change here, so this item was reduced to one question: what in `crimson.exe` decides
+whether a scene node's material is modulated by `SUNLIGHT`, and what does it key on?
+
+**The answer, written up in [`docs/org/vertexLighting.md`](org/vertexLighting.md).** A real
+per-surface exemption exists, it is two gates, and neither keys on a `soil` id:
+
+1. **Per model** (`FUN_00551d90`): bit 0 of the model record's flag word at `+0x08`, the flag the
+   extractor spells `lighting`. Clear, and no light in the scene's array is even considered.
+2. **Per texture** (`FUN_005524d0`, textured branch): bit `0x02` of the texture object's storage
+   flags byte at `+0x09`, set for exactly the textures carrying an alpha channel. Set, and the whole
+   per-vertex lighting evaluation is skipped and the polygon goes through the unlit submission.
+
+`SUNLIGHT` itself is not a separate path: the `sunlight` node is one entry in the same 128-slot
+light array as every `LIGHT_STATE` point light (`FUN_00566be0`, `zmodel\gmod_light.c`), marked
+directional by `FUN_004dbf70` from the zone apply, and evaluated per vertex at draw time by
+`FUN_00567150`. That closes the loop A1's agent left open: the finished ARGB it saw at polygon
+submission is written by this evaluation, not by a load-time bake, and there is no load-time bake.
+
+**What it settles, for all three items that were leaning on the same hunch.**
+
+| Item | Verdict |
+|---|---|
+| `BL-322` (these facades) | **Premise refuted.** `cblock1`–`7`, `bldg1`–`4`, `bldgtrim1` all ship storage flags `0xa5` (no alpha bit) and are lit in the original exactly as in ours. No exemption is available to close the measured ratio. |
+| `BL-304` (water) | **Independently refuted.** `wtr00000`–`wtr00015` are `0xa5` too, so water is not exempt. A1's close stands, and by a mechanism rather than by absence of evidence. |
+| `BL-070` (poleflare glows) | **Confirmed.** `poleflare` is `0xab`; so are `lightpole`, `lite_out`, `bliteon`/`bliteoff` and C5's signage set. The "should be exempt" half needs no A/B; the billboard-axis half still does. |
+
+**What a decoded fix would look like, for a later run.** Gate 2 is not reproduced anywhere in the
+remake: `SceneBuilder` applies its per-model `lit` decision to every surface of the model, overlay
+passes included, and nothing reads the texture storage byte. Honouring it means carrying the
+extractor's `alpha` field through to the material build and treating `alpha != None` on a textured
+surface as "does not take `csky_world_light`", independent of the model flag. The deployed texture
+tree is PNGs without the extractor's `manifest.json`, so that is a plumbing job first; and a PNG
+alpha-channel test is not a substitute, since it loses the 1 to 10 `Simple` textures per chapter
+that carry the bit too. For this item specifically the effect is narrow and its size is not
+predicted: it makes the overlays drawn **on top of** the measured facades fullbright
+(`buildingspotlighted`'s lit windows, `nypd`, `clock`, `fadedsign01`–`03`, `traffic_sign1`), not the
+facades themselves.
+
+**Original goal (kept for reference).** C5's night facades reach the original's measured brightness:
+tower faces about 15.5 where they now read 10.2, low-rise about 37.6 where it now reads 21.7.
 
 **Evidence (confidence: direction-sound, mechanism lead-only).** Split out of `BL-303` at its close
 on 2026-08-08 and measured under `CAP-11`: tower faces 10.2 against 15.5, low-rise 21.7 against
@@ -317,7 +357,8 @@ running short. It is explicitly not fog: that is `BL-303`'s own adjunct note, an
 work of that plan moved none of it. The candidate direction is the lit-signage and self-lit family,
 where `lighting: false` models draw fullbright (`docs/formats/weather.md`), so the question is
 whether these facades author a flag or vertex data that we modulate and the original does not.
-<TODO: re-verify still-open against the code.>
+That candidate is now checked against the code and ruled out for the facades themselves: they carry
+neither an unlit model flag nor the texture alpha bit the original exempts on.
 
 **Approach.** Start from the facades' own authored material and vertex data in C5's gamez rather
 than from the shader: establish what distinguishes the measured faces from the ones that read
@@ -328,19 +369,31 @@ SUNLIGHT, and what it keys on.>
 
 **Model recommendation.** High. The mechanism is unknown, the measurement is the only firm ground,
 and the change risks becoming a second global brightness knob if the discriminator is guessed
-rather than found.
+rather than found. The discriminator is now found rather than guessed, and no code was written
+against it here.
 
 **Verify.** The C5 night poses listed in `playtest/CAP-11/README.md`, measuring the same tower
 faces and low-rise the split recorded, with the pre-change numbers reproduced first. Then the full
 8-chapter `--freecam` regression and the C5 goldens.
 <TODO: name the C5 goldens in `analysis/goldens/manifest.json`.>
+Nothing of that applies to what landed here, which is documentation only. The decode's own checks
+are reproducible without a build: the routines above re-read at their addresses in Ghidra, and the
+texture-flag claims re-read straight off the shipped `ZBD/<chapter>/texture.zbd` directory (24-byte
+file header, then 40-byte records of `name[32]`, data offset, length; the storage byte is the first
+byte of the 16-byte image header at that offset). Cross-checked against the extractor's own `alpha`
+field in `extracted/<chapter>/texture.zip`'s `manifest.json`: the bit-`0x02` count matches
+`Full + Simple` exactly in all eight chapters, and the header widths and heights match too.
 
 **⚠ Traps.** Fog is ruled out and must not be re-chased. `WorldLight` is at clamp here, so raising
 it is not available and would break the terrain calibration `CAP-11` pinned. A fix that brightens
 every C5 surface rather than the measured family is a regression the goldens should catch, so read
 them rather than only the two measured faces. This item interacts with A1: both ask whether a
 family should be exempt from the same modulation, and a shared exemption that catches both by
-accident is not a result, it is a coincidence to rule out.
+accident is not a result, it is a coincidence to rule out. The decode answers that trap directly:
+the exemption A1 proposed and the one this item proposed are the same real mechanism, and it
+excludes both families.
+
+**Verified.** <pending orchestrator run>
 
 ## A3 ☐ `BL-538`: a dark band crosses the large buildings at the range the templates clutter fades out
 

@@ -284,9 +284,16 @@ The original lights the baked-vertex world by the mission's `SUNLIGHT`
 predominantly up-facing world that directional term collapses to one per-mission brightness scalar,
 and the average incidence that reproduces the original is 0.46 — calibrated to C1/IA1
 (`A=0.25, D=1.2 → 0.80`, matching the original's deck 210→169 and terrain →~57) and then confirmed
-at 0.426 / 0.784 / clamp-1.0 across three missions (CAP-11 matched-pose A/B, 2026-08-07). Two known
-exemptions in the original that we do not yet have: water is unmodulated (`BL-304`), and night cloud
-sprites are moonlit directionally (`BL-325`).
+at 0.426 / 0.784 / clamp-1.0 across three missions (CAP-11 matched-pose A/B, 2026-08-07).
+
+⚠ **The scalar is a collapse, and the original's own machinery is decoded separately.** The
+`sunlight` node is one entry in the same light array as every `LIGHT_STATE` point light, and its
+contribution is computed per vertex inside the polygon loop rather than baked. Which surfaces
+receive it is decided by two gates, the model's `lighting` flag and the texture's alpha bit, both in
+[`vertexLighting.md`](vertexLighting.md). That page also settles the exemption question: **water is
+not exempt in the original** (its textures carry no alpha bit), while the lit-signage, glow and
+overlay families are. Night cloud sprites being moonlit directionally (`BL-325`) is a separate,
+still-open reading.
 
 ## The lens flare (measured, not decoded)
 

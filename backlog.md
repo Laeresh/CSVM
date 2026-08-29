@@ -932,6 +932,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the two), but fixing it means giving `Kind` a billboard mode and a second material path, and it
   changes how 139,388 C5 sprites look with no reference shot to check against — so it needs an
   original-game A/B.
+  *The "should be exempt from the dim" half is now decoded and survives.* `docs/org/vertexLighting.md`
+  finds the original's per-surface exemption and it lands on this family: `poleflare` ships texture
+  storage flags `0xab`, i.e. the alpha bit that makes `FUN_005524d0` skip the per-vertex light
+  evaluation outright, so the glows take no sun term at all in the original. So does `lightpole`, and
+  so do `lite_out`, `bliteon`/`bliteoff` and the rest of C5's lit-signage set. The exemption keys on
+  the **texture**, not on a kind, a `soil` id or a node name, so it is a general rule and not a
+  special case cut for this item. It also does not need the A/B: the billboard-axis half still does.
 
 - `BL-076` `[Feature]` **Star twinkle + undecoded light fields** (flags 523/…, the 0.17 float) — stars/beacons
   render as fixed-size soft sprites, no twinkle.
@@ -1041,9 +1048,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-322` `[Bug]` **C5's lit facades render ×0.58–0.66 of the original with WorldLight already at
   clamp 1.0** (split out of `BL-303` at its close, 2026-08-08; measured `CAP-11`: tower faces 10.2
   vs 15.5, low-rise 21.7 vs 37.6). Explicitly NOT fog — `BL-303`'s own adjunct note, and the Wave
-  B fog work moved none of it. Candidate direction: the lit-signage/self-lit family
-  (`lighting: false` models draw fullbright, weather.md) — check whether these facades author a
-  flag or vertex data we modulate that the original does not.
+  B fog work moved none of it.
+  *Decoded, and the item's own premise is refuted:* the original's per-surface lighting exemption is
+  found and written up in `docs/org/vertexLighting.md`. It is two gates, the model's `lighting` flag
+  (`FUN_00551d90`) and the texture's alpha bit (`FUN_005524d0`), and **the measured facades are on
+  the lit side of both**: `cblock1`–`7`, `bldg1`–`4` and `bldgtrim1` all ship storage flags `0xa5`,
+  i.e. no alpha bit, so the original modulates them exactly as we do. Asking "should these facades
+  be modulated at all" therefore answers yes, and no exemption is available to close the measured
+  ratio. What the decode does hand over is a narrower, real gap: the overlays drawn **on top of**
+  those facades are exempt in the original and are not in ours, because the remake applies its
+  per-model `lit` decision to every overlay pass. In C5 that is `buildingspotlighted` (the lit
+  windows, 34 polygons over `cblock*`), `nypd`, `clock`, `fadedsign01`–`03`, `lightpole`, `lite_out`,
+  `bliteon`/`bliteoff` and `traffic_sign1`. Whether drawing those fullbright moves the tower-face and
+  low-rise boxes is untested and is the next step; it is a different mechanism from the one this item
+  was filed on, and the residual after it is not predicted.
+  *Blocked on plumbing:* the exemption keys on the texture header's storage byte, which the deployed
+  texture tree does not carry (PNGs only; the extractor's `alpha` field lives in `texture.zip`'s
+  `manifest.json`). A PNG alpha-channel test is not a substitute — it loses the 1–10 `Simple`
+  textures per chapter that carry the bit too.
   *Playtest after fix:* the C5 night poses in `playtest/CAP-11/README.md`.
 
 - `BL-325` `[Feature]` **Night cloud sprites are directionally moonlit in the original; ours are
@@ -1229,6 +1251,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   tree lines and C2's Eiffel replica, where the erosion this rule was written to prevent would show
   first. *Cross-refs:* `analysis/alpha-classification/FINDINGS.md`, which carries the decode and the
   install-wide census; the coastline commit that filed this (`git log --grep=SoftAlphaCoastline`).
+
+- `BL-613` `[Fidelity]` **An alpha-textured surface takes a sun term in ours and none in the
+  original.** *Evidence (decoded):* [`docs/org/vertexLighting.md`](docs/org/vertexLighting.md) pins
+  the original's per-surface lighting exemption as two gates, and the second is engine-wide: in
+  `FUN_005524d0`'s textured branch, bit `0x02` of the texture object's storage flags byte at `+0x09`
+  (set for exactly the textures carrying an alpha channel) skips the per-vertex light evaluation
+  outright and sends the polygon through the unlit submission path. CSVM has no counterpart, so
+  every alpha-textured surface in every chapter is modulated where the original leaves it
+  fullbright. Confirmed against the shipped data: `poleflare` and `lightpole` are `alpha: Full`
+  and exempt, while `cblock1`, `bldg1` and `wtr00000` are `alpha: None` and lit in both.
+  *Fix shape:* carry the exemption on the material the builder creates, keyed on the texture's own
+  alpha class, alongside the existing per-model `lighting` gate. *⚠ Traps:* **the deployed texture
+  tree cannot answer the question.** It ships PNGs only; the alpha class lives in the extractor's
+  `alpha` field in `texture.zip`'s `manifest.json`, so the plumbing to reach it is the first half of
+  the work. **A PNG alpha-channel test is not a substitute**, because it loses the one to ten
+  `Simple` textures per chapter that carry the bit as well. This changes how a large population of
+  surfaces reads across all eight chapters, so it wants a golden re-pin and the user's eyes, not a
+  suite alone. *Cross-refs:* `BL-322` (the C5 facade overlays, this rule's first concrete instance),
+  `BL-070` (whose "should be exempt from the dim" half this decode settles, leaving only its
+  billboard-axis half), `docs/org/textures.md` (the storage-flag bits).
 
 ## Effects & animation runtime
 

@@ -59,16 +59,22 @@ Derived, not from the file: `+0x00` is `width * height` (`FUN_0052f700`), and `+
 | Bit | Meaning | Evidence |
 |---|---|---|
 | `0x01` | 2 bytes per pixel (16-bit rather than 8-bit paletted) | `FUN_0052f680` returns `1 + (flags & 1)`, and that is the multiplier in `FUN_0052f6b0`'s buffer size |
-| `0x02` | not traced; part of the extractor's alpha class | |
-| `0x04` | not traced; part of the extractor's alpha class | |
+| `0x02` | the texture has an alpha channel; **and it is the per-surface lighting exemption** | `FUN_005524d0` skips the per-vertex light evaluation for any textured polygon whose texture carries it — see [`vertexLighting.md`](vertexLighting.md) |
+| `0x04` | the texture has none; complementary to `0x02` in every shipped header | read off all eight `texture.zbd` directories against the extractor's own `alpha` field |
 | `0x08` | a separate alpha plane follows the pixel data | `FUN_0052f860` reads `width*height` further bytes into `+0x14` only when set |
 | `0x10` | use the global palette, skip the local one | `FUN_0052f860` skips the local palette read when set |
 | `0x20` | image loaded (runtime marker) | set by `FUN_0052fa00` after the pixel read |
 | `0x40` | alpha plane loaded (runtime marker) | set by `FUN_0052f860` |
 | `0x80` | palette loaded (runtime marker) | set by `FUN_0052f860` |
 
-The extractor's `alpha` enum (`None`/`Simple`/`Full`) is derived from bits `0x02`/`0x04`. Those two
-bits are not read anywhere traced in the engine, so this page does not name them.
+The extractor's `alpha` enum (`None`/`Simple`/`Full`) is derived from bits `0x02`/`0x04`, and the
+third bit of the set, `0x08`, is what separates `Full` from `Simple`. A no-alpha texture ships
+`0xa5`, a full-alpha one `0xab`, a simple-alpha one `0xa3`.
+
+⚠ **Bit `0x02` is not only a storage property.** It is the original's per-surface lighting
+exemption: a textured polygon whose texture carries it is drawn without any per-vertex light term at
+all, sun included. That is [`vertexLighting.md`](vertexLighting.md), and it is the reason this byte
+matters to the renderer and not just to the loader.
 
 ## The render-flags word (header `0x0E` → object `+0x0c`)
 
