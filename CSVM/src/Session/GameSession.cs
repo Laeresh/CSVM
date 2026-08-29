@@ -1900,11 +1900,15 @@ public partial class GameSession : Node3D
         Texture2D? reticleTex = ImpactReticle.LoadTexture(
             Path.Combine(_dataRoot, "extracted", "rimage"), "impact_point.png");
 
+        // ⚠ No --det bypass on this arm, unlike the race arm below: a story mission has one
+        // PLAYER_INIT, so the plain walk stacks the whole field on it
+        // (docs/architecture.md, ## src/Session/StartGrid.cs).
+        bool coopCampaign = _spec.CampaignProfile != null && _rigs.Count > 1;
         // ⚠ Choose the spawn placement ONCE, by picking an implementation here, never by a runtime
-        // flag inside one: --det stays byte-identical because RaceGrid is then not constructed at
+        // flag inside one: a --det race stays byte-identical because StartGrid is then not built at
         // all. It cannot move up beside new SpawnPicker, which runs before `race` is settled.
-        IFlightStarts flightStarts = race != null && !_spec.Det
-            ? new RaceGrid(_spawnPicker, GroundSampler())
+        IFlightStarts flightStarts = coopCampaign || (race != null && !_spec.Det)
+            ? new StartGrid(_spawnPicker, GroundSampler())
             : _spawnPicker;
         var aircraftResources = new AircraftAssemblyResources
         {
@@ -2809,7 +2813,7 @@ public partial class GameSession : Node3D
         });
     }
 
-    // The production ground sampler RaceGrid probes its slots with: the world height under a point,
+    // The production ground sampler StartGrid probes its slots with: the world height under a point,
     // or null when the physics space answered nothing.
     // ⚠ Report null, never a fabricated height: the anchor is an authored, flyable point, and a
     // made-up correction would move a race field for no reason. This is the only place that knows

@@ -91,7 +91,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — The seams
 
-1. ☐ `RaceGrid` becomes `StartGrid`, and answers a campaign mission's anchor
+1. ☑ `RaceGrid` becomes `StartGrid`, and answers a campaign mission's anchor
 2. ☐ A campaign session accepts more than one player
 3. ☐ `IObjectiveWorld` grows the human field, and the scripted player keeps its meaning
 4. ☐ The episode owner: a cutscene episode knows which human started it
@@ -142,7 +142,7 @@ those in parallel worktrees. `CampaignDirector.cs` is edited by `A3`, `B13` and 
 
 # Wave A — The seams
 
-## A1 ☐ `RaceGrid` becomes `StartGrid`, and answers a campaign mission's anchor
+## A1 ☑ `RaceGrid` becomes `StartGrid`, and answers a campaign mission's anchor
 
 **Goal.** Four humans launching a campaign mission come up abreast on one heading at one altitude,
 placed by the same grid the stunt race uses, and the type's name no longer claims it is only for

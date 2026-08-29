@@ -400,10 +400,13 @@ reasons that have nothing to do with any of these checks.
   our invention — the original had no splitscreen at all — so every call here is a judgement on our
   own remake, with no reference to A/B against.
 
-  **Why this sitting is the only evidence there will ever be.** The grid is selected only when a
-  session is an actual race, and a `--det` run is explicitly given the old per-player spawn walk
-  instead, so no scripted run, screenshot or golden can exercise this path — by design, since that
-  bypass is what keeps every scripted spawn byte-identical. The grid geometry is also not
+  **Why this sitting is the only evidence there will ever be for a race.** On the race path the grid
+  is selected only when a session is an actual race, and a `--det` run is explicitly given the old
+  per-player spawn walk instead, so no scripted run, screenshot or golden can exercise the race
+  path. That is by design: the bypass is what keeps every scripted race spawn byte-identical. (A
+  multiplayer campaign mission takes the same grid under `--det` as well, so a scripted campaign run
+  does place a field with it; that is a different caller and settles nothing about a race start.)
+  The grid geometry is also not
   photographable: the panes are chase-cam only, so at the default 60 m spacing your neighbour sits
   outside your own frustum. **Read the geometry off the console instead** — every launch logs one
   line per slot, e.g. `spawn [P1 grid slot 1 of 4] pos=(-4974,260,-3771) heading=90° spacing=60m
@@ -411,8 +414,8 @@ reasons that have nothing to do with any of these checks.
 
   **Both numbers are live config, and settling them is the point of this sitting.** `slotSpacing`
   (default **60 m** between neighbouring slots) and `groundClearance` (default **100 m** of air the
-  lowest slot must have under it) are read from `config.json` as `raceGrid.slotSpacing` and
-  `raceGrid.groundClearance`, listed by `--dump-config`, and take effect on the next launch with no
+  lowest slot must have under it) are read from `config.json` as `startGrid.slotSpacing` and
+  `startGrid.groundClearance`, listed by `--dump-config`, and take effect on the next launch with no
   rebuild. Neither is a finding — 60 m is just the figure already in the tree — so dial them between
   launches until the start looks right and record what you landed on.
   *Look for:*

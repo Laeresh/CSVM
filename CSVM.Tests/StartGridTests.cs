@@ -10,12 +10,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The abreast starting grid (<see cref="RaceGrid"/>): where each pilot's slot lands, which way it
+/// The abreast starting grid (<see cref="StartGrid"/>): where each pilot's slot lands, which way it
 /// faces, and how far the field is raised to clear the ground. See <c>docs/architecture.md</c>
 /// for why lift-by-worst-slot has no visible symptom otherwise. Terrain is a synthetic function
 /// of slot position, which is what makes the geometry testable off-engine.
 /// </summary>
-public class RaceGridTests
+public class StartGridTests
 {
     // The grid's own spacing and clearance, restated so a change to either fails here
     // rather than passing silently. Both are config fallbacks now; these tests run with no
@@ -249,7 +249,7 @@ public class RaceGridTests
     public void PosOverrideReachesThroughTheGridAndCentresTheField()
     {
         var spec = SessionSpec.Parse(new[] { "--stunt", "--pos=100,700,-250", "--direction=1,0,0" });
-        var grid = new RaceGrid(new SpawnPicker(spec), Flat(0f));
+        var grid = new StartGrid(new SpawnPicker(spec), Flat(0f));
         // A spawn list that would otherwise be used, to prove the override beats it rather than
         // there being nothing to beat.
         var spawns = new[] { new SpawnPoint(new Vector3(-9999f, 300f, 9999f), 123f) };
@@ -280,7 +280,7 @@ public class RaceGridTests
             new SpawnPoint(new Vector3(0f, 500f, 0f), 0f),
             new SpawnPoint(new Vector3(4000f, 800f, 1000f), 0f),
         };
-        var starts = new RaceGrid(new SpawnPicker(SessionSpec.Parse(new[] { "--stunt" })), Flat(0f))
+        var starts = new StartGrid(new SpawnPicker(SessionSpec.Parse(new[] { "--stunt" })), Flat(0f))
             .ChooseStarts(spawns, "", 1, 4);
 
         Assert.Equal(4000f, starts.Average(s => s.Pos.X), 3);
@@ -299,10 +299,10 @@ public class RaceGridTests
     [Fact]
     public void TheConfigFallbacksAreTheGeometryTheseTestsAssert()
     {
-        Assert.Equal(Spacing, RaceGrid.SlotSpacingDefault, 3);
-        Assert.Equal(Clearance, RaceGrid.GroundClearanceDefault, 3);
-        Assert.Equal(Spacing, Config.GetFloat("raceGrid.slotSpacing", RaceGrid.SlotSpacingDefault), 3);
-        Assert.Equal(Clearance, Config.GetFloat("raceGrid.groundClearance", RaceGrid.GroundClearanceDefault), 3);
+        Assert.Equal(Spacing, StartGrid.SlotSpacingDefault, 3);
+        Assert.Equal(Clearance, StartGrid.GroundClearanceDefault, 3);
+        Assert.Equal(Spacing, Config.GetFloat("startGrid.slotSpacing", StartGrid.SlotSpacingDefault), 3);
+        Assert.Equal(Clearance, Config.GetFloat("startGrid.groundClearance", StartGrid.GroundClearanceDefault), 3);
     }
 
     /// <summary>Every slot reports itself. This is the only instrument a hand-flown race has for the
@@ -349,7 +349,7 @@ public class RaceGridTests
 
     // A grid over a picker with no `--pos` override, so the anchor comes from the
     // spawn list handed to `ChooseStarts`.
-    private static RaceGrid Grid(Func<Vector3, float?> ground) =>
+    private static StartGrid Grid(Func<Vector3, float?> ground) =>
         new(new SpawnPicker(SessionSpec.Parse(new[] { "--stunt" })), ground);
 
     private static IReadOnlyList<SpawnPoint> Spawns(Vector3 pos, float headingDeg) =>

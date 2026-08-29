@@ -9,20 +9,21 @@ namespace CSVM.Session;
 /// <summary>The abreast starting grid: one anchor spawn, every pilot fanned symmetrically about it
 /// on that anchor's heading, and the whole field raised as one to clear the ground. Detail on the
 /// anchor delegation and the injected terrain sampler: this module's docs/architecture.md entry.
-/// ⚠ Not a splitscreen spawner. Dogfight deliberately does not use this; only a race may
-/// construct it, since four dogfighters abreast on one heading is an instant head-on merge.
-/// ⚠ Scripted paths (--det, solo flight, --vs, zone-less chapters) bypass this by never
+/// ⚠ Not a splitscreen spawner. Dogfight deliberately does not use this, since four dogfighters
+/// abreast on one heading is an instant head-on merge; a stunt race and a co-op campaign mission
+/// are its only callers.
+/// ⚠ Scripted paths (solo flight, --vs, zone-less chapters, and a --det race) bypass this by never
 /// constructing it — the caller picks the implementation once. Never add a bypass branch inside
-/// this class; the --det spawn guarantee is structural, not a runtime check.</summary>
-public sealed class RaceGrid : IFlightStarts
+/// this class; the race path's --det spawn guarantee is structural, not a runtime check.</summary>
+public sealed class StartGrid : IFlightStarts
 {
     /// <summary>TUNE: default metres between neighbouring grid slots, measured across the line;
-    /// overridable as <c>raceGrid.slotSpacing</c>. Not yet judged at the playtest
+    /// overridable as <c>startGrid.slotSpacing</c>. Not yet judged at the playtest
     /// (this module's docs/architecture.md entry).</summary>
     public const float SlotSpacingDefault = 60f;
 
     /// <summary>TUNE: default metres of air the lowest slot must have under it before the field
-    /// is left alone; overridable as <c>raceGrid.groundClearance</c>. Deliberately loose against
+    /// is left alone; overridable as <c>startGrid.groundClearance</c>. Deliberately loose against
     /// the known airframe-collision overhang; dial it at the playtest.</summary>
     public const float GroundClearanceDefault = 100f;
 
@@ -33,7 +34,7 @@ public sealed class RaceGrid : IFlightStarts
     /// any part of spawn resolution.</param>
     /// <param name="groundAt">World height of the ground under a point, or null when nothing was
     /// found there.</param>
-    public RaceGrid(SpawnPicker picker, Func<Vector3, float?> groundAt)
+    public StartGrid(SpawnPicker picker, Func<Vector3, float?> groundAt)
     {
         _picker = picker;
         _groundAt = groundAt;
@@ -49,8 +50,8 @@ public sealed class RaceGrid : IFlightStarts
     {
         // Read-through at the point of use, once per session: the grid is constructed at session
         // build and asked exactly once, so this is also the moment the values in force are logged.
-        float spacing = Config.GetFloat("raceGrid.slotSpacing", SlotSpacingDefault);
-        float clearance = Config.GetFloat("raceGrid.groundClearance", GroundClearanceDefault);
+        float spacing = Config.GetFloat("startGrid.slotSpacing", SlotSpacingDefault);
+        float clearance = Config.GetFloat("startGrid.groundClearance", GroundClearanceDefault);
 
         var (anchorPos, anchorLookAt) = _picker.ChooseSpawn(spawns, missionZrdrPath, spawnBase, 0, "grid anchor ");
         // One start state for the whole grid, from the picker, so every slot begins on the same

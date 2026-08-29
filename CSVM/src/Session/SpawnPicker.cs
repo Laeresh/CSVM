@@ -76,7 +76,7 @@ public sealed class SpawnPicker : IFlightStarts
     /// <summary>The throttle and speed every pilot in this mission starts on, out of the mission's
     /// own PLAYER_INIT (docs/formats/spawns.md). ⚠ Whole-field like <see cref="ChooseStarts"/>:
     /// the record is one per mission, so never make this per-player — that invites a per-player
-    /// answer the original does not have. <see cref="RaceGrid"/> calls it rather than
+    /// answer the original does not have. <see cref="StartGrid"/> calls it rather than
     /// restating it.</summary>
     public (float ThrottleFrac, float SpeedMps) StartState(IReadOnlyList<SpawnPoint>? spawns,
         string missionZrdrPath)
@@ -106,7 +106,7 @@ public sealed class SpawnPicker : IFlightStarts
     public (Vector3 pos, Vector3 lookAt) ChooseSpawn(IReadOnlyList<SpawnPoint>? spawns,
         string missionZrdrPath, int spawnBase, int playerIndex, string tag)
     {
-        // ⚠ Tested BEFORE the spawn list — that order is why --pos beats it, and RaceGrid
+        // ⚠ Tested BEFORE the spawn list — that order is why --pos beats it, and StartGrid
         // inherits the override for free by delegating here rather than reimplementing it.
         // Bypasses the list entirely: a scripted run starts short of a target, no maneuvering.
         if (_spec.SpawnAt is { } at)

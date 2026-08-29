@@ -245,10 +245,11 @@ public static class Config
             // warmup runs.
             GetString(EffectsLevel.Key, EffectsLevel.Default);
             GetBool(EffectsLevel.FadeKey, EffectsLevel.FadeDefault);
-            // The race grid is constructed only by a multiplayer stunt race, which the warmup never
-            // builds — register its two keys here so --dump-config documents them on any launch.
-            GetFloat("raceGrid.slotSpacing", Session.RaceGrid.SlotSpacingDefault);
-            GetFloat("raceGrid.groundClearance", Session.RaceGrid.GroundClearanceDefault);
+            // The start grid is constructed only by a multiplayer stunt race or a co-op campaign
+            // mission, neither of which the warmup builds — register its two keys here so
+            // --dump-config documents them on any launch.
+            GetFloat("startGrid.slotSpacing", Session.StartGrid.SlotSpacingDefault);
+            GetFloat("startGrid.groundClearance", Session.StartGrid.GroundClearanceDefault);
         }
         catch (Exception e)
         {

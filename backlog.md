@@ -2631,7 +2631,7 @@ usual.
   does record.
 
 - `BL-314` `[Feature]` `[Blocked: PT-45]` **Race countdown — a rolling start on rails before the run clock
-  opens.** The abreast starting grid landed 2026-08-08 (`RaceGrid`), so every pilot in a splitscreen
+  opens.** The abreast starting grid landed 2026-08-08 (`StartGrid`), so every pilot in a splitscreen
   stunt race now begins on one line, on one heading, at one altitude. What is still missing is the
   moment a race starts: today the clock is running the instant the world appears, so whoever's
   loading screen ends first is flying first. Deliberately split off from the grid rather than landing

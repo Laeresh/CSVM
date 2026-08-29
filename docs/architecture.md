@@ -385,7 +385,7 @@ clusters they delegate to.
 - `src/Session/LiveryResolver.cs` — resolves each player's livery against a `SessionSpec`: the paint catalog, the pattern-mask library, and the per-player scheme pick.
 - `src/Session/SpawnPicker.cs` — resolves each player's flight spawn against a `SessionSpec`: the shared spawn-list index and the per-player point (or the `--spawn-at=` override); the plain `IFlightStarts`.
 - `src/Session/IFlightStarts.cs` — the spawn-placement seam: one call answering for the **whole field** at once, plus the `FlightStart` pos/look-at pair every rig is placed from.
-- `src/Session/RaceGrid.cs` — the race starting grid: every pilot fanned symmetrically about one anchor spawn on its heading, with the whole field lifted as one to clear terrain.
+- `src/Session/StartGrid.cs` — the abreast starting grid: every pilot fanned symmetrically about one anchor spawn on its heading, with the whole field lifted as one to clear terrain.
 - `src/Session/PlaneRoster.cs` — pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
 - `src/Session/EffectCatalogue.cs` — the record of which authored anims are playable effects, and what their defs need staged: the effect/crash/damage-shim name tables, the two surface-indexed def vectors (`CrashDefTable`/`TouchdownDefTable`), and the anchor-root derivation both binds stage from.
 - `src/Session/SurfaceDefTable.cs` — one of the original's per-surface anim-def vectors (`player_crash_*` / `touchdown_*` over the surface registry) and the cascade that indexes it with a struck material's surface id.
@@ -5300,7 +5300,8 @@ Resolves each player's flight spawn:
 position/look-at from that list, objectives.json `PLAYER_INIT`, or the `--spawn-at=` debug
 override), and `LogSpawn`. Constructed once per session build (`_spawnPicker`, same lifetime as
 `LiveryResolver`). Also the plain `IFlightStarts`: `ChooseStarts` just loops its own `ChooseSpawn`,
-which is the placement every session flies except a splitscreen race. `RaceGrid` delegates to
+which is the placement every session flies except a splitscreen race or a co-op campaign mission.
+`StartGrid` delegates to
 `ChooseSpawn` for its anchor, and the weapon lab and freecam spectator call it directly, so this
 type stays the single owner of spawn resolution.
 
@@ -5308,10 +5309,10 @@ type stays the single owner of spawn resolution.
 Where every pilot in a session starts: `ChooseStarts(spawns, missionZrdrPath, spawnBase,
 playerCount)` returns one `FlightStart` — the same `(pos, lookAt)` pair `FlightController.Setup`
 already took — per player. Two implementations: `SpawnPicker` (the plain per-player walk of the
-mission's spawn list) and `RaceGrid`. `HumanFlightAdapter` holds the interface and resolves the
+mission's spawn list) and `StartGrid`. `HumanFlightAdapter` holds the interface and resolves the
 field lazily on its first `Assemble`, so the resolve still happens where it always did.
 
-## src/Session/RaceGrid.cs
+## src/Session/StartGrid.cs
 The abreast starting grid, and the second `IFlightStarts`: slot `i` of `n` sits
 `(i − (n−1)/2) × spacing` metres along the perpendicular to the anchor heading, so an even field
 straddles the anchor and an odd one puts its middle plane on it. The anchor is
@@ -5321,11 +5322,20 @@ of them exist. The heading comes from the anchor's own pos→look-at pair, never
 `HeadingDeg`: `--pos` carries no heading field and re-reading the list entry would silently ignore
 `--direction`. Terrain arrives as an injected `Func<Vector3, float?>` so fan and lift are testable
 off-engine; the production closure is `GameSession.GroundSampler()`, which also owns what an empty
-probe means. `raceGrid.slotSpacing` (60 m) and `raceGrid.groundClearance` (100 m) are
+probe means. `startGrid.slotSpacing` (60 m) and `startGrid.groundClearance` (100 m) are
 `Config.GetFloat` **TUNE** values self-registered in `Config.WarmTuningRegistry`, so `--dump-config`
-lists them even on a launch that never builds a race. Three `CSVM.Tests` assertions exist solely
+lists them even on a launch that never builds a grid. Three `CSVM.Tests` assertions exist solely
 to catch a per-plane-lift regression, and Dogfight's own spacing (rejected as a splitscreen use of
 this class) is `BL-301`'s call.
+
+Two callers construct it, and `GameSession` picks the implementation once so nothing branches
+inside the class. A splitscreen stunt race takes the grid unless `--det` is set, which is what
+keeps every scripted race spawn byte-identical to the per-player walk that preceded it. A campaign
+session with more than one rig takes it unconditionally, `--det` included: a story mission has one
+`PLAYER_INIT`, so the plain walk resolves every human to the same point and stacks the field, and
+there is no prior scripted behaviour to keep identical because a campaign session below two rigs
+never reaches that arm. A user `config.json` written before the rename carries `raceGrid.*` keys,
+which no longer resolve and are silently ignored.
 
 ## src/Session/PlaneRoster.cs
 Static, spec-free lookups over a `SessionSpec`'s plane roster: `PlaneFor(spec, index)`,
