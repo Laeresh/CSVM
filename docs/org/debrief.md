@@ -444,8 +444,12 @@ merge, not its author, and the two run in the same mission-end pass.
   Expended needs no source, since the original does not draw it.
 - **A board exists, but it is shaped like the wrong original screen.** `CampaignPreviousMissionsPage`
   is a flat mission list, closer to `SCRAPBOOK_TOC.SCRIPT` than to the two-page book the debrief
-  actually is; the mission-end entry, the two tabs, the results block and the Replay Mission button
-  all belong to the book, which nothing in CSVM draws yet.
+  actually is; the mission-end entry and the Replay Mission button on that page still belong to the
+  book, which nothing in CSVM draws yet.
+- **The results block is computed (C15).** `CampaignScrapbookResults`, in the same file, renders the
+  outcome line and the four drawn rows off one `MissionResult` and either tab, including the Best to
+  Date tab's own bug: it always reads Mission Failed, since `0x0040a7e6` never reads the merged
+  mask for that tab. Not yet wired into a screen; C17 is the entry path.
 - **The skip offer's counter and its answer are implemented; the asking is not (B14).**
   `MissionResult.Attempts` is the per-mission counter, moved by `CampaignProgression.Record` on a
   failure alone and only while `Best`'s bit 0 is clear, so it counts total rather than consecutive

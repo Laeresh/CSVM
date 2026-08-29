@@ -179,7 +179,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — the results page
 
-15. ☐ The results block: four rows, the outcome line and the two tabs
+15. ☑ The results block: four rows, the outcome line and the two tabs
 16. ☐ The per-airframe kill stamps
 17. ☐ Enter the scrapbook at mission end, and Replay Mission
 
@@ -631,7 +631,7 @@ pass, so this interacts with what a skipped mission leaves behind for the next o
 
 # Wave C — the results page
 
-## C15 ☐ The results block: four rows, the outcome line and the two tabs
+## C15 ☑ The results block: four rows, the outcome line and the two tabs
 
 **Goal.** The results page shows the outcome line, the four rows and the Best to Date / Most Recent
 tabs, reading the flown mission's record.
