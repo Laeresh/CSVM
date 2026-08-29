@@ -70,6 +70,13 @@ public sealed class MissionResult
     /// <summary>The merged best/cumulative result, updated only by an attempt that completed the
     /// primary objective.</summary>
     public MissionRun Best { get; set; } = new();
+
+    /// <summary>Failed attempts at a mission that has never been completed: the original's own
+    /// per-mission counter at <c>[0x0071b494 + idx*0x10]</c>, whose every fourth increment raises
+    /// the skip offer (<c>docs/org/debrief.md</c>, "The four-attempt skip offer"). It belongs to
+    /// neither half, since it spans attempts where the attempt half is cleared by each one, and a
+    /// file saved before it existed reads 0.</summary>
+    public int Attempts { get; set; }
 }
 
 /// <summary>One campaign profile's persisted state: wallet, owned planes with their campaign fit,
@@ -233,6 +240,7 @@ public sealed class CampaignProfileStore
             {
                 w.WriteStartObject();
                 w.WriteNumber("seq", result.Seq);
+                w.WriteNumber("attempts", result.Attempts);
                 WriteRun(w, "latest", result.Latest);
                 WriteRun(w, "best", result.Best);
                 w.WriteEndObject();
@@ -342,6 +350,7 @@ public sealed class CampaignProfileStore
                     def.MissionResults.Add(new MissionResult
                     {
                         Seq = ReadInt(r, "seq", 0),
+                        Attempts = ReadInt(r, "attempts", 0),
                         Latest = ReadRun(r, "latest"),
                         Best = ReadRun(r, "best"),
                     });

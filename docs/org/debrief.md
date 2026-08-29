@@ -446,8 +446,17 @@ merge, not its author, and the two run in the same mission-end pass.
   is a flat mission list, closer to `SCRAPBOOK_TOC.SCRIPT` than to the two-page book the debrief
   actually is; the mission-end entry, the two tabs, the results block and the Replay Mission button
   all belong to the book, which nothing in CSVM draws yet.
-- **The skip offer is unimplemented.** Four failed attempts at an uncompleted mission is a
-  campaign-advancing decision the player is given, not a cosmetic prompt.
+- **The skip offer's counter and its answer are implemented; the asking is not (B14).**
+  `MissionResult.Attempts` is the per-mission counter, moved by `CampaignProgression.Record` on a
+  failure alone and only while `Best`'s bit 0 is clear, so it counts total rather than consecutive
+  failures and stops at the mission's first completion. Its fourth increment raises
+  `MissionRecorded.SkipOffered`, which the flown result carries to the screen; answering Yes is
+  `CampaignProgression.AcceptSkip`, which re-records the same attempt with bit 0 set, the original's
+  synthetic win, and commits the failed attempt's world capture the way the win flag's save gate
+  does. CSVM keeps the counter in the profile because the original's own array sits in the
+  undecoded `0x0071b480` overlap below. The prompt itself is `SkipOfferPrompt`, a marked
+  placeholder: string 191's wording is not in the extraction. Nothing draws the offer yet, because
+  the screen that asks it is Wave C's.
 - **`ObjectiveGraph.CompletedMask` is one of the original's two mask sources.** It is the
   objective-number half; the id 18 to 30 half comes from the module vector.
 

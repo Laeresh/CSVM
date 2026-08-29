@@ -8,9 +8,13 @@ using Godot;
 namespace CSVM.Session;
 
 /// <summary>What one flown campaign mission ended as: the outcome the objectives graph derived,
-/// the attempt recorded into the profile, and what recording it changed.</summary>
+/// the attempt recorded into the profile, and what recording it changed. <c>Chapter</c> and
+/// <c>SkipCapture</c> are what a screen taking the skip offer needs to record it as the win the
+/// original makes it (<see cref="CampaignProgression.AcceptSkip"/>); the capture is null unless
+/// this failure raised the offer, since it exists only while the flown world is still up.</summary>
 public readonly record struct CampaignMissionResult(
-    MissionOutcome Outcome, MissionAttempt Attempt, MissionRecorded Recorded);
+    MissionOutcome Outcome, MissionAttempt Attempt, MissionRecorded Recorded,
+    int Chapter = 0, IReadOnlyList<PersistedObject>? SkipCapture = null);
 
 /// <summary>
 /// The engine-side runtime of one campaign mission, behind <c>GameSession</c>'s one nullable
@@ -704,13 +708,22 @@ public sealed class CampaignDirector
         }
 
         var recorded = CampaignProgression.Record(_profile, attempt);
+        // The skip offer's Yes is a synthetic win whose save gate writes what the failed attempt
+        // left (docs/org/debrief.md), and that state exists only while the world is up. Captured
+        // here and carried; nothing commits it unless the offer is taken.
+        var skipCapture = recorded.SkipOffered && _world?.Runtime is { } lostWorld
+            ? CampaignPersistLog.Capture(lostWorld)
+            : null;
         _store?.Save(_profile);
         SaveAwardedBuilds(recorded);
-        Result = new CampaignMissionResult(outcome, attempt, recorded);
+        Result = new CampaignMissionResult(
+            outcome, attempt, recorded, _mission.Campaign, skipCapture);
         _leaving = LeavingHoldS;
         GD.Print($"campaign: mission {_mission.Ordinal} {outcome} — mask 0x{attempt.CompletedMask:x}, " +
                  $"{attempt.TimeMs / 1000}s, primary={recorded.PrimaryCompleted}, " +
-                 $"advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s); " +
+                 $"advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s), " +
+                 $"attempt {CampaignProgression.ResultOf(_profile, _mission.Seq)?.Attempts ?? 0} " +
+                 $"(skip offered={recorded.SkipOffered}); " +
                  $"holding the world {LeavingHoldS:0.#}s before leaving it");
     }
 

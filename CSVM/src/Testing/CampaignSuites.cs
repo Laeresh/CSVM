@@ -844,8 +844,13 @@ internal static class CampaignSuites
             $"…but the driven objective's own bit survives, mask 0x{result.Attempt.CompletedMask:x}");
         ctx.Check(!result.Recorded.PrimaryCompleted && !result.Recorded.Advanced,
             $"a non-zero mask on a loss still does not complete the primary or advance the campaign");
+        // BL-622/B14: the loss is the mission's first, so it counts one against the skip offer and
+        // the offer itself waits for the fourth.
+        int attempts = CampaignProgression.ResultOf(profile, mission.Seq)?.Attempts ?? 0;
+        ctx.Check(attempts == 1 && !result.Recorded.SkipOffered,
+            $"the loss counted as attempt {attempts} and offered no skip on it");
         report.AppendLine($"loss leg: ended {result.Outcome}, mask 0x{result.Attempt.CompletedMask:x}, "
-            + $"advanced={result.Recorded.Advanced}");
+            + $"advanced={result.Recorded.Advanced}, attempt {attempts}");
     }
 
     // Destroys (or deactivates) every node of one objective's INACTIVE paths, then ticks until it

@@ -76,9 +76,8 @@ either claim from `FUN_00419630` alone.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, B11, B12, B13, C15, C16, C17, D18, D19, D21 | Confirm the trace, then implement. A1 supplies the geometry the Wave D items needed; A2 supplies the counting rule B13 and C16 were waiting on; A3 supplies the entry paths C17 and D20 were waiting on. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, B11, B12, B13, B14, C15, C16, C17, D18, D19, D21 | Confirm the trace, then implement. A1 supplies the geometry the Wave D items needed; A2 supplies the counting rule B13 and C16 were waiting on; A3 supplies the entry paths C17 and D20 were waiting on. |
 | **Direction sound, magnitude a judgement call** | D20 | The *what* is settled by the screenshots, A1's callback map and A3's entry-path split; the rest is a layout call. |
-| **Leads only, no mechanism yet** | B14 | Budget for investigation. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.
@@ -176,7 +175,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ A lost attempt keeps its objective bits
 12. ☑ Carry the mission result across the launcher's deferred hop
 13. ☑ Count the per-airframe tallies and merge them per index
-14. ☐ The per-mission attempt counter and the four-attempt skip offer
+14. ☑ The per-mission attempt counter and the four-attempt skip offer
 
 ### Wave C — the results page
 
@@ -214,7 +213,7 @@ File contention, and these must not run in parallel worktrees:
 - `CSVM/src/UI/CampaignPreviousMissionsPage.cs`: C15, C16, D18, D19 and D20 all edit it. Run them
   in listed order in one worktree, or split the page into per-page classes as C15's first move and
   give each later item its own file.
-- `CSVM/src/Session/CampaignProgression.cs` and `CampaignProfileStore.cs`: B13 alone.
+- `CSVM/src/Session/CampaignProgression.cs` and `CampaignProfileStore.cs`: B13 and B14.
 
 ---
 
@@ -577,12 +576,37 @@ mismatch, so bumping it would drop every existing profile's progress, while the 
 missing-field tolerance already gives an old file all-zero tallies, the correct reading for an
 attempt with no per-airframe record to reconstruct.
 
-## B14 ☐ The per-mission attempt counter and the four-attempt skip offer
+## B14 ☑ The per-mission attempt counter and the four-attempt skip offer
+
+**Landed.** `MissionResult.Attempts` (`CampaignProfileStore.cs`, serialised as `attempts` and read
+back tolerantly, so no `Version` bump) is the per-mission counter. `CampaignProgression.Record`
+moves it on the failure path alone and only while the mission's `Best` mask has bit 0 clear, so it
+counts total rather than consecutive failures and stops for good at the mission's first completion;
+its fourth increment (`SkipOfferAttempts`) raises the new `MissionRecorded.SkipOffered`.
+`CampaignProgression.AcceptSkip` is the Yes: it re-records the same attempt with bit 0 set, which is
+exactly the original's synthetic win (merge, money, awards, position), and commits the failed
+attempt's world capture the way the win flag's save gate does. `CampaignDirector.OnMissionEnded`
+takes that capture, with the chapter, into `CampaignMissionResult` when and only when the offer is
+raised, because the destruction state cannot be read once the world is down. The counter lives in
+the profile rather than mirroring the original's array because the array sits inside the undecoded
+`0x0071b480` overlap. `SkipOfferPrompt` is a ⚠ MARKED PLACEHOLDER, not original wording: langui 191
+is absent from the extraction (ids jump 136 to 200). **Nothing asks the offer yet**: the screen that
+shows a mission's result is C15/C17's, and it reads `SkipOffered` off the carried result.
+
+**Verified.** Four unit tests over the rules: three failures pass in silence and the fourth offers,
+with a failure at another mission not moving this mission's count; declining leaves the position,
+the merged half and the completed list untouched and the fifth failure counts 5 rather than
+restarting; accepting advances the position, merges the mask to 5, keeps the counter at 4 and lands
+the carried capture in the persist log; and a mission completed once never offers a skip across
+eight lost replays, its counter still 0. The `campaign-mission-end` engine suite's loss leg checks
+the director's own path: C1/M02's player-death loss records attempt 1 and offers nothing.
+`dotnet format`/`dotnet build` clean, `CheckCommentCaps.ps1` clean, and the complete `.\RunTests.ps1`
+passes: 2578 unit tests, 181 engine suites with the error log clean, 16 goldens hash-identical.
 
 **Goal.** A mission failed four times without ever having been completed offers to skip it, and
 accepting advances the campaign.
 
-**Evidence (confidence: lead-only).** `docs/org/debrief.md`, "The four-attempt skip offer": the
+**Evidence (confidence: traced).** `docs/org/debrief.md`, "The four-attempt skip offer": the
 counter is `[0x0071b494 + idx*0x10]` with `idx = mission + 10*chapter`, gated on
 `[0x0071b488 + idx*0x10]` being zero (never completed), and every fourth increment opens langui
 string **191** as a `dialog.zrd` `MESSAGEBOX`; a Yes sets the campaign win flag and re-enters the
