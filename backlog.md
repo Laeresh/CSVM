@@ -3034,6 +3034,29 @@ usual.
   `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
   PERF-21.
 
+- `BL-648` `[Bug]` **`world-turrets` fails after enough suites have run before it in one engine
+  process, so a full `RunTests.ps1` can report a red the suite does not own.** *Evidence:* the
+  failing assertion is `AiSuites.cs:744`, `…with rounds striking it moved=0` — the armed
+  `multiplayer1zep` rings acquire and fire (`ShotsFired > 0` passes on the line above) but the bait
+  plane's combined armour/health never moves. It is deterministic on the sequence, not random:
+  `.\RunTests.ps1 -Filter "suite:puffer-modes,suite:loadout-bind,suite:weapons-fire,suite:loadout-forrig,suite:warning-shot,suite:launch-velocity-decay,suite:disabling-hits,suite:ordnance-end-conditions,suite:ordnance-guidance,suite:air-to-air,suite:ai-plane-defs,suite:engine-note,suite:instant-action-end,suite:flight-roster-transaction,suite:world-turrets" -SkipUnits -SkipGoldens`
+  reproduces it every time, and the suite passes alone. **Accumulation, not one bad neighbour:**
+  splitting that prefix in half and running either half ahead of `world-turrets` passes, so no
+  single predecessor carries it and the mechanism needs the whole run-up. *Fix shape:* find the
+  process-wide state that survives a suite's world disposal and starves the turret's rounds — a
+  shared projectile pool whose slots are never returned is the leading candidate, since the
+  failure is "the gun fires and nothing lands" and `air-to-air` already exercises whole-pool
+  overflow. Instrument the live-round count at the top of `world-turrets` under both orders before
+  changing anything; if it is already at the cap, the reset seam is the fix and the suite needs no
+  edit. *⚠ Traps:* this is not the shard balancer — the same sequence fails under a single-shard
+  run. Do not "fix" it by widening the damage assertion or by giving the suite its own shard: the
+  false red is the symptom, and whatever leaks would then leak silently into every later suite in
+  the same process. It is also order-fragile rather than fixed: adding a suite reshuffles the
+  weighted shards and can hide it (it went green when `anim-activation-prerequisite`'s weight
+  landed), so a clean full run is not evidence it is gone. *Cross-refs:* `BL-584` (the other
+  harness-integrity item, a unit test that went red once), `analysis/engine-suite-weights.json`
+  (what decides the order).
+
 ## Misc
 
 - `BL-072` `[Feature]` **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`

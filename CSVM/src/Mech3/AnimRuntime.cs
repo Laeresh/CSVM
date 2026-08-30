@@ -401,7 +401,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private readonly HashSet<AnimDefinition> _invalidated = new();
 
     // Every definition that has ever been started, so AnimStateOf can tell "has run" from "never
-    // ran". Write-only bookkeeping: nothing in the runtime reads it.
+    // ran", and so the animation-list activation prerequisite can count its callers.
     private readonly HashSet<AnimDefinition> _everStarted = new();
 
     private readonly Dictionary<string, int> _unhandled = new(StringComparer.Ordinal);
@@ -2566,6 +2566,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // A range-gated cutscene: the call arms it, the player arriving runs it.
                         if (!instant && DeferRangedCall(target, callAnchor))
                             continue;
+                        // ⚠ Before the staging below and before the wait list: an unmet call
+                        // starts nothing, so a WAIT_FOR_COMPLETION on it would hold for a callee
+                        // that never runs. Silent like the node-state gate in Start.
+                        if (!AnimPrerequisitesMet(target))
+                        {
+                            Count("CallAnimation(anim prerequisite unmet)");
+                            continue;
+                        }
                         // ⚠ Keep the library-root test data-driven, never name-based, and gated on
                         // a death or range-triggered mission call. Other ambient calls keep their
                         // authored positions and must not relocate during bootstrap.
@@ -3526,6 +3534,34 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     return false;
         }
         return true;
+    }
+
+    // The anim-list ACTIVATION_PREREQUISITE, a counter over the def's own callers
+    // (docs/formats/anim-definitions.md). ⚠ Gate CALL_ANIMATION with it and nothing else: a
+    // zeppelin hull death carries the same shape and is also fired from ZeppelinRuntime's damage
+    // model through Play, which owns that kill, and gating that path leaves every zeppelin in the
+    // game unkillable.
+    private bool AnimPrerequisitesMet(AnimDefinition def)
+    {
+        if (def.PrereqAnims.Count == 0)
+            return true;
+        int met = 0;
+        foreach (var name in def.PrereqAnims)
+            if (HasRun(name))
+                met++;
+        // An unauthored minimum means every entry, the same "absent is all" rule the objective
+        // script's completion counts keep; no shipped carrier leaves it out.
+        return met >= (def.PrereqMinToSatisfy > 0 ? def.PrereqMinToSatisfy : def.PrereqAnims.Count);
+    }
+
+    // ⚠ STARTED, not finished: the last caller's own animation is on the list it must satisfy, so
+    // a rule reading "completed" refuses the very call that completes the count.
+    private bool HasRun(string animName)
+    {
+        foreach (var def in _program.ByAnimName(animName))
+            if (_everStarted.Contains(def))
+                return true;
+        return false;
     }
 
     private void Count(string kind) =>
