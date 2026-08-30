@@ -604,11 +604,16 @@ internal static class LandingApproachSuites
         // Which definitions the episode actually reached, so a check that fails says whether the
         // pose was wrong or the branch that writes it never ran at all (DIAG-20).
         var started = new List<string>();
+        var plays = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         void Record(AnimDefinition def, Node3D? anchor)
         {
-            if (def.AnimName is { Length: > 0 } name && !started.Contains(name))
+            if (def.AnimName is { Length: > 0 } name)
             {
-                started.Add(name);
+                plays[name] = plays.TryGetValue(name, out int n) ? n + 1 : 1;
+                if (!started.Contains(name))
+                {
+                    started.Add(name);
+                }
             }
         }
         world.Runtime.OnInstanceStarted += Record;
@@ -629,6 +634,13 @@ internal static class LandingApproachSuites
         }
 
         report.AppendLine($"started: {string.Join(", ", started)}");
+        var repeats = plays.Where(p => p.Value > 1)
+            .OrderByDescending(p => p.Value).Select(p => $"{p.Key} x{p.Value}").ToList();
+        report.AppendLine($"plays: {plays.Count} definition(s), repeats [{string.Join(", ", repeats)}]");
+        // One call site playing three times and three call sites playing once are different
+        // faults, and the hook the episode swings is the airframe's own extend-hook branch.
+        ctx.Same(1, plays.TryGetValue(ExtendHookAnim, out int hookPlays) ? hookPlays : 0,
+            $"the episode swings '{planeNode}'s hook once, playing '{ExtendHookAnim}' a single time");
         report.AppendLine($"after the episode: mount {model.Position}, hook visible={hook?.Visible}");
         ctx.Check(hook is { Visible: true },
             $"the hookup extends '{planeNode}'s own docking hook");
@@ -985,6 +997,48 @@ internal static class LandingApproachSuites
         LandingApproachRuntime trigger, CutsceneController cutscene, FlightController rig,
         LandingApproach dock, Node3D marker, StringBuilder report)
     {
+        // Every start from the settle onward, by name: a leg the episode plays twice is a
+        // different fault from two legs playing once, and only a count separates them.
+        var plays = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        void CountPlay(AnimDefinition def, Node3D? anchor)
+        {
+            if (def.AnimName is { Length: > 0 } name)
+            {
+                plays[name] = plays.TryGetValue(name, out int n) ? n + 1 : 1;
+            }
+        }
+
+        world.Runtime.OnInstanceStarted += CountPlay;
+        try
+        {
+            RunTheDockingCounted(ctx, world, graph, script, trigger, cutscene, rig, dock, marker,
+                report, plays);
+        }
+        finally
+        {
+            world.Runtime.OnInstanceStarted -= CountPlay;
+        }
+    }
+
+    private static void RunTheDockingCounted(
+        TestContext ctx, TestWorld world, ObjectiveGraph graph, ObjectiveScript script,
+        LandingApproachRuntime trigger, CutsceneController cutscene, FlightController rig,
+        LandingApproach dock, Node3D marker, StringBuilder report, Dictionary<string, int> plays)
+    {
+        // The fork's node states as the world build leaves them, before an objective has woken.
+        // A world that builds both legs' nodes open would answer both calls whatever the gate does.
+        var atBuild = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var leg in ForkedLegsOf(world, dock.Anim))
+        {
+            foreach (var prereq in leg.PrereqNodes)
+            {
+                atBuild[PathKey(prereq.Path)] =
+                    PrereqNodeOf(world, prereq.Path) is { } at && at.Visible;
+            }
+        }
+
+        report.AppendLine("at build: " + string.Join(", ",
+            atBuild.Select(kv => $"{kv.Key}={(kv.Value ? "ACTIVE" : "INACTIVE")}")));
         for (float t = 0f; t < IntroSettleS; t += StepDt)
         {
             world.Runtime.Advance(StepDt);
@@ -994,6 +1048,29 @@ internal static class LandingApproachSuites
         report.AppendLine($"intro settled after {IntroSettleS:0}s, playing={cutscene.Playing}");
         ArmRow(ctx, world, graph, script, dock, report);
 
+        // The row's forked legs and the node states at the instant the hookup dispatches them. The
+        // fork is the data's, and the states move during the episode, so they are read at the
+        // dispatch rather than at its end.
+        var forks = ForkedLegsOf(world, dock.Anim);
+        var atDispatch = new Dictionary<string, bool>(StringComparer.Ordinal);
+        void SnapAtDispatch(AnimDefinition def, Node3D? anchor)
+        {
+            if (atDispatch.Count > 0 || def.PrereqNodes.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var leg in forks)
+            {
+                foreach (var prereq in leg.PrereqNodes)
+                {
+                    atDispatch[PathKey(prereq.Path)] =
+                        PrereqNodeOf(world, prereq.Path) is { } at && at.Visible;
+                }
+            }
+        }
+
+        world.Runtime.OnInstanceStarted += SnapAtDispatch;
         float now = 0f;
         var started = new List<string>();
         void Record(AnimDefinition def, Node3D? anchor)
@@ -1040,6 +1117,8 @@ internal static class LandingApproachSuites
                 $"yet the episode belongs to '{dock.Anim}', the row the trigger started, which is the original's landings slot (read '{cutscene.Anim ?? "-"}')");
             WatchTheDocking(ctx, world, graph, trigger, cutscene, rig, dock, marker, report,
                 () => now, dt => now += dt, () => handoffAt, () => handoffRaiser);
+            CheckTheHookPlays(ctx, world, dock, plays, report);
+            CheckTheDockingPrereqs(ctx, world, dock, forks, atDispatch, plays, report);
         }
         finally
         {
@@ -1049,6 +1128,7 @@ internal static class LandingApproachSuites
             }
 
             world.Runtime.CloseResolutionCensus();
+            world.Runtime.OnInstanceStarted -= SnapAtDispatch;
             world.Runtime.OnInstanceStarted -= Record;
             world.Runtime.OnInstanceFinished -= Finished;
             world.Runtime.CallbackHost = cutscene.Host;
@@ -2489,6 +2569,108 @@ internal static class LandingApproachSuites
     {
         var found = world.Runtime.FindNodes(node);
         return found.Count > 0 && found[0].Visible;
+    }
+
+    private static string PathKey(IReadOnlyList<string> path) => string.Join("/", path);
+
+    // The world node a prerequisite path names, each segment found inside the one before it. Null
+    // is the case the gate treats as met, so a suite asserting a gate has to tell it apart.
+    private static Node3D? PrereqNodeOf(TestWorld world, IReadOnlyList<string> path)
+    {
+        Node3D? at = null;
+        foreach (string segment in path)
+        {
+            var found = at == null
+                ? world.Runtime.FindNodes(segment)
+                : world.Runtime.FindNodes(segment, at);
+            if (found.Count == 0)
+            {
+                return null;
+            }
+
+            at = found[0];
+        }
+
+        return at;
+    }
+
+    // The legs of one row's call closure the data forks on: a definition carrying a REQUIRED
+    // node-state ACTIVATION_PREREQUISITE, which is what decides whether its call answers.
+    private static IReadOnlyList<AnimDefinition> ForkedLegsOf(TestWorld world, string root)
+    {
+        var legs = new List<AnimDefinition>();
+        foreach (var def in world.Session.Program.Subset(root).Defs)
+        {
+            if (def.PrereqNodes.Any(p => p.Required))
+            {
+                legs.Add(def);
+            }
+        }
+
+        return legs;
+    }
+
+    // One call site playing three times and three call sites playing once are different faults,
+    // and only a count separates them, so the episode's every start is counted by name.
+    private static void CheckTheHookPlays(
+        TestContext ctx, TestWorld world, LandingApproach dock,
+        IReadOnlyDictionary<string, int> plays, StringBuilder report)
+    {
+        var closure = ClosureOf(world, dock.Anim);
+        var repeats = plays.Where(p => p.Value > 1)
+            .OrderByDescending(p => p.Value).Select(p => $"{p.Key} x{p.Value}").ToList();
+        var closureRepeats = plays.Where(p => p.Value > 1 && closure.Contains(p.Key))
+            .OrderByDescending(p => p.Value).Select(p => $"{p.Key} x{p.Value}").ToList();
+        report.AppendLine($"plays: {plays.Count} definition(s) started, " +
+            $"{closure.Count} in '{dock.Anim}''s closure, repeats [{string.Join(", ", repeats)}]");
+        ctx.Check(plays.Count > 0, $"the episode starts definitions at all, so the count means something");
+        ctx.Same(0, closureRepeats.Count,
+            $"and no definition '{dock.Anim}' reaches plays twice in one episode, the hook legs included ({string.Join(", ", closureRepeats)})");
+    }
+
+    // The docking's own fork: the hookup calls its drop and pickup legs unconditionally and only
+    // each leg's REQUIRED node state keeps the wrong one off. A path resolving to no node passes
+    // the gate vacuously, so the resolution is asserted beside the outcome.
+    private static void CheckTheDockingPrereqs(
+        TestContext ctx, TestWorld world, LandingApproach dock,
+        IReadOnlyList<AnimDefinition> forks, IReadOnlyDictionary<string, bool> atDispatch,
+        IReadOnlyDictionary<string, int> plays, StringBuilder report)
+    {
+        int gated = 0;
+        int unresolved = 0;
+        int wrongWay = 0;
+        foreach (var leg in forks)
+        {
+            string name = leg.AnimName ?? "-";
+            int played = plays.TryGetValue(name, out int n) ? n : 0;
+            foreach (var prereq in leg.PrereqNodes.Where(p => p.Required))
+            {
+                string key = PathKey(prereq.Path);
+                bool read = atDispatch.TryGetValue(key, out bool live);
+                bool held = read && live == prereq.Active;
+                bool built = PrereqNodeOf(world, prereq.Path) != null;
+                report.AppendLine($"fork: '{name}' requires '{key}' " +
+                    $"{(prereq.Active ? "ACTIVE" : "INACTIVE")}, built={built}, at dispatch " +
+                    $"{(read ? (live ? "ACTIVE" : "INACTIVE") : "unread")}, played {played}x");
+                gated++;
+                if (!built)
+                {
+                    unresolved++;
+                }
+
+                if (held != (played > 0))
+                {
+                    wrongWay++;
+                }
+            }
+        }
+
+        ctx.Check(gated > 0,
+            $"'{dock.Anim}''s call closure carries the node-state prerequisites the data forks its legs on ({gated} read)");
+        ctx.Same(0, unresolved,
+            $"and every one of those paths resolves to a node this world built, so none of them passes the gate vacuously");
+        ctx.Same(0, wrongWay,
+            $"and a leg runs exactly when its own required state holds at the dispatch, so the docking's wrong leg stays off");
     }
 
     private static IReadOnlyList<string> ClosureOf(TestWorld world, string root)

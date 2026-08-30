@@ -541,8 +541,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   GEMINI by shooting the open cannon hatches"). Gasbags are not an authored substitute for that.
   *Blocked:* what a finished gasbag looks like in the original is unfilmed, so "completely" has no
   reference to compare against; `CAP-47` is that clip.
-  *Cross-refs:* `BL-640` (the same zeppelin's cannons), `BL-525` (the other prerequisite form,
-  which is dropped).
+  *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
+  parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
 
 - `BL-640` `[Bug]` **CM14 (C2B/M04): a broadside cannon takes weapon damage while its hatch is
   still shut.** *Evidence:* reported at the controls and re-confirmed on the merged build. The
@@ -896,18 +896,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `FormattableString`, so fold each line into one interpolated string. *Cross-refs:* `Log.cs`'s
   incremental migration note, `TurretController`, `BL-611`'s closing commit
   (`git log --grep=BL-611`).
-
-- `BL-621` `[Bug]` **CM07 (C1/M02): the parachutist is gone from the hangar drop since the chute
-  pool landed.** *Evidence:* reported at the controls; before `BL-608` the drop showed the pilot
-  parachuting into the hangar while the aeroplane was missing, and now the aeroplane is there and
-  the figure is not. `WorldSession`'s `ResolveLibraryRoot` serves `AircraftStage`'s staged
-  `chuteman` as pool copy 0 keyed on the call anchor and site, so a caller gets the staged actor
-  relocated to its authored site and later callers get duplicates; CM07's drop does not call the
-  figure at a site, `hdchute1` adopts it with `OBJECT_ADD_CHILD`. *Fix shape:* the placement kind
-  is the distinguishing rule, so let the pool serve the site-bearing call path alone and leave an
-  adoption's node where it is. *⚠ Traps:* CM02's three drifting chutes come from `ww_player`'s three
-  `ww_chuteman` calls and must keep their per-call copies (`campaign-capture-chutes`). *Cross-refs:*
-  `BL-608`'s closing commit (`git log --grep=BL-608`), `AircraftStage`, `docs/architecture.md`.
 
 - `BL-618` `[Bug]` **A compiled anim addressing a mech3ax `~n` dedup name resolves to nothing.**
   *Evidence:* CM13's `pzhomebase` switches `land_on` and `land_on~2` on and neither of the
@@ -1687,19 +1675,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   CM11's closing autodock. It is not airframe-specific: the Devastator and the Bloodhawk both show
   it, and it has been there since CM01, so every docking in the campaign is affected. The hook
   engages correctly, so this is the animation running repeatedly rather than the dock failing.
-  *Fix shape:* read the hookup definition's own call graph first and count the call sites that
-  reach the hook leg. `BL-525` records the shape this most likely takes: `wv_tailhook.zrd`'s
-  `wv_initiate_hookup` `CALL_ANIMATION`s its legs unconditionally and only each definition's
-  `ACTIVATION_PREREQUISITE` keeps the wrong one from running, a prerequisite form both of CSVM's
-  parse paths silently drop. Three plays from one call site is a different fault from three call
-  sites, and the log tells which before any code moves.
-  *⚠ Traps:* do not silence it by latching "already played" on the runtime. A repeat that a
-  definition authors is data the parse is dropping, and a latch would hide the same defect wherever
-  else those prerequisites are ignored, roughly fifty definitions across several chapters
-  (`BL-525`). The player-visible hook engagement is correct today and must stay correct.
+  The repeat does not reproduce headless. Three shipped docking episodes driven over their own
+  built worlds count every start by name and each hook definition starts exactly once:
+  `landings-hookup-airframe` (CM01, both airframes), `landings-balmoral-dock` (CM02) and
+  `landings-docking-hold` (CM06), where the only repeats in the whole episode are the ambient
+  `random_prop` dice and the `wing_lights_blink` blinker. The call-site census agrees: every
+  archive that names `player_extend_hook` names it once, so `hooked_to_klondike` and
+  `wv_initiate_hookup` each reach the hook leg from a single site, and the node-state
+  `ACTIVATION_PREREQUISITE` those legs carry is parsed and enforced today, which rules out the
+  dropped-prerequisite candidate. *Fix shape:* the count is only observable at the controls, so the
+  next step is a sortie that says which of the episode's hook definitions swings three times. CM01's
+  episode starts four of them, once each: `pz_deploy_hook`, `hook_impact`, `player_extend_hook` and
+  the airframe branch that definition picks.
+  *⚠ Traps:* do not silence it by latching "already played" on the runtime. A repeat a definition
+  authors is data, and a latch would hide the same defect wherever else it happens. The
+  player-visible hook engagement is correct today and must stay correct. Do not open this against
+  the node-state prerequisite again; it is enforced, and the three suites above assert the count.
   *Playtest after fix:* any campaign docking, watching the opening shot alone: one hook swing.
-  *Cross-refs:* `BL-525` (the unconditional-call shape and the dropped prerequisite form),
-  `docs/formats/anim-definitions/cutscenes.md`.
+  *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md`.
 
 - `BL-629` `[Bug]` **CM10 (C1/M05): a shot-down attack balloon hangs in the air instead of bursting
   and falling.** *Evidence:* reported at the controls. The parts of the chain that work are the
@@ -2274,8 +2267,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   cutscene silences the per-frame camera arm that re-asserts cockpit visibility, and its fix cannot
   reach a staged NPC, so do not close this against it. The two nearest known shapes are the hangar
   hand-over that played without its aeroplane and the staged actor served only to a call that names
-  a site (`git log --grep=BL-596`, and `BL-621`); read both before opening the definition, since
-  either answer has been written once already. *Cross-refs:* `BL-625`, `BL-621`.
+  a site (`git log --grep=BL-596`, and `git log --grep=BL-621`); read both before opening the
+  definition, since either answer has been written once already. *Cross-refs:* `BL-625`.
 
 - `BL-633` `[Bug]` **CM15 (C2/M05): the player is left under the terrain when a cutscene hands
   control back, and can only recover by crashing.** *Evidence:* reported at the controls. The
@@ -2837,43 +2830,6 @@ usual.
   them the player's escort law as a default; `BL-457` shows the escort hand-off is itself
   unsettled. Do not add a leash constant. *Cross-refs:* `BL-457`, `BL-502` (`SET_AI_NET` reach),
   `BL-523`, `docs/org/aiPilot.md`.
-
-- `BL-525` `[Bug]` **CM06 (C1C/M01): the second docking at the Workers' Voyage (to collect Dr. Fassenbender)
-  completes without docking.** *Evidence (traced):* `objectives.zrd`'s two docking objectives
-  (OBJECTIVE11, first hook, `ANIM_STATE wv_drop_copilot RUNNING`; OBJECTIVE15, second hook,
-  `ANIM_STATE wv_pickup_copilot EXECUTED`) both gate on an animation the hook node's own script
-  (`extracted\C1C\M01\zrdr\wv_tailhook.zrd.json`) runs. That script's `wv_initiate_hookup` sequence
-  `CALL_ANIMATION`s `wv_drop_copilot`, `wv_pickup_fassenb` and `wv_pickup_copilot` unconditionally,
-  every time the player docks; only each definition's own `ACTIVATION_PREREQUISITE`
-  (`REQUIRED [OBJECT_ACTIVE_LIST [[wv_tailhook, dropoff_node]]]` /
-  `[[wv_tailhook, pickup_node]]`) is authored to keep the wrong leg from running. CSVM drops that
-  shape entirely: the reader parse (`AnimDefs.cs`, the `ACTIVATION_PREREQUISITE` case) only reads
-  `OPTIONS [MINIMUM_TO_SATISFY, ANIMATION_LIST]` (the zeppelin hull-death form), and the compiled
-  parse (`CompiledAnim.cs Parse`, `activ_prereqs`) only reads entries shaped `{"Animation": ...}`,
-  silently dropping the `{"Parent": ...}` / `{"Object": ...}` node-active-state shape every dock,
-  pickup and panel prerequisite in the extracted data actually carries (the same shape censuses on
-  roughly 50 files: zeppelin gasbag panel finishers, `chuteman`'s drop-direction gate,
-  `pzep_cargo_point`'s cargo stop). `ZeppelinRuntime.cs` is the only consumer of the parsed
-  `PrereqAnims`/`PrereqMinToSatisfy` fields, so nothing enforces the node-active form anywhere. Net
-  effect: `wv_pickup_copilot` reaches `EXECUTED` on the FIRST docking already (`dropoff_node` active,
-  `pickup_node` not), so `OBJECTIVE15`'s `ANIM_STATE` condition is already true the moment it wakes,
-  on the second-docking nap chain, well before any real second hook-up. At the controls the same
-  unconditional calls show as a docking that ends too early and, a few seconds after the player
-  has released and flown off, a teleport back onto the hook: the wrong leg's own hook-up
-  choreography (`wv_pickup_*`, which puts the flown airframe back on the trapeze) runs on the
-  first docking because nothing enforces its `pickup_node` prerequisite.
-  *Fix shape:* parse the node-active `ACTIVATION_PREREQUISITE` shape on both paths (reader
-  `REQUIRED [OBJECT_ACTIVE_LIST [[path...]]]`; compiled `Parent`+`Object` entry runs, the `Object`
-  leaf's `active` field the required state) into a path/required-state list on `AnimDefinition`, and
-  enforce it generically at `AnimRuntime`'s `CALL_ANIMATION`/`Start` dispatch (silent skip when
-  unmet, mirroring the existing hull-death gate's silence). `ObjectiveGraph`'s own reading of
-  `ANIM_STATE` is correct against the decode and needs no change; the gap is entirely
-  `AnimRuntime`/`CompiledAnim`'s, and its blast radius (~50 defs across several chapters) makes it
-  its own item rather than a docking-local patch. *⚠ Traps:* `ObjectiveGraph.ScanForCompletion`
-  resolves one objective per tick round-robin (`BL-458`), so a completion can land frames after its
-  cause; that round-robin is not this bug's mechanism. Do not hardcode a CM06-specific exception in
-  `AnimRuntime`: the prerequisite is data-authored and general, and a docking-only patch would leave
-  the gasbag/cargo/chute defs carrying the same shape unfixed. *Cross-refs:* `BL-458`.
 
 - `BL-558` `[Research]` **A damaged AI flies a full evasive maneuver where the original may only set a
   flag.** *Evidence:* [`docs/org/aiControlLaw.md`](docs/org/aiControlLaw.md) records `obj+0xBA` as an

@@ -1205,7 +1205,9 @@ public static class SuiteCatalog
             + "its active bit, it carries its own docking-hook group built retracted, and the "
             + "episode ends with that hook extended, the airframe hung at the mount offset the "
             + "extend-hook definition authors for it, and its wings turned to the angles its own "
-            + "fold definition authors where the airframe has one",
+            + "fold definition authors where the airframe has one, having swung that hook once "
+            + "(BL-628: the episode's every start counted by name, the shared extend-hook "
+            + "definition among them)",
             HookupAirframe));
         into.Add(new TestHarness.Suite("landings-hangar-drop-gate",
             "CM07's zeppelin-hangar drop over its BUILT world, every name read from the mission's "
@@ -1227,7 +1229,11 @@ public static class SuiteCatalog
             + "handoff code although the row's definition ends before it on a trailing wait, the "
             + "host hands the session back on that code, the released aeroplane flies out of the "
             + "player marker's pose where the re-placement code read it, and no frame after the "
-            + "release teleports it",
+            + "release teleports it. The hookup calls its drop and pickup legs unconditionally and "
+            + "only each leg's own REQUIRED node state keeps the wrong one off, so all three fork "
+            + "paths resolve to nodes this world built (one resolving to none would pass the gate "
+            + "vacuously), the drop leg runs on the first docking while the two pickup legs do "
+            + "not, and nothing the row reaches plays twice (BL-525, BL-628)",
             DockingHold));
 
         // BL-494: callback codes 965 to 967, which put the player in a different airframe mid

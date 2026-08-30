@@ -22,6 +22,9 @@ That check also found `BL-621` (CM07's parachutist) already fixed and merged in 
 while its entry still stands in `backlog.md`; it is excluded here and the stale entry is A1's
 housekeeping. Two items were additionally checked against the code and say so in their Evidence
 (A1, B11). The other eight carry a `<TODO: re-verify still-open against the code>`.
+That `git log --grep` check was not enough for A1: the mechanism had already landed under two
+commits that name `BL-574`/`BL-575` and `BL-599` rather than `BL-525`, so A1's section below
+records a verification and a closure instead of the implementation it was written as.
 
 **Decode stays open per item.** Each item's Approach names the data file, the decoded rule or the
 instrument that settles it where one is known, and an implementer may take that lane instead of the
@@ -104,8 +107,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the dropped animation prerequisite
 
-1. ☐ `BL-525` The node-active `ACTIVATION_PREREQUISITE` shape reaches both parse paths and gates the call
-2. ☐ `BL-628` A campaign docking swings its hook once, not three times
+1. ☑ `BL-525` The node-active `ACTIVATION_PREREQUISITE` shape reaches both parse paths and gates the call
+2. ◐ `BL-628` A campaign docking swings its hook once, not three times (not reproducible headless; owed at the controls)
 
 ### Wave B — the cutscene handoff
 
@@ -136,11 +139,11 @@ chain, never in parallel worktrees. C21 and C22 are the same mission and one sor
 but they touch different systems (the animation runtime and the marker layer) and can run in
 parallel. D31 is confined to `UI/` and contends with nothing.
 
-**File contention: A1 and E42 both edit `Mech3/AnimRuntime.cs`.** A1 adds the prerequisite predicate
-at the `CALL_ANIMATION` dispatch; E42's named candidate is `NameResolver.ClearFindCache` and its
-callers, which are `AnimRuntime`'s `IndexStage` / `IndexSpawnedCopy` / `IndexRebasedStage` /
-`IndexPooledCopy` paths in the same file. Run one, land it, then the other. C21 may also reach
-`AnimRuntime`'s `ObjectMotion` dispatch; if the diagnosis takes it there, it joins the same queue.
+**File contention: A1 and E42 both edit `Mech3/AnimRuntime.cs`.** A1 closed without touching that
+file, so the queue is clear for E42, whose named candidate is `NameResolver.ClearFindCache` and its
+callers, the `IndexStage` / `IndexSpawnedCopy` / `IndexRebasedStage` / `IndexPooledCopy` paths.
+C21 may also reach `AnimRuntime`'s `ObjectMotion` dispatch; if the diagnosis takes it there, the two
+still run one after the other rather than in parallel worktrees.
 
 E41, E42 and E43 are one measuring session's worth of work and share the instrument setup
 (`--det`, `--perf`, `HitchSidecar`'s attribution). Taking the wave whole is cheaper than three
@@ -150,96 +153,141 @@ separate arm-and-measure cycles, but the three fixes are independent once each i
 
 # Wave A — the dropped animation prerequisite
 
-## A1 ☐ `BL-525` The node-active `ACTIVATION_PREREQUISITE` shape reaches both parse paths and gates the call
+## A1 ☑ `BL-525` The node-active `ACTIVATION_PREREQUISITE` shape reaches both parse paths and gates the call
 
-**Goal.** A definition whose `ACTIVATION_PREREQUISITE` names a required node-active state does not
-answer a `CALL_ANIMATION` until that state holds. Observably: CM06 (C1C/M01)'s second docking at the
-Workers' Voyage completes on the second docking rather than on the first, and the player is not
-teleported back onto the trapeze seconds after flying off.
+**Outcome: the mechanism was already on `main`. This item is a verification and a closure, and it
+landed no engine change.** The section as written asserted that both parse paths drop the
+node-active shape and that nothing enforces it. That is false, and all three pieces are present:
 
-**Evidence (confidence: traced).** `extracted/C1C/M01/zrdr/wv_tailhook.zrd.json`'s
-`wv_initiate_hookup` sequence calls `wv_drop_copilot`, `wv_pickup_fassenb` and `wv_pickup_copilot`
-unconditionally on every dock; only each definition's own
-`REQUIRED [OBJECT_ACTIVE_LIST [[wv_tailhook, dropoff_node]]]` (respectively `pickup_node`) is
-authored to keep the wrong leg from running. Both parse paths drop that shape: the reader parse
-(`Mech3/AnimDefs.cs`, the `ACTIVATION_PREREQUISITE` case) reads only
-`OPTIONS [MINIMUM_TO_SATISFY, ANIMATION_LIST]`, and the compiled parse (`Mech3/CompiledAnim.cs`,
-`activ_prereqs`) reads only entries shaped `{"Animation": ...}`, silently dropping the
-`{"Parent": ...}` / `{"Object": ...}` node-active shape. `objectives.zrd`'s OBJECTIVE15 gates on
-`ANIM_STATE wv_pickup_copilot EXECUTED`, which is therefore already true when it wakes.
-`ObjectiveGraph`'s own reading of `ANIM_STATE` is correct against the decode and needs no change.
-The shape censuses on roughly fifty files across several chapters: zeppelin gasbag panel finishers,
-`chuteman`'s drop-direction gate, `pzep_cargo_point`'s cargo stop.
+- `Mech3/AnimDefs.cs`'s `ACTIVATION_PREREQUISITE` case reads `REQUIRED` and `OPTIONS` carrying
+  `OBJECT_ACTIVE_LIST` / `OBJECT_INACTIVE_LIST` node paths into `AnimDefinition.PrereqNodes` as
+  `AnimNodePrereq(path, active, required)`.
+- `Mech3/CompiledAnim.cs` reads the `Parent` run closed by an `Object` leaf into the same list,
+  taking the required state from bit 0 of `active_raw`.
+- `Mech3/AnimRuntime.cs`'s `Start` refuses a definition whose REQUIRED entries are unmet
+  (`NodePrerequisitesMet`), in silence, counted as `Start(prerequisite unmet)`.
 
-**Checked in this session:** commit `4385f15e` landed the *anim-list* form of the same field (a
-count over the definition's own callers, gated at the `CALL_ANIMATION` dispatch in
-`Mech3/AnimRuntime.cs`, suite `anim-activation-prerequisite`). That is a different form and does not
-cover this one, so the item stands. It does mean the dispatch-side gate now exists and this item is
-smaller than its entry describes: the new work is the two parses plus a second predicate kind
-alongside the count.
+The parses and the gate landed in `4a135e13` under `BL-574`/`BL-575`, and `e3d5de68` corrected the
+compiled state word under `BL-599`. Neither commit names `BL-525`, which is why a `git log --grep`
+on the id found only filings. The durable record is already written: `docs/architecture.md`'s
+`CompiledAnim.cs` and `AnimRuntime.cs` entries and `docs/formats/anim-definitions.md`'s
+`ACTIVATION_PREREQUISITE` row all state the two parses and the `Start` gate, so the only doc edit
+this item needed was replacing that row's estimated shape count with the measured one below.
 
-**Approach.** Parse the node-active shape on both paths into a path plus required-state list on
-`AnimDefinition`: reader `REQUIRED [OBJECT_ACTIVE_LIST [[path...]]]`, compiled `Parent` plus
-`Object` entry runs with the `Object` leaf's `active` field as the required state. Enforce it beside
-the existing count at `AnimRuntime`'s `CALL_ANIMATION` dispatch, with the same silence when unmet.
-Follow `4385f15e`'s two properties where they carry over: an explicit `Play` stays ungated, and the
-gate reads the state at dispatch rather than at parse. `ZeppelinRuntime.cs` is today's only consumer
-of the parsed `PrereqAnims` / `PrereqMinToSatisfy` fields and must keep working unchanged.
-Housekeeping in the same commit: delete `BL-621`'s stale entry from `backlog.md`, since `e6cc93b0`
-landed that fix and the entry was never struck.
+**What the data authors.** `extracted/C1C/M01/zrdr/wv_tailhook.zrd.json` carries four definitions
+with the node form. `wv_drop_copilot` requires `[wv_tailhook, dropoff_node]` ACTIVE;
+`wv_pickup_copilot`, `wv_pickup_fassenb` and `wv_setup_fassenb` each require
+`[wv_tailhook, pickup_node]` ACTIVE. `wv_initiate_hookup` calls `wv_drop_copilot`,
+`wv_pickup_fassenb` and `wv_pickup_copilot` in that order with no condition of its own, so the
+prerequisite is the whole fork. The mission's objectives open one node each: OBJECTIVE11's
+`WAKE_ANIM` is `activate_dropoff_node` (the first hook) and OBJECTIVE15's is `activate_pickup_node`
+(the second). The compiled copies agree, `pickup_cpilot-wv_drop_copilot.json` carrying
+`Parent wv_tailhook` + `Object dropoff_node` with `active_raw: 1`.
 
-**Model recommendation.** high. Two parsers, a generic runtime gate, and a blast radius of roughly
-fifty definitions across several chapters; a wrong predicate here silently stops authored animation
-everywhere rather than in one mission.
+**What the built world does.** `landings-docking-hold` drives that docking over C1C/M01's built
+world and now reads the fork. The world build leaves both nodes INACTIVE; the mission's own
+objective chain turns `dropoff_node` on while arming the row; and at the instant
+`wv_initiate_hookup` dispatches its legs the states read `wv_tailhook/dropoff_node=ACTIVE`,
+`wv_tailhook/pickup_node=INACTIVE`. `wv_drop_copilot` plays once, `wv_pickup_fassenb` and
+`wv_pickup_copilot` play zero times, and `wv_pickup_copilot` therefore does not reach `EXECUTED` on
+the first docking, which is the condition OBJECTIVE15 wakes on. Both paths resolve to nodes this
+world built, so the gate is not passing vacuously; that unresolved-path case, which
+`NodePrerequisitesMet` treats as met, was the surviving gap worth checking and it does not apply
+here. The suite's existing no-teleport-after-release check covers the other half of the reported
+symptom.
 
-**Verify.** Extend `anim-activation-prerequisite` with the node-active form over C1C/M01: on a first
-docking `wv_drop_copilot` runs and `wv_pickup_copilot` does not reach `EXECUTED`; on a second, with
-`pickup_node` active, it does. Seen red before green, with the new predicate removed.
-Then `landings-docking-hold`, `campaign-objectives`, `campaign-cutscene` and `campaign-zeppelins`
-(the count form's consumer) green, and the complete `.\RunTests.ps1` before landing. Census the
-node-active shape across every `mis_anim` and `zrdr` archive and report how many definitions the
-change newly gates, so the blast radius is a number rather than an estimate.
+**Blast radius, as a number.** Across every `mis_anim` and `cam_anim` archive, 437 definition files
+carry a node-state prerequisite, which is 112 distinct root-animation definitions; those hold 1028
+node entries, 784 of them REQUIRED and therefore enforced at `Start`. On the reader side 26 `zrdr`
+files carry the `OBJECT_ACTIVE_LIST` / `OBJECT_INACTIVE_LIST` spelling, 52 keys in all, most of them
+in `C2/M01/goosepath.zrd` (12), `C1C/M01/wv_tailhook.zrd` (4) and `C1/M02/hangar_drop.zrd` (4). The
+entry's "roughly fifty" was an undercount.
 
-**⚠ Traps.** Do not patch this at the docking. The gap is `AnimRuntime` / `CompiledAnim`'s and its
-reach is the reason it is its own item rather than a mission-local fix. Do not change
-`ObjectiveGraph.ScanForCompletion`, whose `ANIM_STATE` reading is correct. Keep the unmet-prerequisite
-skip silent, matching the count gate, so a mission log is not flooded by the roughly fifty
-definitions this newly gates. `<TODO: confirm the compiled path's `active` leaf is the required
-state rather than the observed one, by reading one compiled and one reader copy of the same
-definition side by side before writing the predicate.>`
+**What landed.** `backlog.md` loses `BL-525` and, as this item's housekeeping, `BL-621`, whose fix
+merged in `e6cc93b0` and whose entry was never struck. `BL-628`'s and `BL-632`'s cross-references to
+the two deleted ids are rewritten, and the Gemini gasbag item's "the other prerequisite form, which
+is dropped" now says it is parsed and enforced. `Testing/LandingApproachSuites.cs` gains the
+assertions above.
 
-## A2 ☐ `BL-628` A campaign docking swings its hook once, not three times
+**Verify.** All eleven `landings-` suites PASS in 53.7s, engine errors clean, with
+`landings-docking-hold`'s new `fork:` lines reading `wv_drop_copilot ... built=True, at dispatch
+ACTIVE, played 1x` and both pickup legs `built=True, at dispatch INACTIVE, played 0x`. The nine
+suites the section named, `anim-activation-prerequisite`, `campaign-objectives`,
+`campaign-objectives-hud`, `campaign-cutscene`, `campaign-cutscene-skip`,
+`campaign-cutscene-ownership`, `campaign-zeppelins`, `campaign-airframe-swap` and
+`campaign-hangar-handover`, PASS in 41.7s, errors clean.
+
+Red before green was taken on the gate itself, by dropping the `return` from `Start`'s
+`NodePrerequisitesMet` refusal and leaving the counter. `landings-docking-hold` then FAILs on both
+new checks:
+
+```
+and a leg runs exactly when its own required state holds at the dispatch, so the docking's wrong leg stays off expected=0 actual=2
+and no definition 'wv_initiate_hookup' reaches plays twice in one episode, the hook legs included (rem_pas x3, deactivate_pickup_node x2, deactivate_dropoff_node x2) expected=0 actual=3
+```
+
+That run starts `wv_pickup_fassenb` and `wv_pickup_copilot` at t=7.32 with `pickup_node` INACTIVE
+and pushes the handoff from t=9.93 to t=15.95, which is the reported defect reproduced on demand.
+Note what else it produces: with the gate off, `rem_pas` plays three times in one docking. That is
+A2's shape, from the mechanism A2 named, and it is off on today's build.
+
+**Verified.** <pending orchestrator run>
+
+## A2 ◐ `BL-628` A campaign docking swings its hook once, not three times
 
 **Goal.** The opening camera shot of a docking cutscene shows one hook swing. The hook still engages
 correctly, which it does today.
 
-**Evidence (confidence: direction-sound).** Reported at the controls and re-confirmed on the merged
-build in CM11's closing autodock. Not airframe-specific: the Devastator and the Bloodhawk both show
-it, and it has been there since CM01, so every docking in the campaign is affected. The hook engages
-correctly, so this is the animation running repeatedly rather than the dock failing. The candidate
-mechanism is A1's: `wv_initiate_hookup` calls its legs unconditionally and only the prerequisite
-keeps the wrong one from running. Three plays from one call site is a different fault from three
-call sites, and nothing has yet established which this is.
-`<TODO: re-verify still-open against the code>`
+**Outcome: the candidate mechanism is ruled out and the repeat does not reproduce headless. The item
+stays open, owed at the controls.** No code changed for it.
 
-**Approach.** Take this item only after A1 has landed, and start by re-flying a campaign docking on
-A1's build. If the triple swing is gone, close the item as fixed by A1 and record that in the
-closing commit. If it survives, read the hookup definition's own call graph and count the call sites
-that reach the hook leg, from the mission log, before any code moves; the log distinguishes one site
-playing three times from three sites playing once.
+**The count, measured.** The item's own discriminator, one call site playing three times against
+three call sites playing once, is now a headless number in three shipped docking episodes, each
+driven over its own built world with every start counted by name:
 
-**Model recommendation.** medium. The first half is verification, and the second half only opens up
-if A1 did not cover it; the harder judgement already sits in A1.
+| suite | mission | hook definitions started | repeats in the whole episode |
+|---|---|---|---|
+| `landings-hookup-airframe` | CM01 (C3/M01), Balmoral | `pz_deploy_hook`, `hook_impact`, `player_extend_hook`, `bal_hook_extend`, once each | `random_prop` x12, `wing_lights_blink` x2 |
+| `landings-hookup-airframe` | CM01, Pirate Fighter | the same four with `pirate_hook_extend`, once each | `random_prop` x12 |
+| `landings-balmoral-dock` | CM02 (C3/M05) | the same four with `bal_hook_extend`, once each | `random_prop` x12 |
+| `landings-docking-hold` | CM06 (C1C/M01) | `player_extend_hook`, `blood_hook_extend`, once each | `wing_lights_blink` x2 |
 
-**Verify.** `landings-docking-hold` and `campaign-cutscene` green. At the controls, any campaign
-docking watched through its opening shot alone: one hook swing, and the hook still engages.
-`<TODO: name the headless assertion that counts hook-leg plays in one episode, or record that the
-count is only observable at the controls.>`
+`random_prop` is the ambient prop dice and `wing_lights_blink` is a blinker loop; neither is in the
+docking definition's call closure, and no definition that closure reaches starts twice.
+
+**The call-site census.** Every archive that names `player_extend_hook` names it once: the
+definition itself in each chapter's `cam_anim`, one call in `player-hooked_to_klondike` per mission
+and one in `wv_tailhook-wv_initiate_hookup`. So the shared docking and the Workers' Voyage docking
+each reach the hook leg from a single call site, and the definition itself is eleven `If NodeActive
+n` branches each closed by `StopSequence`, so one airframe branch answers. `LandingApproachRuntime`
+cannot re-fire a row underneath a playing episode either: its `Tick` returns while a cutscene is
+playing, and a manual row latches until its condition stops passing.
+
+**Why A1 does not close it.** A1's mechanism is enforced on today's build, so the fault A1 names
+cannot be producing this. The disproof is two-sided: with A1's gate deliberately switched off,
+`landings-docking-hold` does show a definition playing three times in one docking (`rem_pas` x3),
+which is the shape A2 describes; with the gate on, as it ships, nothing in the closure repeats.
+
+**What is left.** The count is only observable at the controls. Fly a campaign docking with
+`.\RunGame.ps1 --campaign=<profile>:<slot>` and watch the opening shot alone, then read
+`.scratch/logs/fly-*.log` for the episode's starts. CM11 (C2/M02)'s closing autodock is the reported
+case; CM01 (C3/M01) is the earliest. The question the sortie has to answer is which of the four hook
+definitions a docking plays is the one seen three times, because a viewer counting swings is not
+counting definitions, and the headless count says the definitions each run once.
+
+**Model recommendation.** medium, unchanged. The remaining work is one sortie and whatever it names.
+
+**Verify.** `landings-docking-hold`, `landings-hookup-airframe`, `landings-balmoral-dock` and
+`campaign-cutscene` green (with the eight other `landings-` suites and the campaign-cutscene family,
+20 suites in all). The play-count assertions above are permanent, so a regression that introduces
+the repeat fails a suite rather than waiting for a sortie. At the controls, still owed: any campaign
+docking watched through its opening shot alone, one hook swing, and the hook still engages.
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not silence this by latching "already played" on the runtime. A repeat that a
-definition authors is data the parse is dropping, and a latch would hide the same defect wherever
-else those prerequisites are ignored. The player-visible hook engagement is correct today and must
-stay correct.
+definition authors is data, and a latch would hide the same defect wherever else it happens. The
+player-visible hook engagement is correct today and must stay correct. Do not re-open this against
+the node-state prerequisite; it is parsed and enforced, and the suites above assert the count.
 
 ---
 
