@@ -5572,11 +5572,12 @@ a mission that only ever REMOVES its sites would offer nothing. One `ObjectiveSi
 as long as the mission flags it, since the selection is held by source identity; its position and
 labels are re-read every frame, which is what tracks a site under a moving node. `PointFor` prefers
 the bare `TRAVELERS` point of the objective that edits a target over the world node of the same
-name, because C3/M01's village node stands at the world origin. A site on a world node is marked
-at `SiteAnchor`: the node's own position for a placed node, and for a group node standing at the
-world origin that draws nothing itself the centre of its built meshes, a `door`-named leaf pair
-winning over the whole (the stunt mode's aperture rule), because C2's `sghangar` is such a group
-and its parts carry the coordinates. A site is keyed by
+name, because C3/M01's village node stands at the world origin. A site on a world node is marked at
+`SiteAnchor`, the centre of the world bounding box of everything that node draws, which is what the
+original publishes for a mission structure (`docs/org/targeting.md`); its own position is only the
+fallback for a node that draws nothing. C1/M05's balloon groups stand on the water with the balloon
+16 m above them and C2's `sghangar` stands at the world origin, so the node's position is not the
+site. A site is keyed by
 `ObjectiveTarget.Key`, and `ResolveTarget` walks a path one name at a time with `FindNodes` scoped
 to the node before, so `piratezep/rock_zeppelin` is the hull's own child and a bare name is the
 first global match; `targets.zrd` is looked up by the whole key first (a path-authored entry

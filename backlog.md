@@ -2449,33 +2449,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   author. Two aircraft share the key, so a marker that appears on only one is not a pass.
   *Playtest after fix:* CM11, from the objective that starts the follow.
 
-- `BL-636` `[Bug]` **CM10 (C1/M05): the Destroy Attack Balloon marker sits at water level under
-  its balloon.** *Evidence:* reported at the controls, and unchanged on the merged build after the
-  mission's balloon and lifeboat behaviour was fixed. The marker tracks the right balloon
-  horizontally but hangs at the sea surface below it, which reads as a marker on the boat. Each
-  `lifesaverNM` group holds the balloon, its `bbtur` turret, the ropes and the lifeboat together,
-  so a marker anchored on the group rather than on the balloon node lands exactly there.
-  *Fix shape:* read which node the marker anchors on for these targets and move it to the balloon.
-  `BL-602`'s closing commit settled the neighbouring case, a group site anchoring on its built
-  meshes rather than on its own origin (`git log --grep=BL-602`), and is the first thing to read.
-  *⚠ Traps:* do not offset the marker upward by a constant. The balloons descend as they attack,
-  so a fixed lift is right at one altitude and wrong at every other. The marker must also retire
-  with the balloon rather than follow the boat that drops out of it.
-  *Playtest after fix:* CM10, with a wave in frame at two different heights.
-
 - `BL-637` `[Research]` **A targeted patrol boat shows no name line, and the original may show none
   either.** *Evidence:* reported at the controls in CM12 (C2/M01), where the boats can be targeted
   but carry no text. `targets.zrd` for that mission names only `sprucegoose`, its engine, the
   propane tanks and the four `tugandbarge0N`, so no authored target entry covers a boat, and the
   boats themselves are the `eshipg31` generator's. *What to settle:* whether the original draws a
-  name here at all. [`docs/org/targeting.md`](docs/org/targeting.md) (lines 512 to 540) records
+  name here at all. [`docs/org/targeting.md`](docs/org/targeting.md)'s "The HUD: the label" records
   three authors of the name string, the roster block's own `title` at `aiv` slot 20, Instant
   Action's hardcoded ids, and a template-less generator spawn taking its `egen.zrd` value raw, and
   notes that 239 of the install's 414 roster blocks author an empty `title`, so most enemies in the
   original show a box and no name. CM12's generator record authors no `title` of its own and
   resolves `Eshipg31_params` instead, so the answer turns on what that block carries.
   *⚠ Traps:* do not reach for `MSG_VEH_PATROLBOAT`. The vehicle definition's own title is read by
-  none of the three authors (`targeting.md:537`), so displaying it would invent a name the original
+  none of the three authors (that same section), so displaying it would invent a name the original
   never shows. The same page warns that a fourth author is not ruled out, only unfound.
   *Cross-refs:* `BL-626` (the same boats, their guns).
 

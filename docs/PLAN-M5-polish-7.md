@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — CM10's attack balloons
 
 21. ☐ `BL-629` A shot attack balloon bursts and falls instead of hanging in the air
-22. ☐ `BL-636` The Destroy Attack Balloon marker sits on its balloon, at any altitude
+22. ☑ `BL-636` The Destroy Attack Balloon marker sits on its balloon, at any altitude
 
 ### Wave D — the campaign's own hangar
 
@@ -365,34 +365,95 @@ fade, and a despawn would remove the wreck the original shows falling. `set_bbtu
 swap are already doing their jobs, so neither is the suspect. If the fix reaches `AnimRuntime`, check
 the file-contention queue in the dependency notes first.
 
-## C22 ☐ `BL-636` The Destroy Attack Balloon marker sits on its balloon, at any altitude
+## C22 ☑ `BL-636` The Destroy Attack Balloon marker sits on its balloon, at any altitude
 
-**Goal.** CM10's Destroy Attack Balloon marker tracks the balloon it names, at whatever altitude the
-balloon is at, and retires with the balloon rather than following the lifeboat that drops out of it.
+**Goal.** CM10's Destroy Attack Balloon marker stands on the balloon it names, at whatever altitude
+the balloon is at, and retires with the balloon rather than following the lifeboat that drops out of
+it.
 
-**Evidence (confidence: direction-sound).** Reported at the controls, and unchanged on the merged
-build after the mission's balloon and lifeboat behaviour was fixed. The marker tracks the right
-balloon horizontally but hangs at the sea surface below it, which reads as a marker on the boat. Each
-`lifesaverNM` group holds the balloon, its `bbtur` turret, the ropes and the lifeboat together, so a
-marker anchored on the group rather than on the balloon node lands exactly there. That is a candidate
-read from the data, not a confirmed trace. `<TODO: re-verify still-open against the code>`
+**Still open, confirmed against the code.** `ObjectiveSites.SiteAnchor` kept `GlobalPosition` for any
+node standing off the world origin, and a probe over the built C1/M05 world put the offered
+`lifesaver11` site at `(-10075, 0, -2375)`, the water, with the balloon at `(-10075, 16.4, -2380.1)`
+and the lifeboat's own geometry topping out at y 4.1. `BL-602`'s origin-standing branch never fired
+here, so nothing on main had already answered this.
 
-**Approach.** Read which node the marker anchors on for these targets, in `Mech3/RosterMarkers.cs` and
-`UI/MarkerOverlay.cs`, and move it to the balloon. `BL-602`'s closing commit settled the neighbouring
-case, a group site anchoring on its built meshes rather than on its own origin
-(`git log --grep=BL-602`), and is the first thing to read.
+**What the mechanism turned out to be.** The plan's candidate ("a marker anchored on the group") is
+right, and the reason is the group node's own origin rather than its mesh centre. Each
+`lifesaverNM` is a direct child of `world1` carrying the no-transform `"Initial"`, flown to the water
+by the `ObjectMotionSiScript` on the inner `lifesaver` node, with `lifeballoon` hung
+`(0, 16.393, -5.07)` above that origin and `lifeboat` sitting on it. Reading the group's position
+therefore reads the boat's waterline exactly.
 
-**Model recommendation.** medium. The anchoring layer is small, the precedent is named, and the
-judgement is which node is the right anchor rather than how to move it.
+**The decoded rule replaced the heuristic.** `crimson.exe` publishes a mission structure's targeting
+position from vtable `0x00608848` slot 0, which is `LEA EAX, [ECX + 0x74]` at `0x004a36e0`, a cached
+vector. `FUN_004a2570` fills `+0x74` from `FUN_004cf2c0(node)`, which reads the node's active
+bounding box (`FUN_004cd960`, the six floats at `node + 0x70`) and takes its midpoint
+(`FUN_004d8b10`), in the frame `FUN_004cef20` accumulates up the parent chain; `FUN_004a2730`
+recomputes it every frame for a structure whose `+0x8f` moving flag is set. So the original marks a
+site at **the centre of its node's bounding box**, never at the node's origin. `SiteAnchor` is now
+that one rule, and the `HasOwnMesh` short-circuit, the origin gate and `BL-602`'s `door`-named leaf
+rule are gone with it. The decode is written up in `docs/org/targeting.md` ("Where a mission
+structure is") with its four addresses added to that page's function map.
 
-**Verify.** `campaign-objective-markers`, `campaign-objective-target-path` and `hostile-marker-hud`
-green, extended with an assertion that the marker's world position tracks the balloon node at two
-different balloon altitudes and retires when the balloon dies. Seen red before green. At the
-controls, CM10 with a wave in frame at two different heights; the same sortie confirms C21.
+**The port reproduces the authored bbox exactly.** The world AABB of `lifesaver11`'s built meshes
+centres at `(-10075, 11.667011, -2376.3086)`; the gamez node's authored `child_bbox` (its
+`active_bbox` is `Child`) spans y −1.4109578 to 24.744844, x ±13.761361 and z −21.070253 to
+18.45244, whose centre is `(0, 11.6669, −1.3089)` off a group origin at `(-10075, 0, -2375)`. The two
+agree to 1e-5, which is the check that the built subtree stands in for the original's active bbox.
 
-**⚠ Traps.** Do not offset the marker upward by a constant. The balloons descend as they attack, so a
-fixed lift is right at one altitude and wrong at every other. The marker must also retire with the
-balloon rather than follow the boat.
+**What moved elsewhere.** C2/M03's `sghangar` improves: its anchor goes from the door-leaf pair at
+`z −5623.9`, 129 m from `dz1`, to `z −5496.6`, **2.5 m** from `dz1`, so `campaign-race-chain`'s 150 m
+assertion holds far more comfortably than before. C1/M04's `piratezep/rock_zeppelin` moves 64 m onto
+the hull's own geometry, and `campaign-objective-target-path`'s exact-equality assertion was rewritten
+to the anchor plus a new check that the site stays more than 500 m from every other `rock_zeppelin`,
+which is what that suite was really discriminating. C1/M05's `rch_hull` moves 22.6 m along the
+hospital ship and 13.3 m up; C1/M04's `ap_transmitter` moves 22 m up onto its tower.
+
+**The walk costs, and where the cost went.** The union is taken over the built subtree once per site
+per pane per frame, so it was measured rather than assumed (1000 calls on the built world, stopwatch
+in the suite, instrumentation removed afterwards). A 380-mesh site (`piratezep/rock_zeppelin`, the
+worst shipped case) cost **1.9 ms** per call with the obvious `GetChildren()` recursion, because that
+call allocates a Godot array per node; walking by `GetChildCount`/`GetChild` instead costs **0.50 ms**
+for the same result, and `lifesaver11`'s 43 meshes cost about 0.024 ms. The indexed walk is what
+landed. A cached mesh list (built once, live transforms merged per frame) measured 0.26 ms on the
+same 380 meshes, so there is another 1.9x available if a pane count ever makes it matter.
+
+**Files.** `CSVM/src/Session/ObjectiveSites.cs` (the rule), `CSVM/src/Testing/CampaignMarkerSuites.cs`
+(the new suite plus the rewritten path assertion), `CSVM/src/Testing/SuiteCatalog.cs`,
+`CSVM.Tests/SuiteCatalogTests.cs` (191 → 192), `analysis/engine-suite-weights.json`,
+`docs/architecture.md`, `docs/org/targeting.md`.
+
+**Verify.** New suite `campaign-balloon-marker`: the shipped table describes nine attack-balloon
+sites and nine objectives each retire their own site on its own `healthy_balloon`; over the built
+world the marker stands clear of the lifeboat, flies with the whole assembly and rises when the
+balloon alone rises, and retires with the balloon while the boat is still afloat. Seen RED first with
+the old `SiteAnchor` in place, `the marker stands clear of the lifeboat below it (0.0 m against the
+boat's 4.1 m)`, the artifact reading `marker y 0.0 -> assembly climbed 0.0 -> balloon alone climbed
+0.0`; GREEN after, `marker y 11.7 -> assembly climbed 311.7 -> balloon alone climbed 161.7`.
+Targeted runs on this tree, `CSVM_DATA_ROOT` set and the suite count printed non-zero each time:
+`-Filter campaign` **40 passed, 0 failed**, engine errors clean (`campaign-race-chain`,
+`campaign-objective-markers`, `campaign-objective-target-path`, `campaign-objective-labels`,
+`campaign-objectives` and `campaign-objectives-hud` among them); `-Filter target` **8 passed, 0
+failed**; `-Suite hostile-marker-hud` **1 passed**; `-UnitFilter SuiteCatalogTests` **6 passed**;
+`-Quick` **241 units and 13 engine suites passed, 0 failed**, engine errors clean.
+`.\CheckCommentCaps.ps1 -Summary`: all comment blocks within cap.
+**Verified.** <pending orchestrator run>
+
+**Follow-up proposed, not minted.** A site's anchor is still recomputed once per pane, so a four-pane
+co-op CM10 with nine balloons alive pays about 0.86 ms a frame and a four-pane C1/M04 about 2.0 ms.
+Computing each site's anchor once per frame and handing every pane the same value, with the cached
+mesh list above, would take both under 0.3 ms. Worth its own `[Perf]` entry alongside Wave E.
+
+**Still owed at the controls.** CM10 with a wave in frame at two different heights, to judge whether
+the assembly's bbox centre (11.7 m up, among the ropes under the envelope) reads as a marker on the
+balloon. It is where the original puts it, so a different answer would be a deliberate divergence
+rather than a bug. The same sortie is already owed on `BL-629`, C21.
+
+**⚠ Traps.** Do not offset the marker upward by a constant, and do not anchor on the balloon node
+itself: the decode says bounding-box centre, and a rule that follows one authored child would put a
+zeppelin's marker on one of its fourteen engines. `campaign-objective-target-path` and
+`campaign-race-chain` both assert world positions, so any further change to `SiteAnchor` has to be
+checked against them.
 
 ---
 

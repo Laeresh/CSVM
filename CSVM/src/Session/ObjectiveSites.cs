@@ -132,47 +132,17 @@ public sealed class ObjectiveSites
         return node;
     }
 
-    /// <summary>Where a resolved site node's marker stands: the node's own position for a placed
-    /// node, and for a group node standing at the world origin that draws nothing itself the
-    /// centre of its parts, read off the built meshes. ⚠ Do not read such a node's position.
-    /// C2's seaplane hangar (<c>sghangar</c>) is a group at the world origin whose door leaves and
-    /// body carry the world coordinates, 8 km from it. A <c>door</c>-named leaf pair wins over the
-    /// whole, since a fly-through site means the aperture (the stunt mode's own rule).</summary>
+    /// <summary>Where a resolved site node's marker stands: the centre of the world bounding box
+    /// of everything the node draws, which is what the original publishes for a mission structure
+    /// (<c>docs/org/targeting.md</c>). Its own position is the fallback for a node that draws
+    /// nothing at all. ⚠ Do not mark a site at the node's position. C1/M05's balloon groups stand
+    /// on the water with the balloon 16 m above them, and C2's seaplane hangar
+    /// (<c>sghangar</c>) stands at the world origin 8 km from its own body.</summary>
     public static Vector3 SiteAnchor(Node3D node)
     {
-        if (node is MeshInstance3D || HasOwnMesh(node) || !node.GlobalPosition.IsZeroApprox())
-        {
-            return node.GlobalPosition;
-        }
-
-        var boxes = new List<(string Name, Aabb Box)>();
-        CollectMeshBoxes(node, node.Name, boxes);
-        if (boxes.Count == 0)
-        {
-            return node.GlobalPosition;
-        }
-
-        int doors = 0;
-        foreach (var box in boxes)
-        {
-            if (IsDoorLeaf(box.Name))
-            {
-                doors++;
-            }
-        }
-
         Aabb? merged = null;
-        foreach (var box in boxes)
-        {
-            if (doors >= 2 && !IsDoorLeaf(box.Name))
-            {
-                continue;
-            }
-
-            merged = merged?.Merge(box.Box) ?? box.Box;
-        }
-
-        return merged!.Value.GetCenter();
+        CollectMeshBoxes(node, ref merged);
+        return merged?.GetCenter() ?? node.GlobalPosition;
     }
 
     /// <summary>Appends this frame's live sites, each as an objective-flagged candidate the pool
@@ -244,38 +214,29 @@ public sealed class ObjectiveSites
         return false;
     }
 
-    private static bool HasOwnMesh(Node3D node)
+    // The world-frame box of everything `node` and its subtree draw, hidden parts included: the
+    // original's own bounding box is the authored one over every child, and a wave that has not
+    // been switched on yet still has to be marked where it stands.
+    // ⚠ Walk by index rather than GetChildren(). This runs once per site per pane per frame, and
+    // the Godot array GetChildren() allocates costs 1.4 ms of the 1.9 ms a 380-mesh zeppelin site
+    // took before the change.
+    private static void CollectMeshBoxes(Node node, ref Aabb? merged)
     {
-        foreach (var child in node.GetChildren())
+        if (node is MeshInstance3D { Mesh: not null } mesh)
         {
-            if (child is MeshInstance3D { Mesh: not null })
-            {
-                return true;
-            }
+            var box = mesh.GlobalTransform * mesh.GetAabb();
+            merged = merged?.Merge(box) ?? box;
         }
 
-        return false;
-    }
-
-    // One world-frame box per drawing node under `node`, named for the gamez node that owns the
-    // mesh (the mesh instance itself is always called "mesh").
-    private static void CollectMeshBoxes(Node3D node, string owner, List<(string Name, Aabb Box)> into)
-    {
-        foreach (var child in node.GetChildren())
+        int children = node.GetChildCount();
+        for (int i = 0; i < children; i++)
         {
-            if (child is MeshInstance3D { Mesh: not null } mi)
+            if (node.GetChild(i) is Node3D child)
             {
-                into.Add((owner, mi.GlobalTransform * mi.GetAabb()));
-            }
-            else if (child is Node3D c3d)
-            {
-                CollectMeshBoxes(c3d, c3d.Name, into);
+                CollectMeshBoxes(child, ref merged);
             }
         }
     }
-
-    private static bool IsDoorLeaf(string name) =>
-        name.Contains("door", StringComparison.OrdinalIgnoreCase);
 
     // A message key resolves to itself when unknown, which is right for a readout and wrong for a
     // marker; a whitespace-only value is how a mission clears a label, so both read as absent.
