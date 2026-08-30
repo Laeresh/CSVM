@@ -539,8 +539,11 @@ where `GameZ.VertexColorsRestateMaterialColor` detects the two are the same auth
 overrides that colour with the decoded `no_clutter` bit instead. Every shader on one instance
 shares the ordered preamble in `csky_instance_uniforms.gdshaderinc`; see that file for the
 contract, and `GetBiasShader` for how the model's `lighting`/`fog` flags select shader variants
-instead of driving a uniform. Format/decode: docs/formats/gamez.md, docs/formats/world-structure.md,
-docs/formats/gotchas.md.
+instead of driving a uniform. The mesh, material and collider memos are per builder, since every
+override is baked into what they hold; the three SHADER memos are process-wide, because a generated
+text is a pure function of its key and Godot charges a compile for each fresh `Shader` a material
+takes (`docs/verification.md` PERF-22). Format/decode: docs/formats/gamez.md,
+docs/formats/world-structure.md, docs/formats/gotchas.md.
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame

@@ -139,6 +139,7 @@ public static class SuiteCatalog
         "sun-orientation",
         "tex-dropin",
         "gltf-export",
+        "plane-shader-reuse",
         "cockpit-interior",
         "cockpit-overlay-pass",
         "collision-visibility",
@@ -736,6 +737,9 @@ public static class SuiteCatalog
             "the census/override flatten repaints RGB and changes nothing else", TexDropIn));
         into.Add(new TestHarness.Suite("gltf-export",
             "the viewer plane exports to glTF and re-imports with a textured mesh", GltfExport));
+        into.Add(new TestHarness.Suite("plane-shader-reuse",
+            "a second aircraft build reuses the first's Shader resources instead of generating its own copies of the same text, which is what keeps a mid-flight generator launch off Godot's per-shader compile",
+            PlaneShaderReuse));
         into.Add(new TestHarness.Suite("cockpit-interior",
             "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11)", CockpitInterior));
         into.Add(new TestHarness.Suite("cockpit-overlay-pass",

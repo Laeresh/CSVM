@@ -390,6 +390,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
   cost and `phys_hz` for whether the sim keeps up (60 ticks a wall second is real time, because a
   realtime clock advances the physics-stepped sim exactly one 1/60 step per tick); both are
   `--no-det` numbers, since `--det` empties the tick.
+- **PERF-22** — **A memo whose entries are a pure function of their key belongs to the process, not
+  to the builder instance: a per-instance memo of a Godot `Shader` charges every later builder a
+  fresh compile for byte-identical text, and the bill lands wherever the material is made.** On the
+  frame path that is an AI spawn. Measured on CM18's generator launches: of a ~300 ms `ai_spawn`
+  frame, 190 ms sat in the 13 to 15 `new ShaderMaterial { Shader = … }` assignments whose `Shader`
+  was fresh, about 13 ms each, against 0.1 ms across the other 45, whose shader was already memoed;
+  generating the shader text itself cost 1.6 ms. Split fresh-key work from repeat-key work before
+  optimising anything else, or the mesh, material and texture terms it hides read as the cost.
 
 ## LOG — logs, error censuses, and exit codes
 
