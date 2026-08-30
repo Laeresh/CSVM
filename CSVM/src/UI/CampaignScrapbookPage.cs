@@ -203,7 +203,8 @@ public sealed class CampaignScrapbookPage : CampaignPage
     public override bool Accept(int row)
     {
         var (mission, spread) = Position();
-        switch (KindAt(row))
+        var kind = KindAt(row);
+        switch (kind)
         {
             case RowKind.Replay:
                 Flow.SetMission(mission - 1);
@@ -219,6 +220,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
                 if (Previous() is { } prev)
                 {
                     (_viewMission, _viewSpread) = prev;
+                    Refocus(kind);
                 }
                 else
                 {
@@ -230,12 +232,14 @@ public sealed class CampaignScrapbookPage : CampaignPage
                 if (Next() is { } next)
                 {
                     (_viewMission, _viewSpread) = next;
+                    Refocus(kind);
                 }
 
                 return true;
             case RowKind.CurrentMission:
                 _viewMission = Flow.MissionSeq + 1;
                 _viewSpread = 1;
+                Refocus(kind);
                 return true;
             case RowKind.ViewAllMissions:
                 Flow.GoTo(CampaignScreen.PreviousMissions);
@@ -317,6 +321,16 @@ public sealed class CampaignScrapbookPage : CampaignPage
     }
 
     private int RowOf(RowKind kind) => Rows().IndexOf(kind);
+
+    // Puts the cursor back on the control just pressed, at whatever row the new position gives it.
+    // Row lists are rebuilt per position and a page turn off spread 1 drops three rows above the
+    // arrows, so a cursor left on its old index slides down onto RETURN TO CABIN instead. A control
+    // the new position no longer offers hands the cursor to the back arrow, which every one has.
+    private void Refocus(RowKind kind)
+    {
+        int at = RowOf(kind);
+        Flow.FocusRow(at >= 0 ? at : RowOf(RowKind.PrevPage));
+    }
 
     // uiData 2411: Replay Mission is offered once either half of the mission's record holds a
     // time, which a lost attempt also does, so completion bits are not the gate. The script adds

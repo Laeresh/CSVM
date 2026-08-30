@@ -230,6 +230,42 @@ public class CampaignScrapbookPageTests
         Assert.EndsWith("01_02_a.PNG", flow.Page.Pictures[0].Art.Name);
     }
 
+    /// <summary>Turning a page leaves the cursor on the arrow that turned it, not on the row index
+    /// that arrow used to hold: a spread-1 page drops the Replay row and both tabs above the arrows,
+    /// which slides an unmoved cursor down onto RETURN TO CABIN.</summary>
+    [Fact]
+    public void TurningAPageKeepsTheCursorOnTheArrowThatTurnedIt()
+    {
+        string root = ScrapbookCompositionFixture.WriteBook(TestData.TempDir());
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        StepNext(flow); // (1,1) -> (1,2), where the three spread-1 rows are gone
+        Assert.Equal(BoardButton.ScrapbookNext, flow.Page.Button(flow.Row).Button);
+
+        StepPrev(flow); // (1,2) -> (1,1), where they are back
+        Assert.Equal(BoardButton.ScrapbookPrev, flow.Page.Button(flow.Row).Button);
+    }
+
+    /// <summary>The last page of the book offers no forward arrow to stay on, so the cursor lands on
+    /// the back arrow beside it rather than on whatever row the index now names.</summary>
+    [Fact]
+    public void TurningToTheLastPageLeavesTheCursorOnTheBackArrow()
+    {
+        string root = ScrapbookCompositionFixture.WriteBook(TestData.TempDir());
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        StepNext(flow); // (1,1) -> (1,2)
+        StepNext(flow); // (1,2) -> (2,1)
+        StepNext(flow); // (2,1) -> (3,1), the book's last page
+
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ScrapbookNext));
+        Assert.Equal(BoardButton.ScrapbookPrev, flow.Page.Button(flow.Row).Button);
+    }
+
     /// <summary>The Current Mission bookmark shows only while the browsed mission differs from the
     /// campaign's own current one, and jumps back to that mission's spread 1.</summary>
     [Fact]

@@ -125,6 +125,11 @@ public interface ICampaignPage
     /// <summary>The confirm press on the focused row. Returns whether the page handled it.</summary>
     bool Accept(int row);
 
+    /// <summary>The secondary press on the focused row (X), the one shortcut a screen offers beside
+    /// its confirm. Returns whether the page handled it; a screen with no such shortcut says
+    /// false and the press is nothing.</summary>
+    bool Secondary(int row);
+
     /// <summary>The back press. Returns true when the page consumed it (a confirm stage closing, a
     /// text field disarming); false lets the flow leave the screen.</summary>
     bool Back();
@@ -320,6 +325,20 @@ public sealed class CampaignFlow
     {
         Message = string.Empty;
         return Page.Accept(ClampedRow());
+    }
+
+    /// <summary>The secondary press, the pad's X: the one shortcut the screen showing offers beside
+    /// its confirm, and nothing at all on a screen that offers none. A refusal already on the line
+    /// survives a press no page took, since nothing happened for it to be stale about.</summary>
+    public bool Secondary()
+    {
+        if (!Page.Secondary(ClampedRow()))
+        {
+            return false;
+        }
+
+        Message = string.Empty;
+        return true;
     }
 
     /// <summary>The back press: the page first, then leaving the screen. Backing out of the first
@@ -550,6 +569,9 @@ public abstract class CampaignPage : ICampaignPage
 
     /// <inheritdoc/>
     public virtual bool Accept(int row) => false;
+
+    /// <inheritdoc/>
+    public virtual bool Secondary(int row) => false;
 
     /// <inheritdoc/>
     public virtual bool Back() => false;
