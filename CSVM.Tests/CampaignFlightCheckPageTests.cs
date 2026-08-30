@@ -8,8 +8,8 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>The flight check screen: row composition for the pilot's plane with and without a
-/// wingman, the plane-change gate on ordinals 13/17 and under three planes, the ammo route setting
-/// the flow's slot, and the fly request.</summary>
+/// wingman, the plane-change gate on ordinals 13/17 and under three planes, CHANGE PLANE opening the
+/// picker on its own slot, the ammo route setting the flow's slot, and the fly request.</summary>
 public class CampaignFlightCheckPageTests
 {
     private static readonly StockLoadouts Stock =
@@ -161,29 +161,65 @@ public class CampaignFlightCheckPageTests
         Assert.Equal(!barred, hasChangePlane);
     }
 
+    // The seated player's CHANGE PLANE is a plain button onto the picker, named for its slot. The
+    // horizontal axis does nothing on it, and the label names no plane.
     [Fact]
-    public void ChangePlaneStepsThroughTheOwnedPlanesAndSaves()
+    public void ChangePlaneOpensThePickerOnItsOwnSlotAndNoLongerSteps()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        profile.Planes.Add(new OwnedPlane { Name = "Third Plane", Airframe = 5 });
+        var page = NewPage(out var flow, out _, wingman: true, profile: profile, missionSeq: 0);
+
+        int wingmanRow = LastChangePlaneRow(page);
+        Assert.Equal("CHANGE PLANE", page.RowText(wingmanRow));
+        Assert.False(page.Step(wingmanRow, 1));
+        Assert.Equal(0, flow.Profile!.SelectedPlane);
+        Assert.Equal(1, flow.Profile.WingmanPlane);
+
+        Assert.True(page.Accept(wingmanRow));
+        Assert.Equal(CampaignScreen.PlaneSelection, flow.Screen);
+        Assert.Equal(1, flow.PlaneSlot);
+    }
+
+    // What the stepper protected is still protected: a plane change lands on the profile and is
+    // saved. It happens on the picker's ACCEPT now, not on the flight check's own row.
+    [Fact]
+    public void APickTakenOnThePickerLandsOnTheProfileAndIsSaved()
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
         profile.Planes.Add(new OwnedPlane { Name = "Third Plane", Airframe = 5 });
         var page = NewPage(out var flow, out _, wingman: false, profile: profile, missionSeq: 0);
 
-        int changePlaneRow = -1;
-        for (int row = 0; row < page.RowCount; row++)
+        Assert.True(page.Accept(LastChangePlaneRow(page)));
+        Assert.Equal(0, flow.PlaneSlot);
+
+        var picker = new CampaignPlaneSelectionPage(flow, wingman: false);
+        Assert.True(picker.Step(0, 1));
+        Assert.True(picker.Accept(2)); // ACCEPT SELECTIONS
+
+        Assert.Equal(1, flow.Profile!.SelectedPlane);
+        Assert.Equal(1, flow.Store.Load("Zachary")!.SelectedPlane);
+        Assert.Equal(CampaignScreen.FlightCheck, flow.Screen);
+    }
+
+    // The footer stops offering a change the screen no longer makes. Read off the flow's own page,
+    // since the hint is a statement about the focused row.
+    [Fact]
+    public void TheFooterNoLongerOffersTheHorizontalChangeOnTheSeatedPlayersRow()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        profile.Planes.Add(new OwnedPlane { Name = "Third Plane", Airframe = 5 });
+        NewPage(out var flow, out _, wingman: false, profile: profile, missionSeq: 0);
+        flow.GoTo(CampaignScreen.FlightCheck);
+
+        for (int i = 0; i < flow.Page.RowCount && flow.Page.RowText(flow.Row) != "CHANGE PLANE"; i++)
         {
-            if (page.RowText(row).StartsWith("CHANGE PLANE"))
-            {
-                changePlaneRow = row;
-                break;
-            }
+            flow.Move(1);
         }
 
-        Assert.True(changePlaneRow >= 0);
-        Assert.True(page.Step(changePlaneRow, 1));
-        Assert.Equal(1, flow.Profile!.SelectedPlane);
-
-        var reloaded = flow.Store.Load("Zachary");
-        Assert.Equal(1, reloaded!.SelectedPlane);
+        Assert.Equal("CHANGE PLANE", flow.Page.RowText(flow.Row));
+        Assert.DoesNotContain("Change Plane", flow.Page.Footer);
+        Assert.False(flow.Step(1));
     }
 
     [Fact]
@@ -257,7 +293,7 @@ public class CampaignFlightCheckPageTests
     }
 
     // A guest's page is one PILOT block and its two action rows: the wingman belongs to the seated
-    // profile, and CHANGE PLANE is always offered because a guest cycles the stock eleven.
+    // profile, and CHANGE PLANE is always offered because a guest picks out of their own roster.
     [Fact]
     public void AGuestsPageCarriesOnePilotBlockAndNoWingman()
     {
@@ -301,18 +337,25 @@ public class CampaignFlightCheckPageTests
         Assert.False(page.Back());
     }
 
-    // CHANGE PLANE on a guest's row cycles their own record and writes nothing to the profile,
-    // unlike the seated player's row, which is a stored pick.
+    // A guest's CHANGE PLANE takes the same door the seated player's does, on its own slot. The
+    // horizontal axis does nothing on either: one screen changes a plane, so one place enforces the
+    // duplicate rule.
     [Fact]
-    public void AGuestsChangePlaneMovesTheirOwnPickAndSavesNothing()
+    public void AGuestsChangePlaneOpensThePickerAndStepsNothingInPlace()
     {
         var page = NewPage(out var flow, out _, wingman: false);
         flow.SetPlayers(2);
         flow.Field.Advance();
+        flow.SetPlaneSlot(1);
         var before = flow.Field.Plane(1)!;
 
-        Assert.True(page.Step(2, 1));
-        Assert.NotSame(before, flow.Field.Plane(1));
+        Assert.Equal("CHANGE PLANE", page.RowText(2));
+        Assert.False(page.Step(2, 1));
+        Assert.Same(before, flow.Field.Plane(1));
+
+        Assert.True(page.Accept(2));
+        Assert.Equal(CampaignScreen.PlaneSelection, flow.Screen);
+        Assert.Equal(0, flow.PlaneSlot);
         Assert.Equal(0, flow.Store.Load("Zachary")!.SelectedPlane);
     }
 
@@ -444,6 +487,22 @@ public class CampaignFlightCheckPageTests
         }
 
         return sawWingman;
+    }
+
+    // The last CHANGE PLANE row on the page, which is the wingman's where the mission has one.
+    private static int LastChangePlaneRow(CampaignFlightCheckPage page)
+    {
+        int found = -1;
+        for (int row = 0; row < page.RowCount; row++)
+        {
+            if (page.RowText(row) == "CHANGE PLANE")
+            {
+                found = row;
+            }
+        }
+
+        Assert.True(found >= 0);
+        return found;
     }
 
     private static CampaignFlightCheckPage NewPage(

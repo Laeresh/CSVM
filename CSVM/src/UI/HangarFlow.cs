@@ -301,6 +301,34 @@ public sealed class HangarFlow
         return (left, right);
     }
 
+    /// <summary>Writes an airframe's stock guns and per-wing hardpoint counts onto
+    /// <paramref name="def"/>, leaving every other field alone: stock caliber 30..70 is calibre row
+    /// 0..4 and a two-marker slot is the twin mount (the A3 mapping read backwards), and the pylons
+    /// are split by <see cref="StockWingCounts"/>. Both the airframe-defaults arm here and the
+    /// campaign's EXPORT of a plane that has no build need this reading, and a second copy of it
+    /// would let the two disagree about what an airframe carries at rest.</summary>
+    public static void LoadStockWeapons(CustomPlaneDef def, LoadoutDef? fit)
+    {
+        ArgumentNullException.ThrowIfNull(def);
+        for (int slot = 0; slot < CustomPlaneDef.GunSlots; slot++)
+        {
+            def.Guns[slot] = default;
+        }
+
+        if (fit != null)
+        {
+            foreach (var gun in fit.Guns)
+            {
+                if (gun.Slot is >= 1 and <= CustomPlaneDef.GunSlots)
+                {
+                    def.Guns[gun.Slot - 1] = new GunChoice((gun.Caliber - 30) / 10, gun.Markers.Count >= 2);
+                }
+            }
+        }
+
+        (def.LeftHardpoints, def.RightHardpoints) = StockWingCounts(fit?.Hardpoints);
+    }
+
     /// <summary>Moves the row cursor, wrapping like every other launchscreen list.</summary>
     public bool Move(int dir)
     {
@@ -553,26 +581,7 @@ public sealed class HangarFlow
     {
         Scratch.Airframe = airframe;
         Scratch.Engine = 1;
-        var fit = StockFits?.ForModel(PlanePickerRoster.AirframeNode(airframe));
-        for (int slot = 0; slot < CustomPlaneDef.GunSlots; slot++)
-        {
-            Scratch.Guns[slot] = default;
-        }
-
-        if (fit != null)
-        {
-            // The A3 mapping read backwards: stock caliber 30..70 is calibre row 0..4, and a
-            // two-marker slot is the twin mount (one gun over both firepoints).
-            foreach (var gun in fit.Guns)
-            {
-                if (gun.Slot is >= 1 and <= CustomPlaneDef.GunSlots)
-                {
-                    Scratch.Guns[gun.Slot - 1] = new GunChoice((gun.Caliber - 30) / 10, gun.Markers.Count >= 2);
-                }
-            }
-        }
-
-        (Scratch.LeftHardpoints, Scratch.RightHardpoints) = StockWingCounts(fit?.Hardpoints);
+        LoadStockWeapons(Scratch, StockFits?.ForModel(PlanePickerRoster.AirframeNode(airframe)));
         int[] armour = StockArmourUnits(airframe);
         Scratch.ArmourNose = armour[0];
         Scratch.ArmourTail = armour[1];

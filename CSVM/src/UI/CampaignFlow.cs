@@ -28,6 +28,9 @@ public enum CampaignScreen
     /// <summary>Ammunition and ordnance for one aircraft.</summary>
     Ammo,
 
+    /// <summary>The aircraft each crew slot flies, picked from the profile's own.</summary>
+    PlaneSelection,
+
     /// <summary>The scrapbook's results page (spread 1), opened on the mission a finished mission
     /// just flew, with the cabin on its far side.</summary>
     Scrapbook,
@@ -110,6 +113,11 @@ public interface ICampaignPage
     /// <see cref="BoardButton.None"/> means the row is list text, which is the default.</summary>
     BoardButtonRef Button(int row);
 
+    /// <summary>The drop-down list row <paramref name="row"/> is, or null when it is not one. ⚠ A
+    /// combo may only be open while its own row is focused: the flow finds the open one by asking
+    /// the focused row, so a page that leaves one open behind a moved cursor strands it.</summary>
+    CampaignCombo? Combo(int row);
+
     /// <summary>A second, smaller picture for the focused row, or null for none.</summary>
     HangarArt? RowArt(int row);
 
@@ -160,6 +168,7 @@ public sealed class CampaignFlow
         [CampaignScreen.Briefing] = flow => new CampaignBriefingPage(flow),
         [CampaignScreen.FlightCheck] = flow => new CampaignFlightCheckPage(flow),
         [CampaignScreen.Ammo] = flow => new CampaignAmmoPage(flow),
+        [CampaignScreen.PlaneSelection] = flow => new CampaignPlaneSelectionPage(flow),
         [CampaignScreen.Scrapbook] = flow => new CampaignScrapbookPage(flow),
         [CampaignScreen.ScrapbookZoom] = flow => new CampaignScrapbookZoomPage(flow),
     };
@@ -168,6 +177,11 @@ public sealed class CampaignFlow
 
     // The screens entered, innermost last. Never empty: popping the last one ends the flow.
     private readonly List<CampaignScreen> _stack = new() { CampaignScreen.Roster };
+
+    // The mission read for MissionSeq, and which sequence that was. -2 is "not read for any", which
+    // no MissionSeq ever is: the cabin's own default is -1.
+    private CampaignMission? _mission;
+    private int _missionSeq = -2;
 
     /// <summary>Opens a flow over <paramref name="store"/>, reading its roster once.
     /// <paramref name="dataRoot"/> may be null; a page's art then simply loads none.
@@ -231,6 +245,10 @@ public sealed class CampaignFlow
     /// opening the ammo screen.</summary>
     public int AmmoSlot { get; private set; }
 
+    /// <summary>Which crew slot the plane selection screen opens focused on, 0 the pilot's combo
+    /// and 1 the wingman's.</summary>
+    public int PlaneSlot { get; private set; }
+
     /// <summary>How many times the book has been opened through <see cref="OpenScrapbook"/>. The
     /// page watches this rather than <see cref="MissionSeq"/> alone, so reopening it on the mission
     /// it is already browsing still lands on that mission's spread 1, which is what the original's
@@ -241,6 +259,27 @@ public sealed class CampaignFlow
     /// <c>SCRAPBOOK.CSV</c> mission slot, spread and item a scrapbook page's row named. Null
     /// until <see cref="SetScrapbookZoom"/> is called.</summary>
     public (int Mission, int Spread, int Item)? ZoomTarget { get; private set; }
+
+    /// <summary>The <c>cm_sequence.zrd</c> entry <see cref="MissionSeq"/> names, or null when the
+    /// data root, the file or the entry is unavailable. Read once per mission rather than once per
+    /// repaint, and here rather than on a page because more than one screen asks: the flight check
+    /// and the plane selection screen both draw a wingman only when this mission carries one.</summary>
+    public CampaignMission? Mission
+    {
+        get
+        {
+            if (_missionSeq != MissionSeq)
+            {
+                _missionSeq = MissionSeq;
+                _mission = ReadMission();
+            }
+
+            return _mission;
+        }
+    }
+
+    /// <summary>Whether this mission flies a wingman, its <c>cm_sequence</c> flag.</summary>
+    public bool MissionHasWingman => Mission?.Wingman ?? false;
 
     /// <summary>The screen showing.</summary>
     public CampaignScreen Screen => _stack[^1];
@@ -257,9 +296,20 @@ public sealed class CampaignFlow
     /// <summary>The refusal line the last action left, or "". Cleared by any navigation.</summary>
     public string Message { get; private set; } = string.Empty;
 
+    /// <summary>The dialog standing over the screen, or null. While one stands it takes every
+    /// press, so the screen under it neither moves nor changes.</summary>
+    public CampaignModal? Modal { get; private set; }
+
     /// <summary>Whether the keyboard's letters are text right now rather than navigation. The shell
     /// reads this to decide whether to hand over its cursor axes or the pad's alone.</summary>
     public bool CapturesText => Page.TextEntry is { Active: true };
+
+    /// <summary>The drop-down list standing open, or null. Only the focused row's own combo can be
+    /// one, which is the invariant <see cref="ICampaignPage.Combo"/> states.</summary>
+    public CampaignCombo? OpenCombo =>
+        Page.Combo(Math.Clamp(Row, 0, Math.Max(0, Page.RowCount - 1))) is { Open: true } combo
+            ? combo
+            : null;
 
     /// <summary>Whether a screen has a page of its own yet.</summary>
     public static bool HasPage(CampaignScreen screen) => Registry.ContainsKey(screen);
@@ -269,9 +319,21 @@ public sealed class CampaignFlow
     /// one at all.</summary>
     public bool Move(int dir)
     {
+        if (Modal != null)
+        {
+            return false;
+        }
+
         if (Page.TextEntry is { Active: true } entry)
         {
             return dir < 0 ? entry.Append() : entry.Backspace();
+        }
+
+        // An open drop-down owns the axis: the cursor is inside the list, not on the screen's rows.
+        if (OpenCombo is { } combo)
+        {
+            Message = string.Empty;
+            return combo.Move(dir);
         }
 
         int count = Page.RowCount;
@@ -289,7 +351,7 @@ public sealed class CampaignFlow
     /// focused row's own stepper.</summary>
     public bool Step(int dir)
     {
-        if (dir == 0)
+        if (dir == 0 || Modal != null)
         {
             return false;
         }
@@ -297,6 +359,13 @@ public sealed class CampaignFlow
         if (Page.TextEntry is { Active: true } entry)
         {
             return entry.StepLast(dir);
+        }
+
+        // The stepper is the closed field's shortcut. Inside an open list it means nothing, and
+        // stepping the pick under the cursor would leave the two disagreeing.
+        if (OpenCombo != null)
+        {
+            return false;
         }
 
         Message = string.Empty;
@@ -323,6 +392,13 @@ public sealed class CampaignFlow
     /// navigate by naming where they go, not by advancing through a fixed order.</summary>
     public bool Accept()
     {
+        // A dialog takes the confirm. The press that raised one cannot also answer it: a page
+        // raises from inside its own Accept, which this check has already passed by then.
+        if (DismissModal())
+        {
+            return true;
+        }
+
         Message = string.Empty;
         return Page.Accept(ClampedRow());
     }
@@ -332,6 +408,11 @@ public sealed class CampaignFlow
     /// survives a press no page took, since nothing happened for it to be stale about.</summary>
     public bool Secondary()
     {
+        if (Modal != null)
+        {
+            return false;
+        }
+
         if (!Page.Secondary(ClampedRow()))
         {
             return false;
@@ -345,6 +426,11 @@ public sealed class CampaignFlow
     /// screen ends the flow.</summary>
     public bool Back()
     {
+        if (DismissModal())
+        {
+            return true;
+        }
+
         Message = string.Empty;
         if (Page.Back())
         {
@@ -407,6 +493,11 @@ public sealed class CampaignFlow
 
     /// <summary>Points the ammo screen at the pilot's (0) or the wingman's (1) aircraft.</summary>
     public void SetAmmoSlot(int slot) => AmmoSlot = slot;
+
+    /// <summary>Which crew slot's CHANGE PLANE press opened the plane selection screen, the
+    /// original's <c>@globals@ZQ</c> of -1 and -2. The screen draws both slots either way; this
+    /// only decides which of the two combos the cursor opens on.</summary>
+    public void SetPlaneSlot(int slot) => PlaneSlot = slot;
 
     /// <summary>Where a scrapbook capture's file is for the seated profile, or null when there is
     /// none on disk. A <c>Snap_</c> row resolves against the profile's own directory rather than
@@ -472,11 +563,59 @@ public sealed class CampaignFlow
     /// <summary>Leaves a refusal on screen, in the original's own words where it has some.</summary>
     public void SetMessage(string message) => Message = message;
 
+    /// <summary>Raises a dialog over the screen showing. A second raise replaces the first rather
+    /// than stacking: the original's own box is one script run over the screen, not a stack.</summary>
+    public void RaiseModal(string message, string button = "OK", Action? confirmed = null) =>
+        Modal = new CampaignModal(message, button, confirmed);
+
     /// <summary>Puts the cursor on a row, clamped into the page's current list.</summary>
     public void FocusRow(int row)
     {
         Row = Math.Max(0, row);
         ClampedRow();
+    }
+
+    // The sequence entry for MissionSeq. Absent data, an unreadable file or a sequence with no such
+    // entry all read as null: a screen then draws no wingman rather than refusing to open.
+    private CampaignMission? ReadMission()
+    {
+        if (DataRoot is not { } root)
+        {
+            return null;
+        }
+
+        try
+        {
+            string zrdrPath = SessionPaths.PreferUnzipped(Path.Combine(root, "extracted", "zrdr.zip"));
+            foreach (var mission in CampaignSequence.Load(zrdrPath))
+            {
+                if (mission.Seq == MissionSeq)
+                {
+                    return mission;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or FileNotFoundException)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    // Answers a standing dialog, running whatever was to follow it. Both the confirm and the back
+    // press take this door: a one-button dialog has one answer, so skipping the callback on one of
+    // the two presses would make what happens next depend on which one the player used.
+    private bool DismissModal()
+    {
+        if (Modal is not { } modal)
+        {
+            return false;
+        }
+
+        Modal = null;
+        modal.Confirm();
+        return true;
     }
 
     // The page for a screen, built on first sight and kept, so a page may hold state of its own
@@ -554,6 +693,9 @@ public abstract class CampaignPage : ICampaignPage
 
     /// <inheritdoc/>
     public virtual BoardButtonRef Button(int row) => BoardButtonRef.None;
+
+    /// <inheritdoc/>
+    public virtual CampaignCombo? Combo(int row) => null;
 
     /// <inheritdoc/>
     public virtual HangarArt? RowArt(int row) => null;

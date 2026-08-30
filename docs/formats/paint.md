@@ -205,6 +205,29 @@ Little-endian 32-bit fields, offsets confirmed against the screen callbacks that
 | 0x98-0xa4 | per-gun-slot 4 = empty, else 0; derived at commit | case 22 of `FUN_00407670` |
 | 0xa8-0xc4 | eight per-pylon display cells: commit writes 1 if position < that wing's hardpoint count else 11; callback 2245's write refills them `rand()%20 > 10` per cell while the count is non-zero | case 22; `0x0040ad4f` |
 
+### How the remake stores one
+
+The 204-byte format is import-only. CSVM writes its own JSON, one file per plane under
+`user://Planes/`, named by the plane's name (`CustomPlaneStore`, schema `version` 2): the chosen
+fields above and nothing the original derives at commit.
+
+That file carries one field the original's record has no room for, an optional `loadout` block:
+
+```json
+"loadout": { "ammo": [2, 4, -1, -1], "ordnance": [3, 0, 0, 0, 11, 0, 0, 0] }
+```
+
+`ammo` is four gun slots and `ordnance` eight pylon cells, in the campaign profile's own encoding
+(`saved-games.md`, "Where the ammunition and ordnance picks live"): an ammunition index 0-3 or the
+no-gun marker 4, and a one-based rocket-table row with 0 meaning never picked. `-1` in `ammo` is the
+same "never picked", which the profile record has no need of because its own field starts at 0.
+
+The campaign's EXPORT is the only writer, and the block is written only for a plane that carries
+one, so a plane built in the hangar persists exactly the file earlier builds wrote. It is a
+**version 2** file either way: a reader without the block skips it like any unknown property and a
+reader with it defaults the fields when it is absent, so raising the schema version would only have
+made older builds refuse a plane they read perfectly well.
+
 ### The paint screen's preview art
 
 The paint screen's aircraft preview is not the flying model's `.BM` composition. Each

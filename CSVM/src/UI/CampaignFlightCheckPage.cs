@@ -39,9 +39,10 @@ internal readonly record struct FlightRow(
 /// <see cref="CampaignScreen.Ammo"/>), CHANGE PLANE where the mission allows it, RETURN TO BRIEFING
 /// and FLY MISSION. The row list carries only these actionable items; each plane's dense text
 /// (title, both eight-row lists) and the objectives note live in <see cref="Detail"/>, the split
-/// <see cref="CampaignRosterPage"/> uses for its own descriptive text. CHANGE PLANE cycles in
-/// place because no picker screen exists. With guests joined this one page draws
-/// the whole sequence, a player at a time (<see cref="CampaignFlightField"/>).
+/// <see cref="CampaignRosterPage"/> uses for its own descriptive text. CHANGE PLANE opens
+/// <see cref="CampaignScreen.PlaneSelection"/> on the row's own slot, a guest's check and the
+/// seated player's alike, so one place enforces the duplicate rule. With guests joined this one
+/// page draws the whole sequence, a player at a time (<see cref="CampaignFlightField"/>).
 /// </summary>
 public sealed class CampaignFlightCheckPage : CampaignPage
 {
@@ -107,11 +108,11 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     private StockLoadouts? _stock;
     private Messages? _messages;
 
-    // The mission and its objectives note, decoded once per mission rather than once per repaint:
-    // both read files, and the flow keeps one page instance across every screen it draws. -2 is
-    // "not yet read for any mission", which no MissionSeq ever is (the cabin's own default is -1).
+    // The objectives note, read once per mission rather than once per repaint: it reads files, and
+    // the flow keeps one page instance across every screen it draws. -2 is "not yet read for any
+    // mission", which no MissionSeq ever is (the cabin's own default is -1). The mission itself is
+    // the flow's, since the plane selection screen asks the same question.
     private int _resolvedSeq = -2;
-    private CampaignMission? _mission;
     private string _objectives = string.Empty;
 
     /// <summary>Binds the page to its flow. <paramref name="planes"/>/<paramref name="stock"/> let a
@@ -136,11 +137,6 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     /// <inheritdoc/>
     public override int RowCount => Rows().Count;
-
-    /// <inheritdoc/>
-    public override string Footer => Flow.Row < Rows().Count && Rows()[Flow.Row].Kind == FlightRowKind.ChangePlane
-        ? "↑↓  Choose       ←→  Change Plane       Enter / A  Select       Esc / B  Back"
-        : "↑↓  Choose       Enter / A  Select       Esc / B  Back";
 
     /// <summary>Each crew slot's aircraft silhouette, the airframe's own frame of the icon sheet,
     /// at the authored positions of <c>fc_p_pilotplane</c> and <c>fc_p_wingplane</c>.</summary>
@@ -211,7 +207,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     /// runs in one window, so the heading is the only thing that says whose turn it is.</summary>
     public string Heading => Player > 0 ? $"FLIGHT CHECK P{Player + 1}" : "FLIGHT CHECK";
 
-    private bool HasWingman => _wingmanOverride ?? Mission()?.Wingman ?? false;
+    private bool HasWingman => _wingmanOverride ?? Flow.MissionHasWingman;
 
     // Whose check this is: 0 the seated player, 1 and up a guest. A guest's page is this same
     // screen re-entered, so everything below reads the player rather than assuming the profile's
@@ -271,40 +267,6 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     }
 
     /// <inheritdoc/>
-    public override bool Step(int row, int dir)
-    {
-        var rows = Rows();
-        if (row < 0 || row >= rows.Count || rows[row].Kind != FlightRowKind.ChangePlane || dir == 0)
-        {
-            return false;
-        }
-
-        if (Player > 0)
-        {
-            return Flow.Field.Step(Player, dir);
-        }
-
-        var profile = Flow.Profile ?? EmptyProfile;
-        if (profile.Planes.Count == 0)
-        {
-            return false;
-        }
-
-        int count = profile.Planes.Count;
-        if (rows[row].Slot == 0)
-        {
-            profile.SelectedPlane = (((profile.SelectedPlane + dir) % count) + count) % count;
-        }
-        else
-        {
-            profile.WingmanPlane = (((profile.WingmanPlane + dir) % count) + count) % count;
-        }
-
-        Flow.Store.Save(profile);
-        return true;
-    }
-
-    /// <inheritdoc/>
     public override bool Accept(int row)
     {
         var rows = Rows();
@@ -318,6 +280,10 @@ public sealed class CampaignFlightCheckPage : CampaignPage
             case FlightRowKind.ChangeAmmo:
                 Flow.SetAmmoSlot(rows[row].Slot);
                 Flow.GoTo(CampaignScreen.Ammo);
+                return true;
+            case FlightRowKind.ChangePlane:
+                Flow.SetPlaneSlot(rows[row].Slot);
+                Flow.GoTo(CampaignScreen.PlaneSelection);
                 return true;
             case FlightRowKind.ReturnToBriefing:
                 Flow.Field.Rewind();
@@ -356,8 +322,8 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         var rows = new List<FlightRow>();
         if (Player > 0)
         {
-            // A guest cycles the stock eleven, so neither of FLIGHTCHECK.SCRIPT's plane-change
-            // gates applies: both are rules about the seated profile's own aircraft.
+            // A guest picks out of the stock eleven and copies, so neither of FLIGHTCHECK.SCRIPT's
+            // plane-change gates applies: both are rules about the seated profile's own aircraft.
             AddSlot(rows, Flow.Field.Plane(Player), slot: 0, heading: "PILOT", changePlane: true);
         }
         else
@@ -395,10 +361,9 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         rows.Add(new FlightRow("CHANGE AMMO", string.Empty, FlightRowKind.ChangeAmmo, slot));
         if (changePlane)
         {
-            // The plaque centre-clips its label, so a stock record's long marketing title is left
-            // off: it is already written on the info row directly above.
-            string named = plane.Name == AirframeTitle(plane.Airframe) ? string.Empty : $": {plane.Name}";
-            rows.Add(new FlightRow($"CHANGE PLANE{named}", string.Empty, FlightRowKind.ChangePlane, slot));
+            // The plaque carries its label alone, the original's own FC_B_CHANGEPLANE: the plane
+            // it would name is already written on the info row directly above.
+            rows.Add(new FlightRow("CHANGE PLANE", string.Empty, FlightRowKind.ChangePlane, slot));
         }
     }
 
@@ -581,7 +546,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     private string ReadObjectivesNote()
     {
-        if (Flow.DataRoot is not { } root || Mission() is not { } mission)
+        if (Flow.DataRoot is not { } root || Flow.Mission is not { } mission)
         {
             return string.Empty;
         }
@@ -605,9 +570,9 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         }
     }
 
-    // Reads the mission and its objectives note for whichever mission the flow now names, once.
-    // Keyed on the sequence number rather than a bare "done" flag: the flow keeps this page
-    // instance, so the same page draws the second mission after it drew the first.
+    // Reads the objectives note for whichever mission the flow now names, once. Keyed on the
+    // sequence number rather than a bare "done" flag: the flow keeps this page instance, so the
+    // same page draws the second mission after it drew the first.
     private void Resolve()
     {
         if (_resolvedSeq == Flow.MissionSeq)
@@ -616,38 +581,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         }
 
         _resolvedSeq = Flow.MissionSeq;
-        _mission = null;
-        ReadMission();
         _objectives = ReadObjectivesNote();
-    }
-
-    private CampaignMission? Mission()
-    {
-        Resolve();
-        return _mission;
-    }
-
-    private void ReadMission()
-    {
-        if (Flow.DataRoot is { } root)
-        {
-            try
-            {
-                string zrdrPath = SessionPaths.PreferUnzipped(Path.Combine(root, "extracted", "zrdr.zip"));
-                foreach (var mission in CampaignSequence.Load(zrdrPath))
-                {
-                    if (mission.Seq == Flow.MissionSeq)
-                    {
-                        _mission = mission;
-                        break;
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or FileNotFoundException)
-            {
-                _mission = null;
-            }
-        }
     }
 
     private Messages MessagesFor(string root) =>

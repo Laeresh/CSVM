@@ -6,7 +6,7 @@ using CSVM.Session;
 namespace CSVM.UI;
 
 /// <summary>
-/// One guest's aircraft on a co-op campaign sortie: the records they may cycle through, and which
+/// One guest's aircraft on a co-op campaign sortie: the records the picker offers them, and which
 /// one they are on. Every record here is session-scoped — a stock airframe at rest, or a COPY of
 /// one of the seated profile's aircraft — so a guest's ammunition edits land on something the
 /// profile store never sees.
@@ -136,46 +136,38 @@ public sealed class CampaignFlightField
     /// for the seated player, that guest's own pick for anybody else, null when neither exists.</summary>
     public OwnedPlane? Plane(int player)
     {
-        if (player <= 0)
-        {
-            return SeatedPlane();
-        }
-
-        EnsureGuests();
-        int at = player - 1;
-        return at >= 0 && at < _guests.Count ? _guests[at].Plane : null;
+        return player <= 0 ? SeatedPlane() : GuestAt(player)?.Plane;
     }
 
-    /// <summary>Cycles a guest's aircraft, skipping whatever another player already took. Returns
-    /// whether the pick moved.</summary>
-    public bool Step(int player, int dir)
+    /// <summary>Whether entry <paramref name="pick"/> of a guest's own choices is one another
+    /// player already flies, which is what the picker refuses a pick on. False for a player index
+    /// that names no guest: only a guest chooses out of this roster.</summary>
+    public bool Taken(int player, int pick)
     {
-        EnsureGuests();
-        int at = player - 1;
-        if (dir == 0 || at < 0 || at >= _guests.Count)
+        if (GuestAt(player) is not { } guest)
         {
             return false;
         }
 
-        var guest = _guests[at];
-        int count = guest.Choices.Count;
-        int pick = guest.Choice;
-        for (int tries = 0; tries < count; tries++)
-        {
-            pick = (((pick + dir) % count) + count) % count;
-            if (pick == guest.Choice)
-            {
-                return false;
-            }
+        return pick >= 0 && pick < guest.Choices.Count && Taken(guest, pick);
+    }
 
-            if (!Taken(guest, pick))
-            {
-                guest.Choice = pick;
-                return true;
-            }
+    /// <summary>Puts a guest on entry <paramref name="pick"/> of their own choices, which is what
+    /// the picker's ACCEPT does. An entry another player flies is refused here as well as on the
+    /// picker, so the no-duplicate rule cannot be walked around by a caller that skips the screen.
+    /// Returns whether the pick moved. ⚠ Nothing here reaches the seated profile: every record a
+    /// guest may be put on is session-scoped.</summary>
+    public bool Choose(int player, int pick)
+    {
+        if (GuestAt(player) is not { } guest
+            || pick < 0 || pick >= guest.Choices.Count || pick == guest.Choice
+            || Taken(guest, pick))
+        {
+            return false;
         }
 
-        return false;
+        guest.Choice = pick;
+        return true;
     }
 
     /// <summary>Whether this record is a stock airframe at rest rather than a profile aircraft.
@@ -200,6 +192,15 @@ public sealed class CampaignFlightField
         Ordnance = (int[])plane.Ordnance.Clone(),
         Special = plane.Special,
     };
+
+    // The guest player index names, or null for the seated player and for a player who has not
+    // joined. Every public entry that takes a player index comes through here.
+    private CampaignGuest? GuestAt(int player)
+    {
+        EnsureGuests();
+        int at = player - 1;
+        return at >= 0 && at < _guests.Count ? _guests[at] : null;
+    }
 
     private OwnedPlane? SeatedPlane()
     {

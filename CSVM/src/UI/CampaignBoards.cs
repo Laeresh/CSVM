@@ -34,6 +34,48 @@ public static class CampaignBoards
     // they take a smaller face than a listbox row does.
     private const float NoteFont = 11f;
 
+    // A drop-down field's height and face: the sixteen pixels the reference screenshot draws
+    // between one field's top edge and its bottom, and a face that fits inside them.
+    private const float ComboFieldHeight = 16f;
+    private const float ComboFont = 11f;
+
+    // Both arrow strips are four frames in the same disabled / normal / rollover / depressed order
+    // every button strip uses: the field's arrow is 16x12 and the scrollbar's 16x11. A closed field
+    // draws the normal frame, which is the black triangle the reference screenshot shows.
+    private const int ArrowFrames = 4;
+    private const int ArrowNormal = 1;
+    private const float ComboArrowWidth = 16f;
+    private const float ComboArrowHeight = 12f;
+    private const float ScrollArrowHeight = 11f;
+
+    // Where the 410x300 messagebox art lands on the 800x600 board, which is centred, and the face
+    // and button width its own widgets take.
+    private const float DialogX = 195f;
+    private const float DialogY = 150f;
+    private const float DialogFont = 12f;
+    private const float DialogButtonWidth = 62f;
+
+    // MB_B_Icon.Png stacks three icons rather than a button's four states: the warning, and the two
+    // the other message classes use.
+    private const int DialogIconFrames = 3;
+
+    // The scrollbar thumb's own art height, and where a field's words sit inside its box.
+    private const float ScrollThumbHeight = 12f;
+    private const float ComboTextInset = 4f;
+    private const float ComboTextDrop = 1f;
+
+    // A drop-down's own colours, measured off OriginalScreenshots/Campaign Flight Check Change
+    // Plane Combo Box.png rather than decoded: LAYOUT.CSV's D rows carry art and item height but no
+    // colour column, the engine's own list class drawing the field and the picked row's bar.
+    private static readonly byte[] ComboPaper = { 200, 212, 230 };
+    private static readonly byte[] ComboPicked = { 167, 185, 215 };
+
+    private static readonly BoardArt ComboDownArrow = Ui("GN_B_ListboxarrowSMALLdown.png", ArrowFrames);
+    private static readonly BoardArt ComboUpArrow = Ui("GN_B_ListboxarrowSMALLup.png", ArrowFrames);
+    private static readonly BoardArt ScrollUp = Ui("FC_B_ScrollUp.png", ArrowFrames);
+    private static readonly BoardArt ScrollDown = Ui("FC_B_ScrollDown.png", ArrowFrames);
+    private static readonly BoardArt ScrollThumb = Ui("FC_B_ScrollBar.png");
+
     private static readonly BoardArt PaperButton = Ui("SB_B_PaperButton.png", StripFrames);
     private static readonly BoardArt ReturnToCabinArt = Ui("GN_B_ReturntoCabin.png", StripFrames);
 
@@ -118,6 +160,16 @@ public static class CampaignBoards
             new BoardSlot(BoardButton.AcceptLoadout, 0, Ui("OL_B_AcceptLoadout.png", StripFrames), 341, 553),
             new BoardSlot(BoardButton.CancelLoadout, 0, Ui("OL_B_CancelLoadout.png", StripFrames), 551, 553),
         },
+
+        // PS_B_SELLP and PS_B_SELLW are authored beside the two EXPORT buttons and are deliberately
+        // absent: PLANESELECTION.SCRIPT deactivates both unconditionally at gui_create.
+        [CampaignScreen.PlaneSelection] = new[]
+        {
+            new BoardSlot(BoardButton.ExportPlane, 0, Ui("FC_B_PaperButton.Png", StripFrames), 560, 168, true),
+            new BoardSlot(BoardButton.ExportPlane, 1, Ui("FC_B_PaperButton.Png", StripFrames), 560, 385, true),
+            new BoardSlot(BoardButton.AcceptSelections, 0, Ui("PS_B_AcceptSelections.png", StripFrames), 341, 553),
+            new BoardSlot(BoardButton.CancelSelections, 0, Ui("PS_B_CancelSelections.png", StripFrames), 551, 553),
+        },
     };
 
     // The screen chrome that is neither the page's own art nor a button: the profile screen's
@@ -136,6 +188,7 @@ public static class CampaignBoards
         [CampaignScreen.Scrapbook] = new[] { new BoardPicture(Ui("SB_BackGround.jpg"), 0, 0) },
         [CampaignScreen.FlightCheck] = new[] { new BoardPicture(Ui("FC_BackGround.jpg"), 0, 0) },
         [CampaignScreen.Ammo] = new[] { new BoardPicture(Ui("OL_BackGround.jpg"), 0, 0) },
+        [CampaignScreen.PlaneSelection] = new[] { new BoardPicture(Ui("PS_BackGround.jpg"), 0, 0) },
     };
 
     /// <summary>The board for a page with the cursor on <paramref name="focusedRow"/>. A row the
@@ -143,17 +196,27 @@ public static class CampaignBoards
     /// screen's own authored text slots. <paramref name="pressed"/> draws the focused plaque in
     /// its depressed frame for the frames a confirm is held.</summary>
     public static ComposedBoard For(
-        ICampaignPage page, int focusedRow, bool pressed = false, string detail = "")
+        ICampaignPage page, int focusedRow, bool pressed = false, string detail = "",
+        CampaignModal? modal = null)
     {
         var backdrop = Chrome.TryGetValue(page.Screen, out var chrome)
             ? chrome
             : Array.Empty<BoardPicture>();
         var lines = new List<BoardLine>(page.Captions);
         var plaques = new List<BoardPlaque>();
+        var fills = new List<BoardFill>(page.Fills);
+        var pictures = new List<BoardPicture>(page.Pictures);
+        var overlays = new List<BoardPanel>();
         var slots = Buttons.TryGetValue(page.Screen, out var found) ? found : Array.Empty<BoardSlot>();
         int listIndex = 0;
         for (int row = 0; row < page.RowCount; row++)
         {
+            if (page.Combo(row) is { } combo)
+            {
+                ComposeCombo(combo, row == focusedRow, fills, pictures, lines, overlays);
+                continue;
+            }
+
             var reference = page.Button(row);
             if (reference.Button != BoardButton.None && Find(slots, reference) is { } slot)
             {
@@ -177,8 +240,35 @@ public static class CampaignBoards
             lines.Add(new BoardLine(detail, note.X, note.Y, note.Width, ListFont, BoardInk.Detail));
         }
 
+        if (modal != null)
+        {
+            overlays.Add(Dialog(modal));
+        }
+
         return new ComposedBoard(
-            page.Pictures, page.Strokes, lines, plaques, page.Notes, backdrop, page.Fills);
+            pictures, page.Strokes, lines, plaques, page.Notes, backdrop, fills, overlays);
+    }
+
+    /// <summary>The messagebox as its own panel, centred on the board. Every position inside it is
+    /// <c>[@MessageBox@]</c>'s own, offset by where the 410x300 art lands: the layout gives the box
+    /// its internal geometry and no screen position, and the reference screenshots put its edges at
+    /// the centred one (<c>OriginalScreenshots/Campaign Flight Check Change Plane Export
+    /// dialog.png</c>).</summary>
+    public static BoardPanel Dialog(CampaignModal modal)
+    {
+        var pictures = new List<BoardPicture>
+        {
+            new(Ui("MB_Background.png"), DialogX, DialogY),
+            new(Ui("MB_B_Icon.Png", DialogIconFrames), DialogX + 36f, DialogY + 65f),
+            new(Ui("MB_B_Buttons.Png", StripFrames), DialogX + 174f, DialogY + 254f, 2),
+        };
+        var lines = new List<BoardLine>
+        {
+            new(modal.Message, DialogX + 94f, DialogY + 70f, 282f, DialogFont, BoardInk.Dialog),
+            new(modal.Button, DialogX + 174f, DialogY + 257f, DialogButtonWidth, DialogFont,
+                BoardInk.LabelActivate, Justify: BoardJustify.Center),
+        };
+        return new BoardPanel(Array.Empty<BoardFill>(), pictures, lines);
     }
 
     /// <summary>Where one of a screen's authored buttons sits and what art it draws, for a page
@@ -219,11 +309,92 @@ public static class CampaignBoards
                 : (245f, 356f + ((index - 1) * 20f), 305f),
             // One heading per crew slot, at the PILOT and WINGMAN widgets.
             CampaignScreen.FlightCheck => (138f, index == 0 ? 102f : 320f, 400f),
-            // Four gun groups down the ammunition panel, then eight pylons in two columns.
-            CampaignScreen.Ammo => index < 4
-                ? (142f, 105f + (index * 42f), 200f)
-                : (index < 8 ? 135f : 410f, 320f + ((index - 4) % 4 * 28f), 152f),
+
+            // ⚠ The ammo screen has no entry here, and must not regain one: its picks are drop-down
+            // fields and its captions are the page's own lines, so no row of it reaches this table.
             _ => (20f, 20f + (index * 20f), 400f),
+        };
+
+    // One drop-down: the field goes into the screen's own layers, and an open list goes into an
+    // overlay instead, because it hangs across whatever the screen draws under it.
+    private static void ComposeCombo(
+        CampaignCombo combo, bool focused, List<BoardFill> fills, List<BoardPicture> pictures,
+        List<BoardLine> lines, List<BoardPanel> overlays)
+    {
+        fills.AddRange(Box(combo.X, combo.Y, combo.Width, ComboFieldHeight, ComboPaper));
+        pictures.Add(new BoardPicture(
+            combo.Open ? ComboUpArrow : ComboDownArrow,
+            combo.X + combo.Width - ComboArrowWidth,
+            combo.Y + ((ComboFieldHeight - ComboArrowHeight) / 2f),
+            ArrowNormal));
+        lines.Add(FieldText(combo.Text, combo.X, combo.Y, combo.Width - ComboArrowWidth,
+            focused ? BoardInk.RowFocused : BoardInk.Row));
+        if (combo.Open)
+        {
+            overlays.Add(OpenList(combo));
+        }
+    }
+
+    // The open list under its field: the box, the picked row's bar, the visible entries, and the
+    // scrollbar when the entries outrun the window.
+    private static BoardPanel OpenList(CampaignCombo combo)
+    {
+        float top = combo.Y + ComboFieldHeight;
+        float height = combo.Visible * combo.RowHeight;
+        var fills = new List<BoardFill>(Box(combo.X, top, combo.Width, height, ComboPaper));
+        var pictures = new List<BoardPicture>();
+        var lines = new List<BoardLine>();
+        for (int seen = 0; seen < combo.Visible; seen++)
+        {
+            int entry = combo.First + seen;
+            if (entry >= combo.Entries.Count)
+            {
+                break;
+            }
+
+            float y = top + (seen * combo.RowHeight);
+            if (entry == combo.Highlight)
+            {
+                fills.Add(new BoardFill(
+                    combo.X + 1f, y, combo.Width - 2f, combo.RowHeight,
+                    ComboPicked[0], ComboPicked[1], ComboPicked[2]));
+            }
+
+            lines.Add(FieldText(combo.Entries[entry], combo.X, y, combo.Width, BoardInk.Row));
+        }
+
+        if (combo.Scrolls)
+        {
+            float bar = combo.X + combo.Width - ComboArrowWidth;
+            pictures.Add(new BoardPicture(ScrollUp, bar, top, ArrowNormal));
+            pictures.Add(new BoardPicture(ScrollDown, bar, top + height - ScrollArrowHeight, ArrowNormal));
+            pictures.Add(new BoardPicture(ScrollThumb, bar, ThumbY(combo, top, height)));
+        }
+
+        return new BoardPanel(fills, pictures, lines);
+    }
+
+    // Where the thumb sits in the track between the two arrows: the window's own position in the
+    // list, so a full list's thumb is at the bottom and an unscrolled one's is at the top.
+    private static float ThumbY(CampaignCombo combo, float top, float height)
+    {
+        float track = height - (ScrollArrowHeight * 2f) - ScrollThumbHeight;
+        int span = Math.Max(1, combo.Entries.Count - combo.RowsDisplayed);
+        return top + ScrollArrowHeight + (Math.Max(0f, track) * combo.First / span);
+    }
+
+    // A field's words, inset from its left edge and sat on the row's own baseline the way the
+    // reference draws them: the text is vertically centred in a 16-pixel field at an 11-pixel face.
+    private static BoardLine FieldText(string text, float x, float y, float width, BoardInk ink) =>
+        new(text, x + ComboTextInset, y + ComboTextDrop, width - ComboTextInset, ComboFont, ink);
+
+    // A filled rectangle and its one-pixel outline, which is what every field and list box on these
+    // screens is: the engine's own list class draws no art for either.
+    private static BoardFill[] Box(float x, float y, float width, float height, byte[] paper) =>
+        new[]
+        {
+            new BoardFill(x, y, width, height, paper[0], paper[1], paper[2]),
+            new BoardFill(x, y, width, height, 0, 0, 0, 1f, Border: true),
         };
 
     private static BoardArt Ui(string name, int frames = 1) =>

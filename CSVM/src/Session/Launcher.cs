@@ -959,11 +959,11 @@ public partial class Launcher : Node3D
         // this read a custom plane would fly as the stock aircraft it is built on.
         var customs = new List<Flight.CustomPlaneDef?>(players.Count);
         Flight.CustomPlaneStore? store = null;
+        Flight.StockLoadouts? stock = null;
         foreach (var p in players)
         {
             planes.Add(p.PlaneNode);
             pads.Add(p.Pads);
-            fits.Add(p.Fit);
             Flight.CustomPlaneDef? custom = null;
             if (p.CustomPlane is { } customName)
             {
@@ -980,6 +980,12 @@ public partial class Launcher : Node3D
             }
 
             customs.Add(custom);
+            // A plane the campaign exported flies with the ammunition and ordnance EXPORT wrote
+            // into it. A fit set on the loadout screen is this sortie's own explicit pick and
+            // stands instead of the stored one.
+            fits.Add(p.Fit ?? (custom is { HasLoadout: true }
+                ? CampaignLoadout.For(custom, stock ??= Flight.StockLoadouts.Load())
+                : null));
         }
         _spec = SessionSpec.FromMenu(_cli, chapter, planes, mode, iaDef, fits, customs);
         // Step the master so flying again is a new mission rather than a replay: without this every
