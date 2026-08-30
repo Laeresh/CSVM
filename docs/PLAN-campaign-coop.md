@@ -114,7 +114,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ What a co-op sortie writes to the seated profile
 32. ☑ Goldens and playtest items
-33. ☐ The 4P cost of a heavy campaign mission
+33. ☑ The 4P cost of a heavy campaign mission
 34. ☐ The five terms in `CONTEXT.md`
 35. ☐ Land the branch: rebase onto the rewritten `main`, never merge it
 
