@@ -2976,8 +2976,13 @@ usual.
   disconnects — the 8BitDo Ultimate 2 dongle's HID interface is one (`Uint8` loop counter vs
   uncapped dinput `nbuttons`; godot#115667, SDL#14961, fixed by SDL#15304). Check the bundled
   `thirdparty/sdl/joystick/SDL_joystick.c` `SDL_PrivateJoystickForceRecentering` for the `int i`
-  fix before removing. Side effect while active: DirectInput-only controllers (non-XInput
-  sticks without an SDL HIDAPI driver) are invisible in-game.
+  fix before removing. Side effects while active: DirectInput-only controllers (non-XInput sticks
+  without an SDL HIDAPI driver) are invisible in-game, and, since the var is set by the launch
+  scripts and never by the export, a shipped build enumerates DirectInput devices that no dev or
+  test run sees. An 8BitDo Ultimate 2 arrives as three joypads there, which is how a device that
+  holds a roster position without producing input came to take the seat `AssignPads` fills by
+  position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
+  inferred. Dropping the var also closes that divergence.
 
 - `BL-581` `[Bug]` **CM09 (C1/M04): with the radio tower down and every aircraft killed, the
   mission does not go on to the docking.** *Evidence (graph disproved, world side open):* reported
