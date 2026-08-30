@@ -92,6 +92,33 @@ public class CampaignLoadoutTests
         Assert.Null(fit.PylonFor(1));
     }
 
+    /// <summary>An exported plane's own stored picks read the same way the profile record's do, so
+    /// Instant Action flies what the campaign fitted (B6's read side).</summary>
+    [Fact]
+    public void AnExportedPlanesStoredPicksReadLikeTheProfileRecords()
+    {
+        var ordnance = new int[] { 3, 0, 0, 0, 11, 0, 0, 0 };
+        var exported = new CustomPlaneDef { Name = "Gypsy Magic" };
+        exported.SetLoadout(new[] { 2, 4, 0, 1 }, ordnance);
+
+        var fit = CampaignLoadout.For(exported, Stock);
+
+        Assert.Equal("ap", fit.GunAmmoFor(1));
+        Assert.Equal(LoadoutChoice.None, fit.GunAmmoFor(2));
+        Assert.Equal(Stock.Options.PylonOrdnance[2].Id, fit.PylonFor(1));
+        Assert.Equal(Stock.Options.PylonOrdnance[10].Id, fit.PylonFor(5));
+    }
+
+    /// <summary>A plane the campaign never exported picks nothing at all, so laying its fit over an
+    /// airframe leaves the airframe's own.</summary>
+    [Fact]
+    public void APlaneWithNoExportedLoadoutLeavesEveryGunAndPylonAlone()
+    {
+        var fit = CampaignLoadout.For(new CustomPlaneDef { Name = "Blue Streak" }, Stock);
+
+        Assert.True(fit.IsStock);
+    }
+
     [Fact]
     public void AFreshProfileFliesTheWingmanInTheSecondStarter()
     {

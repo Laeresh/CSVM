@@ -44,6 +44,10 @@ public enum BoardInk
 
     /// <summary>A button label being pressed (<c>BtnLabelActivate</c>).</summary>
     LabelActivate,
+
+    /// <summary>A dialog's own words. White whatever screen it stands over, which is what
+    /// <c>MB_T_MESSAGE</c>'s authored <c>0xFFFFFFFF</c> says, so it takes no palette.</summary>
+    Dialog,
 }
 
 /// <summary>Which edge of its <see cref="BoardLine.Width"/> a text widget's words sit against,
@@ -121,6 +125,15 @@ public enum BoardButton
 
     /// <summary><c>OL_B_CANCEL</c>.</summary>
     CancelLoadout,
+
+    /// <summary><c>PS_B_EXPORT</c>, one per crew slot.</summary>
+    ExportPlane,
+
+    /// <summary><c>PS_B_ACCEPT</c>.</summary>
+    AcceptSelections,
+
+    /// <summary><c>PS_B_CANCEL</c>.</summary>
+    CancelSelections,
 
     /// <summary><c>SBZ_B_RETURN</c>, the scrap detail view's close button.</summary>
     CloseZoom,
@@ -223,6 +236,16 @@ public sealed record BoardNote(
 }
 
 /// <summary>
+/// Something drawn over the finished screen: an open drop-down list, a dialog. Its own three layers
+/// draw in the order they are named here, after everything the board itself carries, which is what
+/// makes it an overlay rather than another layer of the screen. A screen with none composes none.
+/// </summary>
+public sealed record BoardPanel(
+    IReadOnlyList<BoardFill> Fills,
+    IReadOnlyList<BoardPicture> Pictures,
+    IReadOnlyList<BoardLine> Lines);
+
+/// <summary>
 /// One campaign screen composed in the original's 800x600 dialog space: the pictures under it, the
 /// text on it and the button plaques over it, all at authored pixel positions. Engine-free, so
 /// what a screen is made of tests off engine; <see cref="ComposedBoardView"/> is only its renderer
@@ -238,7 +261,8 @@ public sealed class ComposedBoard
         IReadOnlyList<BoardPlaque> plaques,
         IReadOnlyList<BoardNote>? notes = null,
         IReadOnlyList<BoardPicture>? backdrop = null,
-        IReadOnlyList<BoardFill>? fills = null)
+        IReadOnlyList<BoardFill>? fills = null,
+        IReadOnlyList<BoardPanel>? overlays = null)
     {
         Pictures = pictures;
         Strokes = strokes;
@@ -247,6 +271,7 @@ public sealed class ComposedBoard
         Notes = notes ?? Array.Empty<BoardNote>();
         Backdrop = backdrop ?? Array.Empty<BoardPicture>();
         Fills = fills ?? Array.Empty<BoardFill>();
+        Overlays = overlays ?? Array.Empty<BoardPanel>();
     }
 
     /// <summary>The screen's own fixed art, drawn under everything: the painted background and the
@@ -272,6 +297,10 @@ public sealed class ComposedBoard
 
     /// <summary>List widgets whose entries flow, drawn with the text.</summary>
     public IReadOnlyList<BoardNote> Notes { get; }
+
+    /// <summary>What is drawn over the finished screen, in order: an open drop-down list, then a
+    /// dialog raised over it.</summary>
+    public IReadOnlyList<BoardPanel> Overlays { get; }
 
     /// <summary>The strip frame a plaque draws. A four-frame strip inks the state into the art
     /// itself; a one-frame plaque keeps frame 0 and changes its label's font instead, which is

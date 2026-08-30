@@ -1682,7 +1682,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (value is not ("campaign" or "campaign-empty" or "campaign-roster" or "campaign-entry"
             or "campaign-cabin" or "campaign-previous" or "campaign-scrapbook" or "campaign-briefing"
             or "campaign-flightcheck" or "campaign-guestcheck" or "campaign-ammo"
-            or "campaign-hangar" or "campaign-fly"))
+            or "campaign-planeselection" or "campaign-hangar" or "campaign-fly"))
         {
             return;
         }
@@ -1799,6 +1799,12 @@ public sealed partial class LaunchMenu : CanvasLayer
                 flow.SetMission(CampaignProgression.NextMissionSeq(profile));
                 flow.SetAmmoSlot(0);
                 flow.GoTo(CampaignScreen.Ammo);
+                return;
+            case "campaign-planeselection":
+                // The pilot's CHANGE PLANE press, which is what names the slot the cursor opens on.
+                flow.SetMission(CampaignProgression.NextMissionSeq(profile));
+                flow.SetPlaneSlot(0);
+                flow.GoTo(CampaignScreen.PlaneSelection);
                 return;
             case "campaign-hangar":
                 // The cabin's own PLANE CONSTRUCTION press, so the shot is the hangar standing
@@ -2451,7 +2457,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // screen has nowhere else to put, which is every short description and every refusal.
         bool banded = CampaignBoards.DetailSlot(page.Screen) == null && !detail.Contains('\n');
         _boardRoot.Show(
-            CampaignBoards.For(page, row, _pressFrames > 0, detail),
+            CampaignBoards.For(page, row, _pressFrames > 0, detail, flow.Modal),
             BoardPalette.For(page.Screen),
             banded ? detail : string.Empty,
             page.Footer);
