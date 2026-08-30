@@ -25,12 +25,39 @@ internal static class CampaignMarkerSuites
     private const string PathKey = "piratezep/rock_zeppelin";
     private const string PathLabel = "MSG_OBJ_DEFEND";
 
+    // How far the hull's own child must stand from every other node of that name. The hull is
+    // 400 m across, so a marker on its geometry can be several hundred metres from its origin.
+    private const float PathApart = 500f;
+
     // The story position whose objective labels are pinned (C1C/M01): the one mission with no
     // targets.zrd of its own, labelled by the chapter's through the reader search path.
     private const int LabelSeq = 5;
 
+    // The story position whose attack balloons are marked (C1/M05), the first of its nine sites,
+    // and the two halves the site's group holds: the balloon the objective watches and the
+    // lifeboat that drops out of it and outlives it.
+    private const int BalloonSeq = 9;
+    private const string BalloonSite = "lifesaver11";
+    private const string BalloonNode = "healthy_balloon";
+    private const string BalloonPath = "lifesaver11/lifesaver/lifeballoon";
+    private const string BoatPath = "lifesaver/lifeboat";
+    private const string BalloonDescription = "MSG_OBJ_ATTACKBALLOON";
+    private const int BalloonCount = 9;
+
+    // How far above the balloon node's own origin the marker may still stand. The balloon's
+    // envelope reaches about 8 m over it, so anything higher is off the balloon entirely.
+    private const float BalloonReach = 10f;
+
+    private const float AltitudeTolerance = 0.5f;
+
+    // ScanForCompletion resolves one objective per tick, so a removal needs more than one.
+    private const float RetireSeconds = 3f;
+
     // How far a site's world node is moved to prove the candidate follows it.
     private static readonly Vector3 Shove = new(600f, 0f, -400f);
+
+    // The climb the balloon assembly is flown by, well past the 26 m the assembly is tall.
+    private static readonly Vector3 Climb = new(0f, 300f, 0f);
 
     // C1C/M01's three flown objective targets as the script authors them, with the label lines
     // the chapter's targets.zrd and messages.json give each, and whether the action draws red.
@@ -167,6 +194,208 @@ internal static class CampaignMarkerSuites
         ctx.Note($"{chapter}/{folder}: the three objective markers read the original's verb and proper name");
     }
 
+    /// <summary>CM10 (C1/M05)'s attack-balloon markers over its BUILT world. Each
+    /// <c>lifesaverNM</c> site is a group node standing on the water with the balloon hung above it
+    /// and the lifeboat at its own origin, so the marker belongs on the group's geometry rather
+    /// than on the node. Asserted over the shipped table and script, then flown at two balloon
+    /// altitudes, and retired by the balloon rather than by the boat.</summary>
+    internal static void CampaignBalloonMarker(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), BalloonSeq)
+            ?? throw new SuiteSkippedException($"cm_sequence carries no story position {BalloonSeq}");
+        string chapter = mission.ChapterFolder.ToUpperInvariant();
+        string folder = mission.MissionFolder.ToUpperInvariant();
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+
+        var shipped = ObjectiveScript.Load(missionZrdr);
+        var targets = MissionTargets.Load(missionZrdr, SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+        var messages = Messages.Load(ctx.MessagesPath);
+        var report = new StringBuilder();
+        report.AppendLine($"seq {BalloonSeq} -> {chapter}/{folder}");
+        CheckBalloonData(ctx, shipped, targets, report);
+
+        // The shipped ADD is on a dormant wave objective and the REMOVE on the one that watches the
+        // balloon; both are restated conditionless here so they run on the first tick.
+        var script = ObjectiveScript.Parse(new List<object?>
+        {
+            new List<object?>
+            {
+                "OBJECTIVE1", new List<object?>
+                {
+                    "ADD_OBJECTIVE_TARGET", new List<object?> { BalloonSite },
+                },
+                "OBJECTIVE2", new List<object?>
+                {
+                    "INACTIVE1", new List<object?> { BalloonSite, BalloonNode },
+                    "REMOVE_OBJECTIVE_TARGET", new List<object?> { BalloonSite },
+                },
+            },
+        });
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        var director = CampaignDirector.Create(script, mission, profile, null);
+        ctx.WithWorld(chapter, collision: false, folder, world =>
+            DriveBalloon(ctx, world, director, targets, messages, report));
+        ctx.WriteArtifact($"test-campaign-balloon-marker-{chapter}.txt", report.ToString());
+        ctx.Note($"{chapter}/{folder}: the attack-balloon marker stands on the balloon group's geometry, at two altitudes, and retires with the balloon");
+    }
+
+    // The shipped files: nine attack-balloon sites, each retired by its own balloon going inactive.
+    private static void CheckBalloonData(TestContext ctx, ObjectiveScript script,
+        MissionTargets targets, StringBuilder report)
+    {
+        int balloons = 0;
+        foreach (var entry in targets.ByNode)
+        {
+            if (string.Equals(entry.Value.Description, BalloonDescription, StringComparison.Ordinal))
+            {
+                balloons++;
+            }
+        }
+
+        ctx.Same(BalloonCount, balloons, $"targets.zrd describes the mission's attack-balloon sites");
+
+        int retired = 0;
+        foreach (var def in script.Objectives)
+        {
+            foreach (var path in def.Inactive)
+            {
+                if (path.Count == 2 && Removes(def, path[0])
+                    && string.Equals(path[1], BalloonNode, StringComparison.OrdinalIgnoreCase))
+                {
+                    retired++;
+                }
+            }
+        }
+
+        report.AppendLine($"{balloons} attack-balloon target entries, {retired} retired by their own '{BalloonNode}'");
+        ctx.Same(BalloonCount, retired,
+            $"and one objective per site removes it when that site's own '{BalloonNode}' goes inactive");
+    }
+
+    private static void DriveBalloon(TestContext ctx, TestWorld world, CampaignDirector director,
+        MissionTargets targets, Messages messages, StringBuilder report)
+    {
+        var listener = ctx.Camera.GlobalPosition;
+        director.Attach(new CampaignDirector.WorldInputs
+        {
+            Runtime = world.Runtime,
+            Gamez = world.Gamez,
+            Sounds = world.Runtime.Sounds,
+            ListenerPosition = () => listener,
+            Rng = new Random(1),
+        });
+        var graph = director.Graph!;
+        graph.Step(0.1f);
+
+        var group = ObjectiveSites.ResolveTarget(world.Runtime, ObjectiveTarget.Parse(BalloonSite));
+        var balloon = ObjectiveSites.ResolveTarget(world.Runtime, ObjectiveTarget.Parse(BalloonPath));
+        var healthy = ObjectiveSites.ResolveTarget(world.Runtime, ObjectiveTarget.Parse(BalloonSite + "/" + BalloonNode));
+        var boat = ObjectiveSites.ResolveTarget(world.Runtime, ObjectiveTarget.Parse(BalloonSite + "/" + BoatPath));
+        ctx.Check(group != null && balloon != null && healthy != null && boat != null,
+            $"'{BalloonSite}' builds its group node, its balloon and its lifeboat");
+        if (group == null || balloon == null || healthy == null || boat == null)
+        {
+            return;
+        }
+
+        float boatTop = WorldBox(boat)?.End.Y ?? group.GlobalPosition.Y;
+        report.AppendLine($"'{BalloonSite}' node at {group.GlobalPosition}, balloon at {balloon.GlobalPosition}, "
+            + $"lifeboat top y {boatTop:0.0}, anchor {ObjectiveSites.SiteAnchor(group)}");
+        ctx.Check(balloon.GlobalPosition.Y - group.GlobalPosition.Y > boatTop - group.GlobalPosition.Y,
+            $"the balloon hangs above the lifeboat the same group holds, so the two are not one point");
+
+        var sites = new ObjectiveSites(director, messages, targets, world.Runtime);
+        var pilot = new Pilot(sites);
+        pilot.Fly(listener);
+        if (Find(pilot.Selection.Pool.Enemy, BalloonSite) is not { } marked)
+        {
+            ctx.Check(false, $"'{BalloonSite}' is offered as an objective site");
+            return;
+        }
+
+        report.AppendLine($"offered '{marked.Name}' \"{marked.DisplayName}\" / \"{marked.CategoryLine}\" at {marked.Position}");
+        ctx.Check(marked.Position.Y > boatTop,
+            $"the marker stands clear of the lifeboat below it ({marked.Position.Y:0.0} m against the boat's {boatTop:0.0} m)");
+        ctx.Check(marked.Position.Y <= balloon.GlobalPosition.Y + BalloonReach,
+            $"and within the balloon it names rather than above it ({marked.Position.Y:0.0} m)");
+        CheckBalloonAltitudes(ctx, group, balloon, pilot, report);
+        CheckBalloonRetires(ctx, graph, healthy, boat, pilot, report);
+    }
+
+    // Two altitudes: the whole assembly flown as its own SiScript flies it, then the balloon alone
+    // rising off its boat. A marker read off the balloon's live geometry moves for both; one lifted
+    // off the group node by a constant moves only for the first.
+    private static void CheckBalloonAltitudes(TestContext ctx, Node3D group, Node3D balloon,
+        Pilot pilot, StringBuilder report)
+    {
+        var assembly = group.GetChild<Node3D>(0);
+        var restAssembly = assembly.GlobalPosition;
+        var restBalloon = balloon.GlobalPosition;
+        float before = Find(pilot.Selection.Pool.Enemy, BalloonSite)!.Value.Position.Y;
+
+        assembly.GlobalPosition = restAssembly + Climb;
+        pilot.Fly(pilot.Position);
+        var flown = Find(pilot.Selection.Pool.Enemy, BalloonSite);
+        assembly.GlobalPosition = restAssembly;
+
+        balloon.GlobalPosition = restBalloon + Climb;
+        pilot.Fly(pilot.Position);
+        var risen = Find(pilot.Selection.Pool.Enemy, BalloonSite);
+        balloon.GlobalPosition = restBalloon;
+        pilot.Fly(pilot.Position);
+
+        report.AppendLine($"marker y {before:0.0} -> assembly climbed {flown?.Position.Y ?? float.NaN:0.0}"
+            + $" -> balloon alone climbed {risen?.Position.Y ?? float.NaN:0.0}");
+        ctx.Check(flown is { } f && Mathf.Abs(f.Position.Y - (before + Climb.Y)) < AltitudeTolerance,
+            $"the marker flies with the whole assembly, so it is right at every altitude the wave attacks from");
+        ctx.Check(risen is { } r && r.Position.Y > before + AltitudeTolerance,
+            $"and rises when only the balloon rises, so it is not a constant lift off the group node");
+    }
+
+    // The marker belongs to the balloon: the boat outlives it and must not keep the marker alive.
+    private static void CheckBalloonRetires(TestContext ctx, ObjectiveGraph graph, Node3D healthy,
+        Node3D boat, Pilot pilot, StringBuilder report)
+    {
+        healthy.Visible = false;
+        for (float t = 0f; t < RetireSeconds; t += 0.1f)
+        {
+            graph.Step(0.1f);
+        }
+
+        pilot.Fly(pilot.Position);
+        var left = Find(pilot.Selection.Pool.Enemy, BalloonSite);
+        report.AppendLine($"balloon killed with the boat still afloat ({boat.Visible}): site "
+            + $"{(left == null ? "retired" : "still offered")}, live target keys "
+            + $"[{string.Join(",", graph.ObjectiveTargets)}]");
+        healthy.Visible = true;
+        ctx.Check(boat.Visible, $"the lifeboat is still there when the balloon dies");
+        ctx.Check(left == null, $"and the marker retires with the balloon rather than staying on the boat");
+    }
+
+    private static Aabb? WorldBox(Node3D node)
+    {
+        Aabb? merged = null;
+        void Walk(Node current)
+        {
+            foreach (var child in current.GetChildren())
+            {
+                if (child is MeshInstance3D { Mesh: not null } mesh)
+                {
+                    var box = mesh.GlobalTransform * mesh.GetAabb();
+                    merged = merged?.Merge(box) ?? box;
+                }
+
+                Walk(child);
+            }
+        }
+
+        Walk(node);
+        return merged;
+    }
+
     private static void DriveLabels(TestContext ctx, TestWorld world, CampaignDirector director,
         MissionTargets targets, Messages messages, StringBuilder report)
     {
@@ -251,10 +480,28 @@ internal static class CampaignMarkerSuites
         ctx.Same(1, marked.Count, $"exactly one '{PathChild}' site is offered");
         ctx.Check(marked.Count == 1 && marked[0].Node == PathKey,
             $"and it is the path's own key, not a bare name");
-        ctx.Check(marked.Count == 1 && child != null && marked[0].Position.IsEqualApprox(child.GlobalPosition),
-            $"standing on the hull's child, not on a ground '{PathChild}'");
+        ctx.Check(marked.Count == 1 && child != null
+                && marked[0].Position.IsEqualApprox(ObjectiveSites.SiteAnchor(child)),
+            $"standing on the hull's child's own geometry");
+        ctx.Check(marked.Count == 1 && child != null && Nearest(all, child, marked[0].Position) > PathApart,
+            $"and nowhere near a ground '{PathChild}', which is what the path had to tell apart");
         ctx.Check(marked.Count == 1 && marked[0].Category == messages.Get(PathLabel).Trim(),
             $"with the help label written against the same path ('{marked[0].Category}')");
+    }
+
+    // How far the marked site is from the nearest node of the same name that is NOT the hull's own.
+    private static float Nearest(IReadOnlyList<Node3D> all, Node3D mine, Vector3 at)
+    {
+        float best = float.MaxValue;
+        foreach (var node in all)
+        {
+            if (node != mine)
+            {
+                best = Mathf.Min(best, at.DistanceTo(node.GlobalPosition));
+            }
+        }
+
+        return best;
     }
 
     private static bool AuthorsPath(ObjectiveScript script)

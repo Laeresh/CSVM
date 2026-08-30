@@ -202,6 +202,7 @@ public static class SuiteCatalog
         "campaign-objective-target-path",
         "campaign-objective-labels",
         "campaign-race-chain",
+        "campaign-balloon-marker",
         "landings-approach-trigger",
         "landings-wingwalk-gate",
         "landings-train-pickup-gate",
@@ -1132,6 +1133,14 @@ public static class SuiteCatalog
             + "racer alive completes OBJECTIVE17, 18 and 19 with no racer-death DEDG firing, while "
             + "a racer dying afterwards fires its DEDG and kills the rest of the chain",
             CampaignRaceSuites.CampaignRaceChain));
+
+        into.Add(new TestHarness.Suite("campaign-balloon-marker",
+            "CM10's attack-balloon markers over C1/M05's BUILT world: its nine lifesaver sites are "
+            + "group nodes standing on the water with the balloon hung above and the lifeboat at "
+            + "the group's own origin, so the marker stands on the group's geometry clear of the "
+            + "boat, flies with the assembly and rises when the balloon alone rises, and retires "
+            + "when the balloon its objective watches goes inactive while the boat is still afloat",
+            CampaignBalloonMarker));
 
         // BL-467: nothing read landings.zrd, so no mission could ever play the cutscene an
         // ANIM_STATE objective waits on.

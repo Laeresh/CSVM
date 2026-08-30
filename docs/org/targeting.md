@@ -51,6 +51,10 @@ Two findings will not be guessed correctly from the screenshots:
 | `FUN_004b6490` | Step the cycle: find the current entry, move `±1` with wrap, return it |
 | `FUN_004b6480` | The cycle's acceptance predicate. Returns constant `1`; the list is pre-filtered |
 | `FUN_004a64e0` | The death/despawn hook. Drops a dead entity from every target field and both lists |
+| `0x004a36e0` / `0x004a36f0` | A mission structure's position and velocity getters, vtable `0x00608848` slots 0 and 1: `LEA EAX, [ECX + 0x74]` / `[ECX + 0x80]` |
+| `FUN_004a2570` | The structure constructor. Stores the scene node at `+0xc` and fills `+0x74` from `FUN_004cf2c0` |
+| `FUN_004a2730` | The per-frame refresh of `+0x74`/`+0x80`, gated on the `+0x8f` moving flag |
+| `FUN_004cf2c0` | Node → point: the active bbox (`FUN_004cd960`, six floats at `node + 0x70`), its midpoint (`FUN_004d8b10`), in the frame `FUN_004cef20` builds |
 | `FUN_004b9770` | The take-a-hit path. Appends the shooter to the attacker queue |
 | `FUN_004a5f40` | `Target::GetColor`, the marker colour rule |
 | `FUN_004574d0` | **Draws the bracket box** (six line sprites) and computes the label anchor |
@@ -290,6 +294,27 @@ small and that no banding scheme exists anywhere.
 6. In a network game, publish the target kind and net id to `+0x728`/`+0x72c`.
 
 Step 4 is the entire lifecycle mechanism. See "Lifecycle" below.
+
+## Where a mission structure is
+
+Step 5 reads the entity's own position through vtable slot 0. For a mission structure that slot is
+`0x004a36e0`, three bytes long: `LEA EAX, [ECX + 0x74]`. It returns a cached vector, and slot 1
+(`+0x80`) returns the velocity the same cache derives.
+
+**`+0x74` is the world-space CENTRE of the structure node's active bounding box, not the node's
+origin.** The constructor `FUN_004a2570` stores the scene node at `+0xc` and fills `+0x74` from
+`FUN_004cf2c0(node)`, which reads the node's active bbox (`FUN_004cd960` copies the six floats at
+`node + 0x70`) and takes its midpoint (`FUN_004d8b10`: `(min + max) * 0.5` per axis) in the frame
+`FUN_004cef20` builds up the parent chain. `FUN_004a2730` recomputes the same value every frame for
+a structure whose `+0x8f` moving flag is set, and derives `+0x80` as the frame-to-frame delta over
+the tick, which is why a structure on a flying node is marked where it now is.
+
+⚠ **A group node's own origin is not its site.** Two shipped cases prove it: C2's `sghangar` carries
+the no-transform `"Initial"` and so stands at the world origin 8 km from the building, and C1/M05's
+nine `lifesaverNM` attack-balloon groups stand on the water with the balloon hung 16.4 m above them
+and the lifeboat at the group's own origin, so a marker on the node reads as a marker on the boat.
+The authored bbox is the answer in both: `lifesaver11`'s `child_bbox` spans y −1.411 to 24.745 in
+group coordinates, putting its centre 11.667 m up.
 
 ## The cycle order
 
