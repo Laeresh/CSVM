@@ -2479,6 +2479,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   never shows. The same page warns that a fourth author is not ruled out, only unfound.
   *Cross-refs:* `BL-626` (the same boats, their guns).
 
+- `BL-654` `[Feature]` **The menus take no mouse input at all, where the original is mouse-first.**
+  *Evidence:* every `Control` the launchscreen builds is `MouseFilterEnum.Ignore`
+  (`CSVM/src/UI/LaunchMenu.cs:422`, `427`, `431`, `445`, `458`, `2514`, `2541`, `2579`), so a click
+  reaches nothing and the whole shell is keyboard/pad only. The original's screens are authored for
+  the pointer: `LAYOUT.CSV` gives every button a rollover colour column and a depressed one, the
+  campaign scripts' listboxes draw a bright red frame around the row under the pointer
+  (`docs/formats/campaign-screens.md`, the profile screen's sub-script `VB`), and its dropdowns open
+  on a click. *Fix shape:* hit-test the composed board, since the board already knows every plaque's
+  and row's authored rectangle (`CampaignBoards.For`, `ComposedBoard`): a pointer over a rectangle
+  focuses that row and lights the rollover frame, a press draws the depressed frame, a release on
+  the same rectangle is the confirm. A wheel over a list scrolls it. *⚠ Traps:* the cursor position
+  is authored 800x600 space, so the hit test has to run through the same fit transform the board is
+  drawn with (`BoardFit`), not against window pixels; and focus must stay one thing, so a pointer
+  move and a pad press cannot each own a different row. *Cross-refs:* the combo-box popups and the
+  modal dialog added for the plane selection screen are the newest widgets that would need it.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2967,6 +2983,21 @@ usual.
   earned mission money at the director boundary, sum it once into the attempt, and add the promised
   two-rig positive-value assertion plus a 1P invariant. *⚠ Traps:* do not aggregate gunnery or plane
   identity; those fields feed a seated pilot's best-of record.
+
+- `BL-653` `[Research]` **The plane selection screen's TOP SPEED and OFFENSE ratings have no decoded
+  formula, and ship as a stand-in.** *Evidence:* `PS_T_TOPSPEEDP`/`PS_T_OFFENSEP` and their wingman
+  twins are four text widgets fed one of langui 501-505 (`Poor`, `Fair`, `Average`, `Good`,
+  `Excellent`). Two of the four are decoded and running: `HangarEconomy.Bill` computes
+  `AgilityStars` from `(agility - 1) / 4` and `ArmourStars` from
+  `(armour + units*5 - 1) / 0x49` (`CSVM/src/Flight/HangarEconomy.cs:173-176`). No such reading
+  exists for speed or offense, so the screen derives them from engine power and from gun calibre
+  plus hardpoint count instead, which matches the reference screenshots on the airframes visible
+  there and is otherwise unevidenced. *What to settle:* which engine field the original rates speed
+  from and what it counts as offense, then whether the ratings are per airframe or per built plane.
+  *⚠ Traps:* do not settle it by eye against `OriginalScreenshots/Campaign Flight Check Change
+  Plane.png` alone. Two airframes reading `Average` is consistent with many formulas, and a
+  stand-in that happens to match the four sampled aircraft is exactly what is already there.
+  *Cross-refs:* the plane selection screen that draws them.
 
 ## Tooling, platform & docs
 
