@@ -2184,12 +2184,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   identifies "Access Chase View" as the mode-9 FLYBY, not the following chase — a contradiction
   between the menu label and the decoded behaviour nobody has settled. Resolve which behaviour the
   `F7`-labelled binding actually maps to before choosing a CSVM key.
+  ⚠ **This item owns the KEYBOARD/MOUSE half only; the pad is already built and is deliberately
+  not the decoded law.** CSVM splits the look-around by DEVICE, not by view: the right stick aims
+  ABSOLUTELY in both the chase view and the two first-person ones, stick position mapping straight
+  onto one shared envelope (`HeadLook.PadLookYawMaxDeg`/`PadLookPitchMaxDeg`) and releasing back to
+  the settled pose, which is a UX call for this port and not in the original at all. The decoded
+  relative controller above is what the numpad snap cluster, the centre key and the mouse ride, and
+  extending it to the chase camera for THOSE inputs is the work still owed here. Building this must
+  not take the pad off its absolute path, in either view: that is the behaviour the controls were
+  judged on. The pad's own bound is the chase camera's gimbal margin (±60° pitch), which is why the
+  stick cannot reach the straight-up the snap cluster can, and the shared pair must not be widened
+  to close that gap.
   *Fix shape:* reuse `HeadLook` (`src/Flight/HeadLook.cs`, C21) on the chase camera with
-  `PitchFloor = -π/2` instead of building a second controller; the snap cluster becomes
-  `CameraController`'s numpad table per `BL-150`'s law once that item's rebuild lands.
+  `PitchFloor = -π/2` instead of building a second controller, feeding it the snap/centre/mouse
+  paths only; the snap cluster becomes `CameraController`'s numpad table per `BL-150`'s law once
+  that item's rebuild lands.
   *Cross-refs:* `BL-150` (the fixed-view numpad table this supersedes as a mental model), `BL-433`
   (the same F9-F12/zoom cluster's `+`/`−` half), `PLAN-cockpit-view.md` (⚠ table row 2, C21
-  `HeadLook`), `docs/org/cameraViews.md` (the F7/flyby correction).
+  `HeadLook`), `docs/org/cameraViews.md` (the F7/flyby correction), `docs/controls.md` (the
+  device split, and `--look=` as its scripted twin).
 
 - `BL-436` `[Tuning]` `[Owed-playtest]` **The cockpit view's whole feel is unjudged at the controls
   — one sitting owes seven separate decisions `PLAN-cockpit-view.md` made without one.** (a)

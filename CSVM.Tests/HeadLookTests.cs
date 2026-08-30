@@ -50,6 +50,76 @@ public class HeadLookTests
         Assert.Null(HeadLook.SnapTargets(0f, 0f));
     }
 
+    // The pad aims absolutely: a deflection IS an angle, scaled by the envelope the chase camera
+    // swings through. Half a stick is half the angle, which is exactly what the relative
+    // free-look path below does NOT do.
+    [Theory]
+    [InlineData(1f, 0f, 0f, -HeadLook.PadLookYawMaxDeg)]
+    [InlineData(-1f, 0f, 0f, HeadLook.PadLookYawMaxDeg)]
+    [InlineData(0f, 1f, HeadLook.PadLookPitchMaxDeg, 0f)]
+    [InlineData(0f, -1f, -HeadLook.PadLookPitchMaxDeg, 0f)]
+    [InlineData(0.5f, 0.5f, HeadLook.PadLookPitchMaxDeg / 2f, -HeadLook.PadLookYawMaxDeg / 2f)]
+    public void ThePadAimsAtTheStickPosition(float right, float up, float elevationDeg, float azimuthDeg)
+    {
+        var (elevation, azimuth) = HeadLook.PadAimTargets(right, up);
+        Assert.Equal(Mathf.DegToRad(elevationDeg), elevation, Tol);
+        Assert.Equal(Mathf.DegToRad(azimuthDeg), azimuth, Tol);
+    }
+
+    // The whole point of decision 2: an absolute stick with first person's decoded level floor
+    // would leave the bottom half of its travel inert, so the pad path carries its own symmetric
+    // bound instead. The floor still binds every other path, asserted below.
+    [Fact]
+    public void ThePadLooksBelowLevelWhereTheOtherPathsCannot()
+    {
+        var head = new HeadLook();          // first person: ElevationFloor 0, level
+        head.Step(0.1f, Pad(0f, -1f));
+        Assert.Equal(Mathf.DegToRad(-HeadLook.PadLookPitchMaxDeg), head.TargetElevation, Tol);
+
+        head = new HeadLook();
+        head.Step(0.5f, Free(0f, -1f));     // the decoded relative path stops at the floor
+        Assert.Equal(0f, head.TargetElevation, Tol);
+    }
+
+    // Precedence, decision 5: the discrete commands stay on top of a standing absolute aim, and a
+    // centred stick claims no frame at all, so it blocks neither the mouse nor the idle rule.
+    [Fact]
+    public void ADiscreteCommandBeatsTheStickAndACentredStickClaimsNothing()
+    {
+        var head = new HeadLook();
+        head.Step(0.1f, new HeadLookInput(0f, 1f, 0f, 0f, false, 1f, 0f));   // Kp8 with the stick over
+        Assert.Equal(HeadLook.MaxElevation, head.TargetElevation, Tol);
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
+
+        head = new HeadLook();
+        head.Step(0.5f, new HeadLookInput(0f, 0f, 0f, 1f, false, 0f, 0f));   // mouse only, pad centred
+        Assert.Equal(1f, head.TargetElevation, Tol);
+    }
+
+    // Release is the idle frame, so the head returns to straight ahead on its own: the stick
+    // position is the whole state, and nothing of it survives letting go.
+    [Fact]
+    public void ReleasingTheStickReturnsTheHeadToStraightAhead()
+    {
+        var head = new HeadLook();
+        head.Step(0.1f, Pad(-1f, 0.5f));
+        Assert.True(head.TargetAzimuth > 1f);
+        head.Step(0.1f, Idle);
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
+        Assert.Equal(0f, head.TargetElevation, Tol);
+    }
+
+    // The pad reaches the same angles the chase camera swings through, which is the whole
+    // request: one envelope, read by both, so they cannot drift apart.
+    [Fact]
+    public void ThePadSharesTheChaseCamerasEnvelope()
+    {
+        Assert.Equal(150f, HeadLook.PadLookYawMaxDeg);
+        Assert.Equal(60f, HeadLook.PadLookPitchMaxDeg);
+        Assert.True(HeadLook.PadLookPitchMaxDeg < Mathf.RadToDeg(HeadLook.MaxElevation),
+            "the shared pitch bound must stay inside the head's own ceiling");
+    }
+
     [Fact]
     public void ReleasingASnapReturnsTheTargetsToStraightAhead()
     {
@@ -323,4 +393,6 @@ public class HeadLookTests
     private static HeadLookInput Snap(float x, float y) => new(x, y, 0f, 0f, false);
 
     private static HeadLookInput Free(float right, float up) => new(0f, 0f, right, up, false);
+
+    private static HeadLookInput Pad(float right, float up) => new(0f, 0f, 0f, 0f, false, right, up);
 }

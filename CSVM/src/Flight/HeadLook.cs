@@ -4,23 +4,28 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>One frame of look input, in the head's own conventions: a snap direction as a
-/// composed (x, y) with +x right and +y forward, a free-look direction with +right and +up, and
-/// the center key. Both directions are read for DIRECTION only — the pan rate is fixed, so a
-/// half-deflected stick pans exactly as fast as a full one, which is what the original's
-/// hat-switch input does.</summary>
+/// composed (x, y) with +x right and +y forward, a free-look direction with +right and +up, the
+/// center key, and the pad's absolute aim with the same +right/+up signs.
+/// <para>The snap and free-look directions are read for DIRECTION only, so a half-deflected input
+/// pans exactly as fast as a full one, which is what the original's hat-switch input does. That
+/// rule does NOT bind <paramref name="PadRight"/>/<paramref name="PadUp"/>: those carry a
+/// MAGNITUDE, because the pad aims absolutely (docs/controls.md). Defaulted, so a caller forcing
+/// one of the other paths cannot leave a stale deflection on the frame.</para></summary>
 public readonly record struct HeadLookInput(
-    float SnapX, float SnapY, float FreeRight, float FreeUp, bool Center);
+    float SnapX, float SnapY, float FreeRight, float FreeUp, bool Center,
+    float PadRight = 0f, float PadUp = 0f);
 
 /// <summary>
 /// The pilot's head in a first-person view: where it is being told to look (the TARGET angles,
 /// set by a snap direction, integrated by free-look, or zeroed by the center key) and where it is
 /// actually looking (the SHOWN angles, chasing the targets exponentially at the decoded rates).
-/// Elevation is 0 at level and +π/2 straight up, clamped to
-/// <see cref="ElevationFloor"/>..π/2; azimuth is 0 straight ahead, positive to the left, and
-/// CLAMPED to ±π — the head stops at dead astern and never pans past it, the original's own
-/// stop confirmed at its controls. Engine-free apart from <see cref="Mathf"/>, so every law here
-/// unit-tests without a camera; <see cref="CameraController.FirstPersonPose"/> composes the shown
-/// angles into a basis.
+/// Elevation is 0 at level and +π/2 straight up, clamped to <see cref="ElevationFloor"/>..π/2;
+/// azimuth is 0 straight ahead, positive to the left, and CLAMPED to ±π — the head stops at dead
+/// astern and never pans past it, the original's own stop confirmed at its controls. Both bounds
+/// bind the relative paths (snap, free-look, center); the absolute pad aim carries its own
+/// envelope, see <see cref="PadAimTargets"/>. Engine-free apart from <see cref="Mathf"/>, so
+/// every law here unit-tests without a camera; <see cref="CameraController.FirstPersonPose"/>
+/// composes the shown angles into a basis.
 /// </summary>
 public sealed class HeadLook
 {
@@ -42,6 +47,14 @@ public sealed class HeadLook
 
     /// <summary>The snap elevation for a diagonal direction: 45° up (<c>0.7853982</c>).</summary>
     public const float DiagonalElevation = Mathf.Pi / 4f;
+
+    /// <summary>The pad look envelope: where a fully deflected right stick aims, left/right and
+    /// up/down. NOT decoded (the original binds no absolute stick), a UX call for this port, and
+    /// shared with <see cref="CameraController.PadLook"/> so the chase camera and the first-person
+    /// head cannot drift apart. ⚠ The pitch bound is the CHASE camera's gimbal margin, not the
+    /// head's: at 90° that camera sits over the plane and <c>Basis.LookingAt</c>'s up hint goes
+    /// parallel to the view. Widening it here gimbals chase.</summary>
+    public const float PadLookYawMaxDeg = 150f, PadLookPitchMaxDeg = 60f;
 
     // How near a direction must be to dead ahead, and to a 45° diagonal, for the snap to lift the
     // head: 0.1° and 0.09° respectively. Windows rather than equalities because the original's
@@ -103,6 +116,16 @@ public sealed class HeadLook
         return (elevation, Wrap(-angle));
     }
 
+    /// <summary>The absolute pad mapping: stick position IS head position, scaled by the shared
+    /// <see cref="PadLookYawMaxDeg"/>/<see cref="PadLookPitchMaxDeg"/> envelope. Deliberately
+    /// ignores <see cref="ElevationFloor"/>: that floor bounds the original's relative controls,
+    /// and first person floors it at level, which would leave the lower half of an absolute
+    /// stick's travel inert. Pure; <paramref name="right"/> is +right, <paramref name="up"/> +up,
+    /// both expected in [−1, 1].</summary>
+    public static (float Elevation, float Azimuth) PadAimTargets(float right, float up) =>
+        (Mathf.Clamp(up, -1f, 1f) * Mathf.DegToRad(PadLookPitchMaxDeg),
+         Mathf.Clamp(-right, -1f, 1f) * Mathf.DegToRad(PadLookYawMaxDeg));
+
     /// <summary>C22's law: the idle-frame lean into the plane's own velocity, local-frame X/Y only
     /// (forward speed dropped — why, and the (elevation, azimuth) derivation, are
     /// docs/formats/vehicle/player-globals.md's autohead row). Scaled by <paramref
@@ -142,9 +165,11 @@ public sealed class HeadLook
     public static float ClampAzimuth(float angle) => Mathf.Clamp(angle, -Mathf.Pi, Mathf.Pi);
 
     /// <summary>One frame: pick this frame's target from the input, then chase it. The center key
-    /// beats a snap, a snap beats free-look, and a frame with none of them is the idle frame
-    /// <see cref="IdleAim"/> owns. The chase runs whatever the input was, so every path — snap,
-    /// free-look, center, autohead — reaches the eye through the same law.</summary>
+    /// beats a snap, a snap beats the pad's absolute aim, that beats free-look, and a frame with
+    /// none of them is the idle frame <see cref="IdleAim"/> owns. A centred pad claims no frame,
+    /// so a plugged-in stick blocks neither the mouse nor autohead. The chase runs whatever the
+    /// input was, so every path (snap, pad, free-look, center, autohead) reaches the eye through
+    /// the same law.</summary>
     public void Step(float dt, in HeadLookInput input)
     {
         var snap = SnapTargets(input.SnapX, input.SnapY);
@@ -155,6 +180,15 @@ public sealed class HeadLook
         else if (snap != null)
         {
             SetTargets(snap.Value.Elevation, snap.Value.Azimuth);
+        }
+        else if (input.PadRight != 0f || input.PadUp != 0f)
+        {
+            // Above free-look and below the discrete commands: an absolute aim is a standing
+            // instruction, so a momentary snap or center press still overrides it while held.
+            // Assigned rather than SetTargets'd, since this path owns its own bounds.
+            var (elevation, azimuth) = PadAimTargets(input.PadRight, input.PadUp);
+            TargetElevation = elevation;
+            TargetAzimuth = azimuth;
         }
         else if (input.FreeRight != 0f || input.FreeUp != 0f)
         {

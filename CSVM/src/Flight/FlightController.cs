@@ -375,6 +375,13 @@ public partial class FlightController : Node3D
     /// cycle key changes it; this field only seeds it.</summary>
     public PilotViewMode PinnedViewMode = PilotViewMode.Chase;
 
+    /// <summary>The right-stick deflection held for the whole run (<c>--look=x,y</c>, +x right and
+    /// +y up), the scripted twin of pushing the look stick. Zero (the default) is a centred stick,
+    /// exactly today's behaviour; a live stick wins while deflected, the rule a held numpad key
+    /// follows against <see cref="PinnedView"/>. Feeds the chase swing and the first-person head
+    /// through the one reader, so a run can compare them.</summary>
+    public Vector2 PinnedLook;
+
     /// <summary>Out of lives: this pilot stays crashed for the rest of
     /// the mission — neither R nor <see cref="AutoRespawnAfter"/>'s timer brings it back — while
     /// the session hands its pane to a <see cref="SpectatorCamera"/> and the others fly on. Set by
@@ -3489,13 +3496,19 @@ public partial class FlightController : Node3D
                 KeyAxis(Key.KpSubtract, Key.KpAdd) + padZoom); // Kp- out, Kp+ in, RT out, LT in
     }
 
-    // E42's pad look-around stick: this player's right stick, curved the same
-    // way OrbitInput's is. Read here, not in CameraController, for the
-    // same reason `OrbitInput` is — the camera never learns about pad devices or the stick
-    // response curve. Both components read exactly 0 inside the deadzone, which is what tells the
-    // caller the look-around is inactive.
-    private (float X, float Y) PadLookInput() =>
-        (StickCurve(PadAxis(JoyAxis.RightX)), StickCurve(PadAxis(JoyAxis.RightY)));
+    // The pad look-around stick: this player's right stick, curved the same way OrbitInput's is.
+    // Read here, not in CameraController, for the same reason `OrbitInput` is: the camera never
+    // learns about pad devices or the stick response curve. Both components read exactly 0 inside
+    // the deadzone, which is what tells the caller the look-around is inactive. ONE reader for
+    // both views, so the chase swing and the first-person head cannot take different sticks.
+    private (float X, float Y) PadLookInput()
+    {
+        float x = StickCurve(PadAxis(JoyAxis.RightX)), y = StickCurve(PadAxis(JoyAxis.RightY));
+        // A live stick beats the scripted pin, the rule a held numpad key follows against --view=.
+        // PinnedLook's Y is +up, this pair's is the stick's own +down, so it is negated back here
+        // and every caller keeps reading one convention.
+        return x != 0f || y != 0f ? (x, y) : (PinnedLook.X, -PinnedLook.Y);
+    }
 
     // One frame of head-look input, in HeadLook's own conventions. Read here for the same reason
     // the look-around stick is: the camera never learns about pads, mice or key layouts.
@@ -3503,7 +3516,11 @@ public partial class FlightController : Node3D
     {
         var (snapX, snapY) = SnapLookInput();
         var (freeRight, freeUp) = FreeLookRead();
-        return new HeadLookInput(snapX, snapY, freeRight, freeUp, KeyDown(SnapCenterKey));
+        var (lookX, lookY) = PadLookInput();
+        // The pad aims absolutely here, as it does in the chase view; the mouse stays on the
+        // decoded relative path. `lookY` is the stick's +down, HeadLook wants +up.
+        return new HeadLookInput(snapX, snapY, freeRight, freeUp, KeyDown(SnapCenterKey),
+            lookX, -lookY);
     }
 
     // C22's IdleAim delegate: HeadLook.Step calls this only on a frame with no look input at all.
@@ -3534,18 +3551,14 @@ public partial class FlightController : Node3D
         return (x, y);
     }
 
-    // Free-look direction: this player's right stick, or the mouse while its right button is held
-    // (the RMB-to-look posture the freecam already uses). Only the DIRECTION is read, so mouse
-    // pixels and a curved stick axis mix freely and neither needs its own sensitivity.
+    // Free-look direction: the mouse while its right button is held (the RMB-to-look posture the
+    // freecam already uses). Only the DIRECTION is read, at the decoded fixed pan rate. The pad
+    // deliberately does NOT feed this path: its stick aims absolutely (HeadLook.PadAimTargets),
+    // which is what makes the cockpit read like the chase view. A mouse has no absolute position
+    // to map, so it keeps the original's relative law.
     private (float Right, float Up) FreeLookRead()
     {
         var mouse = MouseLookDelta();
-        float right = StickCurve(PadAxis(JoyAxis.RightX));
-        float up = -StickCurve(PadAxis(JoyAxis.RightY));   // stick up = look up
-        if (right != 0f || up != 0f)
-        {
-            return (right, up);
-        }
         return (mouse.X, -mouse.Y);                        // screen Y grows downward
     }
 

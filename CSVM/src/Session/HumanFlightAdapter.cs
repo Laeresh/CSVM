@@ -152,6 +152,7 @@ internal sealed class HumanFlightAdapter
             DebugCollision = _world.DebugCollision,
             PinnedView = _policy.View,
             PinnedViewMode = _policy.ViewMode,
+            PinnedLook = _policy.PinnedLook,
             HudParent = rig.Viewport,
             // Null when the airframe ships no cockpit1 — the rig then hides nothing, as before B11.
             Cockpit = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior),
