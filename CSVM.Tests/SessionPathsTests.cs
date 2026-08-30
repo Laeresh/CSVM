@@ -45,6 +45,43 @@ public class SessionPathsTests
     }
 
     [Fact]
+    public void ForceZippedTakesTheZipEvenWhereTheUnpackedFolderExists()
+    {
+        var root = TestData.TempDir();
+        var chapter = Path.Combine(root, "extracted", "C4");
+        Directory.CreateDirectory(Path.Combine(chapter, "gamez"));
+        File.WriteAllText(Path.Combine(chapter, "gamez.zip"), "not really a zip");
+        try
+        {
+            SessionPaths.ForceZipped = true;
+            Assert.Equal(Path.Combine(chapter, "gamez.zip"), SessionPaths.ChapterGamez(root, "C4"));
+        }
+        finally
+        {
+            SessionPaths.ForceZipped = false;
+        }
+    }
+
+    [Fact]
+    public void ForceZippedStillTakesTheFolderWhereNoZipWasEverExtracted()
+    {
+        var root = TestData.TempDir();
+        var chapter = Path.Combine(root, "extracted", "C4");
+        Directory.CreateDirectory(Path.Combine(chapter, "gamez"));
+        try
+        {
+            // Asking for the export's asset shape must not refuse to start a tree that only ever
+            // had the folder — the flag narrows the choice, it does not add a requirement.
+            SessionPaths.ForceZipped = true;
+            Assert.Equal(Path.Combine(chapter, "gamez"), SessionPaths.ChapterGamez(root, "C4"));
+        }
+        finally
+        {
+            SessionPaths.ForceZipped = false;
+        }
+    }
+
+    [Fact]
     public void TheTopRtextureTierBeatsTheBaseTextureArchive()
     {
         var root = TestData.TempDir();

@@ -718,6 +718,11 @@ public sealed record SessionSpec
     public bool Perf { get; private set; }
     public bool NoFocus { get; private set; }
 
+    /// <summary><c>--zip-assets</c>: read the <c>.zip</c> archives even where an unpacked sibling
+    /// folder exists, so a development machine runs the asset shape an export ships. See
+    /// <see cref="SessionPaths.ForceZipped"/> for why the two shapes fail differently.</summary>
+    public bool ZipAssets { get; private set; }
+
     /// <summary><c>--hitch-inject=</c>: a synthetic stall of known
     /// magnitude, in milliseconds, so every later item in the plan has something deterministic to
     /// verify against instead of an incidental hitch. Null when the flag was absent.</summary>
@@ -1084,6 +1089,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--tex-census=")) { s.TexCensus = true; s.TexCensusFilter = arg["--tex-census=".Length..]; }
             else if (arg == "--no-focus") { s.NoFocus = true; }
             else if (arg == "--no-vsync") { s.NoVsync = true; }
+            else if (arg == "--zip-assets") { s.ZipAssets = true; }
             else if (arg.StartsWith("--hitch-inject="))
             {
                 (s.HitchInjectMs, s.HitchInjectAlloc, s.HitchInjectFrame) =
