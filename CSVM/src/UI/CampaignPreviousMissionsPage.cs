@@ -19,7 +19,7 @@ public static class CampaignScrapbookResults
 {
     // LAYOUT.CSV [@ScrapBook@]: STATTITLEX/STATX are the title and value columns; SLINE0/SLINE1
     // are the outcome and heading rows; SLINE2/SLINE4/SLINE5/SLINE6 are the four drawn rows.
-    // SLINE3, the cut Rockets Expended row, is not among them (A1).
+    // SLINE3, the cut Rockets Expended row, is not among them.
     private const float TitleX = 417f;
     private const float ValueX = 642f;
     private const float OutcomeY = 339f;
@@ -32,7 +32,7 @@ public static class CampaignScrapbookResults
     // AB14I, the row font every SB_T_* widget in [@ScrapBook@] carries.
     private const float RowFont = 14f;
 
-    // KTEXTW, the SB_KILLTEXT box width (C16).
+    // KTEXTW, the SB_KILLTEXT box width.
     private const float StampTextWidth = 15f;
 
     private const string MissionCompletedText = "Mission Completed"; // langui 1213
@@ -45,10 +45,10 @@ public static class CampaignScrapbookResults
     private const string PlanesDownedTitle = "Overall Planes Downed"; // langui 1207
 
     // SB_killMARKERcombined.png: 22 frames of 70x100, the eleven airframes then the same eleven
-    // starred (C16).
+    // starred.
     private static readonly BoardArt KillMarker = new(BoardArtLibrary.Ui, "SB_KILLMARKERCOMBINED.PNG", 22);
 
-    // SB_KILL0..SB_KILL10's top-left, LAYOUT.CSV [@ScrapBook@]. Not in reading order (C16).
+    // SB_KILL0..SB_KILL10's top-left, LAYOUT.CSV [@ScrapBook@]. Not in reading order.
     private static readonly (float X, float Y)[] StampSlots =
     {
         (560f, 109f), (467f, 93f), (604f, 173f), (604f, 50f), (520f, 42f),
@@ -78,7 +78,7 @@ public static class CampaignScrapbookResults
 
     /// <summary>The sum of both per-airframe kill arrays over their eleven slots, truncated to
     /// sixteen bits the way <c>0x0040a8df</c> does. There is no stored total field, so this always
-    /// agrees with whatever the stamps (C16) draw.</summary>
+    /// agrees with whatever the stamps draw.</summary>
     public static int PlanesDowned(MissionResult result, bool bestToDate)
     {
         var run = bestToDate ? result.Best : result.Latest;
@@ -119,7 +119,7 @@ public static class CampaignScrapbookResults
     }
 
     /// <summary>The stamp art, one <c>BoardPicture</c> per filled slot at its <c>SB_KILL</c>
-    /// position. ⚠ The eleven slots are not in reading order (C16): <c>SB_KILL1</c> sits left of
+    /// position. ⚠ The eleven slots are not in reading order: <c>SB_KILL1</c> sits left of
     /// and above <c>SB_KILL0</c>.</summary>
     public static IReadOnlyList<BoardPicture> StampPictures(MissionResult result, bool bestToDate)
     {

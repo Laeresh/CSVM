@@ -256,7 +256,7 @@ public sealed class CampaignAmmoPage : CampaignPage
     // Reloads the working copy whenever the flow names a different record than the one loaded, or
     // when a prior Accept/Cancel/Back dropped it. A re-entry onto the same record after a cancel
     // therefore reads the still-unedited stored fit, never the discarded edits. The record itself
-    // is the key (C22): a guest's aircraft is not in the profile, so no index names it.
+    // is the key: a guest's aircraft is not in the profile, so no index names it.
     private void EnsureLoaded()
     {
         var target = Flow.AmmoTarget();
@@ -277,7 +277,7 @@ public sealed class CampaignAmmoPage : CampaignPage
 
     // Writes the working copy into the plane's own record and saves the profile, the original's
     // uiData 2034/gosCallback 12 commit path. ⚠ A guest's record is session-scoped and belongs to
-    // no profile, so their ACCEPT writes the record and saves nothing (the plan's decision 4).
+    // no profile, so their ACCEPT writes the record and saves nothing.
     private void Commit()
     {
         if (_plane == null)
@@ -418,7 +418,7 @@ public sealed class CampaignAmmoPage : CampaignPage
 
     // The plane's gun/hardpoint shape: from its own CustomPlaneStore build when it has one (every
     // hangar-built plane), else the airframe's plain stock fit (the two profile-seeded starters,
-    // which never touch CustomPlaneStore per B13's own SellPrice fallback reasoning, and a guest's
+    // which use the stock-fit fallback and never touch CustomPlaneStore, and a guest's
     // stock airframe, which is named for its airframe and so must never look a build up by name).
     private SlotBuild ResolveBuild(OwnedPlane plane)
     {

@@ -9,7 +9,7 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The window a cutscene plays in (B14): an episode gives pane 1 the whole window and
+/// <summary>The window a cutscene plays in: an episode gives pane 1 the whole window and
 /// takes the other panes and their listeners down, and both exits hand the rig back. Driven at
 /// 2, 3 and 4 panes against the real <see cref="SplitScreen"/> and the real
 /// <see cref="CutsceneController"/>, wired through the one seam the session wires. The listener

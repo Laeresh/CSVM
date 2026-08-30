@@ -74,7 +74,7 @@ internal sealed class CampaignDangerZones
     /// <summary>One physics-frame test over the whole human field: any gate a human's movement
     /// segment crossed this frame, completing a zone once both its gates have been crossed. The
     /// crossed flags are per zone, so they UNION across the field and the pair may be split between
-    /// two humans (decision 7 of the campaign co-op plan). Fires <paramref name="onCompleted"/> with
+    /// two humans. Fires <paramref name="onCompleted"/> with
     /// the <c>dzpathN</c> name, the exact string a <c>DANGER_ZONES_COMPLETED</c> condition
     /// names.</summary>
     public void Update(IReadOnlyList<HumanState> humans, Action<string> onCompleted)

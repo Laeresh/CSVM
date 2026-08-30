@@ -621,7 +621,7 @@ internal static class CampaignLoopSuites
 
     // The cabin the campaign flow lands on for a fresh profile pick, checked here on a flow built
     // straight from the store (Launcher.OpenDebrief -> LaunchMenu.OpenCampaignScrapbook opens the
-    // debrief on top of it instead, C17, which is not this suite's own path).
+    // debrief on top of it instead, which is not this suite's own path).
     private static void ReturnToTheCabin(
         TestContext ctx, CampaignProfileStore store, UiStrings strings, StockLoadouts stock, StringBuilder report)
     {

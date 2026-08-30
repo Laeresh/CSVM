@@ -67,7 +67,7 @@ internal static class CampaignHudSuites
             pause.TryToggle(0);
             var hud = ObjectivesHud.Build(director, messages, pause);
             ctx.Host.AddChild(hud);
-            // B15: a second rig's own instance over the same director, proof that "one per rig"
+            // A second rig's own instance over the same director proves that "one per rig"
             // is N polling instances rather than one broadcasting to many panes.
             var hud2 = ObjectivesHud.Build(director, messages, pause);
             ctx.Host.AddChild(hud2);

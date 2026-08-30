@@ -28,10 +28,10 @@ public enum CampaignScreen
     Ammo,
 
     /// <summary>The scrapbook's results page (spread 1), opened on the mission a finished mission
-    /// just flew, cabin on its far side (C17).</summary>
+    /// just flew, with the cabin on its far side.</summary>
     Scrapbook,
 
-    /// <summary>One scrap's detail view (D19), opened on <see cref="CampaignFlow.ZoomTarget"/> and
+    /// <summary>One scrap's detail view, opened on <see cref="CampaignFlow.ZoomTarget"/> and
     /// closing back to <see cref="Scrapbook"/>.</summary>
     ScrapbookZoom,
 }
@@ -198,8 +198,7 @@ public sealed class CampaignFlow
     public UiStrings Strings { get; }
 
     /// <summary>The humans flying this sortie: how many joined, whose flight check is showing, and
-    /// what each guest picked. Solo until the shell says otherwise, so a campaign nobody joined
-    /// behaves exactly as it did before C22.</summary>
+    /// what each guest picked. Solo until the shell says otherwise.</summary>
     public CampaignFlightField Field { get; }
 
     /// <summary>The folder <c>extracted/</c> sits in, or null when the caller has none.</summary>
@@ -222,7 +221,7 @@ public sealed class CampaignFlow
     public int AmmoSlot { get; private set; }
 
     /// <summary>The scrap <see cref="CampaignScreen.ScrapbookZoom"/> is open on: the
-    /// <c>SCRAPBOOK.CSV</c> mission slot, spread and item a scrapbook page's row named (D19). Null
+    /// <c>SCRAPBOOK.CSV</c> mission slot, spread and item a scrapbook page's row named. Null
     /// until <see cref="SetScrapbookZoom"/> is called.</summary>
     public (int Mission, int Spread, int Item)? ZoomTarget { get; private set; }
 

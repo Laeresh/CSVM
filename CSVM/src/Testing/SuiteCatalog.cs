@@ -1047,7 +1047,7 @@ public static class SuiteCatalog
             + "certain steady-hand failure on one leaves it on that node and back with the other two",
             BomberFormation));
         into.Add(new TestHarness.Suite("campaign-kill-credit",
-            "the debrief's two per-airframe kill tallies (BL-622/B13), credited off real Downed "
+            "the debrief's two per-airframe kill tallies, credited off real Downed "
             + "reports over C3/M05's shipped roster: two of the three netted britbalmoral bombers "
             + "and three of the five plain britpeace Peacemakers land in the plain array, the ace "
             + "britpeace_7 lands in the starred array instead, and a friendly wingman's loss and an "
@@ -1529,7 +1529,7 @@ public static class SuiteCatalog
             + "--no-crash-loss pins neither, and a solo death answers exactly as it did before",
             CoopDeathSuites.CampaignCoopDeath));
         into.Add(new TestHarness.Suite("campaign-coop-attempt",
-            "what a co-op sortie writes to the seated profile (D31): two human rigs each fire a real "
+            "what a co-op sortie writes to the seated profile: two human rigs each fire a real "
             + "cannon round at the other's aircraft, and only the seated pilot's reaches the recorded "
             + "attempt's Shots/Hits, WireScoredShooter gating on the scripted player and never a "
             + "guest; Money sums to 0 across the field today, since the mission reward table's cash "

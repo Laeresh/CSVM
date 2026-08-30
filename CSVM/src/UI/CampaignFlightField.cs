@@ -9,7 +9,7 @@ namespace CSVM.UI;
 /// One guest's aircraft on a co-op campaign sortie: the records they may cycle through, and which
 /// one they are on. Every record here is session-scoped — a stock airframe at rest, or a COPY of
 /// one of the seated profile's aircraft — so a guest's ammunition edits land on something the
-/// profile store never sees (the plan's decision 4, "nothing, and nothing").
+/// profile store never sees.
 /// </summary>
 public sealed class CampaignGuest
 {
@@ -43,13 +43,9 @@ public sealed class CampaignGuest
 /// The humans flying one campaign sortie, as the flight check walks them: how many joined, whose
 /// check is showing, and what each guest picked. The seated player is 0 and keeps the profile's own
 /// aircraft; players 1 and up are guests, who bring no profile and fly the session-scoped records
-/// <see cref="CampaignGuest"/> holds. Engine-free, so the no-duplicate rule and the copy-not-
-/// reference rule test off engine, which is where the plan's decision 4 is actually enforced.
-///
-/// <para>The sequence is the existing <see cref="CampaignScreen.FlightCheck"/> screen re-entered
-/// with a player index, not a screen per player: <see cref="CampaignFlow.GoTo"/> returns to an
-/// already-open screen instead of stacking a second copy, and the flow keeps ONE page instance per
-/// screen, so a registry entry per guest could never have drawn four different checks.</para>
+/// <see cref="CampaignGuest"/> holds. Engine-free, so the no-duplicate and copy-not-reference rules
+/// test off engine. The sequence re-enters <see cref="CampaignScreen.FlightCheck"/> with a player
+/// index because <see cref="CampaignFlow.GoTo"/> returns to the existing page instance.
 /// </summary>
 public sealed class CampaignFlightField
 {
@@ -82,9 +78,7 @@ public sealed class CampaignFlightField
     /// <summary>Whose flight check is showing: 0 the seated player, 1 and up a guest.</summary>
     public int Current { get; private set; }
 
-    /// <summary>Whether the field is closed to new players. It closes the moment the seated player
-    /// presses FLY MISSION, which is what C21's "joinable up to and including FLY MISSION" means
-    /// now that the press advances the screen instead of leaving it.</summary>
+    /// <summary>Whether the field is closed to new players while a guest's flight check is shown.</summary>
     public bool Locked => Current > 0;
 
     /// <summary>The guests, in player order. Empty for a solo campaign.</summary>

@@ -193,7 +193,7 @@ internal static class CampaignRosterSuites
         ctx.Note($"spawned {RosterChapter}/{RosterMission}'s roster from its aiv blocks and flew wingman_1 on the player");
     }
 
-    /// <summary>BL-622/B13: the debrief's two per-airframe kill tallies, credited off real
+    /// <summary>The debrief's two per-airframe kill tallies, credited off real
     /// <see cref="FlightController.Downed"/> reports over C3/M05's shipped roster. Forces down two
     /// netted <c>britbalmoral</c> bombers, three plain <c>britpeace</c> Peacemakers and the ace
     /// <c>britpeace_7</c>, reproducing CM02's own drawn stamps (2/3/starred 1, total 6); a friendly

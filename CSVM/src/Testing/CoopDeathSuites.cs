@@ -8,7 +8,7 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>A co-op mission's loss rule (B13): losing one aeroplane costs that human their
+/// <summary>A co-op mission's loss rule: losing one aeroplane costs that human their
 /// aircraft and nothing else, and the mission ends only when the last of them is down. Driven over
 /// the first story mission of C3, the same world <c>campaign-player-death</c> uses and for the same
 /// reason: C3/M01 authors no <c>INSTANTLOSS</c> and no <c>LOST</c> objective, so a Lost outcome

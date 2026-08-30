@@ -57,7 +57,7 @@ public sealed class CampaignDirector
     private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SurfaceVehicle> _vessels = new(StringComparer.OrdinalIgnoreCase);
 
-    // The two per-airframe kill tallies A2 decoded (docs/org/debrief.md#what-the-tallies-count),
+    // The two per-airframe kill tallies (docs/org/debrief.md#what-the-tallies-count),
     // credited as the roster's own aircraft go down. Read into the mission-end attempt; never
     // written from anywhere else.
     private readonly int[] _kills = new int[CampaignProgression.AirframeCount];
@@ -65,7 +65,7 @@ public sealed class CampaignDirector
 
     // The death wiring and the loss latch, both per SEAT of the human field rather than per
     // aircraft: a 967 swap rebuilds one seat's aeroplane and a death in the new one counts too,
-    // and the seat is what stays down once it has (B13's rule, decision 9).
+    // and the seat is what stays down once it has.
     private readonly List<FlightController?> _deathWiredTo = new();
     private readonly HashSet<int> _seatsDown = new();
     private World? _world;
@@ -94,7 +94,7 @@ public sealed class CampaignDirector
     private Action<FlightController>? _beginSpectate;
     private bool _playerLost;
 
-    // D31: the seated pilot's own gunnery, wired the same deferred way as the damage ping, since
+    // The seated pilot's own gunnery is wired the same deferred way as the damage ping, since
     // the scripted player's aircraft is also built after Attach runs.
     private ProjectilePool? _projectiles;
     private FlightController? _scoredShooterWiredTo;
@@ -566,7 +566,7 @@ public sealed class CampaignDirector
         }
     }
 
-    // The seated pilot is the only shooter Shots/Hits answers for (decision 13).
+    // The seated pilot is the only shooter Shots/Hits answers for.
     // ProjectilePool.ScoredShooters is the sole gate its two counters have. Registering just the
     // scripted player's aircraft here keeps a guest's cannon fire out of them, whatever the human
     // field's size.
@@ -584,7 +584,7 @@ public sealed class CampaignDirector
     // Losing the aircraft loses the mission, in the original's two stages: the death stops the
     // objectives, and the wreck reaching the ground reaches the debrief. With a human field it is
     // the LAST seat's death that stops them, and an earlier one only takes that human out of the
-    // flight (decision 9: no respawn, and the survivors fly on). ⚠ Read the aircraft's own Downed
+    // flight; the downed pilot does not respawn, and the survivors fly on. ⚠ Read the aircraft's own Downed
     // report, which is raised once per real death; the under-map backstop teleports without one,
     // so an altitude test here would end missions nobody lost (docs/verification.md INSTR-22).
     private void OnPlayerDown(int seat, FlightController human)
@@ -1120,7 +1120,7 @@ public sealed class CampaignDirector
                 return spec.Approaching ? at : !at;
             }
 
-            // The authored `player` subject is the whole human field, nearest first (decision 7).
+            // The authored `player` subject is the whole human field, nearest first.
             // A field of none falls back to the listener, which is where this read has always been
             // and is what a suite that builds no rig still answers with.
             var field = SnapshotHumans();

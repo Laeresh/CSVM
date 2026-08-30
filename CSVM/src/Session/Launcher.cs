@@ -1005,7 +1005,7 @@ public partial class Launcher : Node3D
     // A flown campaign mission is over: free the world and open the scrapbook on the mission just
     // flown, cabin on its far side, on a flow seated on the profile the director just wrote.
     // Reached from the session's MissionEnded by way of _pendingDebrief, one frame later, carrying
-    // the result the mission ended with (B12).
+    // the result the mission ended with.
     private void OpenDebrief(string profile, CampaignMissionResult result)
     {
         GD.Print($"campaign: {result.Outcome} — arrived at the debrief with '{profile}'");
@@ -1261,9 +1261,8 @@ public sealed class LauncherContext
     public required System.Action RestartSession { get; init; }
 
     /// <summary>Frees this session and reopens the launchscreen on the named profile's campaign
-    /// cabin, carrying the mission's result intact (B12) — a campaign mission's end (D31's
-    /// <c>MissionEnded</c>). Null when this process was not launched into the menu, where there is
-    /// no cabin to return to.</summary>
+    /// cabin, carrying the mission's result intact from <c>MissionEnded</c>. Null when this process
+    /// was not launched into the menu, where there is no cabin to return to.</summary>
     public System.Action<string, CampaignMissionResult>? ReturnToCabin { get; init; }
 
     /// <summary>The process's music channel, so a mission's own cues reach the one player that

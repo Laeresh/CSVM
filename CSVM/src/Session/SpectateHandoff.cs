@@ -31,7 +31,7 @@ internal static class SpectateHandoff
         }
 
         pilot.Spectating = true;
-        pilot.CameraOwned = true;   // D8's seam: the session writes nothing to the camera from here
+        pilot.CameraOwned = true;   // the spectator owns this pane from here
         foreach (var other in rigs)
         {
             if (other.Controller is { InPlay: true } live && live != pilot)

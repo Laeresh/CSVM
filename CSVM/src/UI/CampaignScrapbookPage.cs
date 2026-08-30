@@ -10,7 +10,7 @@ namespace CSVM.UI;
 /// The scrapbook's results page, opened on the mission a finished mission just flew
 /// (<c>docs/org/debrief.md#the-screen-is-the-scrapbook</c>): the shown spread's results block, kill
 /// stamps and shipped scraps, the page/mission arrows and the Current Mission bookmark for browsing
-/// the rest of the book (D20, <c>docs/architecture.md</c>), and every openable scrap
+/// the rest of the book, and every openable scrap
 /// (<see cref="ScrapbookScrap.Opens"/>) as its own row opening
 /// <see cref="CampaignScreen.ScrapbookZoom"/>. REPLAY MISSION and RETURN TO CABIN act on whichever
 /// mission is browsed. The Best to Date toggle and the page title (mission name and area) are not
@@ -264,7 +264,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
 
     // The previous spread: one back within the mission, or the previous mission's own last spread
     // once its front is reached. Null at the front of the book (mission 1, spread 1); this shell
-    // has no table of contents to fall into there yet (A3's own open scope call).
+    // has no table of contents screen to fall into there yet.
     private (int Mission, int Spread)? Previous(int mission, int spread)
     {
         if (spread > 1)

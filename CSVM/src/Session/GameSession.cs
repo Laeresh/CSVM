@@ -109,7 +109,7 @@ public partial class GameSession : Node3D
     // session and builds a fresh one. Nothing here can put a mission's opposition back on its own.
     private readonly Action _restartSession;
     // A campaign mission's end: the Launcher frees this session and reopens the launchscreen on
-    // the named profile's cabin, carrying the result so a page can be opened on it (B12). Null
+    // the named profile's cabin, carrying the result so a page can be opened on it. Null
     // outside a menu-driven process (a --campaign= run from the command line has no cabin to
     // return to and simply stays in the flown world).
     private readonly Action<string, CampaignMissionResult>? _returnToCabin;
@@ -840,10 +840,9 @@ public partial class GameSession : Node3D
         return _aircraftScan;
     }
 
-    /// <summary>The human field: every joined player's aircraft and no AI, in the same reused-list
-    /// shape as <see cref="AllAircraft"/> and read just as fresh, since an airframe swap rebuilds
-    /// a rig's controller. One entry outside splitscreen, which is the scripted player alone.
-    /// Not to be held across a step.</summary>
+    // Every joined player's aircraft and no AI, in the same reused-list shape as AllAircraft.
+    // Read fresh because an airframe swap rebuilds a rig's controller; do not hold across a step.
+    // Outside splitscreen the sole entry is the scripted player.
     private IReadOnlyList<FlightController> HumanAircraft()
     {
         _humanScan.Clear();
@@ -2641,7 +2640,7 @@ public partial class GameSession : Node3D
         if (_campaign is { } campaign)
         {
             var objectiveMessages = Messages.Load(state.MessagesPath);
-            // B15: one readout per rig, under that rig's own HudParent, so every pane draws its own
+            // One readout per rig, under that rig's own HudParent, so every pane draws its own
             // copy over the one shared PauseState — the pattern every other per-rig HUD follows.
             foreach (var rig in _rigs)
             {
@@ -3214,7 +3213,7 @@ public partial class GameSession : Node3D
                  $" ({AiPlanes.Count} AI aircraft flying)");
     }
 
-    // A co-op campaign human whose aircraft is lost while the others fly on (B13): the same
+    // A co-op campaign human whose aircraft is lost while the others fly on uses the same
     // hand-off Instant Action's last life runs, with the campaign's own loss rule deciding when.
     private void BeginCampaignSpectate(FlightController pilot)
     {

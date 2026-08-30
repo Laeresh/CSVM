@@ -103,7 +103,7 @@ public enum BoardButton
     /// <summary><c>OL_B_CANCEL</c>.</summary>
     CancelLoadout,
 
-    /// <summary><c>SBZ_B_RETURN</c>, the scrap detail view's close button (D19).</summary>
+    /// <summary><c>SBZ_B_RETURN</c>, the scrap detail view's close button.</summary>
     CloseZoom,
 
     /// <summary><c>sb_b_prev</c>, the book's page-back arrow.</summary>

@@ -338,7 +338,7 @@ internal static class CampaignSuites
         ctx.Note($"flew {mission.ChapterFolder}/{mission.MissionFolder} to a graph-derived end");
     }
 
-    /// <summary>D31: a co-op sortie's <c>Shots</c>/<c>Hits</c> are the seated pilot's alone. Two
+    /// <summary>A co-op sortie's <c>Shots</c>/<c>Hits</c> are the seated pilot's alone. Two
     /// human rigs each fire a real cannon round at the other's aircraft; only the seated pilot's
     /// (rig 0's) round reaches the recorded attempt, proving <c>WireScoredShooter</c> gates on the
     /// scripted player and never a guest. <c>Money</c> sums to 0 for both today, since the cash
@@ -395,7 +395,7 @@ internal static class CampaignSuites
 
             seated = BuildAttemptRig(ctx, planesGamez, textures, live, 0, seatedPos);
             guest = BuildAttemptRig(ctx, planesGamez, textures, live, 1, guestPos);
-            // An enemy target rather than each other: decision 1 bars friendly fire between
+            // Use an enemy target because friendly fire is disabled between
             // co-op humans, so a round aimed at the OTHER human would never register a hit.
             target = BuildAttemptRig(ctx, planesGamez, textures, live, 2, targetPos, Flight.AimAssist.PlayerTeam + 1);
             var field = new List<Flight.FlightController> { seated, guest };
@@ -924,7 +924,7 @@ internal static class CampaignSuites
         ctx.Check(graph.CompletedOf(2), $"it ran again, which no plain wake could have done");
     }
 
-    // BL-622/B11: the original runs both mask-building loops regardless of outcome, so a lost
+    // The original runs both mask-building loops regardless of outcome, so a lost
     // attempt still records whichever non-primary objectives it completed, with only bit 0 (the
     // primary) forced clear (docs/org/debrief.md, "The completed-objective mask has two sources").
     // Driven independently of the win leg above, on its own fresh world, since a player death is
@@ -964,7 +964,7 @@ internal static class CampaignSuites
             $"…but the driven objective's own bit survives, mask 0x{result.Attempt.CompletedMask:x}");
         ctx.Check(!result.Recorded.PrimaryCompleted && !result.Recorded.Advanced,
             $"a non-zero mask on a loss still does not complete the primary or advance the campaign");
-        // BL-622/B14: the loss is the mission's first, so it counts one against the skip offer and
+        // The loss is the mission's first, so it counts one against the skip offer and
         // the offer itself waits for the fourth.
         int attempts = CampaignProgression.ResultOf(profile, mission.Seq)?.Attempts ?? 0;
         ctx.Check(attempts == 1 && !result.Recorded.SkipOffered,
@@ -992,7 +992,7 @@ internal static class CampaignSuites
     }
 
     // The same drive, restricted to an objective that carries a display row of its own that is not
-    // the primary: what a lost attempt needs to prove it keeps a non-primary bit (B11).
+    // the primary: what a lost attempt needs to prove it keeps a non-primary bit.
     private static int DriveOneNonPrimaryInactive(
         TestContext ctx, TestWorld world, ObjectiveScript script, ObjectiveGraph graph, StringBuilder report)
     {

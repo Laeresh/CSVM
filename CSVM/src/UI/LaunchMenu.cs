@@ -324,7 +324,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The campaign's composed-board surface, drawn instead of _center on every campaign screen.
     private ComposedBoardView _boardRoot = null!;
 
-    // C21's chip strip: `P1 P2 P3 P4` in `SplitScreen.PlayerColor`, top-right, shown only while a
+    // The campaign chip strip: `P1 P2 P3 P4` in `SplitScreen.PlayerColor`, top-right, shown while a
     // campaign board is up AND more than one has joined — a solo campaign board looks exactly as
     // it does today. A composed board draws no full join strip by design (RebuildBoard's own
     // comment), so this is a deliberate exception drawn as a shell overlay rather than a page
@@ -445,7 +445,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         menu._boardRoot.Visible = false;
         root.AddChild(menu._boardRoot);
 
-        // C21's chip strip: a zero-size box pinned to the top-right corner, GrowHorizontal.Begin
+        // The chip strip is a zero-size box pinned to the top-right corner; GrowHorizontal.Begin
         // spending its minimum width leftward from there (PerfHud's own PlaceTopRight pattern), so
         // the right edge stays on the inset however many chips are joined.
         menu._chipStrip = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
@@ -674,8 +674,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     /// <summary>Opens the campaign on the named profile's scrapbook, at the mission a finished
-    /// mission just flew, cabin on its far side (<see cref="Session.Launcher"/>'s deferred hop,
-    /// C17). The profile is re-read from the store, the same discipline as
+    /// mission just flew, cabin on its far side after <see cref="Session.Launcher"/>'s deferred
+    /// hop. The profile is re-read from the store, the same discipline as
     /// <see cref="OpenCampaignCabin"/>, so the shown record is what the mission just wrote.</summary>
     public void OpenCampaignScrapbook(string profileName, int seq)
     {
@@ -989,16 +989,16 @@ public sealed partial class LaunchMenu : CanvasLayer
             _joinPrev[pad] = MenuInput.JoinPressed(pad);
     }
 
-    // Start on an unclaimed pad joins a new player, on the Plane screen and, C21, on the
-    // Campaign screen — the same ordering rule (player 1 claims a pad first) keeps the gesture
-    // unambiguous on both. A campaign join closes at the seated player's FLY MISSION (C22's lock).
+    // Start on an unclaimed pad joins a new player on the Plane or Campaign screen.
+    // The same ordering rule, player 1 claiming a pad first, keeps the gesture unambiguous on both.
+    // A campaign join closes at the seated player's FLY MISSION.
     private bool ScanJoins()
     {
         bool dirty = false;
         if (_screen != Screen.Plane && _screen != Screen.Campaign)
             return false;
-        // C22: the seated player's FLY MISSION no longer leaves the screen, it opens the first
-        // guest's check — so the field's own lock is what closes joining now.
+        // The seated player's FLY MISSION opens the first guest's check instead of leaving, so
+        // the field's own lock is what closes joining now.
         if (_campaign is { Field.Locked: true })
             return false;
         foreach (int pad in Pads.Connected())
@@ -1653,7 +1653,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _campaign = NewCampaignFlow(CampaignProfileStore.UserProfiles());
         _screen = Screen.Campaign;
         _error = "";
-        PrimeJoins(); // C21: joining opens here too — a Start held on the way in must not fire
+        PrimeJoins(); // joining opens here too, so a held Start must not fire on entry
     }
 
     // A campaign flow over one store, with the two stores its later screens resolve fits through:
@@ -1703,7 +1703,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _campaign = NewCampaignFlow(AidProfileStore(seeded, progressed: value != "campaign-roster"));
         _screen = Screen.Campaign;
         _error = "";
-        PrimeJoins(); // C21: this is its own entry point into Screen.Campaign, same rule as OpenCampaign
+        PrimeJoins(); // this entry point needs the same held-Start guard as OpenCampaign
         if (_campaign is not { } flow)
         {
             return;
@@ -1777,7 +1777,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 flow.GoTo(CampaignScreen.FlightCheck);
                 return;
             case "campaign-guestcheck":
-                // C22's sequence: the same screen, headed for a guest. The argument names which
+                // The guest-check aid reuses the same screen. The argument names which guest
                 // one (default P2), and --debug-join= is what puts them on the field.
                 flow.SetMission(CampaignProgression.NextMissionSeq(profile));
                 flow.GoTo(CampaignScreen.FlightCheck);
@@ -1900,8 +1900,8 @@ public sealed partial class LaunchMenu : CanvasLayer
             dirty |= flow.Back();
         }
 
-        // C21: everyone else can only drop out from here; the driving player's Back above is the
-        // flow's own navigation. C22 closes even that once the sequence runs — the field is then
+        // Every guest can only drop out from here; the driving player's Back above is the
+        // flow's own navigation. The field closes guest exits once the sequence runs;
         // settled, and every Back on screen is the walk back through the checks.
         for (int i = _slots.Count - 1; i >= 1 && !flow.Field.Locked; i--)
         {
@@ -1934,7 +1934,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // Whose presses steer the campaign board. Player 1's everywhere, except a guest's own flight
-    // check (C22), which is that guest's screen to fill in. A driver with no device — --debug-join's
+    // check, which is that guest's screen to fill in. A driver with no device — --debug-join's
     // deviceless players — hands back to player 1, or a screenshot aid could never walk the
     // sequence at all.
     private MenuInput CampaignDriver(CampaignFlow flow, MenuInput p1)
@@ -1971,7 +1971,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // FLY MISSION: the profile is saved, the board's score stops and the host builds a campaign
     // session for this profile and story position. Every joined human's aircraft goes with it —
     // its stock node, its hangar build where it has one, and the ammunition and ordnance the ammo
-    // screen (or, for a guest, C22's own flight check) stored. The wingman's own binding is
+    // screen, or a guest's own flight check, stored. The wingman's own binding is
     // resolved by CampaignDirector, which has the profile open anyway.
     private void FlyCampaignMission(CampaignFlow flow)
     {
@@ -2418,7 +2418,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             page.Footer);
     }
 
-    // C21's chip strip content — called only while the board is up (RebuildBoard); visibility
+    // The campaign chip strip content is built only while the board is up; visibility
     // itself is Rebuild's, off the same slot count, so a Back that drops the last guest hides the
     // strip on the same frame instead of leaving one stale chip behind.
     private void RebuildChipStrip()

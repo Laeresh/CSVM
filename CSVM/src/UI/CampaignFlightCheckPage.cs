@@ -40,7 +40,7 @@ internal readonly record struct FlightRow(
 /// and FLY MISSION. The row list carries only these actionable items; each plane's dense text
 /// (title, both eight-row lists) and the objectives note live in <see cref="Detail"/>, the split
 /// <see cref="CampaignRosterPage"/> uses for its own descriptive text. CHANGE PLANE cycles in
-/// place (no picker screen exists), the plan's C24 design. With guests joined this one page draws
+/// place because no picker screen exists. With guests joined this one page draws
 /// the whole sequence, a player at a time (<see cref="CampaignFlightField"/>).
 /// </summary>
 public sealed class CampaignFlightCheckPage : CampaignPage
@@ -215,7 +215,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     // Whose check this is: 0 the seated player, 1 and up a guest. A guest's page is this same
     // screen re-entered, so everything below reads the player rather than assuming the profile's
-    // own aircraft; the seated player's page is unchanged from before C22.
+    // own aircraft; the seated player's page is unchanged.
     private int Player => Flow.Field.Current;
 
     // The flow's hangar store, or null off-engine: every plane then reads as its stock fit.
@@ -324,7 +324,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
                 Flow.GoTo(CampaignScreen.Briefing);
                 return true;
             case FlightRowKind.FlyMission:
-                // C22: the last joined player's press launches; every earlier one advances to the
+                // The last joined player's press launches; every earlier one advances to the
                 // next check. GoTo on the screen already showing is the re-entry — the stack
                 // returns to it rather than stacking a second copy, and the cursor opens afresh.
                 if (Flow.Field.Advance())
@@ -349,7 +349,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     // Every row this screen draws, computed fresh each call from the profile and the mission's
     // wingman flag: the PILOT block, its two action rows, the WINGMAN block and its own two action
     // rows when the mission carries a wingman, then RETURN TO BRIEFING and FLY MISSION. A guest's
-    // own check (C22) draws one PILOT block and no wingman: the wingman is the seated profile's.
+    // own check draws one PILOT block and no wingman: the wingman is the seated profile's.
     private List<FlightRow> Rows()
     {
         var profile = Flow.Profile ?? EmptyProfile;

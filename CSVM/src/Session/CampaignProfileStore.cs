@@ -32,8 +32,8 @@ public sealed class OwnedPlane
     public bool Special { get; set; }
 }
 
-/// <summary>One run of a mission, the eight scalar fields <c>saved-games.md</c>'s mission-result
-/// decode closed, plus the two per-airframe kill tallies A2 decoded
+/// <summary>One run of a mission: the eight scalar fields described by <c>saved-games.md</c>, plus
+/// the two per-airframe kill tallies
 /// (<c>docs/org/debrief.md#what-the-tallies-count</c>).</summary>
 public sealed class MissionRun
 {

@@ -20,7 +20,7 @@ public readonly record struct ObjectivesHudLine(int Priority, string Text, bool 
 /// unconditionally, never filtered by its own Awake flag: see docs/architecture.md's entry for
 /// why. The reference frame fixes the corner and nothing else, so the glyphs/metrics below stay
 /// TUNE. Self-mounting, but unlike <see cref="PerfHud"/>'s one-for-the-window instance, a
-/// splitscreen session builds ONE PER RIG (B15) under that rig's own <c>HudParent</c>, so every
+/// splitscreen session builds ONE PER RIG under that rig's own <c>HudParent</c>, so every
 /// pane polls the shared <see cref="ObjectiveGraph"/> on its own.
 /// </summary>
 public sealed partial class ObjectivesHud : Node

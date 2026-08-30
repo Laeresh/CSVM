@@ -31,7 +31,7 @@ internal static class CampaignHumanFieldSuites
     // run past all 39 of this mission's armed objectives, not one.
     private const float ScanWindow = 5f;
 
-    // Far outside that radius on every axis, and clear of C3's terrain.
+    // Far outside that radius on every axis, and clear of the mission terrain.
     private static readonly Vector3 FarAway = new(2000f, 900f, 2000f);
 
     internal static void CampaignCoopHumanField(TestContext ctx)
@@ -190,7 +190,7 @@ internal static class CampaignHumanFieldSuites
         report.AppendLine($"scripted player: ResolveLeader(\"player\") is {p1.Name} with a field of two");
     }
 
-    // Decision 7's danger-zone half, over C3/M01's own gate geometry: the crossed flags are per
+    // The human-field danger-zone rule over C3/M01's own gate geometry: crossed flags are per
     // zone, so the pair may be split between two humans.
     private static void CheckDangerZoneUnion(TestContext ctx, TestWorld world, ObjectiveScript script,
         string missionZrdr, StringBuilder report)

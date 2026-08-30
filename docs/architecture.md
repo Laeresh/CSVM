@@ -4141,23 +4141,14 @@ Off-engine coverage: `CSVM.Tests/CampaignFlowTests.cs`,
 `CSVM.Tests/CampaignCabinPageTests.cs`, `CSVM.Tests/CampaignPreviousMissionsPageTests.cs`.
 
 ## src/UI/CampaignFlightField.cs
-The humans flying one campaign sortie, as the flight check walks them (`C22`): how many joined,
-whose check is showing, and what each guest picked. Player 0 is the seated player and keeps the
-profile's own aircraft; players 1 and up are guests, who bring no profile and fly a session-scoped
-`OwnedPlane` — a stock airframe at rest, or a COPY of one of the seated profile's aircraft.
-Engine-free, so the two rules that make a guest costless test off engine: the copy (a reference
-where a copy belongs writes a guest's ammunition edits into the seated profile) and the
-no-duplicate filter, whose identity is the airframe for a stock entry and the plane's NAME for a
-profile aircraft. `Advance`/`Retreat`/`Rewind` are the walk; `Locked` closes joining the moment it
-starts, which is what C21's "joinable up to and including FLY MISSION" means now that the press
-advances the screen rather than leaving it.
-⚠ `IsStock` exists because a stock record is NAMED for its airframe: a screen must ask before
-reading `CustomPlaneStore` under that name, or a hangar plane called "Devastator" would fit a guest
-with somebody else's build. The sequence draws on the one `FlightCheck` screen re-entered with a
-player index rather than a `CampaignScreen` per guest — the flow keeps one page instance per screen
-and `GoTo` returns to an open one, so a registry entry could only ever have drawn a single check.
-Off-engine coverage: `CSVM.Tests/CampaignFlightFieldTests.cs`, plus the guest cases in
-`CSVM.Tests/CampaignFlightCheckPageTests.cs` and `CSVM.Tests/CampaignAmmoPageTests.cs`.
+Owns the humans flying one campaign sortie: how many joined, whose flight check is showing, and
+what each guest picked. Player 0 keeps the seated profile's aircraft; later players fly
+session-scoped stock records or copies of that profile's aircraft, so guest edits cannot persist.
+`Advance`/`Retreat`/`Rewind` walk one reused `FlightCheck` page through the field, while `Locked`
+exposes whether a guest check is active. The no-duplicate filter identifies stock choices by
+airframe and profile choices by plane name. `IsStock` keeps stock records out of
+`CustomPlaneStore` lookups. Off-engine coverage: `CSVM.Tests/CampaignFlightFieldTests.cs`,
+`CampaignFlightCheckPageTests.cs`, and `CampaignAmmoPageTests.cs`.
 
 ## src/UI/BoardFit.cs
 How the original's fixed 800x600 campaign dialog space lands on an arbitrary window: one uniform
@@ -5386,29 +5377,15 @@ mission's spawn list) and `StartGrid`. `HumanFlightAdapter` holds the interface 
 field lazily on its first `Assemble`, so the resolve still happens where it always did.
 
 ## src/Session/StartGrid.cs
-The abreast starting grid, and the second `IFlightStarts`: slot `i` of `n` sits
-`(i − (n−1)/2) × spacing` metres along the perpendicular to the anchor heading, so an even field
-straddles the anchor and an odd one puts its middle plane on it. The anchor is
-`SpawnPicker.ChooseSpawn(playerIndex: 0)` — delegated, so the ia.json list, objectives.json
-`PLAYER_INIT`, the C1 last-resort fallback and `--pos` all keep working without the grid knowing any
-of them exist. The heading comes from the anchor's own pos→look-at pair, never the spawn's
-`HeadingDeg`: `--pos` carries no heading field and re-reading the list entry would silently ignore
-`--direction`. Terrain arrives as an injected `Func<Vector3, float?>` so fan and lift are testable
-off-engine; the production closure is `GameSession.GroundSampler()`, which also owns what an empty
-probe means. `startGrid.slotSpacing` (60 m) and `startGrid.groundClearance` (100 m) are
-`Config.GetFloat` **TUNE** values self-registered in `Config.WarmTuningRegistry`, so `--dump-config`
-lists them even on a launch that never builds a grid. Three `CSVM.Tests` assertions exist solely
-to catch a per-plane-lift regression, and Dogfight's own spacing (rejected as a splitscreen use of
-this class) is `BL-301`'s call.
-
-Two callers construct it, and `GameSession` picks the implementation once so nothing branches
-inside the class. A splitscreen stunt race takes the grid unless `--det` is set, which is what
-keeps every scripted race spawn byte-identical to the per-player walk that preceded it. A campaign
-session with more than one rig takes it unconditionally, `--det` included: a story mission has one
-`PLAYER_INIT`, so the plain walk resolves every human to the same point and stacks the field, and
-there is no prior scripted behaviour to keep identical because a campaign session below two rigs
-never reaches that arm. A user `config.json` written before the rename carries `raceGrid.*` keys,
-which no longer resolve and are silently ignored.
+The abreast starting grid and second `IFlightStarts`: it fans slots symmetrically across one anchor
+heading, then lifts the whole field by its lowest terrain clearance. Anchor selection stays with
+`SpawnPicker`, preserving mission `PLAYER_INIT`, Instant Action lists, fallbacks, and `--pos`.
+Heading comes from the anchor's position-to-look-at pair so `--direction` survives. Terrain is an
+injected `Func<Vector3, float?>`; production uses `GameSession.GroundSampler()`.
+`startGrid.slotSpacing` and `startGrid.groundClearance` are registered TUNE values. `GameSession`
+selects this grid for multiplayer campaign sessions and eligible splitscreen stunt races; solo,
+Dogfight, and deterministic scripted race starts keep their own placement paths. Geometry and
+terrain lifting are pinned by `CSVM.Tests/StartGridTests.cs`.
 
 ## src/Session/PlaneRoster.cs
 Static, spec-free lookups over a `SessionSpec`'s plane roster: `PlaneFor(spec, index)`,
@@ -5507,18 +5484,12 @@ already forced by `HumanFlightAdapter`'s own `DebugCompleteStunt` wiring; `zeppe
 force, its verification drove the mode through real damage.
 
 ## src/Session/SpectateHandoff.cs
-What both directors do to a pane whose pilot is out of the mission for good, in one place because
-only the rule that reaches it differs: Instant Action's last life, and a co-op campaign human whose
-aircraft is lost while the others fly on. `Begin` pins the wreck through
-`FlightController.Spectating` (so neither `R` nor an armed `AutoRespawnAfter` flies it again),
-takes the camera off the controller with `CameraOwned`, and parents a `SpectatorCamera` at the pane
-camera's current pose, which is where `CameraController.CrashView` left it. It orbit-locks onto the
-first other rig still `InPlay` and answers that aircraft, or null when it starts free at the crash
-camera; false back means this pilot was already spectating, which is what keeps a second report of
-the same death from stacking a second camera on the pane. ⚠ The spectator takes the pilot's OWN
-`PadDevices`/`UseKeyboard` filter: two downed pilots watching at once otherwise move in lockstep.
-`LockCandidates` and the tracking list are both optional, for a caller with no roster to offer and
-no rerun to hand panes back to.
+The shared pane handoff for an Instant Action pilot out of lives or a campaign human whose aircraft
+is lost while teammates continue. `Begin` pins the wreck through `FlightController.Spectating`,
+releases the pane camera through `CameraOwned`, and creates a `SpectatorCamera` at the crash view's
+last pose. It follows the first other rig still `InPlay`, or starts free when none exists, and uses
+the downed pilot's own device filter. A false result means that pane already has a spectator.
+Candidate and tracking lists are optional for callers without a roster or rerun path.
 
 ## src/Session/InstantActionRuntime.cs
 Owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's spawn draw
@@ -5590,22 +5561,13 @@ table loaded from the wrong scope looks like. `GameSession` binds it through
 hangar anchor, and C2/M03's race chain of per-zone objectives with a racer-death DEDG each).
 
 ## src/Session/CampaignHumanField.cs
-The human field's own rules, engine-free and pinned by `CSVM.Tests/CampaignHumanFieldTests.cs`:
-what a condition that used to ask about one aeroplane answers once two to four humans fly the
-mission. Two meanings live behind the word "player" in this area and the split between them is the
-whole of the design: the SCRIPTED PLAYER is the one aeroplane an authored `player` token names,
-always P1's, and the HUMAN FIELD is every human in the session. This type only ever answers "any of
-them", over `HumanState` (position, the AI group a capture stamped, whether it is a wreck), and
-`CampaignDirector.World.SnapshotHumans` is the only producer of those.
-`Travelers` is the `TRAVELERS` proximity read: the NEAREST human decides, so an approaching
-condition is met by the first human to arrive and a departing one only once the last has left. ⚠ A
-wreck still reports its position, deliberately: the single-player read this replaces is the pilot
-rig's own position, which a crash does not stop reporting. `LiveInGroup` is the `DEDG` count of
-humans holding a captured aeroplane of that group, crashed alone and never inert, since a human rig
-is inert under a cutscene. The two seams that deliberately do NOT read this type are
-`CampaignRosterPlan.ResolveLeader`'s `player` and `NetTrailerTargets`, each anchored on the scripted
-player because an escort and an anchored net must each follow ONE aeroplane; both carry a `⚠` at
-their input, since they are the two a later reader will assume were missed.
+Engine-free objective rules over every joined human, represented by `HumanState` position, captured
+group, and wreck state. `CampaignDirector.World.SnapshotHumans` is the sole producer. `Travelers`
+uses the nearest human, so approaching succeeds on the first arrival and departing on the last
+exit; wrecks continue reporting their positions. `LiveInGroup` counts non-wrecked humans in a
+captured group and ignores temporary cutscene inertia. The scripted player remains a separate P1
+identity for authored `player` tokens, roster leaders, and anchored net trailers. Rules are pinned by
+`CSVM.Tests/CampaignHumanFieldTests.cs`.
 
 ## src/Session/ObjectiveGraph.cs
 The objectives runtime over a parsed script, pure state over `Step` calls in the shape of
