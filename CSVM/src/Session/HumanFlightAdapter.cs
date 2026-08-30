@@ -251,7 +251,7 @@ internal sealed class HumanFlightAdapter
                     foreach (var _ in controller.Loadout.FirableGuns) { groups++; }
                     GD.Print($"weapons: {groups} gun group(s), {controller.Loadout.Hardpoints.Count} " +
                              $"hardpoint(s), guns=Space/pad-B rockets=F/pad-A, " +
-                             $"select guns=G/dpad-L rockets=H/dpad-R" +
+                             $"select guns=G/dpad-R rockets=H/dpad-L" +
                              (_policy.GunSelect != 0 ? $" [gun-select={_policy.GunSelect}]" : "") +
                              (_policy.InfiniteAmmo ? " (infinite ammo)" : "") +
                              (_policy.AmmoCap != null ? $" (--ammo={_policy.AmmoCap})" : ""));
