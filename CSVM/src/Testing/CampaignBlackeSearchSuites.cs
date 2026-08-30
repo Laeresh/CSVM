@@ -222,7 +222,13 @@ internal static class CampaignBlackeSearchSuites
                 ctx.Check(gyro.Inert, $"…and the placement left his INERT bit alone");
             }
 
-            Spot(ctx, director, graph, gyro, at => listener = at, report);
+            // The spot check reads the human field, so moving the listener alone leaves the
+            // aeroplane the condition actually asks about back at its start point.
+            Spot(ctx, director, graph, gyro, at =>
+            {
+                human.PlaceHeld(at, at + pose.Forward);
+                listener = at;
+            }, report);
         }
         finally
         {

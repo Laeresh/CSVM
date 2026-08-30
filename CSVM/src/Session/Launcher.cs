@@ -989,8 +989,8 @@ public partial class Launcher : Node3D
     // --campaign= command line.
     private void StartCampaignFromMenu(LaunchMenu.CampaignLaunch launch)
     {
-        _spec = SessionSpec.FromCampaign(_cli, launch.Profile, launch.Seq, launch.PlaneNode,
-            launch.Fit, launch.Custom);
+        _spec = SessionSpec.FromCampaign(_cli, launch.Profile, launch.Seq, launch.PlaneNodes,
+            launch.Players, launch.Fits, launch.Customs);
         if (!_spec.SeedPinned)
         {
             _sortie++;

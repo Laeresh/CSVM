@@ -61,6 +61,11 @@ public enum ObjectiveTransitionKind
 /// wake/completion actions that touch world objects. A method returning <c>null</c> means "this
 /// engine cannot answer", which makes the condition family report false rather than guess; the
 /// graph counts those in <see cref="ObjectiveGraph.UnresolvedConditions"/>.
+/// ⚠ Two meanings live behind the word "player" here, and an implementer has to keep them apart:
+/// the SCRIPTED PLAYER is the one aeroplane an authored <c>player</c> token names, and the HUMAN
+/// FIELD is every human flying the mission. Every condition below reads the field
+/// (<see cref="CampaignHumanField"/>); the escort leader and a net's trailer target read the
+/// scripted player, and neither of those reaches the graph at all.
 /// </summary>
 public interface IObjectiveWorld
 {
@@ -73,11 +78,13 @@ public interface IObjectiveWorld
     int AnimState(string anim);
 
     /// <summary>Live vehicles in an AI group, plus the named generator's remaining capacity when
-    /// <c>DEDG</c> authors one. Null when the session has no AI-group roster at all.</summary>
+    /// <c>DEDG</c> authors one, plus every human the group's capture stamped. Null when the session
+    /// has no AI-group roster at all.</summary>
     int? GroupLiveCount(int group, string? generator);
 
-    /// <summary>Whether a <c>TRAVELERS</c> proximity condition reads true this tick. Null when the
-    /// subject or the reference cannot be resolved.</summary>
+    /// <summary>Whether a <c>TRAVELERS</c> proximity condition reads true this tick. An authored
+    /// <c>player</c> subject is the human field, nearest human first. Null when the subject or the
+    /// reference cannot be resolved.</summary>
     bool? TravelersMet(TravelersSpec spec);
 
     /// <summary>`WAKEUP_ENEMIES`: reactivate each named vehicle or zeppelin that is

@@ -10,8 +10,9 @@ namespace CSVM.UI;
 /// <summary>
 /// The ammo selection screen (<c>Campaign Ammo Selection.png</c>, <c>ORDINANCELAYOUT.SCRIPT</c>,
 /// <c>docs/formats/campaign-screens.md</c> "Ammo selection"): four gun-group ammunition picks, eight
-/// pylon ordnance picks, a description panel, and ACCEPT/CANCEL LOADOUT, for
-/// <see cref="CampaignFlow.AmmoSlot"/> 0 the pilot or 1 the wingman. Edits a working copy, the
+/// pylon ordnance picks, a description panel, and ACCEPT/CANCEL LOADOUT, for whichever record
+/// <see cref="CampaignFlow.AmmoTarget"/> names: <see cref="CampaignFlow.AmmoSlot"/> 0 the pilot or
+/// 1 the wingman on the seated player's check, a guest's own aircraft on theirs. Edits a working copy, the
 /// original's own model (<c>uiData</c> 2035/2034): nothing reaches <see cref="Flow"/>'s profile until
 /// ACCEPT, and CANCEL — or backing out — simply drops the copy. A gun group's build comes from the
 /// plane's <see cref="CustomPlaneDef"/> when hangar-built, else the airframe's stock fit for the two
@@ -41,9 +42,6 @@ public sealed class CampaignAmmoPage : CampaignPage
     private readonly CustomPlaneStore? _planes;
     private StockLoadouts? _stock;
 
-    private CampaignProfileDef? _loadedProfile;
-    private int _loadedSlot = -1;
-    private int _loadedPlaneIndex = -1;
     private OwnedPlane? _plane;
     private SlotBuild _build;
     private int[] _ammo = new int[4];
@@ -255,31 +253,19 @@ public sealed class CampaignAmmoPage : CampaignPage
         return new SlotBuild(present, calibre, left, right);
     }
 
-    // Reloads the working copy from the flow's current target (profile, slot, plane index) when it
-    // changed since the last load, or when a prior Accept/Cancel/Back dropped it. A re-entry onto
-    // the same target after a cancel therefore reads the still-unedited stored fit, never the
-    // discarded edits.
+    // Reloads the working copy whenever the flow names a different record than the one loaded, or
+    // when a prior Accept/Cancel/Back dropped it. A re-entry onto the same record after a cancel
+    // therefore reads the still-unedited stored fit, never the discarded edits. The record itself
+    // is the key (C22): a guest's aircraft is not in the profile, so no index names it.
     private void EnsureLoaded()
     {
-        var profile = Flow.Profile;
-        if (profile == null)
-        {
-            _plane = null;
-            return;
-        }
-
-        int slot = Flow.AmmoSlot;
-        int planeIndex = slot == 0 ? profile.SelectedPlane : profile.WingmanPlane;
-        if (_plane != null && ReferenceEquals(profile, _loadedProfile)
-            && slot == _loadedSlot && planeIndex == _loadedPlaneIndex)
+        var target = Flow.AmmoTarget();
+        if (_plane != null && ReferenceEquals(target, _plane))
         {
             return;
         }
 
-        _loadedProfile = profile;
-        _loadedSlot = slot;
-        _loadedPlaneIndex = planeIndex;
-        _plane = planeIndex >= 0 && planeIndex < profile.Planes.Count ? profile.Planes[planeIndex] : null;
+        _plane = target;
         _build = _plane != null ? ResolveBuild(_plane) : default;
         _ammo = _plane != null ? (int[])_plane.Ammo.Clone() : new int[4];
         _ordnance = _plane != null ? (int[])_plane.Ordnance.Clone() : new int[8];
@@ -290,7 +276,8 @@ public sealed class CampaignAmmoPage : CampaignPage
     private void Discard() => _plane = null;
 
     // Writes the working copy into the plane's own record and saves the profile, the original's
-    // uiData 2034/gosCallback 12 commit path.
+    // uiData 2034/gosCallback 12 commit path. ⚠ A guest's record is session-scoped and belongs to
+    // no profile, so their ACCEPT writes the record and saves nothing (the plan's decision 4).
     private void Commit()
     {
         if (_plane == null)
@@ -300,7 +287,10 @@ public sealed class CampaignAmmoPage : CampaignPage
 
         _plane.Ammo = _ammo;
         _plane.Ordnance = _ordnance;
-        Flow.Store.Save(Flow.Profile!);
+        if (Flow.Field.Current == 0 && Flow.Profile is { } profile)
+        {
+            Flow.Store.Save(profile);
+        }
     }
 
     // The aircraft's frame of one diagram sheet, captioned with the plane it is fitting.
@@ -428,10 +418,11 @@ public sealed class CampaignAmmoPage : CampaignPage
 
     // The plane's gun/hardpoint shape: from its own CustomPlaneStore build when it has one (every
     // hangar-built plane), else the airframe's plain stock fit (the two profile-seeded starters,
-    // which never touch CustomPlaneStore per B13's own SellPrice fallback reasoning).
+    // which never touch CustomPlaneStore per B13's own SellPrice fallback reasoning, and a guest's
+    // stock airframe, which is named for its airframe and so must never look a build up by name).
     private SlotBuild ResolveBuild(OwnedPlane plane)
     {
-        var built = _planes?.Load(plane.Name);
+        var built = Flow.Field.IsStock(plane) ? null : _planes?.Load(plane.Name);
         if (built != null)
         {
             var present = new bool[4];

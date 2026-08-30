@@ -18,11 +18,15 @@ namespace CSVM.Session;
 public readonly record struct AirframeSwapCode(int Code, string Def, string PlaneNode,
     int? AwardAirframe = null, bool ShippedSkins = false);
 
-/// <summary>One swap as the mission-script host raises it: the airframe the code names, and the
-/// node the raising definition is rooted on, which is the aircraft the capture animation belongs
-/// to. <c>CaptureRoot</c> is null for a definition rooted on nothing the runtime could name.
+/// <summary>One swap as the mission-script host raises it: the airframe the code names, the node
+/// the raising definition is rooted on, which is the aircraft the capture animation belongs to, and
+/// the rig the swap lands on. <c>CaptureRoot</c> is null for a definition rooted on nothing the
+/// runtime could name. <c>Owner</c> is the episode owner, the human whose trigger started the
+/// episode, and it is the whole of what makes a guest's capture put the GUEST in the aeroplane; it
+/// is null only where the host has no rigs bound, which is a session with no aircraft to swap.
 /// </summary>
-public readonly record struct AirframeSwapOrder(AirframeSwapCode Airframe, string? CaptureRoot);
+public readonly record struct AirframeSwapOrder(AirframeSwapCode Airframe, string? CaptureRoot,
+    Flight.PlayerRig? Owner = null);
 
 /// <summary>What one raised swap did: whether an aircraft was replaced at all, and the aircraft the
 /// swap took out of the world (967's capture, null for the other two codes and for a root that

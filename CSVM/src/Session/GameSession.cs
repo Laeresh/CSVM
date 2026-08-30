@@ -84,6 +84,8 @@ public partial class GameSession : Node3D
     private readonly List<bool> _boardWasVisible = new();
     // scratch: the rigs' controllers plus AiPlanes, rebuilt on every AllAircraft() call
     private readonly List<FlightController> _aircraftScan = new();
+    // scratch: the rigs' controllers alone, rebuilt on every HumanAircraft() call
+    private readonly List<FlightController> _humanScan = new();
     // scratch: rig camera positions for the edge extender
     private readonly List<Vector3> _focusPoints = new();
     // Pickable subtrees that live beside the world content rather than under it — the anim lab's
@@ -305,7 +307,8 @@ public partial class GameSession : Node3D
         Name = "GameSession";
         // ⚠ Resolved here, before any consumer reads Chapter/Mission: a --campaign= launch names a
         // story position, not a chapter, and every path below is derived from those two fields.
-        _spec = ResolveCampaignZeppelins(CampaignDirector.ResolveSpec(spec, ctx.ZrdrPath), ctx.DataRoot);
+        _spec = CampaignDirector.ResolveSeatedPlane(
+            ResolveCampaignZeppelins(CampaignDirector.ResolveSpec(spec, ctx.ZrdrPath), ctx.DataRoot));
         _repoRoot = ctx.RepoRoot;
         _dataRoot = ctx.DataRoot;
         _planesGamezPath = ctx.PlanesGamezPath;
@@ -488,6 +491,10 @@ public partial class GameSession : Node3D
                     ApplyDeferredSpawnOverride();
                 }
             };
+            // Read live, not captured: the pane rig is built later in this same build, and an
+            // intro's first code lands in the animation bootstrap before it exists (BindRigs
+            // re-raises this for that episode).
+            _cutscene.FillsWindow = fills => _split?.Fill(fills);
             AddChild(_cutscene);
             // The mid-mission cutscene trigger, hosted by the same controller. ⚠ Story missions
             // only: C3/IA1 carries hooked_to_klondike with its approach armed, so an Instant
@@ -610,10 +617,16 @@ public partial class GameSession : Node3D
         // since a connected pad reports button 0 pressed as it arrives.
         if (_cutscene is { Playing: true }
             && (@event is InputEventKey { Pressed: true, Echo: false, Keycode: not Key.Escape }
-                || (!_spec.PadsDisabled && @event is InputEventJoypadButton { Pressed: true }))
-            && _cutscene.Skip())
+                || (!_spec.PadsDisabled && @event is InputEventJoypadButton { Pressed: true })))
         {
-            return;
+            int skipper = SkipperIndex(@event);
+            if (_cutscene.Skip(skipper))
+            {
+                // Named on screen, because with a field of humans the picture ending is one
+                // player's decision the others did not make.
+                _split?.NoteSkip(skipper);
+                return;
+            }
         }
         // P halts the sim and . steps it one frame, in freecam and the static viewer. ⚠ Do not
         // handle either for flight or the animation lab; both own their own transport.
@@ -827,6 +840,24 @@ public partial class GameSession : Node3D
         return _aircraftScan;
     }
 
+    /// <summary>The human field: every joined player's aircraft and no AI, in the same reused-list
+    /// shape as <see cref="AllAircraft"/> and read just as fresh, since an airframe swap rebuilds
+    /// a rig's controller. One entry outside splitscreen, which is the scripted player alone.
+    /// Not to be held across a step.</summary>
+    private IReadOnlyList<FlightController> HumanAircraft()
+    {
+        _humanScan.Clear();
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller is { } c)
+            {
+                _humanScan.Add(c);
+            }
+        }
+
+        return _humanScan;
+    }
+
     // Loads the session's core archives (gamez, textures, sounds, sound defs/groups) and routes the
     // texture/sound archives to whichever owner outlives this build scope.
     private void LoadArchives(BuildState state)
@@ -1011,7 +1042,9 @@ public partial class GameSession : Node3D
                 LandingTriggers = _landings != null,
                 PlanesGamezPath = state.PlanesGamezPath,
                 CallbackHost = _cutscene != null ? _cutscene.Host : null,
-                TriggerOwner = _cutscene != null ? _cutscene.Own : null,
+                // No owner named: the opening cutscene has no triggering human, so the episode is
+                // the scripted player's, which is what the intro has always meant.
+                TriggerOwner = _cutscene is { } host ? anim => host.Own(anim) : null,
                 // The weather rig is built after the world, and the intro's fog fires inside the
                 // bootstrap, so the event is held until the rig has applied its zone.
                 FogStateSink = fog =>
@@ -1043,10 +1076,8 @@ public partial class GameSession : Node3D
         if (_cutscene != null && _landings != null)
         {
             _cutscene.HostDefinitions(session.LandingCutsceneAnims);
-            _landings.Bind(session.Runtime, session.Landings, _cutscene,
-                () => _rigs.Count > 0 ? _rigs[0].Controller : null);
-            _ladder?.Bind(session.Runtime, _cutscene,
-                () => _rigs.Count > 0 ? _rigs[0].Controller : null, session.Pickups);
+            _landings.Bind(session.Runtime, session.Landings, _cutscene, () => _rigs);
+            _ladder?.Bind(session.Runtime, _cutscene, () => _rigs, session.Pickups);
         }
         // The screen wash. Set here rather than inside WorldSession for the same reason the
         // contact mask below is: the overlay is a session-owned surface and WorldSession builds
@@ -1900,11 +1931,15 @@ public partial class GameSession : Node3D
         Texture2D? reticleTex = ImpactReticle.LoadTexture(
             Path.Combine(_dataRoot, "extracted", "rimage"), "impact_point.png");
 
+        // ⚠ No --det bypass on this arm, unlike the race arm below: a story mission has one
+        // PLAYER_INIT, so the plain walk stacks the whole field on it
+        // (docs/architecture.md, ## src/Session/StartGrid.cs).
+        bool coopCampaign = _spec.CampaignProfile != null && _rigs.Count > 1;
         // ⚠ Choose the spawn placement ONCE, by picking an implementation here, never by a runtime
-        // flag inside one: --det stays byte-identical because RaceGrid is then not constructed at
+        // flag inside one: a --det race stays byte-identical because StartGrid is then not built at
         // all. It cannot move up beside new SpawnPicker, which runs before `race` is settled.
-        IFlightStarts flightStarts = race != null && !_spec.Det
-            ? new RaceGrid(_spawnPicker, GroundSampler())
+        IFlightStarts flightStarts = coopCampaign || (race != null && !_spec.Det)
+            ? new StartGrid(_spawnPicker, GroundSampler())
             : _spawnPicker;
         var aircraftResources = new AircraftAssemblyResources
         {
@@ -2254,10 +2289,8 @@ public partial class GameSession : Node3D
             if (grafted > 0 && _landings != null && _cutscene != null
                 && state.WorldRuntime is { } landingWorld && state.Landings is { } landingRows)
             {
-                _landings.Bind(landingWorld, landingRows, _cutscene,
-                    () => _rigs.Count > 0 ? _rigs[0].Controller : null);
-                _ladder?.Bind(landingWorld, _cutscene,
-                    () => _rigs.Count > 0 ? _rigs[0].Controller : null, state.Pickups);
+                _landings.Bind(landingWorld, landingRows, _cutscene, () => _rigs);
+                _ladder?.Bind(landingWorld, _cutscene, () => _rigs, state.Pickups);
             }
         }
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
@@ -2579,7 +2612,9 @@ public partial class GameSession : Node3D
                 ? pilot.WorldPosition
                 : Vector3.Zero,
             PlayerAircraft = () => _rigs.Count > 0 ? _rigs[0].Controller : null,
+            Humans = HumanAircraft,
             Aircraft = AllAircraft,
+            BeginSpectate = BeginCampaignSpectate,
             Rng = Rng.NewSystemRandom(Rng.Ai),
         });
 
@@ -2606,7 +2641,12 @@ public partial class GameSession : Node3D
         if (_campaign is { } campaign)
         {
             var objectiveMessages = Messages.Load(state.MessagesPath);
-            _worldRoot!.AddChild(UI.ObjectivesHud.Build(campaign, objectiveMessages, _pauseState!));
+            // B15: one readout per rig, under that rig's own HudParent, so every pane draws its own
+            // copy over the one shared PauseState — the pattern every other per-rig HUD follows.
+            foreach (var rig in _rigs)
+            {
+                rig.HudParent.AddChild(UI.ObjectivesHud.Build(campaign, objectiveMessages, _pauseState!));
+            }
             var sites = new ObjectiveSites(campaign, objectiveMessages,
                 MissionTargets.Load(state.MissionZrdrPath,
                     SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter)),
@@ -2809,7 +2849,7 @@ public partial class GameSession : Node3D
         });
     }
 
-    // The production ground sampler RaceGrid probes its slots with: the world height under a point,
+    // The production ground sampler StartGrid probes its slots with: the world height under a point,
     // or null when the physics space answered nothing.
     // ⚠ Report null, never a fabricated height: the anchor is an authored, flyable point, and a
     // made-up correction would move a race field for no reason. This is the only place that knows
@@ -2878,6 +2918,29 @@ public partial class GameSession : Node3D
                 ? fc.GlobalPosition
                 : _rigs[i].Camera.GlobalPosition;
         return positions;
+    }
+
+    // Which human that key or button belongs to. A pad is bound to exactly one seat by
+    // Pads.AssignPads, and the keyboard is P1's alone (HumanFlightAdapter); an unmatched device is
+    // the scripted player's, so a skip always has a skipper to name rather than a hole.
+    private int SkipperIndex(InputEvent @event)
+    {
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller is not { IsHumanPiloted: true } pilot)
+            {
+                continue;
+            }
+
+            if (@event is InputEventJoypadButton pad
+                ? pilot.PadDevices != null && System.Array.IndexOf(pilot.PadDevices, pad.Device) >= 0
+                : pilot.UseKeyboard)
+            {
+                return rig.Index;
+            }
+        }
+
+        return 0;
     }
 
     // Whether any human pilot is flying one of the two first-person views — the answer the anim
@@ -3075,10 +3138,12 @@ public partial class GameSession : Node3D
         _orbit.Frame(aabb, _spec.CamPos, pivot);
     }
 
-    // The mission-script host's airframe swap (callback codes 965 to 967). Player 1 alone: the
-    // original has one player vehicle and the codes name it, so a splitscreen pane cannot be given
-    // an answer the data does not carry. A failed swap is reported rather than thrown: the player
-    // keeps the aircraft the exception left them without, and the mission goes on.
+    // The mission-script host's airframe swap (callback codes 965 to 967). The episode owner's rig,
+    // which is the human whose trigger started the episode: the original has one player vehicle and
+    // the codes name it, and with a field the aeroplane it names is the one that earned the swap.
+    // An episode nobody claimed is the scripted player's, so a 1P mission swaps exactly what it
+    // swapped before. A failed swap is reported rather than thrown: the player keeps the aircraft
+    // the exception left them without, and the mission goes on.
     private AirframeSwapResult SwapPlayerAirframe(AirframeSwapOrder order)
     {
         if (_flightRoster == null || _rigs.Count == 0)
@@ -3088,7 +3153,7 @@ public partial class GameSession : Node3D
 
         try
         {
-            return _flightRoster.RunSwap(_rigs[0], order,
+            return _flightRoster.RunSwap(order.Owner ?? _rigs[0], order,
                 AirframeHandover.Resolves(_spec.Chapter, _spec.Mission));
         }
         catch (Exception e)
@@ -3147,6 +3212,25 @@ public partial class GameSession : Node3D
         GD.Print($"--debug-spectate: {_rigs.Count} human(s) pinned, inert and untargetable; " +
                  (follow != null ? $"camera following {follow.Name}" : "camera free at the spawn") +
                  $" ({AiPlanes.Count} AI aircraft flying)");
+    }
+
+    // A co-op campaign human whose aircraft is lost while the others fly on (B13): the same
+    // hand-off Instant Action's last life runs, with the campaign's own loss rule deciding when.
+    private void BeginCampaignSpectate(FlightController pilot)
+    {
+        foreach (var rig in _rigs)
+        {
+            if (!ReferenceEquals(rig.Controller, pilot))
+            {
+                continue;
+            }
+
+            SpectateHandoff.Begin(rig, _rigs, _worldRoot!, LockCandidateAircraft,
+                _spectatorCameras, out var follow);
+            GD.Print($"campaign: P{rig.Index + 1}'s pane is spectating" +
+                     (follow != null ? $", following P{follow.PlayerIndex + 1}" : " from the crash camera"));
+            return;
+        }
     }
 
     /// <summary>What a <see cref="SpectatorCamera"/>'s target key may lock onto: every aircraft
@@ -3509,10 +3593,19 @@ public partial class GameSession : Node3D
         public void StepLandingApproaches()
         {
             session._landings?.Tick();
-            if (session._landings != null && session._rigs.Count > 0
-                && session._rigs[0].Controller is { } flown)
+            if (session._landings is not { } landings)
             {
-                flown.AutoLandOffered = session._landings.AutoLandOffered;
+                return;
+            }
+
+            // Per pane: only the human inside the sphere is shown the prompt, and only their own
+            // button starts the row.
+            foreach (var rig in session._rigs)
+            {
+                if (rig.Controller is { } flown)
+                {
+                    flown.AutoLandOffered = landings.OffersAutoLandTo(rig.Index);
+                }
             }
         }
 

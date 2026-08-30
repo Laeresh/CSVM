@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -55,6 +56,13 @@ public sealed partial class CutsceneController : Node
     /// <summary>Raised whenever the world hold changes, so the session can suspend the mission
     /// director alongside its own per-step world update (code 20 stops both).</summary>
     public Action<bool>? WorldHeld;
+
+    /// <summary>Raised as an episode takes the window and again as it gives it back, so a
+    /// splitscreen session can play the cutscene across the whole window rather than in N small
+    /// copies of one camera path. Both exits (the definition ending and a skip) go through the
+    /// restore, so both hand it back; <see cref="BindRigs"/> re-raises it for an episode that
+    /// started before the panes existed, which is every mission intro.</summary>
+    public Action<bool>? FillsWindow;
 
     /// <summary>Puts the player into the airframe codes 965 to 967 name, and carries out whatever
     /// else the raised code asks of the mission (<see cref="AirframeHandover"/>). The session fills
@@ -117,6 +125,14 @@ public sealed partial class CutsceneController : Node
     // The landings slot: the row definition the trigger has just started, owning the next episode
     // whichever callee raises its first code. Null once that episode has taken it.
     private string? _owner;
+    // The human whose trigger claimed that slot, taken with it. Null where the trigger named none.
+    private PlayerRig? _ownerRig;
+    // The episode owner, latched when the episode took the session: the human the swap and the
+    // staging follow. Null means the scripted player, resolved live below rather than at the claim,
+    // because a suite (and the intro) can own an episode before BindRigs has run. Rewritten as the
+    // NEXT episode takes the session rather than at the handoff, the way the code record is, so the
+    // aeroplane a swap left the mission with stays the one a hookup definition resolves.
+    private PlayerRig? _episodeOwner;
     // The world root `camera1` belongs under, so Restore can undo a definition's own reparent.
     private Node3D? _cameraHome;
     private Node3D? _bars;
@@ -184,9 +200,29 @@ public sealed partial class CutsceneController : Node
     /// do, and the first of those ends with the aeroplane still on the hook.</summary>
     public string? Anim { get; private set; }
 
+    /// <summary>The human this episode belongs to: the one whose mission trigger started it
+    /// (<see cref="Own"/>), or the scripted player where no trigger named one, which is every
+    /// mission intro. The airframe swap rebuilds THIS rig, so a guest who flies the capture cone
+    /// ends up in the captured aeroplane rather than handing it to P1. Null only in a session with
+    /// no rigs bound.</summary>
+    public PlayerRig? EpisodeOwner => _episodeOwner ?? ScriptedPlayer;
+
     /// <summary>The letterbox card's extent as <see cref="BindWorld"/> measured it, in the bars
     /// root's own frame. Read-only, and measured once: see the note in <c>BindWorld</c>.</summary>
     public Aabb CardBox => _cardBox;
+
+    // The scripted player's rig: P1's, the one aeroplane an authored `player` token means. It is
+    // what an unclaimed episode owns, so a 1P session and every mission intro answer exactly what
+    // they answered before there was a field to choose from.
+    private PlayerRig? ScriptedPlayer => _rigs.Count > 0 ? _rigs[0] : null;
+
+    // The one pilot the staged `player` marker poses and the re-placement moves: the episode owner's,
+    // which is the scripted player's in an unclaimed episode and in every 1P session. There is
+    // exactly one marker, so the other humans hold the pose they were in when the code took them out
+    // of flight rather than stacking on that point, and no second staging geometry exists to give
+    // them. ⚠ Read live: a swap rebuilds the owner's controller mid-episode.
+    private FlightController? OwnerPilot =>
+        EpisodeOwner?.Controller is { IsHumanPiloted: true } pilot ? pilot : null;
 
     /// <summary>The vertical field of view, in degrees, at which the letterbox card of extent
     /// <paramref name="cardBox"/> covers a pane of ratio <paramref name="aspect"/>, or null when
@@ -232,11 +268,12 @@ public sealed partial class CutsceneController : Node
         animName != null && (IsIntro(animName) || _hosted.Contains(animName));
 
     /// <summary>Puts <paramref name="animName"/> in the landings slot: the next episode belongs to
-    /// it and ends when it does, however deep the callee that raises its first code sits. This is
-    /// the original's own slot, which holds the instance the trigger started. Call it before
-    /// starting the definition, since the first code can land inside that start.
-    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
-    public void Own(string animName)
+    /// it and ends when it does, however deep the callee that raises its first code sits, and
+    /// <paramref name="owner"/> is the human whose trigger this is (null: the scripted player's,
+    /// which is what a mission intro means). This is the original's own slot, which holds the
+    /// instance the trigger started. Call it before starting the definition, since the first code
+    /// can land inside that start. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    public void Own(string animName, PlayerRig? owner = null)
     {
         // ⚠ Not every mission trigger starts a cutscene: an objective's WAKE_ANIM and the ladder
         // switch go through the same call, and a slot one of those claimed would outrank the next
@@ -247,6 +284,7 @@ public sealed partial class CutsceneController : Node
         }
 
         _owner = animName;
+        _ownerRig = owner;
     }
 
     /// <summary>The world's animation runtime and the two nodes a cutscene definition drives. Run
@@ -303,6 +341,7 @@ public sealed partial class CutsceneController : Node
             return;
         }
 
+        FillsWindow?.Invoke(true);
         ApplyPresentation(Presenting);
         ApplyOutOfFlight(OutOfFlight);
         if (AiParked)
@@ -370,16 +409,22 @@ public sealed partial class CutsceneController : Node
             // The slot beats the raiser only while its definition is live, so a stale one cannot
             // outlast it. ⚠ With no runtime yet to ask it wins outright: the intro's first code
             // lands in the bootstrap, before the build has handed this host a runtime.
-            Anim = _owner != null
-                   && (_runtime == null || _runtime.AnimStateOf(_owner) == AnimRunning)
-                ? _owner : animName;
+            bool slotWins = _owner != null
+                && (_runtime == null || _runtime.AnimStateOf(_owner) == AnimRunning);
+            Anim = slotWins ? _owner : animName;
+            // The rig rides the slot and not the raiser: a stale slot that lost the definition has
+            // lost its claim on the episode's owner too, and an unclaimed episode is the scripted
+            // player's.
+            _episodeOwner = slotWins ? _ownerRig : null;
             _owner = null;
+            _ownerRig = null;
             SeedRaisers();
             _barsFlipsThisEpisode = 0;
             _lastBarsVisible = _bars?.Visible ?? false;
             GD.Print(Anim == animName
                 ? $"cutscene: '{animName}' has the session"
                 : $"cutscene: '{Anim}' has the session, its callee '{animName}' raising the first code");
+            FillsWindow?.Invoke(true);
         }
 
         _codeRoot = rootName;
@@ -415,14 +460,17 @@ public sealed partial class CutsceneController : Node
     /// <summary>The player's skip. Force-stops the definition the way the original's state core
     /// does, then restores the gameplay state the definition's own RESET_STATE asserts, so the
     /// remaining beats being dropped cannot leave the mission held, hidden or unflyable.
-    /// Declined, and the key press left to whatever else reads it, while no skip is armed.</summary>
-    public bool Skip()
+    /// Declined, and the key press left to whatever else reads it, while no skip is armed.
+    /// <paramref name="playerIndex"/> is the human whose device it came from: any of them may
+    /// skip, so who did is something the other players are owed rather than a detail.</summary>
+    public bool Skip(int playerIndex = 0)
     {
         if (!Playing || !Skippable)
         {
             return false;
         }
 
+        Log.Info("anim", $"cutscene '{Anim}' skipped by P{playerIndex + 1}");
         if (Anim != null)
         {
             _runtime?.Stop(Anim);
@@ -590,6 +638,9 @@ public sealed partial class CutsceneController : Node
         _fov.Clear();
         Playing = false;
         Anim = null;
+        // Last, with the state it was raised alongside already down: the panes come back to a
+        // session that is flying again rather than to one still holding the world.
+        FillsWindow?.Invoke(false);
     }
 
     private void Act(int code)
@@ -673,7 +724,8 @@ public sealed partial class CutsceneController : Node
     // does, which is how the player gets flight back in the new airframe.
     private void Swap(AirframeSwapCode airframe)
     {
-        var swapped = SwapAirframe?.Invoke(new AirframeSwapOrder(airframe, _codeRoot)) ?? default;
+        var swapped = SwapAirframe?.Invoke(new AirframeSwapOrder(airframe, _codeRoot, EpisodeOwner))
+                      ?? default;
         if (!swapped.Swapped)
         {
             GD.Print($"cutscene: callback {airframe.Code} names '{airframe.PlaneNode}' " +
@@ -699,14 +751,16 @@ public sealed partial class CutsceneController : Node
         ApplyPresentation(true);
     }
 
-    // Player 1's airframe subtree into the runtime's node table, the same restriction the swap
-    // keeps: the original has one player vehicle and the hookup definition names it. Run wherever
-    // that aircraft can have been replaced, since the definition resolves it by name and index.
+    // The episode owner's airframe subtree into the runtime's node table, which is the aeroplane a
+    // hookup definition resolves its own hook, wings and mount offset off. The original has one
+    // player vehicle and names it; with a field, the one the definition means is the human whose
+    // trigger started the episode, and an unclaimed episode still answers the scripted player's.
+    // Run wherever that aircraft can have been replaced, since the definition resolves it by name.
     private void StageFlownAirframe()
     {
-        if (_runtime is { } runtime && _aircraft is { } aircraft && _rigs.Count > 0)
+        if (_runtime is { } runtime && _aircraft is { } aircraft && EpisodeOwner is { } owner)
         {
-            aircraft.StageFlown(runtime, _rigs[0].Controller?.PlaneModel);
+            aircraft.StageFlown(runtime, owner.Controller?.PlaneModel);
         }
     }
 
@@ -800,16 +854,18 @@ public sealed partial class CutsceneController : Node
         var pose = OutOfFlight && _playerMarker.Visible
             ? AnimRuntime.WorldTransform(_playerMarker, out _)
             : (Transform3D?)null;
+        var owner = OwnerPilot;
         foreach (var pilot in Pilots())
         {
-            pilot.StageAt(pose);
+            pilot.StageAt(ReferenceEquals(pilot, owner) ? pose : null);
         }
     }
 
     // Where the pilot flies out of: the `player` node's world pose, read the moment the definition
     // asks for it. The original writes that pose straight into the vehicle's own position, rotation
     // and velocity, so this reads the marker whether or not it is drawn, and the aeroplane's own
-    // hand-back target moves with it (docs/formats/anim-definitions/cutscenes.md).
+    // hand-back target moves with it (docs/formats/anim-definitions/cutscenes.md). The episode
+    // owner's target alone, for the one-marker reason on OwnerPilot.
     private void ReplacePlayer()
     {
         if (_playerMarker == null)
@@ -820,12 +876,8 @@ public sealed partial class CutsceneController : Node
         }
 
         var pose = AnimRuntime.WorldTransform(_playerMarker, out _);
-        foreach (var pilot in Pilots())
-        {
-            pilot.ResumeAt(pose);
-        }
-
-        GD.Print($"cutscene: '{Anim}' re-places the pilot at {pose.Origin}");
+        OwnerPilot?.ResumeAt(pose);
+        GD.Print($"cutscene: '{Anim}' re-places P{(EpisodeOwner?.Index ?? 0) + 1} at {pose.Origin}");
     }
 
     private void MirrorCamera()

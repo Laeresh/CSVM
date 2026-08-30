@@ -35,6 +35,17 @@ public sealed partial class SplitScreen : CanvasLayer
 
     private const int Gutter = 2;   // px between panes — confirmed at the controls
 
+    // How long the skip notice stands, in seconds of wall time. Chrome, not sim: the skip releases
+    // the world hold in the same instant, so a notice on the session clock would be the one thing
+    // still frozen behind a mission that is running again. TUNE.
+    private const double SkipNoticeS = 3.0;
+
+    private const int SkipNoticeFontPx = 28;
+
+    // How far off the bottom edge the notice sits — clear of the letterbox card's lower bar, which
+    // a cutscene has over that edge for the whole time this line can be up.
+    private const int SkipNoticeInsetPx = 72;
+
     // Per-player identity colours: the launchscreen's join strip and plane-select
     // cursors, and later the race HUD/scoreboard rows, all key off these so a player
     // recognises "their" colour from the menu through to the results. P1 keeps the launchscreen's
@@ -50,10 +61,21 @@ public sealed partial class SplitScreen : CanvasLayer
     private readonly List<SubViewport> _views = new();
     private readonly List<SubViewportContainer> _panes = new();
     private Control _root = null!;
+    private ColorRect _backdrop = null!;
+    private Label? _skipNotice;
+    private double _skipNoticeLeft;
 
     /// <summary>One SubViewport per player, in player order. Add the player's camera (and its
     /// HUD canvases) to it.</summary>
     public IReadOnlyList<SubViewport> Views => _views;
+
+    /// <summary>Whether pane 1 currently fills the window on its own — what a cutscene asks for,
+    /// since four small copies of one camera path is not a picture anybody framed.</summary>
+    public bool Filled { get; private set; }
+
+    /// <summary>The skip line standing on screen, or null when none is. Its text names the player
+    /// and its modulate is that player's own <see cref="PlayerColor"/>.</summary>
+    public Label? SkipNotice => _skipNotice is { Visible: true } label ? label : null;
 
     /// <summary>Where player <paramref name="index"/>'s pane sits in a <paramref name="size"/>
     /// area shared by <paramref name="players"/> players: 2P stacked top/bottom, 3–4P a 2×2 grid
@@ -106,6 +128,70 @@ public sealed partial class SplitScreen : CanvasLayer
         return split;
     }
 
+    /// <summary>Gives the whole window to pane 1 for the duration of a cutscene
+    /// (<paramref name="on"/>), or hands the panes back. The rig is not rebuilt: every pane keeps
+    /// its camera, its HUD parent, its private visual layer and its cull mask, so what changes is
+    /// the rect one pane covers and which panes draw at all. The main viewport's camera stays down
+    /// throughout — it is the panes that render this world, in a cutscene as in flight.</summary>
+    public void Fill(bool on)
+    {
+        if (Filled == on)
+        {
+            return;
+        }
+
+        Filled = on;
+        for (int i = 1; i < _panes.Count; i++)
+        {
+            _panes[i].Visible = !on;
+            // Taken down by hand rather than left to the pane's visibility: the listener set is the
+            // viewport's own property, and a session that keeps four of them is exactly the pinned
+            // listener model this collapse is not allowed to change (docs/architecture.md).
+            _views[i].AudioListenerEnable3D = !on;
+            // And the render with it: an Always pane goes on drawing the whole world into a target
+            // nobody sees, which is three copies of the shot the one visible pane is already paying
+            // for.
+            _views[i].RenderTargetUpdateMode = on
+                ? SubViewport.UpdateMode.Disabled
+                : SubViewport.UpdateMode.Always;
+        }
+
+        // The gutters and (at 3P) the empty quadrant are the backdrop's; with one pane over the
+        // whole window there is nothing left for it to paint.
+        _backdrop.Visible = !on;
+        Relayout();
+        GD.Print(on
+            ? $"splitscreen: pane1 fills the window for a cutscene, {_panes.Count - 1} pane(s) down, one listener left"
+            : $"splitscreen: {_panes.Count} panes back, a listener and a render each");
+    }
+
+    /// <summary>Names the player who skipped a cutscene, in that player's own colour, for a few
+    /// seconds over the window. Splitscreen only, because that is where the question exists: with
+    /// one human there is nobody else the key press could have been.</summary>
+    public void NoteSkip(int playerIndex)
+    {
+        _skipNotice ??= BuildSkipNotice();
+        _skipNotice.Text = $"{PlayerTag(playerIndex)} SKIPPED";
+        _skipNotice.Modulate = PlayerColor(playerIndex);
+        _skipNotice.Visible = true;
+        _skipNoticeLeft = SkipNoticeS;
+    }
+
+    /// <inheritdoc/>
+    public override void _Process(double delta)
+    {
+        if (_skipNotice is not { Visible: true })
+        {
+            return;
+        }
+
+        _skipNoticeLeft -= delta;
+        if (_skipNoticeLeft <= 0.0)
+        {
+            _skipNotice.Visible = false;
+        }
+    }
+
     private void Init(int players, Viewport mainViewport)
     {
         _root = new Control { Name = "panes", MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -114,9 +200,9 @@ public sealed partial class SplitScreen : CanvasLayer
 
         // Backdrop: paints the gutters between panes and (at 3P) the empty fourth quadrant.
         // Without it the main viewport's environment sky shows through those pixels.
-        var backdrop = new ColorRect { Color = Colors.Black, MouseFilter = Control.MouseFilterEnum.Ignore };
-        backdrop.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        _root.AddChild(backdrop);
+        _backdrop = new ColorRect { Color = Colors.Black, MouseFilter = Control.MouseFilterEnum.Ignore };
+        _backdrop.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _root.AddChild(_backdrop);
 
         // The panes render the SAME world as the main viewport. A SubViewport nested in the tree
         // inherits its parent viewport's World3D by default; setting it explicitly documents that
@@ -165,9 +251,29 @@ public sealed partial class SplitScreen : CanvasLayer
             return;
         for (int i = 0; i < _panes.Count; i++)
         {
-            var rect = PaneRect(i, _panes.Count, size);
+            // Filled, the hidden panes keep their own quadrant: only pane 1 is moved, so handing
+            // the window back is a visibility change and one rect rather than a re-layout.
+            var rect = Filled && i == 0 ? new Rect2(Vector2.Zero, size) : PaneRect(i, _panes.Count, size);
             _panes[i].Position = rect.Position;
             _panes[i].Size = rect.Size;
         }
+    }
+
+    // Built on the first skip and kept: a session nobody skips a cutscene in adds no node at all.
+    // Over the panes because it is added after them, which is also why it survives the collapse.
+    private Label BuildSkipNotice()
+    {
+        var label = new Label
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            Visible = false,
+        };
+        label.AddThemeFontSizeOverride("font_size", SkipNoticeFontPx);
+        label.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        label.OffsetBottom = -SkipNoticeInsetPx;
+        _root.AddChild(label);
+        return label;
     }
 }

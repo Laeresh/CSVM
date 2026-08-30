@@ -19,8 +19,11 @@ namespace CSVM.Session;
 internal sealed class CampaignDangerZones
 {
     private readonly List<Zone> _zones;
-    private Vector3 _lastPos;
-    private bool _havePos;
+
+    // One previous position per human, by field index: the crossing test is a segment, so each
+    // human needs their own. A slot stays empty until that human's first Update, which is what
+    // keeps a joining player from crossing a gate on the jump from nowhere to their aeroplane.
+    private readonly List<Vector3?> _lastPos = new();
 
     private CampaignDangerZones(List<Zone> zones) => _zones = zones;
 
@@ -68,37 +71,49 @@ internal sealed class CampaignDangerZones
         return new CampaignDangerZones(zones);
     }
 
-    /// <summary>One physics-frame test: any gate the player's movement segment crossed this frame,
-    /// completing a zone once both its gates have been crossed. Fires <paramref name="onCompleted"/>
-    /// with the <c>dzpathN</c> name, the exact string a <c>DANGER_ZONES_COMPLETED</c> condition
+    /// <summary>One physics-frame test over the whole human field: any gate a human's movement
+    /// segment crossed this frame, completing a zone once both its gates have been crossed. The
+    /// crossed flags are per zone, so they UNION across the field and the pair may be split between
+    /// two humans (decision 7 of the campaign co-op plan). Fires <paramref name="onCompleted"/> with
+    /// the <c>dzpathN</c> name, the exact string a <c>DANGER_ZONES_COMPLETED</c> condition
     /// names.</summary>
-    public void Update(Vector3 playerPos, Action<string> onCompleted)
+    public void Update(IReadOnlyList<HumanState> humans, Action<string> onCompleted)
     {
-        if (!_havePos)
+        for (int i = 0; i < humans.Count; i++)
         {
-            _lastPos = playerPos;
-            _havePos = true;
-            return;
-        }
-
-        foreach (var z in _zones)
-        {
-            if (z.Completed)
-                continue;
-            if (GateCrossing(_lastPos, playerPos, z.Green))
-                z.GreenCrossed = true;
-            if (GateCrossing(_lastPos, playerPos, z.Red))
-                z.RedCrossed = true;
-            if (z.GreenCrossed && z.RedCrossed)
+            Vector3 now = humans[i].Position;
+            while (_lastPos.Count <= i)
+                _lastPos.Add(null);
+            if (_lastPos[i] is not { } was)
             {
-                z.Completed = true;
-                Log.Info("campaign", $"danger zone '{z.PathName}' completed");
-                onCompleted(z.PathName);
+                _lastPos[i] = now;
+                continue;
             }
-        }
 
-        _lastPos = playerPos;
+            foreach (var z in _zones)
+            {
+                if (z.Completed)
+                    continue;
+                if (GateCrossing(was, now, z.Green))
+                    z.GreenCrossed = true;
+                if (GateCrossing(was, now, z.Red))
+                    z.RedCrossed = true;
+                if (z.GreenCrossed && z.RedCrossed)
+                {
+                    z.Completed = true;
+                    Log.Info("campaign", $"danger zone '{z.PathName}' completed");
+                    onCompleted(z.PathName);
+                }
+            }
+
+            _lastPos[i] = now;
+        }
     }
+
+    /// <summary>The one-human form, for a caller with a position and no field: a suite driving a
+    /// probe along a gate normal, which is how the shipped gate pairs are proved.</summary>
+    public void Update(Vector3 humanPos, Action<string> onCompleted) =>
+        Update(new[] { new HumanState(humanPos, null, false) }, onCompleted);
 
     /// <summary>The mission's own zone-set override (docs/formats/missions.md "Zone overrides"):
     /// a <c>dzpathN</c> named here is switched off for this mission, for the player's scoring and

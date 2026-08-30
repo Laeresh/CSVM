@@ -690,43 +690,17 @@ public sealed class InstantActionDirector
                   $"of {spawns.Count}");
     }
 
-    // A pilot has spent its last life. The Spectating flag pins the wreck, so neither R nor the
-    // armed respawn timer flies it again, and this pane's camera goes to a SpectatorCamera locked
-    // onto a still-flying human where there is one. Any translation input releases the lock.
-    // ⚠ Give the spectator this pilot's own device filter, so in splitscreen two downed pilots
-    // watching at once move independently rather than in lockstep.
+    // A pilot has spent its last life, which is this mission type's own "out for good": the shared
+    // hand-off pins the wreck and puts a SpectatorCamera on the pane (Session/SpectateHandoff.cs).
     private void BeginSpectate(PlayerRig rig)
     {
-        if (rig.Controller is not { Spectating: false } pilot)
+        var end = _end!;
+        if (!SpectateHandoff.Begin(rig, _rigs!, end.WorldRoot, end.LockCandidates,
+                end.SpectatorCameras, out var follow))
         {
             return;
         }
-        var end = _end!;
-        pilot.Spectating = true;
-        pilot.CameraOwned = true;   // D8's seam: the session writes nothing to the camera from here
-        FlightController? follow = null;
-        foreach (var other in _rigs!)
-        {
-            if (other.Controller is { InPlay: true } live && live != pilot)
-            {
-                follow = live;
-                break;
-            }
-        }
-        var eye = rig.Camera.Position;   // where Crash's own cut left it (CameraController.CrashView)
-        var spectator = new SpectatorCamera(rig.Camera, eye,
-            follow != null ? follow.WorldPosition : eye - rig.Camera.Basis.Z,
-            pilot.PadDevices, pilot.UseKeyboard)
-        {
-            ShowReadout = false,   // the freecam's own label would sit over a splitscreen pane
-            LockCandidates = end.LockCandidates,
-        };
-        end.WorldRoot.AddChild(spectator);
-        end.SpectatorCameras.Add(spectator);   // tracked so a rerun can hand the panes back
-        if (follow != null)
-        {
-            spectator.FollowNode(follow);
-        }
+        var pilot = rig.Controller!;
         GD.Print($"ia: P{pilot.PlayerIndex + 1} is out of lives — spectating" +
                  (follow != null ? $", following P{follow.PlayerIndex + 1}" : " from the crash camera"));
         // One of the two events that can complete a stunt mission's zone sets: this pilot has

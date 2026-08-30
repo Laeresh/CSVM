@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using CSVM;
 using CSVM.Session;
+using Godot;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -407,6 +408,59 @@ public class ObjectiveGraphTests
         Assert.Contains("pzhookpoint", graph.ObjectiveTargets);
     }
 
+    [Fact]
+    public void A_travelers_objective_completes_on_the_guest_who_arrives_first()
+    {
+        var (graph, world) = Build(
+            "\"OBJECTIVE1\",[\"TRAVELERS\",[\"player\",\"APPROACHING\",[1000.0,0.0,0.0],100.0]]");
+        world.Humans.Add(new HumanState(Vector3.Zero, null, false));
+        world.Humans.Add(new HumanState(new Vector3(2000f, 0f, 0f), null, false));
+        Run(graph, 1f);
+        Assert.False(graph.CompletedOf(1));
+
+        // The guest flies in while the scripted player stays where it was: the objective is the
+        // human field's, so the first one to arrive settles it.
+        world.Humans[1] = new HumanState(new Vector3(1050f, 0f, 0f), null, false);
+        Run(graph, 1f);
+        Assert.True(graph.CompletedOf(1));
+    }
+
+    [Fact]
+    public void A_departing_travelers_objective_waits_for_the_last_human_out()
+    {
+        var (graph, world) = Build(
+            "\"OBJECTIVE1\",[\"TRAVELERS\",[\"player\",\"LEAVING\",[0.0,0.0,0.0],100.0]]");
+        world.Humans.Add(new HumanState(new Vector3(500f, 0f, 0f), null, false));
+        world.Humans.Add(new HumanState(new Vector3(50f, 0f, 0f), null, false));
+        Run(graph, 1f);
+        Assert.False(graph.CompletedOf(1));
+
+        world.Humans[1] = new HumanState(new Vector3(500f, 0f, 0f), null, false);
+        Run(graph, 1f);
+        Assert.True(graph.CompletedOf(1));
+    }
+
+    [Fact]
+    public void A_dedg_counts_every_human_the_capture_stamped_with_its_group()
+    {
+        // The roster's own members of group 7 are gone; two humans hold captured aeroplanes
+        // stamped with it, so the group is not wiped out until both of them are.
+        var (graph, world) = Build("\"OBJECTIVE1\",[\"DEDG\",[7,0]]");
+        world.GroupLive[7] = 0;
+        world.Humans.Add(new HumanState(Vector3.Zero, 7, false));
+        world.Humans.Add(new HumanState(Vector3.Zero, 7, false));
+        Run(graph, 1f);
+        Assert.False(graph.CompletedOf(1));
+
+        world.Humans[0] = new HumanState(Vector3.Zero, 7, true);
+        Run(graph, 1f);
+        Assert.False(graph.CompletedOf(1));
+
+        world.Humans[1] = new HumanState(Vector3.Zero, 7, true);
+        Run(graph, 1f);
+        Assert.True(graph.CompletedOf(1));
+    }
+
     private static (ObjectiveGraph Graph, FakeWorld World) Build(string body)
     {
         var world = new FakeWorld();
@@ -445,14 +499,29 @@ public class ObjectiveGraphTests
 
         public List<string> WokenEnemies { get; } = new();
 
+        // The human field, read through the same CampaignHumanField rules CampaignDirector's own
+        // world uses, so these tests drive the graph over the answers a co-op sortie gives it.
+        public List<HumanState> Humans { get; } = new();
+
         public bool? NodeInactive(IReadOnlyList<string> path) => Inactive.Contains(path[^1]);
 
         public int AnimState(string anim) => AnimStates.TryGetValue(anim, out int s) ? s : 0;
 
         public int? GroupLiveCount(int group, string? generator) =>
-            GroupLive.TryGetValue(group, out int live) ? live : null;
+            GroupLive.TryGetValue(group, out int live)
+                ? live + CampaignHumanField.LiveInGroup(Humans, group)
+                : null;
 
-        public bool? TravelersMet(TravelersSpec spec) => null;
+        public bool? TravelersMet(TravelersSpec spec)
+        {
+            if (Humans.Count == 0 || spec.WherePoint is not { } p)
+            {
+                return null;
+            }
+
+            return CampaignHumanField.Travelers(
+                Humans, new Vector3(p[0], p[1], p[2]), spec.Radius, spec.Approaching);
+        }
 
         public void WakeupEnemies(IReadOnlyList<string> names) => WokenEnemies.AddRange(names);
 

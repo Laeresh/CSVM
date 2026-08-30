@@ -235,6 +235,13 @@ public static class SuiteCatalog
         "landings-balmoral-dock",
         "campaign-cutscene-ownership",
         "airframe-hull-coverage",
+        "campaign-coop-human-field",
+        "campaign-coop-episode-owner",
+        "campaign-coop-approach-row",
+        "campaign-coop-dropoff",
+        "campaign-coop-death",
+        "campaign-coop-attempt",
+        "campaign-coop-cutscene-fullscreen",
     };
 
     // The suites `--run-tests=tier:quick` runs: one representative per failure surface, checked in
@@ -1485,6 +1492,56 @@ public static class SuiteCatalog
             + "within the tolerance, the part names and their order the damage mapping relies on, "
             + "and the per-part box-to-hull volume the sweep no longer bridges",
             AirframeColliderSuites.AirframeHullCoverage));
+        into.Add(new TestHarness.Suite("campaign-coop-human-field",
+            "the human field over C3/M01's own shipped script and gate geometry: OBJECTIVE5's "
+            + "authored 'player' TRAVELERS completes on the guest who reaches the point while the "
+            + "scripted player stays 5 km out, and completes on nobody while the same aeroplane sits "
+            + "there outside the field, an escorting block's 'player' leader still resolves to P1's "
+            + "rig alone, and dzpath1's gate pair completes when P1 flies the green gate and the "
+            + "guest the red one, which neither half completes by itself",
+            CampaignHumanFieldSuites.CampaignCoopHumanField));
+        into.Add(new TestHarness.Suite("campaign-coop-episode-owner",
+            "the episode owner over CM02's own capture with two humans flying: the mission's swap "
+            + "rebuilds the rig whose trigger claimed the episode, on the record the code names, "
+            + "while the other human keeps the aeroplane it was flying; the swapped pilot keeps "
+            + "their own shooter id and their one near-miss registration, the other pilot's is "
+            + "untouched, and the same capture claimed by nobody swaps the scripted player",
+            CoopEpisodeOwnerSuites.CampaignCoopEpisodeOwner));
+        into.Add(new TestHarness.Suite("campaign-coop-approach-row",
+            "the first story mission's own auto row flown by two humans: the guest inside the "
+            + "sphere is offered the prompt in their own pane while the scripted player a kilometre "
+            + "out is not and their held button starts nothing, the guest's press starts the row "
+            + "and the episode belongs to the guest rather than to player 1, and a second human "
+            + "standing in the same volume is not a second entry into it",
+            LandingApproachSuites.CampaignCoopApproachRow));
+        into.Add(new TestHarness.Suite("campaign-coop-dropoff",
+            "the first story mission's own drop-off driven with two humans flying 2 km apart: the "
+            + "episode owner rides the staged 'player' marker for every frame of the episode and "
+            + "flies out of the re-placement the definition authors, while the other human is inert "
+            + "at its own coordinates throughout and back in play there at the handoff; the same "
+            + "definition claimed by nobody poses the scripted player and holds the guest instead",
+            CoopDropoffSuites.CampaignCoopDropoff));
+        into.Add(new TestHarness.Suite("campaign-coop-death",
+            "the co-op loss rule over C3/M01, a mission whose script authors no loss at all: one "
+            + "human down leaves the mission running and hands that pane a spectator camera with "
+            + "the wreck pinned, while the other keeps flying; the LAST human's death is what ends "
+            + "it lost once no wreck is still falling, whichever of them went first; "
+            + "--no-crash-loss pins neither, and a solo death answers exactly as it did before",
+            CoopDeathSuites.CampaignCoopDeath));
+        into.Add(new TestHarness.Suite("campaign-coop-attempt",
+            "what a co-op sortie writes to the seated profile (D31): two human rigs each fire a real "
+            + "cannon round at the other's aircraft, and only the seated pilot's reaches the recorded "
+            + "attempt's Shots/Hits, WireScoredShooter gating on the scripted player and never a "
+            + "guest; Money sums to 0 across the field today, since the mission reward table's cash "
+            + "half is a separate, unlanded item",
+            CampaignCoopAttempt));
+        into.Add(new TestHarness.Suite("campaign-coop-cutscene-fullscreen",
+            "the window a cutscene plays in at 2, 3 and 4 panes: an episode gives pane 1 the whole "
+            + "window, takes the other panes down and leaves EXACTLY ONE listener-enabled viewport "
+            + "rather than none, and both exits — the definition ending and a player's skip — lay "
+            + "the panes back out with a listener each; an intro whose first code lands before the "
+            + "rig exists collapses as the rigs bind, and a skip names the player in their colour",
+            CoopCutsceneSuites.CampaignCoopCutsceneFullscreen));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------

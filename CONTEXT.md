@@ -45,8 +45,34 @@ _Avoid_: original team id, raw team, data team, loader team
 **Versus band**:
 Where the extra humans of a splitscreen `--vs` session sit, kept clear of the ids world data
 authors so a player cannot inherit an emplacement's side. A remake-only rule: the original has no
-per-pilot team ladder.
+per-pilot team ladder. A co-op campaign does not use it: every human sits on team id `1`.
 _Avoid_: team band, emplacement band, pilot team offset
+
+## Campaign co-op
+
+**Scripted player**:
+The one aircraft an authored `player` token resolves to. Always P1, whatever else is joined.
+_Avoid_: the player, P1 (as a stand-in for the concept rather than the slot itself)
+
+**Human field**:
+Every human aircraft in the session. An objective condition reads the whole field and is satisfied
+by the first human to meet it.
+_Avoid_: player field, human roster, party
+
+**Guest**:
+A human pilot who seats no profile. A guest flies, shoots, captures and dies, and nothing about
+them persists.
+_Avoid_: second player, extra pilot, co-op player
+
+**Seated profile**:
+The one campaign profile a co-op sortie reads and writes. A guest can neither spend nor change
+anything in it.
+_Avoid_: active profile, player profile, current save
+
+**Episode owner**:
+The human whose trigger started a cutscene episode. The airframe swap puts them in the new
+aeroplane, and staging places them on the marker.
+_Avoid_: triggering player, cutscene owner, episode player
 
 ## Clutter
 

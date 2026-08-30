@@ -67,13 +67,20 @@ internal static class CampaignHudSuites
             pause.TryToggle(0);
             var hud = ObjectivesHud.Build(director, messages, pause);
             ctx.Host.AddChild(hud);
+            // B15: a second rig's own instance over the same director, proof that "one per rig"
+            // is N polling instances rather than one broadcasting to many panes.
+            var hud2 = ObjectivesHud.Build(director, messages, pause);
+            ctx.Host.AddChild(hud2);
 
             // ObjectivesHud polls for the graph in _Process rather than at construction (the
             // wiring contract: a session adds it before Attach runs), so drive one process frame
             // before reading it, matching what a real running session would do.
             hud._Process(0.0);
+            hud2._Process(0.0);
             ctx.Same(graph.Rows.Count, hud.BuildLines().Count,
                 $"the readout carries one line per display row before anything happens");
+            ctx.Same(hud.BuildLines().Count, hud2.BuildLines().Count,
+                $"a second rig's own readout carries the same row count as the first");
             CheckNoBlankRowsDrawn(ctx, hud, report);
 
             if (sounds != null)
@@ -83,7 +90,21 @@ internal static class CampaignHudSuites
                 CheckCueReachedAPlayer(ctx, script, wokeACue, completedACue, report);
             }
 
+            hud2._Process(0.0);
+            ctx.Same(hud.BuildLines().Count, hud2.BuildLines().Count,
+                $"a second rig's own readout still tracks the same row count once the graph advanced");
+            bool sameCompletions = true;
+            var linesA = hud.BuildLines();
+            var linesB = hud2.BuildLines();
+            for (int i = 0; i < System.Math.Min(linesA.Count, linesB.Count); i++)
+            {
+                sameCompletions &= linesA[i].Completed == linesB[i].Completed;
+            }
+            ctx.Check(sameCompletions,
+                $"a completion reaches every rig's own readout, not only the first one built");
+
             hud.QueueFree();
+            hud2.QueueFree();
         });
 
         ctx.WriteArtifact($"test-campaign-objectives-hud-{ctx.Chapter}.txt", report.ToString());

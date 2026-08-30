@@ -6,12 +6,12 @@ using Godot;
 
 namespace CSVM.Session;
 
-/// <summary>The mid-mission cutscene trigger: every frame, with nothing already playing and the
-/// player flying, each armed <c>landings.zrd</c> row tests the aircraft against its approach node's
-/// condition volume, attitude cone and speed band, and the first row that passes starts its
-/// animation with <see cref="CutsceneController"/> hosting it, once per entry into that volume. An
-/// <c>auto</c> row offers the auto-land instead of starting anything. Decode:
-/// docs/formats/anim-definitions/cutscenes.md.</summary>
+/// <summary>The mid-mission cutscene trigger: every frame, with nothing already playing, each armed
+/// <c>landings.zrd</c> row tests every flying human against its approach node's condition volume,
+/// attitude cone and speed band, and the first row any of them passes starts its animation with
+/// <see cref="CutsceneController"/> hosting it, once per entry into that volume and owned by the
+/// human who flew it. An <c>auto</c> row offers the auto-land to each passing human instead of
+/// starting anything. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
 public sealed partial class LandingApproachRuntime : Node
 {
     private readonly List<Bound> _bound = new();
@@ -19,11 +19,24 @@ public sealed partial class LandingApproachRuntime : Node
     private readonly HashSet<int> _boundIds = new();
     // Rows that have fired and whose condition has not stopped passing since. A cutscene ends with
     // the aircraft parked where the definition left it, which is still inside the volume that
-    // started it, so without this the row re-fires on the frame after the handoff.
+    // started it, so without this the row re-fires on the frame after the handoff. ⚠ Per ROW, not
+    // per row and human: a row fires once per entry into its volume however many humans are in it,
+    // and a second human arriving is not a second entry.
     private readonly HashSet<int> _latched = new();
+    // Which humans an `auto` row is offering the prompt to right now, by player index: the prompt is
+    // per pane, so only the human inside the sphere sees it and only they can press it.
+    private readonly HashSet<int> _offered = new();
+    // The humans passing the row under test, in player order. A field so the per-row scan allocates
+    // nothing on a tick that fires nothing, which is nearly all of them.
+    private readonly List<PlayerRig> _passing = new();
     private AnimRuntime? _runtime;
     private CutsceneController? _cutscene;
-    private Func<FlightController?>? _player;
+    private Func<IReadOnlyList<PlayerRig>>? _humans;
+    // The human the row being started belongs to, read by the trigger-owner seam during the
+    // PlayMissionTrigger call and null outside one. A field rather than an argument because the
+    // slot is written inside the runtime's own start, which carries a definition name alone; every
+    // other path through that seam means the scripted player, which is what null says.
+    private PlayerRig? _startingFor;
 
     /// <summary>Constructs the trigger. SessionSimulation ticks it before mission objectives;
     /// CutsceneController then mirrors a newly started row later in the same frame.</summary>
@@ -37,34 +50,41 @@ public sealed partial class LandingApproachRuntime : Node
     /// </summary>
     public int Armed => _bound.Count;
 
-    /// <summary>Whether an <c>auto</c> row passes right now: the original lights its auto-land
-    /// prompt off exactly this, and never starts the animation on that row by itself. The HUD draws
-    /// the prompt off this flag, and the auto-land button starts the row's animation while it holds.</summary>
-    public bool AutoLandOffered { get; private set; }
+    /// <summary>Whether an <c>auto</c> row passes for any human right now: the original lights its
+    /// auto-land prompt off exactly this, and never starts the animation on that row by itself.
+    /// <see cref="OffersAutoLandTo"/> is the per-pane answer the HUD is actually drawn from.</summary>
+    public bool AutoLandOffered => _offered.Count > 0;
 
     /// <summary>The animation the last row to pass started, for a suite and the log.</summary>
     public string? LastStarted { get; private set; }
 
+    /// <summary>The player index of the human whose flying started <see cref="LastStarted"/>, for a
+    /// suite and the log; null before anything has started.</summary>
+    public int? LastStartedBy { get; private set; }
+
     /// <summary>Binds the resolved rows to the built world. Rows whose approach node the build
-    /// never created are dropped, so <see cref="Armed"/> counts what can actually fire.</summary>
+    /// never created are dropped, so <see cref="Armed"/> counts what can actually fire.
+    /// <paramref name="humans"/> is the human field, read fresh each tick because an airframe swap
+    /// rebuilds a rig's controller.</summary>
     public void Bind(
         AnimRuntime runtime,
         IReadOnlyList<LandingApproach> approaches,
         CutsceneController cutscene,
-        Func<FlightController?> player)
+        Func<IReadOnlyList<PlayerRig>> humans)
     {
         _runtime = runtime;
         _cutscene = cutscene;
         // The trigger slot, on the runtime rather than on this class: every path that starts a
-        // definition writes it, and a suite that binds a trigger onto a bare world runtime gets the
-        // same wiring a session's world build gives it.
-        runtime.MissionTriggerOwner = cutscene.Own;
-        _player = player;
+        // definition writes it, and a suite binding a trigger onto a bare world runtime gets the
+        // wiring a session's world build gives it. See `_startingFor` for the human half.
+        runtime.MissionTriggerOwner = anim => cutscene.Own(anim, _startingFor);
+        _humans = humans;
         _bound.Clear();
         _approaches.Clear();
         _approaches.AddRange(approaches);
         _boundIds.Clear();
         _latched.Clear();
+        _offered.Clear();
         RefreshBindings();
 
         if (_bound.Count > 0)
@@ -73,10 +93,14 @@ public sealed partial class LandingApproachRuntime : Node
         }
     }
 
+    /// <summary>Is this human being offered the auto-land right now? The prompt is per pane, so a
+    /// human outside the sphere neither sees it nor can press it.</summary>
+    public bool OffersAutoLandTo(int playerIndex) => _offered.Contains(playerIndex);
+
     /// <summary>One session-simulation step. Cheap and inert when the world armed no rows.</summary>
     public void Tick()
     {
-        AutoLandOffered = false;
+        _offered.Clear();
         if (_runtime == null || _cutscene is not { Playing: false })
         {
             return;
@@ -85,23 +109,16 @@ public sealed partial class LandingApproachRuntime : Node
         {
             GD.Print($"landings: {_bound.Count} approach trigger(s) armed after world staging");
         }
-        if (_bound.Count == 0)
+        if (_bound.Count == 0 || _humans?.Invoke() is not { Count: > 0 } humans)
         {
             return;
         }
 
-        // The original's own two guards, in its order: no cutscene running, and a player who is
-        // still flying rather than pinned inside one.
-        if (_player?.Invoke() is not { Held: false, Inert: false } plane)
-        {
-            return;
-        }
-
-        float speed = plane.WorldVelocity.Length();
         for (int i = 0; i < _bound.Count; i++)
         {
             var bound = _bound[i];
-            if (!Passes(bound, plane, speed))
+            CollectPassing(bound, humans);
+            if (_passing.Count == 0)
             {
                 _latched.Remove(bound.Id);
                 continue;
@@ -109,12 +126,9 @@ public sealed partial class LandingApproachRuntime : Node
 
             if (bound.Approach.Auto)
             {
-                AutoLandOffered = true;
-                // The same latch the manual row uses: a press starts it once per entry into the
-                // sphere, and the cutscene guard above already gates this whole method.
-                if (plane.AutoLandPressed() && _latched.Add(bound.Id))
+                if (OfferAutoLand(bound) is { } presser)
                 {
-                    Start(bound.Approach);
+                    Start(bound.Approach, presser);
                     return;
                 }
                 continue;
@@ -125,9 +139,45 @@ public sealed partial class LandingApproachRuntime : Node
                 continue;
             }
 
-            Start(bound.Approach);
+            // First one wins, in player order: two humans entering the volume on the same tick
+            // start the row once, and it belongs to the lower-numbered of them.
+            Start(bound.Approach, _passing[0]);
             return;
         }
+    }
+
+    // The humans this row passes for, in player order. The original's own two guards are here, in
+    // its order: no cutscene running (the caller's), and a pilot still flying rather than pinned
+    // inside one.
+    private void CollectPassing(Bound bound, IReadOnlyList<PlayerRig> humans)
+    {
+        _passing.Clear();
+        foreach (var rig in humans)
+        {
+            if (rig.Controller is { Held: false, Inert: false } plane
+                && Passes(bound, plane, plane.WorldVelocity.Length()))
+            {
+                _passing.Add(rig);
+            }
+        }
+    }
+
+    // Lights the prompt in every passing human's pane and answers the first of them holding the
+    // button down, or null. The latch is the manual row's: a press starts the row once per entry
+    // into the sphere, however many humans are standing in it.
+    private PlayerRig? OfferAutoLand(Bound bound)
+    {
+        PlayerRig? presser = null;
+        foreach (var rig in _passing)
+        {
+            _offered.Add(rig.Index);
+            if (presser == null && rig.Controller is { } plane && plane.AutoLandPressed())
+            {
+                presser = rig;
+            }
+        }
+
+        return presser != null && _latched.Add(bound.Id) ? presser : null;
     }
 
     private int RefreshBindings()
@@ -168,14 +218,26 @@ public sealed partial class LandingApproachRuntime : Node
             && approach.Contains(frame.AffineInverse() * plane.WorldPosition);
     }
 
-    // Starts the row's definition. The cutscene host is already registered for every definition
-    // this chapter's table can reach, which is where the original's per-instance registration
-    // lands (CutsceneController.HostDefinitions), and the trigger call writes the slot itself.
-    private void Start(LandingApproach approach)
+    // Starts the row's definition for the human who flew it. The cutscene host is already registered
+    // for every definition this chapter's table can reach, which is where the original's
+    // per-instance registration lands (CutsceneController.HostDefinitions), and the trigger call
+    // writes the slot itself, reading `_startingFor` for the human as it goes.
+    private void Start(LandingApproach approach, PlayerRig by)
     {
-        int started = _runtime!.PlayMissionTrigger(approach.Anim).Count;
+        _startingFor = by;
+        int started;
+        try
+        {
+            started = _runtime!.PlayMissionTrigger(approach.Anim).Count;
+        }
+        finally
+        {
+            _startingFor = null;
+        }
+
         LastStarted = approach.Anim;
-        GD.Print($"landings: '{approach.Node}' flown, started '{approach.Anim}' " +
+        LastStartedBy = by.Index;
+        GD.Print($"landings: '{approach.Node}' flown by P{by.Index + 1}, started '{approach.Anim}' " +
                  $"({started} definition(s))");
     }
 

@@ -243,7 +243,7 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Active plans:** [`docs/PLAN-M5-polish-5.md`](docs/PLAN-M5-polish-5.md), every item landed and verified on the plan branch, and [`docs/PLAN-M5-polish-6.md`](docs/PLAN-M5-polish-6.md), all eleven items resolved on `worktree-m5-polish-6`; [`docs/PLAN-scrapbook.md`](docs/PLAN-scrapbook.md) has Wave A (`A1`-`A3`), Wave B (`B11`-`B14`), Wave C (`C15`-`C17`) and `D18`-`D21` landed on `worktree-bl-622-debrief-decode`.
 Next: `D31`, the CM04 to CM09 (plus CM13) sortie at the controls, then close run 5; run 6's two partials are `B11` (`BL-546`) and `B13` (`BL-535`); the scrapbook's own remaining item is `22`, the closing rebase onto main.
-`PT-84`, `PT-85`, `PT-88`, `PT-89` and `BL-120`/`PT-53` remain owed playtests.
+`PT-84`, `PT-85`, `PT-88` to `PT-93` and `BL-120`/`PT-53` remain owed playtests.
 
 Use the targeted/quick development loop above, then verify landed code with the complete
 **`.\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.

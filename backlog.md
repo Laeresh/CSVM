@@ -2532,18 +2532,22 @@ usual.
 - `BL-434` `[Research]` **Splitscreen cockpit interior/audio behaviour is unprofiled and unjudged
   past one pilot.** `PLAN-cockpit-view.md` (Decision 5) built cockpit rendering and the
   `cockpit_engine_sound` swap verified single-player-only, no further. (a) **Per-viewport interior
-  draw cost is unprofiled**: each pilot's rig now carries its own `cockpit1` subtree and
-  `CockpitVisibility`, so a splitscreen session with 2-4 cockpit-view pilots draws that many
-  interiors simultaneously. (b) **The per-pilot `cockpit_engine_sound` swap against splitscreen's
-  `MixGain` term is unjudged at the controls** — `BL-391`'s "own-ship engine loop too loud" finding
-  predates the cockpit swap and never isolated the `_cp` def specifically. (c) **Today's hiding
-  mechanism is node visibility on a shared plane node, not a per-viewport render flag**:
-  `CockpitVisibility` hides the OWN rig's `healthy` body node, so a pilot sitting in the cockpit
-  hides THAT AIRCRAFT'S body in every pane that can see it, not just their own — a cross-pane effect
-  unjudged at `N > 1`.
-  *Fix shape:* profile per-viewport interior cost at 4 players; a splitscreen listen for the
-  cockpit-swap/`MixGain` interaction; confirm or fix the cross-pane body-hide visually at the
-  controls with 2+ cockpit-view pilots in the same session.
+  draw cost is now profiled, not yet judged**: `analysis/campaign-coop-4p-perf/FINDINGS.md` (D33)
+  measured CM18 (C4/M03) at 1P/4P x external/cockpit: cockpit view adds ~5% more draws at both
+  player counts (697 to 733 at 1P, 3972 to 4169 at 4P) and ~0.4-2 ms of frame time, both within or
+  just past this machine's measured noise floor (`docs/verification.md` PERF-9…PERF-11); going 1P
+  to 4P moves draws 5.7x (697 to 3972, more than the 4x pane count) while `render_cpu_ms`/`gpu_ms`
+  stay flat, so the draw-count growth outpaces panes and has not yet been isolated to the cockpit
+  subtree specifically vs. the rest of the per-pane rig. (b) **The per-pilot `cockpit_engine_sound`
+  swap against splitscreen's `MixGain` term is unjudged at the controls** — `BL-391`'s "own-ship
+  engine loop too loud" finding predates the cockpit swap and never isolated the `_cp` def
+  specifically. (c) **Today's hiding mechanism is node visibility on a shared plane node, not a
+  per-viewport render flag**: `CockpitVisibility` hides the OWN rig's `healthy` body node, so a
+  pilot sitting in the cockpit hides THAT AIRCRAFT'S body in every pane that can see it, not just
+  their own — a cross-pane effect unjudged at `N > 1`.
+  *Fix shape:* isolate the draw-count growth's split between the cockpit subtree and the rest of a
+  4P rig; a splitscreen listen for the cockpit-swap/`MixGain` interaction; confirm or fix the
+  cross-pane body-hide visually at the controls with 2+ cockpit-view pilots in the same session.
   *Cross-refs:* `PLAN-cockpit-view.md` B11 ("Splitscreen posture"), `BL-391` (base engine level,
   the audio half of (b)), `BL-389` (splitscreen weapon mix, same playtest family).
 
@@ -2631,7 +2635,7 @@ usual.
   does record.
 
 - `BL-314` `[Feature]` `[Blocked: PT-45]` **Race countdown — a rolling start on rails before the run clock
-  opens.** The abreast starting grid landed 2026-08-08 (`RaceGrid`), so every pilot in a splitscreen
+  opens.** The abreast starting grid landed 2026-08-08 (`StartGrid`), so every pilot in a splitscreen
   stunt race now begins on one line, on one heading, at one altitude. What is still missing is the
   moment a race starts: today the clock is running the instant the world appears, so whoever's
   loading screen ends first is flying first. Deliberately split off from the grid rather than landing
@@ -2930,6 +2934,21 @@ usual.
   count for "Destroy all enemy fighters" in the end (its ram death dropped group 2 to zero and
   primary 3 completed), so this is not an objective bug. *Cross-refs:* `docs/org/aiPilot.md` (the
   activation primitive and `FUN_00432010`).
+
+- `BL-641` `[Bug]` **CM18 (C4/M03) stalls the frame roughly 300 ms twice early in flight, on an
+  `ai_spawn` site, at the same sim frame and magnitude whether one human flies or four.**
+  *Evidence:* `analysis/campaign-coop-4p-perf/FINDINGS.md` (D33): `--det`'s deterministic clock
+  put the stall at sim frame 241 (~320 ms, threshold 45.7 ms) and frame 482 (~290-300 ms) in every
+  one of the four 1P/4P x cockpit/external launches measured, `HitchSidecar`'s own attribution
+  assigning essentially the whole frame to one `ai_spawn` sample (`attributed_ms` within 20 ms of
+  `frame_ms` both times). Identical across player counts, so this is a single mission-script/
+  generator spawn cost on the main thread, not something splitscreen's pane count multiplies.
+  *Fix shape:* find what CM18's roster/generator script does at those two sim instants (a
+  `WAKEUP_GENERATOR`/roster credit or similar bulk spawn) and see whether it can be spread across
+  frames; not this plan's job (D33 measures, it does not fix). *⚠ Traps:* the stall is far past
+  `HitchMonitor`'s grace window and reproduces to the same frame under `--det`, so it is not
+  workstation noise (`docs/verification.md` PERF-12/13). *Cross-refs:* `BL-434` (the per-viewport
+  splitscreen cost this same measurement pass separately profiled).
 
 ## Tooling, platform & docs
 

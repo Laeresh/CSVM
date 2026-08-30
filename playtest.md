@@ -400,10 +400,13 @@ reasons that have nothing to do with any of these checks.
   our invention — the original had no splitscreen at all — so every call here is a judgement on our
   own remake, with no reference to A/B against.
 
-  **Why this sitting is the only evidence there will ever be.** The grid is selected only when a
-  session is an actual race, and a `--det` run is explicitly given the old per-player spawn walk
-  instead, so no scripted run, screenshot or golden can exercise this path — by design, since that
-  bypass is what keeps every scripted spawn byte-identical. The grid geometry is also not
+  **Why this sitting is the only evidence there will ever be for a race.** On the race path the grid
+  is selected only when a session is an actual race, and a `--det` run is explicitly given the old
+  per-player spawn walk instead, so no scripted run, screenshot or golden can exercise the race
+  path. That is by design: the bypass is what keeps every scripted race spawn byte-identical. (A
+  multiplayer campaign mission takes the same grid under `--det` as well, so a scripted campaign run
+  does place a field with it; that is a different caller and settles nothing about a race start.)
+  The grid geometry is also not
   photographable: the panes are chase-cam only, so at the default 60 m spacing your neighbour sits
   outside your own frustum. **Read the geometry off the console instead** — every launch logs one
   line per slot, e.g. `spawn [P1 grid slot 1 of 4] pos=(-4974,260,-3771) heading=90° spacing=60m
@@ -411,8 +414,8 @@ reasons that have nothing to do with any of these checks.
 
   **Both numbers are live config, and settling them is the point of this sitting.** `slotSpacing`
   (default **60 m** between neighbouring slots) and `groundClearance` (default **100 m** of air the
-  lowest slot must have under it) are read from `config.json` as `raceGrid.slotSpacing` and
-  `raceGrid.groundClearance`, listed by `--dump-config`, and take effect on the next launch with no
+  lowest slot must have under it) are read from `config.json` as `startGrid.slotSpacing` and
+  `startGrid.groundClearance`, listed by `--dump-config`, and take effect on the next launch with no
   rebuild. Neither is a finding — 60 m is just the figure already in the tree — so dial them between
   launches until the start looks right and record what you landed on.
   *Look for:*
@@ -703,6 +706,82 @@ against `BL-389` rather than against the wash routing.
   `BL`.
   *Variations:* `--players=2` and `--players=3` for the intermediate pane counts, which is where a
   routing off-by-one would show.
+
+### CM01 (C3/M01) · two to four pilots — join, flight check, death and skip
+
+```powershell
+./RunGame.ps1
+```
+
+Menu path: Mode → Campaign → create or select a profile → join two to four humans → the seated
+pilot's own briefing and flight check, then `FLIGHT CHECK P2`/`P3`/`P4` in the same window → FLY
+MISSION. A fresh profile's first entry is CM01, so this is also where the sortie itself is flown.
+Splitscreen co-op is our own invention (no networked original to A/B against), so every call here
+is a judgement on our own remake.
+
+- `PT-90` `[Own]` **Joining from the roster screen and the sequential flight check**
+  (`PLAN-campaign-coop.md` `C21`, `C22`).
+  *Look for:*
+  - (a) Start on an unclaimed pad joins a guest from the roster, the briefing and the flight check
+    alike, with the player chip strip naming everyone who has joined;
+  - (b) FLY MISSION on the seated pilot's own check opens `FLIGHT CHECK P2` rather than launching,
+    and does the same for P3 and P4 as each joins — one window, one player at a time;
+  - (c) FLY MISSION on the LAST joined player's check is what actually launches the mission;
+  - (d) B on a guest's pad drops that guest back out (roster, briefing or flight check alike)
+    without disturbing P1's own flow, which keeps its ordinary Back/Next meaning throughout.
+  *Blocks:* nothing tracks the outcome (`C21`/`C22` landed on screenshots and code review alone,
+  with no scripted-input driver for a pad press on a menu screen): a fail mints a new `BL`.
+
+- `PT-92` `[Own]` **A downed human spectates, and the last one lost ends the mission**
+  (`PLAN-campaign-coop.md` `B13`).
+  Fly two humans into CM01 and crash one — into the sea or a hillside, `R` to restart the pane if
+  the first attempt is too gentle to register as a loss.
+  *Look for:*
+  - (a) the downed human's pane switches to an orbiting spectator camera on their own wreck, not a
+    frozen frame or a black pane, and the other pane keeps flying with its own HUD untouched;
+  - (b) that spectating pane takes its own pad's input for the orbit, so a second downed human (at
+    three or four players) does not orbit in lockstep with the first;
+  - (c) crashing the LAST human still flying ends the mission on a loss the instant no wreck is
+    still falling — that human is not handed a camera, since there is nothing left to watch;
+  - (d) `--no-crash-loss` (`--campaign=<profile>:0 --players=2 --no-crash-loss`) turns all of this
+    off together: a crashed human keeps flying, no pane is taken and nothing ends.
+  *Blocks:* nothing tracks the outcome (`B13` landed on an engine suite alone, with no scripted
+  input to force a specific human's crash headlessly): a fail mints a new `BL`.
+
+- `PT-93` `[Own]` **A cutscene fills the window, and the skipper is named**
+  (`PLAN-campaign-coop.md` `B14`).
+  CM01's own mission intro plays fullscreen on launch. Two pads (or pad + keyboard); have the
+  SECOND player skip it, then relaunch and have the first player skip instead.
+  *Look for:*
+  - (a) the intro collapses to one pane filling the whole window, letterboxed, with no gutter and
+    no second pane drawn behind it;
+  - (b) any key or pad button (not Escape) skips it, and the on-screen name is the SKIPPER'S,
+    in that player's own colour — P2's skip must never read as P1's;
+  - (c) the skip (or the intro's own end) restores every pane and HUD exactly as they were before
+    the collapse, with nobody's pad input lost in the process.
+  *Blocks:* nothing tracks the outcome (`B14` landed on an engine suite and a code-review pass at
+  the controls, with no scripted-input driver for a pad-button skip): a fail mints a new `BL`.
+
+### CM02 (C3/M05) · guest capture — the Balmoral wing-walk
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:1 --players=2
+```
+
+- `PT-91` `[Own]` **Whichever human triggers the capture ends up in the captured aeroplane**
+  (`PLAN-campaign-coop.md` `A4`, decision 8). Fly both humans to CM02's wing-walk rescue, and have
+  the GUEST (not P1) be the one to fly into the trigger.
+  *Look for:*
+  - (a) the guest, not P1, is the one re-flown into the Balmoral once the cutscene ends — the swap
+    follows whoever triggered it rather than always landing on P1;
+  - (b) the OTHER human's aircraft and position are undisturbed for the whole cutscene, not stacked
+    onto the capture point;
+  - (c) the newly-captured Balmoral shows its own hook and wing-fold choreography rather than
+    Bloodhawk/Fury geometry left over from the airframe the guest flew in;
+  - (d) relaunching and letting P1 trigger it instead puts P1 in the Balmoral and leaves the guest's
+    own airframe alone — the same behaviour, the other human.
+  *Blocks:* nothing tracks the outcome (`A4` landed on an engine suite alone, with no scripted-input
+  driver to fly a human into a world trigger headlessly): a fail mints a new `BL`.
 
 ---
 

@@ -39,9 +39,9 @@ internal readonly record struct FlightRow(
 /// <see cref="CampaignScreen.Ammo"/>), CHANGE PLANE where the mission allows it, RETURN TO BRIEFING
 /// and FLY MISSION. The row list carries only these actionable items; each plane's dense text
 /// (title, both eight-row lists) and the objectives note live in <see cref="Detail"/>, the split
-/// <see cref="CampaignRosterPage"/> uses for its own descriptive text. CHANGE PLANE's own design
-/// (no picker screen exists in this item's boundary, so it cycles in place) is recorded in the
-/// plan's C24 section, not repeated here.
+/// <see cref="CampaignRosterPage"/> uses for its own descriptive text. CHANGE PLANE cycles in
+/// place (no picker screen exists), the plan's C24 design. With guests joined this one page draws
+/// the whole sequence, a player at a time (<see cref="CampaignFlightField"/>).
 /// </summary>
 public sealed class CampaignFlightCheckPage : CampaignPage
 {
@@ -174,7 +174,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
             var rows = Rows();
             var lines = new List<BoardLine>
             {
-                new("FLIGHT CHECK", 138, 36, 190, 20, BoardInk.Heading),
+                new(Heading, 138, 36, 190, 20, BoardInk.Heading),
                 new(Title, 136, 70, 400, 15, BoardInk.Detail),
             };
 
@@ -207,7 +207,16 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         }
     }
 
+    /// <summary>The screen's own heading, which names the player on a guest's check: the sequence
+    /// runs in one window, so the heading is the only thing that says whose turn it is.</summary>
+    public string Heading => Player > 0 ? $"FLIGHT CHECK P{Player + 1}" : "FLIGHT CHECK";
+
     private bool HasWingman => _wingmanOverride ?? Mission()?.Wingman ?? false;
+
+    // Whose check this is: 0 the seated player, 1 and up a guest. A guest's page is this same
+    // screen re-entered, so everything below reads the player rather than assuming the profile's
+    // own aircraft; the seated player's page is unchanged from before C22.
+    private int Player => Flow.Field.Current;
 
     // The flow's hangar store, or null off-engine: every plane then reads as its stock fit.
     private CustomPlaneStore? Planes => _planes ??= Flow.Planes;
@@ -270,6 +279,11 @@ public sealed class CampaignFlightCheckPage : CampaignPage
             return false;
         }
 
+        if (Player > 0)
+        {
+            return Flow.Field.Step(Player, dir);
+        }
+
         var profile = Flow.Profile ?? EmptyProfile;
         if (profile.Planes.Count == 0)
         {
@@ -306,30 +320,55 @@ public sealed class CampaignFlightCheckPage : CampaignPage
                 Flow.GoTo(CampaignScreen.Ammo);
                 return true;
             case FlightRowKind.ReturnToBriefing:
+                Flow.Field.Rewind();
                 Flow.GoTo(CampaignScreen.Briefing);
                 return true;
             case FlightRowKind.FlyMission:
-                Flow.Request(CampaignExit.FlyMission);
+                // C22: the last joined player's press launches; every earlier one advances to the
+                // next check. GoTo on the screen already showing is the re-entry — the stack
+                // returns to it rather than stacking a second copy, and the cursor opens afresh.
+                if (Flow.Field.Advance())
+                {
+                    Flow.GoTo(CampaignScreen.FlightCheck);
+                }
+                else
+                {
+                    Flow.Request(CampaignExit.FlyMission);
+                }
+
                 return true;
             default:
                 return false;
         }
     }
 
+    /// <summary>Back on a guest's check returns to the player before them, the inverse of FLY
+    /// MISSION; on the seated player's own it is unconsumed, so the flow leaves the screen.</summary>
+    public override bool Back() => Flow.Field.Retreat();
+
     // Every row this screen draws, computed fresh each call from the profile and the mission's
     // wingman flag: the PILOT block, its two action rows, the WINGMAN block and its own two action
-    // rows when the mission carries a wingman, then RETURN TO BRIEFING and FLY MISSION.
+    // rows when the mission carries a wingman, then RETURN TO BRIEFING and FLY MISSION. A guest's
+    // own check (C22) draws one PILOT block and no wingman: the wingman is the seated profile's.
     private List<FlightRow> Rows()
     {
         var profile = Flow.Profile ?? EmptyProfile;
         var rows = new List<FlightRow>();
-        AddSlot(rows, profile, slot: 0, heading: "PILOT",
-            planeIndex: Math.Clamp(profile.SelectedPlane, 0, Math.Max(0, profile.Planes.Count - 1)));
-
-        if (HasWingman)
+        if (Player > 0)
         {
-            AddSlot(rows, profile, slot: 1, heading: "WINGMAN",
-                planeIndex: Math.Clamp(profile.WingmanPlane, 0, Math.Max(0, profile.Planes.Count - 1)));
+            // A guest cycles the stock eleven, so neither of FLIGHTCHECK.SCRIPT's plane-change
+            // gates applies: both are rules about the seated profile's own aircraft.
+            AddSlot(rows, Flow.Field.Plane(Player), slot: 0, heading: "PILOT", changePlane: true);
+        }
+        else
+        {
+            AddSlot(rows, PlaneAt(profile, profile.SelectedPlane), slot: 0, heading: "PILOT",
+                changePlane: ChangePlaneAllowed(profile));
+            if (HasWingman)
+            {
+                AddSlot(rows, PlaneAt(profile, profile.WingmanPlane), slot: 1, heading: "WINGMAN",
+                    changePlane: ChangePlaneAllowed(profile));
+            }
         }
 
         rows.Add(new FlightRow("RETURN TO BRIEFING", string.Empty, FlightRowKind.ReturnToBriefing));
@@ -337,23 +376,38 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         return rows;
     }
 
-    private void AddSlot(List<FlightRow> rows, CampaignProfileDef profile, int slot, string heading, int planeIndex)
+    private OwnedPlane? PlaneAt(CampaignProfileDef profile, int index) =>
+        profile.Planes.Count > 0
+            ? profile.Planes[Math.Clamp(index, 0, profile.Planes.Count - 1)]
+            : null;
+
+    private void AddSlot(List<FlightRow> rows, OwnedPlane? plane, int slot, string heading, bool changePlane)
     {
-        if (planeIndex < 0 || planeIndex >= profile.Planes.Count)
+        if (plane == null)
         {
             rows.Add(new FlightRow($"{heading}   (no plane)", string.Empty, FlightRowKind.Info, slot));
             return;
         }
 
-        var plane = profile.Planes[planeIndex];
         var (guns, rockets) = WeaponColumns(plane);
-        rows.Add(new FlightRow($"{heading}   {plane.Name}   {AirframeTitle(plane.Airframe)}",
+        rows.Add(new FlightRow($"{heading}   {SlotLabel(plane)}",
             LoadoutBlock(plane), FlightRowKind.Info, slot, plane.Airframe, guns, rockets));
         rows.Add(new FlightRow("CHANGE AMMO", string.Empty, FlightRowKind.ChangeAmmo, slot));
-        if (ChangePlaneAllowed(profile))
+        if (changePlane)
         {
-            rows.Add(new FlightRow($"CHANGE PLANE: {plane.Name}", string.Empty, FlightRowKind.ChangePlane, slot));
+            // The plaque centre-clips its label, so a stock record's long marketing title is left
+            // off: it is already written on the info row directly above.
+            string named = plane.Name == AirframeTitle(plane.Airframe) ? string.Empty : $": {plane.Name}";
+            rows.Add(new FlightRow($"CHANGE PLANE{named}", string.Empty, FlightRowKind.ChangePlane, slot));
         }
+    }
+
+    // A named aircraft and its airframe, except where the two are the same word: a guest's stock
+    // record is named for its airframe, and "Devastator   Devastator" is not a second fact.
+    private string SlotLabel(OwnedPlane plane)
+    {
+        string title = AirframeTitle(plane.Airframe);
+        return plane.Name == title ? title : $"{plane.Name}   {title}";
     }
 
     // The two rules FLIGHTCHECK.SCRIPT applies, both traced (docs/formats/campaign-screens.md,
@@ -465,7 +519,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     private FlightCheckGun?[] ResolveGuns(OwnedPlane plane)
     {
         var groups = new FlightCheckGun?[CustomPlaneDef.GunSlots];
-        if (Planes?.Load(plane.Name) is { } custom)
+        if (BuildFor(plane) is { } custom)
         {
             for (int i = 0; i < custom.Guns.Length && i < groups.Length; i++)
             {
@@ -497,13 +551,19 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     // half reuses HangarFlow's own fill-order-to-wing split rather than re-deriving it.
     private (int Left, int Right) ResolveHardpoints(OwnedPlane plane)
     {
-        if (Planes?.Load(plane.Name) is { } custom)
+        if (BuildFor(plane) is { } custom)
         {
             return (custom.LeftHardpoints, custom.RightHardpoints);
         }
 
         return HangarFlow.StockWingCounts(StockFor(plane.Airframe)?.Hardpoints);
     }
+
+    // The hangar build a record flies with, if any. ⚠ A guest's stock record is named for its
+    // airframe, so it must never be looked up by name: a hangar plane called "Devastator" would
+    // otherwise fit that guest with somebody else's build.
+    private CustomPlaneDef? BuildFor(OwnedPlane plane) =>
+        Flow.Field.IsStock(plane) ? null : Planes?.Load(plane.Name);
 
     private LoadoutDef? StockFor(int airframe) =>
         Stock?.For(AirframeDefKeys[Math.Clamp(airframe, 0, AirframeDefKeys.Length - 1)]);

@@ -100,7 +100,7 @@ internal static class CutsceneOwnershipSuites
         cutscene.HostDefinitions(ClosureOf(world, owner.WakeAnim!.Value.Anim));
         // The session's own wiring, and the whole subject of this suite: the slot is on the runtime,
         // so the objective script's WAKE_ANIM writes it the same way an approach row's start does.
-        world.Runtime.MissionTriggerOwner = cutscene.Own;
+        world.Runtime.MissionTriggerOwner = anim => cutscene.Own(anim);
         float now = 0f;
         string? firstRaiser = null;
         float completedAt = -1f;

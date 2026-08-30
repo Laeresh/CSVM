@@ -62,6 +62,12 @@ public sealed class CampaignDirector
     // written from anywhere else.
     private readonly int[] _kills = new int[CampaignProgression.AirframeCount];
     private readonly int[] _aceKills = new int[CampaignProgression.AirframeCount];
+
+    // The death wiring and the loss latch, both per SEAT of the human field rather than per
+    // aircraft: a 967 swap rebuilds one seat's aeroplane and a death in the new one counts too,
+    // and the seat is what stays down once it has (B13's rule, decision 9).
+    private readonly List<FlightController?> _deathWiredTo = new();
+    private readonly HashSet<int> _seatsDown = new();
     private World? _world;
     private ScriptedPathVehicles? _paths;
 
@@ -85,8 +91,13 @@ public sealed class CampaignDirector
     // finds a different aircraft hooks that one (the old node is freed with its subscriptions).
     private float _scanClock;
     private FlightController? _damageWiredTo;
-    private FlightController? _deathWiredTo;
+    private Action<FlightController>? _beginSpectate;
     private bool _playerLost;
+
+    // D31: the seated pilot's own gunnery, wired the same deferred way as the damage ping, since
+    // the scripted player's aircraft is also built after Attach runs.
+    private ProjectilePool? _projectiles;
+    private FlightController? _scoredShooterWiredTo;
 
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
@@ -189,6 +200,46 @@ public sealed class CampaignDirector
         GD.Print($"campaign: seq {seq} '{mission.Desc}' -> {mission.ChapterFolder}/{mission.MissionFolder}");
         return spec.WithCampaignMission(
             mission.ChapterFolder.ToUpperInvariant(), mission.MissionFolder.ToUpperInvariant());
+    }
+
+    /// <summary>Seats the profile's own selected aircraft on a command-line
+    /// <c>--campaign=</c> launch, which passed no launchscreen and so carries nobody's aeroplane.
+    /// <c>--plane=</c> entry 0 beats the profile and says so; entries 1 and up name guests and are
+    /// left alone. Returns the spec unchanged outside a campaign launch, and for a profile that
+    /// cannot be read (<see cref="TryCreate"/> reports that one).</summary>
+    public static SessionSpec ResolveSeatedPlane(SessionSpec spec)
+    {
+        if (spec.CampaignProfile == null
+            || CampaignProfileStore.UserProfiles().Load(spec.CampaignProfile) is not { } profile
+            || profile.Planes.Count == 0)
+        {
+            return spec;
+        }
+
+        int at = Math.Clamp(profile.SelectedPlane, 0, profile.Planes.Count - 1);
+        var plane = profile.Planes[at];
+        string node = UI.PlanePickerRoster.AirframeNode(plane.Airframe);
+        // A named entry 0 wins whether it came from --plane= or from the launchscreen's own seat,
+        // which is already this node. Comparing the node rather than tracking where the name came
+        // from is what keeps a cabin launch silent: it seated the same aeroplane.
+        if (spec.PlaneNames.Count > 0)
+        {
+            if (!string.Equals(spec.PlaneNames[0], node, StringComparison.OrdinalIgnoreCase))
+            {
+                GD.PushWarning($"--plane={spec.PlaneNames[0]} overrides the seated aircraft: " +
+                               $"'{profile.Name}' flies \"{plane.Name}\" ({node}) at story position " +
+                               $"{spec.CampaignMissionSeq}, and it is flying stock {spec.PlaneNames[0]} instead");
+            }
+
+            return spec;
+        }
+
+        // The same three things CampaignLaunch carries, resolved the way FlyCampaignMission does:
+        // a reward aircraft with no file in the build store falls back to its own award template.
+        var custom = CustomPlaneStore.UserPlanes().Load(plane.Name)
+                     ?? CampaignProgression.BuildForOwned(plane);
+        GD.Print($"campaign: '{profile.Name}' seated in \"{plane.Name}\" as {node}");
+        return spec.WithSeatedAircraft(node, custom, CampaignLoadout.For(plane, StockLoadouts.Load()));
     }
 
     /// <summary>Construction, the shape <see cref="InstantActionDirector.TryCreate"/> has: null
@@ -390,6 +441,8 @@ public sealed class CampaignDirector
     internal void Attach(WorldInputs inputs)
     {
         _world = new World(this, inputs);
+        _beginSpectate = inputs.BeginSpectate;
+        _projectiles = inputs.Projectiles;
         _paths ??= inputs.Runtime is { } animRuntime
             ? new ScriptedPathVehicles(name => animRuntime.FindNodes(name))
             : null;
@@ -439,6 +492,7 @@ public sealed class CampaignDirector
         }
 
         WirePlayerDeath();
+        WireScoredShooter();
         if (_cutsceneHold)
         {
             return;
@@ -446,9 +500,9 @@ public sealed class CampaignDirector
 
         StepPlayerLost();
         Graph?.Step(dt);
-        if (_dangerZones != null && _world?.Player() is { } player)
+        if (_dangerZones != null && _world is { } world)
         {
-            _dangerZones.Update(player.WorldPosition, NotifyDangerZoneCompleted);
+            _dangerZones.Update(world.SnapshotHumans(), NotifyDangerZoneCompleted);
         }
         _paths?.Step(dt);
         StepMusic(dt);
@@ -482,44 +536,101 @@ public sealed class CampaignDirector
         return null;
     }
 
-    // The player's own death, subscribed on the first step that finds an aircraft: the player rig
-    // is built after Attach has run, the same reason the music channel's damage ping waits. Read
-    // by identity, not by a flag: a 967 swap rebuilds the rig and a death in the new one has to
-    // end the mission too.
+    // Every human's death, subscribed on the first step that finds that seat's aircraft: the flight
+    // rigs are built after Attach has run, the same reason the music channel's damage ping waits.
+    // Wired by identity per seat, so a 967 swap's new aeroplane is hooked as well.
     private void WirePlayerDeath()
     {
-        if (_world?.Player() is not { } player || ReferenceEquals(player, _deathWiredTo))
+        var humans = _world?.HumanRigs();
+        if (humans == null)
         {
             return;
         }
 
-        _deathWiredTo = player;
-        player.Downed += (_, _) => OnPlayerDown();
+        for (int seat = 0; seat < humans.Count; seat++)
+        {
+            while (_deathWiredTo.Count <= seat)
+            {
+                _deathWiredTo.Add(null);
+            }
+
+            var human = humans[seat];
+            if (ReferenceEquals(human, _deathWiredTo[seat]))
+            {
+                continue;
+            }
+
+            _deathWiredTo[seat] = human;
+            int down = seat;
+            human.Downed += (_, _) => OnPlayerDown(down, human);
+        }
+    }
+
+    // The seated pilot is the only shooter Shots/Hits answers for (decision 13).
+    // ProjectilePool.ScoredShooters is the sole gate its two counters have. Registering just the
+    // scripted player's aircraft here keeps a guest's cannon fire out of them, whatever the human
+    // field's size.
+    private void WireScoredShooter()
+    {
+        if (_world?.Player() is not { } player || ReferenceEquals(player, _scoredShooterWiredTo))
+        {
+            return;
+        }
+
+        _scoredShooterWiredTo = player;
+        _projectiles?.ScoredShooters.Add(player.PlayerIndex);
     }
 
     // Losing the aircraft loses the mission, in the original's two stages: the death stops the
-    // objectives, and the wreck reaching the ground reaches the debrief. ⚠ Read the aircraft's own
-    // Downed report, which is raised once per real death; the under-map backstop teleports without
-    // one, so an altitude test here would end missions nobody lost (docs/verification.md INSTR-22).
-    private void OnPlayerDown()
+    // objectives, and the wreck reaching the ground reaches the debrief. With a human field it is
+    // the LAST seat's death that stops them, and an earlier one only takes that human out of the
+    // flight (decision 9: no respawn, and the survivors fly on). ⚠ Read the aircraft's own Downed
+    // report, which is raised once per real death; the under-map backstop teleports without one,
+    // so an altitude test here would end missions nobody lost (docs/verification.md INSTR-22).
+    private void OnPlayerDown(int seat, FlightController human)
     {
-        if (!EndsOnPlayerDeath || Graph is not { } graph || !graph.NotifyPlayerLost())
+        // --no-crash-loss is a debugging session flying on past a crash, which means the wreck is
+        // NOT pinned and R still flies it again: taking the pane would leave that pilot blind.
+        if (!EndsOnPlayerDeath || !_seatsDown.Add(seat))
+        {
+            return;
+        }
+
+        int seats = _world?.HumanRigs().Count ?? 1;
+        if (_seatsDown.Count < seats)
+        {
+            _beginSpectate?.Invoke(human);
+            GD.Print($"campaign: seat {seat + 1} of {seats} is lost — spectating; " +
+                     $"{seats - _seatsDown.Count} human(s) still flying");
+            return;
+        }
+
+        if (Graph is not { } graph || !graph.NotifyPlayerLost())
         {
             return;
         }
 
         _playerLost = true;
-        GD.Print("campaign: the player's aircraft is lost — the objectives stop, and the mission ends where the wreck does");
+        GD.Print($"campaign: the last of {seats} human aircraft is lost — the objectives stop, " +
+                 "and the mission ends where the wreck does");
     }
 
     // The second stage: a hull that is still falling has not landed yet, which is the whole of the
-    // delay between the kill and the debrief.
+    // delay between the kill and the debrief. With N humans that is N wrecks, and the wait is for
+    // the last of them.
     private void StepPlayerLost()
     {
-        if (!_playerLost || Graph is not { } graph
-            || _world?.Player() is { WreckFalling: true })
+        if (!_playerLost || Graph is not { } graph)
         {
             return;
+        }
+
+        foreach (var human in _world!.HumanRigs())
+        {
+            if (human.WreckFalling)
+            {
+                return;
+            }
         }
 
         _playerLost = false;
@@ -686,9 +797,9 @@ public sealed class CampaignDirector
         var plane = _profile.SelectedPlane >= 0 && _profile.SelectedPlane < _profile.Planes.Count
             ? _profile.Planes[_profile.SelectedPlane]
             : null;
-        // The money an attempt banks is the hangar economy's, not this director's: it reports zero.
-        // Both of the original's mask loops run whatever the outcome, only bit 0 from the win flag
-        // (docs/org/debrief.md, "The completed-objective mask has two sources").
+        // Money is the hangar economy's reward table, 0 today. Both mask loops run whatever the
+        // outcome, only bit 0 from the win flag (docs/org/debrief.md). ⚠ Shots/Hits stay the
+        // seated pilot's alone (WireScoredShooter): a guest's gunnery never counts.
         var attempt = new MissionAttempt(
             _mission.Seq,
             outcome == MissionOutcome.Won
@@ -798,7 +909,14 @@ public sealed class CampaignDirector
         /// leaves that block on its own def, which is what every other mission wants.</summary>
         public FlyingAirframe? PlayerAirframe;
 
+        /// <summary>What <c>ResolveLeader</c>'s <c>player</c> means. ⚠ The SCRIPTED PLAYER, never
+        /// the human field: an escorting block follows one aeroplane, and a leader chosen from
+        /// whichever human is handiest would hand the wing a different lead every mission.</summary>
         public Func<FlightController?> Player = () => null;
+
+        /// <summary>⚠ Anchored on the scripted player for the same reason as
+        /// <see cref="Player"/>: a net's trailer target is ONE aircraft the graph is drawn behind,
+        /// and there is no field-wide answer to what it should trail.</summary>
         public NetTrailerTargets? NetTrailers;
         public Func<string, IReadOnlyList<Node3D>>? FindNodes;
         public SpawnRosterAircraft Spawn = null!;
@@ -836,13 +954,25 @@ public sealed class CampaignDirector
         /// unarmed, the same "no seam yet" shape as every other null here.</summary>
         public GameZ? Gamez;
 
-        /// <summary>The player's aircraft once one exists, for the music channel's damage ping.
-        /// A delegate rather than a value because the flight rigs are built after the world.</summary>
+        /// <summary>The SCRIPTED PLAYER's aircraft once one exists, for the music channel's damage
+        /// ping and the lost ending. One aeroplane, always P1's. A delegate rather than a value
+        /// because the flight rigs are built after the world.</summary>
         public Func<FlightController?>? PlayerAircraft;
+
+        /// <summary>The HUMAN FIELD: every joined player's aircraft, read fresh. Left unset by a
+        /// solo sortie and by every suite that builds one rig, where the scripted player is the
+        /// whole field and <see cref="PlayerAircraft"/> answers for it.</summary>
+        public Func<IReadOnlyList<FlightController>>? Humans;
 
         /// <summary>Every aircraft in the session, read fresh: the music channel's proximity scan
         /// counts the ones near the player.</summary>
         public Func<IReadOnlyList<FlightController>>? Aircraft;
+
+        /// <summary>Hand this human's pane to a spectator camera: it is out of the mission, but the
+        /// mission is not over. The director decides WHEN and never builds the camera itself, which
+        /// is the same "this class adds no node" rule the rest of it keeps. Unset by a session with
+        /// no rigs to hand over, which leaves a death with no camera to move and nothing else.</summary>
+        public Action<FlightController>? BeginSpectate;
 
         public Random Rng = new();
     }
@@ -854,6 +984,13 @@ public sealed class CampaignDirector
     {
         private readonly CampaignDirector _owner;
         private readonly WorldInputs _in;
+
+        // Refilled by SnapshotHumans and handed straight to CampaignHumanField, never held: the
+        // reads that use it are one graph step apart, so one buffer serves all of them.
+        private readonly List<HumanState> _field = new();
+
+        // HumanRigs' fallback field, the scripted player alone, for a session that names none.
+        private readonly List<FlightController> _soloField = new();
 
         public World(CampaignDirector owner, WorldInputs inputs)
         {
@@ -905,12 +1042,9 @@ public sealed class CampaignDirector
             }
 
             // The human rig after a 967 capture carries the captured aircraft's group and stands
-            // in for it, or CM02's wiped-out DEDG would nap the instant loss. Crashed alone, not
-            // Inert: a human rig is inert under a cutscene, which is not a deactivation.
-            if (Player() is { Group: { } playerGroup } player && playerGroup == group && !player.Crashed)
-            {
-                alive++;
-            }
+            // in for it, or CM02's wiped-out DEDG would nap the instant loss. Every human, not the
+            // scripted player alone: a guest can be the one holding the captured aeroplane.
+            alive += CampaignHumanField.LiveInGroup(SnapshotHumans(), group);
             if (generator != null)
             {
                 _owner.Gap("DEDG", $"the generator form ('{generator}') adds no remaining capacity yet");
@@ -975,7 +1109,6 @@ public sealed class CampaignDirector
                 return null;
             }
 
-            Vector3 subject = _in.ListenerPosition();
             if (!string.Equals(spec.Who, "player", StringComparison.OrdinalIgnoreCase))
             {
                 if (Where(spec.Who) is not { } who)
@@ -983,11 +1116,19 @@ public sealed class CampaignDirector
                     return null;
                 }
 
-                subject = who;
+                bool at = who.DistanceSquaredTo(reference.Value) <= spec.Radius * spec.Radius;
+                return spec.Approaching ? at : !at;
             }
 
-            bool inside = subject.DistanceSquaredTo(reference.Value) <= spec.Radius * spec.Radius;
-            return spec.Approaching ? inside : !inside;
+            // The authored `player` subject is the whole human field, nearest first (decision 7).
+            // A field of none falls back to the listener, which is where this read has always been
+            // and is what a suite that builds no rig still answers with.
+            var field = SnapshotHumans();
+            return field.Count > 0
+                ? CampaignHumanField.Travelers(field, reference.Value, spec.Radius, spec.Approaching)
+                : CampaignHumanField.Travelers(
+                    new[] { new HumanState(_in.ListenerPosition(), null, false) },
+                    reference.Value, spec.Radius, spec.Approaching);
         }
 
         public void WakeupEnemies(IReadOnlyList<string> names)
@@ -1064,7 +1205,52 @@ public sealed class CampaignDirector
             GD.Print($"campaign: WAKE_ANIM '{anim}' started {started} definition(s)");
         }
 
+        /// <summary>The SCRIPTED PLAYER: the one aeroplane an authored <c>player</c> token means,
+        /// always P1's, and the aircraft whose loss ends the mission. ⚠ Not the human field. A
+        /// condition that asks "has a human done this" reads <see cref="SnapshotHumans"/> instead,
+        /// and the two answers differ the moment a guest joins.</summary>
         public FlightController? Player() => _in.PlayerAircraft?.Invoke();
+
+        /// <summary>The human field as the RIGS themselves, for the two seams that must hold an
+        /// aeroplane rather than a reading of one: the per-seat death wiring and the wreck wait.
+        /// Same fallback as <see cref="SnapshotHumans"/>, so a session that names no field is the
+        /// scripted player alone and answers exactly as it did before there was a field.</summary>
+        public IReadOnlyList<FlightController> HumanRigs()
+        {
+            if (_in.Humans?.Invoke() is { Count: > 0 } humans)
+            {
+                return humans;
+            }
+
+            _soloField.Clear();
+            if (Player() is { } player)
+            {
+                _soloField.Add(player);
+            }
+
+            return _soloField;
+        }
+
+        /// <summary>The HUMAN FIELD as the conditions read it, refilled into one reused buffer. A
+        /// session that names no field is one where the scripted player IS the field, which keeps
+        /// the co-op read and the solo read on one code path.</summary>
+        public IReadOnlyList<HumanState> SnapshotHumans()
+        {
+            _field.Clear();
+            if (_in.Humans?.Invoke() is { Count: > 0 } humans)
+            {
+                foreach (var human in humans)
+                {
+                    _field.Add(new HumanState(human.WorldPosition, human.Group, human.Crashed));
+                }
+            }
+            else if (Player() is { } player)
+            {
+                _field.Add(new HumanState(player.WorldPosition, player.Group, player.Crashed));
+            }
+
+            return _field;
+        }
 
         /// <summary>How many other live aircraft sit inside the decoded scan radius of the player.
         /// Wrecks are excluded; whether the original's own skip predicate excludes more than that

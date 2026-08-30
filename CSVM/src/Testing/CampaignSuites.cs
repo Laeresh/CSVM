@@ -338,6 +338,126 @@ internal static class CampaignSuites
         ctx.Note($"flew {mission.ChapterFolder}/{mission.MissionFolder} to a graph-derived end");
     }
 
+    /// <summary>D31: a co-op sortie's <c>Shots</c>/<c>Hits</c> are the seated pilot's alone. Two
+    /// human rigs each fire a real cannon round at the other's aircraft; only the seated pilot's
+    /// (rig 0's) round reaches the recorded attempt, proving <c>WireScoredShooter</c> gates on the
+    /// scripted player and never a guest. <c>Money</c> sums to 0 for both today, since the cash
+    /// half of the mission reward table is a separate, unlanded item.</summary>
+    internal static void CampaignCoopAttempt(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
+        {
+            throw new SuiteSkippedException($"chapter {ctx.Chapter} holds no campaign mission");
+        }
+
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
+        ctx.RequireData(missionZrdr, $"{mission.ChapterFolder}/{mission.MissionFolder} zrdr");
+        var script = ObjectiveScript.Load(missionZrdr);
+        int winner = EndObjective(script);
+        if (winner == 0)
+        {
+            throw new SuiteSkippedException(
+                $"{mission.ChapterFolder}/{mission.MissionFolder} authors no INSTANTWIN objective");
+        }
+
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, mission.ChapterFolder);
+        ctx.RequireData(texturesPath, $"{mission.ChapterFolder} textures");
+
+        var textures = new TextureArchive(texturesPath);
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weaponDefs = Flight.WeaponDefs.Load(ctx.ZrdrPath, null);
+        var cannon = weaponDefs.All.FirstOrDefault(w => w.IsCannon && w.ArmorDamage is > 0f);
+        ctx.Check(cannon != null, $"a CANNON gun exists in the data");
+        if (cannon == null)
+        {
+            textures.Dispose();
+            return;
+        }
+
+        var seatedPos = new Vector3(0f, 800f, 0f);
+        var guestPos = new Vector3(0f, 800f, -2000f);
+        var targetPos = new Vector3(500f, 800f, 0f);
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        var director = CampaignDirector.Create(script, mission, profile, null);
+        Flight.ProjectilePool? pool = null;
+        Flight.FlightController? seated = null;
+        Flight.FlightController? guest = null;
+        Flight.FlightController? target = null;
+        var report = new StringBuilder();
+        try
+        {
+            var live = new Flight.ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            seated = BuildAttemptRig(ctx, planesGamez, textures, live, 0, seatedPos);
+            guest = BuildAttemptRig(ctx, planesGamez, textures, live, 1, guestPos);
+            // An enemy target rather than each other: decision 1 bars friendly fire between
+            // co-op humans, so a round aimed at the OTHER human would never register a hit.
+            target = BuildAttemptRig(ctx, planesGamez, textures, live, 2, targetPos, Flight.AimAssist.PlayerTeam + 1);
+            var field = new List<Flight.FlightController> { seated, guest };
+
+            director.Attach(new CampaignDirector.WorldInputs
+            {
+                Projectiles = live,
+                ListenerPosition = () => seatedPos,
+                PlayerAircraft = () => seated,
+                Humans = () => field,
+            });
+            director.Step(0.1f);
+            ctx.Check(live.ScoredShooters.Contains(seated.PlayerIndex),
+                $"the seated pilot's aircraft is wired into ScoredShooters on the first step");
+            ctx.Check(!live.ScoredShooters.Contains(guest.PlayerIndex),
+                $"...and the guest's never is");
+
+            void FireAt(Flight.FlightController shooter, Vector3 at)
+            {
+                var muzzle = new Transform3D(
+                    Basis.LookingAt(Vector3.Back, Vector3.Up), at + new Vector3(0f, 0f, -20f));
+                live.Spawn(cannon, muzzle, Vector3.Zero, shooterId: shooter.PlayerIndex);
+                for (int i = 0; i < 20; i++)
+                {
+                    live.SimStep(1f / 60f);
+                }
+            }
+
+            FireAt(guest, targetPos);
+            ctx.Check(live.CannonRoundsFired == 0 && live.CannonHits == 0,
+                $"a guest's cannon round moves neither counter: fired={live.CannonRoundsFired} hits={live.CannonHits}");
+
+            FireAt(seated, targetPos);
+            ctx.Check(live.CannonRoundsFired == 1 && live.CannonHits == 1,
+                $"the seated pilot's own round counts as both fired and hit: fired={live.CannonRoundsFired} hits={live.CannonHits}");
+
+            director.Graph!.Wake(winner);
+            Advance(director, 2f);
+            ctx.Check(director.Result != null, $"the mission ended and banked its result");
+            var attempt = director.Result!.Value.Attempt;
+            ctx.Same(1, attempt.Shots, $"the recorded attempt carries the seated pilot's shot count alone");
+            ctx.Same(1, attempt.Hits, $"...and hit count alone, never the guest's");
+            ctx.Same(0, attempt.Money, $"money sums to 0 across the human field: no source pays it yet");
+
+            report.AppendLine($"{mission.ChapterFolder}/{mission.MissionFolder}: seated shots="
+                + $"{attempt.Shots} hits={attempt.Hits} money={attempt.Money}, guest's cannon round "
+                + $"never reached ScoredShooters");
+        }
+        finally
+        {
+            pool?.Free();
+            seated?.Free();
+            guest?.Free();
+            target?.Free();
+            textures.Dispose();
+        }
+
+        ctx.WriteArtifact(
+            $"test-campaign-coop-attempt-{mission.ChapterFolder}-{mission.MissionFolder}.txt", report.ToString());
+        ctx.Note($"{mission.ChapterFolder}/{mission.MissionFolder}: a co-op sortie's Shots/Hits stay the seated pilot's alone");
+    }
+
     /// <summary>BL-458: a campaign mission's own <c>dzpathN</c> gates, resolved against real
     /// world geometry, drive the exact objectives <c>objectives.zrd</c> gates on them. Proved
     /// over C3/M01's shipped SECONDARY (OBJECTIVE3, <c>dzpath1</c>) and OBJECTIVE11
@@ -1061,6 +1181,37 @@ internal static class CampaignSuites
         }
 
         return found;
+    }
+
+    // A human rig for CampaignCoopAttempt, built and registered like CombatSuites' own manual rig:
+    // Setup before the node joins the tree, then RegisterAircraft, so its body is a real hittable
+    // target for another rig's cannon round.
+    private static Flight.FlightController BuildAttemptRig(
+        TestContext ctx, GameZ planesGamez, TextureArchive textures, Flight.ProjectilePool live,
+        int index, Vector3 at, int? team = null)
+    {
+        var stats = Flight.PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+        var pilot = new Flight.FlightController
+        {
+            PlaneModel = model,
+            Collider = Flight.PlaneCollider.Build(model),
+            Damage = stats.DestroyableParts.Count > 0 || stats.VehicleHealth is > 0f
+                ? Flight.PlaneDamage.For(stats) : null,
+            PlayerIndex = FlightRoster.ShooterIdBase + index,
+            IsHumanPiloted = true,
+            Projectiles = live,
+            UseKeyboard = false,
+            PadDevices = System.Array.Empty<int>(),
+            AllowPause = false,
+            Team = team ?? Flight.AimAssist.PlayerTeam,
+            Name = $"AttemptRig{index}",
+        };
+        pilot.AddChild(model);
+        pilot.Setup(new Flight.FlightModel(stats), ctx.Camera, new Flight.CamParams(), at, at + Vector3.Forward);
+        ctx.Host.AddChild(pilot);
+        live.RegisterAircraft(pilot.Body!);
+        return pilot;
     }
 
     // Node index -> anchor, for every node a PERSIST_LOG def binds.
