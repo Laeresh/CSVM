@@ -142,7 +142,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the plane selection screen
 
 4. ☑ B4 `CampaignScreen.PlaneSelection`, drawn at its authored geometry
-5. ☐ B5 The duplicate-plane refusal and its revert
+5. ☑ B5 The duplicate-plane refusal and its revert
 6. ☐ B6 EXPORT writes the plane and its loadout where Instant Action reads it
 
 ### Wave C — the screens that change around it
@@ -312,7 +312,7 @@ that is the whole point of picking with a preview. `ChangePlaneAllowed`'s two ga
 is unreachable when they bite and must not re-implement them. The mission-title line is
 `PS_T_MISSIONINFO` at 136,70 and is the mission's own name, not the screen title.
 
-## B5 ☐ The duplicate-plane refusal and its revert
+## B5 ☑ The duplicate-plane refusal and its revert
 
 **Goal.** On the seated player's screen, moving the pilot's combo onto the plane the wingman is
 flying, or the reverse, raises the modal reading langui 710 and leaves both picks as they were.

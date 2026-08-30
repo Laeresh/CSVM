@@ -64,6 +64,9 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     private const int ExportLabel = 1139;
     private const int HardpointsLabel = 1008;
 
+    // IDS_PS_CANTFLYSAMEPLANE, the words the refused pick is answered with.
+    private const int SamePlaneRefusal = 710;
+
     // The four rating words, langui 501-505 in the order Poor to Excellent.
     private static readonly string[] RatingWords = { "Poor", "Fair", "Average", "Good", "Excellent" };
 
@@ -371,8 +374,9 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     private int Clamped(CampaignProfileDef profile, int index) =>
         profile.Planes.Count == 0 ? 0 : Math.Clamp(index, 0, profile.Planes.Count - 1);
 
-    // Applies a pick. B5 puts the duplicate-plane refusal in front of this; today every pick the
-    // list can offer is taken.
+    // Applies a pick, or refuses it in the original's words. The refusal is the answer to a commit
+    // (a picked list row or a closed field's step), never to movement inside an open list, which is
+    // where message 10015 sits: refusing per movement would pop the dialog at every scrolled row.
     private bool Take(int slot, int pick)
     {
         if (pick == _combos[slot].Selected)
@@ -380,8 +384,31 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
             return false;
         }
 
+        if (Clashes(slot, pick))
+        {
+            Flow.RaiseModal(Flow.Strings.Text(
+                SamePlaneRefusal, "Pilot and Wingman must fly different planes."));
+            return true;
+        }
+
         _combos[slot].Select(pick);
         return true;
+    }
+
+    // The script's permit test on 10015: the change is allowed when the two combos differ or when
+    // only one crew slot is active. ⚠ Compared by name, CampaignFlightField.KeyOf's rule for a
+    // profile aircraft, since two of them may share an airframe and flying that pair is legal.
+    private bool Clashes(int slot, int pick)
+    {
+        if (ActiveSlots < 2)
+        {
+            return false;
+        }
+
+        var planes = (Flow.Profile ?? EmptyProfile).Planes;
+        int other = _combos[slot == 0 ? 1 : 0].Selected;
+        return pick >= 0 && pick < planes.Count && other >= 0 && other < planes.Count
+            && planes[pick].Name == planes[other].Name;
     }
 
     // ACCEPT: the two picks into the profile, and the profile to disk.

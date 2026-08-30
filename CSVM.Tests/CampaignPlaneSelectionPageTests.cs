@@ -9,7 +9,8 @@ namespace CSVM.Tests;
 
 /// <summary>The plane selection screen: its rows with and without a wingman, the combos filled from
 /// the profile, the cursor opening on the slot that was pressed, an open list owning the cursor,
-/// ACCEPT writing both picks and CANCEL restoring them.</summary>
+/// the refusal of a plane the other crew slot flies, ACCEPT writing both picks and CANCEL restoring
+/// them.</summary>
 public class CampaignPlaneSelectionPageTests
 {
     [Fact]
@@ -110,8 +111,8 @@ public class CampaignPlaneSelectionPageTests
     public void AcceptWritesBothPicksIntoTheProfileAndSavesIt()
     {
         var page = NewPage(out var flow, wingman: true);
+        page.Step(2, 1);  // wingman off plane 1 first, or the pilot's step onto it is refused
         page.Step(0, 1);  // pilot onto plane 1
-        page.Step(2, 1);  // wingman onto plane 2
 
         Assert.True(page.Accept(4));
 
@@ -126,8 +127,8 @@ public class CampaignPlaneSelectionPageTests
     public void CancelLeavesBothCrewSlotsFlyingWhatTheyFlew()
     {
         var page = NewPage(out var flow, wingman: true);
-        page.Step(0, 1);
         page.Step(2, 1);
+        page.Step(0, 1);
 
         Assert.True(page.Accept(5));
 
@@ -136,6 +137,50 @@ public class CampaignPlaneSelectionPageTests
         Assert.Equal(0, page.Combo(0)!.Selected);
         Assert.Equal(1, page.Combo(2)!.Selected);
         Assert.Equal(CampaignScreen.FlightCheck, flow.Screen);
+    }
+
+    /// <summary>The script's own refusal on message 10015: the pilot cannot take the plane the
+    /// wingman is flying, and neither pick moves.</summary>
+    [Fact]
+    public void APickTheOtherCrewSlotFliesIsRefusedAndNeitherPickMoves()
+    {
+        var page = NewPage(out var flow, wingman: true);
+
+        Assert.True(page.Step(0, 1)); // onto plane 1, which the wingman flies
+
+        Assert.Equal("Pilot and Wingman must fly different planes.", flow.Modal?.Message);
+        Assert.Equal(0, page.Combo(0)!.Selected);
+        Assert.Equal(1, page.Combo(2)!.Selected);
+    }
+
+    /// <summary>The script's other arm, <c>!POA || !QOA</c>: a screen with one active crew slot has
+    /// nothing to clash with, so every pick is taken.</summary>
+    [Fact]
+    public void OnAWingmanlessMissionTheSamePickIsPermitted()
+    {
+        var page = NewPage(out var flow, wingman: false);
+
+        Assert.True(page.Step(0, 1));
+
+        Assert.Null(flow.Modal);
+        Assert.Equal(1, page.Combo(0)!.Selected);
+    }
+
+    [Fact]
+    public void ARefusedListPickLeavesTheComboClosedOnItsOldValueAfterTheDialogIsAnswered()
+    {
+        var page = NewPage(out var flow, wingman: true);
+        var combo = page.Combo(0)!;
+        page.Accept(0);
+        combo.Move(1); // the cursor onto the wingman's plane
+
+        Assert.True(page.Accept(0));
+        Assert.NotNull(flow.Modal);
+
+        Assert.True(flow.Accept()); // the dialog answered, not the screen underneath
+        Assert.Null(flow.Modal);
+        Assert.False(combo.Open);
+        Assert.Equal(0, combo.Selected);
     }
 
     /// <summary>The one decoded rating, checked against both aircraft the reference screenshots
