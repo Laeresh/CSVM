@@ -3085,6 +3085,10 @@ unauthored state by a factor of ten, so the `puffer-modes` suite asserts both ca
 once; the archive is the key, so a chapter change never serves another chapter's frames.
 Three config knobs (`puffer.burstSizeScale`/`trailSizeScale`/`sustainSizeScale`) scale `BaseSize`
 per spawn path, registered in `Config.WarmTuningRegistry` for `--dump-config`.
+A dormant emitter is off Godot's `_Process` list: `SetActive` is the only writer of the active flag
+and it moves `SetProcess` with it, `_Ready` puts the node back where `SetActive` left it, and the
+`puffer-idle-process-gate` suite holds both directions. A mission pre-warms thousands of emitters,
+so what they cost the frame is set by how many ask for the callback.
 The wind it reads is `Effects/WorldWind.cs` — see its own entry below.
 
 **The camera-distance fade** (`DistanceAlpha`) is view-space depth off `EffectAmbience`'s camera

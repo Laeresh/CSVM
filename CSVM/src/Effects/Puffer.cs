@@ -432,6 +432,8 @@ public sealed partial class Puffer : Node3D
     private bool _emitting;
     private float _sinceStart;
     private int _burstsSpawned, _burstsTotal;
+    // ⚠ Write this through SetActive, never directly: the flag also gates the node's own
+    // _Process, and an idle emitter left processing costs a frame callback for nothing.
     private bool _active;
 
     private bool _trailing;        // distance-interval trail mode (DISTANCE_INTERVAL states)
@@ -526,7 +528,7 @@ public sealed partial class Puffer : Node3D
         _sinceStart = 0f;
         _burstsSpawned = 0;
         _emitting = true;
-        _active = true;
+        SetActive(true);
         Visible = true;
         SpawnBatch(); // t = 0 immediately, so a screenshot on the impact frame already shows fire
     }
@@ -537,7 +539,7 @@ public sealed partial class Puffer : Node3D
         _emitting = false;
         _trailing = false;
         _sustaining = false;
-        _active = false;
+        SetActive(false);
         _liveCount = 0;
         _renderer?.Show(0);
         Visible = false;
@@ -583,6 +585,12 @@ public sealed partial class Puffer : Node3D
         SustainEnd();
         TrailEnd();
     }
+
+    /// <summary>⚠ Do not drop this. Godot turns processing ON at ready for every script that
+    /// defines <c>_Process</c>, so an emitter built dormant would start asking for a frame callback
+    /// it returns straight out of; this puts the node back where <see cref="SetActive"/> left
+    /// it.</summary>
+    public override void _Ready() => SetProcess(_active);
 
     public override void _Process(double delta)
     {
@@ -656,7 +664,7 @@ public sealed partial class Puffer : Node3D
 
         if (_liveCount == 0 && !_emitting && !_trailing && !_sustaining)
         {
-            _active = false;
+            SetActive(false);
             Visible = false;
         }
     }
@@ -741,6 +749,18 @@ public sealed partial class Puffer : Node3D
         return sum / (w * h);
     }
 
+    // Godot dispatches _Process to every processing node, and each C# callback crosses the managed
+    // boundary whether or not its body does anything. A mission pre-warms thousands of emitters, so
+    // the frame cost is set by how many ask to be called, not by how many run.
+    // ⚠ A node joining the process group mid-pass is not visited until the next frame, so a start
+    // costs one frame before the emitter's first integrate-and-draw. That is a particle shot's
+    // whole difference across this gate; see docs/verification.md PERF-24.
+    private void SetActive(bool active)
+    {
+        _active = active;
+        SetProcess(active);
+    }
+
     // The distance alpha across every pane: keeps the most favourable
     // answer of DistanceAlpha evaluated per viewer, drawing if any pane would draw it.
     // ⚠ Must be per-viewer, not nearest-by-range: the fade is view-space depth along each camera's
@@ -818,7 +838,7 @@ public sealed partial class Puffer : Node3D
             _trailing = true;
             _trailPrev = worldPos;
             _trailCarry = 0f;
-            _active = true;
+            SetActive(true);
             Visible = true;
             return;
         }
@@ -859,7 +879,7 @@ public sealed partial class Puffer : Node3D
             _trailing = true;
             _trailPrev = worldPos;
             _trailCarry = 0f;
-            _active = true;
+            SetActive(true);
             Visible = true;
         }
         _trailCarry += speedMps * dt;
@@ -897,7 +917,7 @@ public sealed partial class Puffer : Node3D
             TopLevel = true;                 // world-space particles, like the trail mode
             GlobalTransform = Transform3D.Identity; // see TrailAdvance: TopLevel keeps the global basis
             _sustaining = true;
-            _active = true;
+            SetActive(true);
             Visible = true;
             _sustainCarry = _state.TimeInterval; // emit on the very first frame
             // No prior pose to interpolate from — re-home here rather than trailing from a

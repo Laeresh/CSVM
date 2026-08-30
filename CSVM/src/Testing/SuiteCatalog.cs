@@ -59,6 +59,7 @@ public static class SuiteCatalog
         "puffer-distance-fade",
         "puffer-priority-size",
         "puffer-fire-column",
+        "puffer-idle-process-gate",
         "loadout-bind",
         "weapons-fire",
         "aim-assist",
@@ -299,6 +300,10 @@ public static class SuiteCatalog
         into.Add(new TestHarness.Suite("puffer-fire-column",
             "the 30 s fire's authored column height, still air and in C1's own upward wind — the readout that retired the invented fire scales (D10)",
             PufferFireColumn));
+        into.Add(new TestHarness.Suite("puffer-idle-process-gate",
+            "a dormant emitter is off Godot's frame-callback list and each entry path puts it back, "
+            + "which is what keeps a mission's pre-warmed field from costing the frame it is idle in",
+            PufferIdleProcessGate));
         into.Add(new TestHarness.Suite("loadout-bind",
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",

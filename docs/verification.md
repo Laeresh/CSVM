@@ -406,6 +406,19 @@ loss. What the engine renders was decodable from the authored constants + oscill
   with nine aircraft alive (about 1.9 ms a line), and gating it took the windows whose worst tick
   exceeds the 16.7 ms budget from 47 of 82 to 3 of 82 with the tick rate unmoved at 60.0.
 
+- **PERF-24** — **When a frame's cost is not in physics, not in the render terms and not in any
+  named script scope, count the nodes ASKING for the per-frame callback before looking at what the
+  callbacks do.** Godot dispatches `_Process` to every processing node and each C# callback crosses
+  the managed boundary whether or not its body runs, so a population that returns immediately still
+  sets the rate. Measured on CM13 (C2/M03): the whole C# `_Process` pass cost 9.4 ms of a 12.4 ms
+  frame while the bodies inside it summed to 1.06 ms, over 3,814 `Puffer` nodes of 3,879 processing
+  ones, against 709 and 2.16 ms in a `--fly` session on the same chapter and a 0.5 ms intercept, so
+  the dispatch is about 2.3 us a node. **The price of gating one off is one frame**: a node joining
+  the process group mid-pass is not visited until the next frame, so an emitter's first
+  integrate-and-draw moves. Measured on the `c1-crash` shot: 16 of the 21 emitters it starts used to
+  get their first `_Process` in the frame they were activated and now all 21 get it one frame later,
+  which is that shot's whole 1.15 % of moved pixels (GOLD-6).
+
 ## LOG — logs, error censuses, and exit codes
 
 - **LOG-1** — **An empty report may mean the mode did not build the feature.**

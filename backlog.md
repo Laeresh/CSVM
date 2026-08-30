@@ -908,28 +908,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   which sibling. *Cross-refs:* `NameResolver`, `docs/formats/gamez.md`, `BL-616`'s closing commit
   (`git log --grep=BL-616`).
 
-- `BL-612` `[Bug]` **CM09 (C1/M04): the frame rate falls under 60 for the rest of the mission once
-  the Promised Land is down and the next fighter squad spawns.** *Evidence:* reported at the
-  controls on the plan branch, and it is a sustained rate drop, not single hitches. The sortie
-  log's late `[perf] hitch` lines carry the shape in their baseline: 19 to 26 ms against 10 ms
-  earlier in the same sortie, with `script_ms` about 25 and `physics_ms` 17 to 18 while
-  `render_cpu_ms` stays near 1 and `gpu_ms` near 0.5, `nodes` about 37000 and `mem_mb` about 1300.
-  The frame is spent on the CPU in script and physics, not on the GPU. *Fix shape:* the hitch
-  detector reports outliers against a rolling baseline, so a whole-run slowdown reads only in that
-  baseline; measure the rate itself instead (a frame-time trace over the sortie, or the probe's
-  own timing), then attribute the script time with the sampler armed. Read whether the cost is the
-  zeppelin's death choreography left running (the burn, finisher and sink anims and their emitters
-  persist after the hull is down), the destroyed hull's colliders and debris still stepping, or the
-  new squad's rigs adding AI and physics on top; the node count says nothing was freed. Compare a
-  run that leaves the zeppelin alive. *⚠ Traps:* the hitch detector is opt-in (`RunTests.ps1 -Hitch`)
-  and answers a different question than this one; `attributed_ms` is 0 in these lines because the
-  sampler was not armed, so they name no culprit. CM13 (C2/M03) shows the same sustained drop and
-  is the likelier test case, since that mission spawns its whole field at the start and involves no
-  zeppelin death: if both share a cause it is the number of live aircraft, not the destruction
-  choreography, so measure CM13 first and treat CM09's zeppelin as the second variable.
-  *Cross-refs:* `HitchMonitor`, `Launcher`'s hitch tick, `BL-599`'s closing commit
-  (`git log --grep=BL-599`).
-
 - `BL-597` `[Bug]` **CM08 (C1B/M03): the Pandora does not halt exactly over the tanker and plays no
   hangar animation there.** *Evidence:* reported at the controls against the original: the Pandora
   holds level along Klondike1 now, but its armed stop lands short of or past the tanker, and the
