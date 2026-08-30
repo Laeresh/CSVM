@@ -362,6 +362,9 @@ public partial class Launcher : Node3D
         // log. The sink always takes every category at every level; --log= only widens what the
         // console additionally shows.
         Log.Open(_repoRoot, _spec.ModeName);
+        // Named while the run is live, because a crash never reaches the mirror in _ExitTree and
+        // this is then the only pointer to the traces our own sink cannot see.
+        Log.Info("core", $"engine log={Path.Combine(OS.GetUserDataDir(), "logs", "godot.log")} (mirrored beside this one on quit)");
         foreach (var (old, replacement) in _spec.Deprecated)
         {
             Log.Warn("core", $"deprecated flag={old} use={replacement}");
@@ -411,6 +414,13 @@ public partial class Launcher : Node3D
         // ClearOverrides just dropped; before the early-quit probes below, so --run-tests and the
         // --dump-* wrappers are covered by the same gain an interactive launch gets.
         ApplyMasterVolume();
+        // Before the first PreferUnzipped call and process-wide, so every later resolution (the
+        // chapter paths in StartSession, the menu pages' own lookups) takes the same asset shape.
+        SessionPaths.ForceZipped = _spec.ZipAssets;
+        if (_spec.ZipAssets)
+        {
+            Log.Info("core", $"assets: --zip-assets — reading .zip archives, ignoring unpacked folders");
+        }
         // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists (loose
         // JSON/PNG/WAV: no zip decompression at load). Base (chapter-independent) paths resolve now;
         // the chapter-dependent gamez/texture/mission paths resolve per-session in StartSession.
@@ -596,6 +606,7 @@ public partial class Launcher : Node3D
         _hitchSidecar.Flush();
         _musicArchive?.Dispose();
         _musicArchive = null;
+        MirrorEngineLog();
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -716,6 +727,39 @@ public partial class Launcher : Node3D
     // The process's one music channel and the archive it streams from. Everything here is
     // optional: an install without soundsh or without a readable sounds.json leaves the game
     // silent, which is what a missing extraction has always meant.
+    /// <summary>Copies Godot's own log next to ours in <c>.scratch/logs/</c> on an ordinary quit,
+    /// so one folder is the whole bug report. The file sink takes <see cref="Log"/> calls only, so
+    /// a managed exception escaping a callback reaches the engine's log and NOT ours.
+    /// ⚠ Best effort throughout, and never on a crash: the engine holds the file open, and nothing
+    /// here may take the quit with it.</summary>
+    private void MirrorEngineLog()
+    {
+        if (Log.SinkPath is not { } sinkPath)
+        {
+            return;
+        }
+        string source = Path.Combine(OS.GetUserDataDir(), "logs", "godot.log");
+        string target = Path.ChangeExtension(sinkPath, ".godot.log");
+        try
+        {
+            if (!File.Exists(source))
+            {
+                return;
+            }
+            // Share ReadWrite: the engine's own writer is still open on it, and a plain
+            // File.Copy would fail on Windows against that handle.
+            using var src = new FileStream(source, FileMode.Open, System.IO.FileAccess.Read, FileShare.ReadWrite);
+            using var dst = new FileStream(target, FileMode.Create, System.IO.FileAccess.Write, FileShare.Read);
+            src.CopyTo(dst);
+            Log.Info("core", $"engine log mirrored from={source} to={target} bytes={dst.Length}");
+        }
+        catch (System.Exception e) when (e is IOException or System.UnauthorizedAccessException
+                                             or System.NotSupportedException)
+        {
+            Log.Warn("core", $"engine log mirror failed from={source} error={e.GetType().Name}: {e.Message}");
+        }
+    }
+
     private void BuildMusic()
     {
         try

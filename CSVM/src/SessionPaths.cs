@@ -12,11 +12,25 @@ namespace CSVM;
 /// </summary>
 public static class SessionPaths
 {
+    /// <summary><c>--zip-assets</c>: ignore every unpacked sibling folder and read the <c>.zip</c>,
+    /// the only shape an exported build ships. Process-wide, set once at startup, because the
+    /// asset shape is a property of the run rather than of one path.
+    /// ⚠ The two shapes do not fail alike, so an unpacked tree cannot reproduce a zip-only bug at
+    /// all. That is how one shipped: <see cref="Mech3.SoundArchive"/>'s entry in
+    /// docs/architecture.md.</summary>
+    public static bool ForceZipped { get; set; }
+
     /// <summary>Prefer the unpacked sibling folder from <c>ExtractAssets.ps1 -Unzip</c> when it
     /// exists (loose JSON/PNG/WAV: no zip decompression at load); else the <c>.zip</c> path
-    /// verbatim. The loaders (`GameZ`/`TextureArchive`/`Zrdr`) read either shape.</summary>
+    /// verbatim. The loaders (`GameZ`/`TextureArchive`/`Zrdr`) read either shape.
+    /// <see cref="ForceZipped"/> takes the zip whenever there IS one, and otherwise falls through:
+    /// a run that asked for zips must still start where only the folder was ever extracted.</summary>
     public static string PreferUnzipped(string zipPath)
     {
+        if (ForceZipped && File.Exists(zipPath))
+        {
+            return zipPath;
+        }
         var dir = Path.Combine(Path.GetDirectoryName(zipPath)!, Path.GetFileNameWithoutExtension(zipPath));
         return Directory.Exists(dir) ? dir : zipPath;
     }

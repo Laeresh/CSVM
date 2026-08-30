@@ -1428,6 +1428,27 @@ Godot cannot load the game's WAV format (see `docs/formats/sounds.md`).
 WAV lookup over a soundsh/soundsl extraction (zip or dir), decoded through `WavFile` into cached
 `AudioStreamWav`s; `Find(name, looped)` marks the stream as a forward loop when asked.
 
+**The lifetime rule.** A session opens this for the world build and closes it at the end of it
+(`ArchiveIntent.Session` → `SoundsOutliveBuild = false`), while `FlightAudio`, `ProjectilePool` and
+the rest keep the object and keep asking. `Dispose` therefore releases the OS handle without ending
+the archive's usable life: a later read reopens the zip, takes its one entry and closes again. The
+entry map is built once at construction and kept across `Dispose`, which is what makes that cheap,
+and `Find` caches the decoded stream, so each distinct sound pays a reopen at most once.
+
+The two backing shapes fail differently, and that asymmetry is the point. A directory-backed
+archive re-reads a path per lookup and cannot be closed under itself; a zip-backed one holds a
+handle that can. The build-scoped close rested on the build-time prewarm covering every sound the
+session would ever want. It does not: `40cal_gun`, `bullet_ground`, `missile_bg` and
+`missile_explode` are all first needed in flight. On a developer tree, where `ExtractAssets.ps1
+-Unzip` leaves unpacked folders that `SessionPaths.PreferUnzipped` prefers, that gap is invisible.
+On an exported build, which ships only the `.zip`, every one of those reads threw
+`ObjectDisposedException` out of `SessionSimulation.Step` and skipped every later phase, the AI
+aircraft included. Run with `--zip-assets` (`SessionPaths.ForceZipped`) to take the export's asset
+shape on a developer tree.
+
+A read that still fails returns null, never a throw: this runs inside the session step, where an
+escaping exception costs every phase after it.
+
 ## src/Mech3/MusicPlayer.cs
 The state-driven score: one non-positional streaming channel beside `WorldSounds`' pooled 3D
 emitters, so the menu, the cabin and the mission director all drive the same track. `Enter(state)`
