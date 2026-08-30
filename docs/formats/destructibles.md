@@ -19,6 +19,7 @@ mode, the `DAMAGE_SEQUENCE` threshold script, the death sequence, and the collid
 - [Damage and death sequences](#damage-and-death-sequences)
 - [Starting destroyed](#starting-destroyed)
 - [Definition binding](#definition-binding)
+- [Which node takes the hit](#which-node-takes-the-hit)
 - [Water-tower example](#water-tower-example)
 ## Destructible pieces
 
@@ -192,6 +193,35 @@ A destructible def anchors to scene nodes exactly like any animation definition 
   `_healthy`/`_destroyed` (also bare `healthy`/`destroyed`, and object-specific spellings) pairing
   is pervasive: C1's gamez alone carries hundreds of such nodes.
 
+## Which node takes the hit
+
+A destructible's HP pool does not sit on its `NAME` anchor. The animation-definition loader
+`FUN_005230d0` walks every record and, for `activation` 0 or 2, calls
+`FUN_005abbf0(record, *(record + 0x6c), …, 0x004e7220)`. The slot-0 weapon-hit handler is therefore
+registered on **`def+0x6c`, the animation-root node**, which is `ANIMATION_ROOT_NAME` resolved
+inside the definition's own subtree, falling back to `def+0x48` (the `NAME` anchor) when the root
+name is absent or resolves to nothing ([../org/sequences.md](../org/sequences.md), "The two roots are
+different fields"). `FUN_005abb20` hangs the handler off a list on the node itself (`node+0xbc`), so
+several definitions can register on one object without displacing each other, each on its own node.
+
+> **A hit belongs to the definition whose animation root covers the piece that was struck**, not to
+> the definition that happens to name the group. Two destructible defs anchored on one node are told
+> apart by nothing else.
+
+That matters wherever one object authors two independent deaths. Across the whole install, 10 of the
+2,603 destructible defs' `NAME` groups carry defs with **different** animation roots:
+
+| Where | `NAME` | The two pools |
+|---|---|---|
+| `C1/M05/mis_anim` | `lifesaver11`–`lifesaver33` (9 sites) | `lifefallNM` `HEALTH 60` rooting on `lifeballoon`, the balloon's own burst-and-fall; `lboat_destructionNM` `HEALTH 40` rooting on the `lifesaverNM` group, the lifeboat's explosion |
+| `C2/cam_anim` | `sghangar` | `tbridg1_fire` `HEALTH 15` on `tarzan_bridg1`; `tbridg2_fire` `HEALTH 5` on `tarzan_bridg2` |
+
+CM10's attack balloons are the worked case. Shooting the envelope has to reach `lifefallNM`, whose
+eight `OBJECT_MOTION` events drop the `lifeboat` under `GRAVITY -10`, drop `lifeballoon` under
+`GRAVITY -5` and fling `b_part1`–`b_part6` at 10–16 m/s, alongside seven `OBJECT_OPACITY_FROM_TO`
+fades and fourteen puffer states. Reaching `lboat_destructionNM` instead leaves the envelope with
+nothing but the RESET-derived healthy→destroyed swap, so the destroyed balloon hangs where it died.
+
 ## Water-tower example
 
 `extracted/C1/zrdr/ap_h2otwr.zrd.json` is one reader definition, `NAME ap_h2otwr*`,
@@ -239,6 +269,14 @@ wildcard can anchor to *different* nodes of one object. The water tower's compil
 collider — and the compiled def is the authoritative one, since its `DAMAGE_SEQUENCE` and death
 sequence are the real ones. The nearest **compiled** anchor up the chain wins; failing any compiled
 anchor, the nearest reader one.
+
+Each pool claims two nodes on the way in: its **damage node** (the animation root above) outright,
+and its anchor only as a fallback, which is what separates the ten two-pool objects. The anchor
+claim is kept rather than dropped for the original's one-node-only rule, because most defs root on a
+node their own death then hides and a hit on the wreck must still find the pool that owns it; an
+own-root claim outranks an anchor claim whichever order the two defs register in. `Instance.Anchor`
+stays the animation anchor, so `ANIM_HEALTH` evaluation, the objective marker layer and the AI
+target pool are unaffected by which node the hit resolves through.
 
 Two death-sequence shapes the registry's per-instance state has to track beyond the swap above:
 

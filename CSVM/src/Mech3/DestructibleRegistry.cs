@@ -19,10 +19,15 @@ public sealed class DestructibleRegistry
 
     private readonly HashSet<ulong> _anchors = new();
 
-    // The ONE authoritative instance per anchor node, for resolving a struck world node back to a
-    // destructible. A node can carry several instances (reader wildcard + compiled
-    // per-instance); the compiled def is the better data, so it wins.
+    // The ONE authoritative instance per node a hit may resolve through. A node can carry several
+    // instances (reader wildcard + compiled per-instance); the compiled def is the better data, so
+    // it wins. Each instance claims its own damage node outright and its anchor only as a
+    // fallback, which is what tells two pools on one anchor apart — see Register.
     private readonly Dictionary<ulong, Instance> _authoritative = new();
+
+    // The claims made on a node by an instance whose OWN damage node it is. A second def merely
+    // anchored above that node must not displace it, whichever order the two register in.
+    private readonly HashSet<ulong> _ownClaim = new();
 
     /// <summary>Coarse lifecycle state of one destructible instance. Everything sits at
     /// <see cref="Healthy"/> until damage is applied.</summary>
@@ -47,8 +52,10 @@ public sealed class DestructibleRegistry
 
     /// <summary>Registers one destructible node group at full health. Idempotent: a repeated
     /// <c>(def, anchor)</c> returns the existing instance without resetting its HP, so a second
-    /// bootstrap pass or a re-index cannot silently heal a damaged object.</summary>
-    public Instance Register(AnimDefinition def, Node3D anchor, float maxHealth)
+    /// bootstrap pass or a re-index cannot silently heal a damaged object.
+    /// <paramref name="damageNode"/> is the node a weapon hit resolves through, the definition's
+    /// own animation-root node (docs/formats/destructibles.md); null means the anchor.</summary>
+    public Instance Register(AnimDefinition def, Node3D anchor, float maxHealth, Node3D? damageNode = null)
     {
         var key = (def, anchor.GetInstanceId());
         if (_byKey.TryGetValue(key, out var existing))
@@ -58,13 +65,16 @@ public sealed class DestructibleRegistry
         _all.Add(inst);
         ulong aid = anchor.GetInstanceId();
         _anchors.Add(aid);
-        // Compiled beats reader as the authoritative instance for this anchor (compiled defs load
-        // first, so this normally just fills an empty slot, but the check makes it order-proof).
-        if (!_authoritative.TryGetValue(aid, out var current)
-            || (def.Archive != null && current.Def.Archive == null))
+        // The damage node as its own claim, the anchor only as a fallback. ⚠ Keep the anchor
+        // claim: a def usually roots on a node its death then hides, and a hit on the wreck must
+        // still find the pool that owns it rather than falling through as scenery.
+        var own = damageNode ?? anchor;
+        Claim(own.GetInstanceId(), inst, ownRoot: true);
+        if (!ReferenceEquals(own, anchor))
         {
-            _authoritative[aid] = inst;
+            Claim(aid, inst, ownRoot: false);
         }
+
         return inst;
     }
 
@@ -124,6 +134,26 @@ public sealed class DestructibleRegistry
         _all.Clear();
         _anchors.Clear();
         _authoritative.Clear();
+        _ownClaim.Clear();
+    }
+
+    // Who answers a hit resolved at this node. Compiled beats reader, and a def whose own damage
+    // node this is beats one merely anchored above it; otherwise the first claimant keeps it.
+    private void Claim(ulong node, Instance inst, bool ownRoot)
+    {
+        bool free = !_authoritative.TryGetValue(node, out var current);
+        bool better = !free
+            && ((inst.Def.Archive != null && current!.Def.Archive == null)
+                || (ownRoot && !_ownClaim.Contains(node)));
+        if (free || better)
+        {
+            _authoritative[node] = inst;
+        }
+
+        if (ownRoot)
+        {
+            _ownClaim.Add(node);
+        }
     }
 
     /// <summary>One live destructible node group: its authored definition, the world node it

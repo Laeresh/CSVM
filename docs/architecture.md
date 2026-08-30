@@ -1410,7 +1410,12 @@ Live, mutable per-instance HP for the world's destructibles — any `AnimDefinit
 `HEALTH > 0`. One `Instance` per `(def, anchor)` pair, seeded from the authored `HEALTH`, plus a
 coarse healthy/damaged/destroyed `State` and a monotonic `DamageStage`; built during AnimRuntime's
 bootstrap, read by `ANIM_HEALTH` eval, escalated by `ApplyDamageStages`, damaged via `DamageAt`.
-`Resolve(struck)` maps a raycast-hit node back to its instance. Schema: docs/formats/destructibles.md.
+`Resolve(struck)` maps a raycast-hit node back to its instance, climbing to the nearest node a pool
+claims. A pool claims its own DAMAGE NODE (`Register`'s `damageNode`, which
+`AnimRuntime.DamageNodeOf` reads off the def's `ANIMATION_ROOT_NAME` inside that anchor) and its
+anchor only as a fallback, which is how two defs sharing one anchor are told apart; the rule and the
+`def+0x6c` decode behind it are in docs/formats/destructibles.md, "Which node takes the hit".
+Regression: the `campaign-balloon-death` suite. Schema: docs/formats/destructibles.md.
 `Instance.Reseed(max)` re-seeds a pool from a mission record — the F18 zeppelin zones, where
 `zeppelins.json` hp beats the def's own `HEALTH` — and refuses once damaged, so a late wire-up
 cannot heal a fight in progress. `Instance.Team`, `Instance.Owner` and `Instance.Dormant` are what a mission
