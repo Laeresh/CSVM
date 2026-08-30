@@ -421,7 +421,10 @@ Targeted results, all on this worktree with `CSVM_DATA_ROOT` set:
 - `-UnitFilter SuiteCatalogTests`: 6 passed. `.\RunTests.ps1 -Quick`: units 241 of 241, engine 13 of
   13, engine errors clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-2 tree, with current `main` in:
+build clean, units 2694 passed of 2694, 194 engine suites passed with engine errors clean, and 18
+golden shots hash-identical. Exit 0 in 203.1 s, the engine stage over its 100 s budget at 140.1 s
+(awareness only).
 
 **Suite count.** The catalog is 193; `CSVM.Tests/SuiteCatalogTests.cs` (192 → 193) and
 `analysis/engine-suite-weights.json` were updated with it.
@@ -530,7 +533,10 @@ engine tier `-SkipUnits -SkipGoldens` **193 passed, 0 failed, 0 skipped**, engin
 and `c1-destroy-effects` included, which is the pixel side of the same registry.
 `.\CheckCommentCaps.ps1 -Summary`: every block within cap, and `dotnet format --verify-no-changes`
 clean.
-**Verified.** `<pending orchestrator run>`
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-2 tree, with current `main` in:
+build clean, units 2694 passed of 2694, 194 engine suites passed with engine errors clean, and 18
+golden shots hash-identical. Exit 0 in 203.1 s, the engine stage over its 100 s budget at 140.1 s
+(awareness only).
 
 **Owed at the controls.** CM10, shoot one balloon and watch what is left in the air: the envelope
 falls and fades, six pieces fly and trail, the lifeboat drops and splashes, and nothing stands still.
