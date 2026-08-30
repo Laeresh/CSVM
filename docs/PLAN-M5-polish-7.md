@@ -127,7 +127,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E — the campaign's frame stalls
 
 41. ◐ `BL-641` CM18's two spawn stalls are spread across frames (largest term removed, 363/325 ms to 156/117 ms; the residual is per-aircraft construction and still trips the detector, `BL-641` rewritten)
-42. ☐ `BL-562` CM11's physics tick spikes are attributed and removed
+42. ◐ `BL-562` CM11's physics tick spikes are attributed and removed (the cap-exhaustion premise is disproved and the recurring band is gone; three one-off ticks of 46 to 124 ms remain, `BL-562` rewritten)
 43. ☐ `BL-612` CM09 and CM13 hold their rate for the whole mission
 
 ## Dependency and parallelism notes
@@ -139,11 +139,10 @@ chain, never in parallel worktrees. C21 and C22 are the same mission and one sor
 but they touch different systems (the animation runtime and the marker layer) and can run in
 parallel. D31 is confined to `UI/` and contends with nothing.
 
-**File contention: A1 and E42 both edit `Mech3/AnimRuntime.cs`.** A1 closed without touching that
-file, so the queue is clear for E42, whose named candidate is `NameResolver.ClearFindCache` and its
-callers, the `IndexStage` / `IndexSpawnedCopy` / `IndexRebasedStage` / `IndexPooledCopy` paths.
-C21 may also reach `AnimRuntime`'s `ObjectMotion` dispatch; if the diagnosis takes it there, the two
-still run one after the other rather than in parallel worktrees.
+**File contention on `Mech3/AnimRuntime.cs` is settled.** A1 closed without touching that file, C21
+touched only three regions of it (the two `DestructibleRegistry.Register` call sites and a new
+private `DamageNodeOf` near `Targets`), and E42 ruled its candidate out and touched neither
+`AnimRuntime.cs` nor `Anim/NameResolver.cs`. Nothing in wave E holds either file.
 
 E41, E42 and E43 are one measuring session's worth of work and share the instrument setup
 (`--det`, `--perf`, `HitchSidecar`'s attribution). Taking the wave whole is cheaper than three
@@ -801,40 +800,118 @@ PASS.
 
 **Verified.** <pending orchestrator run>
 
-## E42 ☐ `BL-562` CM11's physics tick spikes are attributed and removed
+## E42 ◐ `BL-562` CM11's physics tick spikes are attributed and removed
 
 **Goal.** CM11 (C2/M02) runs no single physics tick long enough to exhaust Godot's eight-step catch-up
 cap, so no sim step is discarded.
 
-**Evidence (confidence: direction-sound).** The bracketed instrument (`Utils/PhysicsTickCost.cs`, and
-`--perf`'s `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz`) over 333 windows of a loaded CM11 session
-puts the mean tick at 1.81 ms (p95 3.20 ms) and the tick rate at a median of 60.0 per wall second, but
-`phys_tick_max_ms` hit 72, 102 and 177 ms on individual ticks. `max_physics_steps_per_frame` is at
-Godot's default 8, so a 177 ms stall leaves about six sim steps undeliverable and they are discarded,
-not deferred. The named candidate is `Mech3/Anim/NameResolver.cs`'s `ClearFindCache`, which drops the
-whole find memo, so the next tick's roughly sixty objective name resolutions re-walk the roughly
-5000-row index calling `GodotObject.IsInstanceValid` on every row; its callers are the `IndexStage` /
-`IndexSpawnedCopy` / `IndexRebasedStage` / `IndexPooledCopy` spawn and warm-up paths in
-`Mech3/AnimRuntime.cs`, which is the right shape for a spike that lands on a spawn rather than
-steadily. `<TODO: re-verify still-open against the code>`
+**Outcome: the named candidate is ruled out, the cap-exhaustion premise does not reproduce, and the
+recurring over-budget band was an ungated debug print rather than anything in the animation runtime.**
+The band is gone; three one-off ticks remain and `BL-562` is rewritten around them, so the item lands
+partial.
 
-**Approach.** Confirm the candidate by bracketing a spiking tick rather than by inference: instrument
-what a spiking tick is doing before changing the memo. If it is the find cache, the fix is an
-invalidation narrower than dropping the whole memo. Check the file-contention queue: A1 edits the same
-file.
+**Mode, stated up front.** `.\RunProbe.ps1 --campaign=e42-perf:10 --no-det --perf --no-vsync --mute
+--no-pads --seed=1 --frames=5000 --screenshot=…`, one aeroplane, nobody at the controls, on a copy of
+the `d33-perf` profile deleted afterwards. `--no-det` is required: `--det` makes the clock
+parent-driven, which empties the physics tick and the three `phys_*` terms with it (PERF-21). The
+session's loaded phase is its first 83 seconds; at t≈70 s the unattended pilot flies into the water
+and the world goes quiet (`phys_tick_ms` 0.08, node count frozen), so the 333-window session the
+entry quoted was mostly measuring an idle world. Every window below is a 60-rendered-frame window at
+a median `phys_hz` of 60.0, so 82 windows are 82 sim seconds as well as 82 wall seconds.
 
-**Model recommendation.** high. The instruments here have already misled once on this exact item, and
-a cache invalidation that is too narrow returns a stale node rather than a slow frame.
+**The candidate, ruled out by measurement.** A temporary counter pair on `NameResolver`
+(`ClearFindCache` calls, `FindAll` calls, misses, index rows walked) read across every tick over
+12 ms says `clears=0` on all 55 spiking ticks of a sortie: not one of `IndexStage`,
+`IndexSpawnedCopy`, `IndexRebasedStage`, `IndexSpawnedVehicle` or the template stage's
+`IndexPooledCopy` fires during CM11 flight, because nothing in that mission spawns a vehicle, grows a
+stage or checks out a new library copy after the build. The memo is never dropped, so it cannot be
+re-walked. The index is about 900 rows per runtime rather than 5000, and the spiking ticks that do
+miss the memo (76 misses over 69,008 rows on the crash tick) spend 0.02 ms doing it. No narrower
+invalidation was written and none is needed.
 
-**Verify.** Re-run the bracketed instrument over a loaded CM11 session and show `phys_tick_max_ms`
-under the 16.7 ms budget across the same window count, with the mean unchanged. Compare durations in
-sim seconds, never wall seconds. The complete `.\RunTests.ps1` before landing, since a memo change
-reaches every name resolution in the game.
+**What a spiking tick is actually doing.** A temporary `Stopwatch` breakdown inside the bracket, split
+first between `GameSession`'s `SessionSimulation.Step` and the 20 `AnimRuntime.Advance` calls, then
+across `SessionSimulation`'s seventeen named phases, then inside `FlightController.SimStep`:
 
-**⚠ Traps.** **Do not chase the sustained step**; see the disproven-claims table above. Do not raise
-`max_physics_steps_per_frame`: it deepens the catch-up spiral rather than recovering the lost steps.
-The original measurement ran under `--debug-objective=18` with nobody at the controls, so it
-under-weights projectiles and destruction cascades; a re-measurement should say which mode it used.
+| tick | ms | where |
+|---|---:|---|
+| the first tick after the world build | 124 | `anim_advance` 95 ms over 20 runtimes (first `Advance`, 46,355 index rows over five cold misses), `sim_step` 29 ms |
+| the recurring band, 47 of 82 windows | 18 to 25 | `captured_ai` 16 to 22 ms, of which `telemetry` 17.0 to 21.5 ms over nine aircraft |
+| one tick a sortie | 46 | `human_ac` 38 ms, the pilot's own crash |
+| one tick a sortie | 46 | `captured_ai` 46 ms, of which one AI aircraft's `sweep` 45.1 ms |
+| one tick a sortie | 50 | a single `AnimRuntime.Advance` |
+
+**The mechanism.** `FlightController.SimStep` ended with an ungated `GD.Print` of a per-aircraft
+telemetry line every sim second. Every live aircraft starts its counter at the same instant, so all
+nine crossed the boundary on the SAME sim step and the tick paid nine console writes at about 1.9 ms
+each. The line reached only Godot's stdout, never `.scratch/logs/`, and was formatted in the host's
+CurrentCulture (`spd=55,8` on this machine), so it was neither filterable nor greppable where a
+reader looks for it.
+
+**What landed.** The line asks `Log.ConsoleShows("flight", Log.Level.Debug)` before it formats
+anything and emits through `Log.Debug("flight", …)`, so `--log=flight` turns it on and the default
+costs nothing. Nothing else changed. Recorded as `docs/verification.md` PERF-23 and on
+`FlightController`'s `docs/architecture.md` entry.
+
+**The numbers, paired A/B, two kept runs a side after a discarded warmup (PERF-7), each side rebuilt
+`--no-incremental` (SHELL-16), the "before" side being this tree with the ungated `GD.Print` put back
+in place and restored afterwards (METHOD-17).** Window 1 is excluded from the aggregates as the
+build-settling regime (PERF-19) and reported on its own.
+
+| | mean `phys_tick_ms` | median `phys_hz` | windows over 16.7 ms, of 82 | worst tick after window 1 | window 1 |
+|---|---:|---:|---:|---:|---:|
+| before | 1.249 / 1.246 | 59.9 / 60.0 | 47 / 47 | 46.3 / 47.5 | 124.8 / 124.3 |
+| after | 1.002 / 1.037 | 60.0 / 60.0 | 3 / 4 | 47.4 / 51.1 | 122.6 / 124.3 |
+
+The mean moves rather than holding, which is the same arithmetic rather than a second effect: 17 ms of
+work removed once a second is 0.28 ms off a 60 Hz tick, and 0.22 ms is what the mean lost. **No window
+on either side reaches 133 ms**, the eight-step cap, so the "about six sim steps discarded" reading
+does not reproduce on this build at all, and `phys_hz` was already 60.0 before the change.
+
+**Red before green.** `flight-telemetry-gate` flies three AI aircraft a whole sim second and counts
+telemetry lines in the scoped console sink and in the always-on log file. Both halves were seen able
+to fail, separately. Dropping only the gate (`Log.ConsoleShows(…) || true`), which leaves the console
+half suppressed and would pass a console-only check:
+
+```
+…and none to the always-on log file either, so the line costs nothing when nobody asked (got 3)
+```
+
+and putting the original ungated `GD.Print` back, which reaches neither sink:
+
+```
+--log=flight brings the line back, one per aircraft (got 0 of 3)
+…and the same lines reach the log file (got 0 of 3)
+and every aircraft emits on the SAME sim step (), which is why the cost lands on one physics tick
+…written in the invariant culture, so a decimal reads '.' rather than the host's separator
+```
+
+GREEN reads `unasked: 65 steps x 3 aircraft -> console 0, file 0, steps []` and `asked: … console 3,
+file 3, steps [54]`, the single step number being the burst this item is about.
+
+**Suite count.** The catalog is 196; `CSVM.Tests/SuiteCatalogTests.cs` (195 → 196) and
+`analysis/engine-suite-weights.json` were updated with it.
+
+**Verify.** Targeted results on this worktree with `CSVM_DATA_ROOT` set, the suite count printed
+non-zero each time: `-Suite flight-telemetry-gate` **1 passed, 0 failed** in 0.95 s, engine errors
+clean; `-Filter ai` **63 passed, 0 failed** (`inert-aircraft`, `ai-actor`, `ai-modes`,
+`ai-gunnery`, `air-to-air` and every `landings-`/`campaign-*ai*` suite the substring reaches),
+engine errors clean, 101.5 s, the engine stage 1.5 s over its 100 s budget (awareness only);
+`-Filter campaign` **41 passed, 0 failed**, engine errors clean; the unit tier
+`-SkipEngine -SkipGoldens` **2694 passed of 2694**; the golden stage `-SkipUnits -SkipEngine`
+**18 shot(s) hash-identical** with `analysis/goldens/manifest.json` unmodified in the tree (GOLD-9);
+`-Quick` **241 units and 13 engine suites passed, 0 failed**, engine errors clean.
+`.\CheckCommentCaps.ps1 -Summary`: every block within cap, and `dotnet format --verify-no-changes`
+clean.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps that still bind.** Do not raise `max_physics_steps_per_frame`: it deepens the catch-up
+spiral rather than recovering the lost steps, and nothing here exhausts the cap anyway. Do not chase
+the sustained step (the disproven-claims table above). Do not re-open this against
+`NameResolver.ClearFindCache`: it is called zero times in a CM11 sortie and a memo that is never
+dropped cannot be the cost. Any re-measurement must say which mode it flew, and must use `--no-det`
+or the physics terms are empty by construction.
 
 ## E43 ☐ `BL-612` CM09 and CM13 hold their rate for the whole mission
 

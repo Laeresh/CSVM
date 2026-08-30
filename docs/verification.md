@@ -398,6 +398,13 @@ loss. What the engine renders was decodable from the authored constants + oscill
   was fresh, about 13 ms each, against 0.1 ms across the other 45, whose shader was already memoed;
   generating the shader text itself cost 1.6 ms. Split fresh-key work from repeat-key work before
   optimising anything else, or the mesh, material and texture terms it hides read as the cost.
+- **PERF-23** — **A per-object diagnostic on a shared periodic boundary is a BURST, not a spread
+  load: every object crosses that boundary on the same sim step, so N of them land inside one
+  physics tick. Ask the log filter at the call site, before the values are formatted, because
+  `Log.*` writes to the file sink whatever `--log=` says.** Measured on a flown CM11 (C2/M02):
+  `FlightController`'s ungated once-a-sim-second telemetry print cost 17.0 ms of an 18.3 ms tick
+  with nine aircraft alive (about 1.9 ms a line), and gating it took the windows whose worst tick
+  exceeds the 16.7 ms budget from 47 of 82 to 3 of 82 with the tick rate unmoved at 60.0.
 
 ## LOG — logs, error censuses, and exit codes
 

@@ -3539,7 +3539,11 @@ crash runtime, the def table, the anchor and the two respawn snapshots in one ca
 cannot be half-bound and only `CrashRuntime`/`CrashAnchor` stay readable as properties. The DEATH family (`CRASH into`, `midair aspect`, every
 `vehicle health exhausted`, `graze`, `embedded in terrain`, `AI ram`, `impact`) routes through
 `Log.Info("flight", …)`, so a play session's file sink carries how each aircraft died; the
-per-round weapon breadcrumbs around them are a different family and still `GD.Print`.
+per-round weapon breadcrumbs around them are a different family and still `GD.Print`. The
+once-a-sim-second `telemetry` line is `Log.Debug("flight", …)` behind a `Log.ConsoleShows` ask
+taken BEFORE its values are formatted, since every live aircraft crosses that boundary on the same
+sim step and an unasked line is one write per aircraft inside one physics tick; `--log=flight`
+turns it on (verification.md PERF-23).
 The sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). `SimStep` also ticks
 `Turrets` (the carried gunners) after the fire outcome, so the crash branch's early

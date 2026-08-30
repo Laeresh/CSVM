@@ -1010,29 +1010,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
   so the ledger keeps "a wreck flies the near-field plant" as an exception. Decode when and by
   whom it is set so the wreck can fly the decoded arm.
-- `BL-562` `[Perf]` **Single physics ticks reach 70 to 180 ms in CM11 (C2/M02), and Godot's 8-step
-  catch-up cap turns each one into sim time the mission never gets back.** *Evidence (traced):* the
-  bracketed instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` /
-  `phys_hz`) over 333 windows of a loaded CM11 session puts the **mean** tick at 1.81 ms (p95
-  3.20 ms) and the tick rate at a median of 60.0 per wall second, but `phys_tick_max_ms` hit 72,
-  102 and 177 ms on individual ticks. `max_physics_steps_per_frame` is at Godot's default 8, so a
-  177 ms stall leaves about six sim steps undeliverable and they are discarded, not deferred. *Fix
-  shape:* find what a spiking tick is doing. The chain map's candidate is
-  `NameResolver.ClearFindCache`, which drops the whole find memo, so the next tick's ~60 objective
-  name resolutions re-walk the ~5000-row index calling `GodotObject.IsInstanceValid` on every row;
-  its callers are the `IndexStage` / `IndexSpawnedCopy` / `IndexRebasedStage` / `IndexPooledCopy`
-  spawn and warm-up paths in `AnimRuntime`, which is the right shape for a spike that lands on a
-  spawn rather than steadily. Confirm by bracketing a spiking tick rather than by inference. *⚠
-  Traps:* **do not chase the sustained step.** The entry used to claim a ~39 ms step and a sim at
-  half wall time; both were a misreading of Godot's `physics_ms` monitor, which holds the WORST tick
-  of the last wall second and refreshes about 1 Hz (`docs/verification.md` PERF-21, and the
-  disproof's own commit, `git log --grep=BL-562`). The mean step is a ninth of its 16.7 ms budget and
-  the sim tracks the wall clock at a ratio of 0.9999 over 306 wall seconds, so there is nothing to
-  win by optimising the steady tick. Compare durations in sim seconds, never wall seconds, and do
-  not raise `max_physics_steps_per_frame`: it deepens the catch-up spiral rather than recovering the
-  lost steps. The measurement was taken with `--debug-objective=18` driving the mission, with nobody
-  at the controls, so it under-weights projectiles and destruction cascades. *Cross-refs:*
-  `docs/plans/PLAN-M5-polish-6.md` C22, `BL-606` (the same per-sim-step suspects seen as an allocator).
+- `BL-562` `[Perf]` **CM11 (C2/M02) still spends single physics ticks of 45 to 51 ms in flight and
+  about 124 ms on the first tick after the world build.** *Evidence (traced):* the bracketed
+  instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz`) over 82
+  windows of a flown CM11, with the recurring telemetry burst removed, leaves three residual terms,
+  each attributed by a temporary sub-scope breakdown inside the tick. (a) The FIRST tick after the
+  build costs about 124 ms, 95 ms of it the 20 animation runtimes' first `Advance` (46,355 index rows
+  walked over five cold `FindAll` misses, plus a 29 ms first sim step); it reproduces on every run to
+  within 2 ms and is the world-build settling regime, not flight. (b) One tick in a sortie reaches
+  46 ms inside `FlightController`'s AI collision sweep (`SweepProbes` + `CenterRayContact`, 45.1 ms
+  in a single aircraft's step). (c) One reaches 50 ms inside a single `AnimRuntime.Advance`. Nothing
+  else exceeds 16.7 ms and the tick rate holds at a median 60.0. *Fix shape:* (b) first, since it is
+  the one a player meets mid-flight: log which collider the sweep struck on the spiking step and
+  whether the cost is the query or the report it fills. (a) is worth a separate look only if a
+  cutscene handoff or a mid-mission stage build repeats it. *⚠ Traps:* **the cap-exhaustion premise
+  is dead** — the entry used to claim 72, 102 and 177 ms ticks discarding about six sim steps each
+  against Godot's default `max_physics_steps_per_frame` of 8; over four paired 83-second runs on the
+  current build no window's worst tick reaches 133 ms, so nothing exhausts the cap. **Do not chase
+  the sustained step** either: the ~39 ms step and half-speed sim the entry once claimed were a
+  misreading of Godot's `physics_ms` monitor, which holds the WORST tick of the last wall second
+  (`docs/verification.md` PERF-21). The recurring 18 to 25 ms band that dominated every earlier
+  reading was the ungated once-a-sim-second telemetry print, one write per live aircraft in the same
+  tick (PERF-23); it is gated and gone, so do not re-derive it. Compare durations in sim seconds,
+  never wall seconds; state which mode a re-measurement flew (the numbers here are `--no-det` with
+  nobody at the controls, so they under-weight projectiles and destruction cascades); and do not
+  raise `max_physics_steps_per_frame`, which deepens the catch-up spiral rather than recovering
+  lost steps. *Cross-refs:* `docs/plans/PLAN-M5-polish-6.md` C22, `BL-606` (the same per-sim-step
+  suspects seen as an allocator), `docs/verification.md` PERF-21 and PERF-23.
 
 - `BL-627` `[Bug]` **CM12 (C2/M01): the Spruce Goose moves jittery.** *Evidence:* reported at the
   controls, and re-confirmed on the merged build in the same sortie that cleared the mission's
