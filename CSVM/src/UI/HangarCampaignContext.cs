@@ -65,31 +65,31 @@ public sealed class HangarCampaignContext
         && !IsSpecial(planeName)
         && Profile.Planes.Count > 2;
 
-    /// <summary>The full build cost of an owned plane, the decoded sell price (no depreciation,
-    /// docs/org/hangar.md "The sell price is the full build cost"). Falls back to the campaign's
-    /// own starting-Devastator spec (airframe from the ownership record, engine 1, two hardpoints
-    /// per wing, no armour or guns — "The campaign instead starts with two aircraft") when the
-    /// name never went through <see cref="CustomPlaneStore"/>, true only of the two profile-seeded
-    /// starters, which are never hangar-built.</summary>
-    public int SellPrice(string planeName)
+    /// <summary>The profile's own aircraft as buildable defs, in the ownership list's own order,
+    /// which is the campaign hangar's roster (langui 1257 INVENTORY). Ownership is what separates
+    /// the two modes, not storage: an Instant Action build sits in the same
+    /// <c>user://Planes/</c> directory and is absent here because the profile does not own it.</summary>
+    public IReadOnlyList<CustomPlaneDef> OwnedBuilds()
     {
-        var built = _planes.Load(planeName);
-        if (built != null)
+        var builds = new List<CustomPlaneDef>(Profile.Planes.Count);
+        foreach (var owned in Profile.Planes)
         {
-            return HangarEconomy.Price(built).Total.Cost;
+            builds.Add(BuildFor(owned));
         }
 
+        return builds;
+    }
+
+    /// <summary>The full build cost of an owned plane, the decoded sell price (no depreciation,
+    /// docs/org/hangar.md "The sell price is the full build cost"). A name the profile does not
+    /// own is priced from the build store alone, on the campaign's starting-Devastator spec where
+    /// even that is absent.</summary>
+    public int SellPrice(string planeName)
+    {
         var owned = Profile.Planes.FirstOrDefault(
             p => string.Equals(p.Name, planeName, StringComparison.OrdinalIgnoreCase));
-        var starter = new CustomPlaneDef
-        {
-            Name = planeName,
-            Airframe = owned?.Airframe ?? 5,
-            Engine = 1,
-            LeftHardpoints = 2,
-            RightHardpoints = 2,
-        };
-        return HangarEconomy.Price(starter).Total.Cost;
+        return HangarEconomy.Price(BuildFor(owned ?? new OwnedPlane { Name = planeName, Airframe = 5 }))
+            .Total.Cost;
     }
 
     /// <summary>Deducts a completed build's total cost, records ownership and saves the profile.
@@ -98,7 +98,20 @@ public sealed class HangarCampaignContext
     public void Purchase(string planeName, int airframe, int cost)
     {
         Profile.Funds -= cost;
-        Profile.Planes.Add(new OwnedPlane { Name = planeName, Airframe = airframe });
+        var owned = Profile.Planes.FirstOrDefault(
+            p => string.Equals(p.Name, planeName, StringComparison.OrdinalIgnoreCase));
+
+        // ⚠ Do not add a second record for a name already owned. The commit writes one file per
+        // name, so two records would name one aeroplane twice and a later sale would remove both.
+        if (owned != null)
+        {
+            owned.Airframe = airframe;
+        }
+        else
+        {
+            Profile.Planes.Add(new OwnedPlane { Name = planeName, Airframe = airframe });
+        }
+
         _store.Save(Profile);
     }
 
@@ -119,5 +132,28 @@ public sealed class HangarCampaignContext
         _store.Save(Profile);
         _planes.Delete(planeName);
         return true;
+    }
+
+    // What one ownership record flies. A hangar-built plane is its stored build; a reward aircraft
+    // granted before the store held one falls back to its own award template (the same order
+    // LaunchMenu's launch path resolves in); the two profile-seeded starters are never built at
+    // all, so they take the campaign's own Devastator spec (docs/org/hangar.md, "The campaign
+    // instead starts with two aircraft": engine 1, two hardpoints per wing, no armour or guns).
+    private CustomPlaneDef BuildFor(OwnedPlane owned)
+    {
+        var built = _planes.Load(owned.Name) ?? CampaignProgression.BuildForOwned(owned);
+        if (built == null)
+        {
+            built = new CustomPlaneDef
+            {
+                Airframe = owned.Airframe,
+                Engine = 1,
+                LeftHardpoints = 2,
+                RightHardpoints = 2,
+            };
+        }
+
+        built.Name = owned.Name;
+        return built;
     }
 }

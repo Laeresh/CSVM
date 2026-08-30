@@ -122,7 +122,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — the campaign's own hangar
 
-31. ☐ `BL-634` Plane Construction lists the profile's aircraft and offers buy and sell
+31. ☑ `BL-634` Plane Construction lists the profile's aircraft and offers buy and sell
 
 ### Wave E — the campaign's frame stalls
 
@@ -459,41 +459,75 @@ balloon rather than follow the boat.
 
 # Wave D — the campaign's own hangar
 
-## D31 ☐ `BL-634` Plane Construction lists the profile's aircraft and offers buy and sell
+## D31 ☑ `BL-634` Plane Construction lists the profile's aircraft and offers buy and sell
 
-**Goal.** A campaign profile's Plane Construction screen lists that profile's own aircraft and offers
-buying and selling against its wallet. A fresh profile shows exactly its two starters, a purchase adds
-one and takes the money, a sale removes it and returns the full build cost, and Instant Action's list
-is unaffected by all three.
+**Landed.** Ownership now separates the campaign hangar from Instant Action's, over the one
+`user://Planes/` build store both doors still write into.
 
-**Evidence (confidence: traced).** Reported at the controls. The cabin opens the hangar over the
-global build store, `CustomPlaneStore.UserPlanes()` (`UI/LaunchMenu.cs:1866-1869`), and the flow's
-first screen lists it wholesale (`Saved = store.List()`, `UI/HangarFlow.cs:150`), which is the same
-`user://Planes/` directory the Instant Action Build button writes into. The profile's ownership list
-is not consulted anywhere in that screen, though it exists and is already wired for money:
-`HangarCampaignContext` carries `Purchase`, `Sell`, `CanSell` and `SellPrice`
-(`UI/HangarCampaignContext.cs:98-122`) with the decoded rules, a sell price equal to the full build
-cost, reward aircraft unsellable, and a floor of two aircraft ([`docs/org/hangar.md`](org/hangar.md),
-"The sell price is the full build cost"). The rows are Instant Action's as well, a New Plane row and
-a delete, where the campaign's are buy and sell. `<TODO: re-verify still-open against the code>`
+**Re-verified still open against the code first.** The two cited line numbers had drifted, the
+mechanism had not. `Saved = store.List()` was exactly `UI/HangarFlow.cs:150` as filed;
+`HangarCampaignContext`'s `Purchase`/`Sell`/`CanSell`/`SellPrice` were at `:98-122` as filed; the
+campaign door is `LaunchMenu.OpenCampaignHangar` at `:1967-1981`, not the filed `:1866-1869`, and it
+does hand the flow `CustomPlaneStore.UserPlanes()` unfiltered. The money half (`Commit` debiting
+through `Purchase`, `DeleteSaved` crediting through `Sell`, the special-plane and two-plane-floor
+refusals) had already landed with PLAN-hangar's B13, so the open half was the listing and the verbs.
 
-**Approach.** Filter the campaign flow's plane list through `Profile.Planes` and route its rows to
-`Purchase` and `Sell`. Ownership is what separates the two modes, not storage: `Purchase` already
-names a build into the profile, so the builds themselves can stay in the one `user://Planes/` store.
+- **The roster.** `HangarFlow.ReadRoster` puts `HangarCampaignContext.OwnedBuilds()` in `Saved` over
+  a campaign flow and the whole directory over the two wallet-free doors. `OwnedBuilds` walks
+  `Profile.Planes` in the ownership list's own order and resolves each record to its stored build,
+  else the reward aircraft's own award template (`CampaignProgression.BuildForOwned`, the order
+  `LaunchMenu`'s launch path already resolves in), else the campaign's starting-Devastator spec. The
+  two seeded starters are never hangar-built, which is why that last arm exists; `SellPrice` now
+  shares the same resolution instead of carrying its own copy of it.
+- **The verbs.** `HangarPlaneSelectionPage` reads as the original's INVENTORY (langui 1257) over a
+  campaign flow: a `Buy a New Plane` row detailing the wallet (1149), one row per owned plane with
+  its airframe short name (3020 + id) and value (1258), and a trailing `Sell a plane` opening the
+  same two-stage confirm list, whose rows read `Sell <name>` and carry either the price or the
+  refusal a press would meet. Instant Action's rows are untouched.
+- **An owned row is inert over a campaign flow.** The decoded economy has no partial upgrade: a
+  build is paid in full and a sale credits in full, so editing in place would charge again and
+  strand the old plane's value. The sell stage is what acts on an owned plane.
+- **Two holes the filter would otherwise have opened.** `IsNameTaken` spans the whole build
+  directory rather than the visible roster, so a campaign build cannot silently overwrite an Instant
+  Action plane of the same name (`HangarNamePage`'s roller and its overwrite warning both ask
+  through it). `Purchase` updates an existing ownership record rather than adding a second one for a
+  name already owned, since the commit writes one file per name and a duplicate record would let one
+  sale remove two.
+- **Fixed in passing:** `DeleteSaved`'s reward-aircraft refusal read langui 704 raw, so with the
+  real table loaded it reached the pilot as `This %1!s!, %2!s!, cannot be sold.`. It is composed now
+  through `CannotSellText`, with the airframe short name and the plane name filled in.
+- **Decode recorded.** [`docs/org/hangar.md`](org/hangar.md) gained "The inventory screen's own
+  strings": the screen's `langui` symbols (1257, 1258, 1256, 1003, 1139, 1149, 204, 702, 703), which
+  of them carry arguments and are unusable raw (700 and 704, with 700's inline bold markup), and
+  that Export is a campaign verb Instant Action does not have.
 
-**Model recommendation.** high. It separates two modes over one store, spends the campaign wallet,
-and gets the decoded sell rules wrong in a way a profile carries forward if it is careless.
+**Verify.** Red before green, seen by reverting the three production branches in place
+(`Saved = stored`, the campaign flag in `RowText`, the inert-row arm in `Accept`): 8 of the 17
+`HangarCampaignContextTests` failed, including
+`Assert.Equal() Failure: Strings differ / Expected: "Sell a plane" / Actual: "Delete a saved plane"`
+and `AFreshProfileListsExactlyItsTwoStarters` with an empty actual collection. `Purchase`'s
+duplicate guard was reverted separately, failing
+`RebuildingAnOwnedNameKeepsOneOwnershipRecord` with `Expected: 2 / Actual: 3`.
 
-**Verify.** Unit tests over the flow and the context: a fresh profile lists exactly its two starters;
-a purchase adds the build to `Profile.Planes` and debits the wallet; a sale removes it and credits the
-full build cost; a reward aircraft cannot be sold; the two-aircraft floor holds; and an Instant Action
-build written to the same store does not appear in the campaign list. `hangar` and `hangar-door-wake`
-green, plus `campaign-persistence`, and the complete `.\RunTests.ps1` before landing.
+Green: `HangarCampaignContextTests` 17/17 (the six behaviours the item names, plus the inert row,
+the cross-mode name collision and the duplicate-ownership guard); the full unit tier 2683/2683;
+`CustomPlaneStoreTests` 16/16 including a new `PathFor_KeepsEveryNameInsideTheStore`; engine
+`-Filter hangar` 3/3 (`hangar-door-wake`, `landings-hangar-drop-gate`,
+`campaign-hangar-handover`), errors clean; engine `-Suite campaign-persistence` 1/1, errors clean.
+`CheckCommentCaps.ps1` clean over every changed file.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not give the campaign its own build directory to get the separation. The two starters
 a fresh profile is seeded with are never hangar-built and have no entry there at all, which is why
 `SellPrice` falls back to the campaign's own Devastator spec; a per-mode store would strand them. The
 delete row is not the sell row: deleting a build must not credit the wallet.
+
+**Still open, and deliberately not taken here.** The screen has not been seen at the controls, so a
+confirming flight is owed. The decoded slot cap (25 records, the free-slot finder reserving six,
+langui 204) is not enforced on a campaign purchase. Instant Action's list still shows campaign
+builds with no export step, which is the mirror image of what this item fixed and is what langui
+702 and 1139 exist for.
 
 ---
 

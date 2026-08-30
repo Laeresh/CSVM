@@ -4092,6 +4092,17 @@ press that removes a plane names the plane it removes. The list closes when it e
 launchscreen's own `RefreshRoster`, which `CloseHangar` runs on every exit, is what keeps a
 picker cursor inside the shortened roster afterwards.
 
+**Ownership, not storage, is what separates the campaign from Instant Action.** Both doors write
+into the one `user://Planes/` build store; over a campaign flow `ReadRoster` puts
+`HangarCampaignContext.OwnedBuilds()` in `Saved` instead of the whole directory, resolving each
+ownership record to its stored build, else a reward aircraft's own award template, else the
+campaign's starting-Devastator spec (the two seeded starters are never hangar-built). The screen
+then reads as the original's INVENTORY: a Buy row over the wallet, one row per owned plane with its
+value, and a trailing sale that credits the full build cost through `DeleteSaved`. An owned row is
+inert, because the decoded economy has no partial upgrade. `IsNameTaken` still spans the WHOLE
+directory rather than the visible roster, so a campaign build cannot silently overwrite an Instant
+Action plane of the same name; `HangarNamePage`'s roller and overwrite warning both ask through it.
+
 `IHangarPage` is the mount point Wave C's remaining items fill: `Title`, `RowCount`, `RowText`,
 `Detail`, `Step` (the launchscreen's live ←→ stepper), `Accept` (returning false hands the press
 back to the flow, which advances), `OpeningRow` (the row the cursor lands on when the flow arrives,

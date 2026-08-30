@@ -2376,31 +2376,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/controls.md`), so a resolved string that names the key needs the port's key substituted.
   *Cross-refs:* `docs/plans/PLAN-M5-polish-2.md` C10.
 
-- `BL-634` `[Bug]` **The campaign's Plane Construction lists every Instant Action build instead of
-  the profile's own aircraft, and offers Instant Action's verbs.** *Evidence:* reported at the
-  controls. The cabin opens the hangar over the global build store,
-  `CustomPlaneStore.UserPlanes()` (`UI/LaunchMenu.cs:1866-1869`), and the flow's first screen lists
-  it wholesale (`Saved = store.List()`, `UI/HangarFlow.cs:150`), which is the same
-  `user://Planes/` directory the Instant Action Build button writes into. The profile's ownership
-  list is not consulted anywhere in that screen, though it exists and is already wired for money:
-  `HangarCampaignContext` carries `Purchase`, `Sell`, `CanSell` and `SellPrice`
-  (`UI/HangarCampaignContext.cs:98-122`) with the decoded rules, a sell price equal to the full
-  build cost, reward aircraft unsellable, and a floor of two aircraft
-  ([`docs/org/hangar.md`](docs/org/hangar.md), "The sell price is the full build cost"). The rows
-  are Instant Action's as well, a New Plane row and a delete, where the campaign's are buy and
-  sell. *Fix shape:* filter the campaign flow's plane list through `Profile.Planes` and route its
-  rows to `Purchase` and `Sell`. Ownership is what separates the two modes, not storage: `Purchase`
-  already names a build into the profile, so the builds themselves can stay in the one
-  `user://Planes/` store. *⚠ Traps:* do not give the campaign its own build directory to get the
-  separation. The two starters a fresh profile is seeded with are never hangar-built and have no
-  entry there at all, which is why `SellPrice` falls back to the campaign's own Devastator spec
-  (`:74-93`); a per-mode store would strand them. The delete row is not the sell row: deleting a
-  build must not credit the wallet. *Playtest after fix:* a fresh profile shows exactly its two
-  starters, a purchase adds one and takes the money, a sale removes it and returns the full cost,
-  and Instant Action's list is unaffected by all three.
-  *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) (the wallet, the slot rules and the
-  reward table), `CampaignProfileStore`.
-
 - `BL-635` `[Bug]` **CM11 (C2/M02): the stunt planes carry no objective marker, though their roster
   blocks name one.** *Evidence:* reported at the controls and still open after the mission's other
   findings were fixed. `aiv.zrd` keys `secfury_5` and `secfury_6` with `MSG_STUNT_PLANE_NAME` and
