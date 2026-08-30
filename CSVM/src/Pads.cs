@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM;
@@ -83,7 +84,11 @@ public static class Pads
     }
 
     /// <summary>Log who flies what, for either source of the binding (the roster split above or
-    /// the launchscreen's join flow) — a silent plane is otherwise hard to diagnose.</summary>
+    /// the launchscreen's join flow) — a silent plane is otherwise hard to diagnose.
+    /// ⚠ Through the run log, not <c>GD.Print</c>: which device a seat ended up on is decided once
+    /// at build and is unrecoverable afterwards, so a player reporting two pilots on one plane has
+    /// nothing to hand over unless the line survives in the file sink. That is the whole evidence
+    /// for a mis-seated pad, and a terminal nobody was watching does not keep it.</summary>
     public static void LogPads(int[][] assignment)
     {
         for (int i = 0; i < assignment.Length; i++)
@@ -91,10 +96,10 @@ public static class Pads
             var pads = new List<string>(assignment[i].Length);
             foreach (int pad in assignment[i])
                 pads.Add($"pad {pad} \"{Input.GetJoyName(pad)}\"");
-            GD.Print($"player {i + 1} input: {(i == 0 ? "keyboard" : "")}" +
-                     (pads.Count > 0
-                         ? $"{(i == 0 ? " + " : "")}{string.Join(" + ", pads)}"
-                         : i == 0 ? "" : "NO DEVICE (connect a pad and relaunch)"));
+            string devices = pads.Count > 0
+                ? $"{(i == 0 ? "keyboard + " : "")}{string.Join(" + ", pads)}"
+                : i == 0 ? "keyboard" : "NO DEVICE (connect a pad and relaunch)";
+            Log.Info("core", $"player {i + 1} input: {devices}");
         }
     }
 }
