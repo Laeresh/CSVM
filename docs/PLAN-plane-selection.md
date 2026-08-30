@@ -153,7 +153,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — the record
 
-10. ☐ D10 `docs/formats/campaign-screens.md` gains its Plane selection section
+10. ☑ D10 `docs/formats/campaign-screens.md` gains its Plane selection section
 
 ## Dependency and parallelism notes
 
@@ -467,7 +467,7 @@ matching the original.
 
 # Wave D — the record
 
-## D10 ☐ `docs/formats/campaign-screens.md` gains its Plane selection section
+## D10 ☑ `docs/formats/campaign-screens.md` gains its Plane selection section
 
 **Goal.** The screen's decode is written where every neighbouring screen's is, so the next reader
 finds it in the same place as the flight check and the ammo screen.
