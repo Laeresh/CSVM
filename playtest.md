@@ -126,7 +126,7 @@ sounds like, watched and frame-sampled, never measured into a constant.
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-37` | An AI aircraft flying a patrol/attack loop, unprompted by the player | An AI-controlled aircraft in external/chase view, held long enough to cover a sustained turn, a low-speed moment and a patrol leg's end, with the player's own aircraft in frame where possible for a same-shot comparison. Behavioural and comparative questions only, **no absolute distances or speeds read off this footage** (`docs/verification.md`; a decode is never contested with a footage-derived measurement): does it gain altitude through a sustained turn or hold it; is its turn tighter or wider than the player's in the same airframe; does it hold a speed through manoeuvres or bleed and recover like a lever-driven aircraft; does it wallow at low speed or stay crisp; what does it do at the end of a patrol leg | `docs/plans/PLAN-ai-flight.md` F52 (the AI-side at-the-controls verdict for waves C and E) |
+| `CAP-37` | An AI aircraft flying a patrol/attack loop, unprompted by the player | An AI-controlled aircraft in external/chase view, held long enough to cover a sustained turn, a low-speed moment and a patrol leg's end, with the player's own aircraft in frame where possible for a same-shot comparison. Behavioural and comparative questions only, **no absolute distances or speeds read off this footage** (`docs/verification.md`; a decode is never contested with a footage-derived measurement): does it gain altitude through a sustained turn or hold it; is its turn tighter or wider than the player's in the same airframe; does it hold a speed through manoeuvres or bleed and recover like a lever-driven aircraft; does it wallow at low speed or stay crisp; what does it do at the end of a patrol leg | The AI-side at-the-controls verdict for waves C and E |
 
 ---
 
@@ -176,7 +176,7 @@ sounds like, watched and frame-sampled, never measured into a constant.
 
 - `PT-47` `[A/B: both C1 IA1 Fog stills + CAP-12]` **The overcast-match plan's exit verdict**
   (`OriginalScreenshots/C1 IA1 Fog river.png`, `.../C1 IA1 Fog above clouddeck.png`,
-  `playtest/CAP-12/`; the plan is `docs/plans/PLAN-overcast-match.md`,
+  `playtest/CAP-12/`; the matching work is complete,
   completed 2026-08-09; it closed `BL-118`, `BL-312`, `BL-303`, `BL-100`, `BL-101`, whose records
   are in that plan and in `git log --grep=<ID>`). Three waves rebuilt this sky — the sprite
   scatter, the fog model and the deck's brightness — and every number in the plan's final tables
@@ -212,7 +212,7 @@ sounds like, watched and frame-sampled, never measured into a constant.
     angle, no visible field edge over the base map, and the sheet's mottling reading as
     multi-scale rather than smooth broad bands (ours is measurably blurrier than the original's —
     high-pass RMS ≈ 0.2 against ≈ 0.9 — so say whether that is visible in motion).
-  - (f) **the in-band flicker** (`BL-329`, `PLAN-weather-decompile-match` D32) — hold still a few
+  - (f) **the in-band flicker** (`BL-329`) — hold still a few
     seconds in the whiteout RAMP, not the opaque core (~970–1032 m or ~1062–1124 m; the fully
     white core in between is a flat colour by design and never flickers): the pane should shimmer
     subtly rather than sit dead flat, on a pace of roughly a couple to several seconds per swing.
@@ -252,7 +252,7 @@ reasons that have nothing to do with any of these checks.
     one in a hard turn and one in level flight and compare;
   - (c) the second, smokier explosion reads as a separate beat downrange rather than landing on top
     of the airburst.
-  *Blocks:* the at-the-controls half of `D24` (`docs/plans/PLAN-ai-damage-and-engine-audio.md`). A
+  *Blocks:* the at-the-controls AI-damage verdict. A
   fail on (b) is not a reason to reinstate neutralised commands: it points at whether the original
   zeroes an AI's stick on death, which is undecoded and would be a fresh item.
 
@@ -364,7 +364,7 @@ reasons that have nothing to do with any of these checks.
 ./RunGame.ps1 --vs --players=2 --chapter=C1
 ```
 
-- `PT-52` `[Own]` **The puffer distance fade in two panes (`BL-339` landed 2026-08-15, plan B11).**
+- `PT-52` `[Own]` **The puffer distance fade in two panes (`BL-339` landed 2026-08-15).**
   The fade now runs its bands against every pane's camera and each particle takes the most
   favourable pane's alpha, so a trail near player 2 draws in player 2's pane. What no instrument
   here can judge is the remaining divergence: one alpha per particle for the whole world, so a pane
@@ -376,8 +376,7 @@ reasons that have nothing to do with any of these checks.
   whole trail, not just the stretch beside P1; (b) neither pane shows a puffer popping in or out as
   the OTHER player turns or flies away (the shared-alpha tell); (c) flying through an emitter still
   culls it in the pane that flew through it rather than filling that screen.
-  *Blocks:* the fidelity verdict the plan's nearest/union boundary rule asks for
-  (`docs/plans/PLAN-splitscreen-polish.md`'s Milestone goal) — per-pane alpha (one MultiMesh per pane) is
+  *Blocks:* the fidelity verdict for the nearest/union boundary rule — per-pane alpha (one MultiMesh per pane) is
   reached for only if (b) visibly fails, and a fail mints its own `BL` item.
   *Variations:* C3 (`--chapter=C3`, the waterfalls' `spew_puffer` is the tightest authored band);
   `--players=4` for the same question with four alphas competing.
@@ -394,7 +393,7 @@ reasons that have nothing to do with any of these checks.
 ./RunGame.ps1 --stunt --players=2 --chapter=C1
 ```
 
-- `PT-45` `[Own]` **The abreast race starting grid** (`docs/PLAN-race-grid.md`, landed 2026-08-08;
+- `PT-45` `[Own]` **The abreast race starting grid** (landed 2026-08-08;
   it closed `BL-084`, whose record is in that commit — `git log --grep=BL-084`).
   Two pads (or pad + keyboard); menu path: Stunt → C1 → both press Start. Splitscreen stunt racing is
   our invention — the original had no splitscreen at all — so every call here is a judgement on our
@@ -490,7 +489,7 @@ reasons that have nothing to do with any of these checks.
   (`t0.5`/`t5` stills) — `WorldBuilder.BuildHorizon` knows how to billboard a moon, so the (a)
   sweep should check whether the built zone1 subtree simply lacks the node.
   *Blocks:* nothing open — `BL-100`'s remaining four chapters were settled by render evidence
-  instead (`PLAN-overcast-match` `B12`: C1/C2B/C4/C1C = `zone2`), not by a fresh flight.
+  instead (C1/C2B/C4/C1C = `zone2`), not by a fresh flight.
   *Variations:* one flight each — repeat with `--chapter=C3`, then `--chapter=C2`; (d)'s four
   untouched chapters need only a glance in each.
 
@@ -554,8 +553,7 @@ reasons that have nothing to do with any of these checks.
 
 ### AI flight — external view, own build (F52 AI arm)
 
-- `PT-54` `[Own]` **AI plant A/B against the old plant (`docs/plans/PLAN-ai-flight.md` C21–C24, F52 AI
-  arm).** Fly the new AI force path, then relaunch flipping AI aircraft back onto the player plant
+- `PT-54` `[Own]` **AI plant A/B against the old plant.** Fly the new AI force path, then relaunch flipping AI aircraft back onto the player plant
   with `--no-ai-plant` and fly the same engagement again — the switch exists for exactly this
   comparison (`docs/cli.md` `--no-ai-plant`) and is temporary, removed once this verdict lands.
   ```powershell
@@ -604,8 +602,8 @@ reasons that have nothing to do with any of these checks.
 
 ### Autogyro, Balmoral, Fury — low-speed authority ramp (F52 player arm)
 
-- `PT-57` `[Own]` **Low-speed handling across `BL-330`'s authority-ramp extremes
-  (`docs/plans/PLAN-ai-flight.md` C24, F52 player arm, judged against `BL-330`'s existing corroboration).**
+- `PT-57` `[Own]` **Low-speed handling across `BL-330`'s authority-ramp extremes, judged against
+  `BL-330`'s existing corroboration.**
   The ramp fades roll and pitch to nothing at 10 mph and back to full at 50; `BL-330`'s own decode
   picked out the two airframes furthest apart on it — the autogyro (18.5 mph stall, ~21% of
   authority left there) and the Balmoral (45.5 mph stall, ~89% left) — plus a mid-pack airframe for
@@ -620,7 +618,7 @@ reasons that have nothing to do with any of these checks.
   early relative to its own stall, the Balmoral barely at all, and the Fury somewhere between.
   *Blocks:* F52's player-side verdict.
 
-### C1 · two pilots — the victim-routed screen wash (`PLAN-ordnance-types` F22)
+### C1 · two pilots — the victim-routed screen wash
 
 ```powershell
 ./RunGame.ps1 --coop --players=2 --chapter=C1 --debug-wash=2
@@ -637,7 +635,7 @@ the constant: a decode is not contested with a measurement read off a running pi
 (`docs/verification.md` DET-12).
 
 - `PT-74` `[Own]` **The wash is addressed to the viewer who was hit, and blends
-  (`PLAN-ordnance-types` `D13`, Decision 2).** The original holds one wash state for the whole
+  (the routed wash contract).** The original holds one wash state for the whole
   machine, which would blind viewer 1 when viewer 3 is flashed; ours routes by the victim's own pane
   and composites over the existing proximity ramp instead of replacing it. `--debug-wash=N` fires
   two overlapping scripted washes at viewer N (red at weight 1 for 5 s on the first frame, then
@@ -653,13 +651,13 @@ the constant: a decode is not contested with a measurement read off a running pi
     pilot's sonic burst washes their own pane alone. (A pilot's own burst never washes them: the
     gather excludes the round's owner, `FUN_005aca30`.)
 
-  *Blocks:* nothing tracks the outcome (`PLAN-ordnance-types` is complete; (a)/(b) passed at the
-  controls and only (c) is still owed): a fail on routing is a `D13` regression and mints a new
+  *Blocks:* nothing tracks the outcome; (a)/(b) passed at the controls and only (c) is still owed.
+  a fail on routing mints a new
   `BL`.
   *Variations:* `--debug-wash=3` in a two-pane session, which answers to no pane and must paint
   nothing at all.
 
-### C1 · four pilots — the four-viewer ordnance pass (`PLAN-ordnance-types` F22)
+### C1 · four pilots — the four-viewer ordnance pass
 
 ```powershell
 ./RunGame.ps1 --coop --players=4 --chapter=C1 --rocket=wep_08 --infinite-ammo
@@ -671,8 +669,7 @@ splitscreen weapon mix wants a retune, with rockets too quiet against guns and w
 firing at once. **A mix problem is not a behaviour problem**: judge what happens, and file loudness
 against `BL-389` rather than against the wash routing.
 
-- `PT-75` `[Own]` **The disabling types with four viewers on one team (`PLAN-ordnance-types` F22,
-  `D13`, `D15`, `D18`).**
+- `PT-75` `[Own]` **The disabling types with four viewers on one team.**
   *Look for:*
   - (a) **two viewers washed in the same second** carry their own wash each, with the other two
     panes clean, and neither washed pane is brighter or shorter for having a neighbour;
@@ -685,11 +682,10 @@ against `BL-389` rather than against the wash routing.
   - (e) frame cost holds up with four panes and a dense burst (`--debug-fps`), since every splash
     candidate now costs a cover ray.
 
-  *Blocks:* nothing tracks the outcome (`PLAN-ordnance-types` is complete): a fail on routing is a
-  `D13` regression and mints a new `BL`; a fail on loudness is `BL-389`.
+  *Blocks:* nothing tracks the outcome: a fail on routing mints a new `BL`; a fail on loudness is
+  `BL-389`.
 
-- `PT-76` `[Own]` **The same pass under Dogfight rules, four viewers hostile
-  (`PLAN-ordnance-types` F22).** `--coop` puts every human on one team, so the beeper's hostility
+- `PT-76` `[Own]` **The same pass under Dogfight rules, four viewers hostile.** `--coop` puts every human on one team, so the beeper's hostility
   gate and the AI-side effects never fire between players there. Dogfight makes them mutually
   hostile, which is the only way to judge the tag gate and a human-on-human paint.
   *Launch:* `./RunGame.ps1 --vs --players=4 --chapter=C1 --rocket=wep_10 --infinite-ammo`
@@ -702,7 +698,7 @@ against `BL-389` rather than against the wash routing.
     facing rule still holding for the flash;
   - (d) the match keeps scoring normally: none of the no-damage types registers a hit or a kill.
 
-  *Blocks:* nothing tracks the outcome (`PLAN-ordnance-types` is complete): a fail mints a new
+  *Blocks:* nothing tracks the outcome: a fail mints a new
   `BL`.
   *Variations:* `--players=2` and `--players=3` for the intermediate pane counts, which is where a
   routing off-by-one would show.
@@ -719,8 +715,7 @@ MISSION. A fresh profile's first entry is CM01, so this is also where the sortie
 Splitscreen co-op is our own invention (no networked original to A/B against), so every call here
 is a judgement on our own remake.
 
-- `PT-90` `[Own]` **Joining from the roster screen and the sequential flight check**
-  (`PLAN-campaign-coop.md` `C21`, `C22`).
+- `PT-90` `[Own]` **Joining from the roster screen and the sequential flight check.**
   *Look for:*
   - (a) Start on an unclaimed pad joins a guest from the roster, the briefing and the flight check
     alike, with the player chip strip naming everyone who has joined;
@@ -732,8 +727,7 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome (`C21`/`C22` landed on screenshots and code review alone,
   with no scripted-input driver for a pad press on a menu screen): a fail mints a new `BL`.
 
-- `PT-92` `[Own]` **A downed human spectates, and the last one lost ends the mission**
-  (`PLAN-campaign-coop.md` `B13`).
+- `PT-92` `[Own]` **A downed human spectates, and the last one lost ends the mission.**
   Fly two humans into CM01 and crash one — into the sea or a hillside, `R` to restart the pane if
   the first attempt is too gentle to register as a loss.
   *Look for:*
@@ -748,8 +742,7 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome (`B13` landed on an engine suite alone, with no scripted
   input to force a specific human's crash headlessly): a fail mints a new `BL`.
 
-- `PT-93` `[Own]` **A cutscene fills the window, and the skipper is named**
-  (`PLAN-campaign-coop.md` `B14`).
+- `PT-93` `[Own]` **A cutscene fills the window, and the skipper is named.**
   CM01's own mission intro plays fullscreen on launch. Two pads (or pad + keyboard); have the
   SECOND player skip it, then relaunch and have the first player skip instead.
   *Look for:*
@@ -768,8 +761,7 @@ is a judgement on our own remake.
 ./RunGame.ps1 --campaign=<profile>:1 --players=2
 ```
 
-- `PT-91` `[Own]` **Whichever human triggers the capture ends up in the captured aeroplane**
-  (`PLAN-campaign-coop.md` `A4`, decision 8). Fly both humans to CM02's wing-walk rescue, and have
+- `PT-91` `[Own]` **Whichever human triggers the capture ends up in the captured aeroplane.** Fly both humans to CM02's wing-walk rescue, and have
   the GUEST (not P1) be the one to fly into the trigger.
   *Look for:*
   - (a) the guest, not P1, is the one re-flown into the Balmoral once the cutscene ends — the swap

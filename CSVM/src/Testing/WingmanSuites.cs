@@ -676,7 +676,7 @@ internal static class WingmanSuites
             ctx.Check(meanRange < MeanHoldM,
                 $"…averaging inside {MeanHoldM:0} m of the leader: {meanRange:0} m");
             // The decode pins the COMMANDED station, not where the push's weave puts the flown
-            // mean (docs/PLAN-M5-campaign.md D34): the formation state is never left, and outside
+            // mean: the formation state is never left, and outside
             // the push the commanded point is the body-frame station to the centimetre.
             if (playerLeader)
             {

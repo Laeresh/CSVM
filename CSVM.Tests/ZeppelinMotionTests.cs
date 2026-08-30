@@ -43,7 +43,7 @@ public class ZeppelinMotionTests
         Assert.Equal(4, m.TotalEngines);
         Assert.Equal(15f, m.EffectiveMaxSpeed);
 
-        m.AliveEngines = 2;   // THE F18 SEAM: the damage side writes the surviving count
+        m.AliveEngines = 2;   // The damage side writes the surviving count.
         Assert.Equal(15f * 0.70710678f, m.EffectiveMaxSpeed, 3);
         Assert.Equal(((0.8f * 0.70710678f) + 0.2f) * 4.47f, m.EffectiveMaxAccel, 3);
 

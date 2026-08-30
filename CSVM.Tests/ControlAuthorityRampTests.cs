@@ -143,7 +143,7 @@ public class ControlAuthorityRampTests
         Assert.True(m.YawAuthorityAt(500f * Mph) < 0.2f, "the floor must be able to bite");
     }
 
-    /// <summary>Nothing in the force path reads the factor, which is the C24 finding and not an
+    /// <summary>Nothing in the force path reads the factor. This is not an
     /// omission — the assertion that breaks the day someone "restores" it as a torque scale. Full
     /// rudder at 400 mph against the same at 100: the achieved yaw-rate ratio is the YAW TABLE's
     /// ratio (0.193), and folding the factor in as well would put it at 0.044, so the two readings

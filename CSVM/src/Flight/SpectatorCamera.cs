@@ -39,7 +39,7 @@ public sealed partial class SpectatorCamera : Node
 
     private readonly Camera3D _camera;
     // The device filter: null/true (the default) reads every connected pad plus
-    // the keyboard, matching every pre-E44 call site (--freecam, the anim lab, the weapon lab —
+    // the keyboard, matching the single-seat call sites (--freecam, the anim lab, the weapon lab —
     // all single-seat). A downed splitscreen pilot's spectator gets its rig's own PadDevices/
     // UseKeyboard instead, so two pilots watching at once no longer move together.
     private readonly int[]? _padDevices;
@@ -226,7 +226,7 @@ public sealed partial class SpectatorCamera : Node
         !_useKeyboard ? 0f :
         (Input.IsKeyPressed(positive) ? 1f : 0f) - (Input.IsKeyPressed(negative) ? 1f : 0f);
 
-    // Pad reads restricted to _padDevices — null (every pre-E44 call site) is every
+    // Pad reads restricted to _padDevices — null is every
     // connected pad, matching the project's phantom-device policy (never pads[0]): take the
     // largest-magnitude value across the device set, so idle/phantom devices read ~0.
     // Through Pads.For(_padDevices) rather than Pads.Connected(): these are input *reads*, so

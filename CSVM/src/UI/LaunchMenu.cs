@@ -67,8 +67,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int FooterFont = 15;
     private const int ErrorFont = 15;
 
-    // The hangar art block's 720p height (C22's seam); the 358x335 TGAs letterbox into it. It
-    // stands beside the rows since E47b, so it is as tall as the column has room for rather than
+    // The hangar art block's 720p height; the 358x335 TGAs letterbox into it. It
+    // stands beside the rows, so it is as tall as the column has room for rather than
     // as short as a block over them had to be.
     private const int HangarArtHeight = 200;
     // Its column's 720p width, to the left of the rows (E47b), and the focused row's own smaller
@@ -302,7 +302,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // A character reached a plane's name since the last frame, so the menu owes a redraw that no
     // polled input asked for.
     private bool _typed;
-    // The hangar page's art (C22's seam), as the one texture the shell owns: rebuilt only when
+    // The hangar page's art, as the one texture the shell owns: rebuilt only when
     // the page hands over a different decoded image, since Rebuild runs on every keypress.
     private TgaImage? _hangarArtSource;
     private ImageTexture? _hangarArtTexture;
@@ -2362,9 +2362,9 @@ public sealed partial class LaunchMenu : CanvasLayer
         _body.AddChild(Label(heading, (int)(HeadingFont * s), HeadingColor, HorizontalAlignment.Center));
         _body.AddChild(Spacer((int)(6 * s)));
 
-        // C26's totals seam (PLAN-hangar Decision 10): the persistent price/weight line off
+        // The persistent price/weight line comes from
         // HangarFlow.TotalsLine, error-coloured when over and empty where the focused row has no
-        // plane to price (E50). This pair and its LayoutScale term are the whole rendering.
+        // plane to price. This pair and its LayoutScale term are the whole rendering.
         if (_screen == Screen.Hangar && _hangar is { } hangarFlow && hangarFlow.TotalsLine.Length > 0)
         {
             _body.AddChild(Label(hangarFlow.TotalsLine, (int)(DetailFont * s),
@@ -2642,11 +2642,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         // The selected-aircraft line is a second conditional pair on the same screen, so it is
         // counted the same way — a wingman-heavy locked launch adds both at once.
         bool lockedLine = _screen == Screen.Plane && _slots.Count == 1 && _slots[0].Locked;
-        // The hangar totals line (C26's seam, Decision 10) is a third, on every hangar screen.
+        // The hangar totals line is a third row, on every hangar screen.
         bool totalsLine = _screen == Screen.Hangar && _hangar is { } totalsFlow
             && totalsFlow.TotalsLine.Length > 0;
         int extraChildren = (wingmenLine ? 2 : 0) + (lockedLine ? 2 : 0) + (totalsLine ? 2 : 0);
-        // The hangar art column (C22's seam) stands BESIDE the rows since E47b, so it only adds
+        // The hangar art column stands beside the rows, so it only adds
         // height where it is taller than the rows it sits next to, not on top of them.
         float artH = PageArt() != null
             ? Mathf.Max(0f, HangarArtHeight + HangarRowArtHeight + 2 * font.GetHeight(FooterFont) +
@@ -2679,7 +2679,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     // The stock fit behind a roster row, or null when the table has no def flying that model.
     // A custom row resolves through its airframe's stock node, so its Ammo Selection list is the
-    // airframe's until D32 builds the custom's own guns. Wingman indices land here too: wingmen
+    // airframe's until custom loadouts are supported. Wingman indices land here too: wingmen
     // are stock-only, and the roster's first eleven rows ARE the stock table in its order.
     private LoadoutDef? StockFitFor(int planeIndex) => Fits.ForModel(_roster[planeIndex].Node);
 
@@ -2909,7 +2909,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _ => null,
     };
 
-    // The art column a hangar page may request (C22's seam): the page's picture over the focused
+    // The art column a hangar page may request: the page's picture over the focused
     // row's own, both captioned. Each texture is rebuilt only when the page hands over a different
     // decoded image, since Rebuild runs on every keypress.
     private Control HangarArtColumn(HangarArt art, float s)
@@ -3188,9 +3188,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary><paramref name="Fit"/> is this pane's own Ammo Selection edits, or null for the
     /// airframe's stock fit. Per pane, because the roster above it is.</summary>
     /// <summary><paramref name="CustomPlane"/> is the picked custom plane's store name, or null
-    /// for a stock pick. ⚠ D32's seam: nothing reads it yet, so a custom pick flies as
-    /// <paramref name="PlaneNode"/>, its airframe's stock plane. D32 reads it in
-    /// <c>Launcher.StartSessionFromMenu</c>, loads the def from <c>CustomPlaneStore</c> and
+    /// for a stock pick. ⚠ Nothing reads it yet, so a custom pick flies as
+    /// <paramref name="PlaneNode"/>, its airframe's stock plane. <c>Launcher.StartSessionFromMenu</c>
+    /// loads the def from <c>CustomPlaneStore</c> and
     /// builds it into the spawned aircraft.</summary>
     public readonly record struct PlayerChoice(
         string PlaneNode, int[] Pads, LoadoutChoice? Fit = null, string? CustomPlane = null);

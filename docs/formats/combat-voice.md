@@ -198,7 +198,7 @@ death and taunt triggers address a specific aircraft.
 
 The rules above are represented in `CSVM/src/Flight/AiVoiceDispatcher.cs` (the gate, cooldowns,
 halving, election, DI tiers, bearing index — engine-free, seeded) and wired by
-`CSVM/src/Session/AiVoiceRuntime.cs` over the B8 seam. Where the original's dispatch site is
+`CSVM/src/Session/AiVoiceRuntime.cs`. Where the original's dispatch site is
 decoded, the remake uses it; where only the trigger's meaning is decoded, the chosen stand-in
 site is recorded here:
 

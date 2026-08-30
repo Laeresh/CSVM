@@ -131,7 +131,7 @@ public class ExtractedGoldenTests
         Assert.Equal(2715, SoundDefs.Load(SharedZrdr).Count);
 
         var groups = SoundDefs.LoadGroups(SharedZrdr);
-        // 488 weighted groups + 222 dialogue-chain groups (registered since B8 keeps chains);
+        // 488 weighted groups + 222 dialogue-chain groups (the loader keeps chains);
         // the per-kind split is pinned in CombatVoiceGoldenTests.
         Assert.Equal(710, groups.Count);
         // The destruction / combat one-shots the weapon and damage code resolves through.

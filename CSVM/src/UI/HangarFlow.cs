@@ -172,8 +172,7 @@ public sealed class HangarFlow
 
     /// <summary>The campaign wallet this flow prices against, or null over the two existing doors
     /// (Instant Action's Build button, the top-level entry), which stay wallet-free by construction
-    /// (PLAN-hangar Decision 2). Non-null only when the cabin's Plane Construction opened this
-    /// flow (B13).</summary>
+    /// Non-null only when the cabin's Plane Construction opened this flow.</summary>
     public HangarCampaignContext? Campaign { get; }
 
     /// <summary>The airframe whose defaults the pending ask (langui 206) offers, or null when
@@ -218,7 +217,7 @@ public sealed class HangarFlow
     public string Message { get; private set; } = string.Empty;
 
     /// <summary>The persistent second stats line every hangar screen shows under its heading
-    /// (PLAN-hangar Decision 10): the build's total price and its weight against the airframe's
+    /// the build's total price and its weight against the airframe's
     /// capacity, recomputed from <see cref="HangarEconomy.Price"/> on demand and flagged with the
     /// original's own word (langui 1227) when over. Which plane it prices is the page's to say
     /// (<see cref="IHangarPage.TotalsPlane"/>): the plane-selection screen prices the saved plane

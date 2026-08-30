@@ -8,7 +8,7 @@ per-mission results, and how far through the campaign the player is). It also st
 
 The decode stops where the structural questions are answered. It is deliberately not
 byte-complete, there is no writer, and importing an original profile is out of scope
-(`PLAN-M5-campaign.md` decision 1). [Evidence and limits](#evidence-and-limits) lists every place
+. [Evidence and limits](#evidence-and-limits) lists every place
 the decode stops and why.
 
 ## Contents

@@ -132,7 +132,7 @@ internal sealed class HumanFlightAdapter
         // A swap's ShippedSkins reading wins over all three, null included (below).
         long mark = StartupProfile.Mark();
         // cockpitInterior: a human rig is the only one whose pilot can look out of a cockpit
-        // (PLAN-cockpit-view, B11) — FlightRoster's AI builder deliberately does not ask for one.
+        // FlightRoster's AI builder deliberately does not ask for one.
         var scheme = swap is { ShippedSkins: true } capturedSwap
             ? capturedSwap.Scheme
             : swap?.Scheme
@@ -152,6 +152,7 @@ internal sealed class HumanFlightAdapter
             DebugCollision = _world.DebugCollision,
             PinnedView = _policy.View,
             PinnedViewMode = _policy.ViewMode,
+            PinnedLook = _policy.PinnedLook,
             HudParent = rig.Viewport,
             // Null when the airframe ships no cockpit1 — the rig then hides nothing, as before B11.
             Cockpit = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior),

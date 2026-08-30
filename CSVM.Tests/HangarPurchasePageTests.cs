@@ -8,7 +8,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The PURCHASE screen (PLAN-hangar C26): the itemised review with one row per priced thing the
+/// The PURCHASE screen: the itemised review with one row per priced thing the
 /// scratch plane carries (airframe always, engine when chosen, armed gun slots named as the GUNS
 /// screen names them, armoured zones via langui 1191-1194, wings with hardpoints via 1176/1177),
 /// each detailed with its decoded cost and weight, then the totals row and the Purchase Now row.

@@ -63,7 +63,7 @@ internal static class ZeppelinSuites
                 $"placed at the authored position at load pos={host.GlobalPosition}");
 
             var motion = runtime.MotionFor("piratezep");
-            ctx.Check(motion != null, $"MotionFor finds the live motion (the F18 seam's lookup)");
+            ctx.Check(motion != null, $"MotionFor finds the live motion by node name");
             if (motion == null)
                 return;
 

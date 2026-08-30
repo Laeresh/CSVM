@@ -37,8 +37,7 @@ public sealed class CustomPlaneDef
     /// premultiplied by 5, our JSON stores the units themselves.</summary>
     public const int MaxArmourUnits = 12;
 
-    /// <summary>Every airframe has exactly four gun slots (the disproof in PLAN-hangar's
-    /// wrong-claims table; slot titles vary, the count does not).</summary>
+    /// <summary>Every airframe has exactly four gun slots; slot titles vary, the count does not.</summary>
     public const int GunSlots = 4;
 
     /// <summary>Gun calibre dropdown rows 0-4.</summary>

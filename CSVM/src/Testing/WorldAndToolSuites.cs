@@ -60,8 +60,8 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // The cockpit interior's build and its per-mode hiding (PLAN-cockpit-view, B11). Two builds of
-    // the same airframe: the default one must be byte-for-byte the pre-B11 exterior (an AI plane
+    // The cockpit interior's build and its per-mode hiding. Two builds of
+    // the same airframe: the default one must be byte-for-byte the exterior build (an AI plane
     // pays nothing), the cockpitInterior one must gain the subtree, hidden, at the cockpit_camera
     // marker. Able to fail: without the Skip arm the interior build finds no cockpit1; without the
     // mount it sits at the plane origin at authored (~20x) scale.
@@ -921,7 +921,7 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // The B13 rule: WorldLights.Commit fades and ranks
+    // WorldLights.Commit fades and ranks
     // each light against the NEAREST of every pane's camera, not a single position. Driven
     // straight against a real WorldLights instance with synthetic positions —
     // there is no per-player placement flag to give two scripted panes independent spots (the
@@ -976,6 +976,6 @@ internal static class WorldAndToolSuites
         lights.Add(nearP1, Colors.White, 1f, 10f);
         lights.Commit(new[] { p1 });
         ctx.Check(lights.CommittedPositions.Count == 1 && lights.CommittedPositions.Contains(nearP1),
-            $"one viewer (single player) is the unchanged, pre-B13 rule");
+            $"one viewer (single player) uses the single-viewer distance rule");
     }
 }

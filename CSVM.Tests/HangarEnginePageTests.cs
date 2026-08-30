@@ -8,7 +8,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The ENGINE screen (PLAN-hangar C23): seven rows (the six per-airframe engines from langui
+/// The ENGINE screen: seven rows (the six per-airframe engines from langui
 /// 3100+af*6+id plus the explicit no-engine row, langui 1165 "None" per the decoded dropdown,
 /// E42), the airframe page's pick-and-tick idiom writing the scratch plane's engine and nothing
 /// else (E49: confirm selects, the stepper is inert), and the detail line carrying the decoded

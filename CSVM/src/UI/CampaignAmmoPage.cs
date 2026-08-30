@@ -17,7 +17,7 @@ namespace CSVM.UI;
 /// ACCEPT, and CANCEL — or backing out — simply drops the copy. A gun group's build comes from the
 /// plane's <see cref="CustomPlaneDef"/> when hangar-built, else the airframe's stock fit for the two
 /// profile-seeded starters (B13). <see cref="OwnedPlane.Ordnance"/>'s encoding, since the original's
-/// own ordnance id is undecoded, is <c>docs/PLAN-M5-campaign.md</c> C25's, not the save's.
+/// own ordnance id is undecoded, belongs to the screen rather than the save.
 /// </summary>
 public sealed class CampaignAmmoPage : CampaignPage
 {

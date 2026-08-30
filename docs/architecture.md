@@ -589,10 +589,10 @@ between them at spawn/engine-stop (`FlightController`), so both must exist. `sta
 autogyro) is unaffected and stays skipped in flight — that def only names propeller nodes.
 `Build` also reads `CockpitCameraOffset`, the plane-local `cockpit_camera` marker translate
 (`MarkerRig.FindNamedMarker`, fallback the origin), for `CameraController`'s first-person
-placement (PLAN-cockpit-view, A2); the marker read walks past the alternate-state subtrees to the
+placement; the marker read walks past the alternate-state subtrees to the
 authored node in the top-level `markers` group.
 
-`cockpitInterior: true` (PLAN-cockpit-view, B11) takes `cockpit1` back out of the skip list for
+`cockpitInterior: true` takes `cockpit1` back out of the skip list for
 that build alone and mounts it hidden as `CockpitInterior`: local transform = the
 `cockpit_camera` offset, a uniform `InteriorScale`, and the fixed
 `CameraController.HeadPitchOffsetRad` tilt, then `ParkInteriorStates` walks it. Only a
@@ -960,7 +960,7 @@ uniform is session-global (a lit light is lit for every pane), but `Commit`'s 90
 its `MaxActive`-slot significance rank both answer to the NEAREST of every viewer position handed
 in, not one camera — a light beside player 4 stays lit even with player 1 far away (`BL-366`;
 `AnimRuntime.LightViewerPositions`, fed from `GameSession`'s `ViewerSet`). One position (single
-player) reduces to the pre-B13 rule exactly.
+player) uses the single-viewer distance rule exactly.
 
 ## src/Pads.cs
 Single source of truth for gamepads — every reader goes through it, never `Input.GetConnectedJoypads()`.
@@ -1561,7 +1561,7 @@ immediately BEFORE performing `_fire.Step`'s outcome — the original restamps a
 on every round that goes out (B5's job), so the forget pass must see the pre-shot state. Gated on
 `FlightController.IsHumanPiloted` (default true) — the original ticks this only for the local
 player, and an AI plane's dead-eye path has no slots at all. Every CSVM plane is human-piloted
-today (Decision 7 in `docs/plans/PLAN-sticky-bullets.md`), so the gate is a no-op until M4 lands AI
+today, so the gate is a no-op until AI aircraft are active
 aircraft; `AssistedGunDirection` falls back to the unassisted muzzle axis for a non-human pilot,
 the same fallback a barrel with no slot already takes.
 
@@ -1872,8 +1872,8 @@ static viewer. Beside the held views it carries the pilot's SELECTED view mode (
 `--view=cockpit`/`=nose` and changed at the controls by F8 (Cockpit → Nose → Chase) or F6
 (directly to Chase). The decisions themselves are `PilotView`'s, not this class's, so they are testable
 without an engine; this class holds the state and the camera. ⚠ The modes are deliberately NOT rows
-in `Views`: `BL-150` rebuilds that table later and must be able to replace it without touching them
-(PLAN-cockpit-view, Decision 2). ⚠ Outside first person a held numpad key overrides the mode for as
+in `Views`: `BL-150` rebuilds that table later and must be able to replace it without touching them.
+⚠ Outside first person a held numpad key overrides the mode for as
 long as it is down and leaves the selection alone, the same precedence it has over `--view=`'s
 pinned digit; INSIDE Cockpit or Nose it holds no view at all, because the numpad is the head-look
 snap cluster there, which is what the original binds it to (`OriginalScreenshots/Keybinds Views
@@ -1906,7 +1906,7 @@ authored) plus a first-order acceleration transient relaxing at the MEASURED 0.6
 
 ## src/Flight/HeadLook.cs
 The pilot's head in the two first-person views, decoded from the original's shared look controller
-(`docs/PLAN-cockpit-view.md`, "What the data actually ships"). It holds two pairs of angles: the
+(the original's shared look controller). It holds two pairs of angles: the
 TARGETS the input sets, and the SHOWN angles that chase them exponentially,
 `shown = target + (shown − target)·e^(−rate·dt)`, at 3.0/s for elevation and 5.0/s for azimuth.
 Elevation is 0 at level and +π/2 straight up, clamped to `ElevationFloor`..π/2; azimuth is 0 dead
@@ -1920,7 +1920,7 @@ input direction, which is normalised first because the rate IS the law — the o
 hat switch, so a light stick deflection pans exactly as fast as a hard one; the **center key**
 zeroes both targets at once and beats a held snap. ⚠ `ElevationFloor` is a constructor parameter,
 not a constant: the original's first-person caller passes 0 and its chase caller −π/2, and the
-chase look-around (a filed E41 item) is the same controller. `IdleAim` is C22's seam — consulted
+chase look-around is the same controller. `IdleAim` is the no-input hook — consulted
 only on a frame with no look input at all, its answer becomes the targets directly, deliberately
 past the floor, because autohead's own floor is below level. `AutoheadTarget` (static, engine-free)
 is that seam's law: local-frame sideways/vertical velocity only (forward speed dropped — a port
@@ -2389,7 +2389,7 @@ siblings (the struck node's group seeded as already spent, since it took the ful
 `SceneBuilder` did not build stand for themselves, so genuinely separate parts keep separate shares.
 At most `MaxBlastTargets` 32 candidates take damage per burst, the original's hit-buffer size; when more
 are inside the radius the pool prints one `blast limit:` line naming the weapon, the burst and how
-many were dropped (Decision 9 of PLAN-ordnance-types: never silent; not "cap", which this repo
+many were dropped; never silently discard a capped blast, and do not call it a "cap", which this repo
 uses for captures). `MaxBlastBodies` 4096 is only the raw sphere
 query ceiling. The fuse tests the whole swept segment per candidate plane (no tunnelling at
 ~20 m/step) and gates through `DETONATION_DOT_PRODUCT` toward the nearest hull point. The
@@ -2561,7 +2561,7 @@ model and coasts under power. With a `Machine` the stun is its `Stunned` mode; w
 keeps its own countdown; `IsStunned` reads either and `ClearStun` is the respawn reset.
 
 ## src/Flight/AiControlLaw.cs
-The original's own AI steering law, decoded as plan D31 in `docs/org/aiControlLaw.md` — read
+The original's own AI steering law, documented in `docs/org/aiControlLaw.md` — read
 that page before changing anything here. An aim point, that point's velocity and one of four
 parameter tables read out of the image in, one `FlightInput` out: a desired speed from the aim
 point's own speed plus range-weighted lead terms, an intercept solve (`AimAssist.TryIntercept`) for
@@ -3025,7 +3025,7 @@ The engine is ONE voice on one slot; its pitch, gain and definition all come fro
 `EngineAudioCurves`, shared with `AiEngineAudio` (see that entry). `UpdateEngineSlot` swaps the
 slot's stream for `damaged_engine_sound` while `EngineAudioCurves.EngineDamaged` holds (worst zone
 below a quarter health, or the engine choked) and for `cockpit_engine_sound`
-while the pilot's SELECTED view (`FlightController.FirstPersonView`, A1's mode-6/7 equivalents) is
+while the pilot's selected first-person view (`FlightController.FirstPersonView`) is
 Cockpit or Nose, both resolved at `Setup`; damaged takes precedence when both apply
 (`EngineAudioCurves.EngineDefFor` carries the rule — no def authors a damaged cockpit variant, and
 the plan's evidence does not decode which of the two wins, so damage feedback keeps priority as a
@@ -3569,7 +3569,7 @@ the one field every other halt-aware consumer (animation, puffers, the projectil
 single-step) already reads. Reading the COMBINED value is what lets a results board halt the world
 without this mirror fighting it back to running on the next frame — `PauseState` decides who may
 flip it, not how a halt behaves once flipped. A rig built with no `PauseState` (the suites) falls
-back to the pre-E43 unconditional toggle, unreachable there since `AllowPause` is false on every
+back to the unconditional toggle, unreachable there since `AllowPause` is false on every
 such rig. `PauseBoard` is the shared pause board.
 
 `PollResultsShortcuts` reads R / pad Y while a results board is up, from `_Process` on wall time
@@ -3783,7 +3783,7 @@ data names a `pdpanel*` stage (`PairsPanels`); the null-sink stand-in fallback i
 program-existence, so the cockpit gauge defs (`*_damage_green/yellow/red`, `*_got_hit`) can never
 play on an airframe.
 
-**The cockpit-interior twins pcdp4/pcdp6 (PLAN-cockpit-view, B12).** `PlaneBuilder.CockpitDamagePanels`
+**The cockpit-interior twins pcdp4/pcdp6.** `PlaneBuilder.CockpitDamagePanels`
 joins `DamagePanels` in the same `_panels` table (an optional constructor param, empty outside a
 cockpit-interior build), so `ApplyPartStage`/`Retract` flip `pcdp4`/`pcdp6` alongside `pdp4`/`pdp6`
 off the identical `pdpanel4`/`pdpanel6` entries — no separate cockpit rule, and `Reset()` clears
@@ -3936,7 +3936,7 @@ fly stock airframes, so nothing here waits on the hangar. Units in
 
 The hangar (`HangarFlow`) has two doors, both through `OpenHangar`, which remembers the screen to
 land back on: a trailing `Build Custom Plane` row past the three Mode rows, and the same row past
-the eleven airframes on the Instant Action plane pick (PLAN-hangar Decision 6). `Screen.Hangar`
+the eleven airframes on the Instant Action plane pick. `Screen.Hangar`
 draws through the same centred body every other screen uses: heading, rows, detail and footer all
 read off `_hangar.Page`. The rows and their detail line live in a content column of their own, so
 that when the page's `Art` is non-null an art column (`HangarArtColumn`) stands to its LEFT, the
@@ -3947,7 +3947,7 @@ hands over a different image, and `LayoutScale` counts the column only where it 
 rows it stands beside. The detail label autowraps in that 560px content column, which is what
 keeps the airframe-defaults ask (langui 206, a two-sentence question) on a 16:9 screen instead of
 stretching the centred body past its edges. Every hangar screen also carries the persistent totals line under its heading
-(`HangarFlow.TotalsLine`, PLAN-hangar Decision 10), error-coloured via `TotalsOverweight` and
+(`HangarFlow.TotalsLine`), error-coloured via `TotalsOverweight` and
 counted by `LayoutScale` the same way. A page needs no change here, art included. The hangar's
 screens sit behind a flow rather than behind the screen enum, so `--menu=` reaches them through
 `OpenHangarAid`: `hangar` the plane list, `airframe` the airframe list, `defaults` its ask, `paint` the
@@ -4095,7 +4095,7 @@ nine screens (plane selection, airframe, engine, armour, guns, hardpoints, paint
 by an undo path: `Back()` off the first screen sets `Exit = Cancelled` and the scratch is simply
 dropped. `Commit()` is the whole gate in one place: a name (langui 203), then
 `HangarEconomy.Price`'s verdict in the original's own words (1182 + 1227 OVERWEIGHT, 1182 + 1171 No
-Engine Selected), then `CustomPlaneStore.Save`; funds are never checked (PLAN-hangar Decision 2).
+Engine Selected), then `CustomPlaneStore.Save`; funds are never checked.
 Editing a saved plane starts from a copy made through the store's own canonical serialisation, so
 abandoning an edit cannot touch what is on disk. `DeleteSaved(name)` is the plane-selection
 screen's Sell Plane (`ps_b_sellp`) in a build with no economy: it removes the file, re-reads
@@ -4116,7 +4116,7 @@ back to the flow, which advances), `OpeningRow` (the row the cursor lands on whe
 0 for most screens and the current pick on the two pick screens), `TotalsPlane(row)` (which plane
 the shell's totals row prices while that row is focused, the scratch plane by default and null to
 hide the row), `Art`, an optional decoded `TgaImage` plus caption the shell
-renders (null by default via `HangarPage`; the C22 seam every art-bearing screen uses), and
+renders (null by default via `HangarPage`), and
 `RowArt(row)`, the same thing again for the focused row alone (only the paint screen's decal rows
 have one). All plain
 text, plain indices and raw pixels, so a page is engine-free and testable and the shell needs no
@@ -4131,7 +4131,7 @@ nothing) stands only in the switch's default arm now that every screen has its o
 `HangarPurchasePage` (each its own file) are all real; the placeholder stands only in the
 switch's default arm. `HangarFlow.TotalsLine` (with its `TotalsOverweight` colour flag) is the
 persistent second stats line the launchscreen draws under every hangar screen's heading
-(PLAN-hangar Decision 10): the build's total price and weight against the airframe's capacity,
+: the build's total price and weight against the airframe's capacity,
 recomputed from `HangarEconomy.Price` on demand and carrying the original's OVERWEIGHT word
 (langui 1227) when over. Which plane it prices is the page's answer, through `TotalsPlane`: the
 plane-selection screen prices the saved plane under the cursor and hands back null on its action
@@ -4399,7 +4399,7 @@ the HE/AP/flak picture is unchanged by the channel's existence; `CurrentFor` rea
 `BlendFor` the blend state alone. `Advance(dt)` is `_Process`'s body, exposed so a suite can step
 both channels on its own clock. **Per pane, not one global**: the original holds one wash state for
 the whole machine (`DAT_0064ef9c` and neighbours), which would blind viewer 1 when viewer 3 is
-flashed; that divergence is deliberate (`docs/PLAN-ordnance-types.md`, Decision 2). `--debug-wash=N`
+flashed; that divergence is deliberate. `--debug-wash=N`
 addresses two overlapping scripted washes to viewer N so the channel can be seen with no weapon
 firing it (`GameSession._Process`). Pinned by the `fbfx-flash` suite (routing: player 2 addressed,
 pane 1 untouched, ramp composited under) and `BlendWashTests` (the rules).
@@ -4572,7 +4572,7 @@ stand-off through `PlaceHeld`;
 shift-click aims without moving, and an orange ball marks the aim point. The scripted twins all fire
 on the first physics frame, most specific first — `--weapon-target=x,y,z`, then
 `--weapon-surface=<registry name>` (nearest collider carrying that surface id — any of the
-fourteen since B12, so `dirt` now means id 13 and NOT "everything untagged", which is `default` —
+fourteen, so `dirt` means id 13 and NOT "everything untagged", which is `default` —
 measured to the nearest
 collision VERTEX, since a chapter's water tiles all sit at the world origin), then
 `--weapon-click=x,y[,aim]` — and every one of them ends in the same `PlaceOn` as a real click, at
@@ -5198,7 +5198,7 @@ float, and three of the five gaps land one step late. It then asserts B12's rout
 the sink: every step reports the burst's own point and the def's authored `10000` m² gate, and a
 real two-pane `ScreenFlash` over two `Camera3D` nodes 120 m apart paints one pane, the other pane, or
 both, purely by where the burst is. The able-to-fail control is the same overlay with no `ViewerSet`
-bound, which paints both — the pre-B12 behaviour; disabling the routing fails three of the checks.
+bound, which paints both — the un-routed behaviour; disabling the routing fails three of the checks.
 Its blend-channel half puts both cameras at ONE point, so the ramp's proximity gate cannot tell the
 panes apart and any difference is the victim routing alone: `PlayBlend(1, …)` stepped through its
 attack paints pane 2 red and leaves pane 1 clear, an HE ramp then reaching both paints pane 1 exactly
@@ -5484,7 +5484,7 @@ shared damage-stage defs, not TUNE — the file's why lines carry the per-root c
 per-player term is what keeps splitscreen/multiplayer from collapsing back onto one copy, since every
 extra aircraft is another gun and another rocket landing somewhere else. `DepthFor` is the deepest
 root = how many slot containers the stage needs; `UnknownRoots` names an authored root that is not in
-`WorldEffectsFactory.EffectStageRootNames(program, gamez)` — the DERIVED stage set, since B3 — as a
+`WorldEffectsFactory.EffectStageRootNames(program, gamez)` — the derived stage set — as a
 typo would otherwise size nothing silently. Asserted twice, because that set is now chapter data: in
 `EffectPoolsTests` against C1's bound program (an `ExtractedDataFact`, skipped without an
 extraction) and as an `effects-census` condition on whatever chapter the run was given.
@@ -6363,9 +6363,9 @@ same lifetime as `LiveryResolver`/`SpawnPicker`) from
 plus a settable `ScreenFlash`
 sink it hands to the effects runtime — the three defs carrying an `FBFX_COLOR_FROM_TO`
 (`he_ground_effect`/`ap_ground_effect`/`flak_effect`) all play there. The sink's last two arguments
-are the burst point and the def's own gate radius squared, B12's pane routing; this class only
+are the burst point and the def's own gate radius squared, for per-pane routing; this class only
 forwards them. `playerPositions` (`BL-365`; null → the single `playerPosition` alone, the
-pre-C21 behaviour a caller with no seam — `AiCrashDefs`' test rig — still gets) is set as
+single-camera behaviour a caller with no seam — `AiCrashDefs`' test rig — still gets) is set as
 `PlayerPositions` on the built world-effects runtime, so its own `If PlayerRange` gates (the same
 three washes) answer to the nearest human rather than one camera; `GameSession` feeds the identical
 snapshot this factory gets and `WorldSession.Options.PlayerPositions` gets, from one
@@ -6540,8 +6540,7 @@ The states one aircraft moves between and the rules that move it: in play, crash
 its wreck still flying, inert, and back to spawned. It owns those flags plus the collision-grace,
 carrier-drop ground-blow and auto-respawn timers, holds the crash-def table and the selection off it
 (`LastCrashDef`), and holds no `Node`, so the whole table runs in a unit test. Every transition
-REPORTS what happened instead of performing it (Decision 7 of
-`docs/plans/PLAN-flightcontroller-deepening.md`): `Crash(surfaceId, killer)` answers one `CrashOutcome`
+REPORTS what happened instead of performing it: `Crash(surfaceId, killer)` answers one `CrashOutcome`
 (did it happen, was it the wreck landing, which crash def, whether the shutdown, the camera cut and
 the `Downed` report are owed, and the killer to name) and `Destroy(destroyDef, killer)` one
 `DestroyOutcome` on the same terms, with `WreckFalling` deciding whether the hull flies itself down.

@@ -341,7 +341,7 @@ public partial class GameSession : Node3D
 
     /// <summary>The campaign mission's director, null outside a <c>--campaign=</c> launch. The
     /// session layer reads its <see cref="CampaignDirector.ReturnToCabin"/> to know the mission is
-    /// over and the player belongs back in the cabin; C22 builds that screen.</summary>
+    /// over and the player belongs back in the cabin.</summary>
     internal CampaignDirector? Campaign => _campaign;
 
     /// <summary>The session's subject plane (null until the build lands one) — the Launcher's
@@ -2196,7 +2196,7 @@ public partial class GameSession : Node3D
         // The roster shares the session data the human field was built from, so later AI spawns
         // works from here on, at build or at any later sim step.
         _flightRoster = flightRoster;
-        // The E16 voice dispatch, over B8's seam: needs the world's WorldSounds (prewarmed
+        // The voice dispatcher needs the world's WorldSounds (prewarmed
         // above) and the sound defs. Built before the --ai loop so spawns can register; the
         // players register as damage sources only (WA-HighDmg's broadcast trigger).
         if (state.WorldRuntime?.Sounds is { } worldSounds
@@ -2602,7 +2602,7 @@ public partial class GameSession : Node3D
             Generators = _generators,
             Zeppelins = _zeppelins,
             SurfaceVehicles = _surfaceVehicles,
-            // A6/BL-458: the campaign's danger-zone gates are chapter-world geometry, so the
+            // The campaign's danger-zone gates are chapter-world geometry, so the
             // tracker needs the built gamez to resolve its dzpathN subtrees.
             Gamez = state.Gamez,
             Sounds = state.WorldRuntime?.Sounds,
@@ -3192,7 +3192,7 @@ public partial class GameSession : Node3D
             var eye = pilot.WorldPosition + Vector3.Up * 30f;
             pilot.Held = true;
             pilot.Inert = true;
-            pilot.CameraOwned = true;   // D8's seam: the controller writes this pane's camera no more
+            pilot.CameraOwned = true;   // The controller writes this pane's camera no more.
             // The cockpit instruments belong to an aircraft nobody is flying; the marker HUD is a
             // sibling on the same canvas and stays, which is the whole point of the mode.
             pilot.PilotHud.SetInstrumentsVisible(false);
@@ -3265,7 +3265,7 @@ public partial class GameSession : Node3D
             return;
         SuspendBoards();
         pilot.BeginPhotoMode();
-        pilot.CameraOwned = true;   // D8's seam: the controller writes this pane's camera no more
+        pilot.CameraOwned = true;   // The controller writes this pane's camera no more.
         pilot.SetPilotHudVisible(false);
         var eye = rig.Camera.Position;
         _photoCamera = new SpectatorCamera(rig.Camera, eye, eye - rig.Camera.Basis.Z,

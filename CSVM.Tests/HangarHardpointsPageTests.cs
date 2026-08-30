@@ -8,7 +8,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The HARDPOINTS screen (PLAN-hangar C24): two per-wing rows named through langui 1176/1177
+/// The HARDPOINTS screen: two per-wing rows named through langui 1176/1177
 /// (which carry the count themselves), the stepper walking each wing's count 0-4 with wraparound
 /// into the scratch def, and the detail line speaking the original dropdown's vocabulary
 /// (1165/1168/1169) beside the decoded $410 / 480 lb per hardpoint and the wing's line total.
