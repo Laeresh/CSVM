@@ -2931,57 +2931,6 @@ usual.
   primary 3 completed), so this is not an objective bug. *Cross-refs:* `docs/org/aiPilot.md` (the
   activation primitive and `FUN_00432010`).
 
-- `BL-622` `[Feature]` **No debrief screen: a finished mission drops straight back to the cabin.**
-  *Evidence:* reported at the controls, on a won and on a lost mission alike. `CampaignDirector`
-  records the attempt, writes the profile and raises `ReturnToCabin`; `GameSession.
-  OnCampaignMissionEnded` prints one `GD.Print` and calls the launcher's return, which reopens the
-  launchscreen on the cabin, so nothing between the mission ending and the cabin exists. The
-  result the screen would show is already carried: `CampaignMissionResult` has the outcome, the
-  attempt, the recorded flags and the won mission's `CompletedMask`. The original's own debrief is
-  decoded in `docs/org/debrief.md` (`FUN_004194e0`): what it writes into the profile's
-  mission-result record, the two sources its completed-objective mask is built from, and the offer
-  to skip a mission that opens on **every fourth failed attempt** at a mission never completed,
-  which takes effect by setting the campaign win flag. **The screen is the scrapbook**, not a board
-  of its own: every label on it is an `IDS_SB_*` langui row (the Instant Action wrap-up's are
-  `IDS_IAWU_*`), the authored screens are `SCRAPBOOK.SCRIPT`, `SCRAPBOOKZOOM.SCRIPT` and
-  `SCRAPBOOK_TOC.SCRIPT`, and
-  `OriginalScreenshots/Campaign Mission End screen CM01.png` is it as the original draws it. **The
-  mission end opens the mission's first spread**, the one carrying the results block. Its
-  Best to Date / Most Recent tabs are the mission-result record's merged and attempt halves, and it
-  draws **four** rows, Run Time (`mm:ss`), Gun Hit Ratio, Cash Earned and Overall Planes Downed;
-  Rockets Expended is authored in langui and `LAYOUT.CSV` and drawn by nothing.
-  **The scrapbook is a book, not a screen**, and this is plan-sized rather than one page:
-  a mission has one, two or three spreads, the first being the results page and the rest story
-  pages, the arrows step
-  page then mission, a mission other than the current one raises a Current Mission bookmark that
-  jumps back, and every scrap may open in detail (`SCRAPBOOKZOOM.SCRIPT`), 210 of the 461 authored
-  scraps doing so. **The composition is a shipped data file**,
-  `extracted/rof/ASSETS/SCRAPBOOK.CSV`, keyed `<mission>_<spread>_<item>` and decoded in
-  `docs/formats/campaign-screens.md`; the widget geometry is `LAYOUT.CSV`. A flown danger zone leaves
-  the player's own screenshot as a scrap named `Snap_<mission>_<objective>`, mounted in
-  `DZ_GENERIC_CORNERS.PNG`. *Fix shape:* `CampaignPreviousMissionsPage` already IS the scrapbook, so
-  this extends that page rather than adding one, but the extension is the whole book: the story
-  page, the per-scrap zoom, the navigation and bookmark, the results block and Replay Mission, the
-  mission-end entry path, and the skip offer. **Scaffold a plan rather than starting this as one
-  backlog item.** *⚠ Traps:* a mission does not always have two spreads, and an art filename's
-  `<page>` field is not the spread the scrap appears on; `SCRAPBOOK.CSV` is the only authority on
-  what draws where. The world stays up for the rest of the frame after the end is
-  raised, so the page belongs to the launchscreen side, not the session's. The mask cannot be drawn
-  as it stands: `CampaignDirector.OnMissionEnded` banks `0` for the whole mask on a loss where the
-  original keeps every objective bit and clears only bit 0, so per-objective lines would read as
-  all-failed on every lost mission. The Overall Planes Downed row sums CSVM's own per-airframe kill
-  tallies (`CampaignProgression`, `CampaignDirector.CreditKill`) rather than reading a stored field,
-  and Rockets Expended needs no source at all since the original never draws it. The original stores
-  no total either: the row is the sum of the two kill arrays, computed where it is drawn. The
-  wording of the skip offer (langui string 191) is absent from
-  `extracted/rof/ui_strings.json`, whose ids jump 136 to 200. *Cross-refs:*
-  `docs/org/debrief.md`, `docs/formats/saved-games.md` ("The mission-result array"),
-  `docs/formats/campaign-screens.md` (the memento pane reads the same art directory), `CampaignFlow`,
-  `CampaignProgression`, `BL-256` (the danger-zone
-  screenshot the scrapbook mounts), `BL-463` (Change Memento, the same `MS_P_` art), `BL-620`'s and
-  `BL-623`'s closing commits (`git log --grep=BL-620`); the held two seconds `BL-623` added are
-  where this screen belongs.
-
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in

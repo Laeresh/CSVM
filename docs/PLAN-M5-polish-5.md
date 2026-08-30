@@ -1792,4 +1792,4 @@ on the flown path.
 
 **Verified.** On the merged plan tree, the full gate: build clean, 2562 unit tests, 179 engine suites in four shards with the error census clean, 16 goldens hash-identical.
 
-**⚠ Traps.** The freeze catches the wing fold 0.048 rad short of its authored angle, which is decoded and not a defect, so the pose check reads it at that tolerance. `campaign-mission-end` steps the graph, not the director, so it needs the director stepped for the hold. CSVM paints no fade over the held frame and has no debrief on its far end (`BL-622`): the two seconds are currently held picture and then a cut.
+**⚠ Traps.** The freeze catches the wing fold 0.048 rad short of its authored angle, which is decoded and not a defect, so the pose check reads it at that tolerance. `campaign-mission-end` steps the graph, not the director, so it needs the director stepped for the hold. CSVM paints no fade over the held frame: the two seconds are held picture and then a cut into the scrapbook.

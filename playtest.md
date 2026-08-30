@@ -144,7 +144,7 @@ sounds like, watched and frame-sampled, never measured into a constant.
   `campaign: <Outcome> — returning '<profile>' to the cabin` when the world leaves, then
   `campaign: <Outcome> — arrived at the debrief with '<profile>'` one frame later at the
   launchscreen side, with the same outcome in both lines. A mismatch or a missing second line
-  reopens `BL-622`; what the debrief screen itself shows is `PT-89`.
+  means the mission-end result carry is broken; what the debrief screen itself shows is `PT-89`.
 - `PT-89` `[Own]` **C17/D18/D19/D20: the scrapbook opens on the flown mission, not the cabin, with
   its own shipped scraps under the stat card, each one opening into its own detail view, and the
   page/mission arrows and Current Mission bookmark browsing the rest of the book.**
@@ -166,7 +166,7 @@ sounds like, watched and frame-sampled, never measured into a constant.
   lands on the cabin with that session's own state (funds, Next Mission). A wrong mission on Replay,
   stale numbers, a missing stamp or scrap, a scrap that will not open, an arrow or the bookmark
   appearing where it should not (or not appearing where it should), or landing straight on the cabin
-  reopens `BL-622`.
+  means the debrief screen is broken.
 
 ### C1 · Bloodhawk — the overcast sky, ground to above the deck
 
