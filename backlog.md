@@ -1681,22 +1681,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   airframe-specific branch (`blood_hook_extend`, `brig_hook_extend`, `bal_hook_extend`, one per
   airframe), and no suite counts those. A census that counts the generic name proves nothing about
   the branch the fork actually plays.
-  Two faults in the data wear this one symptom, and both are read out of `extracted/*/cam_anim/`:
-  (a) **`blood_hook_extend` and `brig_hook_extend` are each authored TWICE**, as
-  `blood_hook-blood_hook_extend.json` and `…-1.json`, carrying the same `name` (`blood_hook`) and the
-  same `anim_name` and differing by one byte, in every one of the eight chapters. `ByAnimName`
-  resolves both, so one `CALL_ANIMATION` starts two instances and the Bloodhawk and the Brigand play
-  their hook twice. The other nine airframes have no twin.
-  (b) **The Devastator has no hook definition at all.** Ten airframes carry one (`gyro`, `avenger`,
-  `bal`, `blood`, `brig`, `fire`, `fury`, `kest`, `peace`, `war`); airframe 3005 has none anywhere in
-  the extract, which is consistent with its hook being fully deployed before the episode's animation
-  runs, as seen at the controls.
-  *Fix shape:* settle (a) first, since it is a duplicate-instantiation question the runtime can
-  answer: establish whether both twins are meant to be instantiated, or whether the compiled
-  manifest is supposed to supersede one (the mission log's own "reader def(s) superseded by this
-  mission's compiled manifest" line names `bal_hook_*` and `gyro_hook_*` but not the twins). Then
-  (b), which is a different question: what the original does for an airframe that authors no hook
-  definition. Count the AIRFRAME BRANCH, never `player_extend_hook`, in any suite written for this.
+  The Devastator's own hook animation is `pirate_hook_extend`, which the data binds to the
+  `player_pfighter` model: `extracted/zrdr/pirate_hook.zrd.json` authors
+  `NAME1 [pirate_hook_extend, [player_pfighter, pirate_hook]]`. Every one of the eleven airframes has
+  exactly one such definition bound to its own model, so no airframe is missing one.
+  Two separate faults wear this one symptom, and they explain its two halves.
+  (a) **The repeat is airframe-independent, and the duplicated definition is the FORK, not the
+  branch.** `extracted/zrdr/player_hook.zrd.json`, which authors `player_extend_hook` and its eleven
+  `If NodeActive` branches, uses a plain `NAME` and carries no `NAME1` anywhere. The mission log's own
+  census line reads "reader def(s) superseded by this mission's compiled manifest (mission-scope +
+  NAME1), not instantiated", and every entry it names is tagged `(NAME1)`. A plain-`NAME` reader
+  definition is therefore not superseded, so it coexists with the compiled
+  `C*/cam_anim/player-player_extend_hook.json` and the fork runs twice, taking its airframe branch
+  with it each time. That matches the symptom being present on every docking since CM01 and on more
+  than one airframe. ⚠ The supersede rule here is read off that log line's own wording; confirm it
+  against the parse before building on it.
+  (b) **Seven of the eleven airframes author no `_startup` definition**, the Devastator among them.
+  Only `autogyro_hook`, `balmoral_hook`, `brigand_hook` and `warhawk_hook` carry one; `avenger`,
+  `blood`, `firebrand`, `fury`, `kestrel`, `peacemaker` and `pirate` do not. If the startup is what
+  parks the hook retracted at build, that is why the Devastator's hooks are already fully deployed
+  when the episode opens, which is what was seen at the controls.
+  Separately, `blood_hook_extend` and `brig_hook_extend` are each authored twice in
+  `C*/cam_anim/` (`…-1.json`, same `name`, same `anim_name`, one byte apart) in all eight chapters.
+  That is a third duplication, and it is not what the Devastator hits.
+  *Fix shape:* settle (a) first, since it is one question about which reader definitions the
+  compiled manifest supersedes and it reaches every airframe. Then (b), which is a different
+  question: what parks a hook retracted at build for the seven airframes authoring no startup.
+  Count the AIRFRAME BRANCH, never `player_extend_hook`, in any suite written for this.
   *⚠ Traps:* do not silence it by latching "already played" on the runtime. A repeat a definition
   authors is data, and a latch would hide the same defect wherever else it happens. The
   player-visible hook engagement is correct today and must stay correct. Do not open this against
