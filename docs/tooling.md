@@ -241,7 +241,7 @@ selection exactly once. Each suite row carries its registry `index`, which is wh
 reports back into registry order. A `phaseTotals` block and a matching set of per-suite fields (`worldsBuilt`, `buildSeconds`,
 `archiveDecodeSeconds`, `soundPrepSeconds`, `runtimeConstructionSeconds`, `otherBuildSeconds`,
 `disposalSeconds`, `restSeconds`, `overrunSeconds`) split every suite's wall time into world-build
-(further split into the three phase categories `PLAN-fast-verification.md`'s B11 needs), disposing a
+(further split into three phase categories), disposing a
 built world, and what is left over (manual simulation plus assertion work) — `docs/architecture.md`'s
 `src/Testing/TestHarness.cs` entry has the boundary detail. `overrunSeconds` is nonzero only on a
 measurement anomaly (the independent stopwatches summing past the suite's own wall clock); it is
@@ -271,7 +271,7 @@ manifest found every raw-pixel hash, `sim_frame`, size and adapter string bit-id
 count, with the measured wall time falling from ~88 s serial to ~49 s (2), ~41 s (3) and ~29 s (4) —
 4 was chosen as the fastest count that stayed bit-identical on the one machine measured. Pass
 `-GoldenWorkers 1` for the serial reference path; a hash that moves under a higher count on a different
-machine is a disproof of that count there; it does not need to change the default (docs/plans/PLAN-fast-verification.md C21).
+machine is a disproof of that count there; it does not need to change the default.
 
 **The hitch stage is opt-in (`-Hitch`), not part of the retained landing gate.** The milestone that
 shortened this run names what the full gate retains — build, units, all engine suites, goldens —

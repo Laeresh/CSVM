@@ -485,8 +485,8 @@ public class HangarFlowTests : IDisposable
 
     // Confirms forward until the flow is on `target`, so a test names the screen it cares about
     // rather than counting presses. The walk keeps the plane the caller set up: the airframe
-    // screen picks on confirm since E49, so the cursor is put on the plane's own airframe first,
-    // and the defaults ask that pick raises is declined (the pre-E41 behaviour).
+    // screen picks on confirm, so the cursor is put on the plane's own airframe first,
+    // and the defaults ask that pick raises is declined.
     private static void Walk(HangarFlow flow, HangarScreen target)
     {
         for (int guard = 0; flow.Screen != target && guard < HangarFlow.Order.Length + 3; guard++)

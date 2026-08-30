@@ -513,7 +513,7 @@ public sealed class WeatherRig
     // Resolves _activeZone, the zone the fog and skydome both build from — the mission's own
     // zone names first, then, for the default request only, the chapter's horizon geometry
     // (a bare-marker dome yields to a zone that has one). An explicit --sky-zone= is honoured
-    // literally, empty dome and all — see docs/cli.md. Called before the domes, since C5's
+    // literally, empty dome and all — see docs/cli.md. Called before the domes because C5's
     // zone1+zone3 chapter needs the fallback before the zone2 default renders neither.
     private void LoadWeather(string missionZrdrPath, IReadOnlyList<HorizonZone> horizonZones)
     {

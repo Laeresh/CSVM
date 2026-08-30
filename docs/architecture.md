@@ -164,8 +164,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
 - `src/Flight/StuntRaceBoard.cs` — the race's shared ranked results overlay, on its own full-window CanvasLayer above the splitscreen panes.
 - `src/Flight/ScoreStore.cs` — stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only.
-- `src/Flight/CustomPlaneDef.cs` — a custom-built plane as a pure model: the decoded 204-byte record's chosen fields (airframe, engine, armour x4, guns x4 with twin bits, hardpoint counts x2, paint pattern/picks/colours, name), none of its derived fields; engine-free.
-- `src/Flight/CustomPlaneStore.cs` — one JSON file per custom plane under `user://Planes/` (versioned schema, name = identity, same name overwrites); list/load/save/delete over a plain absolute directory so it unit-tests, `UserPlanes()` resolves the `user://` scheme. `Delete(name)` sanitises the name exactly as `Save` does and treats a missing file as a no-op. Version 2 stores paint as the original's index pairs plus three decals; a version-1 file still loads, its "picks" read as the decals they were and each RGB triple mapped to the nearest authored swatch, and upgrades on its next save.
+- `src/Flight/CustomPlaneDef.cs` — a custom-built plane as a pure model: the decoded 204-byte record's chosen fields (airframe, engine, armour x4, guns x4 with twin bits, hardpoint counts x2, paint pattern/picks/colours, name), none of its derived fields; engine-free. `Ammo`/`Ordnance` carry the campaign loadout EXPORT writes, in `OwnedPlane`'s own encoding with `NoAmmoPick`/`NoOrdnancePick` for a slot nobody fitted, and `HasLoadout` says whether any of it was; `SetLoadout` is the only writer and touches nothing else, since export must not rewrite the build. `Clamp` leaves those two alone: their vocabulary is `CampaignLoadout`'s, which is the one decoder of both.
+- `src/Flight/CustomPlaneStore.cs` — one JSON file per custom plane under `user://Planes/` (versioned schema, name = identity, same name overwrites); list/load/save/delete over a plain absolute directory so it unit-tests, `UserPlanes()` resolves the `user://` scheme. `Delete(name)` sanitises the name exactly as `Save` does and treats a missing file as a no-op. Version 2 stores paint as the original's index pairs plus three decals; a version-1 file still loads, its "picks" read as the decals they were and each RGB triple mapped to the nearest authored swatch, and upgrades on its next save. The `loadout` block (the exported ammunition and ordnance) is optional and written only for a plane that carries one, so a hangar-built plane's file is the one earlier builds wrote; ⚠ it deliberately did not raise the version, because a reader without it skips an unknown property and a reader with it defaults the fields, and a bump would only have made older builds refuse a plane they can read.
 - `src/Flight/CustomPlaneRecord.cs` — import-only reader for the original's 204-byte saved-plane files (`docs/formats/paint.md` "Saved custom planes"): one record or a whole install `Planes\` directory to `CustomPlaneDef`s; every paint field read as the indices it is (colour, shade, decal), the +0x68 RGBA left out as the engine's own cache and exposed by `StoredColour` for the cross-check, derived fields ignored, an unreadable file reads as null.
 - `src/Flight/CustomPlaneBuild.cs` — the join from a saved `CustomPlaneDef` to what a spawn consumes: a `LoadoutDef` over the airframe's stock fit (calibre + twin onto slot markers, hardpoint counts onto the two wings' pylons), a `PaintScheme` from the record's pattern and colours, and a `PlaneDamage` ledger with the bought armour on the four zones; engine and weight deliberately reach nothing.
 - `src/Flight/HangarEconomy.cs` — the hangar's decoded economy over a `CustomPlaneDef`: the airframe/gun/engine tables as data, per-line costs and weights, the two totals, the capacity/engine purchase verdict, and the display-only star ratings; pure, provenance in `docs/org/hangar.md`.
@@ -251,7 +251,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/Flight/HangarPaintTables.cs` — the paint screen's decoded tables as CSVM data: the swatch table (`data/hangar_swatches.json`, 27 rows of base colour, default variant and shade ramp) and the pattern table plus the 50 decal names (`data/hangar_patterns.json`). `Resolve(colour, shade)` is the original's own resolver; `Available(pattern, airframe)` is the availability mask; `Nearest(rgb)` maps a version-1 store file's free triple onto an authored swatch. Engine-free and pure, so the whole colour model resolves without a session.
 - `src/UI/HangarNamePage.cs` — the PLANENAME screen: one row per character stepped through a filename-safe alphabet plus a length row that adds and removes them, capped at the original's 32-character name, with the detail line assembling the name and marking the focused character.
 - `src/UI/HangarPurchasePage.cs` — the PURCHASE screen: the itemised review, one row per priced thing the scratch plane carries (airframe always, engine when chosen, armed gun slots, armoured zones via 1191-1194, wings with hardpoints via 1176/1177) with its decoded cost and weight, a totals row, and the Purchase Now row that commits, flagged with the problems text (1182 + 1227 / 1171) whenever the verdict is not Ok.
-- `src/UI/CampaignFlow.cs` — the campaign's out-of-mission flow, engine-free: a stack of screens over one selected `CampaignProfileDef`, the `ICampaignPage` mount point the later screens fill (rows, detail, footer, optional `HangarArt`, optional text field), a registry keyed by `CampaignScreen` (`Roster`, `Cabin`, `PreviousMissions`, `Briefing`, `FlightCheck`, `Ammo`, `Scrapbook`, `ScrapbookZoom`), and the navigation API (`GoTo`, `Back`, `SelectProfile`, `Cancel`) those pages steer with. `ZoomTarget` names the mission/spread/item a `ScrapbookZoom` screen opens on, set by `SetScrapbookZoom` and re-read fresh rather than cached.
+- `src/UI/CampaignFlow.cs` — the campaign's out-of-mission flow, engine-free: a stack of screens over one selected `CampaignProfileDef`, the `ICampaignPage` mount point the later screens fill (rows, detail, footer, optional `HangarArt`, optional text field), a registry keyed by `CampaignScreen` (`Roster`, `Cabin`, `PreviousMissions`, `Briefing`, `FlightCheck`, `Ammo`, `PlaneSelection`, `Scrapbook`, `ScrapbookZoom`), and the navigation API (`GoTo`, `Back`, `SelectProfile`, `Cancel`) those pages steer with. `RaiseModal`/`Modal` is the dialog facility every screen shares, and it takes every press until it is answered. `ZoomTarget` names the mission/spread/item a `ScrapbookZoom` screen opens on, set by `SetScrapbookZoom` and re-read fresh rather than cached.
 - `src/UI/CampaignRosterPage.cs` — the player-profile screen: the name field over the roster, CONTINUE creating or continuing a player and opening the cabin, a roster row selecting then continuing, DELETE PLAYER as a confirmed second stage, CANCEL back to the launchscreen, and the original's own name refusals (langui 200/202/212/707).
 - `src/UI/CampaignTextEntry.cs` — a campaign screen's one-line text field: the original's alphanumeric-and-space rule and 32-character cap, typed from the keyboard and stepped from the pad through one alphabet, so the field needs no keyboard and produces nothing the profile store would have to sanitise.
 - `src/UI/CampaignCabinPage.cs` — the cabin hub: NEXT MISSION (opens the briefing for the profile's next mission, or refuses in the campaign's own words once all 24 are complete), PREVIOUS MISSIONS, PLANE CONSTRUCTION (a `CampaignExit.OpenHangar` request the shell fulfils), and RETURN TO MAIN MENU; `Pictures` layers the pilot's own aircraft photo (`PC_P_HANGAR<airframe>.JPG`) under the painted cabin, whose colour-keyed hole is the window, and the board draws it; `Art` is the flat cabin scene alone, for a caller that wants pixels. `MapPinCount` is a pure, tested stand-in for pins nothing places yet.
@@ -330,6 +330,10 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
   precedent. CSVM carries no unlock-flag analogue, so unlike the original the objective gate cannot
   be bypassed.
 - `src/UI/CampaignBriefingPage.cs` — the mission briefing: everything resolved from `CampaignFlow.MissionSeq` alone, through `cm_sequence` to the storage address, `brief_c%d%d` to the dialog state, the state to its map bitmap and narration name, `sounds.zrd`'s `SETS` to the wav file, and the mission's own `objectives.zrd` to the note, so nothing is computed from the story position. REPLAY BRIEFING / RETURN TO CABIN / GO TO FLIGHT CHECK are the screen's only rows: an uncovered objective is written on the parchment through `Notes`, the `BoardNote` carrying the dialog's own `LIST` widget, so the mission's text is read and never a cursor stop (`BL-487`). The map is the page's `HangarArt`. Labels are `messages.json`'s own `MSG_BTN_*` and an unresolved objective key shows as the raw key, so a missing extraction degrades to the three buttons rather than throwing. It plays nothing: `NarrationWav` and `NarrationStarts` name what a shell must play, and `Advance(seconds)` is the clock a shell drives.
+- `src/UI/CampaignCombo.cs` — a campaign screen's drop-down (`PS_D_PILOTPLANE`, `OL_D_AMMO0`): the authored rectangle, the row height and row count the list opens at, the window that scrolls when the cursor leaves it, and a closed field's horizontal step. ⚠ It never moves its own pick: `Confirm` and `Next` return a candidate and `Select` is the only mutation, because the screens that own one refuse some picks.
+- `src/UI/CampaignModal.cs` — the dialog a screen raises over the composed board, the original's `messagebox.script`: a message, one button and the callback its answer runs. Held by `CampaignFlow`, not by a page, since two screens reach the same box. ⚠ It is not `CampaignFlow.Message`, the one-line refusal band a navigation clears; answering a refusal in both would say it twice.
+- `src/UI/CampaignFlightCheckPage.cs` — the FLIGHT CHECK screen (`FLIGHTCHECK.SCRIPT`): the mission title, a PILOT block and, where `cm_sequence` sets the wingman flag, a WINGMAN block, each with its silhouette, its GUNS and ROCKETS tables and its CHANGE AMMO and CHANGE PLANE rows, then RETURN TO BRIEFING and FLY MISSION. The objectives note is a caption at `fc_t_objectives`' own geometry, read once per mission rather than once per repaint. CHANGE AMMO names the slot and opens `CampaignScreen.Ammo`; CHANGE PLANE names the slot and opens `CampaignScreen.PlaneSelection`, the picker being the one place a plane changes and therefore the one place the duplicate rule is enforced. Its two gates are the script's own: barred on mission ordinals 13 and 17, and while the profile owns fewer than three planes; a guest's row is offered unconditionally, both gates being rules about the seated profile's own aircraft. The screen has no horizontal stepper at all: a guest's CHANGE PLANE takes the same door the seated player's does, so the duplicate rule is enforced in one place. Weapons resolve build-or-stock through `CampaignFlightField.IsStock`, never by looking a stock record up in `CustomPlaneStore` by name.
+- `src/UI/CampaignPlaneSelectionPage.cs` — the PLANE SELECTION screen (`PLANESELECTION.SCRIPT`): a combo, a silhouette, four ratings and a gun and hardpoint list per active crew slot, EXPORT per slot, ACCEPT writing both picks and CANCEL restoring the pair the screen opened with. A pick the other active crew slot already flies is refused with langui 710 and the field left where it was, which is message 10015's own arm plus its `sender.QG` revert; the comparison is by plane name, `CampaignFlightField.KeyOf`'s rule for a profile aircraft, since two of them may share an airframe legally. The refusal answers a commit, a picked list row or a closed field's step, never movement inside an open list. EXPORT writes the slot's plane into `CustomPlaneStore` under its own name with the ammunition and ordnance the campaign fitted, and answers with langui 702 through `UiStrings.Format`; a record already on file keeps its paint, armour and engine, and a starter or granted aircraft with none gets one built from its award template or its airframe's stock weapons (`HangarFlow.LoadStockWeapons`), since a record with no guns would export an aircraft that flies unarmed. ⚠ A stock record is refused outright (`CampaignFlightField.IsStock`): it is named for its airframe, so the write would land on any hangar plane sharing that name. TOP SPEED and OFFENSE have no decoded formula and draw a stand-in (`BL-653`). A guest's check (`CampaignFlow.Field.Current` above zero) opens the same page over that guest's own `Choices` instead: one PILOT slot whatever the mission flies, no EXPORT row at all (a guest's record carries the owner's plane name, so the write would rewrite the owner's build), a refusal reading "Each player must fly a different plane." because langui 710 names a Pilot and a Wingman a guest's check has no concept of, and an ACCEPT that moves the guest's own pick through `CampaignFlightField.Choose` and writes nothing. ⚠ The guest refusal asks `CampaignFlightField.Taken` rather than carrying a second copy of the rule: only the field knows what the other humans took, and it is what compares a stock entry by airframe and a profile copy by name.
 - `src/UI/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`/`BriefingState`/`BriefingStep`, walking the root list where the 24 states actually live) and `BriefingReveal`, the interpreter that runs a state's 12-opcode beat sheet against a caller-advanced clock, blocking on `Wait`'s authored seconds and `WaitForMarker`'s cue times and keeping each element's opacity, rotation and position as its tweens land. Elements come out in placement order, which is draw order. With no cue points every marker releases at once, so the map finishes under the narration rather than a timing being invented. Decode: `docs/formats/briefing.md`.
 - `src/UI/BriefingObjectives.cs` — the briefing's parchment note from a mission's `objectives.zrd`: every `IDENTITY` carrying a `MSG_BRF_*` key, ordered by priority ascending, which is the list an `Objective id index` opcode indexes 0-based. Takes the reader list rather than a path, so it tests without an extraction; resolves text through `Messages`, leaving the raw key visible when the table cannot.
 - `src/UI/ObjectivesHud.cs` — the campaign mission's objectives readout, drawn on the **pause screen** and nowhere else (`BL-466`): the original keeps its objectives on the pause screen's parchment and leaves the flight HUD to the gauges, so the whole layer is hidden until `PauseState.Paused`. Reads `CampaignDirector`'s `ObjectiveGraph.Rows` directly (not a re-parse), text through `Messages`, and shows every row rather than gating on the row's own `Awake` flag (an objective authored with no `BEGIN_DORMANT` starts awake without ever running a wake action, so its row's `Awake` flag never turns on even though it is live from the mission's first tick, C1/M02's own primary OBJECTIVE3, and filtering on it would hide exactly the objective a player needs to see first). This also matches the original's own decoded display mechanism (`docs/formats/objectives.md`, `FUN_004acc20`/`FUN_004ad240`): every `IDENTITY` row is built once and shown unconditionally, only the completion mark toggles. A row the mission gives **no message key** resolves to no text and is dropped from the drawing (`DrawnLines`), since drawn it would be a mark against blank space, and `BuildLines` still carries one line per graph row so a suite counts against the graph. The mark takes a column of its own, so a completed line's text starts where every other line's does. Self-mounting (its own `CanvasLayer`, on `HudLayers.Board` with the pause board and after it in tree order), so `GameSession` only hands each built instance the shared `CampaignDirector`, `Messages` and `PauseState` and adds it — unlike `PerfHud`'s one-for-the-window instance, a splitscreen campaign session builds ONE INSTANCE PER RIG (B15), each under that rig's own `HudParent`, so every pane draws and polls the shared `ObjectiveGraph` on its own. The reference frame (`Complete Mission M02.mkv` at t=12 s) fixes the top-right corner and nothing else, so the glyphs and metrics are TUNE.
@@ -430,7 +434,7 @@ clusters they delegate to.
 - `src/Session/CampaignProfileStore.cs` — JSON persistence for a named campaign profile under `user://Profiles/<name>/profile.json`, following `ScoreStore`/`CustomPlaneStore`'s precedent: funds, owned planes (name-referenced into the global `user://Planes/` store, never a copy of it) with their per-gun ammo and per-pylon ordnance picks, mission results (the original's two halves, latest attempt and best-of merge, each carrying `CampaignProgression.AirframeCount`-wide plain and ace kill tallies alongside the six scalar fields, plus the per-mission failed-attempt counter the skip offer rides on, which belongs to neither half because it spans the attempts that clear one of them), the completed-mission count, the granted aircraft awards and the cross-mission destruction log. A file saved before the kill tallies existed reads them as all zero rather than failing to load, which is the correct reading for an attempt with no per-airframe record to reconstruct — no `Version` bump was needed. `SessionSpec.CampaignProfile`/`CampaignMissionSeq` (`--campaign=<profile>:<seq>`) carry the launch-time selection as plain values; building the mission from them is the campaign director's job, not this store's.
 - `src/Session/CampaignProgression.cs` — the rules that write a profile: the best-of merge of one mission attempt (each field's rule is the original's, including a per-index maximum merge of the two per-airframe kill tallies A2 decoded), the monotonic position only a completed primary objective raises, the replay rule Previous Missions flies under, the four-attempt skip offer (`SkipOfferAttempts`: a failure counts against the mission only while its `Best` mask's bit 0 is clear, and every fourth raises `MissionRecorded.SkipOffered`; `AcceptSkip` answers Yes by re-recording the same attempt with bit 0 set, which is the original's synthetic win, and commits the failed attempt's world capture the way the win flag's save gate does. ⚠ `SkipOfferPrompt` is a marked placeholder, not original wording: langui 191 is absent from the extraction), and the five aircraft awards granted once per profile, each with the build its special-plane template authors (`AwardBuild`, `docs/org/hangar.md`) so a reward aircraft flies its own guns, armour and engine tier rather than its stock airframe. The cash half of the reward table stays with the hangar economy; this class banks the money an attempt reports. `AirframeCount` (11) is the single source of truth for the kill tallies' width, shared by `MissionAttempt`, `MissionRun` and `CampaignDirector`'s own credit counters.
 - `src/Session/CampaignPersistLog.cs` — the cross-mission state log (`BL-243`): captures what `PERSIST_LOG` defs a mission left destroyed out of `AnimRuntime.Destructibles`, keyed by chapter, by the capturing mission's `cm_sequence` position and by gamez node index, and re-applies it to a later mission of that chapter through `AnimRuntime.CarryState`, silently: the pool reads destroyed at HP 0 (or the carried HP at its damage stage) and the nodes take the pose the death ends in, with no effect, sound or choreography, so a later hit on a carried kill is a no-op. `Through`/`ApplyTo` take the position of the most recent EARLIER mission of the chapter (`CampaignSequence.PreviousInSameChapter`, which `CampaignDirector` resolves once at construction) and carry only what positions at or before it captured. ⚠ Never fold a chapter without that cut, and never route the replay through `DamageAt`: the first opens a mission on its own previous sortie's wreckage (CM07 is chapter 1's first mission, so its fort came up with the AA guns already dead and silent), the second runs the previous mission's death choreography at mission open. A state stored without a position is an older profile's and belongs to whatever earlier mission wrote it. Persistence is read from the READER def bound to a node, never from the compiled twin, which drops the flag. Regression: the `carried-state-silent`, `campaign-persistence` and `c1-aa-guns` suites.
-- `src/Session/CampaignLoadout.cs` — the bridge between a profile's stored picks and a flying aircraft's fit: one `OwnedPlane`'s ammunition indices and ordnance table indices as the `LoadoutChoice` a launch hands the session, which `Loadout.Bind` then lays over the aircraft's base fit. Engine-free, and both encodings are the campaign screens' own rather than the original's per-pylon ordnance id, which is a rocket table index decoded in `docs/formats/saved-games.md` and deliberately not adopted here, so an unset pylon is left to the base rather than written back. ⚠ `PylonRow` is the one decoder of the stored one-based ordnance value, and every screen that reads the field calls it rather than subtracting one itself; a second reading of the field puts a different rocket on the flight check than the ammo screen just committed.
+- `src/Session/CampaignLoadout.cs` — the bridge between a profile's stored picks and a flying aircraft's fit: one `OwnedPlane`'s ammunition indices and ordnance table indices as the `LoadoutChoice` a launch hands the session, which `Loadout.Bind` then lays over the aircraft's base fit. Engine-free, and both encodings are the campaign screens' own rather than the original's per-pylon ordnance id, which is a rocket table index decoded in `docs/formats/saved-games.md` and deliberately not adopted here, so an unset pylon is left to the base rather than written back. The same reading serves an exported `CustomPlaneDef`'s own stored picks, which is how a campaign plane flown from the Instant Action picker carries what the campaign fitted it with; one decoder, because the two records hold the field in one encoding. ⚠ `PylonRow` is the one decoder of the stored one-based ordnance value, and every screen that reads the field calls it rather than subtracting one itself; a second reading of the field puts a different rocket on the flight check than the ammo screen just committed.
 - `src/Session/ObjectiveScript.cs` — one mission's parsed `objectives.zrd`: the file-level keys and the contiguous `OBJECTIVEn` blocks in the typed shape the graph runs, found by exact name so every shipped misspelling lands in no field and stays dead. Decode: `docs/formats/objectives.md`.
 - `src/Session/ObjectiveGraph.cs` — the objectives runtime, engine-free: the four-state machine per objective, the rotating one-completion-per-tick scan, the chaining executor with its already-awake truncation, the nap that clears a completed flag, the condition families' OR, the mission countdown, the win/loss flags and the display rows D33 reads. Reaches the world only through `IObjectiveWorld`.
 - `src/Session/CampaignHumanField.cs` — the human field's rules, engine-free: what a condition that named one aeroplane asks once two to four humans fly the mission. The `TRAVELERS` proximity read (the nearest human decides) and the `DEDG` count of humans a capture stamped with a group. The scripted player is not here; it is one aircraft and `CampaignDirector` answers it.
@@ -588,10 +592,10 @@ between them at spawn/engine-stop (`FlightController`), so both must exist. `sta
 autogyro) is unaffected and stays skipped in flight — that def only names propeller nodes.
 `Build` also reads `CockpitCameraOffset`, the plane-local `cockpit_camera` marker translate
 (`MarkerRig.FindNamedMarker`, fallback the origin), for `CameraController`'s first-person
-placement (PLAN-cockpit-view, A2); the marker read walks past the alternate-state subtrees to the
+placement; the marker read walks past the alternate-state subtrees to the
 authored node in the top-level `markers` group.
 
-`cockpitInterior: true` (PLAN-cockpit-view, B11) takes `cockpit1` back out of the skip list for
+`cockpitInterior: true` takes `cockpit1` back out of the skip list for
 that build alone and mounts it hidden as `CockpitInterior`: local transform = the
 `cockpit_camera` offset, a uniform `InteriorScale`, and the fixed
 `CameraController.HeadPitchOffsetRad` tilt, then `ParkInteriorStates` walks it. Only a
@@ -959,7 +963,7 @@ uniform is session-global (a lit light is lit for every pane), but `Commit`'s 90
 its `MaxActive`-slot significance rank both answer to the NEAREST of every viewer position handed
 in, not one camera — a light beside player 4 stays lit even with player 1 far away (`BL-366`;
 `AnimRuntime.LightViewerPositions`, fed from `GameSession`'s `ViewerSet`). One position (single
-player) reduces to the pre-B13 rule exactly.
+player) uses the single-viewer distance rule exactly.
 
 ## src/Pads.cs
 Single source of truth for gamepads — every reader goes through it, never `Input.GetConnectedJoypads()`.
@@ -1565,7 +1569,7 @@ immediately BEFORE performing `_fire.Step`'s outcome — the original restamps a
 on every round that goes out (B5's job), so the forget pass must see the pre-shot state. Gated on
 `FlightController.IsHumanPiloted` (default true) — the original ticks this only for the local
 player, and an AI plane's dead-eye path has no slots at all. Every CSVM plane is human-piloted
-today (Decision 7 in `docs/plans/PLAN-sticky-bullets.md`), so the gate is a no-op until M4 lands AI
+today, so the gate is a no-op until AI aircraft are active
 aircraft; `AssistedGunDirection` falls back to the unassisted muzzle axis for a non-human pilot,
 the same fallback a barrel with no slot already takes.
 
@@ -1876,8 +1880,8 @@ static viewer. Beside the held views it carries the pilot's SELECTED view mode (
 `--view=cockpit`/`=nose` and changed at the controls by F8 (Cockpit → Nose → Chase) or F6
 (directly to Chase). The decisions themselves are `PilotView`'s, not this class's, so they are testable
 without an engine; this class holds the state and the camera. ⚠ The modes are deliberately NOT rows
-in `Views`: `BL-150` rebuilds that table later and must be able to replace it without touching them
-(PLAN-cockpit-view, Decision 2). ⚠ Outside first person a held numpad key overrides the mode for as
+in `Views`: `BL-150` rebuilds that table later and must be able to replace it without touching them.
+⚠ Outside first person a held numpad key overrides the mode for as
 long as it is down and leaves the selection alone, the same precedence it has over `--view=`'s
 pinned digit; INSIDE Cockpit or Nose it holds no view at all, because the numpad is the head-look
 snap cluster there, which is what the original binds it to (`OriginalScreenshots/Keybinds Views
@@ -1910,7 +1914,7 @@ authored) plus a first-order acceleration transient relaxing at the MEASURED 0.6
 
 ## src/Flight/HeadLook.cs
 The pilot's head in the two first-person views, decoded from the original's shared look controller
-(`docs/PLAN-cockpit-view.md`, "What the data actually ships"). It holds two pairs of angles: the
+(the original's shared look controller). It holds two pairs of angles: the
 TARGETS the input sets, and the SHOWN angles that chase them exponentially,
 `shown = target + (shown − target)·e^(−rate·dt)`, at 3.0/s for elevation and 5.0/s for azimuth.
 Elevation is 0 at level and +π/2 straight up, clamped to `ElevationFloor`..π/2; azimuth is 0 dead
@@ -1924,7 +1928,7 @@ input direction, which is normalised first because the rate IS the law — the o
 hat switch, so a light stick deflection pans exactly as fast as a hard one; the **center key**
 zeroes both targets at once and beats a held snap. ⚠ `ElevationFloor` is a constructor parameter,
 not a constant: the original's first-person caller passes 0 and its chase caller −π/2, and the
-chase look-around (a filed E41 item) is the same controller. `IdleAim` is C22's seam — consulted
+chase look-around is the same controller. `IdleAim` is the no-input hook — consulted
 only on a frame with no look input at all, its answer becomes the targets directly, deliberately
 past the floor, because autohead's own floor is below level. `AutoheadTarget` (static, engine-free)
 is that seam's law: local-frame sideways/vertical velocity only (forward speed dropped — a port
@@ -2393,7 +2397,7 @@ siblings (the struck node's group seeded as already spent, since it took the ful
 `SceneBuilder` did not build stand for themselves, so genuinely separate parts keep separate shares.
 At most `MaxBlastTargets` 32 candidates take damage per burst, the original's hit-buffer size; when more
 are inside the radius the pool prints one `blast limit:` line naming the weapon, the burst and how
-many were dropped (Decision 9 of PLAN-ordnance-types: never silent; not "cap", which this repo
+many were dropped; never silently discard a capped blast, and do not call it a "cap", which this repo
 uses for captures). `MaxBlastBodies` 4096 is only the raw sphere
 query ceiling. The fuse tests the whole swept segment per candidate plane (no tunnelling at
 ~20 m/step) and gates through `DETONATION_DOT_PRODUCT` toward the nearest hull point. The
@@ -2565,7 +2569,7 @@ model and coasts under power. With a `Machine` the stun is its `Stunned` mode; w
 keeps its own countdown; `IsStunned` reads either and `ClearStun` is the respawn reset.
 
 ## src/Flight/AiControlLaw.cs
-The original's own AI steering law, decoded as plan D31 in `docs/org/aiControlLaw.md` — read
+The original's own AI steering law, documented in `docs/org/aiControlLaw.md` — read
 that page before changing anything here. An aim point, that point's velocity and one of four
 parameter tables read out of the image in, one `FlightInput` out: a desired speed from the aim
 point's own speed plus range-weighted lead terms, an intercept solve (`AimAssist.TryIntercept`) for
@@ -3029,7 +3033,7 @@ The engine is ONE voice on one slot; its pitch, gain and definition all come fro
 `EngineAudioCurves`, shared with `AiEngineAudio` (see that entry). `UpdateEngineSlot` swaps the
 slot's stream for `damaged_engine_sound` while `EngineAudioCurves.EngineDamaged` holds (worst zone
 below a quarter health, or the engine choked) and for `cockpit_engine_sound`
-while the pilot's SELECTED view (`FlightController.FirstPersonView`, A1's mode-6/7 equivalents) is
+while the pilot's selected first-person view (`FlightController.FirstPersonView`) is
 Cockpit or Nose, both resolved at `Setup`; damaged takes precedence when both apply
 (`EngineAudioCurves.EngineDefFor` carries the rule — no def authors a damaged cockpit variant, and
 the plan's evidence does not decode which of the two wins, so damage feedback keeps priority as a
@@ -3583,7 +3587,7 @@ the one field every other halt-aware consumer (animation, puffers, the projectil
 single-step) already reads. Reading the COMBINED value is what lets a results board halt the world
 without this mirror fighting it back to running on the next frame — `PauseState` decides who may
 flip it, not how a halt behaves once flipped. A rig built with no `PauseState` (the suites) falls
-back to the pre-E43 unconditional toggle, unreachable there since `AllowPause` is false on every
+back to the unconditional toggle, unreachable there since `AllowPause` is false on every
 such rig. `PauseBoard` is the shared pause board.
 
 `PollResultsShortcuts` reads R / pad Y while a results board is up, from `_Process` on wall time
@@ -3797,7 +3801,7 @@ data names a `pdpanel*` stage (`PairsPanels`); the null-sink stand-in fallback i
 program-existence, so the cockpit gauge defs (`*_damage_green/yellow/red`, `*_got_hit`) can never
 play on an airframe.
 
-**The cockpit-interior twins pcdp4/pcdp6 (PLAN-cockpit-view, B12).** `PlaneBuilder.CockpitDamagePanels`
+**The cockpit-interior twins pcdp4/pcdp6.** `PlaneBuilder.CockpitDamagePanels`
 joins `DamagePanels` in the same `_panels` table (an optional constructor param, empty outside a
 cockpit-interior build), so `ApplyPartStage`/`Retract` flip `pcdp4`/`pcdp6` alongside `pdp4`/`pdp6`
 off the identical `pdpanel4`/`pdpanel6` entries — no separate cockpit rule, and `Reset()` clears
@@ -3950,7 +3954,7 @@ fly stock airframes, so nothing here waits on the hangar. Units in
 
 The hangar (`HangarFlow`) has two doors, both through `OpenHangar`, which remembers the screen to
 land back on: a trailing `Build Custom Plane` row past the three Mode rows, and the same row past
-the eleven airframes on the Instant Action plane pick (PLAN-hangar Decision 6). `Screen.Hangar`
+the eleven airframes on the Instant Action plane pick. `Screen.Hangar`
 draws through the same centred body every other screen uses: heading, rows, detail and footer all
 read off `_hangar.Page`. The rows and their detail line live in a content column of their own, so
 that when the page's `Art` is non-null an art column (`HangarArtColumn`) stands to its LEFT, the
@@ -3961,7 +3965,7 @@ hands over a different image, and `LayoutScale` counts the column only where it 
 rows it stands beside. The detail label autowraps in that 560px content column, which is what
 keeps the airframe-defaults ask (langui 206, a two-sentence question) on a 16:9 screen instead of
 stretching the centred body past its edges. Every hangar screen also carries the persistent totals line under its heading
-(`HangarFlow.TotalsLine`, PLAN-hangar Decision 10), error-coloured via `TotalsOverweight` and
+(`HangarFlow.TotalsLine`), error-coloured via `TotalsOverweight` and
 counted by `LayoutScale` the same way. A page needs no change here, art included. The hangar's
 screens sit behind a flow rather than behind the screen enum, so `--menu=` reaches them through
 `OpenHangarAid`: `hangar` the plane list, `airframe` the airframe list, `defaults` its ask, `paint` the
@@ -3976,7 +3980,10 @@ node, and `Launcher.StartSessionFromMenu` reads the name back into a def through
 `CustomPlaneStore` and carries it on `SessionSpec.MenuCustomPlanes`, one entry per pane, for
 `HumanFlightAdapter.Assemble` to build the aircraft from (`CustomPlaneBuild`). A plane whose file
 went away between the listing and the launch warns and flies the stock airframe rather than
-refusing the session. Wingmen stay stock-only (`Planes`), and the scripted paths
+refusing the session. A def carrying an exported loadout (`CustomPlaneDef.HasLoadout`) also supplies
+that pane's fit through `CampaignLoadout`, so an exported campaign plane flies in Instant Action and
+multiplayer with what the campaign fitted it with; a fit the player set on the loadout screen is
+this sortie's explicit pick and stands instead. Wingmen stay stock-only (`Planes`), and the scripted paths
 (`--plane=`, `--det`) never see the roster: they name planes by node in `SessionSpec` directly.
 ⚠ The plane pick's hangar row is offered only to a lone pilot under Instant Action
 (`HangarRowOnPlaneScreen`): it trails the customs, a splitscreen pane never draws it, and
@@ -4106,7 +4113,7 @@ nine screens (plane selection, airframe, engine, armour, guns, hardpoints, paint
 by an undo path: `Back()` off the first screen sets `Exit = Cancelled` and the scratch is simply
 dropped. `Commit()` is the whole gate in one place: a name (langui 203), then
 `HangarEconomy.Price`'s verdict in the original's own words (1182 + 1227 OVERWEIGHT, 1182 + 1171 No
-Engine Selected), then `CustomPlaneStore.Save`; funds are never checked (PLAN-hangar Decision 2).
+Engine Selected), then `CustomPlaneStore.Save`; funds are never checked.
 Editing a saved plane starts from a copy made through the store's own canonical serialisation, so
 abandoning an edit cannot touch what is on disk. `DeleteSaved(name)` is the plane-selection
 screen's Sell Plane (`ps_b_sellp`) in a build with no economy: it removes the file, re-reads
@@ -4116,7 +4123,10 @@ stray nudge from losing a build: a trailing `Delete a saved plane` row (offered 
 anything is saved) opens a second list whose every row reads `Delete <name>`, plus Cancel, so the
 press that removes a plane names the plane it removes. The list closes when it empties. The
 launchscreen's own `RefreshRoster`, which `CloseHangar` runs on every exit, is what keeps a
-picker cursor inside the shortened roster afterwards.
+picker cursor inside the shortened roster afterwards. `LoadStockWeapons` is the airframe-defaults
+arm's gun and hardpoint reading, public and static because the campaign's EXPORT of a plane with no
+build needs the same one; a second copy of it would let the two disagree about what an airframe
+carries at rest.
 
 **Ownership, not storage, is what separates the campaign from Instant Action.** Both doors write
 into the one `user://Planes/` build store; over a campaign flow `ReadRoster` puts
@@ -4135,7 +4145,7 @@ back to the flow, which advances), `OpeningRow` (the row the cursor lands on whe
 0 for most screens and the current pick on the two pick screens), `TotalsPlane(row)` (which plane
 the shell's totals row prices while that row is focused, the scratch plane by default and null to
 hide the row), `Art`, an optional decoded `TgaImage` plus caption the shell
-renders (null by default via `HangarPage`; the C22 seam every art-bearing screen uses), and
+renders (null by default via `HangarPage`), and
 `RowArt(row)`, the same thing again for the focused row alone (only the paint screen's decal rows
 have one). All plain
 text, plain indices and raw pixels, so a page is engine-free and testable and the shell needs no
@@ -4150,7 +4160,7 @@ nothing) stands only in the switch's default arm now that every screen has its o
 `HangarPurchasePage` (each its own file) are all real; the placeholder stands only in the
 switch's default arm. `HangarFlow.TotalsLine` (with its `TotalsOverweight` colour flag) is the
 persistent second stats line the launchscreen draws under every hangar screen's heading
-(PLAN-hangar Decision 10): the build's total price and weight against the airframe's capacity,
+: the build's total price and weight against the airframe's capacity,
 recomputed from `HangarEconomy.Price` on demand and carrying the original's OVERWEIGHT word
 (langui 1227) when over. Which plane it prices is the page's answer, through `TotalsPlane`: the
 plane-selection screen prices the saved plane under the cursor and hands back null on its action
@@ -4196,7 +4206,9 @@ hands over is the hangar's own art column and is unused on the campaign path.
 resolves an aircraft out of the profile by index any more.
 Off-engine coverage: `CSVM.Tests/CampaignFlowTests.cs`,
 `CSVM.Tests/CampaignRosterPageTests.cs`, `CSVM.Tests/CampaignTextEntryTests.cs`,
-`CSVM.Tests/CampaignCabinPageTests.cs`, `CSVM.Tests/CampaignPreviousMissionsPageTests.cs`.
+`CSVM.Tests/CampaignCabinPageTests.cs`, `CSVM.Tests/CampaignPreviousMissionsPageTests.cs`,
+`CSVM.Tests/CampaignComboTests.cs`, `CSVM.Tests/CampaignModalTests.cs`,
+`CSVM.Tests/CampaignPlaneSelectionPageTests.cs`.
 
 ## src/UI/CampaignFlightField.cs
 Owns the humans flying one campaign sortie: how many joined, whose flight check is showing, and
@@ -4204,8 +4216,11 @@ what each guest picked. Player 0 keeps the seated profile's aircraft; later play
 session-scoped stock records or copies of that profile's aircraft, so guest edits cannot persist.
 `Advance`/`Retreat`/`Rewind` walk one reused `FlightCheck` page through the field, while `Locked`
 exposes whether a guest check is active. The no-duplicate filter identifies stock choices by
-airframe and profile choices by plane name. `IsStock` keeps stock records out of
-`CustomPlaneStore` lookups. Off-engine coverage: `CSVM.Tests/CampaignFlightFieldTests.cs`,
+airframe and profile choices by plane name; `Taken(player, pick)` is that filter's public face, the
+question `CampaignPlaneSelectionPage` asks before it commits a guest's pick, and `Choose` is the
+commit, refusing a taken entry itself so no caller can seat two humans in one aeroplane. There is
+no stepper here: the picker replaced the in-place cycle, so the roster is chosen from rather than
+walked over. `IsStock` keeps stock records out of `CustomPlaneStore` lookups. Off-engine coverage: `CSVM.Tests/CampaignFlightFieldTests.cs`,
 `CampaignFlightCheckPageTests.cs`, and `CampaignAmmoPageTests.cs`.
 
 ## src/UI/BoardFit.cs
@@ -4248,6 +4263,9 @@ layout leaves as unresolved authoring macros, a measurement off the reference sc
 in `docs/org/campaign-board.md`. A page names one of these buttons per row through
 `ICampaignPage.Button`; every other row lists down that screen's own text widgets via `TextSlot`,
 unless the page draws that row itself, which is what the table of contents' 80-pixel rows are.
+⚠ The ammo screen has no `TextSlot` entry at all and must not be given one: its picks are
+`ICampaignPage.Combo` drop-down fields at `[@OrdinanceLayout@]`'s own dropdown positions and its
+calibre captions are the page's own `Captions`, so no row of it reaches that table.
 `ObjectivesNote` is the one widget that is not a slot list: the briefing parchment's `LIST` flows its
 entries, so it carries a wrap box and a spacing instead of a pitch and the renderer measures it.
 ⚠ `Labelled` on a slot, not the frame count, decides whether a plaque's words are drawn over it: the
@@ -4410,7 +4428,7 @@ the HE/AP/flak picture is unchanged by the channel's existence; `CurrentFor` rea
 `BlendFor` the blend state alone. `Advance(dt)` is `_Process`'s body, exposed so a suite can step
 both channels on its own clock. **Per pane, not one global**: the original holds one wash state for
 the whole machine (`DAT_0064ef9c` and neighbours), which would blind viewer 1 when viewer 3 is
-flashed; that divergence is deliberate (`docs/PLAN-ordnance-types.md`, Decision 2). `--debug-wash=N`
+flashed; that divergence is deliberate. `--debug-wash=N`
 addresses two overlapping scripted washes to viewer N so the channel can be seen with no weapon
 firing it (`GameSession._Process`). Pinned by the `fbfx-flash` suite (routing: player 2 addressed,
 pane 1 untouched, ramp composited under) and `BlendWashTests` (the rules).
@@ -4583,7 +4601,7 @@ stand-off through `PlaceHeld`;
 shift-click aims without moving, and an orange ball marks the aim point. The scripted twins all fire
 on the first physics frame, most specific first — `--weapon-target=x,y,z`, then
 `--weapon-surface=<registry name>` (nearest collider carrying that surface id — any of the
-fourteen since B12, so `dirt` now means id 13 and NOT "everything untagged", which is `default` —
+fourteen, so `dirt` means id 13 and NOT "everything untagged", which is `default` —
 measured to the nearest
 collision VERTEX, since a chapter's water tiles all sit at the world origin), then
 `--weapon-click=x,y[,aim]` — and every one of them ends in the same `PlaceOn` as a real click, at
@@ -5209,7 +5227,7 @@ float, and three of the five gaps land one step late. It then asserts B12's rout
 the sink: every step reports the burst's own point and the def's authored `10000` m² gate, and a
 real two-pane `ScreenFlash` over two `Camera3D` nodes 120 m apart paints one pane, the other pane, or
 both, purely by where the burst is. The able-to-fail control is the same overlay with no `ViewerSet`
-bound, which paints both — the pre-B12 behaviour; disabling the routing fails three of the checks.
+bound, which paints both — the un-routed behaviour; disabling the routing fails three of the checks.
 Its blend-channel half puts both cameras at ONE point, so the ramp's proximity gate cannot tell the
 panes apart and any difference is the victim routing alone: `PlayBlend(1, …)` stepped through its
 attack paints pane 2 red and leaves pane 1 clear, an HE ramp then reaching both paints pane 1 exactly
@@ -5495,7 +5513,7 @@ shared damage-stage defs, not TUNE — the file's why lines carry the per-root c
 per-player term is what keeps splitscreen/multiplayer from collapsing back onto one copy, since every
 extra aircraft is another gun and another rocket landing somewhere else. `DepthFor` is the deepest
 root = how many slot containers the stage needs; `UnknownRoots` names an authored root that is not in
-`WorldEffectsFactory.EffectStageRootNames(program, gamez)` — the DERIVED stage set, since B3 — as a
+`WorldEffectsFactory.EffectStageRootNames(program, gamez)` — the derived stage set — as a
 typo would otherwise size nothing silently. Asserted twice, because that set is now chapter data: in
 `EffectPoolsTests` against C1's bound program (an `ExtractedDataFact`, skipped without an
 extraction) and as an `effects-census` condition on whatever chapter the run was given.
@@ -6380,9 +6398,9 @@ same lifetime as `LiveryResolver`/`SpawnPicker`) from
 plus a settable `ScreenFlash`
 sink it hands to the effects runtime — the three defs carrying an `FBFX_COLOR_FROM_TO`
 (`he_ground_effect`/`ap_ground_effect`/`flak_effect`) all play there. The sink's last two arguments
-are the burst point and the def's own gate radius squared, B12's pane routing; this class only
+are the burst point and the def's own gate radius squared, for per-pane routing; this class only
 forwards them. `playerPositions` (`BL-365`; null → the single `playerPosition` alone, the
-pre-C21 behaviour a caller with no seam — `AiCrashDefs`' test rig — still gets) is set as
+single-camera behaviour a caller with no seam — `AiCrashDefs`' test rig — still gets) is set as
 `PlayerPositions` on the built world-effects runtime, so its own `If PlayerRange` gates (the same
 three washes) answer to the nearest human rather than one camera; `GameSession` feeds the identical
 snapshot this factory gets and `WorldSession.Options.PlayerPositions` gets, from one
@@ -6557,8 +6575,7 @@ The states one aircraft moves between and the rules that move it: in play, crash
 its wreck still flying, inert, and back to spawned. It owns those flags plus the collision-grace,
 carrier-drop ground-blow and auto-respawn timers, holds the crash-def table and the selection off it
 (`LastCrashDef`), and holds no `Node`, so the whole table runs in a unit test. Every transition
-REPORTS what happened instead of performing it (Decision 7 of
-`docs/plans/PLAN-flightcontroller-deepening.md`): `Crash(surfaceId, killer)` answers one `CrashOutcome`
+REPORTS what happened instead of performing it: `Crash(surfaceId, killer)` answers one `CrashOutcome`
 (did it happen, was it the wreck landing, which crash def, whether the shutdown, the camera cut and
 the `Downed` report are owed, and the killer to name) and `Destroy(destroyDef, killer)` one
 `DestroyOutcome` on the same terms, with `WreckFalling` deciding whether the hull flies itself down.

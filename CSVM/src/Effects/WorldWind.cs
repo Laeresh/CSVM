@@ -125,7 +125,7 @@ public sealed class WorldWind
 public sealed class EffectAmbience
 {
     // Every pane's camera pose this frame, refilled in place from the session's ViewerSet. A list
-    // rather than a single pose since B11: the fade is evaluated per particle against all of them.
+    // rather than a single pose: the fade is evaluated per particle against all of them.
     private readonly List<ViewerSet.ViewerPose> _viewers = new();
 
     private readonly bool _frozen;

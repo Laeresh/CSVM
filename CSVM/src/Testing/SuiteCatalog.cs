@@ -145,6 +145,7 @@ public static class SuiteCatalog
         "plane-shader-reuse",
         "cockpit-interior",
         "cockpit-overlay-pass",
+        "look-stick",
         "collision-visibility",
         "nodelab-visibility",
         "trail-world-anchor",
@@ -756,7 +757,10 @@ public static class SuiteCatalog
         into.Add(new TestHarness.Suite("cockpit-interior",
             "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11)", CockpitInterior));
         into.Add(new TestHarness.Suite("cockpit-overlay-pass",
-            "--cockpit-pass moves the interior into a world of its own, where it and the camera both sit at the origin and no chapter-scale coordinate reaches the panel's transform (PLAN-cockpit-panel C21)", CockpitOverlayPass));
+            "--cockpit-pass moves the interior into a world of its own, where it and the camera both sit at the origin and no chapter-scale coordinate reaches the panel's transform", CockpitOverlayPass));
+        into.Add(new TestHarness.Suite("look-stick",
+            "the right stick's look-around flown in both views with --look= standing in for the stick: the flag parses, clamps and survives a typo, and one deflection through one reader and one envelope swings the chase camera and the cockpit head the same angle to the same side of the aeroplane, each returning to its settled pose when the stick centres",
+            LookStickSuites.LookStick));
         into.Add(new TestHarness.Suite("collision-visibility",
             "nothing a chapter hides is left solid: no enabled collider under an invisible node", CollisionVisibility));
         into.Add(new TestHarness.Suite("nodelab-visibility",

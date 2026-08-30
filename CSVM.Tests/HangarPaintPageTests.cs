@@ -9,7 +9,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The PAINT screen (PLAN-hangar C25, reworked onto the original's own model in E43): the pattern
+/// The PAINT screen: the pattern
 /// row stepping only the patterns this airframe's availability mask allows and loading that
 /// entry's six colour/shade defaults, a colour row and a shade row per slot walking the 27-row
 /// swatch table and its ramps, three decal rows over the 00-49 texture set, and the live preview

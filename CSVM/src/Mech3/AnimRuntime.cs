@@ -84,7 +84,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// one camera. In flight this is the aircraft themselves — the chase camera trails far
     /// enough behind the plane to eat most of a 50 m radius. Null → both fall back to
     /// <see cref="PlayerPosition"/> alone, keeping a runtime built without this seam (a lab, a
-    /// test) on the pre-C21 single-camera behaviour.</summary>
+    /// test) on the single-camera behaviour.</summary>
     public Func<IReadOnlyList<Vector3>>? PlayerPositions;
 
     // ---- observability (the animation debugger's timeline; null = zero cost in the game) ----

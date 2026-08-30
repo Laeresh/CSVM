@@ -684,9 +684,9 @@ The two other airframe-only behaviours are the ones above: enemy aircraft take t
 scale as the boat, and aircraft alone additionally take the +/-5% per-spawn jitter on both pools
 (and on nine other def numbers), which is why two Bloodhawks on the same tier are not identical.
 
-## The A4 decision: what the remake builds on this
+## What the remake builds on this
 
-M4 item A4 (decided 2026-08-13) asked how the remake represents multi-zone damage across its
+The remake represents multi-zone damage across its
 three consumers: aircraft, zeppelins, and the static world destructibles. The decision, justified
 against this decode:
 
@@ -724,7 +724,7 @@ decoded kill check walks the `healthy` node list, counts entries still active, a
 default 1, clamped to the `healthy` list length; the survivor polarity must be asserted in a test,
 because the inverse reading is an immortal zeppelin). Gasbags, engines and cannons are each their
 own node with their own pool and destruction anim, which is exactly the registry's existing
-`(def, anchor)` scalar shape once the sub-part defs anchor at all. So F18 builds: (1) the
+`(def, anchor)` scalar shape once the sub-part defs anchor at all. The implementation: (1) the
 deliberate `NameResolver.Anchors` change that lets zeppelin sub-part defs anchor; (2) pool seeding
 from the mission record (`gasbags` hp 80-400, `cannon_health` hp 200) where authored; (3) a
 per-zeppelin aggregator component, fed by the mission's `zeppelins.json` record, that counts
@@ -775,7 +775,7 @@ The 2026-08-13 pass read `FUN_004b9bc0` as the take-hit entry point. It is not: 
 wraps it, and the wrapper LOOPS. An at-the-controls report against the remake (an enemy Fury
 absorbing nine HE rockets) prompted the re-read; everything below is instruction-level, same
 method as the rest of this page. This section partially corrects "Taking a hit" step 5 and
-"The A4 decision" below.
+"What the remake builds on this" below.
 
 - **`FUN_004b9b30` loops the leftover.** First pass: a caller supplying no part id has the
   struck zone resolved by `FUN_004b3950`, and `FUN_004b9bc0` runs with it. The wrapper then sets

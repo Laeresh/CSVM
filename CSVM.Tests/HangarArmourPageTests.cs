@@ -9,7 +9,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The ARMOR screen (PLAN-hangar C23, on the original's display scale since E44): the four zones
+/// The ARMOR screen, on the original's display scale: the four zones
 /// named through their own langui formats (1191-1194, which carry the number themselves) at the
 /// record's stored units x5, the stepper walking that 0-60-in-fives roster into the scratch def,
 /// and the detail line naming the pick the way the original's dropdown does (1165 "None" on zero,

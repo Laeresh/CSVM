@@ -11,7 +11,7 @@ namespace CSVM.Tests;
 /// (<c>fixtures/planes204/</c>, original filenames kept). The four Fury fixtures were saved in
 /// the original's paint UI wearing its four shipped Fury patterns, so their colour triples are
 /// asserted as the files hold them; where they differ from the vehicle.json scheme table the
-/// difference is a finding recorded in PLAN-hangar B12, not a bug here.
+/// difference is intentional, not a bug here.
 /// </summary>
 public class CustomPlaneRecordTests
 {
@@ -74,7 +74,7 @@ public class CustomPlaneRecordTests
 
     // The colour triples as the four Fury saves actually hold them. Against the vehicle.json
     // scheme table: blckswan and every slot-1 colour match exactly; each scheme's (0,0,0) slot is
-    // saved as (25,25,25), the paint UI's darkest picker shade (the B12 finding).
+    // saved as (25,25,25), the paint UI's darkest picker shade.
     [Theory]
     [InlineData("Fury BlackSwan", 1, 23, 23, 21, 48, 47, 39, 196, 193, 186)]
     [InlineData("Fury Fortune", 4, 223, 0, 41, 25, 25, 25, 255, 255, 255)]

@@ -8,7 +8,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The GUNS screen (PLAN-hangar C24): always four rows titled from the airframe's stat-table
+/// The GUNS screen: always four rows titled from the airframe's stat-table
 /// slot-title strings, each stepping the original's 11-entry dropdown as a cycle (five calibres
 /// single, the same five twinned via format 506, then No Gun, langui 3315), and the detail line
 /// carrying the slot's decoded cost and weight (turret column per the airframe's 0-based turret

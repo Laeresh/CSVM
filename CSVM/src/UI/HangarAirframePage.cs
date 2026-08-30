@@ -8,9 +8,9 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The AIRFRAME screen: all 11 airframes as rows (the availability threshold gates nothing here,
-/// PLAN-hangar Decision 9), named from langui 3000+id, the chosen one ticked. Moving the cursor
+/// so it does not gate this screen), named from langui 3000+id, the chosen one ticked. Moving the cursor
 /// previews an airframe (detail figures, stars and blueprint follow focus) and confirm picks it,
-/// which is E49: the ←→ stepper is inert here.
+/// so the ←→ stepper is inert here.
 ///
 /// <para>Confirming an airframe that is not already the pick raises the defaults ask (string 206,
 /// <see cref="HangarFlow.DefaultsAsk"/>), an inline two-row confirm: OK loads the airframe's

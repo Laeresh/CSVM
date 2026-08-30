@@ -2199,12 +2199,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   identifies "Access Chase View" as the mode-9 FLYBY, not the following chase — a contradiction
   between the menu label and the decoded behaviour nobody has settled. Resolve which behaviour the
   `F7`-labelled binding actually maps to before choosing a CSVM key.
+  ⚠ **This item owns the KEYBOARD/MOUSE half only; the pad is already built and is deliberately
+  not the decoded law.** CSVM splits the look-around by DEVICE, not by view: the right stick aims
+  ABSOLUTELY in both the chase view and the two first-person ones, stick position mapping straight
+  onto one shared envelope (`HeadLook.PadLookYawMaxDeg`/`PadLookPitchMaxDeg`) and releasing back to
+  the settled pose, which is a UX call for this port and not in the original at all. The decoded
+  relative controller above is what the numpad snap cluster, the centre key and the mouse ride, and
+  extending it to the chase camera for THOSE inputs is the work still owed here. Building this must
+  not take the pad off its absolute path, in either view: that is the behaviour the controls were
+  judged on. The pad's own bound is the chase camera's gimbal margin (±60° pitch), which is why the
+  stick cannot reach the straight-up the snap cluster can, and the shared pair must not be widened
+  to close that gap.
   *Fix shape:* reuse `HeadLook` (`src/Flight/HeadLook.cs`, C21) on the chase camera with
-  `PitchFloor = -π/2` instead of building a second controller; the snap cluster becomes
-  `CameraController`'s numpad table per `BL-150`'s law once that item's rebuild lands.
+  `PitchFloor = -π/2` instead of building a second controller, feeding it the snap/centre/mouse
+  paths only; the snap cluster becomes `CameraController`'s numpad table per `BL-150`'s law once
+  that item's rebuild lands.
   *Cross-refs:* `BL-150` (the fixed-view numpad table this supersedes as a mental model), `BL-433`
   (the same F9-F12/zoom cluster's `+`/`−` half), `PLAN-cockpit-view.md` (⚠ table row 2, C21
-  `HeadLook`), `docs/org/cameraViews.md` (the F7/flyby correction).
+  `HeadLook`), `docs/org/cameraViews.md` (the F7/flyby correction), `docs/controls.md` (the
+  device split, and `--look=` as its scripted twin).
 
 - `BL-436` `[Tuning]` `[Owed-playtest]` **The cockpit view's whole feel is unjudged at the controls
   — one sitting owes seven separate decisions `PLAN-cockpit-view.md` made without one.** (a)
@@ -2488,6 +2501,44 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   none of the three authors (that same section), so displaying it would invent a name the original
   never shows. The same page warns that a fourth author is not ruled out, only unfound.
   *Cross-refs:* `BL-626` (the same boats, their guns).
+
+- `BL-654` `[Feature]` **The menus take no mouse input at all, where the original is mouse-first.**
+  *Evidence:* every `Control` the launchscreen builds is `MouseFilterEnum.Ignore`
+  (`CSVM/src/UI/LaunchMenu.cs:422`, `427`, `431`, `445`, `458`, `2514`, `2541`, `2579`), so a click
+  reaches nothing and the whole shell is keyboard/pad only. The original's screens are authored for
+  the pointer: `LAYOUT.CSV` gives every button a rollover colour column and a depressed one, the
+  campaign scripts' listboxes draw a bright red frame around the row under the pointer
+  (`docs/formats/campaign-screens.md`, the profile screen's sub-script `VB`), and its dropdowns open
+  on a click. *Fix shape:* hit-test the composed board, since the board already knows every plaque's
+  and row's authored rectangle (`CampaignBoards.For`, `ComposedBoard`): a pointer over a rectangle
+  focuses that row and lights the rollover frame, a press draws the depressed frame, a release on
+  the same rectangle is the confirm. A wheel over a list scrolls it. *⚠ Traps:* the cursor position
+  is authored 800x600 space, so the hit test has to run through the same fit transform the board is
+  drawn with (`BoardFit`), not against window pixels; and focus must stay one thing, so a pointer
+  move and a pad press cannot each own a different row. *Cross-refs:* the combo-box popups and the
+  modal dialog added for the plane selection screen are the newest widgets that would need it.
+
+- `BL-658` `[Fidelity]` **The ammo screen shows one description pane where the original fills two.**
+  *Evidence:* `[@OrdinanceLayout@]` authors `OL_S_AMMODESC` at 566,96 and `OL_S_ROCKETDESC` at
+  566,332, each under its own heading, and `ORDINANCELAYOUT.SCRIPT` fills both at once, so the
+  screen reads a gun's ammunition and a pylon's ordnance side by side. Our board draws a single
+  `CampaignBoards.DetailSlot` at 566,92 carrying whichever row the cursor is on, so a rocket
+  description appears in the ammunition pane's position and the lower pane is empty.
+  *Fix shape:* the detail slot is keyed by screen, so the composer cannot tell which pane a row
+  belongs to; `ICampaignPage` needs a member naming the pane, after which the ammo page answers
+  with both texts and the two headings can be drawn. *⚠ Traps:* the plane selection screen and the
+  roster share `DetailSlot` and must keep one pane; and the open rocket list draws over the lower
+  pane in the original, so the overlay order is part of the change.
+
+- `BL-659` `[Testing]` **No screenshot aid can open a campaign combo box.**
+  *Evidence:* `LaunchMenu.OpenCampaignAid`'s `:<n>` argument spends itself on `flow.Move(1)`, and
+  `campaign-guestcheck` spends its colon on the player number, so no `--menu=` value can press a
+  row. The reference images that matter most for the new widget are the open ones
+  (`Campaign Flight Check Change Ammo ComboBox.png`, `Campaign Flight Check Change Plane Combo
+  Box.png`), and both were photographed by temporarily patching a `flow.Accept()` into the walk.
+  *Fix shape:* an argument form that spells a short input script rather than a step count, so a
+  shot can move to a row and confirm on it. *Cross-refs:* the plane selection and ammo screens'
+  open lists are unpinned by any golden until this exists.
 
 ## Splitscreen
 
@@ -2952,6 +3003,21 @@ usual.
   earned mission money at the director boundary, sum it once into the attempt, and add the promised
   two-rig positive-value assertion plus a 1P invariant. *⚠ Traps:* do not aggregate gunnery or plane
   identity; those fields feed a seated pilot's best-of record.
+
+- `BL-653` `[Research]` **The plane selection screen's TOP SPEED and OFFENSE ratings have no decoded
+  formula, and ship as a stand-in.** *Evidence:* `PS_T_TOPSPEEDP`/`PS_T_OFFENSEP` and their wingman
+  twins are four text widgets fed one of langui 501-505 (`Poor`, `Fair`, `Average`, `Good`,
+  `Excellent`). Two of the four are decoded and running: `HangarEconomy.Bill` computes
+  `AgilityStars` from `(agility - 1) / 4` and `ArmourStars` from
+  `(armour + units*5 - 1) / 0x49` (`CSVM/src/Flight/HangarEconomy.cs:173-176`). No such reading
+  exists for speed or offense, so the screen derives them from engine power and from gun calibre
+  plus hardpoint count instead, which matches the reference screenshots on the airframes visible
+  there and is otherwise unevidenced. *What to settle:* which engine field the original rates speed
+  from and what it counts as offense, then whether the ratings are per airframe or per built plane.
+  *⚠ Traps:* do not settle it by eye against `OriginalScreenshots/Campaign Flight Check Change
+  Plane.png` alone. Two airframes reading `Average` is consistent with many formulas, and a
+  stand-in that happens to match the four sampled aircraft is exactly what is already there.
+  *Cross-refs:* the plane selection screen that draws them.
 
 ## Tooling, platform & docs
 

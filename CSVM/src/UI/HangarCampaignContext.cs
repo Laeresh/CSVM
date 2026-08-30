@@ -9,8 +9,8 @@ namespace CSVM.UI;
 /// <summary>
 /// The optional campaign wallet a hangar flow prices against. Absent (null) for every existing
 /// door — the IA Build button and the top-level launchscreen entry — keeping those paths
-/// wallet-free (PLAN-hangar Decision 2). Present only when the cabin's Plane Construction opens
-/// the flow over a selected <see cref="CampaignProfileDef"/> (B13; PLAN-hangar Decision 9's seam).
+/// wallet-free. Present only when the cabin's Plane Construction opens
+/// the flow over a selected <see cref="CampaignProfileDef"/>.
 ///
 /// <para>Reads and writes the profile through <see cref="CampaignProfileStore"/>'s public API.
 /// A mission-reward aircraft (docs/org/hangar.md, the reward table at <c>0x0061ae80</c>) is
@@ -48,8 +48,7 @@ public sealed class HangarCampaignContext
     /// availability threshold (<c>0x00619bb0+0x14</c>, <see cref="HangarEconomy.Airframes"/>)
     /// against the save's progress counter (<c>UIData +0x338</c> / <c>DAT_0064b678</c>, this
     /// profile's <see cref="CampaignProfileDef.MissionsCompleted"/>), exactly the comparison
-    /// <c>FUN_00410120</c> makes (<c>DAT_0064b678 + 1</c> against the threshold). PLAN-hangar
-    /// Decision 9 shipped this field wired to nothing outside Instant Action; this is the wire.</summary>
+    /// <c>FUN_00410120</c> makes (<c>DAT_0064b678 + 1</c> against the threshold).</summary>
     public bool IsAirframeAvailable(int airframe) =>
         Profile.MissionsCompleted + 1 >= HangarEconomy.Airframes[airframe].Availability;
 

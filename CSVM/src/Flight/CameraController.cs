@@ -47,12 +47,6 @@ public sealed class CameraController
     // so only the radius below comes from the data.
     private const float BaseBack = 16f, BaseUp = 4.5f;
 
-    // E42's pad look-around range: how far the right stick swings the view left/right and up/down
-    // from the ordinary chase direction. Not decoded — the original binds no such control — so
-    // this is a UX judgement call for the port, not authored data. Kept well short of vertical
-    // (baseDir sits ~74° off the up axis; ±60° pitch leaves a comfortable margin before
-    // Basis.LookingAt's up hint goes parallel to the view direction).
-    private const float PadLookYawMaxDeg = 150f, PadLookPitchMaxDeg = 60f;
     private const float CamLookAhead = 40f;
     private const float CamSmooth = 8f;         // 1/s — position catch-up
     private const float CamRotSmooth = 7f;      // 1/s — orientation (basis) catch-up; a touch of
@@ -80,8 +74,7 @@ public sealed class CameraController
     // The decoded per-mode BASE horizontal FOV, in degrees (org/cameraViews.md, "FOV constants
     // and aspect correction": 1.0471976 rad / 1.3962634 rad, exactly 60°/80°). Only Cockpit and
     // Nose ever read this table; every external view keeps GameSession's own 62° vertical global
-    // untouched (PLAN-cockpit-view, Decision 3 — the engine-wide migration is a filed item, not
-    // this one).
+    // untouched; external-view FOV calibration remains separate from this table.
     private const float NoseHorizontalFovDeg = 60f;
     private const float CockpitHorizontalFovDeg = 80f;
 
@@ -138,7 +131,7 @@ public sealed class CameraController
     // The FOV the owned camera carried at construction — GameSession's own 62° vertical global
     // for every external pose (chase, fixed, back, pad-look, crash). Captured once rather than
     // read back from GameSession, so this class restores exactly what it found and never reaches
-    // into that global's own home (PLAN-cockpit-view, A3, Decision 3).
+    // into that global's own home.
     private readonly float _externalFovDeg;
 
     // The dynamic chase radius: _dist + _distFactor·V + the acceleration transient. Advanced by
@@ -180,7 +173,7 @@ public sealed class CameraController
     /// overrides it for as long as that key is down without changing it (see
     /// <see cref="PilotView.Effective"/>). Seeded from <c>--view=cockpit</c>/<c>=nose</c>.
     /// ⚠ Deliberately NOT a row in <see cref="Views"/>: `BL-150` rebuilds that table later and
-    /// must be able to replace it without touching these modes (PLAN-cockpit-view, Decision 2).</summary>
+    /// must be able to replace it without touching these modes.</summary>
     public PilotViewMode ViewMode { get; set; }
 
     /// <summary>Where the owned camera's eye is in the world this frame, for a pass that draws
@@ -274,16 +267,16 @@ public sealed class CameraController
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
     }
 
-    /// <summary>Analog look-around: the right stick swings the view around the plane at
-    /// the same dynamic radius the chase camera and numpad views share. <paramref name="stickX"/>/
-    /// <paramref name="stickY"/> arrive pre-curved and dead-zoned, so both at 0 reduces to the
-    /// ordinary chase direction. Rigid and instant like <see cref="FixedView"/>; releasing it lets
-    /// <see cref="Chase"/> resume its own catch-up next frame. Not a decode — see
-    /// docs/controls.md.</summary>
+    /// <summary>Analog look-around: the right stick swings the view around the plane at the same
+    /// dynamic radius the chase camera and numpad views share. <paramref name="stickX"/>/<paramref
+    /// name="stickY"/> arrive pre-curved and dead-zoned, so both at 0 reduces to the ordinary chase
+    /// direction. Rigid and instant like <see cref="FixedView"/>; releasing it lets
+    /// <see cref="Chase"/> resume its catch-up next frame. Not a decode; the envelope is
+    /// <see cref="HeadLook"/>'s, shared with the first-person head (docs/controls.md).</summary>
     public void PadLook(in Transform3D renderPose, float stickX, float stickY)
     {
-        float yaw = Mathf.DegToRad(stickX * PadLookYawMaxDeg);
-        float pitch = Mathf.DegToRad(-stickY * PadLookPitchMaxDeg);  // stick up = look up
+        float yaw = Mathf.DegToRad(stickX * HeadLook.PadLookYawMaxDeg);
+        float pitch = Mathf.DegToRad(-stickY * HeadLook.PadLookPitchMaxDeg);  // stick up = look up
         var baseDir = new Vector3(0f, BaseUp, BaseBack).Normalized();
         var dir = new Basis(Vector3.Up, yaw) * (new Basis(Vector3.Right, pitch) * baseDir);
         _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * _radius));

@@ -3,7 +3,7 @@ using System;
 namespace CSVM.Flight;
 
 /// <summary>The purchase gate's answer. Capacity and engine presence only: pricing a build never
-/// checks funds (PLAN-hangar Decision 2), so there is no insufficient-funds verdict.</summary>
+/// checks funds, so there is no insufficient-funds verdict.</summary>
 public enum PurchaseVerdict
 {
     /// <summary>Buildable: within the airframe's weight capacity, engine chosen.</summary>
@@ -69,7 +69,7 @@ public readonly record struct EngineBase(int Cost, int Weight, int Power);
 /// The hangar's decoded economy: prices a <see cref="CustomPlaneDef"/> exactly as the original
 /// does. The tables and formulas are verbatim transcriptions; their provenance, with addresses,
 /// is docs/org/hangar.md "The airframe stat table" and "The economy". Pure by design: no Godot,
-/// no UI, so a campaign layer can reuse it unchanged (PLAN-hangar Decision 2).
+/// no UI, so a campaign layer can reuse it unchanged.
 /// </summary>
 public static class HangarEconomy
 {

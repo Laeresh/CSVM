@@ -197,6 +197,41 @@ public class CustomPlaneStoreTests
         Assert.Equal(0, def.PaintPattern);
     }
 
+    /// <summary>The campaign's exported loadout round-trips, and is the only thing that puts the
+    /// block in the file: a plane the hangar built writes exactly the file it wrote before the
+    /// field existed.</summary>
+    [Fact]
+    public void RoundTrip_ExportedLoadout()
+    {
+        var store = new CustomPlaneStore(TestData.TempDir());
+        var def = FullDef();
+        def.SetLoadout(new[] { 2, 4, 0, 1 }, new[] { 3, 0, 0, 0, 11, 0, 0, 0 });
+        store.Save(def);
+
+        var loaded = store.Load("Blue Streak");
+
+        Assert.NotNull(loaded);
+        Assert.True(loaded!.HasLoadout);
+        Assert.Equal(new[] { 2, 4, 0, 1 }, loaded.Ammo);
+        Assert.Equal(new[] { 3, 0, 0, 0, 11, 0, 0, 0 }, loaded.Ordnance);
+        Assert.DoesNotContain("loadout", CustomPlaneStore.Serialize(FullDef()), StringComparison.Ordinal);
+    }
+
+    /// <summary>The field is optional: a file written before it existed loads and reads exactly as
+    /// it did, with nothing picked on any gun or pylon.</summary>
+    [Fact]
+    public void Deserialize_WithoutTheLoadoutBlock_PicksNothing()
+    {
+        var def = CustomPlaneStore.Deserialize(CustomPlaneStore.Serialize(FullDef()));
+
+        Assert.NotNull(def);
+        Assert.False(def!.HasLoadout);
+        Assert.Equal(
+            new[] { CustomPlaneDef.NoAmmoPick, CustomPlaneDef.NoAmmoPick, CustomPlaneDef.NoAmmoPick, CustomPlaneDef.NoAmmoPick },
+            def.Ammo);
+        Assert.All(def.Ordnance, cell => Assert.Equal(CustomPlaneDef.NoOrdnancePick, cell));
+    }
+
     [Fact]
     public void Constructor_RelativeDirectory_Throws()
     {

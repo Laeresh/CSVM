@@ -116,15 +116,13 @@ public class ComposedBoardTests
         Assert.All(board.Plaques, p => Assert.Equal(0, p.Frame));
     }
 
-    /// <summary>The list rows walk each screen's own text widgets: the ammo screen's four gun rows
-    /// down the ammunition panel, then its eight pylons in the two rocket columns.</summary>
+    /// <summary>The list rows walk each screen's own text widgets: the flight check's two crew
+    /// headings, at the PILOT and WINGMAN slots.</summary>
     [Fact]
-    public void TheAmmoScreenListsDownItsAuthoredWidgets()
+    public void TheFlightCheckListsDownItsAuthoredWidgets()
     {
-        Assert.Equal((142f, 105f, 200f), CampaignBoards.TextSlot(CampaignScreen.Ammo, 0));
-        Assert.Equal((142f, 231f, 200f), CampaignBoards.TextSlot(CampaignScreen.Ammo, 3));
-        Assert.Equal((135f, 320f, 152f), CampaignBoards.TextSlot(CampaignScreen.Ammo, 4));
-        Assert.Equal((410f, 320f, 152f), CampaignBoards.TextSlot(CampaignScreen.Ammo, 8));
+        Assert.Equal((138f, 102f, 400f), CampaignBoards.TextSlot(CampaignScreen.FlightCheck, 0));
+        Assert.Equal((138f, 320f, 400f), CampaignBoards.TextSlot(CampaignScreen.FlightCheck, 1));
     }
 
     /// <summary>⚠ The flow rule BL-490 is about: a wrapped entry pushes the next one down by what

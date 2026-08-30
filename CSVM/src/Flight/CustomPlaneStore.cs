@@ -21,7 +21,10 @@ public sealed class CustomPlaneStore
 {
     /// <summary>The schema version written into every file. Version 2 stores paint as the
     /// original's own index pairs; a file claiming a version this reader does not know is treated
-    /// as malformed rather than half-read.</summary>
+    /// as malformed rather than half-read. ⚠ The optional <c>loadout</c> block did NOT raise this:
+    /// a reader without it skips the block like any unknown property and a reader with it defaults
+    /// the fields when the block is absent, so a version bump would only have made older builds
+    /// refuse to load a plane they can read perfectly well.</summary>
     public const int Version = 2;
 
     /// <summary>The first schema: paint as three RGB triples plus the three dwords then read as
@@ -110,6 +113,17 @@ public sealed class CustomPlaneStore
             WriteInts(w, "shades", def.PaintShades);
             WriteInts(w, "decals", new[] { def.NoseDecal, def.TailDecal, def.WingDecal });
             w.WriteEndObject();
+
+            // Written only for a plane the campaign exported. A hangar-built plane has no loadout
+            // to carry, and omitting the block is what keeps its file the one earlier builds wrote.
+            if (def.HasLoadout)
+            {
+                w.WriteStartObject("loadout");
+                WriteInts(w, "ammo", def.Ammo);
+                WriteInts(w, "ordnance", def.Ordnance);
+                w.WriteEndObject();
+            }
+
             w.WriteEndObject();
         }
 
@@ -192,6 +206,12 @@ public sealed class CustomPlaneStore
                     ReadInts(paint, "shades", def.PaintShades);
                     ReadDecals(def, paint);
                 }
+            }
+
+            if (root.TryGetProperty("loadout", out var loadout) && loadout.ValueKind == JsonValueKind.Object)
+            {
+                ReadInts(loadout, "ammo", def.Ammo);
+                ReadInts(loadout, "ordnance", def.Ordnance);
             }
 
             return def.Clamp();

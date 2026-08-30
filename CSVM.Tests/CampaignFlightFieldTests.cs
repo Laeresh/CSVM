@@ -36,7 +36,7 @@ public class CampaignFlightFieldTests
         Assert.False(flow.Field.Advance());
     }
 
-    // The field is joinable up to and including the seated player's FLY MISSION (C21's rule), and
+    // The field is joinable up to and including the seated player's FLY MISSION, and
     // that press is now what starts the walk rather than what leaves the screen.
     [Fact]
     public void TheFieldLocksOnceTheWalkStartsAndUnlocksWhenItIsAbandoned()
@@ -108,21 +108,19 @@ public class CampaignFlightFieldTests
         Assert.False(flow.Field.IsStock(guest.Choices[guest.StockCount]));
     }
 
-    // "An aircraft taken by P2 is absent from P3's list": with CHANGE PLANE cycling in place, the
-    // list IS what the stepper can reach, so a taken entry is one it steps over.
+    // "An aircraft taken by P2 is absent from P3's list": the picker asks Taken before it commits,
+    // and Choose refuses the same entry, so no caller can seat two humans in one aeroplane. The
+    // stock entries are the leading Choices in airframe order, so index 5 IS stock airframe 5.
     [Fact]
-    public void AnAircraftAnotherPlayerTookCannotBeSteppedOnto()
+    public void AnAircraftAnotherPlayerTookIsRefusedToTheNextGuest()
     {
         var flow = NewFlow(out _);
         flow.SetPlayers(3);
         int taken = flow.Field.Plane(1)!.Airframe;
 
-        for (int i = 0; i < 20; i++)
-        {
-            var pick = flow.Field.Plane(2)!;
-            Assert.False(flow.Field.IsStock(pick) && pick.Airframe == taken);
-            flow.Field.Step(2, 1);
-        }
+        Assert.True(flow.Field.Taken(2, taken));
+        Assert.False(flow.Field.Choose(2, taken));
+        Assert.NotEqual(taken, flow.Field.Plane(2)!.Airframe);
     }
 
     // The seated player's own aircraft is taken too: two humans in one aeroplane is the same
@@ -132,12 +130,36 @@ public class CampaignFlightFieldTests
     {
         var flow = NewFlow(out _);
         flow.SetPlayers(2);
+        var guest = flow.Field.Guests[0];
 
-        for (int i = 0; i < 20; i++)
+        int gypsy = -1;
+        for (int i = 0; i < guest.Choices.Count; i++)
         {
-            Assert.NotEqual("Gypsy Magic", flow.Field.Plane(1)!.Name);
-            flow.Field.Step(1, 1);
+            if (guest.Choices[i].Name == "Gypsy Magic")
+            {
+                gypsy = i;
+            }
         }
+
+        Assert.True(gypsy >= 0);
+        Assert.True(flow.Field.Taken(1, gypsy));
+        Assert.False(flow.Field.Choose(1, gypsy));
+        Assert.NotEqual("Gypsy Magic", flow.Field.Plane(1)!.Name);
+    }
+
+    // A free entry is what Choose is for: the picker's ACCEPT, moving one guest's own pick.
+    [Fact]
+    public void ChoosingAFreeEntryMovesThatGuestsPickAndNobodyElses()
+    {
+        var flow = NewFlow(out var profile);
+        flow.SetPlayers(3);
+        int before = flow.Field.Guests[1].Choice;
+
+        Assert.True(flow.Field.Choose(1, 9));
+
+        Assert.Equal(9, flow.Field.Plane(1)!.Airframe);
+        Assert.Equal(before, flow.Field.Guests[1].Choice);
+        Assert.Equal(0, profile.SelectedPlane);
     }
 
     // ⚠ The rule decision 4 turns on: a guest flying one of the seated profile's aircraft flies a

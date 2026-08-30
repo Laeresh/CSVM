@@ -63,7 +63,7 @@ public class HangarCampaignContextTests : IDisposable
         Assert.Equal(0, profile.Funds);
     }
 
-    /// <summary>The 11-airframe threshold field (PLAN-hangar Decision 9), wired here: a fresh
+    /// <summary>The 11-airframe threshold field, wired here: a fresh
     /// profile's progress (0 missions + 1) is below the Balmoral's availability (3), so it is
     /// refused even with unlimited funds.</summary>
     [Fact]
@@ -173,7 +173,7 @@ public class HangarCampaignContextTests : IDisposable
 
     /// <summary>The two existing doors (IA Build, top-level entry) pass no campaign context, so
     /// funds and threshold are never consulted: an otherwise-legal build commits exactly as
-    /// PLAN-hangar Decision 2 left it, on a plane whose profile funds are $0.</summary>
+    /// It remains available on a plane whose profile funds are $0.</summary>
     [Fact]
     public void InstantActionHangarStaysWalletFree()
     {

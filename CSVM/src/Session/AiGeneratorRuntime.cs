@@ -26,8 +26,8 @@ public readonly record struct LaunchedVehicle(FlightController? Aircraft, Surfac
 /// path as a hull and joins its net. A generator whose host or whole nets list fails to resolve is
 /// dropped at load, never loaded inert (docs/formats/mission-entities.md). Every load drop, door
 /// transition and spawn prints an <c>egen:</c> line. <see cref="GeneratorCycle.DoorOpen"/>
-/// drives the authored door anims; <see cref="NotifyHostDied"/> is F18's seam.
-/// ⚠ <see cref="UseInstantActionLaunches"/>/<see cref="GrantWaveCapacity"/> are F12's seam — see
+/// drives the authored door anims; <see cref="NotifyHostDied"/> updates the live host state.
+/// ⚠ <see cref="UseInstantActionLaunches"/>/<see cref="GrantWaveCapacity"/> choose the launch source — see
 /// this module's entry in docs/architecture.md before touching either.</summary>
 public sealed partial class AiGeneratorRuntime : Node
 {

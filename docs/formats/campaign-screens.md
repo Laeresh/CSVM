@@ -1,9 +1,10 @@
 # Campaign screens
 
-Part of the [format documentation](README.md). This page is the behavioural decode of the five GUI
+Part of the [format documentation](README.md). This page is the behavioural decode of the six GUI
 scripts that drive the out-of-mission campaign flow: the player profile screen
 (`CAMPAIGN.SCRIPT`), the cabin hub (`PASSENGERCABIN.SCRIPT`), the chapter-intro movie player
-(`CAMPAIGNINTRO.SCRIPT`), the flight check screen (`FLIGHTCHECK.SCRIPT`) and the ammo selection
+(`CAMPAIGNINTRO.SCRIPT`), the flight check screen (`FLIGHTCHECK.SCRIPT`), the plane selection screen
+(`PLANESELECTION.SCRIPT`) and the ammo selection
 screen (`ORDINANCELAYOUT.SCRIPT`), and of the three that drive the scrapbook (`SCRAPBOOK.SCRIPT`,
 `SCRAPBOOKZOOM.SCRIPT` and `SCRAPBOOK_TOC.SCRIPT`). It documents which widget triggers what, how
 each list is filled, which engine callback each screen makes, and where every screen transition
@@ -29,6 +30,7 @@ choreography in [objectives.md](objectives.md).
 - [The cabin: `PASSENGERCABIN.SCRIPT`](#the-cabin-passengercabinscript)
 - [Chapter intro: `CAMPAIGNINTRO.SCRIPT`](#chapter-intro-campaignintroscript)
 - [Flight check: `FLIGHTCHECK.SCRIPT`](#flight-check-flightcheckscript)
+- [Plane selection: `PLANESELECTION.SCRIPT`](#plane-selection-planeselectionscript)
 - [Ammo selection: `ORDINANCELAYOUT.SCRIPT`](#ammo-selection-ordinancelayoutscript)
 - [The scrapbook: `SCRAPBOOK.SCRIPT`, `SCRAPBOOKZOOM.SCRIPT`, `SCRAPBOOK_TOC.SCRIPT`](#the-scrapbook-scrapbookscript-scrapbookzoomscript-scrapbook_tocscript)
   - [Export to Desktop](#export-to-desktop)
@@ -59,7 +61,7 @@ A screen is three files acting together.
   `uiControl` (registry and validation).
 
 **Widget classes.** The script's `@ctl@XX` class names map one to one onto `LAYOUT.CSV`'s type
-letters. Established by pairing every widget these five scripts create against its layout row:
+letters. Established by pairing every widget these six scripts create against its layout row:
 
 | Script class | Layout type | Widget |
 |---|---|---|
@@ -127,6 +129,7 @@ script's own `script_run` / `script_end` / `mail`, both of which are quoted per 
 | Flight check | `FC_B_FLYMISSION` | the mission: `gosCallback` 1, `script_end flightcheck.script` | script |
 | Flight check | `FC_B_CHANGEPLANE` / `..._CHANGEPLANEW` | `PlaneSelection`, with `@globals@ZQ` set to -1 (pilot) or -2 (wingman) | layout + script |
 | Flight check | `FC_B_CHANGEAMMO` / `..._CHANGEAMMOW` | `OrdinanceLayout`, same `ZQ` convention | layout + script |
+| Plane selection | `PS_B_ACCEPT` / `PS_B_CANCEL` | `FlightCheck` | layout |
 | Ammo | `OL_B_ACCEPT` / `OL_B_CANCEL` | `FlightCheck` | layout |
 
 ⚠ **The buttons that carry a `ScriptToExe` name do not appear in their script's mailbox at all.**
@@ -320,6 +323,120 @@ paths on `mission - 1`: `FUN_00417090` when the mission has not been completed b
 selected plane record for the pilot and, when the mission has a wingman, the wingman's record, and
 registers them under the names `player` and `wingman_1`, the same two section names a
 `Persist.NNN` file carries.
+
+## Plane selection: `PLANESELECTION.SCRIPT`
+
+Both CHANGE PLANE buttons reach this screen through their `ScriptToExe` column, and the flight check
+sets `@globals@ZQ` to -1 or -2 first. **The plane screen never reads `ZQ`.** It builds the pilot's
+block and, where the mission has a wingman, the wingman's block, both at once, so the slot the
+flight check recorded matters only to the ammo screen. ACCEPT and CANCEL each carry `FlightCheck` in
+their own `ScriptToExe` with the end-script flag set, so either way out returns to the check.
+
+**Widgets**, from `[@PlaneSelection@]` with the section's own `GX=553`, `V3=444`, `INFOX=430` and
+`ITEMSDISPLAYED=13` and the global `STDITEMH=15` and `STDTEXTH=16` substituted. Layout keys match
+case-insensitively: the layout spells one key `PS_B_EXPORTw` and the script asks for
+`ps_b_exportw`.
+
+| Key | Type | Position | Size or art |
+|---|---|---|---|
+| `PS_BACKGROUND` | pane | 0,0 | `PS_BackGround.jpg` |
+| `PS_P_PILOTPLANE` / `PS_P_WINGPLANE` | pane | 444,138 / 444,356 | `FC_PlaneIcons.png`, 12 frames |
+| `PS_T_TITLE` | text | 132,36 | 190x24, `IDS_PS_TITLE` (`PLANE SELECTION`) |
+| `PS_T_MISSIONINFO` | text | 136,70 | 500x16 |
+| `PS_T_PILOT` / `PS_T_WINGMAN` | text | 138,102 / 138,320 | 94x20, `IDS_FC_PILOT` / `IDS_FC_WINGMAN` |
+| `PS_T_PILOTPLANE` / `PS_T_WINGPLANE` | text | 236,106 / 236,323 | 400x16 |
+| `PS_D_PILOTPLANE` / `PS_D_WINGPLANE` | dropdown | 138,132 / 138,350 | 271 wide, 13 rows of 15 |
+| `PS_T_TOPSPEEDP`, `ARMORP`, `AGILITYP`, `OFFENSEP` | text | 430, 228 / 245 / 262 / 279 | 140x16 |
+| `PS_T_TOPSPEEDW`, `ARMORW`, `AGILITYW`, `OFFENSEW` | text | 430, 446 / 463 / 480 / 497 | 140x16 |
+| `PS_A_PLANEWEAPONSP` / `..._PLANEWEAPONSW` | text list | 578,228 / 578,446 | 160 wide, item spacing 1 |
+| `PS_B_EXPORTP` / `PS_B_EXPORTw` | button | 560,168 / 560,385 | `FC_B_PaperButton.png`, `IDS_PS_B_EXPORT` |
+| `PS_B_SELLP` / `PS_B_SELLW` | button | 560,158 / 560,375 | `FC_B_PaperButton.png`, `IDS_PS_B_SELL` |
+| `PS_B_ACCEPT` / `PS_B_CANCEL` | button | 341,553 / 551,553 | `PS_B_AcceptSelections.png` / `PS_B_CancelSelections.png` |
+
+**Both SELL buttons are deactivated unconditionally.** `gui_create` ends with `deactivate(IS)` and
+`deactivate(UOA)`, which are `ps_b_sellp` and `ps_b_sellw`, outside every `if` in the script, so no
+build reaches the sell path and the reference screenshots show only Export in each slot. Each pair
+is authored ten pixels apart at the same x (`560,158` against `560,168`), which is close enough that
+the two were never meant to be drawn together.
+
+**The two blocks.** The pilot's block is suppressed on the same two missions the flight check
+forbids a plane change on: `switch ($$KP$$) case 13: case 17:` clears the local the script gates it
+with, and the else arm deactivates the pilot's dropdown, its SELL and its EXPORT and creates none of
+its panes, texts or list. The wingman's block is gated on `gosCallback` 27, the mission's wingman
+flag, exactly as on the flight check, and its absence deactivates the wingman's dropdown and its two
+buttons.
+
+**The dropdowns fill from `uiData` 2018**, the same id the flight check queries for the owned plane
+count: both scripts call it as `int JQ = -1; callback($$E$$, 2018, JQ)`, which is the row -1 count
+answer of a list fill, and this screen additionally binds it as the dropdown's `TJ`. `@globals@AR`
+is 26 around the two dropdowns, which is the size of the profile's plane array, and 5 around the two
+weapons lists. Each dropdown takes the shared list sub-script in `WM` and its selected index in
+`QG`. What a row says is not in the script, and the open list in
+`Campaign Flight Check Change Plane Combo Box.png` reads the plane's name, a hyphen and the
+airframe's short title (`Gypsy Magic - Devastator`), while `PS_T_PILOTPLANE` above it is `uiData`
+2011, the same name with the full airframe title the flight check draws
+(`Gypsy Magic  Hughes P21-J MKIII Devastator`).
+
+**Each block is filled per slot on `gui_init`**, and refilled by `initialize(this)` after every
+change: `uiData` 2010 for the silhouette's frame index, 2011 for the plane line, 2015 with flags
+`0x20` for four strings, and `TJ` 2019 (pilot) or 2020 (wingman) for the weapons list. The mission
+line is `uiData` 2009 with flags 1, the long mission name at langui `3450 + mission - 1`, which is
+the `Hollywood - The Great Plane Robbery` the reference screenshots carry.
+
+**The four rating strings carry their own captions.** 2015's four out-strings are assigned in widget
+order to `TOPSPEED`, `ARMOR`, `AGILITY` and `OFFENSE`, and no separate label widget exists beside
+them, so `TOP SPEED:  Average` is one string in one 140-wide box. The values are the five-word run
+at langui 501 to 505, `IDS_QUALITY`: `Poor`, `Fair`, `Average`, `Good`, `Excellent`. **Which plane
+fields the original rates as top speed and offense is not decoded** and is `BL-653`; armour and
+agility are decoded elsewhere and running.
+
+**A rollover previews the whole block.** Message `10013` from either dropdown calls `uiData` 2014
+with the slot, the rollover row `RM` and 0, which is the plane-override write the flight check
+clears with the sentinel -3 on entry. The screen then redraws, so pointing at a row moves that
+slot's silhouette, plane line, ratings and weapons list while the closed field still shows the
+committed pick. Message `10001`, the pointer leaving, re-pushes both slots' working picks through
+`uiData` 2013 and redraws, which is what puts the preview back; the cancel guard `EC` suppresses
+that.
+
+**The duplicate rule is enforced on the pick, and the revert is the script's own.** On `10015` the
+script identifies the sender as the pilot's or the wingman's dropdown and permits the change when
+`sender.QG` differs from the other dropdown's `QG`, or when either block is absent. Permitted, it
+stores the pick in its `US[slot]` working copy. Refused, it sets `@globals@OR.DI` to 710
+(`IDS_PS_CANTFLYSAMEPLANE`, `Pilot and Wingman must fly different planes.`), runs
+`messagebox.script`, and only then assigns `sender.QG = US[slot]` and mails `10016` at the dropdown,
+so the offending pick is still displayed under the box and the revert lands as the box closes, which
+is what `Campaign Flight Check Change Plane Unique Warning.png` shows. Either way it finishes with
+`uiData` 2013 for that slot with `sender.QG` and redraws.
+
+**EXPORT is `gosCallback` 22 with the slot**, followed by `uiData` 2105 writing the message text into
+`@globals@OR.TH` and the same message box. The text is langui 702, `IDS_PS_EXPORTPLANE`, `Your
+%1!s! has been exported and is now available for Multiplayer and Instant Action missions.`, and
+`Campaign Flight Check Change Plane Export dialog.png` fills `%1!s!` with `Devastator`, the airframe
+title, not the plane's name. The script does not set `OR.DI` here: 2105 formats the string with its
+argument and hands over the finished text.
+
+**CANCEL restores, ACCEPT saves.** CANCEL sets `EC` and calls `uiData` 2013 for each present slot
+with `XOA[0]` and `XOA[1]`, the picks read from `uiData` 2012 when the screen was created, so the
+screen edits the live selection and puts it back on the way out. ACCEPT is `gosCallback` 12 with 0,
+the profile write, which is the same op the ammo screen's ACCEPT ends on.
+
+**The message box these three paths share.** `MESSAGEBOX.SCRIPT` reads four fields of
+`@globals@OR`: `DI` is a langui id it fetches through `gosLocalize` into the message text, or 0 to
+use the text already in `TH`; `WR` picks the widget prefix, `mp_` when it is set and otherwise `mb_`
+or, when `XR` is set, `ma_`, and the plane screen clears `WR` before every box so it gets `mb_`; the
+low nibble of `UR` picks the button set, `0x1` being the single centred OK that the refusal and the
+export message both ask for and `0x4` a two-button box; and `VR` carries the answer back, 1 from the
+OK button and 3 or 4 from the two-button pair. The icon frame follows the same nibble, frame 1 for
+the `0x1` box, which is the exclamation mark both reference dialogs draw.
+
+**The sell path is decoded but unreachable.** Behind the deactivated buttons, `10003` asks `uiData`
+2018 for the plane count and refuses below three with langui 701 (`IDS_PS_CANTSELLPLANE`); otherwise
+`uiData` 2103 writes the text and its answer picks the button set, a two-button box when it is
+non-zero and a single OK when it is not. Langui 700 (`IDS_PS_QUERYSELL`, `Your %1!s! is worth
+<B>$%2!d!<b>.  Are you sure you want to sell it?`) and 704 (`IDS_PS_SPECIALPLANE`, `This %1!s!,
+%2!s!, cannot be sold.`) are the two strings that fit those two shapes. An answer of 3, the
+two-button box's left button, calls `uiData` 2109, resets both slots' overrides through 2014,
+re-reads both picks through 2012 and redraws. Nothing in the shipped build can enter it.
 
 ## Ammo selection: `ORDINANCELAYOUT.SCRIPT`
 
@@ -593,7 +710,7 @@ where `$$SR$$` is set).
 
 ## Callback reference
 
-Only the ids these five scripts use. `uiData` dispatches ids 2000 to 2038 through a jump table at
+Only the ids these six scripts use. `uiData` dispatches ids 2000 to 2038 through a jump table at
 `0x0040f518` and 2100 to 2413 through a byte table at `0x0040f788` plus a jump table at
 `0x0040f5b4`; 2099 and 2600 are tested separately. A first argument of -1 or -2 selects the pilot
 or wingman slot, and any other value is a plane index.
@@ -605,8 +722,12 @@ or wingman slot, and any other value is a plane index.
 | 2009 | slot, flags, out | mission name, langui `3450 + m - 1` (flags 1) or `3480 + m - 1` (flags 2) |
 | 2010 | slot | the slot's airframe index, 0 to 10 |
 | 2011 | slot, out | the slot's plane name and airframe title |
+| 2012 | slot | the slot's current plane index |
+| 2013 | slot, plane | set the slot's plane |
 | 2014 | slot, plane, fromIA | set the slot's plane override; -3 means "use the profile's selection" |
-| 2018 | out | owned plane count, less one on missions 13 and 17 |
+| 2015 | slot, flags, out x4, 1 | the slot's four rating lines, caption included, at flags `0x20` |
+| 2018 | row, out | plane dropdown row; row -1 answers the owned plane count, less one on missions 13 and 17 |
+| 2019 / 2020 | row, out | pilot / wingman weapons row on the plane screen |
 | 2021 | | grant and select this mission's story aircraft |
 | 2022 | mission, out | the mission's objectives text |
 | 2027 | row, out | ammunition list row, langui `3360 + row`; count 5 |
@@ -621,8 +742,11 @@ or wingman slot, and any other value is a plane index.
 | 2100 | name | set the current profile name; returns non-zero when it changed |
 | 2101 | out | the current profile name |
 | 2102 | row, out | roster row; count is the number of profiles |
+| 2103 | slot, out | fills the sell messagebox; non-zero asks for the two-button box |
 | 2104 | mission | set the current mission; -2 means `completed + 1`; clamped to 24 |
+| 2105 | slot, out | fills the export messagebox, langui 702 over the airframe title |
 | 2106 | out | fills a messagebox string (not decoded further) |
+| 2109 | slot | sell the slot's plane |
 | 2150 | mode, arg, out | read (mode 0) or write (mode 1) the profile's memento file name |
 | 2151 | out | the chapter number when that chapter has not been started, else 0 |
 | 2600 | | non-zero while a next mission exists |
@@ -660,6 +784,7 @@ whether a name resolves outside `assets\graphics\`, which is true only for a `Sn
 | 12 | write the profile out |
 | 16 | clear and re-enumerate the profile roster |
 | 17 | delete the named profile |
+| 22 | export the slot's plane to Instant Action and multiplayer |
 | 27 | does this mission have a wingman |
 | 28 | the mission's objective text lines |
 | 31 | join the loader thread and tear down the mission world |
@@ -682,6 +807,10 @@ auto-refresh, IP address, phone number and connection type. 3107 is the edit-box
 - **A dropdown's row count in `LAYOUT.CSV` is a display window**, and `@globals@AR` is an array
   capacity. Neither is the item count, which always comes from the fill callback's row -1 answer.
   This is the same trap [instant-action.md](instant-action.md) records for `ia_d_planep`.
+- **A rollover preview is a write, not a read.** The plane screen previews the row under the pointer
+  by writing the slot's plane override (`uiData` 2014), and what puts the committed pick back is the
+  pointer leaving. Nothing clears the override on the way out of the screen; the flight check clears
+  both slots with the sentinel -3 when it is created.
 - **Do not derive an ordnance id from a dropdown row.** The rocket list is filtered by campaign
   progress; ammunition is not.
 - **The profile name becomes a directory name.** The original rejects `" * / : < > ? \ |` and
@@ -699,7 +828,7 @@ auto-refresh, IP address, phone number and connection type. 3107 is the edit-box
 ## Evidence and limits
 
 Every claim above comes from one of three places, named at the point of use: the script text, the
-`LAYOUT.CSV` row, or a `crimson.exe` handler. The five reference screenshots
+`LAYOUT.CSV` row, or a `crimson.exe` handler. The reference screenshots
 (`OriginalScreenshots\Campaign *.png`) were checked against every documented transition and
 corroborate but do not establish them.
 
@@ -709,13 +838,17 @@ corroborate but do not establish them.
 | Cabin | the six buttons and their targets, the deactivated SAVE GAME, the plane photo path, the memento source, the pin count, the `idaho` dropdown, the intro trigger | five buttons and no SAVE GAME, the painted cabin, the framed memento, the map | whether anything on the screen animates or loops, and how the pin frames read; both need the cabin capture |
 | Chapter intro | the movie name, the skip gesture, the one-shot guard | not covered by any screenshot | the MPG decode itself, deliberately out of scope |
 | Flight check | both slots, all four lists, the wingman gate, both plane-change rules, the grant table, both exits | the title, plane lines, six of eight gun rows filled and two blank, the objectives note, the calibre label's string block, both buttons | the `10018`/`10000` state art |
+| Plane selection | both blocks and their gates, the dropdown fill, the rollover preview, the duplicate rule and its revert, the export and cancel paths, the deactivated SELL pair | the widget positions, the list rows, the rating words and their captions, both message boxes verbatim, the preview following the pointer | which plane fields feed top speed and offense (`BL-653`), and what `gosCallback` 22 writes |
 | Ammo selection | both callers, the working-copy commit, the greyed empty group, the pylon deactivation, all six string blocks | the greyed fourth group, two of four pylons per wing, both description panes, both plane diagrams | the rocket table's unread second field |
 | Scrapbook | every button's transition, the composition file, the results rows, the kill stamps, the table of contents, the Replay Mission fork | the three reference spreads scrap for scrap, the stamps and total on two of them | the native side of the cabin entry and of `$$SR$$`, both in `crimson.exe`, unreached this session |
 
 Where this decode stops:
 
-- **`uiData` 2012, 2013, 2015, 2019 and 2020** are the plane-selection screen's ids and were not
-  followed; `2000` and `2001` belong to the save and load screens.
+- **The plane screen's `uiData` handlers were not traced in `crimson.exe`.** 2012, 2013, 2015, 2019,
+  2020, 2103, 2105 and 2109 are described above from their use in the script and from what the
+  reference screenshots draw, which fixes each one's arguments and its visible effect but not the
+  fields it reads. `2000` and `2001` belong to the save and load screens and were not followed
+  either.
 - **The three flags that bypass the ordnance availability filter** were located, not identified.
 - **The obfuscated identifiers were not recovered.** Widget keys, callback ids, message ids and
   langui ids carry the meaning here, and the letters were left alone.

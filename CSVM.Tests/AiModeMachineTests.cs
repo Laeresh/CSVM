@@ -8,7 +8,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The D11 mode machine's transition table, engine-free: the nine decoded modes under fixed
+/// The decoded mode machine's transition table, engine-free: the nine modes under fixed
 /// rolls (chances pinned to 0/1) and seeded rngs. Pins activation into pursue, the return-range
 /// exit, the steady-hand and sixth-sense reactions in the engine's own vocabulary, the evasive
 /// maneuver playing to Done and returning, the avoid-crash override on an injected probe, the

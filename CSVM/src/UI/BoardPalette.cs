@@ -71,7 +71,8 @@ public sealed record BoardPalette(
     /// <summary>The palette a screen writes in.</summary>
     public static BoardPalette For(CampaignScreen screen) => screen switch
     {
-        CampaignScreen.FlightCheck or CampaignScreen.Ammo => Paper,
+        CampaignScreen.FlightCheck or CampaignScreen.Ammo
+            or CampaignScreen.PlaneSelection => Paper,
         CampaignScreen.PreviousMissions or CampaignScreen.Scrapbook
             or CampaignScreen.ScrapbookZoom => Album,
         CampaignScreen.Briefing => Parchment,

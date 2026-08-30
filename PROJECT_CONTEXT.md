@@ -193,6 +193,7 @@ The day-to-day 29 of 138 — 138 is both the parser's accepted-flag count and `d
 | `--pos=x,y,z` | place the mode's **subject**: the camera in `--freecam`/`--viewer`/`--anim-lab`, the plane in `--fly`/`--stunt` (bypassing the mission spawn list) |
 | `--direction=x,y,z` | which way it faces there — view direction or nose. `--lookat=x,y,z` is the point form (and the `--viewer` orbit pivot). Quote comma args in PowerShell |
 | `--view=1-9` | hold a numpad flight-camera perspective for the run (2 belly, 4/6 flanks, 8 ahead); `--fly`/`--stunt` only. Distance is the shared dynamic chase radius; the layout is disputed (`BL-150`) — [`docs/cli.md`](docs/cli.md) |
+| `--look=x,y` | hold a right-stick look deflection for the run, both in [−1, 1], +x right and +y up: the scripted twin of pushing the look stick, and the only way a headless run aims it. Aims the chase swing and the first-person head alike, so one run compares the two; a live stick beats it while deflected |
 | `--screenshot=<path>` | render a few frames, save PNG, quit — the automated-verification workhorse |
 | `--frames=N` / `--shots=N` | which sim frame the shot lands on (default 15) — **a sim coordinate, not a wall-clock delay** / capture N consecutive frames |
 | `--debug-anim` | log every live animation's pose and sound emitters once a second; conditions only when a verdict **flips** (a repeat line means a change) |
@@ -241,9 +242,9 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1 through 5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI (aircraft that patrol, engage, evade and die, turrets, zeppelins, pilot voice), and all four Instant Action mission types plus the 2–4-player splitscreen Dogfight deathmatch are playable and scored. M5 added the single-player campaign: per-profile progression across the cabin, briefing and flight-check screens, and missions that run their authored `objectives.zrd` choreography with intro cutscenes, letterbox and campaign wingmen.
 
-**Active plans:** [`docs/PLAN-M5-polish-7.md`](docs/PLAN-M5-polish-7.md), ten items in five waves, waves A to D landed. Runs 5 and 6, the scrapbook and the campaign co-op are archived in [`docs/plans/plans.md`](docs/plans/plans.md).
-Next: wave `E`, `E41` then `E42` then `E43`; `A2` and run 6's `BL-546` and `BL-535`, with CM13's race pace and CM08's `BL-597`, are owed at the controls.
-`PT-84`, `PT-85`, `PT-88` to `PT-95` and `BL-120`/`PT-53` remain owed playtests.
+**Active plans:** [`docs/PLAN-M5-polish-7.md`](docs/PLAN-M5-polish-7.md), ten items in five waves, all five waves landed; `A2`, `E41` and `E42` land partial, each with its backlog entry rewritten to what remains. Runs 5 and 6, the scrapbook, the campaign co-op and the plane selection screen are archived in [`docs/plans/plans.md`](docs/plans/plans.md).
+Next: the plan's five owed checks are flown and four pass; `BL-628` (the docking hook's repeated animation) is the one that came back open. Run 6's `BL-546` and `BL-535`, CM13's race pace and CM08's `BL-597` are still owed at the controls, and the plane selection run left `BL-658` (the ammo screen's second description pane) and `BL-659` (no aid opens a combo box).
+`PT-84`, `PT-85`, `PT-88` to `PT-93`, `PT-96` and `BL-120`/`PT-53` remain owed playtests.
 
 Use the targeted/quick development loop above, then verify landed code with the complete
 **`.\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.

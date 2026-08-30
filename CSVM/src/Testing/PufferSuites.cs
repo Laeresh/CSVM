@@ -1431,7 +1431,7 @@ internal static class PufferSuites
                 var wind = MeasureFireColumn(ctx, fire, breeze);
 
                 ctx.Note($"large_30sec_fire column, 30 s at 1/60, still host — heights above the emitter:");
-                ctx.Note($"  still air: centre apex {still.Centre:0.0} m, drawn top {still.Top:0.0} m (pre-A1 sprite: {still.PreA1Top:0.0} m), peak live {still.Live}, largest sprite {still.Sprite:0.0} m");
+                ctx.Note($"  still air: centre apex {still.Centre:0.0} m, drawn top {still.Top:0.0} m (unscaled sprite: {still.PreA1Top:0.0} m), peak live {still.Live}, largest sprite {still.Sprite:0.0} m");
                 ctx.Note($"  C1 IA1 wind (0,2,0): centre apex {wind.Centre:0.0} m, drawn top {wind.Top:0.0} m, peak live {wind.Live}");
 
                 // What the authored column has to keep doing, as assertions rather than prose:
