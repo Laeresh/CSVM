@@ -949,6 +949,7 @@ public partial class Launcher : Node3D
         MenuMode mode, InstantActionDef? iaDef)
     {
         var planes = new List<string>(players.Count);
+        var pads = new List<int[]>(players.Count);
         // The fits ride alongside the planes rather than inside them: FromMenu writes each
         // menu-settable field explicitly, so a chosen loadout has to be handed over here or it
         // would be dropped exactly like any other field left out of that factory.
@@ -961,6 +962,7 @@ public partial class Launcher : Node3D
         foreach (var p in players)
         {
             planes.Add(p.PlaneNode);
+            pads.Add(p.Pads);
             fits.Add(p.Fit);
             Flight.CustomPlaneDef? custom = null;
             if (p.CustomPlane is { } customName)
@@ -989,20 +991,30 @@ public partial class Launcher : Node3D
             _masterSeed = Rng.SortieSeed(_processSeed, _sortie);
         }
         LogMasterSeed();
-        // Honour the join flow's device binding rather than re-deriving it from the roster: the
-        // pad that joined as P2 in the menu must be the pad that flies P2. Single player keeps the
-        // any-pad policy (null), so every connected pad flies the one plane, as before.
-        _menuPads = null;
-        if (_spec.Players > 1)
-        {
-            _menuPads = new int[_spec.Players][];
-            for (int i = 0; i < _spec.Players; i++)
-            {
-                _menuPads[i] = players[i].Pads;
-            }
-        }
+        BindMenuPads(pads);
         _menu!.HideMenu();
         BeginLaunch();
+    }
+
+    // Honour the join flow's device binding rather than re-deriving it from the connected roster:
+    // the pad that joined as P2 in the menu must be the pad that flies P2. Single player keeps the
+    // any-pad policy (null), so every connected pad flies the one plane, as before.
+    // ⚠ EVERY menu launch path has to come through here. Pads.AssignPads, the fallback a path that
+    // skips it lands on, gives P1 every pad no later seat claimed — so a two-seat launch with one
+    // pad and the keyboard flew both seats off both devices, and P2's plane sat still.
+    private void BindMenuPads(IReadOnlyList<int[]> pads)
+    {
+        _menuPads = null;
+        if (_spec.Players <= 1)
+        {
+            return;
+        }
+
+        _menuPads = new int[_spec.Players][];
+        for (int i = 0; i < _spec.Players; i++)
+        {
+            _menuPads[i] = pads[i];
+        }
     }
 
     // The campaign cabin's FLY MISSION: the same derive-spec-then-build path as the launchscreen's
@@ -1013,14 +1025,14 @@ public partial class Launcher : Node3D
     private void StartCampaignFromMenu(LaunchMenu.CampaignLaunch launch)
     {
         _spec = SessionSpec.FromCampaign(_cli, launch.Profile, launch.Seq, launch.PlaneNodes,
-            launch.Players, launch.Fits, launch.Customs);
+            launch.Pads.Count, launch.Fits, launch.Customs);
         if (!_spec.SeedPinned)
         {
             _sortie++;
             _masterSeed = Rng.SortieSeed(_processSeed, _sortie);
         }
         LogMasterSeed();
-        _menuPads = null;
+        BindMenuPads(launch.Pads);
         _menu!.HideMenu();
         BeginLaunch();
     }
