@@ -64,10 +64,25 @@ public readonly record struct ScrapbookZoomFamily(
 /// </summary>
 public static class ScrapbookComposition
 {
+    // How far the original shifts a capture off its authored position before laying the smudge
+    // over it, and the ten-frame smudge strip itself.
+    private const float CaptureNudgeX = 3f;
+    private const float CaptureNudgeY = 4f;
+
+    // What the pointer does to the scrap it is over, SCRAPBOOK.SCRIPT's own 10002 handler: two
+    // percent onto the scrap's authored scale, and z + 1000 so it stands over its neighbours. 10001
+    // puts both back. A capture's grime frame goes with it, scaled 100 to 102 in the same handler.
+    private const float HoverGrow = 1.02f;
+
+    private static readonly BoardArt GrimeArt = new(BoardArtLibrary.Ui, "SB_P_Grime.Png", 10);
+
     private static readonly Dictionary<string, Dictionary<string, string[]>?> Files =
         new(StringComparer.Ordinal);
 
     private static readonly Dictionary<string, Dictionary<char, ScrapbookZoomFamily>?> ZoomFamilies =
+        new(StringComparer.Ordinal);
+
+    private static readonly Dictionary<string, Dictionary<string, int>?> Symbols =
         new(StringComparer.Ordinal);
 
     /// <summary>The mission slot's spread, in item order (not draw order): the raw rows, with no
@@ -97,32 +112,54 @@ public static class ScrapbookComposition
     }
 
     /// <summary>The spread's scraps as drawable pictures, gated and ordered the way the original
-    /// draws them: the <c>Objective</c> gate applied against <paramref name="bestMask"/> (the
-    /// mission's merged best-to-date completion mask), a capture skipped when
-    /// <paramref name="captureExists"/> says its file is not on disk, and the survivors stacked by
-    /// ascending <c>DrawOrder</c> (background first).</summary>
+    /// draws them: the <c>Objective</c> gate against <paramref name="bestMask"/> (the merged
+    /// best-to-date mask), a capture skipped when <paramref name="capturePath"/> returns null for
+    /// it, the survivors stacked by ascending <c>DrawOrder</c>, and a capture nudged off its
+    /// authored position under a <c>SB_P_Grime</c> frame. <paramref name="focusedItem"/> is the
+    /// item the cursor is on, which draws last and two percent bigger.</summary>
     public static IReadOnlyList<BoardPicture> Pictures(
-        string? dataRoot, int mission, int spread, int bestMask, Func<ScrapbookScrap, bool> captureExists)
+        string? dataRoot, int mission, int spread, int bestMask,
+        Func<ScrapbookScrap, string?> capturePath, int focusedItem = -1)
     {
-        var visible = Filtered(dataRoot, mission, spread, bestMask, captureExists);
+        var visible = Filtered(dataRoot, mission, spread, bestMask, capturePath);
         visible.Sort((a, b) => a.DrawOrder.CompareTo(b.DrawOrder));
 
+        var grime = new ScrapbookGrime(mission, spread);
         var pictures = new List<BoardPicture>(visible.Count);
+        int first = -1;
+        int count = 0;
         foreach (var scrap in visible)
         {
-            pictures.Add(new BoardPicture(
-                new BoardArt(BoardArtLibrary.Ui, $"SCRAPBOOK/{scrap.FileName}"), scrap.X, scrap.Y));
+            int at = pictures.Count;
+            if (!scrap.IsCapture)
+            {
+                pictures.Add(new BoardPicture(
+                    new BoardArt(BoardArtLibrary.Ui, $"SCRAPBOOK/{scrap.FileName}"), scrap.X, scrap.Y));
+            }
+            else
+            {
+                float x = scrap.X + CaptureNudgeX;
+                float y = scrap.Y + CaptureNudgeY;
+                pictures.Add(new BoardPicture(
+                    new BoardArt(BoardArtLibrary.Loose, capturePath(scrap) ?? string.Empty), x, y));
+                pictures.Add(new BoardPicture(GrimeArt, x, y, grime.Next(pictures.Count)));
+            }
+
+            if (scrap.Item == focusedItem)
+            {
+                (first, count) = (at, pictures.Count - at);
+            }
         }
 
-        return pictures;
+        return first < 0 ? pictures : Lift(pictures, first, count);
     }
 
     /// <summary>The spread's scraps a player can open into detail, in item order: the same gate
     /// <see cref="Pictures"/> applies, narrowed to <see cref="ScrapbookScrap.Opens"/>.</summary>
     public static IReadOnlyList<ScrapbookScrap> Openable(
-        string? dataRoot, int mission, int spread, int bestMask, Func<ScrapbookScrap, bool> captureExists)
+        string? dataRoot, int mission, int spread, int bestMask, Func<ScrapbookScrap, string?> capturePath)
     {
-        var visible = Filtered(dataRoot, mission, spread, bestMask, captureExists);
+        var visible = Filtered(dataRoot, mission, spread, bestMask, capturePath);
         visible.RemoveAll(s => !s.Opens);
         return visible;
     }
@@ -148,6 +185,23 @@ public static class ScrapbookComposition
         return objective > 0 ? (bestMask & bit) != 0 : (bestMask & bit) == 0;
     }
 
+    /// <summary>The langui id a scrap's <c>TitleResID</c>/<c>TextResID</c> symbol stands for, or
+    /// null for the CSV's own <c>0</c> sentinel and for a symbol the header does not carry.
+    /// <c>SCRAPBOOK.CSV</c> names those strings by symbol and <c>ASSETS\SCRIPTS\RESRC1.H</c> is the
+    /// <c>#define</c> table turning one into the id <c>ui_strings.json</c> holds the text under, so
+    /// the letters and clippings resolve to the words the original prints on them.</summary>
+    public static int? StringId(string? dataRoot, string symbol)
+    {
+        if (symbol.Length == 0 || symbol == "0" || dataRoot == null)
+        {
+            return null;
+        }
+
+        var symbols = LoadSymbols(Path.Combine(
+            dataRoot, "extracted", "rof", "ASSETS", "SCRIPTS", "RESRC1.H"));
+        return symbols != null && symbols.TryGetValue(symbol, out int id) ? id : null;
+    }
+
     /// <summary>One zoom family's three text boxes, or null when the letter carries none (no such
     /// family, or the extraction lacks <c>LAYOUT.CSV</c>). Cached per file path, misses
     /// included.</summary>
@@ -158,8 +212,49 @@ public static class ScrapbookComposition
         return families != null && families.TryGetValue(letter, out var family) ? family : null;
     }
 
+    // The focused scrap's own pictures (a capture's grime among them) moved to the end of the list
+    // and grown. Reordered after the whole page is composed rather than while it is: the grime
+    // generator walks its ten frames by picture index, so a scrap taken out of the list mid-compose
+    // would re-roll every capture's smudge behind it as the cursor moved.
+    private static List<BoardPicture> Lift(List<BoardPicture> pictures, int first, int count)
+    {
+        var lifted = pictures.GetRange(first, count).ConvertAll(p => p with { Scale = HoverGrow });
+        pictures.RemoveRange(first, count);
+        pictures.AddRange(lifted);
+        return pictures;
+    }
+
+    // RESRC1.H's own `#define <symbol> <decimal>` lines, symbol -> id. The authoring tool's
+    // _APS_NEXT_* bookkeeping parses as one too and is kept: no scrap row names it, so filtering it
+    // out would buy nothing. Cached per file path, misses included.
+    private static Dictionary<string, int>? LoadSymbols(string path)
+    {
+        if (Symbols.TryGetValue(path, out var cached))
+        {
+            return cached;
+        }
+
+        Dictionary<string, int>? symbols = null;
+        if (File.Exists(path))
+        {
+            symbols = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var line in File.ReadAllLines(path))
+            {
+                var fields = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                if (fields.Length >= 3 && fields[0] == "#define"
+                    && int.TryParse(fields[2], NumberStyles.None, CultureInfo.InvariantCulture, out int id))
+                {
+                    symbols[fields[1]] = id;
+                }
+            }
+        }
+
+        Symbols[path] = symbols;
+        return symbols;
+    }
+
     private static List<ScrapbookScrap> Filtered(
-        string? dataRoot, int mission, int spread, int bestMask, Func<ScrapbookScrap, bool> captureExists)
+        string? dataRoot, int mission, int spread, int bestMask, Func<ScrapbookScrap, string?> capturePath)
     {
         var visible = new List<ScrapbookScrap>();
         foreach (var scrap in Items(dataRoot, mission, spread))
@@ -169,7 +264,7 @@ public static class ScrapbookComposition
                 continue;
             }
 
-            if (scrap.IsCapture && !captureExists(scrap))
+            if (scrap.IsCapture && capturePath(scrap) == null)
             {
                 continue;
             }
@@ -355,5 +450,50 @@ public static class ScrapbookComposition
 
         ZoomFamilies[path] = families;
         return families;
+    }
+}
+
+/// <summary>
+/// The smudge overlay's frame picker, <c>uiData</c> 2413: seeded from the page it dirties and
+/// handing out each of <c>SB_P_Grime.Png</c>'s ten frames once before repeating, so a page's grime
+/// is the same every time it is turned to and different from its neighbours'
+/// (<c>docs/formats/campaign-screens.md#the-grime</c>). The original reseeds from the clock once
+/// the page is composed; nothing here needs that, since a frame is only ever asked for while a page
+/// is being composed.
+/// </summary>
+public sealed class ScrapbookGrime
+{
+    private const int Frames = 10;
+
+    private readonly int _seed;
+    private int _used;
+
+    /// <summary>Seeds the generator for one spread, the original's <c>(mission &lt;&lt; 8) | spread</c>.</summary>
+    public ScrapbookGrime(int mission, int spread) => _seed = (mission << 8) | spread;
+
+    /// <summary>The frame for the <paramref name="index"/>-th grimed scrap of this page, 0 to 9,
+    /// each taken once before the ten are offered again.</summary>
+    public int Next(int index)
+    {
+        if (_used == (1 << Frames) - 1)
+        {
+            _used = 0;
+        }
+
+        // A fixed walk from a page-derived start rather than a real PRNG: the original's own
+        // generator hashes the seed with the draw ordinal, and what matters here is only that a
+        // page is stable and its neighbours differ.
+        int start = ((_seed * 31) + index) % Frames;
+        for (int step = 0; step < Frames; step++)
+        {
+            int frame = (start + step) % Frames;
+            if ((_used & (1 << frame)) == 0)
+            {
+                _used |= 1 << frame;
+                return frame;
+            }
+        }
+
+        return 0;
     }
 }

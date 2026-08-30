@@ -31,6 +31,7 @@ choreography in [objectives.md](objectives.md).
 - [Flight check: `FLIGHTCHECK.SCRIPT`](#flight-check-flightcheckscript)
 - [Ammo selection: `ORDINANCELAYOUT.SCRIPT`](#ammo-selection-ordinancelayoutscript)
 - [The scrapbook: `SCRAPBOOK.SCRIPT`, `SCRAPBOOKZOOM.SCRIPT`, `SCRAPBOOK_TOC.SCRIPT`](#the-scrapbook-scrapbookscript-scrapbookzoomscript-scrapbook_tocscript)
+  - [Export to Desktop](#export-to-desktop)
   - [Entry, exit and the table of contents](#entry-exit-and-the-table-of-contents)
 - [Callback reference](#callback-reference)
 - [Reader rules and edge cases](#reader-rules-and-edge-cases)
@@ -501,6 +502,17 @@ returns an unused value 0 to 9 and marks it used, resetting once all ten are tak
 it reseeds from the clock. The overlay is therefore stable for a given page and varies between
 pages, and `SB_P_GRIME` is drawn one z above the scrap it dirties.
 
+### Export to Desktop
+
+`uiData` 2412 is `FUN_00406870`, and it is a plain file copy. `SHGetSpecialFolderLocation(NULL, 0)`
+plus `SHGetPathFromIDListA` gives the desktop's own path, the scrap's base name (everything past
+the last backslash) is appended, and the file's bytes are written with `CREATE_ALWAYS`, so an
+export overwrites whatever stood there. A failed write is deleted again rather than left truncated.
+The outcome is a message box either way: langui 705 (`This image has been saved to your desktop as
+%1!s!.`) with the file name, or 706 with `FormatMessage`'s text for the last error.
+`SBZ_B_EXPORT` is deactivated for a zoom whose inset image name is empty, so the button only ever
+has a file to copy.
+
 ### The results rows, and the one that is not drawn
 
 `uiData` 2406 returns five strings for the tab it is given: the outcome line and four values. The
@@ -627,11 +639,11 @@ with the rule above: byte at `0x0040f788 + (id - 2100)`, then dword at `0x0040f5
 | 2405 | `0x0040a633` | mode 1 opens a mission at spread 1, or the campaign's current mission when given -1; any other mode reads the open mission |
 | 2406 | `0x0040a7d4` | the outcome line and four result values for a tab, above |
 | 2407 | `0x0040aa52` | walk to the next drawable item of this spread, returning type 5 for an image and 6 for text |
-| 2408 | `0x0040a453` | the page title: mission name and area, out through `ESA.BC` |
+| 2408 | `0x0040a453` | the page title, out through `ESA.BC`: langui 1215 (`%1!s! - %2!s!`) over the player's name and the mission's short name (langui `3480 + m - 1`), which is the "Zachary - The Lost Treasure" both scrapbook reference shots carry |
 | 2409 | `0x0040a4b8` | a table-of-contents row: given an ordinal, out a plane-icon selector and three text lines (mission name, area, plane flown) |
 | 2410 | `0x0040a935` | the zoom view: background, inset image and position, layout letter, and the title, caption and text ids |
 | 2411 | `0x0040a408` | is Replay Mission offered, which is true once either half of the mission's record holds a time |
-| 2412 | `0x0040a3d9` | export the open scrap to the desktop |
+| 2412 | `0x0040a3d9` | export the open scrap to the desktop, below |
 | 2413 | `0x0040a321` | the grime generator, above |
 
 2414 and 2502 are outside the `2100`–`2413` table and are answered by a different widget; 2414 asks

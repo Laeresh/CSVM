@@ -90,10 +90,16 @@ public sealed partial class LaunchMenu : CanvasLayer
     // onto the 19 presets (docs/formats/instant-action.md, "Screen controls"). Decoded, not a fit
     // to our own layout — do not "tidy" it to the item count.
     private const int PresetWindow = 14;
-    // How many missions the campaign screenshot aids' seeded profile has flown. Three is the
-    // smallest number that gives the previous-missions list a scrollable body and leaves the
-    // cabin's Next Mission somewhere other than the campaign's first entry.
+    // How many missions the campaign screenshot aids' seeded profile has flown. Three gives the
+    // previous-missions list a body and leaves the cabin's Next Mission somewhere other than the
+    // campaign's first entry. Raising it walks campaign-briefing onto a longer narration than
+    // campaign-briefing-repaint's own 90-second window covers.
     private const int AidMissionsFlown = 3;
+
+    // The completed-objective mask those runs record. Bit 0 alone would leave every scrapbook page
+    // blank, since the story scraps are gated on the objectives that unlock them, so the aid
+    // records a clean run: bits 0 to 12, the range the shipped rows' own gates use.
+    private const int AidCompletedMask = 0x1fff;
 
     // The lives stepper's range (Screen.MissionType, decision 15/18): 0 = unlimited, 1 = the
     // faithful one-life run (default), up to this cap. INVENTED — ia.json carries no such field, so
@@ -684,8 +690,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (_campaign is { } flow && flow.Store.Load(profileName) is { } profile)
         {
             flow.SelectProfile(profile);
-            flow.SetMission(seq);
-            flow.GoTo(CampaignScreen.Scrapbook);
+            flow.OpenScrapbook(seq);
         }
 
         Music?.Enter(MusicState.Menu, MusicRng);
@@ -1675,7 +1680,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         int colon = startScreen.IndexOf(':');
         string value = colon < 0 ? startScreen : startScreen[..colon];
         if (value is not ("campaign" or "campaign-empty" or "campaign-roster" or "campaign-entry"
-            or "campaign-cabin" or "campaign-previous" or "campaign-briefing"
+            or "campaign-cabin" or "campaign-previous" or "campaign-scrapbook" or "campaign-briefing"
             or "campaign-flightcheck" or "campaign-guestcheck" or "campaign-ammo"
             or "campaign-hangar" or "campaign-fly"))
         {
@@ -1768,6 +1773,12 @@ public sealed partial class LaunchMenu : CanvasLayer
             case "campaign-previous":
                 flow.GoTo(CampaignScreen.PreviousMissions);
                 return;
+            case "campaign-scrapbook":
+                // The book as a finished mission leaves it: opened on the last mission this
+                // profile flew, which is the one door the mission end itself takes.
+                flow.GoTo(CampaignScreen.PreviousMissions);
+                flow.OpenScrapbook(Math.Max(0, CampaignProgression.NextMissionSeq(profile) - 1));
+                return;
             case "campaign-briefing":
                 flow.SetMission(CampaignProgression.NextMissionSeq(profile));
                 flow.GoTo(CampaignScreen.Briefing);
@@ -1848,7 +1859,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             for (int seq = 0; seq < AidMissionsFlown; seq++)
             {
                 CampaignProgression.Record(first, new MissionAttempt(
-                    seq, 1, 300_000 + (seq * 20_000), 400, 120, 0,
+                    seq, AidCompletedMask, 300_000 + (seq * 20_000), 400, 120, 0,
                     first.Planes[0].Airframe, first.Planes[0].Name));
             }
         }
@@ -1888,6 +1899,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             dirty |= flow.Type(driver.Typed);
             dirty |= driver.Erase && flow.Backspace();
+        }
+
+        // X is the screen's own shortcut, not a press of the focused plaque, so it lights no button
+        // and is read before the confirm. While a name field is armed the keyboard's own X alias is
+        // a letter being typed, which must not fire it.
+        if (!typing && driver.Presets)
+        {
+            dirty |= flow.Secondary();
         }
 
         if (driver.Accept)
@@ -1987,10 +2006,15 @@ public sealed partial class LaunchMenu : CanvasLayer
         var planeNodes = new string[players];
         var customs = new CustomPlaneDef?[players];
         var fits = new LoadoutChoice?[players];
+        var pads = new int[players][];
         string seatedName = "";
         for (int player = 0; player < players; player++)
         {
             var plane = flow.Field.Plane(player) ?? new OwnedPlane();
+            // The device this seat joined on, carried the way MenuChoices carries a free-flight
+            // one: the cabin's join flow is the only place that binding exists, and the host
+            // cannot re-derive it from the connected roster (see CampaignLaunch.Pads).
+            pads[player] = _slots[player].Input.Pads ?? Array.Empty<int>();
             planeNodes[player] = PlanePickerRoster.AirframeNode(plane.Airframe);
             // A reward aircraft with no file in the build store falls back to its own award
             // template: the grant writes one, and this is what carries a profile granted before it
@@ -2004,7 +2028,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             }
         }
 
-        var launch = new CampaignLaunch(profile.Name, flow.MissionSeq, planeNodes, customs, fits, players);
+        var launch = new CampaignLaunch(profile.Name, flow.MissionSeq, planeNodes, customs, fits, pads);
         StopNarration();
         Music?.Stop();
         _campaign = null;
@@ -3167,15 +3191,20 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     /// <summary>What the cabin's FLY MISSION hands the host: the profile and the
     /// <c>cm_sequence</c> story position the session is for, plus one entry per joined human, in
-    /// player order, for the three things binding an aircraft needs — its stock node, its hangar
+    /// player order, for the four things binding a seat needs — its stock node, its hangar
     /// build (null for a profile starter or a reward aircraft, neither of which is hangar-built),
-    /// and the ammunition and ordnance its flight check stored. Entry 0 is the seated pilot's,
-    /// exactly as a solo launch always built it; entries 1 and up are guests, session-scoped
-    /// records that never touch the profile store. The wingman is NOT here: <c>CampaignDirector</c>
-    /// resolves its binding from the same profile it already opens.</summary>
+    /// the ammunition and ordnance its flight check stored, and the pads that seat claimed in the
+    /// join flow. Entry 0 is the seated pilot's, exactly as a solo launch always built it; entries
+    /// 1 and up are guests, session-scoped records that never touch the profile store. The player
+    /// count is the list length, so it cannot drift from the entries. The wingman is NOT here:
+    /// <c>CampaignDirector</c> resolves its binding from the same profile it already opens.
+    /// ⚠ <see cref="Pads"/> is not derivable later: the roster split the host falls back to
+    /// without it gives seat 1 every pad no other seat claimed, so a two-seat cabin launched off
+    /// one pad and the keyboard flew both seats from the same devices.</summary>
     public readonly record struct CampaignLaunch(
         string Profile, int Seq, IReadOnlyList<string> PlaneNodes,
-        IReadOnlyList<CustomPlaneDef?> Customs, IReadOnlyList<LoadoutChoice?> Fits, int Players);
+        IReadOnlyList<CustomPlaneDef?> Customs, IReadOnlyList<LoadoutChoice?> Fits,
+        IReadOnlyList<int[]> Pads);
 
     // One editable line of a loadout list. Key is the gun slot (1-4) or the physical pylon
     // number (1-8) — slot identity, the same key LoadoutChoice uses, never a row index.

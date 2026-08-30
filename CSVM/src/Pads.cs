@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM;
@@ -82,19 +83,34 @@ public static class Pads
         return assignment;
     }
 
-    /// <summary>Log who flies what, for either source of the binding (the roster split above or
-    /// the launchscreen's join flow) — a silent plane is otherwise hard to diagnose.</summary>
+    /// <summary>Log the connected roster and who flies what, for either source of the binding (the
+    /// roster split above or the launchscreen's join flow) — a silent plane is otherwise hard to
+    /// diagnose.
+    /// ⚠ Through the run log, not <c>GD.Print</c>: the binding is settled once at build and is
+    /// unrecoverable afterwards, so a player reporting two pilots on one plane has nothing to hand
+    /// over unless it survives in the file sink. What each line answers: docs/architecture.md.</summary>
     public static void LogPads(int[][] assignment)
     {
+        // The roster POSITIONS, not just the ids: AssignPads seats P2-P4 by position, so a device
+        // holding one without producing input takes that seat and the real pad falls back to P1
+        // (docs/architecture.md). The per-seat lines below cannot show that device.
+        var roster = new List<string>();
+        int slot = 0;
+        foreach (int pad in Connected())
+        {
+            roster.Add($"[{slot++}] pad {pad} \"{Input.GetJoyName(pad)}\"");
+        }
+
+        Log.Info("core", $"pad roster: {(roster.Count > 0 ? string.Join(", ", roster) : "none connected")}");
         for (int i = 0; i < assignment.Length; i++)
         {
             var pads = new List<string>(assignment[i].Length);
             foreach (int pad in assignment[i])
                 pads.Add($"pad {pad} \"{Input.GetJoyName(pad)}\"");
-            GD.Print($"player {i + 1} input: {(i == 0 ? "keyboard" : "")}" +
-                     (pads.Count > 0
-                         ? $"{(i == 0 ? " + " : "")}{string.Join(" + ", pads)}"
-                         : i == 0 ? "" : "NO DEVICE (connect a pad and relaunch)"));
+            string devices = pads.Count > 0
+                ? $"{(i == 0 ? "keyboard + " : "")}{string.Join(" + ", pads)}"
+                : i == 0 ? "keyboard" : "NO DEVICE (connect a pad and relaunch)";
+            Log.Info("core", $"player {i + 1} input: {devices}");
         }
     }
 }

@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
+using CSVM.Mech3;
 using CSVM.Session;
 
 namespace CSVM.UI;
@@ -151,7 +153,7 @@ public static class CampaignScrapbookResults
     /// <summary>The results card's own placeholder for a page whose mission has no recorded
     /// attempt yet: langui 1219, at the outcome line's own position.</summary>
     public static BoardLine NotYetFlown() =>
-        new(NotYetFlownText, TitleX, OutcomeY, 0, RowFont, BoardInk.Heading);
+        new(NotYetFlownText, TitleX, OutcomeY, 0, RowFont, BoardInk.Heading, Italic: true);
 
     /// <summary>The outcome line, the heading and the four drawn rows (title then value), at
     /// their <c>LAYOUT.CSV</c> positions. Time is <c>mm:ss</c> off milliseconds truncated the way
@@ -169,22 +171,22 @@ public static class CampaignScrapbookResults
         {
             new BoardLine(
                 Won(result, bestToDate) ? MissionCompletedText : MissionFailedText,
-                TitleX, OutcomeY, 0, RowFont, BoardInk.Heading),
-            new BoardLine(ResultsHeadingText, TitleX, HeadingY, 0, RowFont, BoardInk.Heading),
+                TitleX, OutcomeY, 0, RowFont, BoardInk.Heading, Italic: true),
+            new BoardLine(ResultsHeadingText, TitleX, HeadingY, 0, RowFont, BoardInk.Heading, Italic: true),
 
-            new BoardLine(RunTimeTitle, TitleX, TimeY, 0, RowFont, BoardInk.Row),
-            new BoardLine($"{minutes:00}:{seconds:00}", ValueX, TimeY, 0, RowFont, BoardInk.Row),
+            new BoardLine(RunTimeTitle, TitleX, TimeY, 0, RowFont, BoardInk.Row, Italic: true),
+            new BoardLine($"{minutes:00}:{seconds:00}", ValueX, TimeY, 0, RowFont, BoardInk.Row, Italic: true),
 
-            new BoardLine(GunHitRatioTitle, TitleX, HitsY, 0, RowFont, BoardInk.Row),
-            new BoardLine($"{hitRatio}%", ValueX, HitsY, 0, RowFont, BoardInk.Row),
+            new BoardLine(GunHitRatioTitle, TitleX, HitsY, 0, RowFont, BoardInk.Row, Italic: true),
+            new BoardLine($"{hitRatio}%", ValueX, HitsY, 0, RowFont, BoardInk.Row, Italic: true),
 
-            new BoardLine(CashEarnedTitle, TitleX, CashY, 0, RowFont, BoardInk.Row),
-            new BoardLine($"${run.Money}", ValueX, CashY, 0, RowFont, BoardInk.Row),
+            new BoardLine(CashEarnedTitle, TitleX, CashY, 0, RowFont, BoardInk.Row, Italic: true),
+            new BoardLine($"${run.Money}", ValueX, CashY, 0, RowFont, BoardInk.Row, Italic: true),
 
-            new BoardLine(PlanesDownedTitle, TitleX, PlanesY, 0, RowFont, BoardInk.Row),
+            new BoardLine(PlanesDownedTitle, TitleX, PlanesY, 0, RowFont, BoardInk.Row, Italic: true),
             new BoardLine(
                 PlanesDowned(result, bestToDate).ToString(CultureInfo.InvariantCulture),
-                ValueX, PlanesY, 0, RowFont, BoardInk.Row),
+                ValueX, PlanesY, 0, RowFont, BoardInk.Row, Italic: true),
         };
     }
 
@@ -196,18 +198,85 @@ public static class CampaignScrapbookResults
 }
 
 /// <summary>
-/// The scrapbook's finished-missions list (<c>Campaign CAP-41 Previous Mission *.png</c>): one row
-/// per mission the profile has completed, ordered by <c>seq</c>, then VIEW SELECTED, REPLAY
-/// MISSION and RETURN TO CABIN. The shots show a row as the long mission name over its area and
-/// the plane flown; VIEW SELECTED has no screen of its own to open (its whole job is naming which
-/// row REPLAY MISSION acts on), so it is a no-op that leaves the detail line already showing.
+/// The scrapbook's table of contents (<c>SCRAPBOOK_TOC.SCRIPT</c>, <c>Campaign CAP-41 Previous
+/// Mission 1.png</c>): one 80-pixel row per mission the profile has completed, each an aircraft
+/// silhouette beside the mission's short name, the area it was flown over and the plane that flew
+/// it, in a four-row window with the listbox's own scrollbar beside it, then VIEW SELECTED, REPLAY
+/// MISSION and RETURN TO CABIN. A confirm on a row picks it and a second confirm on the row already
+/// picked is REPLAY MISSION's own press; the secondary press is VIEW SELECTED on whatever the cursor
+/// stands on. The forward page tab is this screen's own rather than the original's, which leaves the
+/// contents page with no arrow a pad can turn it forward by.
 /// </summary>
 public sealed class CampaignPreviousMissionsPage : CampaignPage
 {
+    // SBTOC_L_TOCList, the listbox row of LAYOUT.CSV's [@ScrapBook_TOC@]: X, Y, wrap width, the
+    // height of ONE row (not of the widget) and how many of them are on screen at once.
+    private const float ListX = 420f;
+    private const float ListY = 140f;
+    private const float ListWidth = 325f;
+    private const float RowHeight = 80f;
+    private const int VisibleRows = 4;
+
+    // The row sub-script's own columns: the icon pane sits two pixels in, and its text column
+    // starts a further 20 past the pane's width, at the three rows +10, +30 and +50 down the row.
+    private const float IconX = ListX + 2f;
+    private const float IconWidth = 80f;
+    private const float TextX = ListX + IconWidth + 20f;
+    private const float FirstLineY = 10f;
+    private const float LinePitch = 20f;
+
+    // The row face. Every row is drawn in @globals@gfont3d, whose size is in no layout row, so
+    // this is measured off the reference shot; docs/org/campaign-board.md carries the measurement.
+    private const float RowFont = 17f;
+
+    // SBTOC_T_CHARACTER and SBTOC_T_MISSIONS: both 300 wide from x 425, justify 2, the first at
+    // y 64 and the second at 114. Neither names a face either, so both sizes are measured too.
+    private const float HeaderX = 425f;
+    private const float HeaderWidth = 300f;
+    private const float NameY = 64f;
+    private const float NameFont = 14f;
+    private const float HeadingY = 114f;
+    private const float HeadingFont = 11f;
+
+    // The picked row's wash and its outline, the sub-script's own setpencolor arguments
+    // 0x80f2e7b7 and 0xffdd9017. The focused row takes the same outline over the half-strength
+    // wash the original draws under a mouse pointer.
+    private const byte WashRed = 0xf2;
+    private const byte WashGreen = 0xe7;
+    private const byte WashBlue = 0xb7;
+    private const byte EdgeRed = 0xdd;
+    private const byte EdgeGreen = 0x90;
+    private const byte EdgeBlue = 0x17;
+    private const float PickedWash = 0x80 / 255f;
+    private const float FocusWash = 0x40 / 255f;
+
+    // The scrollbar column, measured off Campaign CAP-41 Previous Mission 2.png: the strip stands
+    // in the list's own last 16 pixels with an 11-pixel arrow at each end of the window. Its
+    // track is the list's KF colour, 0xff282418.
+    private const float ScrollX = 730f;
+    private const float ScrollWidth = 16f;
+    private const float ScrollButton = 11f;
+    private const byte TrackRed = 0x28;
+    private const byte TrackGreen = 0x24;
+    private const byte TrackBlue = 0x18;
+
+    // fc_planeicons.png as the row sub-script mounts it: 12 frames of 80x80, the eleven airframes
+    // in id order and then the card fan the not-yet-started career row takes.
+    private static readonly BoardArt PlaneIcons = new(BoardArtLibrary.Ui, "FC_PlaneIcons.png", 12);
+
+    // The listbox's <SLIDER>, <UP> and <DOWN>: a 16x11 thumb and two four-frame 16x11 strips.
+    private static readonly BoardArt ScrollThumb = new(BoardArtLibrary.Ui, "CM_B_ScrollBar.png");
+    private static readonly BoardArt ScrollUp = new(BoardArtLibrary.Ui, "CM_B_ScrollUp.png", 4);
+    private static readonly BoardArt ScrollDown = new(BoardArtLibrary.Ui, "CM_B_ScrollDown.png", 4);
+
     // The row a mission-row press marks as the one REPLAY MISSION and VIEW SELECTED act on. -1
     // until the player has picked one; the two buttons then fall back to the first finished
     // mission, so a press before ever selecting still does something sensible.
     private int _selected = -1;
+
+    // The first row of the four the window shows, kept across visits so paging away from the list
+    // and back does not jump it to the top.
+    private int _top;
 
     /// <summary>Binds the page to its flow.</summary>
     public CampaignPreviousMissionsPage(CampaignFlow flow)
@@ -221,47 +290,127 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     /// <inheritdoc/>
     public override string Title => "PREVIOUS MISSIONS";
 
-    /// <inheritdoc/>
-    public override int RowCount => Seqs().Count + 3;
+    /// <summary>The one screen with a secondary press, so it says what X does rather than leaving
+    /// the shortcut to be discovered. Kept short: the band is centred over the board and a longer
+    /// line runs its right end under the CURRENT MISSION bookmark this screen carries at the top.
+    /// </summary>
+    public override string Footer =>
+        "↑↓  Choose       Enter / A  Select       X  View       Esc / B  Back";
 
-    /// <summary>The album page's own two text widgets: whose scrapbook it is, then the heading over
-    /// the mission list.</summary>
-    public override IReadOnlyList<BoardLine> Captions => new[]
+    /// <inheritdoc/>
+    public override int RowCount => Seqs().Count + Buttons().Count;
+
+    /// <summary>The two header widgets, then the three lines of every row the window shows.</summary>
+    public override IReadOnlyList<BoardLine> Captions
     {
-        new BoardLine(Flow.Profile?.Name ?? string.Empty, 425, 64, 300, 18, BoardInk.Heading),
-        new BoardLine("PREVIOUS MISSIONS", 425, 114, 300, 16, BoardInk.Heading),
+        get
+        {
+            var seqs = Seqs();
+            int top = Window(seqs.Count);
+            var lines = new List<BoardLine>
+            {
+                new(Flow.Profile?.Name ?? string.Empty, HeaderX, NameY, HeaderWidth, NameFont,
+                    BoardInk.Heading, Justify: BoardJustify.Right),
+                new(Flow.Strings.Text(1131, "Previous Missions"), HeaderX, HeadingY, HeaderWidth,
+                    HeadingFont, BoardInk.Heading, Justify: BoardJustify.Right),
+            };
+
+            for (int i = 0; i < VisibleRows && top + i < seqs.Count; i++)
+            {
+                float y = ListY + (i * RowHeight) + FirstLineY;
+                foreach (string text in RowLines(seqs[top + i]))
+                {
+                    lines.Add(new BoardLine(text, TextX, y, 0f, RowFont, BoardInk.Row, Italic: true));
+                    y += LinePitch;
+                }
+            }
+
+            return lines;
+        }
+    }
+
+    /// <summary>Each shown row's aircraft silhouette, then the scrollbar's two arrows and its thumb
+    /// once the list is longer than its window.</summary>
+    public override IReadOnlyList<BoardPicture> Pictures
+    {
+        get
+        {
+            var seqs = Seqs();
+            int top = Window(seqs.Count);
+            var pictures = new List<BoardPicture>();
+            for (int i = 0; i < VisibleRows && top + i < seqs.Count; i++)
+            {
+                pictures.Add(new BoardPicture(
+                    PlaneIcons, IconX, ListY + (i * RowHeight), Airframe(seqs[top + i])));
+            }
+
+            if (seqs.Count > VisibleRows)
+            {
+                var (thumbY, thumbHeight) = Thumb(seqs.Count, top);
+                pictures.Add(new BoardPicture(ScrollUp, ScrollX, ListY, Frame: 1));
+                pictures.Add(new BoardPicture(
+                    ScrollDown, ScrollX, ListY + WindowHeight - ScrollButton, Frame: 1));
+                pictures.Add(new BoardPicture(
+                    ScrollThumb, ScrollX, thumbY, Width: ScrollWidth, Height: thumbHeight));
+            }
+
+            return pictures;
+        }
+    }
+
+    /// <summary>The picked row's wash and outline, the focused row's fainter pair, and the
+    /// scrollbar's track behind its thumb.</summary>
+    public override IReadOnlyList<BoardFill> Fills
+    {
+        get
+        {
+            var seqs = Seqs();
+            int top = Window(seqs.Count);
+            var fills = new List<BoardFill>();
+            for (int i = 0; i < VisibleRows && top + i < seqs.Count; i++)
+            {
+                if (Wash(top + i) is not { } wash)
+                {
+                    continue;
+                }
+
+                float y = ListY + (i * RowHeight);
+                fills.Add(new BoardFill(
+                    ListX, y, ListWidth, RowHeight, WashRed, WashGreen, WashBlue, wash));
+                fills.Add(new BoardFill(
+                    ListX, y, ListWidth, RowHeight, EdgeRed, EdgeGreen, EdgeBlue, Border: true));
+            }
+
+            if (seqs.Count > VisibleRows)
+            {
+                fills.Add(new BoardFill(
+                    ScrollX, ListY + ScrollButton, ScrollWidth, WindowHeight - (2f * ScrollButton),
+                    TrackRed, TrackGreen, TrackBlue));
+            }
+
+            return fills;
+        }
+    }
+
+    // How tall the four-row window is, which is where the scrollbar's lower arrow sits.
+    private static float WindowHeight => VisibleRows * RowHeight;
+
+    /// <summary>A mission row draws no list text of its own: its three lines already stand at their
+    /// authored positions inside the row.</summary>
+    public override string RowText(int row) => ButtonAt(row) switch
+    {
+        BoardButton.ViewMission => "VIEW SELECTED",
+        BoardButton.ReplayMission => "REPLAY MISSION",
+        BoardButton.CurrentMission => Flow.Strings.Text(1200, "Current Mission"),
+        BoardButton.ReturnToCabin => "RETURN TO CABIN",
+        _ => string.Empty,
     };
 
     /// <inheritdoc/>
-    public override string RowText(int row)
-    {
-        var seqs = Seqs();
-        if (row < seqs.Count)
-        {
-            string name = Flow.Strings.Text(3450 + seqs[row], $"Mission {seqs[row] + 1}");
-            return row == _selected ? "✓ " + name : name;
-        }
-
-        return (row - seqs.Count) switch
-        {
-            0 => "VIEW SELECTED",
-            1 => "REPLAY MISSION",
-            _ => "RETURN TO CABIN",
-        };
-    }
-
-    /// <inheritdoc/>
-    public override BoardButtonRef Button(int row)
-    {
-        int offset = row - Seqs().Count;
-        return offset switch
-        {
-            0 => new BoardButtonRef(BoardButton.ViewMission),
-            1 => new BoardButtonRef(BoardButton.ReplayMission),
-            2 => new BoardButtonRef(BoardButton.ReturnToCabin),
-            _ => BoardButtonRef.None,
-        };
-    }
+    public override BoardButtonRef Button(int row) =>
+        ButtonAt(row) is var button && button != BoardButton.None
+            ? new BoardButtonRef(button)
+            : BoardButtonRef.None;
 
     /// <inheritdoc/>
     public override string Detail(int row)
@@ -269,45 +418,82 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         var seqs = Seqs();
         if (row < seqs.Count)
         {
-            return MissionLine(seqs[row]);
+            return row == _selected
+                ? "Selected. Confirm again to replay it"
+                : Flow.Strings.Text(3450 + seqs[row], $"Mission {seqs[row] + 1}");
         }
 
-        return (row - seqs.Count) switch
+        return ButtonAt(row) switch
         {
-            0 or 1 when SelectedSeq(seqs) is { } seq => MissionLine(seq),
-            0 or 1 => "Pick a mission first",
+            BoardButton.ViewMission => "Opens the scrapbook at this mission",
+            BoardButton.ReplayMission when SelectedSeq(seqs) is { } seq =>
+                Flow.Strings.Text(3450 + seq, $"Mission {seq + 1}"),
+            BoardButton.ScrapbookNext => "Forward into the book",
+            BoardButton.CurrentMission => "Opens the scrapbook at the current mission",
             _ => "Back to the cabin",
         };
     }
 
-    /// <inheritdoc/>
+    /// <summary>A mission row's first confirm picks it and its second replays it, which is the
+    /// original's own double-click on a row folded onto a pad's single button. VIEW SELECTED and
+    /// the bookmark both open the book (<c>uiData</c> 2405 mode 1) on the picked mission and on
+    /// the campaign's own current one.</summary>
     public override bool Accept(int row)
     {
         var seqs = Seqs();
         if (row < seqs.Count)
         {
+            if (row == _selected)
+            {
+                return Replay(seqs[row]);
+            }
+
             _selected = row;
             return true;
         }
 
-        switch (row - seqs.Count)
+        switch (ButtonAt(row))
         {
-            case 0: // VIEW SELECTED: the detail line above already says everything it would.
-                return true;
-            case 1: // REPLAY MISSION
-                if (SelectedSeq(seqs) is not { } seq)
+            case BoardButton.ViewMission:
+                if (SelectedSeq(seqs) is { } viewing)
                 {
-                    Flow.SetMessage("Select a mission first.");
-                    return true;
+                    Flow.OpenScrapbook(viewing);
                 }
 
-                Flow.SetMission(seq);
-                Flow.GoTo(CampaignScreen.Briefing);
                 return true;
-            default: // RETURN TO CABIN
+            case BoardButton.ReplayMission:
+                return SelectedSeq(seqs) is { } replaying && Replay(replaying);
+            case BoardButton.ScrapbookNext:
+                Flow.OpenScrapbook(0);
+                return true;
+            case BoardButton.CurrentMission:
+                Flow.OpenScrapbook(CurrentSeq());
+                return true;
+            default:
                 Flow.GoTo(CampaignScreen.Cabin);
                 return true;
         }
+    }
+
+    /// <summary>VIEW SELECTED without walking down to the button: on a mission row it picks that row
+    /// and opens the book there, and on any other row it opens the book on whatever is picked
+    /// already. Nothing to open (a profile with no finished mission) leaves the press unhandled.
+    /// </summary>
+    public override bool Secondary(int row)
+    {
+        var seqs = Seqs();
+        if (row >= 0 && row < seqs.Count)
+        {
+            _selected = row;
+        }
+
+        if (SelectedSeq(seqs) is not { } seq)
+        {
+            return false;
+        }
+
+        Flow.OpenScrapbook(seq);
+        return true;
     }
 
     // The finished seqs, in story order, per CampaignProgression.CompletedSeqs. Read fresh every
@@ -315,6 +501,56 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     // show up here the next time this page draws.
     private List<int> Seqs() =>
         Flow.Profile is { } profile ? CampaignProgression.CompletedSeqs(profile) : new List<int>();
+
+    // The buttons under the list, in the order they take rows, the arrow among them where the book
+    // itself carries it. REPLAY MISSION is offered only where uiData 2411 offers it, on a picked
+    // mission whose record holds a time; the other four are created active and stay so.
+    private List<BoardButton> Buttons()
+    {
+        var buttons = new List<BoardButton> { BoardButton.ViewMission };
+        if (SelectedSeq(Seqs()) is { } seq && Flow.Profile is { } profile
+            && CampaignProgression.ResultOf(profile, seq) is { } result
+            && (result.Latest.TimeMs != 0 || result.Best.TimeMs != 0))
+        {
+            buttons.Add(BoardButton.ReplayMission);
+        }
+
+        buttons.Add(BoardButton.ScrapbookNext);
+        buttons.Add(BoardButton.CurrentMission);
+        buttons.Add(BoardButton.ReturnToCabin);
+        return buttons;
+    }
+
+    private BoardButton ButtonAt(int row)
+    {
+        var buttons = Buttons();
+        int offset = row - Seqs().Count;
+        return offset >= 0 && offset < buttons.Count ? buttons[offset] : BoardButton.None;
+    }
+
+    // The mission the campaign is on, which the bookmark opens the book at: the next unflown one,
+    // or the last of the twenty-four once the campaign is finished.
+    private int CurrentSeq()
+    {
+        if (Flow.Profile is not { } profile)
+        {
+            return 0;
+        }
+
+        return Math.Clamp(
+            CampaignProgression.NextMissionSeq(profile), 0, CampaignSequence.MissionCount - 1);
+    }
+
+    // How strongly a row's wash draws, or null for a row that is neither picked nor focused.
+    private float? Wash(int row) =>
+        row == _selected ? PickedWash : row == Flow.Row ? FocusWash : null;
+
+    private bool Replay(int seq)
+    {
+        Flow.SetMission(seq);
+        Flow.GoTo(CampaignScreen.Briefing);
+        return true;
+    }
 
     // The row the two buttons act on: the player's own pick, or the first finished mission when
     // nothing has been picked yet.
@@ -329,15 +565,48 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         return seqs[index];
     }
 
-    // Long name over area and the plane that flew the best-of record, the CAP-41 layout.
-    private string MissionLine(int seq)
+    // The first row of the shown window, moved only as far as it must to keep the cursor's own row
+    // on screen. A cursor parked on one of the three buttons leaves it where the list last stood.
+    private int Window(int count)
     {
-        string area = Flow.Strings.Text(1220 + (seq / 5), "");
-        string plane = Flow.Profile is { } profile && CampaignProgression.ResultOf(profile, seq) is { } result
-            ? result.Best.PlaneName
-            : "";
-        return string.IsNullOrEmpty(area) && string.IsNullOrEmpty(plane)
-            ? string.Empty
-            : $"{area}   ·   {plane}";
+        int last = Math.Max(0, count - VisibleRows);
+        int top = Math.Clamp(_top, 0, last);
+        if (Flow.Row < count)
+        {
+            top = Math.Clamp(Math.Clamp(top, Flow.Row - VisibleRows + 1, Flow.Row), 0, last);
+        }
+
+        _top = top;
+        return top;
     }
+
+    // The thumb's run down the track: as tall a fraction of it as the window is of the list, never
+    // shorter than an arrow, and stepped so the last row scrolled to lands it flush at the bottom.
+    private (float Y, float Height) Thumb(int count, int top)
+    {
+        float track = WindowHeight - (2f * ScrollButton);
+        float height = Math.Max(ScrollButton, track * VisibleRows / count);
+        int last = Math.Max(1, count - VisibleRows);
+        return (ListY + ScrollButton + ((track - height) * top / last), height);
+    }
+
+    // The three lines uiData 2409 hands the row sub-script: the mission's short name, the area of
+    // the chapter it belongs to, and the plane whose best-of run stands in the record.
+    private string[] RowLines(int seq) => new[]
+    {
+        Flow.Strings.Text(3480 + seq, $"Mission {seq + 1}"),
+        Flow.Strings.Text(1220 + (seq / 5), string.Empty),
+        Run(seq)?.PlaneName ?? string.Empty,
+    };
+
+    // The icon strip's frame for a row: the airframe its best-of run flew, clamped inside the
+    // eleven the strip carries before the card fan.
+    private int Airframe(int seq) =>
+        Math.Clamp(Run(seq)?.Airframe ?? 0, 0, CampaignProgression.AirframeCount - 1);
+
+    private MissionRun? Run(int seq) =>
+        Flow.Profile is { } profile && CampaignProgression.ResultOf(profile, seq) is { } result
+            ? result.Best
+            : null;
 }
+

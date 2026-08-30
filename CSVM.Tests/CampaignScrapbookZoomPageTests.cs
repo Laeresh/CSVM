@@ -23,6 +23,23 @@ public class CampaignScrapbookZoomPageTests
         Assert.Contains(flow.Page.Captions, l => l.Text == "IDS_TEST_BODY");
     }
 
+    /// <summary>A scrap's title and body are langui symbols, not text: SCRAPBOOK.CSV names them,
+    /// RESRC1.H turns each into an id, and ui_strings.json holds the words. The zoom view draws the
+    /// words, and a symbol no header carries still degrades to itself.</summary>
+    [Fact]
+    public void AScrapsOwnWordsResolveThroughResrc1HIntoTheStringTable()
+    {
+        string root = ScrapbookCompositionFixture.WriteResolvableScrap(TestData.TempDir(), mission: 1);
+        var strings = UiStrings.Parse(
+            "[{\"id\":40002,\"text\":\"[FREE18]\\nMy Dearest Nathan,\",\"dll\":\"langui\"}," +
+            "{\"id\":40003,\"text\":\"Your princess, Loni Ne\",\"dll\":\"langui\"}]");
+        var flow = OpenedOnZoom(root, strings);
+
+        Assert.Contains(flow.Page.Captions, l => l.Text == "\nMy Dearest Nathan,");
+        Assert.Contains(flow.Page.Captions, l => l.Text == "Your princess, Loni Ne");
+        Assert.DoesNotContain(flow.Page.Captions, l => l.Text == "IDS_TEST_TITLE");
+    }
+
     [Fact]
     public void CloseReturnsToTheScrapbookPage()
     {
@@ -43,20 +60,54 @@ public class CampaignScrapbookZoomPageTests
 
         Assert.Empty(flow.Page.Pictures);
         Assert.Empty(flow.Page.Captions);
+        Assert.Equal(1, flow.Page.RowCount); // no file to export, so RETURN alone
     }
 
-    private static CampaignFlow OpenedOnZoom()
+    /// <summary>EXPORT TO DESKTOP copies the scrap's own file, byte for byte, under its own name,
+    /// and says so in langui 705's words.</summary>
+    [Fact]
+    public void ExportCopiesTheScrapToTheDesktopAndSaysSo()
     {
-        var flow = FlowOnScrapbook();
-        flow.FocusRow(2); // Replay, Cabin, then the one openable scrap
+        var flow = OpenedOnZoom();
+        string desktop = Path.Combine(TestData.TempDir(), "Desktop");
+        Directory.CreateDirectory(desktop);
+        string art = Path.Combine(
+            flow.DataRoot!, "extracted", "rof", "ASSETS", "GRAPHICS", "SCRAPBOOK");
+        Directory.CreateDirectory(art);
+        File.WriteAllBytes(Path.Combine(art, "SB_01_01_test.JPG"), new byte[] { 1, 2, 3 });
+
+        var page = new CampaignScrapbookZoomPage(flow, desktop);
+        Assert.Equal(2, page.RowCount);
+        Assert.True(page.Accept(CampaignScrapbookZoomPage.ExportRow));
+
+        Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(Path.Combine(desktop, "SB_01_01_test.JPG")));
+        Assert.Contains("SB_01_01_test.JPG", flow.Message);
+        Assert.Contains("desktop", flow.Message);
+    }
+
+    /// <summary>A scrap with no file behind it offers no EXPORT row at all, which is the original
+    /// deactivating the button for a zoom with no inset image.</summary>
+    [Fact]
+    public void ExportIsNotOfferedForAScrapWithNoFile()
+    {
+        var flow = OpenedOnZoom();
+
+        Assert.Equal(1, flow.Page.RowCount); // the fixture writes no art beside its CSV
+        Assert.False(flow.Page.Accept(CampaignScrapbookZoomPage.ExportRow));
+    }
+
+    private static CampaignFlow OpenedOnZoom(string? root = null, UiStrings? strings = null)
+    {
+        var flow = FlowOnScrapbook(root, strings);
+        flow.FocusRow(flow.Page.RowCount - 1); // the one openable scrap, after every button
         flow.Accept();
         Assert.Equal(CampaignScreen.ScrapbookZoom, flow.Screen);
         return flow;
     }
 
-    private static CampaignFlow FlowOnScrapbook()
+    private static CampaignFlow FlowOnScrapbook(string? root = null, UiStrings? strings = null)
     {
-        string root = ScrapbookCompositionFixture.WriteMinimalOpenableScrap(TestData.TempDir(), mission: 1);
+        root ??= ScrapbookCompositionFixture.WriteMinimalOpenableScrap(TestData.TempDir(), mission: 1);
         var profile = CampaignProfileDef.NewProfile("Zachary");
         CampaignProgression.Record(profile, new MissionAttempt(
             0, CompletedMask: 1, TimeMs: 40000, Shots: 10, Hits: 5, Money: 0,
@@ -66,7 +117,7 @@ public class CampaignScrapbookZoomPageTests
         Directory.CreateDirectory(dir);
         var store = new CampaignProfileStore(dir);
         store.Save(profile);
-        var flow = new CampaignFlow(store, UiStrings.Empty, root);
+        var flow = new CampaignFlow(store, strings ?? UiStrings.Empty, root);
         flow.SelectProfile(store.Load(profile.Name)!);
         flow.SetMission(0);
         flow.GoTo(CampaignScreen.Scrapbook);

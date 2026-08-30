@@ -336,6 +336,41 @@ public class SessionSpecMenuTests
         Assert.Empty(Menu(Cli(), "C4", MenuMode.Free, "player_fury").MenuLoadouts);
     }
 
+    /// <summary>A cabin launch is co-op flight over the story position, at the number of seats that
+    /// joined. The count is the one <c>LaunchCampaign</c> takes off its pad list, so a spec that
+    /// says two seats is a spec whose caller had two pad bindings to hand over.</summary>
+    [Fact]
+    public void ACampaignLaunchFliesOneSeatPerJoinedPlayer()
+    {
+        var solo = SessionSpec.FromCampaign(Cli(), "Rosie", 3, new[] { "player_bhawk" }, 1);
+        var pair = SessionSpec.FromCampaign(Cli(), "Rosie", 3,
+            new[] { "player_bhawk", "player_fury" }, 2);
+
+        Assert.Equal(1, solo.Players);
+        Assert.Equal(2, pair.Players);
+        Assert.True(pair.Coop);
+        Assert.Equal(SessionMode.Fly, pair.Mode);
+        Assert.Equal("player_bhawk", pair.PlaneName);
+    }
+
+    /// <summary>⚠ Why a cabin launch has to hand its join-flow pad binding over rather than let the
+    /// host re-derive one. The roster split is the fallback, and for the ordinary two-seat setup —
+    /// one pad and the keyboard — it gives that pad to seat 1, which already has the keyboard, and
+    /// seat 2 nothing. Both pilots then fly the same plane. Steam Remote Play Together makes this
+    /// the NORMAL shape, since the remote pilot's controller is the host's only pad.</summary>
+    [Fact]
+    public void TheRosterSplitCannotStandInForTheJoinFlowsBinding()
+    {
+        var derived = Pads.AssignPads(2, new List<int> { 0 });
+
+        Assert.Equal(new[] { 0 }, derived![0]); // seat 1: the pad AND the keyboard
+        Assert.Empty(derived[1]);               // seat 2: nothing to fly with
+
+        // What the join flow knows and the roster cannot: seat 2 is the one that claimed pad 0.
+        var joined = new[] { Array.Empty<int>(), new[] { 0 } };
+        Assert.NotEqual(joined[1], derived[1]);
+    }
+
     private static InstantActionDef WizardDef(string missionType) => new()
     {
         MissionType = missionType,

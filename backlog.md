@@ -675,7 +675,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   directions.** *Evidence:* the user at the controls of the original, 2026-08-14: the player selects
   an individual hardpoint (the half that settled `BL-062`, closed the same day), and the selection
   can be stepped clockwise *and* counter-clockwise. Ours has exactly one selector input per weapon,
-  `H` / D-pad Right for pylons and `G` / D-pad Left for gun groups
+  `H` / D-pad Left for pylons and `G` / D-pad Right for gun groups
   (`FlightController.cs:1456`, `docs/controls.md`), and `WeaponCursor.NextSelectable`
   (`WeaponCursor.cs:34`) only ever scans forward. **Direct corroboration, `PLAN-targeting.md` A1
   (2026-08-16):** the original's own Weapons keybind page carries `Cycle guns clockwise` (`F3`) and
@@ -2950,15 +2950,6 @@ usual.
   workstation noise (`docs/verification.md` PERF-12/13). *Cross-refs:* `BL-434` (the per-viewport
   splitscreen cost this same measurement pass separately profiled).
 
-- `BL-642` `[Bug]` **Scrapbook Replay Mission can launch an unflown future mission.**
-  *Evidence:* `CampaignScrapbookPage` always exposes `ReplayRow`, and accepting it calls
-  `SetMission(mission - 1)` even when the same spread says `Not yet flown`. The book can browse
-  unflown missions, while the original offers Replay only when either half of that mission's record
-  has a non-zero time (`docs/plans/PLAN-scrapbook.md`, A3's `uiData 2411` decode). *Fix shape:* gate
-  the row and its action on `Latest.TimeMs != 0 || Best.TimeMs != 0`, with tests covering a loss,
-  a completed mission, and an unflown future mission. *⚠ Traps:* completion bits are not the gate;
-  a failed attempt may have no primary bit and must still be replayable.
-
 - `BL-643` `[Bug]` **Returning from a guest flight check to P1 reopens campaign joining after FLY
   MISSION committed the field.** *Evidence:* `CampaignFlightField.Locked` is `Current > 0`, so
   `Retreat()` from P2 decrements `Current` to zero and `LaunchMenu.ScanJoins` accepts new pads again;
@@ -2967,15 +2958,6 @@ usual.
   moving backward or forward through player checks, and clear it only when the whole walk is
   abandoned through `Rewind`. *⚠ Traps:* revisiting P1's check is navigation inside a committed
   roster, not abandonment; guest Back presses must not change the field size while latched.
-
-- `BL-644` `[Bug]` **The scrapbook has no functional Best to Date tab.** *Evidence:*
-  `CampaignScrapbookPage` passes `bestToDate: false` to every results row, stamp label and stamp
-  picture; only `CampaignScrapbookResults.TabTitle` and its helper tests know the two tab names. The
-  completed scrapbook plan required Best to Date / Most Recent tabs. *Fix shape:* add the page's tab
-  controls and state, drive all results and stamps from the selected half, and reset to Most Recent
-  on every book entry. *⚠ Traps:* preserve the original's decoded Best to Date outcome bug — that
-  tab reads Mission Failed from its never-written outcome offset even when its merged statistics
-  represent a win.
 
 - `BL-645` `[Feature]` **Co-op campaign money is hard-coded to zero instead of aggregating the human
   field.** *Evidence:* `CampaignDirector.OnMissionEnded` constructs every `MissionAttempt` with
@@ -2986,14 +2968,6 @@ usual.
   two-rig positive-value assertion plus a 1P invariant. *⚠ Traps:* do not aggregate gunnery or plane
   identity; those fields feed a seated pilot's best-of record.
 
-- `BL-646` `[Bug]` **The scrapbook results page omits the `SB_STATCARD` background.** *Evidence:*
-  `CampaignScrapbookPage.Pictures` draws `SCRAPBOOK.CSV` scraps and kill stamps only, while the
-  decoded results layout places `SB_STATCARD` at `(403,297)` and the archived plan records the gap
-  under D18. *Fix shape:* draw the shipped stat-card chrome through the composed-board asset path at
-  its authored `LAYOUT.CSV` position, beneath the results rows and stamps, and pin it with the CM01
-  screenshot fixture. *⚠ Traps:* `SB_STATCARD` is layout chrome, not a scrapbook-composition row;
-  do not add it to `SCRAPBOOK.CSV` parsing or author replacement art.
-
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
@@ -3002,8 +2976,13 @@ usual.
   disconnects — the 8BitDo Ultimate 2 dongle's HID interface is one (`Uint8` loop counter vs
   uncapped dinput `nbuttons`; godot#115667, SDL#14961, fixed by SDL#15304). Check the bundled
   `thirdparty/sdl/joystick/SDL_joystick.c` `SDL_PrivateJoystickForceRecentering` for the `int i`
-  fix before removing. Side effect while active: DirectInput-only controllers (non-XInput
-  sticks without an SDL HIDAPI driver) are invisible in-game.
+  fix before removing. Side effects while active: DirectInput-only controllers (non-XInput sticks
+  without an SDL HIDAPI driver) are invisible in-game, and, since the var is set by the launch
+  scripts and never by the export, a shipped build enumerates DirectInput devices that no dev or
+  test run sees. An 8BitDo Ultimate 2 arrives as three joypads there, which is how a device that
+  holds a roster position without producing input came to take the seat `AssignPads` fills by
+  position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
+  inferred. Dropping the var also closes that divergence.
 
 - `BL-581` `[Bug]` **CM09 (C1/M04): with the radio tower down and every aircraft killed, the
   mission does not go on to the docking.** *Evidence (graph disproved, world side open):* reported

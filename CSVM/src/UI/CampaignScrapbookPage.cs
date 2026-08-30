@@ -1,44 +1,72 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using CSVM.Mech3;
 using CSVM.Session;
 
 namespace CSVM.UI;
 
 /// <summary>
-/// The scrapbook's results page, opened on the mission a finished mission just flew
-/// (<c>docs/org/debrief.md#the-screen-is-the-scrapbook</c>): the shown spread's results block, kill
-/// stamps and shipped scraps, the page/mission arrows and the Current Mission bookmark for browsing
-/// the rest of the book, and every openable scrap
-/// (<see cref="ScrapbookScrap.Opens"/>) as its own row opening
-/// <see cref="CampaignScreen.ScrapbookZoom"/>. REPLAY MISSION and RETURN TO CABIN act on whichever
-/// mission is browsed. The Best to Date toggle and the page title (mission name and area) are not
-/// yet wired.
+/// The scrapbook itself (<c>SCRAPBOOK.SCRIPT</c>), opened on the mission a finished mission just
+/// flew: the page title, the shown spread's shipped scraps, and on spread 1 the results card with
+/// its Best to Date / Most Recent tabs, the results block and the kill stamps. Every openable scrap
+/// (<see cref="ScrapbookScrap.Opens"/>) is a row opening <see cref="CampaignScreen.ScrapbookZoom"/>.
+/// The page and mission arrows and the Current Mission bookmark browse the rest of the book, VIEW
+/// ALL MISSIONS jumps to the mission overview, and REPLAY MISSION acts on whichever mission is
+/// browsed, offered only where the original offers it.
 /// </summary>
 public sealed class CampaignScrapbookPage : CampaignPage
 {
-    /// <summary>REPLAY MISSION's row.</summary>
-    public const int ReplayRow = 0;
+    // SB_T_NAMEANDAREA, the page title's own widget. The layout row names no face, so 19 is the
+    // cap height measured off Campaign Mission End screen CM01.png.
+    private const float TitleX = 58f;
+    private const float TitleY = 53f;
+    private const float TitleFont = 19f;
 
-    /// <summary>RETURN TO CABIN's row.</summary>
-    public const int CabinRow = 1;
+    // SB_STATCARD, the results card the block and its tabs sit on: two frames, 0 drawn under the
+    // Best to Date tab and 1 under Most Recent.
+    private const float CardX = 403f;
+    private const float CardY = 297f;
 
-    // Where the fixed rows end and the arrows/bookmark begin; ScrapRowBase (below) follows those.
-    private const int NavRowBase = 2;
+    // SB_B_Statcardtab.png's own frame width, for centring the unselected tab's label the way
+    // ComposedBoardView.DrawPlaque centres a plaque's own.
+    private const float TabWidth = 128f;
+    private const float TabLabelY = 7f;
+    private const float TabLabelFont = 13f;
+
+    private static readonly BoardArt StatCard = new(BoardArtLibrary.Ui, "SB_P_Card.png", 2);
 
     // The browsed position: the SCRAPBOOK.CSV mission slot (1-based) and spread. Reset to the
-    // flown mission's spread 1 whenever CampaignFlow.MissionSeq changes underneath a reused page
-    // instance, so a fresh mission end always reopens the book where it flew rather than wherever
-    // browsing last left it.
+    // opened mission's spread 1 whenever the flow opens the book again or CampaignFlow.MissionSeq
+    // changes underneath a reused page instance, so a fresh entry always lands where it was opened
+    // rather than wherever browsing last left it.
     private int _viewMission = -1;
     private int _viewSpread = 1;
     private int _openedOnMissionSeq = int.MinValue;
+    private int _openedOnEntry = int.MinValue;
+
+    // Which half of the record the results block and the stamps read. Most Recent on every entry,
+    // the tab the original's own SB_STATCARD frame 1 default puts in front.
+    private bool _bestToDate;
 
     /// <summary>Binds the page to its flow.</summary>
     public CampaignScrapbookPage(CampaignFlow flow)
         : base(flow)
     {
+    }
+
+    // Which control a row is. The order here is the order rows are offered, and a row is present
+    // only where the original activates its widget.
+    private enum RowKind
+    {
+        Replay,
+        BestTab,
+        MostTab,
+        PrevPage,
+        NextPage,
+        CurrentMission,
+        ViewAllMissions,
+        ReturnToCabin,
+        Scrap,
     }
 
     /// <inheritdoc/>
@@ -48,36 +76,47 @@ public sealed class CampaignScrapbookPage : CampaignPage
     public override string Title => "SCRAPBOOK";
 
     /// <inheritdoc/>
-    public override int RowCount => ScrapRowBase() + ScrapRows().Count;
+    public override int RowCount => Rows().Count;
 
-    /// <summary>The results block's rows and the kill stamps' counts, off the Most Recent half, on
-    /// spread 1 only; a spread-1 view of a mission with no recorded attempt shows the "Not yet
-    /// flown" placeholder instead.</summary>
+    /// <summary>The page title, the unselected tab's label, and on spread 1 the results block's
+    /// rows and the kill stamps' counts off the selected half; a spread-1 view of a mission with no
+    /// recorded attempt shows the "Not yet flown" placeholder instead of a block.</summary>
     public override IReadOnlyList<BoardLine> Captions
     {
         get
         {
+            var lines = new List<BoardLine> { PageTitle() };
             var (_, spread) = Position();
             if (spread != 1)
             {
-                return Array.Empty<BoardLine>();
+                return lines;
+            }
+
+            if (UnselectedTab() is { } tab)
+            {
+                lines.Add(new BoardLine(
+                    TabLabel(_bestToDate ? RowKind.MostTab : RowKind.BestTab),
+                    tab.X, tab.Y + TabLabelY, TabWidth, TabLabelFont, BoardInk.LabelNormal,
+                    Justify: BoardJustify.Center));
             }
 
             if (Result() is not { } result)
             {
-                return new[] { CampaignScrapbookResults.NotYetFlown() };
+                lines.Add(CampaignScrapbookResults.NotYetFlown());
+                return lines;
             }
 
-            var lines = new List<BoardLine>(CampaignScrapbookResults.Rows(result, bestToDate: false));
-            lines.AddRange(CampaignScrapbookResults.StampLabels(result, bestToDate: false));
+            lines.AddRange(CampaignScrapbookResults.Rows(result, _bestToDate));
+            lines.AddRange(CampaignScrapbookResults.StampLabels(result, _bestToDate));
             return lines;
         }
     }
 
     /// <summary>The shown spread's shipped scraps (<c>SCRAPBOOK.CSV</c>), gated on the mission's
-    /// merged best-to-date mask (0 for a mission with no recorded attempt, so only the
-    /// always-visible rows draw) and with a capture skipped when the profile carries no such file;
-    /// spread 1 also carries the Most Recent kill stamps.</summary>
+    /// merged best-to-date mask and with a capture skipped when the profile carries no such file;
+    /// spread 1 then lays the unselected tab, the results card and the selected half's kill stamps
+    /// over them. The scrap the cursor stands on draws last and two percent bigger, which is what
+    /// the original does to the one under the pointer.</summary>
     public override IReadOnlyList<BoardPicture> Pictures
     {
         get
@@ -89,184 +128,268 @@ public sealed class CampaignScrapbookPage : CampaignPage
 
             var (mission, spread) = Position();
             var result = Result();
-            int bestMask = result?.Best.CompletedMask ?? 0;
             var pictures = new List<BoardPicture>(ScrapbookComposition.Pictures(
-                Flow.DataRoot, mission, spread, bestMask, CaptureExists));
-            if (spread == 1 && result is { } r)
+                Flow.DataRoot, mission, spread, result?.Best.CompletedMask ?? 0, Flow.CapturePath,
+                ScrapAt(Flow.Row)?.Item ?? -1));
+            if (spread != 1)
             {
-                pictures.AddRange(CampaignScrapbookResults.StampPictures(r, bestToDate: false));
+                return pictures;
+            }
+
+            if (UnselectedTab() is { } tab)
+            {
+                bool focused = Flow.Row == RowOf(_bestToDate ? RowKind.MostTab : RowKind.BestTab);
+                pictures.Add(new BoardPicture(
+                    tab.Art, tab.X, tab.Y, ComposedBoard.PlaqueFrame(tab.Art.Frames, focused, false)));
+            }
+
+            pictures.Add(new BoardPicture(StatCard, CardX, CardY, _bestToDate ? 0 : 1));
+            if (result is { } r)
+            {
+                pictures.AddRange(CampaignScrapbookResults.StampPictures(r, _bestToDate));
             }
 
             return pictures;
         }
     }
 
-    /// <inheritdoc/>
-    public override BoardButtonRef Button(int row)
+    /// <summary>Which authored button a row presses. The unselected results tab is not among them:
+    /// it draws as a picture under the card, since a plaque always draws over one.</summary>
+    public override BoardButtonRef Button(int row) => KindAt(row) switch
     {
-        if (row == ReplayRow)
-        {
-            return new BoardButtonRef(BoardButton.ReplayMission);
-        }
+        RowKind.Replay => new BoardButtonRef(BoardButton.ReplayMission),
+        RowKind.BestTab when _bestToDate => new BoardButtonRef(BoardButton.BestTab),
+        RowKind.MostTab when !_bestToDate => new BoardButtonRef(BoardButton.MostTab),
+        RowKind.PrevPage => new BoardButtonRef(BoardButton.ScrapbookPrev),
+        RowKind.NextPage => new BoardButtonRef(BoardButton.ScrapbookNext),
+        RowKind.CurrentMission => new BoardButtonRef(BoardButton.CurrentMission),
+        RowKind.ViewAllMissions => new BoardButtonRef(BoardButton.ViewAllMissions),
+        RowKind.ReturnToCabin => new BoardButtonRef(BoardButton.ReturnToCabin),
+        _ => BoardButtonRef.None,
+    };
 
-        if (row == CabinRow)
-        {
-            return new BoardButtonRef(BoardButton.ReturnToCabin);
-        }
-
-        var nav = NavRows();
-        int navIndex = row - NavRowBase;
-        return navIndex >= 0 && navIndex < nav.Count
-            ? new BoardButtonRef(nav[navIndex])
-            : BoardButtonRef.None;
-    }
-
-    /// <summary>A scrap row draws no list text of its own: its picture already stands at its
-    /// authored position, and drawing its name over it too would be the shell inventing a caption
-    /// the original never had. The page arrows bake their own words into their strip, so only the
-    /// labelled Current Mission bookmark needs text here.</summary>
-    public override string RowText(int row)
+    /// <summary>A scrap row and the unselected tab both draw no list text: the scrap's picture
+    /// already stands at its authored position, and the tab's label is placed over its own art in
+    /// <see cref="Captions"/>. The arrows and the two paper buttons bake their words into their
+    /// strips, so only the labelled plaques need text here.</summary>
+    public override string RowText(int row) => KindAt(row) switch
     {
-        if (row == ReplayRow)
-        {
-            return "REPLAY MISSION";
-        }
-
-        if (row == CabinRow)
-        {
-            return "RETURN TO CABIN";
-        }
-
-        var nav = NavRows();
-        int navIndex = row - NavRowBase;
-        if (navIndex >= 0 && navIndex < nav.Count)
-        {
-            return nav[navIndex] == BoardButton.CurrentMission ? "CURRENT MISSION" : string.Empty;
-        }
-
-        return string.Empty;
-    }
+        RowKind.Replay => "REPLAY MISSION",
+        RowKind.BestTab when _bestToDate => TabLabel(RowKind.BestTab),
+        RowKind.MostTab when !_bestToDate => TabLabel(RowKind.MostTab),
+        RowKind.CurrentMission => Flow.Strings.Text(1200, "Current Mission"),
+        RowKind.ViewAllMissions => "VIEW ALL MISSIONS",
+        RowKind.ReturnToCabin => "RETURN TO CABIN",
+        _ => string.Empty,
+    };
 
     /// <inheritdoc/>
-    public override string Detail(int row)
+    public override string Detail(int row) => KindAt(row) switch
     {
-        if (row == ReplayRow)
-        {
-            return "Flies this mission again";
-        }
-
-        if (row == CabinRow)
-        {
-            return "Back to the cabin";
-        }
-
-        var nav = NavRows();
-        int navIndex = row - NavRowBase;
-        if (navIndex >= 0 && navIndex < nav.Count)
-        {
-            return nav[navIndex] switch
-            {
-                BoardButton.ScrapbookPrev => "Back a page",
-                BoardButton.ScrapbookNext => "Forward a page",
-                _ => "Jump to the current mission",
-            };
-        }
-
-        return ScrapAt(row) is { } scrap ? ScrapHint(scrap) : string.Empty;
-    }
+        RowKind.Replay => "Flies this mission again",
+        RowKind.BestTab => "The best run of this mission so far",
+        RowKind.MostTab => "The last run of this mission",
+        RowKind.PrevPage => Previous() != null ? "Back a page" : "Back to the mission overview",
+        RowKind.NextPage => "Forward a page",
+        RowKind.CurrentMission => "Jump to the current mission",
+        RowKind.ViewAllMissions => "The mission overview",
+        RowKind.ReturnToCabin => "Back to the cabin",
+        _ => ScrapAt(row) is { } scrap ? ScrapHint(scrap) : string.Empty,
+    };
 
     /// <summary>REPLAY MISSION and the arrows all act on the browsed mission
     /// (<c>uiData</c> 2405's "the mission the open page shows"), not necessarily
     /// <see cref="CampaignFlow.MissionSeq"/>: they differ once the player has stepped away from the
-    /// page a mission just ended on. A scrap row opens its detail view.</summary>
+    /// page a mission just ended on. The back arrow at the front of the book falls into the mission
+    /// overview, which is where the original's own <c>sb_b_prev</c> goes.</summary>
     public override bool Accept(int row)
     {
         var (mission, spread) = Position();
-        if (row == ReplayRow)
+        var kind = KindAt(row);
+        switch (kind)
         {
-            Flow.SetMission(mission - 1);
-            Flow.GoTo(CampaignScreen.Briefing);
-            return true;
+            case RowKind.Replay:
+                Flow.SetMission(mission - 1);
+                Flow.GoTo(CampaignScreen.Briefing);
+                return true;
+            case RowKind.BestTab:
+                _bestToDate = true;
+                return true;
+            case RowKind.MostTab:
+                _bestToDate = false;
+                return true;
+            case RowKind.PrevPage:
+                if (Previous() is { } prev)
+                {
+                    (_viewMission, _viewSpread) = prev;
+                    Refocus(kind);
+                }
+                else
+                {
+                    Flow.GoTo(CampaignScreen.PreviousMissions);
+                }
+
+                return true;
+            case RowKind.NextPage:
+                if (Next() is { } next)
+                {
+                    (_viewMission, _viewSpread) = next;
+                    Refocus(kind);
+                }
+
+                return true;
+            case RowKind.CurrentMission:
+                _viewMission = Flow.MissionSeq + 1;
+                _viewSpread = 1;
+                Refocus(kind);
+                return true;
+            case RowKind.ViewAllMissions:
+                Flow.GoTo(CampaignScreen.PreviousMissions);
+                return true;
+            case RowKind.ReturnToCabin:
+                Flow.GoTo(CampaignScreen.Cabin);
+                return true;
+            default:
+                if (ScrapAt(row) is not { } scrap)
+                {
+                    return false;
+                }
+
+                Flow.SetScrapbookZoom(mission, spread, scrap.Item);
+                Flow.GoTo(CampaignScreen.ScrapbookZoom);
+                return true;
         }
-
-        if (row == CabinRow)
-        {
-            Flow.GoTo(CampaignScreen.Cabin);
-            return true;
-        }
-
-        var nav = NavRows();
-        int navIndex = row - NavRowBase;
-        if (navIndex >= 0 && navIndex < nav.Count)
-        {
-            switch (nav[navIndex])
-            {
-                case BoardButton.ScrapbookPrev:
-                    if (Previous(mission, spread) is { } prev)
-                    {
-                        (_viewMission, _viewSpread) = prev;
-                    }
-
-                    return true;
-                case BoardButton.ScrapbookNext:
-                    if (Next(mission, spread) is { } next)
-                    {
-                        (_viewMission, _viewSpread) = next;
-                    }
-
-                    return true;
-                default: // CurrentMission
-                    _viewMission = Flow.MissionSeq + 1;
-                    _viewSpread = 1;
-                    return true;
-            }
-        }
-
-        if (ScrapAt(row) is not { } scrap)
-        {
-            return false;
-        }
-
-        Flow.SetScrapbookZoom(mission, spread, scrap.Item);
-        Flow.GoTo(CampaignScreen.ScrapbookZoom);
-        return true;
     }
 
-    // The first of title, caption, then the image's own name, so the hint line never reads empty
-    // for a scrap this page actually offers to open.
-    private static string ScrapHint(ScrapbookScrap scrap)
+    // The hint band's line for a scrap: the words on the scrap itself where its row names a string,
+    // read off the first line of the title the zoom view heads with. Never the image name, which is
+    // an asset path and not something to show a player, and never the raw IDS_ symbol either: most
+    // rows name no string at all, so the fallback says what a confirm does instead.
+    private string ScrapHint(ScrapbookScrap scrap)
     {
-        foreach (var key in new[] { scrap.TitleKey, scrap.CaptionKey, scrap.TextKey })
+        foreach (var key in new[] { scrap.TitleKey, scrap.CaptionKey })
         {
-            if (key.Length > 0 && key != "0")
+            if (ScrapbookComposition.StringId(Flow.DataRoot, key) is { } id
+                && Flow.Strings.Text(id).Trim() is { Length: > 0 } text)
             {
-                return key;
+                return text.Split('\n')[0].Trim();
             }
         }
 
-        return scrap.ImageName;
+        return "Look closer";
     }
 
-    // The browsed (mission, spread), reset to the flown mission's spread 1 whenever
-    // Flow.MissionSeq no longer matches what it was when last reset -- covers both a page seen for
-    // the first time and a cached page instance reopened on a different mission.
+    // The rows this page offers right now, in the order the cursor steps them. Only the widgets
+    // the original activates are here: the two tabs and the results card belong to spread 1,
+    // Replay to a spread-1 mission whose record holds a time, and Next and the bookmark to a book
+    // position that has somewhere to go.
+    private List<RowKind> Rows()
+    {
+        var (mission, spread) = Position();
+        var rows = new List<RowKind>();
+        if (spread == 1)
+        {
+            if (ReplayOffered())
+            {
+                rows.Add(RowKind.Replay);
+            }
+
+            rows.Add(RowKind.BestTab);
+            rows.Add(RowKind.MostTab);
+        }
+
+        rows.Add(RowKind.PrevPage);
+        if (Next() != null)
+        {
+            rows.Add(RowKind.NextPage);
+        }
+
+        if (Flow.Profile != null && mission != Flow.MissionSeq + 1)
+        {
+            rows.Add(RowKind.CurrentMission);
+        }
+
+        rows.Add(RowKind.ViewAllMissions);
+        rows.Add(RowKind.ReturnToCabin);
+        for (int i = 0; i < ScrapRows().Count; i++)
+        {
+            rows.Add(RowKind.Scrap);
+        }
+
+        return rows;
+    }
+
+    private RowKind KindAt(int row)
+    {
+        var rows = Rows();
+        return row >= 0 && row < rows.Count ? rows[row] : RowKind.Scrap;
+    }
+
+    private int RowOf(RowKind kind) => Rows().IndexOf(kind);
+
+    // Puts the cursor back on the control just pressed, at whatever row the new position gives it.
+    // Row lists are rebuilt per position and a page turn off spread 1 drops three rows above the
+    // arrows, so a cursor left on its old index slides down onto RETURN TO CABIN instead. A control
+    // the new position no longer offers hands the cursor to the back arrow, which every one has.
+    private void Refocus(RowKind kind)
+    {
+        int at = RowOf(kind);
+        Flow.FocusRow(at >= 0 ? at : RowOf(RowKind.PrevPage));
+    }
+
+    // uiData 2411: Replay Mission is offered once either half of the mission's record holds a
+    // time, which a lost attempt also does, so completion bits are not the gate. The script adds
+    // the spread-1 gate by only activating the button on the results page.
+    private bool ReplayOffered()
+    {
+        var (_, spread) = Position();
+        return spread == 1 && Result() is { } result
+            && (result.Latest.TimeMs != 0 || result.Best.TimeMs != 0);
+    }
+
+    // Where the tab that is NOT selected draws, or null when the layout carries no such slot.
+    private (BoardArt Art, float X, float Y)? UnselectedTab() =>
+        CampaignBoards.SlotOf(
+            CampaignScreen.Scrapbook, _bestToDate ? BoardButton.MostTab : BoardButton.BestTab);
+
+    private string TabLabel(RowKind kind) => kind == RowKind.BestTab
+        ? Flow.Strings.Text(1159, CampaignScrapbookResults.TabTitle(bestToDate: true))
+        : Flow.Strings.Text(1160, CampaignScrapbookResults.TabTitle(bestToDate: false));
+
+    // SB_T_NAMEANDAREA's own text, langui 1215 over the player's name and the mission's short
+    // name: "Zachary - The Lost Treasure".
+    private BoardLine PageTitle()
+    {
+        var (mission, _) = Position();
+        string name = Flow.Profile?.Name ?? string.Empty;
+        string title = Flow.Strings.Text(3480 + mission - 1, $"Mission {mission}");
+        string text = Flow.Strings.Has(1215) ? Flow.Strings.Format(1215, name, title) : $"{name} - {title}";
+        return new BoardLine(text, TitleX, TitleY, 0f, TitleFont, BoardInk.Heading, Italic: true);
+    }
+
+    // The browsed (mission, spread), reset to the opened mission's spread 1 whenever the flow has
+    // opened the book again or Flow.MissionSeq no longer matches what it was when last reset.
     private (int Mission, int Spread) Position()
     {
-        if (_viewMission < 0 || _openedOnMissionSeq != Flow.MissionSeq)
+        if (_viewMission < 0 || _openedOnMissionSeq != Flow.MissionSeq
+            || _openedOnEntry != Flow.ScrapbookEntry)
         {
             _viewMission = Flow.MissionSeq + 1;
             _viewSpread = 1;
             _openedOnMissionSeq = Flow.MissionSeq;
+            _openedOnEntry = Flow.ScrapbookEntry;
+            _bestToDate = false;
         }
 
         return (_viewMission, _viewSpread);
     }
 
     // The previous spread: one back within the mission, or the previous mission's own last spread
-    // once its front is reached. Null at the front of the book (mission 1, spread 1); this shell
-    // has no table of contents screen to fall into there yet.
-    private (int Mission, int Spread)? Previous(int mission, int spread)
+    // once its front is reached. Null at the front of the book (mission 1, spread 1), where the
+    // back arrow opens the mission overview instead.
+    private (int Mission, int Spread)? Previous()
     {
+        var (mission, spread) = Position();
         if (spread > 1)
         {
             return (mission, spread - 1);
@@ -285,8 +408,9 @@ public sealed class CampaignScrapbookPage : CampaignPage
     // current one runs out -- probing SCRAPBOOK.CSV for the neighbouring item 1 the way
     // FUN_00406170 does, rather than storing a page count. Null past the last spread of the last
     // mission the file carries.
-    private (int Mission, int Spread)? Next(int mission, int spread)
+    private (int Mission, int Spread)? Next()
     {
+        var (mission, spread) = Position();
         if (ScrapbookComposition.Items(Flow.DataRoot, mission, spread + 1).Count > 0)
         {
             return (mission, spread + 1);
@@ -309,34 +433,6 @@ public sealed class CampaignScrapbookPage : CampaignPage
         return last;
     }
 
-    // Which of the page/mission arrows and the Current Mission bookmark are offered right now, in
-    // the order they occupy rows from NavRowBase: only Prev/Next that actually lead somewhere, and
-    // the bookmark only while the browsed mission is not the campaign's current one -- mirroring
-    // uiData 2401's own activate/deactivate flags rather than drawing a dead button.
-    private List<BoardButton> NavRows()
-    {
-        var (mission, spread) = Position();
-        var rows = new List<BoardButton>();
-        if (Previous(mission, spread) != null)
-        {
-            rows.Add(BoardButton.ScrapbookPrev);
-        }
-
-        if (Next(mission, spread) != null)
-        {
-            rows.Add(BoardButton.ScrapbookNext);
-        }
-
-        if (Flow.Profile != null && mission != Flow.MissionSeq + 1)
-        {
-            rows.Add(BoardButton.CurrentMission);
-        }
-
-        return rows;
-    }
-
-    private int ScrapRowBase() => NavRowBase + NavRows().Count;
-
     private MissionResult? Result()
     {
         var (mission, _) = Position();
@@ -353,17 +449,15 @@ public sealed class CampaignScrapbookPage : CampaignPage
 
         var (mission, spread) = Position();
         int bestMask = Result()?.Best.CompletedMask ?? 0;
-        return ScrapbookComposition.Openable(Flow.DataRoot, mission, spread, bestMask, CaptureExists);
+        return ScrapbookComposition.Openable(Flow.DataRoot, mission, spread, bestMask, Flow.CapturePath);
     }
 
     private ScrapbookScrap? ScrapAt(int row)
     {
+        var rows = Rows();
+        int first = rows.IndexOf(RowKind.Scrap);
         var scraps = ScrapRows();
-        int index = row - ScrapRowBase();
+        int index = first < 0 ? -1 : row - first;
         return index >= 0 && index < scraps.Count ? scraps[index] : null;
     }
-
-    private bool CaptureExists(ScrapbookScrap scrap) =>
-        Flow.Profile is { } profile
-        && File.Exists(Path.Combine(Flow.Store.DirFor(profile.Name), scrap.FileName));
 }

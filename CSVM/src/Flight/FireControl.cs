@@ -36,8 +36,8 @@ public struct FireInputs
 {
     public bool FireHeld;          // gun trigger (Space / pad B; --fire ORs in adapter-side)
     public bool RocketHeld;        // rocket trigger (F / pad A)
-    public bool GunSelectHeld;     // gun-group selector (G / D-pad Left)
-    public bool RocketSelectHeld;  // hardpoint selector (H / D-pad Right)
+    public bool GunSelectHeld;     // gun-group selector (G / D-pad Right)
+    public bool RocketSelectHeld;  // hardpoint selector (H / D-pad Left)
 }
 
 /// <summary>The one spelling of "is this weapon slot armed?".</summary>

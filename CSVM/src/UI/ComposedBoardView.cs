@@ -86,6 +86,16 @@ public sealed partial class ComposedBoardView : Control
             return;
         }
 
+        foreach (var picture in board.Backdrop)
+        {
+            DrawPicture(fit, picture);
+        }
+
+        foreach (var fill in board.Fills)
+        {
+            DrawFill(fit, fill);
+        }
+
         foreach (var picture in board.Pictures)
         {
             DrawPicture(fit, picture);
@@ -170,6 +180,22 @@ public sealed partial class ComposedBoardView : Control
         return _slanted;
     }
 
+    private void DrawFill(BoardFit fit, BoardFill fill)
+    {
+        var colour = new Color(fill.R / 255f, fill.G / 255f, fill.B / 255f, fill.Opacity);
+        var box = new Rect2(
+            fit.X(fill.X), fit.Y(fill.Y), fit.Length(fill.Width), fit.Length(fill.Height));
+        if (!fill.Border)
+        {
+            DrawRect(box, colour);
+            return;
+        }
+
+        // An outline of one authored pixel, which is at least one real one however small the board
+        // is drawn: a sub-pixel border is a border nobody sees.
+        DrawRect(box, colour, filled: false, Mathf.Max(1f, fit.Length(1f)));
+    }
+
     private void DrawPicture(BoardFit fit, BoardPicture picture)
     {
         if (Load(picture.Art) is not { } texture)
@@ -185,6 +211,15 @@ public sealed partial class ComposedBoardView : Control
         if (picture.Centered)
         {
             at -= span / 2f;
+        }
+
+        // Growing about the middle rather than the corner, so a scrap swelling under the cursor
+        // stays where the page put it instead of creeping down and to the right.
+        if (picture.Scale != 1f)
+        {
+            var grown = span * picture.Scale;
+            at -= (grown - span) / 2f;
+            span = grown;
         }
 
         var tint = new Color(1f, 1f, 1f, Mathf.Clamp(picture.Opacity, 0f, 1f));
@@ -245,7 +280,13 @@ public sealed partial class ComposedBoardView : Control
 
         // Wrapped, because a description panel's text is a block and a row's own text may still be
         // longer than the widget it sits in; a single-line draw would run off the board.
-        DrawMultilineString(font, at, line.Text, HorizontalAlignment.Left, fit.Length(line.Width),
+        var justify = line.Justify switch
+        {
+            BoardJustify.Right => HorizontalAlignment.Right,
+            BoardJustify.Center => HorizontalAlignment.Center,
+            _ => HorizontalAlignment.Left,
+        };
+        DrawMultilineString(font, at, line.Text, justify, fit.Length(line.Width),
             points, -1, InkOf(line.Ink));
     }
 
@@ -299,9 +340,13 @@ public sealed partial class ComposedBoardView : Control
     // screen backgrounds ship as, which no engine-free decoder here covers.
     private Texture2D? Load(BoardArt art)
     {
-        string path = art.Library == BoardArtLibrary.Rimage
-            ? Path.Combine(_dataRoot, "extracted", "rimage", art.Name.ToLowerInvariant() + ".png")
-            : Path.Combine(_dataRoot, "extracted", "rof", "ASSETS", "GRAPHICS", art.Name);
+        string path = art.Library switch
+        {
+            BoardArtLibrary.Rimage =>
+                Path.Combine(_dataRoot, "extracted", "rimage", art.Name.ToLowerInvariant() + ".png"),
+            BoardArtLibrary.Loose => art.Name,
+            _ => Path.Combine(_dataRoot, "extracted", "rof", "ASSETS", "GRAPHICS", art.Name),
+        };
         if (_textures.TryGetValue(path, out var cached))
         {
             return cached;

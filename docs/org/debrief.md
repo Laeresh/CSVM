@@ -410,16 +410,16 @@ the flow above is exhaustive and not a sample of it:
 
 ### So this item reuses a board CSVM already has
 
-`CampaignPreviousMissionsPage` is not quite either original screen, but closer in shape to
-`SCRAPBOOK_TOC.SCRIPT` than to the book: a flat list with a pick-then-act pair of buttons and a
-Return, which is the table of contents' VIEW SELECTED / REPLAY MISSION / CURRENT MISSION / RETURN
-over its 25-row list. The original keeps the two screens apart: the cabin's PREVIOUS MISSIONS
-button opens the table of contents, and only a picked row or the Current Mission jump reaches the
-two-page book. CSVM's one class currently stands in for both. The debrief itself is the
-book opened on the mission just flown, and nothing in CSVM draws that yet: the results block, the
-per-scrap pages, the zoom, the page and mission arrows and the bookmark are still to build, and
-where the original's book/table-of-contents split lands in CSVM's own page structure is a call for
-whichever Wave C/D item builds it, not settled here.
+CSVM keeps the original's two screens apart, one class each.
+`CampaignPreviousMissionsPage` is the table of contents: `SBTOC_L_TOCList`'s own four-row window
+over the missions the profile has finished, with VIEW SELECTED, REPLAY MISSION, the CURRENT MISSION
+bookmark and RETURN TO CABIN under it. `CampaignScrapbookPage` is the book, reached exactly the
+three ways the original reaches it: a mission ending, a row picked in the table of contents, and
+either bookmark, all through `CampaignFlow.OpenScrapbook`, which is `uiData` 2405 mode 1. The cabin's
+PREVIOUS MISSIONS button still opens the table of contents alone, never the book.
+The one thing the pages carry that the original's data cannot fill is the capture slots: `BL-256`,
+the capture writer, is deferred, so a `Snap_` row is skipped and its photo-corner mount draws
+alone.
 
 ## What the debrief does not write
 
@@ -440,13 +440,11 @@ merge, not its author, and the two run in the same mission-end pass.
   `CampaignDirector.CreditKill` fills them off each roster aircraft's own `Downed` report: the
   player did it, the victim's roster-authored side is hostile, and the roster's `ace` flag (slot 67)
   picks plain or starred. `CampaignProgression.MergeBest` merges both per index by maximum. The
-  screen side (the stamps and the Overall Planes Downed sum) still draws nothing yet; Rockets
-  Expended needs no source, since the original does not draw it.
-- **A board exists, but it is shaped like the wrong original screen.** `CampaignPreviousMissionsPage`
-  is a flat mission list, closer to `SCRAPBOOK_TOC.SCRIPT` than to the two-page book the debrief
-  actually is; the table of contents' own screen, `SCRAPBOOK_TOC.SCRIPT`, and the book's story page,
-  per-scrap detail and navigation (page/mission arrows, the Current Mission bookmark) are still
-  Wave D's.
+  screen side draws them (C16, below); Rockets Expended needs no source, since the original does
+  not draw it.
+- **Both original screens are built, one class each.** `CampaignPreviousMissionsPage` is
+  `SCRAPBOOK_TOC.SCRIPT`'s table of contents and `CampaignScrapbookPage` is the book, with
+  `CampaignScrapbookZoomPage` the scrap detail view; the split is the section above.
 - **The results block is computed (C15).** `CampaignScrapbookResults`, in
   `CampaignPreviousMissionsPage.cs`, renders the outcome line and the four drawn rows off one
   `MissionResult` and either tab, including the Best to Date tab's own bug: it always reads Mission
@@ -456,15 +454,13 @@ merge, not its author, and the two run in the same mission-end pass.
   slots densely; `StampPictures`/`StampLabels` place the strip frame and count at each slot's own
   `LAYOUT.CSV` position.
 - **The mission-end entry and Replay Mission are wired (C17).** `CampaignScreen.Scrapbook` and its
-  `CampaignScrapbookPage` (Most Recent tab only, C15/C16's content) are reached from
-  `Launcher.OpenDebrief`, renamed from `OpenCabin` since it now opens the debrief with the cabin on
-  its far side (`LaunchMenu.OpenCampaignScrapbook`, mirroring `OpenCampaignCabin`'s re-read-from-store
-  discipline). Replay Mission opens the briefing without touching `CampaignFlow.MissionSeq`, which
-  is already the flown mission and not the campaign's current position (they differ after a win);
-  Return to Cabin pops back to the cabin `SelectProfile` already pushed. The cabin's own PREVIOUS
-  MISSIONS button still opens `CampaignPreviousMissionsPage`'s flat list, not this page — the two
-  entry paths landing on different screens (A3) is Wave D's open scope call to close, if it closes
-  at all.
+  `CampaignScrapbookPage` are reached from `Launcher.OpenDebrief`, renamed from `OpenCabin` since it
+  now opens the debrief with the cabin on its far side (`LaunchMenu.OpenCampaignScrapbook`,
+  mirroring `OpenCampaignCabin`'s re-read-from-store discipline). Replay Mission opens the briefing
+  without touching `CampaignFlow.MissionSeq`, which is already the flown mission and not the
+  campaign's current position (they differ after a win); Return to Cabin pops back to the cabin
+  `SelectProfile` already pushed. Both tabs are live, and Replay Mission is offered only where
+  `uiData` 2411 offers it: a results page whose mission's record holds a time in either half.
 - **The skip offer's counter and its answer are implemented; the asking is not (B14).**
   `MissionResult.Attempts` is the per-mission counter, moved by `CampaignProgression.Record` on a
   failure alone and only while `Best`'s bit 0 is clear, so it counts total rather than consecutive
@@ -474,8 +470,8 @@ merge, not its author, and the two run in the same mission-end pass.
   synthetic win, and commits the failed attempt's world capture the way the win flag's save gate
   does. CSVM keeps the counter in the profile because the original's own array sits in the
   undecoded `0x0071b480` overlap below. The prompt itself is `SkipOfferPrompt`, a marked
-  placeholder: string 191's wording is not in the extraction. Nothing draws the offer yet, because
-  the screen that asks it is Wave C's.
+  placeholder: string 191's wording is not in the extraction. Nothing draws the offer yet: the
+  original asks it in a message box, and this shell has no such screen.
 - **`ObjectiveGraph.CompletedMask` is one of the original's two mask sources.** It is the
   objective-number half; the id 18 to 30 half comes from the module vector.
 
