@@ -36,6 +36,13 @@ public partial class Launcher : Node3D
     // same slot as max, so it would just be max under another name (see ReportPerf).
     private const int Perf95Index = (PerfWindowFrames * 95 + 99) / 100 - 1;
 
+    // Wall seconds per always-on `[perf] rate` line. Wall time and NOT a frame count, unlike
+    // PerfWindowFrames above: a frame-count window stretches exactly as the rate falls, so at
+    // 1 fps a 60-frame window would report once a minute and describe the collapse least where
+    // it matters most. Ten seconds is quiet enough to leave always on beside the rest of the
+    // log and short enough that a drop is placed within the sortie. TUNE.
+    private const double RateWindowSeconds = 10;
+
     // Master-bus index. This project ships no bus layout, so Master is the only bus
     // and everything (both audio paths) is on it by default.
     private const int MasterBus = 0;
@@ -141,6 +148,12 @@ public partial class Launcher : Node3D
     private int _perfFrames;
     private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics;
     private double _perfDraws, _perfPrims, _perfNodes, _perfMem;
+
+    // The always-on rate window (ReportRate). Separate accumulators from the --perf ones above
+    // rather than shared: those are opt-in and reset on a frame count, these run every session.
+    private double _rateWallMs;
+    private double _rateWorstMs;
+    private int _rateFrames;
 
     // The always-on frame-hitch instrument and the viewport whose render times feed it. Both are
     // settled in _Ready: the monitor's constructor is what registers its hitchMonitor.* config keys,
@@ -311,6 +324,11 @@ public partial class Launcher : Node3D
         {
             ScriptedWindow.Hide();
         }
+
+        // ⚠ The driver and method IN USE, never the project setting: a machine that fell back off
+        // Forward+/Vulkan gets none of the export's baked pipelines, and nothing else in the log
+        // would say so. Ahead of the vsync line, whose meaning rests on the refresh rate here.
+        Log.Info("perf", $"gpu={Testing.GoldenShot.Adapter()} driver={RenderingServer.GetCurrentRenderingDriverName()} method={RenderingServer.GetCurrentRenderingMethod()} refresh_hz={DisplayServer.ScreenGetRefreshRate():0.#}");
 
         // --no-vsync uncaps the frame loop so frame/fps/script report work done rather than a
         // refresh cap, safe with the fixed clock since it steps one sim frame per rendered one.
@@ -665,6 +683,10 @@ public partial class Launcher : Node3D
             _hitchSidecar.Enqueue(_hitchMonitor.Last);
         }
         _hitchSidecar.Tick(frameMs);
+        // Fed the same wall cost the monitor above gets, and unconditional where --perf is opt-in:
+        // the rate a player actually saw is the one thing a report from someone else's machine
+        // cannot be reconstructed without.
+        ReportRate(frameMs);
         // Early-quit probes do not construct the readout, but Godot may process one shutdown frame.
         _perfHud?.Tick(frameMs, counters);
         if (_spec.Perf)
@@ -821,6 +843,7 @@ public partial class Launcher : Node3D
         // Flushed first so nothing queued from before the build is held through it.
         _hitchSidecar.Flush();
         _hitchMonitor.Rearm();
+        RearmRate();
         // C8: the build's own scopes (loads, material creation) belong to no frame, and the frame
         // that closes over the build would otherwise report them all at once.
         PerfSample.Reset();
@@ -1074,6 +1097,7 @@ public partial class Launcher : Node3D
         // Same reason as the build in LaunchSession: a teardown legitimately stalls the loop.
         _hitchSidecar.Flush();
         _hitchMonitor.Rearm();
+        RearmRate();
         PerfSample.Reset();
         PhysicsTickCost.Reset();
         _perfHud.Rearm();
@@ -1159,6 +1183,39 @@ public partial class Launcher : Node3D
             }
         }
         Log.Info("perf", $"hitch-inject fired ms={ms:0.0} alloc={alloc} bytes={sink}");
+    }
+
+    /// <summary>The always-on frame-rate trace: one <c>[perf] rate</c> line per
+    /// <see cref="RateWindowSeconds"/> carrying the rate the window ACHIEVED. This is the question
+    /// <see cref="HitchMonitor"/> cannot answer and never could: its trigger is a multiple of a
+    /// rolling median, so a sustained collapse drags the median up with it and trips nothing, and a
+    /// whole sortie spent at a fraction of the refresh rate leaves a clean log. Mean and worst frame
+    /// sit side by side so a rate drop and a single stall read differently.</summary>
+    private void ReportRate(double frameMs)
+    {
+        _rateFrames++;
+        _rateWallMs += frameMs;
+        _rateWorstMs = System.Math.Max(_rateWorstMs, frameMs);
+        if (_rateWallMs < RateWindowSeconds * 1000)
+        {
+            return;
+        }
+        double seconds = _rateWallMs / 1000;
+        double fps = _rateFrames / seconds;
+        double meanMs = _rateWallMs / _rateFrames;
+        double worstMs = _rateWorstMs;
+        Log.Info("perf", $"rate fps={fps:0.0} frames={_rateFrames} wall_s={seconds:0.0} frame_ms={meanMs:0.00} worst_ms={worstMs:0.00}");
+        RearmRate();
+    }
+
+    // Drops the open rate window. Called wherever the frames on either side are not each other's
+    // neighbours, for the same reason HitchMonitor.Rearm is: a window spanning a session build
+    // would report a rate no part of the run ever ran at.
+    private void RearmRate()
+    {
+        _rateWallMs = 0;
+        _rateWorstMs = 0;
+        _rateFrames = 0;
     }
 
     // --perf: the headless stand-in for the editor's profiler, meaned over the window so a
