@@ -44,6 +44,10 @@ public enum BoardInk
 
     /// <summary>A button label being pressed (<c>BtnLabelActivate</c>).</summary>
     LabelActivate,
+
+    /// <summary>A dialog's own words. White whatever screen it stands over, which is what
+    /// <c>MB_T_MESSAGE</c>'s authored <c>0xFFFFFFFF</c> says, so it takes no palette.</summary>
+    Dialog,
 }
 
 /// <summary>Which edge of its <see cref="BoardLine.Width"/> a text widget's words sit against,

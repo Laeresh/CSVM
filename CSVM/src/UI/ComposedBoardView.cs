@@ -178,6 +178,7 @@ public sealed partial class ComposedBoardView : Control
         BoardInk.LabelNormal => _palette.LabelNormal,
         BoardInk.LabelRollover => _palette.LabelRollover,
         BoardInk.LabelActivate => _palette.LabelActivate,
+        BoardInk.Dialog => Colors.White,
         _ => _palette.Row,
     };
 

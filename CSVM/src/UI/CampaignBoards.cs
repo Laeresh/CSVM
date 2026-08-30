@@ -45,6 +45,17 @@ public static class CampaignBoards
     private const int ScrollArrowFrames = 4;
     private const float ComboArrowSize = 16f;
 
+    // Where the 410x300 messagebox art lands on the 800x600 board, which is centred, and the face
+    // and button width its own widgets take.
+    private const float DialogX = 195f;
+    private const float DialogY = 150f;
+    private const float DialogFont = 12f;
+    private const float DialogButtonWidth = 62f;
+
+    // MB_B_Icon.Png stacks three icons rather than a button's four states: the warning, and the two
+    // the other message classes use.
+    private const int DialogIconFrames = 3;
+
     // The scrollbar thumb's own art height, and where a field's words sit inside its box.
     private const float ScrollThumbHeight = 12f;
     private const float ComboTextInset = 4f;
@@ -171,7 +182,8 @@ public static class CampaignBoards
     /// screen's own authored text slots. <paramref name="pressed"/> draws the focused plaque in
     /// its depressed frame for the frames a confirm is held.</summary>
     public static ComposedBoard For(
-        ICampaignPage page, int focusedRow, bool pressed = false, string detail = "")
+        ICampaignPage page, int focusedRow, bool pressed = false, string detail = "",
+        CampaignModal? modal = null)
     {
         var backdrop = Chrome.TryGetValue(page.Screen, out var chrome)
             ? chrome
@@ -214,8 +226,35 @@ public static class CampaignBoards
             lines.Add(new BoardLine(detail, note.X, note.Y, note.Width, ListFont, BoardInk.Detail));
         }
 
+        if (modal != null)
+        {
+            overlays.Add(Dialog(modal));
+        }
+
         return new ComposedBoard(
             pictures, page.Strokes, lines, plaques, page.Notes, backdrop, fills, overlays);
+    }
+
+    /// <summary>The messagebox as its own panel, centred on the board. Every position inside it is
+    /// <c>[@MessageBox@]</c>'s own, offset by where the 410x300 art lands: the layout gives the box
+    /// its internal geometry and no screen position, and the reference screenshots put its edges at
+    /// the centred one (<c>OriginalScreenshots/Campaign Flight Check Change Plane Export
+    /// dialog.png</c>).</summary>
+    public static BoardPanel Dialog(CampaignModal modal)
+    {
+        var pictures = new List<BoardPicture>
+        {
+            new(Ui("MB_Background.png"), DialogX, DialogY),
+            new(Ui("MB_B_Icon.Png", DialogIconFrames), DialogX + 36f, DialogY + 65f),
+            new(Ui("MB_B_Buttons.Png", StripFrames), DialogX + 174f, DialogY + 254f, 2),
+        };
+        var lines = new List<BoardLine>
+        {
+            new(modal.Message, DialogX + 94f, DialogY + 70f, 282f, DialogFont, BoardInk.Dialog),
+            new(modal.Button, DialogX + 174f, DialogY + 257f, DialogButtonWidth, DialogFont,
+                BoardInk.LabelActivate, Justify: BoardJustify.Center),
+        };
+        return new BoardPanel(Array.Empty<BoardFill>(), pictures, lines);
     }
 
     /// <summary>Where one of a screen's authored buttons sits and what art it draws, for a page

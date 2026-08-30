@@ -2451,7 +2451,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // screen has nowhere else to put, which is every short description and every refusal.
         bool banded = CampaignBoards.DetailSlot(page.Screen) == null && !detail.Contains('\n');
         _boardRoot.Show(
-            CampaignBoards.For(page, row, _pressFrames > 0, detail),
+            CampaignBoards.For(page, row, _pressFrames > 0, detail, flow.Modal),
             BoardPalette.For(page.Screen),
             banded ? detail : string.Empty,
             page.Footer);

@@ -136,7 +136,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the machinery
 
 1. ☑ A1 A combo-box widget on the campaign board, closed field and scrolling popup list
-2. ☐ A2 A flow-level modal dialog over the composed board
+2. ☑ A2 A flow-level modal dialog over the composed board
 3. ☐ A3 Register `campaign-planeselection` with the existing `--menu=` aid (runs after B4)
 
 ### Wave B — the plane selection screen
@@ -211,7 +211,7 @@ The plane list can hold 26 entries against 13 displayed, so a fixed-height popup
 closed combo's horizontal stepper working: the flight check's own stepper goes away in C7, but the
 ammo screen's does not, and its existing tests assert it.
 
-## A2 ☐ A flow-level modal dialog over the composed board
+## A2 ☑ A flow-level modal dialog over the composed board
 
 **Goal.** Any page can raise a modal carrying a message and one button, drawn as the original's
 messagebox over whatever screen raised it, holding every input until it is dismissed, after which

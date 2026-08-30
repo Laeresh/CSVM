@@ -262,6 +262,10 @@ public sealed class CampaignFlow
     /// <summary>The refusal line the last action left, or "". Cleared by any navigation.</summary>
     public string Message { get; private set; } = string.Empty;
 
+    /// <summary>The dialog standing over the screen, or null. While one stands it takes every
+    /// press, so the screen under it neither moves nor changes.</summary>
+    public CampaignModal? Modal { get; private set; }
+
     /// <summary>Whether the keyboard's letters are text right now rather than navigation. The shell
     /// reads this to decide whether to hand over its cursor axes or the pad's alone.</summary>
     public bool CapturesText => Page.TextEntry is { Active: true };
@@ -281,6 +285,11 @@ public sealed class CampaignFlow
     /// one at all.</summary>
     public bool Move(int dir)
     {
+        if (Modal != null)
+        {
+            return false;
+        }
+
         if (Page.TextEntry is { Active: true } entry)
         {
             return dir < 0 ? entry.Append() : entry.Backspace();
@@ -308,7 +317,7 @@ public sealed class CampaignFlow
     /// focused row's own stepper.</summary>
     public bool Step(int dir)
     {
-        if (dir == 0)
+        if (dir == 0 || Modal != null)
         {
             return false;
         }
@@ -349,6 +358,13 @@ public sealed class CampaignFlow
     /// navigate by naming where they go, not by advancing through a fixed order.</summary>
     public bool Accept()
     {
+        // A dialog takes the confirm. The press that raised one cannot also answer it: a page
+        // raises from inside its own Accept, which this check has already passed by then.
+        if (DismissModal())
+        {
+            return true;
+        }
+
         Message = string.Empty;
         return Page.Accept(ClampedRow());
     }
@@ -358,6 +374,11 @@ public sealed class CampaignFlow
     /// survives a press no page took, since nothing happened for it to be stale about.</summary>
     public bool Secondary()
     {
+        if (Modal != null)
+        {
+            return false;
+        }
+
         if (!Page.Secondary(ClampedRow()))
         {
             return false;
@@ -371,6 +392,11 @@ public sealed class CampaignFlow
     /// screen ends the flow.</summary>
     public bool Back()
     {
+        if (DismissModal())
+        {
+            return true;
+        }
+
         Message = string.Empty;
         if (Page.Back())
         {
@@ -498,11 +524,31 @@ public sealed class CampaignFlow
     /// <summary>Leaves a refusal on screen, in the original's own words where it has some.</summary>
     public void SetMessage(string message) => Message = message;
 
+    /// <summary>Raises a dialog over the screen showing. A second raise replaces the first rather
+    /// than stacking: the original's own box is one script run over the screen, not a stack.</summary>
+    public void RaiseModal(string message, string button = "OK", Action? confirmed = null) =>
+        Modal = new CampaignModal(message, button, confirmed);
+
     /// <summary>Puts the cursor on a row, clamped into the page's current list.</summary>
     public void FocusRow(int row)
     {
         Row = Math.Max(0, row);
         ClampedRow();
+    }
+
+    // Answers a standing dialog, running whatever was to follow it. Both the confirm and the back
+    // press take this door: a one-button dialog has one answer, so skipping the callback on one of
+    // the two presses would make what happens next depend on which one the player used.
+    private bool DismissModal()
+    {
+        if (Modal is not { } modal)
+        {
+            return false;
+        }
+
+        Modal = null;
+        modal.Confirm();
+        return true;
     }
 
     // The page for a screen, built on first sight and kept, so a page may hold state of its own
