@@ -965,6 +965,16 @@ Owns the phantom policy (span every pad, never `pads[0]`), `Disabled` (`--no-pad
 remarks. `AssignPads` is the launch-time roster split, its leftover-pool rule for P1 covered by
 the pure, engine-free overload in `PadsTests.cs`.
 
+`LogPads` records the roster and the per-seat result through the run log, because the binding is
+settled once at build and cannot be reconstructed afterwards. The roster line carries POSITION and
+id separately (`[1] pad 2 "..."`), and that is what it is for: `AssignPads` seats P2-P4 by roster
+position, so a device occupying a position without producing input takes that seat and leaves the
+real pad in P1's leftover pool, flying P1's plane beside P1's own. The per-seat lines cannot show
+that device, since it is the one no seat reports; a position that does not match its id is the
+tell. A menu-driven launch binds from the join flow instead, which claims by device id and so
+cannot seat a phantom (`Launcher.BindMenuPads`, the path every launchscreen and campaign-cabin
+launch takes).
+
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission
 shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`/`Object3DTranslate`/`Object3DRotate`/
