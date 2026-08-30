@@ -43,12 +43,46 @@ public class CampaignScrapbookZoomPageTests
 
         Assert.Empty(flow.Page.Pictures);
         Assert.Empty(flow.Page.Captions);
+        Assert.Equal(1, flow.Page.RowCount); // no file to export, so RETURN alone
+    }
+
+    /// <summary>EXPORT TO DESKTOP copies the scrap's own file, byte for byte, under its own name,
+    /// and says so in langui 705's words.</summary>
+    [Fact]
+    public void ExportCopiesTheScrapToTheDesktopAndSaysSo()
+    {
+        var flow = OpenedOnZoom();
+        string desktop = Path.Combine(TestData.TempDir(), "Desktop");
+        Directory.CreateDirectory(desktop);
+        string art = Path.Combine(
+            flow.DataRoot!, "extracted", "rof", "ASSETS", "GRAPHICS", "SCRAPBOOK");
+        Directory.CreateDirectory(art);
+        File.WriteAllBytes(Path.Combine(art, "SB_01_01_test.JPG"), new byte[] { 1, 2, 3 });
+
+        var page = new CampaignScrapbookZoomPage(flow, desktop);
+        Assert.Equal(2, page.RowCount);
+        Assert.True(page.Accept(CampaignScrapbookZoomPage.ExportRow));
+
+        Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(Path.Combine(desktop, "SB_01_01_test.JPG")));
+        Assert.Contains("SB_01_01_test.JPG", flow.Message);
+        Assert.Contains("desktop", flow.Message);
+    }
+
+    /// <summary>A scrap with no file behind it offers no EXPORT row at all, which is the original
+    /// deactivating the button for a zoom with no inset image.</summary>
+    [Fact]
+    public void ExportIsNotOfferedForAScrapWithNoFile()
+    {
+        var flow = OpenedOnZoom();
+
+        Assert.Equal(1, flow.Page.RowCount); // the fixture writes no art beside its CSV
+        Assert.False(flow.Page.Accept(CampaignScrapbookZoomPage.ExportRow));
     }
 
     private static CampaignFlow OpenedOnZoom()
     {
         var flow = FlowOnScrapbook();
-        flow.FocusRow(2); // Replay, Cabin, then the one openable scrap
+        flow.FocusRow(flow.Page.RowCount - 1); // the one openable scrap, after every button
         flow.Accept();
         Assert.Equal(CampaignScreen.ScrapbookZoom, flow.Screen);
         return flow;
