@@ -1,8 +1,10 @@
 # Plane selection, combo boxes and the campaign modal
 
-**ACTIVE PLAN** (written 2026-08-30). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (written 2026-08-30, all 10 items landed 2026-08-30). Indexed in
+[`plans.md`](plans.md). Read as history: the shipped behaviour is in
+[`docs/formats/campaign-screens.md`](../formats/campaign-screens.md) and
+[`docs/architecture.md`](../architecture.md), and each item's record is its landing commit's
+message.
 
 The campaign's CHANGE PLANE button cycles the plane in place because no picker screen exists
 (`CSVM/src/UI/CampaignFlightCheckPage.cs:42`). The original opens a whole screen for it,
@@ -149,7 +151,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 7. ☑ C7 The flight check opens the picker and loses its in-place stepper
 8. ☑ C8 A guest's check gets the picker, with no EXPORT and a refusal of its own
-9. ☐ C9 The ammo screen's captions and fields take their authored positions
+9. ☑ C9 The ammo screen's captions and fields take their authored positions
 
 ### Wave D — the record
 
@@ -435,7 +437,7 @@ guest's screen; a guest's accepted pick does not touch the seated profile.
 for its airframe, and a hangar plane called "Devastator" would fit that guest with somebody else's
 build; `IsStock` exists for this and both existing screens already ask it.
 
-## C9 ☐ The ammo screen's captions and fields take their authored positions
+## C9 ☑ The ammo screen's captions and fields take their authored positions
 
 **Goal.** The ammo screen reads like `OriginalScreenshots/Campaign Flight Check Change Ammo
 Menu.png`: a calibre caption above each field, the ammunition name inside the field, and no text

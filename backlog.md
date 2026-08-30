@@ -2495,6 +2495,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   move and a pad press cannot each own a different row. *Cross-refs:* the combo-box popups and the
   modal dialog added for the plane selection screen are the newest widgets that would need it.
 
+- `BL-658` `[Fidelity]` **The ammo screen shows one description pane where the original fills two.**
+  *Evidence:* `[@OrdinanceLayout@]` authors `OL_S_AMMODESC` at 566,96 and `OL_S_ROCKETDESC` at
+  566,332, each under its own heading, and `ORDINANCELAYOUT.SCRIPT` fills both at once, so the
+  screen reads a gun's ammunition and a pylon's ordnance side by side. Our board draws a single
+  `CampaignBoards.DetailSlot` at 566,92 carrying whichever row the cursor is on, so a rocket
+  description appears in the ammunition pane's position and the lower pane is empty.
+  *Fix shape:* the detail slot is keyed by screen, so the composer cannot tell which pane a row
+  belongs to; `ICampaignPage` needs a member naming the pane, after which the ammo page answers
+  with both texts and the two headings can be drawn. *⚠ Traps:* the plane selection screen and the
+  roster share `DetailSlot` and must keep one pane; and the open rocket list draws over the lower
+  pane in the original, so the overlay order is part of the change.
+
+- `BL-659` `[Testing]` **No screenshot aid can open a campaign combo box.**
+  *Evidence:* `LaunchMenu.OpenCampaignAid`'s `:<n>` argument spends itself on `flow.Move(1)`, and
+  `campaign-guestcheck` spends its colon on the player number, so no `--menu=` value can press a
+  row. The reference images that matter most for the new widget are the open ones
+  (`Campaign Flight Check Change Ammo ComboBox.png`, `Campaign Flight Check Change Plane Combo
+  Box.png`), and both were photographed by temporarily patching a `flow.Accept()` into the walk.
+  *Fix shape:* an argument form that spells a short input script rather than a step count, so a
+  shot can move to a row and confirm on it. *Cross-refs:* the plane selection and ammo screens'
+  open lists are unpinned by any golden until this exists.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
