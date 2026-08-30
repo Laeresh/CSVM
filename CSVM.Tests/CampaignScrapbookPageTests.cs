@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -25,8 +26,94 @@ public class CampaignScrapbookPageTests
         Assert.Contains(flow.Page.Captions, l => l.Text == "03:35");
         Assert.Contains(flow.Page.Captions, l => l.Text == "16%");
         Assert.Contains(flow.Page.Captions, l => l.Text == "3"); // the one kill-stamp count
-        Assert.Single(flow.Page.Pictures);
-        Assert.Equal(8, flow.Page.Pictures[0].Frame); // Kestrel, plain
+        Assert.Contains(flow.Page.Captions, l => l.Text == "Zachary - Mission 1"); // SB_T_NAMEANDAREA
+
+        // The unselected tab under the card, the card itself, then the stamp.
+        Assert.Equal(3, flow.Page.Pictures.Count);
+        Assert.Equal("SB_B_Statcardtab.png", flow.Page.Pictures[0].Art.Name);
+        Assert.Equal("SB_P_Card.png", flow.Page.Pictures[1].Art.Name);
+        Assert.Equal(1, flow.Page.Pictures[1].Frame); // Most Recent's own card frame
+        Assert.Equal(8, flow.Page.Pictures[2].Frame); // Kestrel, plain
+    }
+
+    /// <summary>The two tabs are the whole of the selection: the one showing is a plaque over the
+    /// card, the other a picture under it, and switching moves the card's own frame with them
+    /// (<c>BL-644</c>). The Best to Date tab keeps the original's decoded outcome bug, reading
+    /// Mission Failed off an offset the merge never writes.</summary>
+    [Fact]
+    public void TheTabsSwitchWhichHalfTheResultsBlockReads()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, new MissionAttempt(
+            0, CompletedMask: 1, TimeMs: 215000, Shots: 25, Hits: 4, Money: 0,
+            Airframe: 5, PlaneName: "Gypsy Magic", Kills: KillsOf((8, 3))));
+        var flow = OpenedOnScrapbook(profile, seq: 0);
+
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.BestTab)); // unselected: a picture, not a plaque
+        Assert.NotEqual(-1, RowOf(flow.Page, BoardButton.MostTab));
+        Assert.Contains(flow.Page.Captions, l => l.Text == "Mission Completed");
+
+        Press(flow, BoardButton.MostTab); // pressing the tab already showing changes nothing
+        Assert.Contains(flow.Page.Captions, l => l.Text == "Mission Completed");
+
+        flow.FocusRow(RowOf(flow.Page, BoardButton.MostTab) - 1); // the Best tab's own row
+        flow.Accept();
+
+        Assert.NotEqual(-1, RowOf(flow.Page, BoardButton.BestTab)); // now it is the plaque
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.MostTab));
+        Assert.Equal(0, flow.Page.Pictures[1].Frame); // the card's Best to Date frame
+        Assert.Contains(flow.Page.Captions, l => l.Text == "Mission Failed"); // the decoded bug
+    }
+
+    /// <summary>Replay Mission is offered only where <c>uiData</c> 2411 offers it: a mission whose
+    /// record holds a time, and only on the results page (<c>BL-642</c>).</summary>
+    [Fact]
+    public void ReplayMissionIsOfferedOnlyOnAFlownMissionsResultsPage()
+    {
+        string root = ScrapbookCompositionFixture.WriteBook(TestData.TempDir());
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        Assert.NotEqual(-1, RowOf(flow.Page, BoardButton.ReplayMission));
+
+        StepNext(flow); // (1,1) -> (1,2), a story page: no results, no Replay
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ReplayMission));
+
+        StepNext(flow); // (1,2) -> (2,1), a results page for a mission never flown
+        Assert.Contains(flow.Page.Captions, l => l.Text == "Not yet flown");
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ReplayMission));
+    }
+
+    /// <summary>A lost attempt still counts: the gate is a recorded time, not a completion bit, so
+    /// a mission failed once is replayable from its own page.</summary>
+    [Fact]
+    public void ALostAttemptStillOffersReplayMission()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, new MissionAttempt(
+            0, CompletedMask: 0, TimeMs: 40000, Shots: 10, Hits: 5, Money: 0,
+            Airframe: 5, PlaneName: "Gypsy Magic"));
+        var flow = OpenedOnScrapbook(profile, seq: 0);
+
+        Assert.NotEqual(-1, RowOf(flow.Page, BoardButton.ReplayMission));
+    }
+
+    /// <summary>VIEW ALL MISSIONS jumps to the mission overview, and so does the back arrow at the
+    /// front of the book, which is where the original's own <c>sb_b_prev</c> falls.</summary>
+    [Fact]
+    public void ViewAllMissionsAndTheFrontOfTheBookBothReachTheMissionOverview()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0);
+
+        Press(flow, BoardButton.ViewAllMissions);
+        Assert.Equal(CampaignScreen.PreviousMissions, flow.Screen);
+
+        flow.OpenScrapbook(0);
+        Press(flow, BoardButton.ScrapbookPrev); // mission 1, spread 1: nowhere back to turn
+        Assert.Equal(CampaignScreen.PreviousMissions, flow.Screen);
     }
 
     /// <summary>C17's own trap: after a win the campaign position advances past the flown mission,
@@ -39,8 +126,7 @@ public class CampaignScrapbookPageTests
         var flow = OpenedOnScrapbook(profile, seq: 0);
         Assert.Equal(1, CampaignProgression.NextMissionSeq(profile)); // the win advanced it
 
-        flow.FocusRow(CampaignScrapbookPage.ReplayRow);
-        flow.Accept();
+        Press(flow, BoardButton.ReplayMission);
 
         Assert.Equal(CampaignScreen.Briefing, flow.Screen);
         Assert.Equal(0, flow.MissionSeq); // the mission just flown, not seq 1
@@ -53,8 +139,7 @@ public class CampaignScrapbookPageTests
         CampaignProgression.Record(profile, Attempt(0));
         var flow = OpenedOnScrapbook(profile, seq: 0);
 
-        flow.FocusRow(CampaignScrapbookPage.CabinRow);
-        flow.Accept();
+        Press(flow, BoardButton.ReturnToCabin);
 
         Assert.Equal(CampaignScreen.Cabin, flow.Screen);
         flow.Back();
@@ -69,7 +154,7 @@ public class CampaignScrapbookPageTests
         var flow = OpenedOnScrapbook(CampaignProfileDef.NewProfile("Zachary"), seq: 5);
 
         Assert.Contains(flow.Page.Captions, l => l.Text == "Not yet flown");
-        Assert.Empty(flow.Page.Pictures);
+        Assert.Equal(2, flow.Page.Pictures.Count); // the unselected tab and the card, no stamps
     }
 
     /// <summary>An openable scrap on spread 1 gets its own row after the two buttons, and
@@ -82,10 +167,9 @@ public class CampaignScrapbookPageTests
         CampaignProgression.Record(profile, Attempt(0));
         var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
 
-        Assert.Equal(3, flow.Page.RowCount); // Replay, Cabin, the one openable scrap
-
-        flow.FocusRow(2);
-        Assert.Equal("IDS_TEST_TITLE", flow.Page.Detail(2));
+        int scrapRow = flow.Page.RowCount - 1; // the one openable scrap, after every button
+        flow.FocusRow(scrapRow);
+        Assert.Equal("IDS_TEST_TITLE", flow.Page.Detail(scrapRow));
         flow.Accept();
 
         Assert.Equal(CampaignScreen.ScrapbookZoom, flow.Screen);
@@ -102,7 +186,7 @@ public class CampaignScrapbookPageTests
         CampaignProgression.Record(profile, Attempt(0));
         var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
 
-        Assert.Equal(string.Empty, flow.Page.RowText(2));
+        Assert.Equal(string.Empty, flow.Page.RowText(flow.Page.RowCount - 1));
     }
 
     /// <summary>The forward arrow steps within mission 1's two spreads, then rolls to mission 2's
@@ -138,8 +222,6 @@ public class CampaignScrapbookPageTests
         var profile = CampaignProfileDef.NewProfile("Zachary");
         CampaignProgression.Record(profile, Attempt(0));
         var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
-
-        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ScrapbookPrev)); // front of the book
 
         StepNext(flow); // (1,1) -> (1,2)
         StepNext(flow); // (1,2) -> (2,1)
@@ -182,13 +264,13 @@ public class CampaignScrapbookPageTests
         string root = ScrapbookCompositionFixture.WriteBook(TestData.TempDir());
         var profile = CampaignProfileDef.NewProfile("Zachary");
         CampaignProgression.Record(profile, Attempt(0));
+        CampaignProgression.Record(profile, Attempt(1)); // so mission 2's own page offers Replay
         var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
 
         StepNext(flow); // (1,1) -> (1,2)
         StepNext(flow); // (1,2) -> (2,1), mission slot 2 -- seq 1
 
-        flow.FocusRow(CampaignScrapbookPage.ReplayRow);
-        flow.Accept();
+        Press(flow, BoardButton.ReplayMission);
 
         Assert.Equal(CampaignScreen.Briefing, flow.Screen);
         Assert.Equal(1, flow.MissionSeq); // the browsed mission, not the one the book opened on
@@ -223,12 +305,15 @@ public class CampaignScrapbookPageTests
         CampaignProgression.Record(profile, Attempt(0));
         var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
 
-        Assert.Single(flow.Page.Pictures); // just the corner mount, no capture on disk yet
+        Assert.Single(Scraps(flow.Page)); // just the corner mount, no capture on disk yet
 
         File.WriteAllBytes(Path.Combine(flow.Store.DirFor(profile.Name), "Snap_1_18.PNG"), new byte[] { 0 });
-        Assert.Equal(2, flow.Page.Pictures.Count); // the capture, then the mount painted over it
-        Assert.EndsWith("Snap_1_18.PNG", flow.Page.Pictures[0].Art.Name);
-        Assert.EndsWith("DZ_generic_corners.PNG", flow.Page.Pictures[1].Art.Name);
+        var scraps = Scraps(flow.Page);
+        Assert.Equal(3, scraps.Count); // the capture, its grime, then the mount painted over both
+        Assert.EndsWith("Snap_1_18.PNG", scraps[0].Art.Name);
+        Assert.Equal(BoardArtLibrary.Loose, scraps[0].Art.Library); // the profile directory, not the assets
+        Assert.Equal("SB_P_Grime.Png", scraps[1].Art.Name);
+        Assert.EndsWith("DZ_generic_corners.PNG", scraps[2].Art.Name);
     }
 
     // Presses whichever row currently carries the named arrow/bookmark button, failing loudly if
@@ -243,6 +328,24 @@ public class CampaignScrapbookPageTests
         Assert.NotEqual(-1, row);
         flow.FocusRow(row);
         flow.Accept();
+    }
+
+    // The spread's own scraps: on a results page the unselected tab and the card always follow
+    // them in the picture list, so the first of those two ends the scraps.
+    private static List<BoardPicture> Scraps(ICampaignPage page)
+    {
+        var scraps = new List<BoardPicture>();
+        foreach (var picture in page.Pictures)
+        {
+            if (picture.Art.Name is "SB_B_Statcardtab.png" or "SB_P_Card.png")
+            {
+                break;
+            }
+
+            scraps.Add(picture);
+        }
+
+        return scraps;
     }
 
     // The row layout shifts as arrows/bookmark come and go, so tests locate a button by scanning

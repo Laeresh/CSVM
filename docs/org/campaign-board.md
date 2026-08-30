@@ -17,6 +17,7 @@ renderer). The decodes the coordinates come from are
 - [The authored space](#the-authored-space)
 - [Decision: uniform fit, letterboxed, nearest](#decision-uniform-fit-letterboxed-nearest)
 - [Where each coordinate comes from](#where-each-coordinate-comes-from)
+- [The table of contents' mission list](#the-table-of-contents-mission-list)
 - [Button plaques and their four frames](#button-plaques-and-their-four-frames)
 - [Which player the profile screen opens on](#which-player-the-profile-screen-opens-on)
 - [What is not reproduced](#what-is-not-reproduced)
@@ -111,6 +112,34 @@ What goes on it is the mission's own display list, one line per unique `IDENTITY
 number is part of the `MSG_` text, so nothing in the screen numbers them; an `IDENTITY` with no
 message key is a row with empty text, and draws as a blank line.
 
+## The table of contents' mission list
+
+The previous-missions screen's list is `SBTOC_L_TOCList`, and an `L` row's columns are
+`Slider,UpArrow,DownArrow,ScriptPointer,X,Y,Z,Width,Height,TotalDisplayed,TabOrder`. It reads
+`420,140,0,325,80,4`: the widget's top left is `420,140`, a row is 325 wide and **80 tall**
+(`Height` on an `L` row is one row's, not the widget's), and four of them are on screen at once.
+Everything inside a row is `SCRAPBOOK_TOC.SCRIPT`'s own list sub-script, which the layout says
+nothing about:
+
+- The aircraft silhouette is `assets\graphics\fc_planeicons.png` at `location.x + 2`, one frame per
+  row, 12 frames of 80x80. Frames 0 to 10 are the airframes in id order and frame 11 is the card
+  fan the not-yet-started career row takes.
+- The text column starts at `EZ`, the icon pane's width plus 20, so 100 in from the widget's left.
+  Its three rows sit at `+10`, `+30` and `+50` down the row, and hold what `uiData` 2409 returns:
+  the mission's short name (langui `3480 + m - 1`), its area (langui `1220 + chapter`) and the
+  plane that flew it.
+- The picked row is `ldrawrect` in `0x80f2e7b7` under an `ldrawframe` in `0xffdd9017`, both over
+  the full 325-wide row. The row under the pointer takes the same frame over a `0x40f2e7b7` wash.
+  On a pad the cursor is what a pointer was, so the focused row draws the second pair.
+
+**Three values are measured rather than decoded**, and are marked as such in the code. The row face
+is 17 pixels: every row is drawn in `@globals@gfont3d`, which no layout row sizes. `SBTOC_T_CHARACTER`
+and `SBTOC_T_MISSIONS` name no face either, so the player's name is 14 and the heading over the list
+is 11; both are `justify 2` (right) against their own 300-wide column, which is what puts them
+against `x = 725` in the reference. The scrollbar column stands at `x = 730`, 16 wide, with an
+11-pixel arrow at each end of the 320-pixel window and the list's own `0xff282418` behind the thumb,
+all four taken off `Campaign CAP-41 Previous Mission 2.png`.
+
 ## Button plaques and their four frames
 
 Every screen-specific button ships as one PNG holding **four stacked frames of equal height**, in
@@ -159,9 +188,10 @@ Named so nobody reads their absence as a decode gap.
   behind a background at z 4, which cannot be what a pin on the desk map means; the count rule is
   tested in `CampaignCabinPage.MapPinCount` and the drawing waits on that contradiction being
   settled.
-- **Per-widget chrome**: dropdown boxes, scrollbars, listbox selection bars, the scrapbook's kill
-  markers and stat card. The boards draw their screens' backgrounds, plaques, pictures and text;
-  the widgets those text runs sit in are each their own fidelity question.
+- **Per-widget chrome outside the table of contents**: dropdown boxes, and the scrollbars and
+  selection bars of every other list. The boards draw their screens' backgrounds, plaques, pictures
+  and text; the widgets those text runs sit in are each their own fidelity question, and only
+  `SBTOC_L_TOCList` has been answered (above).
 - **Italic as a real face.** The extraction ships no italic font, so a langui row asking for one
   (`[AB19I]`) is drawn as the board's own face sheared 0.25 em. That lean is chosen to read like the
   reference screenshot, not decoded from anything.

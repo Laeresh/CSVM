@@ -90,10 +90,16 @@ public sealed partial class LaunchMenu : CanvasLayer
     // onto the 19 presets (docs/formats/instant-action.md, "Screen controls"). Decoded, not a fit
     // to our own layout — do not "tidy" it to the item count.
     private const int PresetWindow = 14;
-    // How many missions the campaign screenshot aids' seeded profile has flown. Three is the
-    // smallest number that gives the previous-missions list a scrollable body and leaves the
-    // cabin's Next Mission somewhere other than the campaign's first entry.
+    // How many missions the campaign screenshot aids' seeded profile has flown. Three gives the
+    // previous-missions list a body and leaves the cabin's Next Mission somewhere other than the
+    // campaign's first entry. Raising it walks campaign-briefing onto a longer narration than
+    // campaign-briefing-repaint's own 90-second window covers.
     private const int AidMissionsFlown = 3;
+
+    // The completed-objective mask those runs record. Bit 0 alone would leave every scrapbook page
+    // blank, since the story scraps are gated on the objectives that unlock them, so the aid
+    // records a clean run: bits 0 to 12, the range the shipped rows' own gates use.
+    private const int AidCompletedMask = 0x1fff;
 
     // The lives stepper's range (Screen.MissionType, decision 15/18): 0 = unlimited, 1 = the
     // faithful one-life run (default), up to this cap. INVENTED — ia.json carries no such field, so
@@ -684,8 +690,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (_campaign is { } flow && flow.Store.Load(profileName) is { } profile)
         {
             flow.SelectProfile(profile);
-            flow.SetMission(seq);
-            flow.GoTo(CampaignScreen.Scrapbook);
+            flow.OpenScrapbook(seq);
         }
 
         Music?.Enter(MusicState.Menu, MusicRng);
@@ -1675,7 +1680,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         int colon = startScreen.IndexOf(':');
         string value = colon < 0 ? startScreen : startScreen[..colon];
         if (value is not ("campaign" or "campaign-empty" or "campaign-roster" or "campaign-entry"
-            or "campaign-cabin" or "campaign-previous" or "campaign-briefing"
+            or "campaign-cabin" or "campaign-previous" or "campaign-scrapbook" or "campaign-briefing"
             or "campaign-flightcheck" or "campaign-guestcheck" or "campaign-ammo"
             or "campaign-hangar" or "campaign-fly"))
         {
@@ -1768,6 +1773,12 @@ public sealed partial class LaunchMenu : CanvasLayer
             case "campaign-previous":
                 flow.GoTo(CampaignScreen.PreviousMissions);
                 return;
+            case "campaign-scrapbook":
+                // The book as a finished mission leaves it: opened on the last mission this
+                // profile flew, which is the one door the mission end itself takes.
+                flow.GoTo(CampaignScreen.PreviousMissions);
+                flow.OpenScrapbook(Math.Max(0, CampaignProgression.NextMissionSeq(profile) - 1));
+                return;
             case "campaign-briefing":
                 flow.SetMission(CampaignProgression.NextMissionSeq(profile));
                 flow.GoTo(CampaignScreen.Briefing);
@@ -1848,7 +1859,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             for (int seq = 0; seq < AidMissionsFlown; seq++)
             {
                 CampaignProgression.Record(first, new MissionAttempt(
-                    seq, 1, 300_000 + (seq * 20_000), 400, 120, 0,
+                    seq, AidCompletedMask, 300_000 + (seq * 20_000), 400, 120, 0,
                     first.Planes[0].Airframe, first.Planes[0].Name));
             }
         }

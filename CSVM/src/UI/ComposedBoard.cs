@@ -13,6 +13,11 @@ public enum BoardArtLibrary
 
     /// <summary>Screen chrome, <c>extracted/rof/ASSETS/GRAPHICS/&lt;name&gt;</c>, named with it.</summary>
     Ui,
+
+    /// <summary>A file outside the extraction, <see cref="BoardArt.Name"/> being its whole path: a
+    /// scrapbook capture, which lives in the profile's own directory and is the one thing the book
+    /// draws that no asset library holds.</summary>
+    Loose,
 }
 
 /// <summary>How a piece of board text is inked. The authored colours are per widget and mostly
@@ -39,6 +44,20 @@ public enum BoardInk
 
     /// <summary>A button label being pressed (<c>BtnLabelActivate</c>).</summary>
     LabelActivate,
+}
+
+/// <summary>Which edge of its <see cref="BoardLine.Width"/> a text widget's words sit against,
+/// which is <c>LAYOUT.CSV</c>'s own trailing justification field on a <c>T</c> row.</summary>
+public enum BoardJustify
+{
+    /// <summary>Against the widget's left edge, the layout's 0.</summary>
+    Left,
+
+    /// <summary>Centred in its width, the layout's 1.</summary>
+    Center,
+
+    /// <summary>Against its right edge, the layout's 2.</summary>
+    Right,
 }
 
 /// <summary>The screen buttons the campaign boards carry, one member per authored widget. A page
@@ -106,6 +125,18 @@ public enum BoardButton
     /// <summary><c>SBZ_B_RETURN</c>, the scrap detail view's close button.</summary>
     CloseZoom,
 
+    /// <summary><c>SBZ_B_EXPORT</c>, the scrap detail view's Export to Desktop.</summary>
+    ExportScrap,
+
+    /// <summary><c>SB_B_TOC</c>, the book's VIEW ALL MISSIONS.</summary>
+    ViewAllMissions,
+
+    /// <summary><c>SB_B_BEST</c>, the results card's Best to Date tab.</summary>
+    BestTab,
+
+    /// <summary><c>SB_B_MOST</c>, the results card's Most Recent tab.</summary>
+    MostTab,
+
     /// <summary><c>sb_b_prev</c>, the book's page-back arrow.</summary>
     ScrapbookPrev,
 
@@ -132,6 +163,14 @@ public sealed record BoardPicture(
 public sealed record BoardStroke(
     float X1, float Y1, float X2, float Y2, byte R, byte G, byte B, float Opacity = 1f);
 
+/// <summary>A rectangle in an authored ARGB colour, which is a list widget's own
+/// <c>ldrawrect</c>/<c>ldrawframe</c> pair: the table of contents draws a row's picked and focused
+/// states with nothing else. <paramref name="Border"/> draws the one-pixel outline instead of the
+/// fill, and <paramref name="Opacity"/> is the colour's own alpha byte.</summary>
+public sealed record BoardFill(
+    float X, float Y, float Width, float Height, byte R, byte G, byte B, float Opacity = 1f,
+    bool Border = false);
+
 /// <summary>One button plaque: its art strip, its authored top-left, the page row it presses, the
 /// strip frame to draw and the label to write over it. <see cref="Label"/> is empty where the art
 /// bakes its own words in, which every screen but the briefing and the paper buttons does.</summary>
@@ -141,10 +180,11 @@ public sealed record BoardPlaque(
 /// <summary>One line of board text at an authored position, wrapped to <paramref name="Width"/>
 /// (0 for no wrap). <paramref name="Row"/> is the page row it stands for, or -1 for chrome.
 /// <paramref name="Italic"/> is the <c>I</c> of a langui row's own <c>[FONTID]</c> tag, which is
-/// how the original names a slanted face; the renderer decides what it draws that with.</summary>
+/// how the original names a slanted face; the renderer decides what it draws that with.
+/// <paramref name="Justify"/> needs a width to mean anything, since it is measured from one.</summary>
 public sealed record BoardLine(
     string Text, float X, float Y, float Width, float Size, BoardInk Ink, int Row = -1,
-    bool Italic = false);
+    bool Italic = false, BoardJustify Justify = BoardJustify.Left);
 
 /// <summary>
 /// A list widget's entries and the box they flow inside, in authored pixels: the briefing
@@ -188,22 +228,35 @@ public sealed record BoardNote(
 /// </summary>
 public sealed class ComposedBoard
 {
-    /// <summary>Builds a board out of its three ordered layers.</summary>
+    /// <summary>Builds a board out of its ordered layers.</summary>
     public ComposedBoard(
         IReadOnlyList<BoardPicture> pictures,
         IReadOnlyList<BoardStroke> strokes,
         IReadOnlyList<BoardLine> lines,
         IReadOnlyList<BoardPlaque> plaques,
-        IReadOnlyList<BoardNote>? notes = null)
+        IReadOnlyList<BoardNote>? notes = null,
+        IReadOnlyList<BoardPicture>? backdrop = null,
+        IReadOnlyList<BoardFill>? fills = null)
     {
         Pictures = pictures;
         Strokes = strokes;
         Lines = lines;
         Plaques = plaques;
         Notes = notes ?? Array.Empty<BoardNote>();
+        Backdrop = backdrop ?? Array.Empty<BoardPicture>();
+        Fills = fills ?? Array.Empty<BoardFill>();
     }
 
-    /// <summary>Pictures in draw order, background first.</summary>
+    /// <summary>The screen's own fixed art, drawn under everything: the painted background and the
+    /// panels bolted to it. Separate from <see cref="Pictures"/> so a page's fills can sit over the
+    /// background and still stay under the page's own pictures, which is where a list's selection
+    /// bar goes.</summary>
+    public IReadOnlyList<BoardPicture> Backdrop { get; }
+
+    /// <summary>Rectangles over the backdrop and under the pictures, in draw order.</summary>
+    public IReadOnlyList<BoardFill> Fills { get; }
+
+    /// <summary>The page's own pictures in draw order.</summary>
     public IReadOnlyList<BoardPicture> Pictures { get; }
 
     /// <summary>Connector lines, drawn over the pictures.</summary>
