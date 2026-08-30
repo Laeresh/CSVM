@@ -774,6 +774,10 @@ public sealed partial class CutsceneController : Node
         {
             pilot.CameraOwned = on;
             pilot.SetPilotHudVisible(!on);
+            // ⚠ Beside CameraOwned, never instead of it: that flag is what stops the arm
+            // re-asserting the pilot's own view rules, so a cockpit seat would otherwise be framed
+            // by the episode's camera with its airframe hidden and its panel over the shot.
+            pilot.SetViewedFromOutside(on);
         }
 
         foreach (var rig in _rigs)
