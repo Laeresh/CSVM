@@ -404,9 +404,20 @@ repo's pinned editor: extract the inner `templates/` FILES of
 
 **`ExportRelease.ps1` (repo root)** does the whole sequence: checks the export templates are
 installed at `%APPDATA%\Godot\export_templates\4.7.stable.mono\` (throwing a named error if not,
-rather than letting the export itself fail partway through), creates `.scratch\export\` if it's
-missing, builds, imports headless, then exports. Equivalent by hand (a fresh tree needs the
-build + one import pass first):
+rather than letting the export itself fail partway through), checks the fork-built
+`tools\mech3ax\target\release\unzbd.exe` and the rest of the release payload exist, empties
+`.scratch\export\`, builds, imports headless, exports, copies the payload in beside the export
+output, and zips the folder to `.scratch\CSVM.zip`. The folder is cleared rather than written
+over because all of it is zipped, so a leftover would ship in every later release. It is emptied
+rather than deleted (a shell or a running build sitting in it holds the directory itself open),
+and the clear refuses to run if the folder holds a junction, since PowerShell 5.1's recursive
+delete follows one into its target. The payload is
+`packaging/MANIFEST.md`'s table; copying it from those sources on every export is what makes
+"byte-identical to the repo version" true without a check. Two failures it turns into named
+errors up front rather than a cryptic one late: a still-running exported `CSVM.exe` cannot be
+replaced, and `Compress-Archive` reports success after writing nothing when a single file is
+locked, so the zip is built through `System.IO.Compression` instead. Equivalent by hand (a
+fresh tree needs the build + one import pass first):
 
 ```powershell
 dotnet build CSVM/CSVM.sln

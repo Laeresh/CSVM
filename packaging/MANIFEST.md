@@ -1,7 +1,12 @@
 # Release zip manifest (for the B13 assembler, not the recipient)
 
-The friend-release zip is assembled by hand from these pieces. Everything sits at the zip
-root except `tools\unzbd.exe`; the friend unzips, runs `Extract.ps1`, then `CSVM.exe`.
+The friend-release zip holds these pieces. Everything sits at the zip root except
+`tools\unzbd.exe`; the friend unzips, runs `Extract.ps1`, then `CSVM.exe`.
+
+`ExportRelease.ps1` assembles it: it exports into `.scratch\export\`, copies the rows below in
+beside the export output, and zips that folder to `.scratch\CSVM.zip`. This file is the
+statement of what belongs in the zip; the script is what performs it, so a row added here
+needs a matching entry in the script's `$ReleaseFiles`.
 
 | Zip path | Source | Notes |
 |---|---|---|
@@ -17,11 +22,12 @@ root except `tools\unzbd.exe`; the friend unzips, runs `Extract.ps1`, then `CSVM
 Not in the zip, created on the friend's machine by `Extract.ps1`: `extracted\` (game data —
 must never ship; the zip contains zero game assets by construction).
 
-Assembly checks before zipping:
+Assembly checks before hand-off. The copies are taken from the sources above on every export,
+so byte-identity is by construction and only the unzbd build needs confirming:
 
 - `tools\unzbd.exe` is the fork build: `unzbd.exe --version` shows the fork's build
   timestamp, and its SHA-256 should match the `unzbdSha256` a dev-tree extraction stamps
-  into `extracted/VERSION.json`.
-- The two extractor scripts are byte-identical to the repo-root versions at the release
-  commit (`git diff --no-index` them).
-- `LICENSE` / `LICENSE-unzbd` hashes match their sources (`Get-FileHash`).
+  into `extracted/VERSION.json`. The script checks the path exists, not which build it is.
+- Everything in the staging folder goes into the zip, so the script deletes `.scratch\export\`
+  at the start of every run: what is in the archive is what that run produced, never a leftover
+  from an earlier export or a hand assembly.
