@@ -143,7 +143,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 4. ☑ B4 `CampaignScreen.PlaneSelection`, drawn at its authored geometry
 5. ☑ B5 The duplicate-plane refusal and its revert
-6. ☐ B6 EXPORT writes the plane and its loadout where Instant Action reads it
+6. ☑ B6 EXPORT writes the plane and its loadout where Instant Action reads it
 
 ### Wave C — the screens that change around it
 
@@ -340,7 +340,7 @@ combo closed on its old value. Visually against
 list pops a dialog at every step. Compare the same way `CampaignFlightField.KeyOf` does, by name for
 an owned plane, since two profile aircraft can share an airframe and that is legal.
 
-## B6 ☐ EXPORT writes the plane and its loadout where Instant Action reads it
+## B6 ☑ EXPORT writes the plane and its loadout where Instant Action reads it
 
 **Goal.** Pressing EXPORT on the seated player's screen makes that aircraft, with the ammunition
 and ordnance the campaign has fitted, available in Instant Action and multiplayer, and says so with

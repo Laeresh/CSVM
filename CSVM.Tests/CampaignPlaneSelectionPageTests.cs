@@ -221,11 +221,95 @@ public class CampaignPlaneSelectionPageTests
         Assert.Equal(3, panel.Lines.Count); // the three entries, no scrollbar at three of thirteen
     }
 
-    private static CampaignPlaneSelectionPage NewPage(out CampaignFlow flow, bool wingman)
+    /// <summary>EXPORT writes the plane under its own name into the build store the Instant Action
+    /// and multiplayer pickers list, carrying the ammunition and ordnance the campaign fitted, and
+    /// answers in langui 702's words.</summary>
+    [Fact]
+    public void ExportWritesThePlanesCampaignPicksIntoTheBuildStore()
     {
-        string dir = Path.Combine(TestData.TempDir(), "Profiles");
-        var store = new CampaignProfileStore(dir);
-        flow = new CampaignFlow(store, UiStrings.Empty);
+        var page = NewPage(out var flow, out var planes, wingman: false);
+        var plane = flow.Profile!.Planes[0];
+        plane.Ammo = new[] { 2, 1, 0, 4 };
+        plane.Ordnance = new[] { 3, 0, 0, 0, 11, 0, 0, 0 };
+
+        Assert.True(page.Accept(1));
+
+        var exported = planes.Load("Gypsy Magic");
+        Assert.NotNull(exported);
+        Assert.Equal(new[] { 2, 1, 0, 4 }, exported!.Ammo);
+        Assert.Equal(new[] { 3, 0, 0, 0, 11, 0, 0, 0 }, exported.Ordnance);
+        // ⚠ langui 702's placeholder is the airframe's title, not the plane's name: the original
+        // answers "Your Devastator has been exported" for an aircraft named "The Knave".
+        Assert.Contains("Airframe 5", flow.Modal!.Message, System.StringComparison.Ordinal);
+        Assert.DoesNotContain("Gypsy Magic", flow.Modal!.Message, System.StringComparison.Ordinal);
+        Assert.Contains("exported", flow.Modal!.Message, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>A starter or a granted aircraft has no record at all, so exporting creates one on
+    /// its own airframe rather than refusing.</summary>
+    [Fact]
+    public void ExportingAPlaneWithNoBuildCreatesOneOnItsAirframe()
+    {
+        var page = NewPage(out var flow, out var planes, wingman: false);
+        flow.Profile!.Planes[0].Ammo = new[] { 1, 1, 1, 1 };
+
+        Assert.True(page.Accept(1));
+
+        var exported = Assert.Single(planes.List());
+        Assert.Equal("Gypsy Magic", exported.Name);
+        Assert.Equal(5, exported.Airframe);
+    }
+
+    /// <summary>The plan's own trap: export sets the loadout and leaves the build alone, or a
+    /// hangar plane loses its paint, armour and engine the first time the campaign exports it.</summary>
+    [Fact]
+    public void ExportLeavesAnExistingBuildsPaintArmourAndEngineAlone()
+    {
+        var page = NewPage(out var flow, out var planes, wingman: false);
+        planes.Save(new CustomPlaneDef
+        {
+            Name = "Gypsy Magic",
+            Airframe = 5,
+            Engine = 3,
+            ArmourNose = 7,
+            PaintPattern = 9,
+        });
+        flow.Profile!.Planes[0].Ammo = new[] { 3, 3, 3, 3 };
+
+        Assert.True(page.Accept(1));
+
+        var exported = planes.Load("Gypsy Magic")!;
+        Assert.Equal(3, exported.Engine);
+        Assert.Equal(7, exported.ArmourNose);
+        Assert.Equal(9, exported.PaintPattern);
+        Assert.Equal(new[] { 3, 3, 3, 3 }, exported.Ammo);
+    }
+
+    /// <summary>With no build store bound there is nowhere to export to, which is a refusal rather
+    /// than a modal claiming a write that never happened.</summary>
+    [Fact]
+    public void ExportWithNoBuildStoreIsRefused()
+    {
+        var page = NewPage(out var flow, wingman: false);
+
+        Assert.False(page.Accept(1));
+        Assert.Null(flow.Modal);
+    }
+
+    private static CampaignPlaneSelectionPage NewPage(out CampaignFlow flow, bool wingman) =>
+        NewPage(out flow, out _, wingman, withPlanes: false);
+
+    private static CampaignPlaneSelectionPage NewPage(
+        out CampaignFlow flow, out CustomPlaneStore planes, bool wingman) =>
+        NewPage(out flow, out planes, wingman, withPlanes: true);
+
+    private static CampaignPlaneSelectionPage NewPage(
+        out CampaignFlow flow, out CustomPlaneStore planes, bool wingman, bool withPlanes)
+    {
+        string root = TestData.TempDir();
+        var store = new CampaignProfileStore(Path.Combine(root, "Profiles"));
+        planes = new CustomPlaneStore(Path.Combine(root, "Planes"));
+        flow = new CampaignFlow(store, UiStrings.Empty, planes: withPlanes ? planes : null);
         var profile = CampaignProfileDef.NewProfile("Zachary");
         profile.Planes.Add(new OwnedPlane { Name = "Blue Streak", Airframe = 3 });
         store.Save(profile);

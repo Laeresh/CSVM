@@ -67,6 +67,12 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     // IDS_PS_CANTFLYSAMEPLANE, the words the refused pick is answered with.
     private const int SamePlaneRefusal = 710;
 
+    // The words a finished export is answered with. ⚠ Its %1!s! is the airframe's title, not the
+    // plane's name: the original's dialog reads "Your Devastator has been exported" for a wingman
+    // aircraft named "The Knave" (OriginalScreenshots/Campaign Flight Check Change Plane Export
+    // dialog.png).
+    private const int ExportedMessage = 702;
+
     // The four rating words, langui 501-505 in the order Poor to Excellent.
     private static readonly string[] RatingWords = { "Poor", "Fair", "Average", "Good", "Excellent" };
 
@@ -286,6 +292,8 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
                 return _combos[slot].Confirm() is { } picked
                     ? Take(slot, picked)
                     : _combos[slot].Expand();
+            case PlaneRowKind.Export:
+                return Export(slot);
             case PlaneRowKind.Accept:
                 Commit();
                 Flow.GoTo(CampaignScreen.FlightCheck);
@@ -409,6 +417,48 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
         int other = _combos[slot == 0 ? 1 : 0].Selected;
         return pick >= 0 && pick < planes.Count && other >= 0 && other < planes.Count
             && planes[pick].Name == planes[other].Name;
+    }
+
+    // EXPORT: the plane and the loadout the campaign fitted it with, into the build store the
+    // Instant Action and multiplayer pickers list, then the original's own words for it.
+    // ⚠ Refused for a stock record. It is named for its airframe, so a write under that name would
+    // land on any hangar plane sharing it (CampaignFlightField.IsStock, and why a guest's check
+    // draws no EXPORT at all).
+    private bool Export(int slot)
+    {
+        if (PlaneFor(slot) is not { } plane || Flow.Planes is not { } store
+            || Flow.Field.IsStock(plane) || string.IsNullOrWhiteSpace(plane.Name))
+        {
+            return false;
+        }
+
+        // ⚠ An existing record IS the build: export sets its loadout and leaves paint, armour and
+        // engine alone. A starter or a granted aircraft has none, so one is created over the
+        // flight check's own build-or-stock resolution rather than exporting an unarmed airframe.
+        var def = store.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane) ?? StockBuild(plane);
+        def.SetLoadout(plane.Ammo, plane.Ordnance);
+        store.Save(def);
+        Flow.RaiseModal(ExportedText(AirframeTitle(plane.Airframe)));
+        return true;
+    }
+
+    private CustomPlaneDef StockBuild(OwnedPlane plane)
+    {
+        var def = new CustomPlaneDef { Name = plane.Name, Airframe = plane.Airframe };
+        HangarFlow.LoadStockWeapons(
+            def, Flow.Stock?.ForModel(PlanePickerRoster.AirframeNode(plane.Airframe)));
+        return def;
+    }
+
+    // langui 702 with the airframe's title in its one placeholder. The fallback carries the same
+    // words, since a build with no extraction still exports and still owes the player an answer.
+    private string ExportedText(string title)
+    {
+        string text = Flow.Strings.Format(ExportedMessage, title);
+        return text.Length > 0
+            ? text
+            : $"Your {title} has been exported and is now available for Multiplayer and " +
+              "Instant Action missions.";
     }
 
     // ACCEPT: the two picks into the profile, and the profile to disk.

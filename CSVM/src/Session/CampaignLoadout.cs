@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using CSVM.Flight;
 
 namespace CSVM.Session;
@@ -39,12 +40,23 @@ public static class CampaignLoadout
     /// than being cleared, since a table index means nothing without the table. An unset pylon
     /// (stored 0) is also left to the base: the base's stock fit is the universal high-explosive
     /// load that unset stands for, so writing it back changes nothing.</summary>
-    public static LoadoutChoice For(OwnedPlane plane, StockLoadouts? stock)
+    public static LoadoutChoice For(OwnedPlane plane, StockLoadouts? stock) =>
+        For(plane.Ammo, plane.Ordnance, stock);
+
+    /// <summary>The same reading of an exported plane's own stored picks (the campaign's EXPORT
+    /// writes the record's ammunition and ordnance into <see cref="CustomPlaneDef"/>), so a plane
+    /// flown from the Instant Action picker carries what the campaign fitted it with. One decoder
+    /// for both records, since they hold the field in one encoding.</summary>
+    public static LoadoutChoice For(CustomPlaneDef plane, StockLoadouts? stock) =>
+        For(plane.Ammo, plane.Ordnance, stock);
+
+    private static LoadoutChoice For(
+        IReadOnlyList<int> ammoPicks, IReadOnlyList<int> ordnancePicks, StockLoadouts? stock)
     {
         var fit = new LoadoutChoice();
-        for (int slot = 0; slot < LoadoutChoice.MaxGunSlot && slot < plane.Ammo.Length; slot++)
+        for (int slot = 0; slot < LoadoutChoice.MaxGunSlot && slot < ammoPicks.Count; slot++)
         {
-            int ammo = plane.Ammo[slot];
+            int ammo = ammoPicks[slot];
             if (ammo >= 0 && ammo < AmmoNames.Length)
             {
                 fit.SetGunAmmo(slot + 1, AmmoNames[ammo]);
@@ -63,9 +75,9 @@ public static class CampaignLoadout
 
         // Cells 0-3 are the left wing and 4-7 the right, which is physical pylon cell+1: pylons
         // 1-4 left, 5-8 right, the split Loadout.PylonFillOrder itself carries.
-        for (int cell = 0; cell < LoadoutChoice.MaxPylon && cell < plane.Ordnance.Length; cell++)
+        for (int cell = 0; cell < LoadoutChoice.MaxPylon && cell < ordnancePicks.Count; cell++)
         {
-            int row = plane.Ordnance[cell] - 1;
+            int row = ordnancePicks[cell] - 1;
             if (row >= 0 && row < table.Count)
             {
                 fit.SetPylon(cell + 1, table[row].Id);

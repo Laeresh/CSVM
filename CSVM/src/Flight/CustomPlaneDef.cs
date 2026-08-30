@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace CSVM.Flight;
 
@@ -60,6 +61,16 @@ public sealed class CustomPlaneDef
     /// and this says so rather than claiming decal 0.</summary>
     public const int KeepDecal = -1;
 
+    /// <summary>An ammunition slot nobody has picked for. Not a value the campaign record has: its
+    /// own field starts at 0, which IS an ammunition (slug), so a stored plane needs a value
+    /// meaning "left alone" or every hangar-built plane written before the field existed would
+    /// start claiming slug on all four mounts.</summary>
+    public const int NoAmmoPick = -1;
+
+    /// <summary>A pylon nobody has picked for, the same 0 the campaign record uses (its ordnance
+    /// values are one-based for exactly this reason).</summary>
+    public const int NoOrdnancePick = 0;
+
     // The longest shipped ramp is ten, so this is the ceiling a shade clamps to when no swatch
     // table loaded and the row's own length is unknown.
     private const int MaxShadeWithoutTable = 9;
@@ -118,6 +129,44 @@ public sealed class CustomPlaneDef
     /// <summary>Wing decal, 0-49 or <see cref="KeepDecal"/> (record +0x64).</summary>
     public int WingDecal { get; set; } = KeepDecal;
 
+    /// <summary>Per-gun-slot ammunition pick, in <c>Session.OwnedPlane.Ammo</c>'s own encoding, or
+    /// <see cref="NoAmmoPick"/> for a slot the campaign never fitted. Optional in the stored file:
+    /// the campaign's EXPORT is what writes it, so a plane built in the hangar carries none and
+    /// flies its base fit.</summary>
+    public int[] Ammo { get; } = NothingPicked();
+
+    /// <summary>Per-pylon ordnance pick, eight cells, in <c>Session.OwnedPlane.Ordnance</c>'s own
+    /// one-based encoding with <see cref="NoOrdnancePick"/> for a cell the campaign never fitted.
+    /// Optional in the stored file, exactly as <see cref="Ammo"/> is.</summary>
+    public int[] Ordnance { get; } = new int[LoadoutChoice.MaxPylon];
+
+    /// <summary>Whether the campaign has exported a loadout into this record at all. What decides
+    /// whether the stored file carries the block, so a hangar-built plane's file is what it was
+    /// before this field existed.</summary>
+    public bool HasLoadout
+    {
+        get
+        {
+            foreach (int pick in Ammo)
+            {
+                if (pick != NoAmmoPick)
+                {
+                    return true;
+                }
+            }
+
+            foreach (int cell in Ordnance)
+            {
+                if (cell != NoOrdnancePick)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
     /// <summary>Paint slot 1, the identity/body colour, resolved from its index pair. Derived, as
     /// the original's own record +0x68 is: <c>FUN_00406840</c> recomputes that RGBA cache from the
     /// colour and shade indices before every save, so the pair is what a plane's paint IS.</summary>
@@ -171,10 +220,29 @@ public sealed class CustomPlaneDef
         Clamp();
     }
 
+    /// <summary>Copies a campaign record's ammunition and ordnance picks over this plane's, and
+    /// touches nothing else. ⚠ That restraint is the contract: EXPORT sets the loadout of a plane
+    /// the hangar may already have built, and rewriting its paint, armour or engine from a campaign
+    /// record that holds none of the three would throw the build away.</summary>
+    public void SetLoadout(IReadOnlyList<int> ammo, IReadOnlyList<int> ordnance)
+    {
+        for (int slot = 0; ammo != null && slot < Ammo.Length && slot < ammo.Count; slot++)
+        {
+            Ammo[slot] = ammo[slot];
+        }
+
+        for (int cell = 0; ordnance != null && cell < Ordnance.Length && cell < ordnance.Count; cell++)
+        {
+            Ordnance[cell] = ordnance[cell];
+        }
+    }
+
     /// <summary>Forces every field into its decoded range, in place, and returns this. The store
     /// runs it on both load and save, so an out-of-range value from a hand-edited file (or a
     /// screen bug) can never leave the model claiming an airframe or calibre that does not
-    /// exist.</summary>
+    /// exist. <see cref="Ammo"/> and <see cref="Ordnance"/> are the exception: their vocabulary is
+    /// <c>Session.CampaignLoadout</c>'s, the one decoder of both, which reads anything outside it
+    /// as the stock fit, so they are round-tripped as stored rather than pinned here.</summary>
     public CustomPlaneDef Clamp()
     {
         Airframe = Math.Clamp(Airframe, 0, MaxAirframe);
@@ -207,6 +275,14 @@ public sealed class CustomPlaneDef
         TailDecal = ClampDecal(TailDecal);
         WingDecal = ClampDecal(WingDecal);
         return this;
+    }
+
+    // Four slots nobody has picked for, which is what a plane the campaign never exported carries.
+    private static int[] NothingPicked()
+    {
+        var slots = new int[GunSlots];
+        Array.Fill(slots, NoAmmoPick);
+        return slots;
     }
 
     // Anything outside the shipped set becomes the keep-the-placeholder sentinel rather than a
