@@ -1213,8 +1213,8 @@ public sealed class CampaignDirector
 
         /// <summary>The human field as the RIGS themselves, for the two seams that must hold an
         /// aeroplane rather than a reading of one: the per-seat death wiring and the wreck wait.
-        /// Same fallback as <see cref="SnapshotHumans"/>, so a session that names no field is the
-        /// scripted player alone and answers exactly as it did before there was a field.</summary>
+        /// Same fallback as <see cref="SnapshotHumans"/>: a session that names no field exposes the
+        /// scripted player as its sole human rig.</summary>
         public IReadOnlyList<FlightController> HumanRigs()
         {
             if (_in.Humans?.Invoke() is { Count: > 0 } humans)

@@ -216,7 +216,7 @@ invention: the original has no neutralising step on the death path.
 
 ⚠ **Do not tune this against the recordings' downrange.** Freezing measures 323 m downrange and
 −8 m of altitude on a headless kill, where neutralising measured 175 m and +1 m, and 175 m is the
-figure a reference recording gave (`docs/plans/PLAN-ai-damage-and-engine-audio.md`, D21). That agreement
+figure a reference recording gave. That agreement
 is not evidence for neutralising. It is a footage-derived distance, the class of measurement that
 has failed here repeatedly and may not contest a decode, and the magnitude under freezing is a
 function of **our** AI's last throttle rather than the original's, so neither number tests the
@@ -861,8 +861,8 @@ far-field test is the pair at `0x48c4d7` and `0x48c4e9`.
 **How CSVM flies it.** `FlightModel.FarFieldPlant` is re-decided every step from
 `FlightInput.NearestHumanDistSqM`, which `FlightController` fills from the session's
 `PlayerPositions` snapshot. The original measures against its single player pointer; CSVM measures
-against the **nearest human pilot**, which is `docs/plans/PLAN-flight-model-parity.md`'s Decision 3 (widen
-a player-only behaviour to all four human pilots deliberately) and is the only difference from the
+against the **nearest human pilot**, deliberately widening a player-only behaviour to all four
+human pilots. This is the only difference from the
 decode. The crashed-flag arm is not ported: CSVM's own wreck fall already flies the near-field plant
 by `FUN_0048e580`'s rule, and the flag's writers are not decoded. Two constants of the plant's
 inventory come from here, `FarFieldRangeM` and `FarFieldAiSpeedBonus`.
@@ -997,7 +997,7 @@ constructor `FUN_004aff80` zeroes them and the destructor `FUN_004b0aa0` frees t
 deflecting rudder node is `l_rudder_rotate`, which no `l_rudder%d` lookup finds, so the original
 flies that plane with a frozen rudder; the digitless `l_elevator` shape misses the same way.
 CSVM's `RudderRe`/`ElevatorRe` accept those names and animate the surfaces, kept deliberately as
-an improvement over the shipped behavior (user decision, PLAN-flight-model-parity B13). The
+an improvement over the shipped behavior. The
 mixing, angles and smoothing on every matched node remain the decoded values above.
 
 The arithmetic per frame, with addresses:
@@ -1402,7 +1402,7 @@ attitude** — a weathervane cannot bank an aeroplane.
   the original's roll-off.** That reasoning assumed the chain is *double integration + one lag*. The
   remake's is not, and never was: the flight path follows the nose through a **second** first-order
   lag (`lift_accel_rate`, then a kinematic chase, now the demand-side lift, the same `ω = rate · α`
-  when unclamped), so the pre-C23 build already rolled off 19.6× — 1.65× past
+  when unclamped), so the earlier build already rolled off 19.6× — 1.65× past
   that "ceiling" — with `return_rate` still folded into the damping. The 3.5× figure is therefore
   not a measurement of *our* build's deficit, and the amplitude-for-amplitude comparison above
   replaces it.

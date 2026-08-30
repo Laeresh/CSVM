@@ -67,7 +67,7 @@ public sealed class HeadLook
     /// rather than a constant because the original's two callers differ only in this.</summary>
     public HeadLook(float elevationFloor = 0f) => ElevationFloor = elevationFloor;
 
-    /// <summary>C22's seam: consulted on any frame with no look input at all, and its answer
+    /// <summary>Consulted on any frame with no look input at all, and its answer
     /// becomes the targets directly. It sets elevation past <see cref="ElevationFloor"/> on
     /// purpose — autohead's own floor is below level — so the value is taken as given and only the
     /// azimuth is clamped. Null (the default) returns the idle head to straight ahead, the
@@ -126,7 +126,7 @@ public sealed class HeadLook
         (Mathf.Clamp(up, -1f, 1f) * Mathf.DegToRad(PadLookPitchMaxDeg),
          Mathf.Clamp(-right, -1f, 1f) * Mathf.DegToRad(PadLookYawMaxDeg));
 
-    /// <summary>C22's law: the idle-frame lean into the plane's own velocity, local-frame X/Y only
+    /// <summary>The idle-frame lean into the plane's own velocity, local-frame X/Y only
     /// (forward speed dropped — why, and the (elevation, azimuth) derivation, are
     /// docs/formats/vehicle/player-globals.md's autohead row). Scaled by <paramref
     /// name="turnTime"/>, capped in magnitude at <paramref name="turnMax"/>, floored at <paramref

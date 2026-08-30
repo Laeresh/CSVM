@@ -8,7 +8,7 @@ namespace CSVM.Session;
 
 /// <summary>Wires the E16 voice dispatch into a running flight session: subscribes the decoded
 /// event sources on each registered aircraft, runs them through <see cref="AiVoiceDispatcher"/>,
-/// and plays every decision through B8's seam only — <c>CombatVoice.PlayableFor</c> resolving the
+/// and plays every decision through <c>CombatVoice.PlayableFor</c> only, resolving the
 /// name, <c>WorldSounds.HasStream</c> answering availability, and the source-following
 /// <c>WorldSounds.PlayOneShot(name, Node3D, rng)</c> playing it from the speaker's own aircraft.
 /// The wired/unwired dispatch-site table is docs/formats/combat-voice.md "The remake's dispatch

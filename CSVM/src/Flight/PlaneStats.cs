@@ -405,7 +405,7 @@ public sealed class PlaneStats
     }
 
     /// <summary>A shallow copy carrying a different engine power, for the hangar's engine pick
-    /// (PLAN-hangar; the original's registry override onto <c>veh+0x66c</c>). The caller's object
+    /// (the original's registry override onto <c>veh+0x66c</c>). The caller's object
     /// is the shared per-airframe cache and is never mutated; the copy shares the read-only
     /// lists the same way <see cref="WithAiSpawnJitter"/>'s does.</summary>
     public PlaneStats WithEnginePower(float power)

@@ -1033,7 +1033,7 @@ internal static class TargetingSuites
         }
     }
 
-    // A2/BL-534's routing switch, driven directly against hand-built sources — no live
+    // The target-routing switch, driven directly against hand-built sources — no live
     // TargetSelection/AimCandidateSet scan behind it, since DebugForceCrash and AnimRuntime.DamageAt
     // already carry their own coverage elsewhere (AiSuites, DamageSuites and others). What is NEW
     // here is only the dispatch: an aircraft source crashes (Downed fires with the given killer), a

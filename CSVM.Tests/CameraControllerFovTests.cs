@@ -4,8 +4,8 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The decoded horizontal→vertical FOV conversion law (docs/PLAN-cockpit-view.md, A3;
-/// docs/org/cameraViews.md, "FOV constants and aspect correction"):
+/// The decoded horizontal→vertical FOV conversion law (docs/org/cameraViews.md,
+/// "FOV constants and aspect correction"):
 /// <c>vertical = atan(tan(H/2) · assumedAspect/liveAspect)</c>, doubled for the full angle
 /// Godot's <see cref="Godot.Camera3D.Fov"/> expects. <see cref="CameraController.HorizontalToVerticalFovDeg"/>
 /// is engine-free, so these tests need no live <see cref="Godot.Camera3D"/> or

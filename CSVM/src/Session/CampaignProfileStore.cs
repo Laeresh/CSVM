@@ -47,8 +47,8 @@ public sealed class MissionRun
     public string PlaneName { get; set; } = string.Empty;
 
     /// <summary>Plain per-airframe kill counts, <see cref="CampaignProgression.AirframeCount"/>
-    /// slots wide. A file saved before this field existed reads all zero, which is the correct
-    /// reading: an earlier attempt left no per-airframe record to reconstruct.</summary>
+    /// slots wide. A missing JSON property reads all zero because no per-airframe record exists to
+    /// reconstruct.</summary>
     public int[] Kills { get; set; } = new int[CampaignProgression.AirframeCount];
 
     /// <summary>Ace per-airframe kill counts, same shape as <see cref="Kills"/>.</summary>
@@ -74,8 +74,8 @@ public sealed class MissionResult
     /// <summary>Failed attempts at a mission that has never been completed: the original's own
     /// per-mission counter at <c>[0x0071b494 + idx*0x10]</c>, whose every fourth increment raises
     /// the skip offer (<c>docs/org/debrief.md</c>, "The four-attempt skip offer"). It belongs to
-    /// neither half, since it spans attempts where the attempt half is cleared by each one, and a
-    /// file saved before it existed reads 0.</summary>
+    /// neither half, since it spans attempts where the attempt half is cleared by each one. A
+    /// missing JSON property reads 0.</summary>
     public int Attempts { get; set; }
 }
 

@@ -763,7 +763,7 @@ public partial class FlightController : Node3D
 
     // Which stick flies this aircraft: set in Bind, and lazy here too so a bare test rig that
     // never binds still gets one, off whichever of _holdSegments/Pilot it already set (Decision 8,
-    // docs/plans/PLAN-flightcontroller-deepening.md); no suite mutates either after stepping starts.
+    // no suite mutates either after stepping starts.
 #pragma warning disable SA1202 // kept beside World, its seam counterpart, ahead of the public method below
     private IFlightInputSource InputSource => _inputSource ??= ResolveInputSource();
 
@@ -2348,7 +2348,7 @@ public partial class FlightController : Node3D
 
     // Squared HORIZONTAL range to the nearest human pilot, the quantity the flight model's
     // far-field branch is selected on. The original measures Δx² + Δz² against its single player;
-    // this reads every human, which is the flight-parity plan's Decision 3 (docs/plans/PLAN-flight-model-parity.md).
+    // this reads every human, so flight targets always use the nearest human pilot.
     // ⚠ No seam bound means no human is known, and 0 keeps the aircraft near-field.
     private float NearestHumanDistSqM()
     {

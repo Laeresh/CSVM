@@ -10,7 +10,7 @@ namespace CSVM.Tests;
 /// The TGA decoder behind the hangar's art (C22): synthetic files pin the byte-level rules
 /// (BGR order, the bottom-up default and the flip bit, both packet kinds of RLE, malformed input
 /// reading as null), and the extracted-data facts prove the real shipped blueprints and icons
-/// decode at their catalogued shape (PLAN-hangar A2: 358x335, 24-bit RLE and 32-bit RLE).
+/// decode at their catalogued shape: 358x335, 24-bit RLE and 32-bit RLE.
 /// </summary>
 public class TgaImageTests
 {

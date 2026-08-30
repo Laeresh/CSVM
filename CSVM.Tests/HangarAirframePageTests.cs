@@ -8,7 +8,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The AIRFRAME screen (PLAN-hangar C22): all 11 airframes offered (Decision 9), confirm writing
+/// The AIRFRAME screen: all 11 airframes offered, confirm writing
 /// the scratch plane's airframe and nothing else (E49: the pick is on Enter, the stepper is
 /// inert), the detail line carrying the stat table's figures and the economy's own star ratings,
 /// and the focused airframe's blueprint through the page-art seam. E41's airframe-defaults ask
@@ -105,7 +105,7 @@ public class HangarAirframePageTests : IDisposable
     }
 
     /// <summary>Changing airframe through the ask's Cancel row preserves every other pick, the
-    /// pre-E41 behaviour string 206 promises: guns and hardpoints are count-valid on every
+    /// string 206 promises: guns and hardpoints are count-valid on every
     /// airframe (the wrong-claims disproof), so nothing re-clamps.</summary>
     [Fact]
     public void ChangingAirframe_PreservesTheOtherPicks()

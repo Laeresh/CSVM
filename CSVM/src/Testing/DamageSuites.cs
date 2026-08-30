@@ -238,7 +238,7 @@ internal static class DamageSuites
         }
     }
 
-    // ---- the cockpit-interior torn panels flip off the SAME injure entries (PLAN-cockpit-view, B12) --
+    // ---- the cockpit-interior torn panels flip off the same injure entries ---------------------------
 
     // pcdp4/pcdp6 are driven off the very pdpanel4/pdpanel6 entries that already flip pdp4/pdp6 —
     // no separate cockpit rule. Built with cockpitInterior:true so the pair exists, this crosses

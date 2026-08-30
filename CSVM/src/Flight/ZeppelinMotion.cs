@@ -71,7 +71,7 @@ public sealed class ZeppelinMotion
     /// 1, so a record with no engines list still moves).</summary>
     public int TotalEngines { get; }
 
-    /// <summary>THE F18 SEAM: the damage aggregator writes the surviving engine count here as
+    /// <summary>The damage aggregator writes the surviving engine count here as
     /// nacelles die; every read below re-derives the scaled limits, so a mid-flight loss slows
     /// the zeppelin on its next step. Clamped to [0, <see cref="TotalEngines"/>] on use.</summary>
     public int AliveEngines { get; set; }

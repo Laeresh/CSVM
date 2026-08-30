@@ -9,7 +9,7 @@ namespace CSVM.UI;
 /// <summary>
 /// The cabin hub (<c>Campaign Cabin.png</c>, <c>PASSENGERCABIN.SCRIPT</c>): NEXT MISSION,
 /// PREVIOUS MISSIONS, PLANE CONSTRUCTION, RETURN TO MAIN MENU. CHANGE MEMENTO is not shipped
-/// (decision 3, PLAN-M5-campaign.md). <c>CAP-44</c> settled the ambience question at the
+/// (the original does not ship it). <c>CAP-44</c> settled the ambience question at the
 /// controls: the screen has no idle behaviour, only background music over static art, so this
 /// page draws once and does nothing between presses.
 /// </summary>
@@ -164,7 +164,7 @@ public sealed class CampaignCabinPage : CampaignPage
                 return true;
             case PlaneConstructionRow:
                 // The shell owns opening the hangar over the profile's wallet and calling
-                // Flow.Resume when it closes (docs/PLAN-M5-campaign.md, C22's wiring contract).
+                // Flow.Resume when it closes.
                 Flow.Request(CampaignExit.OpenHangar);
                 return true;
             default:

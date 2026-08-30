@@ -188,7 +188,7 @@ public sealed class CombatVoice
     /// <summary>
     /// Picks one pilot VO id from the accent's pool, the spawn-time half of the chain. Pool
     /// members without any clip def are skipped, and <paramref name="eligible"/> narrows further
-    /// (E16 passes a prewarm-backed availability check). Null when nothing in the pool qualifies.
+    /// (the flight session passes a prewarm-backed availability check). Null when nothing in the pool qualifies.
     /// </summary>
     public int? PilotFor(int accentId, Random rng, Func<int, bool>? eligible = null)
     {

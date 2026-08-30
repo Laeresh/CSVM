@@ -737,7 +737,7 @@ public static class SuiteCatalog
         into.Add(new TestHarness.Suite("cockpit-interior",
             "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11)", CockpitInterior));
         into.Add(new TestHarness.Suite("cockpit-overlay-pass",
-            "--cockpit-pass moves the interior into a world of its own, where it and the camera both sit at the origin and no chapter-scale coordinate reaches the panel's transform (PLAN-cockpit-panel C21)", CockpitOverlayPass));
+            "--cockpit-pass moves the interior into a world of its own, where it and the camera both sit at the origin and no chapter-scale coordinate reaches the panel's transform", CockpitOverlayPass));
         into.Add(new TestHarness.Suite("look-stick",
             "the right stick's look-around flown in both views with --look= standing in for the stick: the flag parses, clamps and survives a typo, and one deflection through one reader and one envelope swings the chase camera and the cockpit head the same angle to the same side of the aeroplane, each returning to its settled pose when the stick centres",
             LookStickSuites.LookStick));
@@ -1534,14 +1534,13 @@ public static class SuiteCatalog
             + "human down leaves the mission running and hands that pane a spectator camera with "
             + "the wreck pinned, while the other keeps flying; the LAST human's death is what ends "
             + "it lost once no wreck is still falling, whichever of them went first; "
-            + "--no-crash-loss pins neither, and a solo death answers exactly as it did before",
+            + "--no-crash-loss pins neither, and a solo death ends the mission on its only human",
             CoopDeathSuites.CampaignCoopDeath));
         into.Add(new TestHarness.Suite("campaign-coop-attempt",
             "what a co-op sortie writes to the seated profile: two human rigs each fire a real "
             + "cannon round at the other's aircraft, and only the seated pilot's reaches the recorded "
             + "attempt's Shots/Hits, WireScoredShooter gating on the scripted player and never a "
-            + "guest; Money sums to 0 across the field today, since the mission reward table's cash "
-            + "half is a separate, unlanded item",
+            + "guest; Money sums to 0 because no mission reward source feeds the director",
             CampaignCoopAttempt));
         into.Add(new TestHarness.Suite("campaign-coop-cutscene-fullscreen",
             "the window a cutscene plays in at 2, 3 and 4 panes: an episode gives pane 1 the whole "
