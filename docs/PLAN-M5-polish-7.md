@@ -127,8 +127,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E — the campaign's frame stalls
 
 41. ◐ `BL-641` CM18's two spawn stalls are spread across frames (largest term removed, 363/325 ms to 156/117 ms; the residual is per-aircraft construction and still trips the detector, `BL-641` rewritten)
-42. ☐ `BL-562` CM11's physics tick spikes are attributed and removed
-43. ☐ `BL-612` CM09 and CM13 hold their rate for the whole mission
+42. ◐ `BL-562` CM11's physics tick spikes are attributed and removed (the cap-exhaustion premise is disproved and the recurring band is gone; three one-off ticks of 46 to 124 ms remain, `BL-562` rewritten)
+43. ☑ `BL-612` CM09 and CM13 hold their rate for the whole mission (the cost was `_Process` dispatch over thousands of dormant emitters, not the zeppelin; both sorties now hold the 8.33 ms presentation floor, `BL-612` deleted)
 
 ## Dependency and parallelism notes
 
@@ -139,11 +139,10 @@ chain, never in parallel worktrees. C21 and C22 are the same mission and one sor
 but they touch different systems (the animation runtime and the marker layer) and can run in
 parallel. D31 is confined to `UI/` and contends with nothing.
 
-**File contention: A1 and E42 both edit `Mech3/AnimRuntime.cs`.** A1 closed without touching that
-file, so the queue is clear for E42, whose named candidate is `NameResolver.ClearFindCache` and its
-callers, the `IndexStage` / `IndexSpawnedCopy` / `IndexRebasedStage` / `IndexPooledCopy` paths.
-C21 may also reach `AnimRuntime`'s `ObjectMotion` dispatch; if the diagnosis takes it there, the two
-still run one after the other rather than in parallel worktrees.
+**File contention on `Mech3/AnimRuntime.cs` is settled.** A1 closed without touching that file, C21
+touched only three regions of it (the two `DestructibleRegistry.Register` call sites and a new
+private `DamageNodeOf` near `Targets`), and E42 ruled its candidate out and touched neither
+`AnimRuntime.cs` nor `Anim/NameResolver.cs`. Nothing in wave E holds either file.
 
 E41, E42 and E43 are one measuring session's worth of work and share the instrument setup
 (`--det`, `--perf`, `HitchSidecar`'s attribution). Taking the wave whole is cheaper than three
@@ -801,74 +800,252 @@ PASS.
 
 **Verified.** <pending orchestrator run>
 
-## E42 ☐ `BL-562` CM11's physics tick spikes are attributed and removed
+## E42 ◐ `BL-562` CM11's physics tick spikes are attributed and removed
 
 **Goal.** CM11 (C2/M02) runs no single physics tick long enough to exhaust Godot's eight-step catch-up
 cap, so no sim step is discarded.
 
-**Evidence (confidence: direction-sound).** The bracketed instrument (`Utils/PhysicsTickCost.cs`, and
-`--perf`'s `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz`) over 333 windows of a loaded CM11 session
-puts the mean tick at 1.81 ms (p95 3.20 ms) and the tick rate at a median of 60.0 per wall second, but
-`phys_tick_max_ms` hit 72, 102 and 177 ms on individual ticks. `max_physics_steps_per_frame` is at
-Godot's default 8, so a 177 ms stall leaves about six sim steps undeliverable and they are discarded,
-not deferred. The named candidate is `Mech3/Anim/NameResolver.cs`'s `ClearFindCache`, which drops the
-whole find memo, so the next tick's roughly sixty objective name resolutions re-walk the roughly
-5000-row index calling `GodotObject.IsInstanceValid` on every row; its callers are the `IndexStage` /
-`IndexSpawnedCopy` / `IndexRebasedStage` / `IndexPooledCopy` spawn and warm-up paths in
-`Mech3/AnimRuntime.cs`, which is the right shape for a spike that lands on a spawn rather than
-steadily. `<TODO: re-verify still-open against the code>`
+**Outcome: the named candidate is ruled out, the cap-exhaustion premise does not reproduce, and the
+recurring over-budget band was an ungated debug print rather than anything in the animation runtime.**
+The band is gone; three one-off ticks remain and `BL-562` is rewritten around them, so the item lands
+partial.
 
-**Approach.** Confirm the candidate by bracketing a spiking tick rather than by inference: instrument
-what a spiking tick is doing before changing the memo. If it is the find cache, the fix is an
-invalidation narrower than dropping the whole memo. Check the file-contention queue: A1 edits the same
-file.
+**Mode, stated up front.** `.\RunProbe.ps1 --campaign=e42-perf:10 --no-det --perf --no-vsync --mute
+--no-pads --seed=1 --frames=5000 --screenshot=…`, one aeroplane, nobody at the controls, on a copy of
+the `d33-perf` profile deleted afterwards. `--no-det` is required: `--det` makes the clock
+parent-driven, which empties the physics tick and the three `phys_*` terms with it (PERF-21). The
+session's loaded phase is its first 83 seconds; at t≈70 s the unattended pilot flies into the water
+and the world goes quiet (`phys_tick_ms` 0.08, node count frozen), so the 333-window session the
+entry quoted was mostly measuring an idle world. Every window below is a 60-rendered-frame window at
+a median `phys_hz` of 60.0, so 82 windows are 82 sim seconds as well as 82 wall seconds.
 
-**Model recommendation.** high. The instruments here have already misled once on this exact item, and
-a cache invalidation that is too narrow returns a stale node rather than a slow frame.
+**The candidate, ruled out by measurement.** A temporary counter pair on `NameResolver`
+(`ClearFindCache` calls, `FindAll` calls, misses, index rows walked) read across every tick over
+12 ms says `clears=0` on all 55 spiking ticks of a sortie: not one of `IndexStage`,
+`IndexSpawnedCopy`, `IndexRebasedStage`, `IndexSpawnedVehicle` or the template stage's
+`IndexPooledCopy` fires during CM11 flight, because nothing in that mission spawns a vehicle, grows a
+stage or checks out a new library copy after the build. The memo is never dropped, so it cannot be
+re-walked. The index is about 900 rows per runtime rather than 5000, and the spiking ticks that do
+miss the memo (76 misses over 69,008 rows on the crash tick) spend 0.02 ms doing it. No narrower
+invalidation was written and none is needed.
 
-**Verify.** Re-run the bracketed instrument over a loaded CM11 session and show `phys_tick_max_ms`
-under the 16.7 ms budget across the same window count, with the mean unchanged. Compare durations in
-sim seconds, never wall seconds. The complete `.\RunTests.ps1` before landing, since a memo change
-reaches every name resolution in the game.
+**What a spiking tick is actually doing.** A temporary `Stopwatch` breakdown inside the bracket, split
+first between `GameSession`'s `SessionSimulation.Step` and the 20 `AnimRuntime.Advance` calls, then
+across `SessionSimulation`'s seventeen named phases, then inside `FlightController.SimStep`:
 
-**⚠ Traps.** **Do not chase the sustained step**; see the disproven-claims table above. Do not raise
-`max_physics_steps_per_frame`: it deepens the catch-up spiral rather than recovering the lost steps.
-The original measurement ran under `--debug-objective=18` with nobody at the controls, so it
-under-weights projectiles and destruction cascades; a re-measurement should say which mode it used.
+| tick | ms | where |
+|---|---:|---|
+| the first tick after the world build | 124 | `anim_advance` 95 ms over 20 runtimes (first `Advance`, 46,355 index rows over five cold misses), `sim_step` 29 ms |
+| the recurring band, 47 of 82 windows | 18 to 25 | `captured_ai` 16 to 22 ms, of which `telemetry` 17.0 to 21.5 ms over nine aircraft |
+| one tick a sortie | 46 | `human_ac` 38 ms, the pilot's own crash |
+| one tick a sortie | 46 | `captured_ai` 46 ms, of which one AI aircraft's `sweep` 45.1 ms |
+| one tick a sortie | 50 | a single `AnimRuntime.Advance` |
 
-## E43 ☐ `BL-612` CM09 and CM13 hold their rate for the whole mission
+**The mechanism.** `FlightController.SimStep` ended with an ungated `GD.Print` of a per-aircraft
+telemetry line every sim second. Every live aircraft starts its counter at the same instant, so all
+nine crossed the boundary on the SAME sim step and the tick paid nine console writes at about 1.9 ms
+each. The line reached only Godot's stdout, never `.scratch/logs/`, and was formatted in the host's
+CurrentCulture (`spd=55,8` on this machine), so it was neither filterable nor greppable where a
+reader looks for it.
 
-**Goal.** CM09 (C1/M04) does not fall under 60 for the rest of the mission once the Promised Land is
-down and the next fighter squad spawns, and CM13 (C2/M03), which shows the same sustained drop, holds
-its rate too.
+**What landed.** The line asks `Log.ConsoleShows("flight", Log.Level.Debug)` before it formats
+anything and emits through `Log.Debug("flight", …)`, so `--log=flight` turns it on and the default
+costs nothing. Nothing else changed. Recorded as `docs/verification.md` PERF-23 and on
+`FlightController`'s `docs/architecture.md` entry.
 
-**Evidence (confidence: lead-only).** Reported at the controls on the plan branch, and it is a
-sustained rate drop rather than single hitches. The sortie log's late `[perf] hitch` lines carry the
-shape in their baseline: 19 to 26 ms against 10 ms earlier in the same sortie, with `script_ms` about
-25 and `physics_ms` 17 to 18 while `render_cpu_ms` stays near 1 and `gpu_ms` near 0.5, `nodes` about
-37000 and `mem_mb` about 1300. The frame is spent on the CPU in script and physics, not on the GPU. No
-culprit is named: `attributed_ms` is 0 in those lines because the sampler was not armed.
-`<TODO: re-verify still-open against the code>`
+**The numbers, paired A/B, two kept runs a side after a discarded warmup (PERF-7), each side rebuilt
+`--no-incremental` (SHELL-16), the "before" side being this tree with the ungated `GD.Print` put back
+in place and restored afterwards (METHOD-17).** Window 1 is excluded from the aggregates as the
+build-settling regime (PERF-19) and reported on its own.
 
-**Approach.** The hitch detector reports outliers against a rolling baseline, so a whole-run slowdown
-reads only in that baseline. Measure the rate itself instead (a frame-time trace over the sortie, or
-the probe's own timing), then attribute the script time with the sampler armed. **Measure CM13 first:**
-that mission spawns its whole field at the start and involves no zeppelin death, so if both missions
-share a cause it is the number of live aircraft rather than the destruction choreography. Then read
-CM09's second variable: whether the cost is the zeppelin's death choreography left running (the burn,
-finisher and sink anims and their emitters persist after the hull is down), the destroyed hull's
-colliders and debris still stepping, or the new squad's rigs adding AI and physics on top. The node
-count says nothing was freed. Compare a CM09 run that leaves the zeppelin alive.
+| | mean `phys_tick_ms` | median `phys_hz` | windows over 16.7 ms, of 82 | worst tick after window 1 | window 1 |
+|---|---:|---:|---:|---:|---:|
+| before | 1.249 / 1.246 | 59.9 / 60.0 | 47 / 47 | 46.3 / 47.5 | 124.8 / 124.3 |
+| after | 1.002 / 1.037 | 60.0 / 60.0 | 3 / 4 | 47.4 / 51.1 | 122.6 / 124.3 |
 
-**Model recommendation.** high. The item is a measurement before it is a fix, the instrument has to be
-chosen against a detector that answers a different question, and the outcome may be a disproof.
+The mean moves rather than holding, which is the same arithmetic rather than a second effect: 17 ms of
+work removed once a second is 0.28 ms off a 60 Hz tick, and 0.22 ms is what the mean lost. **No window
+on either side reaches 133 ms**, the eight-step cap, so the "about six sim steps discarded" reading
+does not reproduce on this build at all, and `phys_hz` was already 60.0 before the change.
 
-**Verify.** A frame-time trace over a full CM13 sortie and a full CM09 sortie showing the rate held
-across the second half, with the attribution naming what changed. Take the baseline first: an
-unchanged number is not evidence unless you have seen it able to fail. `docs/verification.md` PERF-12,
-PERF-13 and PERF-19 apply. The complete `.\RunTests.ps1` before landing.
+**Red before green.** `flight-telemetry-gate` flies three AI aircraft a whole sim second and counts
+telemetry lines in the scoped console sink and in the always-on log file. Both halves were seen able
+to fail, separately. Dropping only the gate (`Log.ConsoleShows(…) || true`), which leaves the console
+half suppressed and would pass a console-only check:
 
-**⚠ Traps.** The hitch detector is opt-in (`.\RunTests.ps1 -Hitch`) and answers a different question
-than this one; its lines name no culprit here because the sampler was not armed. Do not treat CM09's
-zeppelin as the first variable: CM13 is the cleaner test case and comes first. If the answer turns out
-to be the settled GC pause, read the second disproven claim above before optimising allocation.
+```
+…and none to the always-on log file either, so the line costs nothing when nobody asked (got 3)
+```
+
+and putting the original ungated `GD.Print` back, which reaches neither sink:
+
+```
+--log=flight brings the line back, one per aircraft (got 0 of 3)
+…and the same lines reach the log file (got 0 of 3)
+and every aircraft emits on the SAME sim step (), which is why the cost lands on one physics tick
+…written in the invariant culture, so a decimal reads '.' rather than the host's separator
+```
+
+GREEN reads `unasked: 65 steps x 3 aircraft -> console 0, file 0, steps []` and `asked: … console 3,
+file 3, steps [54]`, the single step number being the burst this item is about.
+
+**Suite count.** The catalog is 196; `CSVM.Tests/SuiteCatalogTests.cs` (195 → 196) and
+`analysis/engine-suite-weights.json` were updated with it.
+
+**Verify.** Targeted results on this worktree with `CSVM_DATA_ROOT` set, the suite count printed
+non-zero each time: `-Suite flight-telemetry-gate` **1 passed, 0 failed** in 0.95 s, engine errors
+clean; `-Filter ai` **63 passed, 0 failed** (`inert-aircraft`, `ai-actor`, `ai-modes`,
+`ai-gunnery`, `air-to-air` and every `landings-`/`campaign-*ai*` suite the substring reaches),
+engine errors clean, 101.5 s, the engine stage 1.5 s over its 100 s budget (awareness only);
+`-Filter campaign` **41 passed, 0 failed**, engine errors clean; the unit tier
+`-SkipEngine -SkipGoldens` **2694 passed of 2694**; the golden stage `-SkipUnits -SkipEngine`
+**18 shot(s) hash-identical** with `analysis/goldens/manifest.json` unmodified in the tree (GOLD-9);
+`-Quick` **241 units and 13 engine suites passed, 0 failed**, engine errors clean.
+`.\CheckCommentCaps.ps1 -Summary`: every block within cap, and `dotnet format --verify-no-changes`
+clean.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps that still bind.** Do not raise `max_physics_steps_per_frame`: it deepens the catch-up
+spiral rather than recovering the lost steps, and nothing here exhausts the cap anyway. Do not chase
+the sustained step (the disproven-claims table above). Do not re-open this against
+`NameResolver.ClearFindCache`: it is called zero times in a CM11 sortie and a memo that is never
+dropped cannot be the cost. Any re-measurement must say which mode it flew, and must use `--no-det`
+or the physics terms are empty by construction.
+
+## E43 ☑ `BL-612` CM09 and CM13 hold their rate for the whole mission
+
+**Outcome: the drop is real and reproduces, both named candidates are wrong, and the cost was Godot's
+per-node `_Process` dispatch over thousands of dormant particle emitters. Gating a dormant emitter off
+the frame-callback list takes both sorties to the machine's 8.33 ms presentation floor and holds them
+there for the whole run. `BL-612` is deleted.**
+
+**Mode, stated up front.** `.\RunProbe.ps1 --campaign=e43-perf:<seq> --players=1 --plane=player_bhawk
+--no-det --perf --no-vsync --mute --no-pads --seed=1 --frames=<n> --screenshot=…`, one aeroplane,
+nobody at the controls, on a copy of the `d33-perf` profile deleted afterwards. `--no-det` is required
+or the physics terms are empty (PERF-21). CM13 is seq 12 at 9,000 rendered frames on its own mission
+spawn; CM09 is seq 8 at 12,000 with `--pos=-7232,1500,-2564 --direction=0,0,-1 --hold=0,0,0,0.65`,
+because CM09's intro cutscene holds the sim for its first ~70 s and an unattended pilot on the authored
+spawn flies into the terrain about a minute after the handoff. **How the sortie is shown loaded where
+it is measured:** every run reported below logs `CRASH into` zero times, and every one of CM09's 99
+second-half windows and CM13's 75 steps the sim (`phys_tick_ms` above 0.4 rather than E42's idle-world
+0.08); CM09's node count climbs from 34,843 to 36,458 across a before run, which is the later squads
+arriving. ⚠ The profile must exist: with it deleted the same command still exits 0, builds a 12,000-node
+world with no roster and no crash rigs, and reads a clean 8.37 ms, so check the node count before
+quoting a campaign number.
+
+**The drop reproduces, and it is not the zeppelin.** CM09 is measured twice: as flown, and with
+`--debug-objective=30`, which is the mission's own PRIMARY (`INACTIVE1 lkgasbag05, panelleft1`, the
+Promised Land's gasbag) and wakes 38, 42 and 35 on completion, the chain that brings the next fighters.
+The zeppelin-down arm is not slower than the zeppelin-alive arm; it is marginally faster. The death
+choreography, the destroyed hull's colliders and the new squad's rigs are all ruled out as the cause of
+the sustained term. CM13, which spawns its field at the start and has no zeppelin death, carries the
+same cost, which is what said to look at a population rather than at an event.
+
+**Where the cost was.** A `_Process` bracket at the two ends of the priority order, with `Stopwatch`
+buckets inside `GameSession`, `AnimRuntime`, `FlightController`, `Puffer` and `Launcher`, plus a census
+of every node with processing enabled. On CM13 the whole C# `_Process` pass cost **9.4 ms of a 12.4 ms
+frame** while the bodies inside it summed to **1.06 ms**. The census says why: **3,814 of the 3,879
+processing nodes were `Puffer`**, almost all of them dormant, each returning on its first line. A
+`--fly --chapter=C2` control over the same world reads 709 puffers, 2.16 ms of pass and a flat 8.33 ms
+frame, so the two points give about 2.3 us per node of pure dispatch and a 0.5 ms intercept. The
+population is built rather than leaked: each aircraft's crash rig pre-warms 193 to 217 emitters, so a
+mission with twenty aircraft owns four thousand of them and every new spawn adds two hundred more.
+
+**What landed.** `Puffer._active` is written only through a new `SetActive`, which moves `SetProcess`
+with it, and `_Ready` puts the node back where `SetActive` left it, because Godot turns processing ON
+at ready for every script that defines `_Process`. Nothing else moved: the body's own first line was
+already `if (!_active) return;`. Recorded as `docs/verification.md` PERF-24 and on `Puffer`'s
+`docs/architecture.md` entry.
+
+**The numbers, paired A/B, two kept runs a side after a discarded cold warmup (PERF-7), each side
+rebuilt `--no-incremental` (SHELL-16), the "before" side being this tree with the two `SetProcess`
+calls flipped back and restored afterwards (METHOD-17).** Window 1 is excluded as the build-settling
+regime (PERF-19). The runs are `--no-vsync` throughout, so no count crosses a vsync mode (PERF-13),
+and no rendered-frame ordinal is read as a wall time (PERF-12).
+
+| config | before mean `frame_ms` | after mean `frame_ms` | windows over 8.4 ms, before → after |
+|---|---:|---:|---:|
+| CM13, 149 windows | 13.04 / 11.72 | 8.47 / 8.43 | 149, 149 → 41, 29 |
+| CM09, zeppelin alive, 199 windows | 12.09 / 12.65 | 8.45 / 8.54 | 199, 199 → 44, 59 |
+| CM09, zeppelin down, 199 windows | 11.50 / 11.58 | 8.46 / 8.42 | 199, 199 → 54, 35 |
+
+**⚠ A window is 60 RENDERED frames, so the same `--frames` budget does not buy the same sortie on
+the two sides**: the faster after side reaches sim 101.7 s where the before side reaches 145.3 s.
+Read the halves on a sim-second axis instead, which the windows carry (`phys_hz` is 60.0 in every
+run, so a window's wall span is its sim span). Mean `frame_ms` per 25 sim seconds:
+
+| run | 0-25 | 25-50 | 50-75 | 75-100 | 100-125 | 125-150 |
+|---|---:|---:|---:|---:|---:|---:|
+| CM09 alive, before | 10.54 / 10.33 | 10.48 / 10.42 | 12.63 / 12.81 | 12.82 / 12.59 | 13.36 / 17.53 | 13.72 / 14.71 |
+| CM09 alive, after | 8.37 / 8.36 | 8.36 / 8.35 | 8.52 / 8.71 | 8.57 / 8.76 | 8.33 / 8.35 | |
+| CM09 down, before | 10.33 | 10.32 | 12.01 | 12.15 | 12.35 | 12.85 |
+| CM09 down, after | 8.37 | 8.37 | 8.58 | 8.53 | 8.35 | |
+| CM13, before | 15.09 / 12.95 | 13.12 / 12.34 | 12.94 / 11.73 | 13.03 / 10.62 | 11.53 / 10.74 | |
+| CM13, after | 8.45 / 8.54 | 8.54 / 8.38 | 8.43 / 8.38 | 8.33 / 8.33 | | |
+
+That is the reported shape and its answer in one place. CM09's first 50 sim seconds are its intro
+cutscene, which holds the sim; the frame worsens from 10.4 to 13.7 ms once flight starts and the
+squads arrive, and after the fix the same stretch reads 8.35 to 8.76 ms and never trends. CM13 runs
+the other way even before the fix, improving from 15.1 to 10.7 ms as the unattended pilot leaves the
+city, which is the second reason the drop is not "the mission gets busier": the cost tracks the
+emitter population, which CM13 owns from its build.
+
+**8.33 ms is this machine's floor, not a measurement of the work**: `--stage=empty` reads 8.33 ms and
+120.0 fps flat, as PERF-12 already records for the dev box, so the after side is bounded by
+presentation and the real frame cost is lower than the figure. At the controls, where vsync is on, a
+12 to 14 ms frame misses the 8.33 ms refresh and lands on the next one, which is what "falls under
+60" was.
+
+**Red before green.** `puffer-idle-process-gate` builds a 64-strong dormant field and drives the burst
+and trail entry paths. Both halves were seen able to fail, separately. With the gate removed:
+
+```
+no unstarted emitter of a 64-strong field asks for a frame callback expected=0 actual=64
+starting one of the field puts exactly that one on the frame path expected=1 actual=64
+a built, unstarted burst emitter is off the frame path
+a finished burst takes itself off the frame path
+a built, unstarted trail emitter is off the frame path
+Clear takes it off again
+```
+
+and with the gate stuck off (`SetProcess(false)` unconditionally), which the checks above would pass:
+
+```
+starting one of the field puts exactly that one on the frame path expected=1 actual=0
+Burst puts the emitter back on the frame path
+Emit puts the trail emitter on the frame path
+```
+
+**Four goldens moved, and the price is one frame.** `c1-crash`, `c1-debris-rest`, `c1-targeting-hud`
+and `c1-ai-wreck`, every one a particle shot; `c1-destroy-effects` and `c1-flight` are bit-identical.
+Against before-images reproduced from a temporarily reverted build whose 18 hashes match the committed
+ones digit for digit (GOLD-9), the movement is 1.152 % of `c1-crash`'s pixels (0.191 % past a channel
+delta of 16), 39 px of `c1-targeting-hud` at a max delta of 3, 14 px of `c1-debris-rest` and 5 px of
+`c1-ai-wreck`. The mechanism is measured, not inferred: a node joining Godot's process group mid-pass
+is not visited until the next frame, and a stamp of activation frame against first `_Process` frame
+over `c1-crash`'s own command says 16 of its 21 emitters used to be visited in the frame they were
+started and all 21 now wait one frame. GOLD-6's shape, at the small end of its range: it moved the same
+shot by 79.7 % when every called sequence shifted a tick.
+
+**Suite count.** The catalog is 197; `CSVM.Tests/SuiteCatalogTests.cs` (196 → 197) and
+`analysis/engine-suite-weights.json` were updated with it.
+
+**Verify.** Targeted results on this worktree with `CSVM_DATA_ROOT` set, the suite count printed
+non-zero each time: `-Suite puffer-idle-process-gate` **1 passed, 0 failed**, engine errors clean;
+`-Filter puffer` **6 passed, 0 failed**; `-Filter effect` **7 passed, 0 failed**; the whole engine tier
+`-SkipUnits -SkipGoldens` **197 passed, 0 failed, 0 skipped** in 87.4 s, engine errors clean; the unit
+tier `-SkipEngine -SkipGoldens` **2694 passed of 2694**; the golden stage after the re-pin
+**18 shot(s) hash-identical**, with `git diff` on `analysis/goldens/manifest.json` showing exactly the
+four hashes and no `exercises` text (GOLD-9). `.\CheckCommentCaps.ps1 -Summary` within cap and
+`dotnet format --verify-no-changes` clean.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps that still bind.** Do not read `script_ms` or `physics_ms` as a per-frame cost; both are the
+worst step of the last wall second (PERF-21), and the entry's `physics_ms` 17 to 18 was E42's telemetry
+burst, gone before this item started. Do not re-open this against the zeppelin's death choreography:
+the `--debug-objective=30` arm is not slower than the arm that leaves it flying. Do not chase the
+remaining second-half windows a tenth of a millisecond over the floor, or the 13.1 to 14.1 ms window 1,
+which is the world build settling (PERF-19). And do not turn a node's `_Process` back on to recover the
+one-frame emitter delay without re-measuring the population cost: they are the same switch.

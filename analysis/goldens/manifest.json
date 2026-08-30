@@ -99,28 +99,28 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "fe1fd41e008eaa854c8ff974fe5a4c33",
+      "hash": "c302c724eda84f61df035e634e07e34d",
       "exercises": "player_crash_default after five flight steps: corrected pre-crash attitude, crash rig and airframe, moving distance puffers, ranged tumble, vector-form pieces, flydirt delta and pooled repeat calls.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-debris-rest",
       "frame": 360,
-      "hash": "7d8f7514494ec651e00a6d296a68999d",
+      "hash": "ac23a4f7aba9003441ab0338de9011e4",
       "exercises": "the column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer as the visible signal.",
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "e823516a1f9831962204e29099d0bcdb",
+      "hash": "f4a466e7d6ee3c41e7e710b0481a0a48",
       "exercises": "Targeting a live AI in flight: its quaternion-driven pose and its crewed rear turret's barrel feed fixed antialiased in-range brackets, the label below the plane and --debug-markers identity/health text; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "720c60126f6dbfc15db3243daeeaf551",
+      "hash": "b9609a0ca574bbfda2506316863df87c",
       "exercises": "A shot-down AI three seconds after the kill: quaternion flight state under frozen commands, the target's antialiased brackets, the handover fireball where randomdestseq inherits the hull's velocity, and the LOW ALT lamp lit inside its 60 m gate.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     },

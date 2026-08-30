@@ -3085,6 +3085,10 @@ unauthored state by a factor of ten, so the `puffer-modes` suite asserts both ca
 once; the archive is the key, so a chapter change never serves another chapter's frames.
 Three config knobs (`puffer.burstSizeScale`/`trailSizeScale`/`sustainSizeScale`) scale `BaseSize`
 per spawn path, registered in `Config.WarmTuningRegistry` for `--dump-config`.
+A dormant emitter is off Godot's `_Process` list: `SetActive` is the only writer of the active flag
+and it moves `SetProcess` with it, `_Ready` puts the node back where `SetActive` left it, and the
+`puffer-idle-process-gate` suite holds both directions. A mission pre-warms thousands of emitters,
+so what they cost the frame is set by how many ask for the callback.
 The wind it reads is `Effects/WorldWind.cs` — see its own entry below.
 
 **The camera-distance fade** (`DistanceAlpha`) is view-space depth off `EffectAmbience`'s camera
@@ -3539,7 +3543,11 @@ crash runtime, the def table, the anchor and the two respawn snapshots in one ca
 cannot be half-bound and only `CrashRuntime`/`CrashAnchor` stay readable as properties. The DEATH family (`CRASH into`, `midair aspect`, every
 `vehicle health exhausted`, `graze`, `embedded in terrain`, `AI ram`, `impact`) routes through
 `Log.Info("flight", …)`, so a play session's file sink carries how each aircraft died; the
-per-round weapon breadcrumbs around them are a different family and still `GD.Print`.
+per-round weapon breadcrumbs around them are a different family and still `GD.Print`. The
+once-a-sim-second `telemetry` line is `Log.Debug("flight", …)` behind a `Log.ConsoleShows` ask
+taken BEFORE its values are formatted, since every live aircraft crosses that boundary on the same
+sim step and an unasked line is one write per aircraft inside one physics tick; `--log=flight`
+turns it on (verification.md PERF-23).
 The sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). `SimStep` also ticks
 `Turrets` (the carried gunners) after the fire outcome, so the crash branch's early

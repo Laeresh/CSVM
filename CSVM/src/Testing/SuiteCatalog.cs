@@ -29,6 +29,7 @@ using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
 using static CSVM.Testing.DropoffChutemanSuites;
 using static CSVM.Testing.DropoffPlacementSuites;
+using static CSVM.Testing.FlightTelemetrySuites;
 using static CSVM.Testing.GeneratorRosterSuites;
 using static CSVM.Testing.InstantActionSuites;
 using static CSVM.Testing.IntroAircraftSuites;
@@ -58,6 +59,7 @@ public static class SuiteCatalog
         "puffer-distance-fade",
         "puffer-priority-size",
         "puffer-fire-column",
+        "puffer-idle-process-gate",
         "loadout-bind",
         "weapons-fire",
         "aim-assist",
@@ -86,6 +88,7 @@ public static class SuiteCatalog
         "results-board-shell",
         "flight-roster-transaction",
         "inert-aircraft",
+        "flight-telemetry-gate",
         "world-turrets",
         "turret-self-fire",
         "c1-aa-guns",
@@ -297,6 +300,10 @@ public static class SuiteCatalog
         into.Add(new TestHarness.Suite("puffer-fire-column",
             "the 30 s fire's authored column height, still air and in C1's own upward wind — the readout that retired the invented fire scales (D10)",
             PufferFireColumn));
+        into.Add(new TestHarness.Suite("puffer-idle-process-gate",
+            "a dormant emitter is off Godot's frame-callback list and each entry path puts it back, "
+            + "which is what keeps a mission's pre-warmed field from costing the frame it is idle in",
+            PufferIdleProcessGate));
         into.Add(new TestHarness.Suite("loadout-bind",
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",
@@ -511,6 +518,12 @@ public static class SuiteCatalog
             "not move under a sim step and is not drawn — then Activate re-homes it and every one " +
             "of those flips back",
             InertAircraft));
+        into.Add(new TestHarness.Suite("flight-telemetry-gate",
+            "the once-a-sim-second flight telemetry line costs nothing unasked: three aircraft " +
+            "flown a whole sim second write no line to either sink at the shipped --log= level, " +
+            "and --log=flight brings back exactly one line per aircraft, all on the SAME sim " +
+            "step, in the invariant culture",
+            FlightTelemetryGate));
         into.Add(new TestHarness.Suite("world-turrets",
             "the world AA emplacements (C9b) place at their NODES patterns against the real C1 " +
             "world (census pinned, one entry many turrets, scoped multi-segment paths), honour " +

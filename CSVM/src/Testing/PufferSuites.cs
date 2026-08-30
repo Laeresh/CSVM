@@ -1085,6 +1085,113 @@ internal static class PufferSuites
         }
     }
 
+    // What it costs the frame to own an emitter that is doing nothing. Godot dispatches _Process to
+    // every processing node, and a mission pre-warms thousands of emitters, so the claim is that a
+    // dormant one does not ask for the callback at all — through each entry path and each end.
+    internal static void PufferIdleProcessGate(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr effect readers");
+        var burstState = PufferState.Load(ctx.ZrdrPath, "flame_ball.json", "fierypuffer");
+        var trailState = PufferState.Load(ctx.ZrdrPath, "pufftrails.json", "smokepuffer");
+        ctx.Check(burstState != null, $"flame_ball.json defines fierypuffer");
+        ctx.Check(trailState != null, $"pufftrails.json defines smokepuffer");
+        if (burstState == null || trailState == null)
+        {
+            return;
+        }
+
+        // Detached for the duration, for the same reason PufferModes does it: the harness clock is
+        // a FixedStep one nothing steps, so an installed clock would freeze every emitter tick.
+        var clock = GameClock.Current;
+        GameClock.Current = null;
+        try
+        {
+            PufferIdleFieldCost(ctx, burstState);
+            PufferProcessGateBurst(ctx, burstState);
+            PufferProcessGateTrail(ctx, trailState);
+        }
+        finally
+        {
+            GameClock.Current = clock;
+        }
+    }
+
+    // The population claim, at a scale a mission reaches: a pre-warmed field asks Godot for nothing
+    // until something starts one of them, and then for exactly that one.
+    internal static void PufferIdleFieldCost(TestContext ctx, PufferState state)
+    {
+        const int population = 64;
+        var field = new Puffer[population];
+        for (int i = 0; i < population; i++)
+        {
+            field[i] = Puffer.CreateWith(state, new RecordingEmitterRenderer(), activeDuration: 0.3f);
+            ctx.Host.AddChild(field[i]);
+        }
+
+        try
+        {
+            ctx.Check(field.All(p => p.IsInsideTree()),
+                $"the built field is in the tree, so its processing flag is the one Godot dispatches on");
+            ctx.Same(0, field.Count(p => p.IsProcessing()),
+                $"no unstarted emitter of a {population}-strong field asks for a frame callback");
+            field[0].Burst(new Vector3(0f, 500f, 0f));
+            ctx.Same(1, field.Count(p => p.IsProcessing()),
+                $"starting one of the field puts exactly that one on the frame path");
+        }
+        finally
+        {
+            foreach (var p in field)
+            {
+                p.Free();
+            }
+        }
+    }
+
+    // Burst: off when built, on for the run, off again when the last particle dies.
+    internal static void PufferProcessGateBurst(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, activeDuration: 0.3f);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            ctx.Check(!puffer.IsProcessing(), $"a built, unstarted burst emitter is off the frame path");
+            puffer.Burst(new Vector3(0f, 500f, 0f));
+            ctx.Check(puffer.IsProcessing(), $"Burst puts the emitter back on the frame path");
+            for (int i = 0; i < 40; i++)   // 2 s: past the last batch's 1 s lifetime
+            {
+                puffer._Process(0.05f);
+            }
+
+            ctx.Same(0, gpu.Shown, $"the burst has ended (its last particle died)");
+            ctx.Check(!puffer.IsProcessing(), $"a finished burst takes itself off the frame path");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // The continuous paths: Emit turns a DISTANCE_INTERVAL emitter on, and Clear takes it off.
+    internal static void PufferProcessGateTrail(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            ctx.Check(!puffer.IsProcessing(), $"a built, unstarted trail emitter is off the frame path");
+            puffer.Emit(new Vector3(0f, 500f, 0f), Basis.Identity, 1f / 60f);
+            ctx.Check(puffer.IsProcessing(), $"Emit puts the trail emitter on the frame path");
+            puffer.Clear();
+            ctx.Check(!puffer.IsProcessing(), $"Clear takes it off again");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
     // A host that CANNOT move (the damage lab's parked plane) declares a burn rate:
     // `Emit` with `staticBurnMps` spends virtual metres at the held point — the
     // authored per-metre density, not the time cadence — through the same carry as the moving

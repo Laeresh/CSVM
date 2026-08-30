@@ -12,7 +12,7 @@ public sealed class SuiteCatalogTests
     {
         string[] names = TestHarness.All.Select(suite => suite.Name).ToArray();
 
-        Assert.Equal(195, names.Length);
+        Assert.Equal(197, names.Length);
         Assert.Equal(SuiteCatalog.Names, names);
         Assert.Equal("emitter-lifetime", names[0]);
         Assert.Equal("campaign-coop-cutscene-fullscreen", names[^1]);
