@@ -95,6 +95,7 @@
     "sun-orientation": 0.036,
     "tex-dropin": 0.008,
     "gltf-export": 0.571,
+    "plane-shader-reuse": 0.680,
     "cockpit-interior": 0.883,
     "cockpit-overlay-pass": 0.589,
     "collision-visibility": 8.570,

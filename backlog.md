@@ -2855,20 +2855,32 @@ usual.
   primary 3 completed), so this is not an objective bug. *Cross-refs:* `docs/org/aiPilot.md` (the
   activation primitive and `FUN_00432010`).
 
-- `BL-641` `[Bug]` **CM18 (C4/M03) stalls the frame roughly 300 ms twice early in flight, on an
-  `ai_spawn` site, at the same sim frame and magnitude whether one human flies or four.**
-  *Evidence:* `analysis/campaign-coop-4p-perf/FINDINGS.md` (D33): `--det`'s deterministic clock
-  put the stall at sim frame 241 (~320 ms, threshold 45.7 ms) and frame 482 (~290-300 ms) in every
-  one of the four 1P/4P x cockpit/external launches measured, `HitchSidecar`'s own attribution
-  assigning essentially the whole frame to one `ai_spawn` sample (`attributed_ms` within 20 ms of
-  `frame_ms` both times). Identical across player counts, so this is a single mission-script/
-  generator spawn cost on the main thread, not something splitscreen's pane count multiplies.
-  *Fix shape:* find what CM18's roster/generator script does at those two sim instants (a
-  `WAKEUP_GENERATOR`/roster credit or similar bulk spawn) and see whether it can be spread across
-  frames; not this plan's job (D33 measures, it does not fix). *⚠ Traps:* the stall is far past
-  `HitchMonitor`'s grace window and reproduces to the same frame under `--det`, so it is not
-  workstation noise (`docs/verification.md` PERF-12/13). *Cross-refs:* `BL-434` (the per-viewport
-  splitscreen cost this same measurement pass separately profiled).
+- `BL-641` `[Bug]` **Introducing one AI aircraft mid-flight costs about 90 ms of main thread,
+  which is a hitch wherever a mission spawns one: CM18 (C4/M03) still stalls about 155 ms and
+  115 ms at sim frames 241 and 482 against a 46 ms trip threshold.** *Evidence:* the two CM18
+  stalls are `cargozep1`'s first two generator launches, on the authored `ind_period` 3 +
+  `wave_period` 1 cycle (4.017 and 8.033 sim s under `--det`'s 1/60 s step), each building a
+  `Cargo_params` Black Swan through `AiFlightAssembler.Assemble`. Sharing the generated shaders
+  across builders took the frames from 363/325 ms to 156/117 ms at 1P and 337/323 ms to 135/117 ms
+  at 4P, paired A/B, two kept launches a side. What remains is genuine per-aircraft construction,
+  attributed by stopwatch inside the `ai_spawn` scope: about 50 ms crash rig (template staging, the
+  wreck subtree, and 194 to 198 pre-warmed emitters at about 19 ms), 22 ms `FlightController.Bind`
+  (prop, wing-light and control-surface animators, collider), 10 ms model build, 5 ms loadout,
+  turrets and damage visuals. *Fix shape:* the crash rig is the only block that is not needed for
+  the aircraft to be observable, since `_worldRoot.AddChild(controller)` already runs before it, so
+  it can be built a frame or more later behind a "build it now if this aircraft dies first" guard.
+  That alone leaves about 90 ms, so reaching the threshold means spreading the whole assembly over
+  three or more frames. *⚠ Traps:* the stall is far past `HitchMonitor`'s grace window and
+  reproduces to the same sim frame under `--det`, so it is not workstation noise
+  (`docs/verification.md` PERF-12/13); the 4P threshold reads 75 ms rather than 46 ms because the
+  relative term rides a slower rolling median, so compare frames against their own printed
+  threshold. Do not re-derive the shader-compile term: it is gone, and PERF-22 records it. How
+  OFTEN CM18 pays this is a separate open question: `GeneratorCycle` switches the capacity check off
+  at authored `capacity <= 0` unless a `WAKEUP_GENERATOR` has armed it, CM18 authors none, so
+  `cargozep1` launches every 4 s up to `max_active` 10 unasked by any objective, and
+  `docs/formats/mission-entities/enemy-generators.md` "Capacity rule and limit" says the data does
+  not establish that reading. *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same
+  measurement pass profiled).
 
 - `BL-643` `[Bug]` **Returning from a guest flight check to P1 reopens campaign joining after FLY
   MISSION committed the field.** *Evidence:* `CampaignFlightField.Locked` is `Current > 0`, so

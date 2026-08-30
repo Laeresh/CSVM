@@ -126,7 +126,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — the campaign's frame stalls
 
-41. ☐ `BL-641` CM18's two spawn stalls are spread across frames
+41. ◐ `BL-641` CM18's two spawn stalls are spread across frames (largest term removed, 363/325 ms to 156/117 ms; the residual is per-aircraft construction and still trips the detector, `BL-641` rewritten)
 42. ☐ `BL-562` CM11's physics tick spikes are attributed and removed
 43. ☐ `BL-612` CM09 and CM13 hold their rate for the whole mission
 
@@ -723,36 +723,83 @@ builds with no export step, which is the mirror image of what this item fixed an
 
 # Wave E — the campaign's frame stalls
 
-## E41 ☐ `BL-641` CM18's two spawn stalls are spread across frames
+## E41 ◐ `BL-641` CM18's two spawn stalls are spread across frames
 
-**Goal.** CM18 (C4/M03) runs its early flight without the two roughly 300 ms frame stalls, at one
-human and at four.
+**Outcome: the premise held and the largest term was a redundancy rather than a spreadable bulk
+spawn, so the stalls shrank by 57 to 64 % without any change to when entities exist. They still trip
+the detector, so the item lands partial and `BL-641` is rewritten around the residual.**
 
-**Evidence (confidence: traced).** `analysis/campaign-coop-4p-perf/FINDINGS.md` (D33): `--det`'s
-deterministic clock put the stall at sim frame 241 (about 320 ms against a 45.7 ms threshold) and
-frame 482 (about 290 to 300 ms) in every one of the four 1P/4P by cockpit/external launches measured.
-`HitchSidecar`'s own attribution assigned essentially the whole frame to one `ai_spawn` sample
-(`attributed_ms` within 20 ms of `frame_ms` both times). Identical across player counts, so this is a
-single mission-script or generator spawn cost on the main thread, not something splitscreen's pane
-count multiplies. `<TODO: re-verify still-open against the code>`
+**What the two sim instants are.** Not a `WAKEUP_GENERATOR` and not a roster credit. CM18's
+`egen.zrd.json` authors one generator on `cargozep1` with `ind_period` 3 + `wave_period` 1, so its
+cycle fires at 4.0 s and 8.0 s, which under `--det`'s 1/60 s step is exactly sim frames 241 and 482.
+Each launch resolves `vehicle.params Cargo_params` to a disabled `aiv` block and builds one Black
+Swan through `FlightRoster.SpawnAi` → `AiFlightAssembler.Assemble`, the single `ai_spawn` scope. The
+log lines are `egen: 'cargozep1' spawn #1: 'bsfury_eg0' dropped …` and `#2: 'bsfury_eg1'`. Nothing
+about it is bulk: it is one aeroplane, twice, and it recurs every 4 s for the rest of the mission up
+to `max_active` 10.
 
-**Approach.** Find what CM18's roster or generator script does at those two sim instants (a
-`WAKEUP_GENERATOR`, a roster credit or a similar bulk spawn) and establish whether the work can be
-spread across frames. D33 measured it and deliberately did not fix it, so the measurement is the
-starting point rather than work to redo.
+**Where the cost was.** Stopwatch attribution inside the `ai_spawn` scope, then inside
+`PlaneBuilder.Build`, then inside `SceneBuilder`: of a ~300 ms spawn, ~190 ms sat in the 13 to 15
+`new ShaderMaterial { Shader = … }` assignments whose `Shader` resource was freshly generated, about
+13 ms each, while the other 45 material assignments of the same build cost 0.1 ms between them.
+Generating the shader TEXT cost 1.6 ms; painting the livery cost 5 ms; triangulating the meshes cost
+8 ms. `SceneBuilder`'s three shader memos were instance fields, so every aircraft built its own
+copies of the same dozen shaders and paid Godot a compile for each.
 
-**Model recommendation.** high. Spreading a spawn across frames changes when entities exist, which
-mission scripts and the objective graph both observe; the correctness risk is larger than the
-performance work.
+**What landed.** The three shader memos are process-wide, with `DebugClutterFlag` added to the bias
+key because it is the one instance field that varies the generated text. Nothing else moved: the
+mesh, material and collider memos stay per builder, since every override is baked into what they
+hold.
 
-**Verify.** Re-run the D33 measurement under `--det` at 1P and 4P and show both frames under the
-45.7 ms threshold, with the attribution no longer naming `ai_spawn`. `campaign-squad-wakeup`,
-`campaign-roster` and `campaign-objectives` green, and the complete `.\RunTests.ps1` before landing.
-`docs/verification.md` PERF-12 and PERF-13 apply.
+**The numbers, paired A/B, two kept launches a side after a discarded cold-cache warmup (PERF-7),
+`--campaign=<profile>:17 --det --perf --no-vsync --mute --frames=600`.** The "before" side is this
+same tree with the three memos flipped back to instance fields and rebuilt `--no-incremental`
+(SHELL-16). Sim frame 241 is 4.017 sim s and frame 482 is 8.033 sim s, the comparable coordinate;
+PERF-12 forbids reading either as a wall time.
 
-**⚠ Traps.** The stall is far past `HitchMonitor`'s grace window and reproduces to the same frame under
-`--det`, so it is not workstation noise. Spreading the spawn must not change the sim frame on which
-the entities become observable to the objective graph, or the mission's own pacing moves with it.
+| config | sim frame | before `frame_ms` | after `frame_ms` | threshold |
+|---|---|---:|---:|---:|
+| 1P | 241 | 362.8 / 363.5 | 156.5 / 155.8 | 46.0 / 46.2 |
+| 1P | 482 | 323.0 / 328.8 | 116.3 / 117.7 | 46.6 / 46.8 |
+| 4P | 241 | 336.8 / 334.9 | 134.2 / 136.3 | 75.6 / 76.7 |
+| 4P | 482 | 324.7 / 322.1 | 115.6 / 118.6 | 74.0 / 75.8 |
+
+`HitchSidecar` still names `ai_spawn`, at 127.6/98.0 ms (1P) and 97.0/90.4 ms (4P) against
+331.5/301.5 and 300.2/297.5 before. The 4P threshold reads 75 ms rather than 46 ms because
+`HitchMonitor`'s relative term rides a slower rolling median there, which is PERF-13's rule about
+comparing a frequency across modes applied to the threshold itself: read each frame against its own
+printed threshold, never against the plan's 45.7 ms.
+
+**Why it stops here.** The residual ~90 ms is genuine per-aircraft construction, not another
+redundancy: about 50 ms crash rig (template staging, the wreck subtree, and 194 to 198 pre-warmed
+emitters at about 19 ms of it), 22 ms `FlightController.Bind`, 10 ms model build, 5 ms loadout,
+turrets and damage visuals. Reaching the threshold means spreading the assembly over three or more
+frames. Only the crash rig can move without touching observability, because
+`_worldRoot.AddChild(controller)` already runs BEFORE the crash-rig block, so the aircraft is in the
+world and in the roster on the launch frame whatever happens to the rig afterwards. Deferring it
+needs a "build it now if this aircraft dies first" guard and still leaves ~90 ms, so it is filed on
+the rewritten `BL-641` rather than taken here.
+
+**Red before green.** `plane-shader-reuse` builds the same airframe through two `PlaneBuilder`s and
+asserts every `Shader` behind the second model's materials is one the first already made. With the
+memos on the instance it failed:
+`every shader of the second build is one the first already compiled (second=14 shared=0) expected=14 actual=0`.
+Its control arm (the first build carries several distinct shaders, the second carries any at all)
+keeps a collapse to one shader from satisfying it vacuously.
+
+**Found in a file this item does not own.** `GeneratorCycle` switches the capacity check off at
+authored `capacity <= 0` unless a `WAKEUP_GENERATOR` has armed it. All 23 shipped generators author
+`capacity 0` and CM18 authors no `WAKEUP_GENERATOR`, so `cargozep1` launches unasked every 4 s up to
+`max_active` 10, while `docs/formats/mission-entities/enemy-generators.md` says the data does not
+establish that reading. That decides how often CM18 pays this cost at all, and whether ten enemy
+fighters belong in the mission; it is recorded on `BL-641` and owed its own item.
+
+**Verification.** `plane-shader-reuse`, `campaign-squad-wakeup`, `campaign-roster` and
+`campaign-objectives` PASS with engine errors clean; goldens 18 of 18 hash-identical with
+`analysis/goldens/manifest.json` unmodified in the tree (GOLD-9); `-Quick` 241 units and 13 suites
+PASS.
+
+**Verified.** <pending orchestrator run>
 
 ## E42 ☐ `BL-562` CM11's physics tick spikes are attributed and removed
 
