@@ -5,7 +5,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The per-mode node hiding of the pilot's own aircraft (docs/PLAN-cockpit-view.md, B11):
+/// The per-mode node hiding of the pilot's own aircraft:
 /// Cockpit draws the interior, Nose draws neither it nor the <c>markers</c>/<c>dontmove</c>
 /// groups, and both hide the healthy body. <see cref="CockpitVisibility.Rules"/> is engine-free,
 /// so these need no built plane; the tree walk that finds the four nodes is the in-engine

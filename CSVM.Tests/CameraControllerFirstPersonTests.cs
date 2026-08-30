@@ -5,7 +5,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The pure first-person placement law (docs/PLAN-cockpit-view.md, A2):
+/// The pure first-person placement law:
 /// <c>camera_world = plane_pos + plane_rotation × cockpit_camera_offset</c>, plus the fixed
 /// −4.70° head-pitch offset. <see cref="CameraController.FirstPersonPose"/> is engine-free, so
 /// these tests need no live <see cref="Camera3D"/>.

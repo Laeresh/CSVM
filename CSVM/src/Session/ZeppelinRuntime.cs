@@ -140,7 +140,7 @@ public sealed partial class ZeppelinRuntime : Node
         return moved;
     }
 
-    /// <summary>The live motions by node name, the F18 seam's lookup (damage writes
+    /// <summary>The live motions by node name; damage writes
     /// <see cref="ZeppelinMotion.AliveEngines"/>).</summary>
     public ZeppelinMotion? MotionFor(string node) => Find(node)?.Motion;
 
@@ -662,7 +662,7 @@ public sealed partial class ZeppelinRuntime : Node
             return;
         }
 
-        // Engine deaths drive the decoded sqrt curve through F17's seam.
+        // Engine deaths update the count that drives the decoded square-root curve.
         int engines = damage.AliveEngines(
             name => zep.EngineZones.TryGetValue(name, out var e) ? ZoneIsAlive(e) : true);
         if (engines != zep.Motion.AliveEngines)

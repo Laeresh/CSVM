@@ -5,7 +5,7 @@ using CSVM.Flight;
 namespace CSVM.UI;
 
 /// <summary>One row of a human plane picker: a stock airframe, or a saved custom plane listed
-/// after them (PLAN-hangar Decision 6). <paramref name="Node"/> is the planes.zbd root node a
+/// after them. <paramref name="Node"/> is the planes.zbd root node a
 /// launch builds; for a custom row that is its airframe's STOCK node, because building the
 /// custom def into a flying aircraft is D32's; <paramref name="CustomName"/> is the store name
 /// distinguishing the pick, carried into <c>LaunchMenu.PlayerChoice.CustomPlane</c> so D32 can
@@ -27,8 +27,7 @@ public static class PlanePickerRoster
     // Airframe id 0-10 (the stat table's row order: Hoplite, Hellhound, Balmoral, Bloodhawk,
     // Brigand, Devastator, Firebrand, Fury, Kestrel, Peacemaker, Warhawk) to the planes.zbd
     // node, the same id order HangarPaintPage.SkinPrefixes is keyed by. The Hoplite is
-    // player_autogyro: the shipped data names that aircraft both ways (PLAN-instant-action's
-    // two-names trap).
+    // player_autogyro: the shipped data names that aircraft both ways.
     private static readonly string[] AirframeNodes =
     {
         "player_autogyro", "player_avenger", "player_balmoral", "player_bhawk", "player_brigand",

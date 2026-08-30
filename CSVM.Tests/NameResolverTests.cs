@@ -467,7 +467,7 @@ public class NameResolverTests
     [Fact]
     public void EmptyNameWithoutTargetsStaysRefusedEvenWithAGenericRoot()
     {
-        // The pre-F18 refusal survives for the defs it was written for: an empty-NAME def
+        // The refusal survives for the defs it was written for: an empty-NAME def
         // carrying only a generic ANIMATION_ROOT_NAME must not root-lift onto every instance.
         var parent = Node("b0");
         var resolver = new NameResolver<TestNode>();

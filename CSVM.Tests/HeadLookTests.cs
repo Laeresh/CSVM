@@ -5,7 +5,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The head-look laws (docs/PLAN-cockpit-view.md, C21): the snap direction table, the 2 rad/s
+/// The head-look laws: the snap direction table, the 2 rad/s
 /// free-look integration, the elevation clamp and azimuth wrap, and the exponential smoothing at
 /// the decoded rates (elevation 3.0/s, azimuth 5.0/s). <see cref="HeadLook"/> is engine-free, so
 /// none of this needs a live camera.
@@ -249,7 +249,7 @@ public class HeadLookTests
     {
         var attitude = new Basis(Vector3.Up, 0.4f);
         var (position, basis) = CameraController.FirstPersonPose(Vector3.One, attitude, Vector3.Up);
-        // The A2 law with no head angles at all: the fixed −4.70° tilt about the plane's right axis.
+        // With no head angles, use the fixed −4.70° tilt about the plane's right axis.
         var expected = attitude * new Basis(Vector3.Right, -0.08203f);
         Assert.True(position.IsEqualApprox(Vector3.One + (attitude * Vector3.Up)));
         Assert.True(basis.Z.IsEqualApprox(expected.Z));

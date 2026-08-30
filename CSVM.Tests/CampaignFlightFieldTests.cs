@@ -36,7 +36,7 @@ public class CampaignFlightFieldTests
         Assert.False(flow.Field.Advance());
     }
 
-    // The field is joinable up to and including the seated player's FLY MISSION (C21's rule), and
+    // The field is joinable up to and including the seated player's FLY MISSION, and
     // that press is now what starts the walk rather than what leaves the screen.
     [Fact]
     public void TheFieldLocksOnceTheWalkStartsAndUnlocksWhenItIsAbandoned()

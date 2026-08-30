@@ -74,7 +74,7 @@ public sealed class PlaneDamage
     public float SummaryHealthFraction =>
         WholeHealthMax > 0f ? _wholeHealth / WholeHealthMax : 1f;
 
-    /// <summary>The decoded kill rule (FUN_004b9bc0, the A4 decision as corrected 2026-08-14):
+    /// <summary>The decoded kill rule (FUN_004b9bc0):
     /// whole-vehicle health current at or below zero. The <c>critical</c> flag stays parsed and
     /// is never consulted — no code on the decoded death path reads a part flag.</summary>
     public bool IsDestroyed => WholeHealthMax > 0f && _wholeHealth <= 0f;

@@ -6,9 +6,9 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The picker roster's build rule (PLAN-hangar D31): stock airframes first in their given order,
+/// The picker roster's build rule: stock airframes first in their given order,
 /// saved customs after them, each custom carrying its store name and flying as its airframe's
-/// stock node until D32. `LaunchMenu` is engine-bound and untestable directly, so these are the
+/// stock node. `LaunchMenu` is engine-bound and untestable directly, so these are the
 /// facts behind every human plane picker it draws, lone-pilot and splitscreen panes alike.
 /// </summary>
 public class PlanePickerRosterTests
@@ -52,7 +52,7 @@ public class PlanePickerRosterTests
             row => Assert.True(row.IsCustom));
     }
 
-    /// <summary>The D32 seam: a custom row's node is its airframe's stock plane, and its store
+    /// <summary>A custom row's node is its airframe's stock plane, and its store
     /// name rides along so the launch layer can tell the pick apart from the stock row.</summary>
     [Fact]
     public void ACustomRowFliesAsItsAirframesStockNodeAndKeepsItsName()

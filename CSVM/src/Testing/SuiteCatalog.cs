@@ -736,7 +736,7 @@ public static class SuiteCatalog
         into.Add(new TestHarness.Suite("cockpit-interior",
             "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11)", CockpitInterior));
         into.Add(new TestHarness.Suite("cockpit-overlay-pass",
-            "--cockpit-pass moves the interior into a world of its own, where it and the camera both sit at the origin and no chapter-scale coordinate reaches the panel's transform (PLAN-cockpit-panel C21)", CockpitOverlayPass));
+            "--cockpit-pass moves the interior into a world of its own, where it and the camera both sit at the origin and no chapter-scale coordinate reaches the panel's transform", CockpitOverlayPass));
         into.Add(new TestHarness.Suite("collision-visibility",
             "nothing a chapter hides is left solid: no enabled collider under an invisible node", CollisionVisibility));
         into.Add(new TestHarness.Suite("nodelab-visibility",

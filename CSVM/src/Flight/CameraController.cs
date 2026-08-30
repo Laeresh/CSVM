@@ -80,8 +80,7 @@ public sealed class CameraController
     // The decoded per-mode BASE horizontal FOV, in degrees (org/cameraViews.md, "FOV constants
     // and aspect correction": 1.0471976 rad / 1.3962634 rad, exactly 60°/80°). Only Cockpit and
     // Nose ever read this table; every external view keeps GameSession's own 62° vertical global
-    // untouched (PLAN-cockpit-view, Decision 3 — the engine-wide migration is a filed item, not
-    // this one).
+    // untouched; external-view FOV calibration remains separate from this table.
     private const float NoseHorizontalFovDeg = 60f;
     private const float CockpitHorizontalFovDeg = 80f;
 
@@ -138,7 +137,7 @@ public sealed class CameraController
     // The FOV the owned camera carried at construction — GameSession's own 62° vertical global
     // for every external pose (chase, fixed, back, pad-look, crash). Captured once rather than
     // read back from GameSession, so this class restores exactly what it found and never reaches
-    // into that global's own home (PLAN-cockpit-view, A3, Decision 3).
+    // into that global's own home.
     private readonly float _externalFovDeg;
 
     // The dynamic chase radius: _dist + _distFactor·V + the acceleration transient. Advanced by
@@ -180,7 +179,7 @@ public sealed class CameraController
     /// overrides it for as long as that key is down without changing it (see
     /// <see cref="PilotView.Effective"/>). Seeded from <c>--view=cockpit</c>/<c>=nose</c>.
     /// ⚠ Deliberately NOT a row in <see cref="Views"/>: `BL-150` rebuilds that table later and
-    /// must be able to replace it without touching these modes (PLAN-cockpit-view, Decision 2).</summary>
+    /// must be able to replace it without touching these modes.</summary>
     public PilotViewMode ViewMode { get; set; }
 
     /// <summary>Where the owned camera's eye is in the world this frame, for a pass that draws
