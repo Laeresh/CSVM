@@ -137,11 +137,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ A1 A combo-box widget on the campaign board, closed field and scrolling popup list
 2. ☑ A2 A flow-level modal dialog over the composed board
-3. ☐ A3 Register `campaign-planeselection` with the existing `--menu=` aid (runs after B4)
+3. ☑ A3 Register `campaign-planeselection` with the existing `--menu=` aid (runs after B4)
 
 ### Wave B — the plane selection screen
 
-4. ☐ B4 `CampaignScreen.PlaneSelection`, drawn at its authored geometry
+4. ☑ B4 `CampaignScreen.PlaneSelection`, drawn at its authored geometry
 5. ☐ B5 The duplicate-plane refusal and its revert
 6. ☐ B6 EXPORT writes the plane and its loadout where Instant Action reads it
 
@@ -242,7 +242,7 @@ navigation. The modal is not that, and the two must not be wired together: a ref
 raises a modal would show the same words twice. A modal raised from inside `Accept` must not have
 its own confirm consumed by the same press that raised it.
 
-## A3 ☐ Register `campaign-planeselection` with the existing `--menu=` aid
+## A3 ☑ Register `campaign-planeselection` with the existing `--menu=` aid
 
 **Goal.** `--menu=campaign-planeselection --screenshot` photographs the new screen over the same
 scratch profile every other campaign aid uses.
@@ -273,7 +273,7 @@ mode page, so a typo looks like a screenshot of the wrong screen rather than an 
 
 # Wave B — the plane selection screen
 
-## B4 ☐ `CampaignScreen.PlaneSelection`, drawn at its authored geometry
+## B4 ☑ `CampaignScreen.PlaneSelection`, drawn at its authored geometry
 
 **Goal.** CHANGE PLANE opens a screen that looks like
 `OriginalScreenshots/Campaign Flight Check Change Plane.png`: the mission line, a PILOT block and,

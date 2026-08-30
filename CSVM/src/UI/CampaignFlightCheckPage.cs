@@ -107,11 +107,11 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     private StockLoadouts? _stock;
     private Messages? _messages;
 
-    // The mission and its objectives note, decoded once per mission rather than once per repaint:
-    // both read files, and the flow keeps one page instance across every screen it draws. -2 is
-    // "not yet read for any mission", which no MissionSeq ever is (the cabin's own default is -1).
+    // The objectives note, read once per mission rather than once per repaint: it reads files, and
+    // the flow keeps one page instance across every screen it draws. -2 is "not yet read for any
+    // mission", which no MissionSeq ever is (the cabin's own default is -1). The mission itself is
+    // the flow's, since the plane selection screen asks the same question.
     private int _resolvedSeq = -2;
-    private CampaignMission? _mission;
     private string _objectives = string.Empty;
 
     /// <summary>Binds the page to its flow. <paramref name="planes"/>/<paramref name="stock"/> let a
@@ -211,7 +211,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     /// runs in one window, so the heading is the only thing that says whose turn it is.</summary>
     public string Heading => Player > 0 ? $"FLIGHT CHECK P{Player + 1}" : "FLIGHT CHECK";
 
-    private bool HasWingman => _wingmanOverride ?? Mission()?.Wingman ?? false;
+    private bool HasWingman => _wingmanOverride ?? Flow.MissionHasWingman;
 
     // Whose check this is: 0 the seated player, 1 and up a guest. A guest's page is this same
     // screen re-entered, so everything below reads the player rather than assuming the profile's
@@ -581,7 +581,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     private string ReadObjectivesNote()
     {
-        if (Flow.DataRoot is not { } root || Mission() is not { } mission)
+        if (Flow.DataRoot is not { } root || Flow.Mission is not { } mission)
         {
             return string.Empty;
         }
@@ -605,9 +605,9 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         }
     }
 
-    // Reads the mission and its objectives note for whichever mission the flow now names, once.
-    // Keyed on the sequence number rather than a bare "done" flag: the flow keeps this page
-    // instance, so the same page draws the second mission after it drew the first.
+    // Reads the objectives note for whichever mission the flow now names, once. Keyed on the
+    // sequence number rather than a bare "done" flag: the flow keeps this page instance, so the
+    // same page draws the second mission after it drew the first.
     private void Resolve()
     {
         if (_resolvedSeq == Flow.MissionSeq)
@@ -616,38 +616,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         }
 
         _resolvedSeq = Flow.MissionSeq;
-        _mission = null;
-        ReadMission();
         _objectives = ReadObjectivesNote();
-    }
-
-    private CampaignMission? Mission()
-    {
-        Resolve();
-        return _mission;
-    }
-
-    private void ReadMission()
-    {
-        if (Flow.DataRoot is { } root)
-        {
-            try
-            {
-                string zrdrPath = SessionPaths.PreferUnzipped(Path.Combine(root, "extracted", "zrdr.zip"));
-                foreach (var mission in CampaignSequence.Load(zrdrPath))
-                {
-                    if (mission.Seq == Flow.MissionSeq)
-                    {
-                        _mission = mission;
-                        break;
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or FileNotFoundException)
-            {
-                _mission = null;
-            }
-        }
     }
 
     private Messages MessagesFor(string root) =>

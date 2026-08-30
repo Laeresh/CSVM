@@ -39,11 +39,14 @@ public static class CampaignBoards
     private const float ComboFieldHeight = 16f;
     private const float ComboFont = 11f;
 
-    // The arrow strip is three 16-pixel frames; the scroll arrows are four 11-pixel ones, which is
-    // the same disabled/normal/rollover/depressed order every button strip uses.
-    private const int ComboArrowFrames = 3;
-    private const int ScrollArrowFrames = 4;
-    private const float ComboArrowSize = 16f;
+    // Both arrow strips are four frames in the same disabled / normal / rollover / depressed order
+    // every button strip uses: the field's arrow is 16x12 and the scrollbar's 16x11. A closed field
+    // draws the normal frame, which is the black triangle the reference screenshot shows.
+    private const int ArrowFrames = 4;
+    private const int ArrowNormal = 1;
+    private const float ComboArrowWidth = 16f;
+    private const float ComboArrowHeight = 12f;
+    private const float ScrollArrowHeight = 11f;
 
     // Where the 410x300 messagebox art lands on the 800x600 board, which is centred, and the face
     // and button width its own widgets take.
@@ -67,10 +70,10 @@ public static class CampaignBoards
     private static readonly byte[] ComboPaper = { 200, 212, 230 };
     private static readonly byte[] ComboPicked = { 167, 185, 215 };
 
-    private static readonly BoardArt ComboDownArrow = Ui("GN_B_ListboxarrowSMALLdown.png", ComboArrowFrames);
-    private static readonly BoardArt ComboUpArrow = Ui("GN_B_ListboxarrowSMALLup.png", ComboArrowFrames);
-    private static readonly BoardArt ScrollUp = Ui("FC_B_ScrollUp.png", ScrollArrowFrames);
-    private static readonly BoardArt ScrollDown = Ui("FC_B_ScrollDown.png", ScrollArrowFrames);
+    private static readonly BoardArt ComboDownArrow = Ui("GN_B_ListboxarrowSMALLdown.png", ArrowFrames);
+    private static readonly BoardArt ComboUpArrow = Ui("GN_B_ListboxarrowSMALLup.png", ArrowFrames);
+    private static readonly BoardArt ScrollUp = Ui("FC_B_ScrollUp.png", ArrowFrames);
+    private static readonly BoardArt ScrollDown = Ui("FC_B_ScrollDown.png", ArrowFrames);
     private static readonly BoardArt ScrollThumb = Ui("FC_B_ScrollBar.png");
 
     private static readonly BoardArt PaperButton = Ui("SB_B_PaperButton.png", StripFrames);
@@ -157,6 +160,16 @@ public static class CampaignBoards
             new BoardSlot(BoardButton.AcceptLoadout, 0, Ui("OL_B_AcceptLoadout.png", StripFrames), 341, 553),
             new BoardSlot(BoardButton.CancelLoadout, 0, Ui("OL_B_CancelLoadout.png", StripFrames), 551, 553),
         },
+
+        // PS_B_SELLP and PS_B_SELLW are authored beside the two EXPORT buttons and are deliberately
+        // absent: PLANESELECTION.SCRIPT deactivates both unconditionally at gui_create.
+        [CampaignScreen.PlaneSelection] = new[]
+        {
+            new BoardSlot(BoardButton.ExportPlane, 0, Ui("FC_B_PaperButton.Png", StripFrames), 560, 168, true),
+            new BoardSlot(BoardButton.ExportPlane, 1, Ui("FC_B_PaperButton.Png", StripFrames), 560, 385, true),
+            new BoardSlot(BoardButton.AcceptSelections, 0, Ui("PS_B_AcceptSelections.png", StripFrames), 341, 553),
+            new BoardSlot(BoardButton.CancelSelections, 0, Ui("PS_B_CancelSelections.png", StripFrames), 551, 553),
+        },
     };
 
     // The screen chrome that is neither the page's own art nor a button: the profile screen's
@@ -175,6 +188,7 @@ public static class CampaignBoards
         [CampaignScreen.Scrapbook] = new[] { new BoardPicture(Ui("SB_BackGround.jpg"), 0, 0) },
         [CampaignScreen.FlightCheck] = new[] { new BoardPicture(Ui("FC_BackGround.jpg"), 0, 0) },
         [CampaignScreen.Ammo] = new[] { new BoardPicture(Ui("OL_BackGround.jpg"), 0, 0) },
+        [CampaignScreen.PlaneSelection] = new[] { new BoardPicture(Ui("PS_BackGround.jpg"), 0, 0) },
     };
 
     /// <summary>The board for a page with the cursor on <paramref name="focusedRow"/>. A row the
@@ -311,8 +325,10 @@ public static class CampaignBoards
         fills.AddRange(Box(combo.X, combo.Y, combo.Width, ComboFieldHeight, ComboPaper));
         pictures.Add(new BoardPicture(
             combo.Open ? ComboUpArrow : ComboDownArrow,
-            combo.X + combo.Width - ComboArrowSize, combo.Y));
-        lines.Add(FieldText(combo.Text, combo.X, combo.Y, combo.Width - ComboArrowSize,
+            combo.X + combo.Width - ComboArrowWidth,
+            combo.Y + ((ComboFieldHeight - ComboArrowHeight) / 2f),
+            ArrowNormal));
+        lines.Add(FieldText(combo.Text, combo.X, combo.Y, combo.Width - ComboArrowWidth,
             focused ? BoardInk.RowFocused : BoardInk.Row));
         if (combo.Open)
         {
@@ -350,9 +366,9 @@ public static class CampaignBoards
 
         if (combo.Scrolls)
         {
-            float bar = combo.X + combo.Width - ComboArrowSize;
-            pictures.Add(new BoardPicture(ScrollUp, bar, top, 1));
-            pictures.Add(new BoardPicture(ScrollDown, bar, top + height - ComboArrowSize, 1));
+            float bar = combo.X + combo.Width - ComboArrowWidth;
+            pictures.Add(new BoardPicture(ScrollUp, bar, top, ArrowNormal));
+            pictures.Add(new BoardPicture(ScrollDown, bar, top + height - ScrollArrowHeight, ArrowNormal));
             pictures.Add(new BoardPicture(ScrollThumb, bar, ThumbY(combo, top, height)));
         }
 
@@ -363,9 +379,9 @@ public static class CampaignBoards
     // list, so a full list's thumb is at the bottom and an unscrolled one's is at the top.
     private static float ThumbY(CampaignCombo combo, float top, float height)
     {
-        float track = height - (ComboArrowSize * 2f) - ScrollThumbHeight;
+        float track = height - (ScrollArrowHeight * 2f) - ScrollThumbHeight;
         int span = Math.Max(1, combo.Entries.Count - combo.RowsDisplayed);
-        return top + ComboArrowSize + (Math.Max(0f, track) * combo.First / span);
+        return top + ScrollArrowHeight + (Math.Max(0f, track) * combo.First / span);
     }
 
     // A field's words, inset from its left edge and sat on the row's own baseline the way the

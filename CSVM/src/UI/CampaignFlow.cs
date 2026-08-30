@@ -28,6 +28,9 @@ public enum CampaignScreen
     /// <summary>Ammunition and ordnance for one aircraft.</summary>
     Ammo,
 
+    /// <summary>The aircraft each crew slot flies, picked from the profile's own.</summary>
+    PlaneSelection,
+
     /// <summary>The scrapbook's results page (spread 1), opened on the mission a finished mission
     /// just flew, with the cabin on its far side.</summary>
     Scrapbook,
@@ -165,6 +168,7 @@ public sealed class CampaignFlow
         [CampaignScreen.Briefing] = flow => new CampaignBriefingPage(flow),
         [CampaignScreen.FlightCheck] = flow => new CampaignFlightCheckPage(flow),
         [CampaignScreen.Ammo] = flow => new CampaignAmmoPage(flow),
+        [CampaignScreen.PlaneSelection] = flow => new CampaignPlaneSelectionPage(flow),
         [CampaignScreen.Scrapbook] = flow => new CampaignScrapbookPage(flow),
         [CampaignScreen.ScrapbookZoom] = flow => new CampaignScrapbookZoomPage(flow),
     };
@@ -173,6 +177,11 @@ public sealed class CampaignFlow
 
     // The screens entered, innermost last. Never empty: popping the last one ends the flow.
     private readonly List<CampaignScreen> _stack = new() { CampaignScreen.Roster };
+
+    // The mission read for MissionSeq, and which sequence that was. -2 is "not read for any", which
+    // no MissionSeq ever is: the cabin's own default is -1.
+    private CampaignMission? _mission;
+    private int _missionSeq = -2;
 
     /// <summary>Opens a flow over <paramref name="store"/>, reading its roster once.
     /// <paramref name="dataRoot"/> may be null; a page's art then simply loads none.
@@ -236,6 +245,10 @@ public sealed class CampaignFlow
     /// opening the ammo screen.</summary>
     public int AmmoSlot { get; private set; }
 
+    /// <summary>Which crew slot the plane selection screen opens focused on, 0 the pilot's combo
+    /// and 1 the wingman's.</summary>
+    public int PlaneSlot { get; private set; }
+
     /// <summary>How many times the book has been opened through <see cref="OpenScrapbook"/>. The
     /// page watches this rather than <see cref="MissionSeq"/> alone, so reopening it on the mission
     /// it is already browsing still lands on that mission's spread 1, which is what the original's
@@ -246,6 +259,27 @@ public sealed class CampaignFlow
     /// <c>SCRAPBOOK.CSV</c> mission slot, spread and item a scrapbook page's row named. Null
     /// until <see cref="SetScrapbookZoom"/> is called.</summary>
     public (int Mission, int Spread, int Item)? ZoomTarget { get; private set; }
+
+    /// <summary>The <c>cm_sequence.zrd</c> entry <see cref="MissionSeq"/> names, or null when the
+    /// data root, the file or the entry is unavailable. Read once per mission rather than once per
+    /// repaint, and here rather than on a page because more than one screen asks: the flight check
+    /// and the plane selection screen both draw a wingman only when this mission carries one.</summary>
+    public CampaignMission? Mission
+    {
+        get
+        {
+            if (_missionSeq != MissionSeq)
+            {
+                _missionSeq = MissionSeq;
+                _mission = ReadMission();
+            }
+
+            return _mission;
+        }
+    }
+
+    /// <summary>Whether this mission flies a wingman, its <c>cm_sequence</c> flag.</summary>
+    public bool MissionHasWingman => Mission?.Wingman ?? false;
 
     /// <summary>The screen showing.</summary>
     public CampaignScreen Screen => _stack[^1];
@@ -460,6 +494,11 @@ public sealed class CampaignFlow
     /// <summary>Points the ammo screen at the pilot's (0) or the wingman's (1) aircraft.</summary>
     public void SetAmmoSlot(int slot) => AmmoSlot = slot;
 
+    /// <summary>Which crew slot's CHANGE PLANE press opened the plane selection screen, the
+    /// original's <c>@globals@ZQ</c> of -1 and -2. The screen draws both slots either way; this
+    /// only decides which of the two combos the cursor opens on.</summary>
+    public void SetPlaneSlot(int slot) => PlaneSlot = slot;
+
     /// <summary>Where a scrapbook capture's file is for the seated profile, or null when there is
     /// none on disk. A <c>Snap_</c> row resolves against the profile's own directory rather than
     /// the asset library (<c>docs/formats/campaign-screens.md</c>, "The scrapbook"), which is the
@@ -534,6 +573,34 @@ public sealed class CampaignFlow
     {
         Row = Math.Max(0, row);
         ClampedRow();
+    }
+
+    // The sequence entry for MissionSeq. Absent data, an unreadable file or a sequence with no such
+    // entry all read as null: a screen then draws no wingman rather than refusing to open.
+    private CampaignMission? ReadMission()
+    {
+        if (DataRoot is not { } root)
+        {
+            return null;
+        }
+
+        try
+        {
+            string zrdrPath = SessionPaths.PreferUnzipped(Path.Combine(root, "extracted", "zrdr.zip"));
+            foreach (var mission in CampaignSequence.Load(zrdrPath))
+            {
+                if (mission.Seq == MissionSeq)
+                {
+                    return mission;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or FileNotFoundException)
+        {
+            return null;
+        }
+
+        return null;
     }
 
     // Answers a standing dialog, running whatever was to follow it. Both the confirm and the back

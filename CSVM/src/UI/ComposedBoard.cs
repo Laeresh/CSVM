@@ -126,6 +126,15 @@ public enum BoardButton
     /// <summary><c>OL_B_CANCEL</c>.</summary>
     CancelLoadout,
 
+    /// <summary><c>PS_B_EXPORT</c>, one per crew slot.</summary>
+    ExportPlane,
+
+    /// <summary><c>PS_B_ACCEPT</c>.</summary>
+    AcceptSelections,
+
+    /// <summary><c>PS_B_CANCEL</c>.</summary>
+    CancelSelections,
+
     /// <summary><c>SBZ_B_RETURN</c>, the scrap detail view's close button.</summary>
     CloseZoom,
 
