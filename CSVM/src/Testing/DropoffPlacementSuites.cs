@@ -38,6 +38,27 @@ internal static class DropoffPlacementSuites
     // pass on a build that re-places nothing.
     private const float MovedMinM = 100f;
 
+    // C2/M05, the story position whose paratrooper drop raises the same re-placement callback while
+    // naming no `player` node at all, so nothing in it ever poses the node the callback reads.
+    private const int UnposedMissionSeq = 14;
+
+    // The zeppelin that drop is staged around. Its authored pose is where the pilot is flying when
+    // the drop fires, so it is where the episode has to leave them.
+    private const string DropZeppelin = "cargozep2";
+
+    // How high above the zeppelin the pilot is flown in, and how far the handoff may then leave the
+    // aeroplane from there.
+    private const float FlownInAboveM = 120f;
+    private const float HeldToleranceM = 2f;
+
+    // The surface probe: cast from this far above a point to this far below it. The span covers the
+    // chapter's relief several times over, so "no hit" means off the map rather than out of reach.
+    private const float CastUpM = 2000f;
+    private const float CastDownM = 8000f;
+
+    // The clearance the released aeroplane needs over whatever surface is under it.
+    private const float ClearanceMinM = 10f;
+
     /// <summary>Drives C3/M01's drop-off definition directly (never the approach cone, so nothing
     /// INSTR-20 warns about is armed) against its BUILT world, with the pilot flown in at the world
     /// origin: the definition's own re-placement callback puts the aeroplane on the pose its
@@ -70,6 +91,40 @@ internal static class DropoffPlacementSuites
 
         ctx.WriteArtifact($"test-dropoff-placement-{chapter}-{folder}.txt", report.ToString());
         ctx.Note($"drove {chapter}/{folder}'s re-placing cutscene over a built world");
+    }
+
+    /// <summary>Drives C2/M05's paratrooper drop against its BUILT world with the pilot flown in
+    /// beside the zeppelin it is staged around. That definition raises the re-placement callback
+    /// without naming the <c>player</c> node, so there is no authored placement to read: the
+    /// handoff has to leave the aeroplane where the drop found it, above the surface under it.
+    /// </summary>
+    internal static void CutsceneHandoffUnposed(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), UnposedMissionSeq)
+            ?? throw new SuiteSkippedException($"cm_sequence carries no story position {UnposedMissionSeq}");
+        string chapter = mission.ChapterFolder.ToUpperInvariant();
+        string folder = mission.MissionFolder.ToUpperInvariant();
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.PlanesGamezPath, $"aircraft archive");
+
+        var report = new StringBuilder();
+        report.AppendLine($"seq {UnposedMissionSeq} -> {chapter}/{folder}");
+        ctx.CutsceneRoots = true;
+        try
+        {
+            ctx.WithWorld(chapter, collision: true, folder,
+                world => DriveUnposed(ctx, world, missionZrdr, report));
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+        }
+
+        ctx.WriteArtifact($"test-cutscene-handoff-unposed-{chapter}-{folder}.txt", report.ToString());
+        ctx.Note($"drove {chapter}/{folder}'s unposed re-placement over a built world");
     }
 
     private static void Drive(TestContext ctx, TestWorld world, string missionZrdr, StringBuilder report)
@@ -122,6 +177,146 @@ internal static class DropoffPlacementSuites
             pool.Free();
             textures.Dispose();
         }
+    }
+
+    private static void DriveUnposed(TestContext ctx, TestWorld world, string missionZrdr,
+        StringBuilder report)
+    {
+        var cutscenes = MissionCutscenes.AnimNames(missionZrdr);
+        report.AppendLine($"cutscene definitions: {string.Join(", ", cutscenes)}");
+        string? anim = ReplacingAnimOf(world, cutscenes);
+        report.AppendLine($"re-placing definition: '{anim ?? "-"}' (callback {ReplaceCode})");
+        ctx.Check(anim != null,
+            $"the mission's own cutscenes directory carries a definition raising callback {ReplaceCode}");
+        if (anim == null)
+        {
+            return;
+        }
+
+        var named = NodesNamedBy(world, anim);
+        report.AppendLine($"'{anim}' names: {string.Join(", ", named)}");
+        ctx.Check(!named.Contains(AircraftStage.PlayerNode),
+            $"'{anim}' raises it while naming no '{AircraftStage.PlayerNode}' node, so this drive is the case where nothing posed the node the callback reads");
+
+        if (world.Session.Aircraft is not { PlayerMarker: { } marker })
+        {
+            ctx.Check(false, $"the world build staged the '{AircraftStage.PlayerNode}' marker the drop reads");
+            return;
+        }
+
+        var zeppelin = Zeppelins.Load(missionZrdr).FirstOrDefault(z => z.Node == DropZeppelin);
+        if (zeppelin == null)
+        {
+            ctx.Check(false, $"the mission's zeppelins carry '{DropZeppelin}', the drop's own subject");
+            return;
+        }
+
+        var cutscene = new CutsceneController();
+        ctx.Host.AddChild(cutscene);
+        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var pool = new ProjectilePool(textures, null, null);
+        ctx.Host.AddChild(pool);
+        try
+        {
+            var rig = BuildRig(ctx, world, pool);
+            var flyAt = zeppelin.Position + (Vector3.Up * FlownInAboveM);
+            rig.PlaceHeld(flyAt, flyAt + Vector3.Forward);
+            cutscene.BindWorld(world.Runtime, world.Session.Aircraft);
+            cutscene.BindRigs(
+                new[]
+                {
+                    new PlayerRig
+                    {
+                        Index = 0,
+                        Camera = ctx.Camera,
+                        HudParent = ctx.Host,
+                        Controller = rig,
+                    },
+                },
+                () => Array.Empty<FlightController>());
+            cutscene.HostDefinitions(new[] { anim });
+            world.Runtime.CallbackHost = cutscene.Host;
+            RunTheUnposedDrop(ctx, world, cutscene, rig, marker, anim, report);
+        }
+        finally
+        {
+            cutscene.Free();
+            pool.Free();
+            textures.Dispose();
+        }
+    }
+
+    // The drive. The rig is never stepped, so wherever it ends up is the episode's doing; the two
+    // poses the item is about are the one the drop found the pilot at and the one they are released
+    // at, with the surface under each measured rather than assumed.
+    private static void RunTheUnposedDrop(TestContext ctx, TestWorld world, CutsceneController cutscene,
+        FlightController rig, Node3D marker, string anim, StringBuilder report)
+    {
+        var flewInAt = rig.WorldPosition;
+        float? underFlewIn = SurfaceUnder(world, flewInAt);
+        Transform3D? read = null;
+        float played = 0f;
+        world.Runtime.Play(anim);
+        for (float t = 0f; t < DriveBudgetS && (played == 0f || cutscene.Playing); t += StepDt)
+        {
+            world.Runtime.Advance(StepDt);
+            cutscene.Tick();
+            played += cutscene.Playing ? StepDt : 0f;
+            if (read == null && cutscene.Codes.Contains(ReplaceCode))
+            {
+                read = AnimRuntime.WorldTransform(marker, out _);
+            }
+        }
+
+        var released = rig.WorldPosition;
+        float? underReleased = SurfaceUnder(world, released);
+        float moved = released.DistanceTo(flewInAt);
+        report.AppendLine($"'{anim}' episode ran {played:0.##} s, codes {string.Join("/", cutscene.Codes)}");
+        report.AppendLine($"flew in at {flewInAt}, surface under it {Height(underFlewIn)}");
+        report.AppendLine($"'{AircraftStage.PlayerNode}' marker at the callback: "
+            + $"{(read is { } r ? r.Origin.ToString() : "-")}");
+        report.AppendLine($"released at {released}, surface under it {Height(underReleased)}, "
+            + $"{moved:0.#} m from where the drop found the pilot");
+        ctx.Check(played > 0f && !cutscene.Playing,
+            $"'{anim}' runs to its handoff with the cutscene host answering its codes");
+        ctx.Check(read != null, $"and raises callback {ReplaceCode} on the way");
+        if (read == null)
+        {
+            return;
+        }
+
+        ctx.Check(moved < HeldToleranceM,
+            $"the handoff leaves the aeroplane where the drop found it ({moved:0.#} m away), since the definition posed no '{AircraftStage.PlayerNode}' node to re-place it on");
+        ctx.Check(underReleased is { } surface && released.Y - surface > ClearanceMinM,
+            $"and above the surface under it, rather than through the single-sided terrain the pilot cannot climb back out of");
+    }
+
+    // The surface under a point, cast from well above it. Null when nothing is there at all, which
+    // is a reading rather than a gap: the world root the marker is parked at is off the chapter map.
+    private static float? SurfaceUnder(TestWorld world, Vector3 at)
+    {
+        var space = world.Stage.GetWorld3D().DirectSpaceState;
+        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+            at + (Vector3.Up * CastUpM), at - (Vector3.Up * CastDownM), CollisionLayers.World));
+        return hit.Count > 0 ? ((Vector3)hit["position"]).Y : null;
+    }
+
+    private static string Height(float? y) => y is { } h ? $"{h:0.#}" : "(nothing)";
+
+    // Every node name a definition's own support arrays carry, which is what says whether it can
+    // pose a node at all.
+    private static HashSet<string> NodesNamedBy(TestWorld world, string anim)
+    {
+        var named = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var def in world.Session.Program.ByAnimName(anim))
+        {
+            foreach (string node in def.NodeList)
+            {
+                named.Add(node);
+            }
+        }
+
+        return named;
     }
 
     // The drive itself. The rig is never stepped, so wherever it ends up is the cutscene's doing and

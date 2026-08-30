@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the cutscene handoff
 
 11. ☑ `BL-625` A cutscene entered from the cockpit frames the aeroplane, and gives the cockpit back
-12. ☐ `BL-633` CM15's handoff leaves the player above the terrain, not under it
+12. ☑ `BL-633` CM15's handoff leaves the player above the terrain, not under it
 
 ### Wave C — CM10's attack balloons
 
@@ -362,36 +362,80 @@ so un-hiding the airframe does not take the panel off screen; the pass has to be
 re-synced by name. An intro cutscene drawing no aircraft is a different thing: those definitions
 deactivate the `player` node themselves in `ApplyOutOfFlight`.
 
-## B12 ☐ `BL-633` CM15's handoff leaves the player above the terrain, not under it
+## B12 ☑ `BL-633` CM15's handoff leaves the player above the terrain, not under it
 
-**Goal.** When CM15 (C2/M05)'s cutscene hands control back, the aircraft is at the pose the episode
-ended on and above the ground, and the player can fly on without dying.
+**What landed.** `CutsceneController.ReplacePlayer` declines a `player` marker still parked where the
+build and every handoff leave it, under the world root at identity. The new predicate is
+`MarkerParked()`, and nothing else changed: no ordering moved, no clamp of any kind was added, and a
+definition that does pose the marker re-places the pilot exactly as before.
 
-**Evidence (confidence: lead-only).** Reported at the controls. The handoff leaves the aircraft below
-the ground surface rather than at the pose the episode ended on, and since terrain colliders are
-single-sided a crossing from below is silent, so dying is the only way out. No mechanism is
-established. The nearest known shape is the marker-relative position that survived an episode's own
-reparenting, fixed for a different episode in `BL-610` (`git log --grep=BL-610`), so the first
-question is whether this episode takes that path. `<TODO: re-verify still-open against the code>`
+**The mechanism, measured.** The episode is the mission's paratrooper drop, `balmoral-drop_paratroopers`,
+the only definition in C2/M05's own `cutscenes\` directory that raises the re-placement callback. It
+names three nodes, `cargozep2`, `balmoral` and `camera1`, and no `player` at all, yet its Initial
+sequence raises 951 straight after the handoff code 1. CSVM stands a bodiless marker in for the
+original's `player` node, built under the world root at identity, so the callback read the world
+origin and flew the aeroplane there. Over the built C2/M05 world with the pilot flown in beside the
+zeppelin the drop is staged around:
 
-**Approach.** Log the pose the episode restores against the pose it ended on, over CM15's episode,
-before changing anything. Read `Session/CutsceneController.cs`'s restore path (`ApplyPresentation(false)`
-and the reparent undo around `_cameraHome`) against `BL-610`'s fix and establish whether the same
-reparenting is in play. Take B11 first: it edits the same restore path, and landing them in one file
-one after the other avoids a merge against yourself.
+| | pose | surface under that XZ |
+|---|---|---|
+| the drop found the pilot at | (-2651.4, 595.0, -12270.2) | 170.6, so 424.4 m of clearance |
+| the marker when 951 landed | (0, 0, 0) | — |
+| the handoff released them at | (0, 0, 0) | 56.5, so 56.5 m UNDER the ground |
 
-**Model recommendation.** high. The diagnosis is open, the instrument has to be chosen, and the
-restore path is shared with B11 and with every other episode in the campaign.
+12567.5 m of teleport, and under a single-sided collider, which is exactly the reported symptom. The
+decode settles what the right answer is rather than leaving it to judgement: the original's case
+`0x3b7` reads the player vehicle's OWN scene node, so a definition raising 951 without posing that
+node writes the aeroplane's pose back onto itself and changes nothing but the release speed
+([`cutscenes.md`](formats/anim-definitions/cutscenes.md), "The re-placement code 951"). Two shipped
+definitions carry that shape, this one and C5/M04's `stihellhound_eg0-milesdrop`, so the fix answers
+CM24 as well.
 
-**Verify.** A headless assertion over CM15's episode that the restored pose matches the pose the
-episode ended on, and that the aircraft's Y is above the terrain height at that XZ. Seen red before
-green. `campaign-cutscene-ownership` and `campaign-cutscene` green. At the controls, CM15 flown
-through the episode, then flown on.
+**Both of the leads handed over from B11 are ruled out.** `_stagedFrom` is the aircraft's own
+transform at staging, not a marker-relative pose, and the restore leg through code 1 returns it
+correctly; the wrong pose arrives after that, from 951. And the RESET_STATE reading is not available
+to this episode at all: `drop_paratroopers` authors no `RESET_STATE`, so `ResetStateAuthors` raises
+nothing, and its 951 is authored in the definition's own timeline and raised during play, long
+before `Restore` reparents anything. `BL-610`'s reparenting is not in play either, since nothing in
+this definition ever touches the marker.
 
-**⚠ Traps.** Do not add a ground clamp to the handoff. It would hide a wrong restore everywhere else
-it happens, and it would fight an episode that legitimately ends below a surface. The single-sided
-colliders that make the symptom unrecoverable are a separate property, recorded from the air side in
-`BL-566`, and are not this item's to change.
+**Red before green.** The assertion was written first and run against unchanged code, failing on both
+halves: `the handoff leaves the aeroplane where the drop found it (12567.5 m away), since the
+definition posed no 'player' node to re-place it on` and `and above the surface under it, rather than
+through the single-sided terrain the pilot cannot climb back out of`. Adding the guard turned both
+green, and neutralising the guard again (`if (MarkerParked() && false)`) reproduced the same two
+failures, so the suite is failing on the fix rather than on the weather.
+
+**Verify.** The new suite `cutscene-handoff-unposed` drives the definition over C2/M05's BUILT world
+with the colliders up, reads the definition's own node list to prove this is the unposed case, and
+measures the surface under both poses by raycast rather than assuming a ground height.
+
+Targeted results, all on this worktree with `CSVM_DATA_ROOT` set:
+
+- `-Suite cutscene-handoff-unposed`: FAIL before the fix, PASS after, engine errors clean.
+- `-Filter cutscene`: 6 passed, 0 failed, engine errors clean.
+- `-Filter dropoff`: 3 passed (`dropoff-chuteman-stage`, `dropoff-placement`, `campaign-coop-dropoff`).
+- `-Filter landings`: 11 passed, including `landings-docking-hold`, which asserts the released
+  aeroplane flies out of the marker pose the re-placement read.
+- `-Filter intro,coop,hangar,swap,wingwalk,campaign-loop`: 17 passed, 0 failed.
+- `-UnitFilter SuiteCatalogTests`: 6 passed. `.\RunTests.ps1 -Quick`: units 241 of 241, engine 13 of
+  13, engine errors clean.
+
+**Verified.** <pending orchestrator run>
+
+**Suite count.** The catalog is 193; `CSVM.Tests/SuiteCatalogTests.cs` (192 → 193) and
+`analysis/engine-suite-weights.json` were updated with it.
+
+**Owed at the controls.** CM15 flown through the paratrooper drop and then flown on, which is the
+picture no headless assertion gives.
+
+**⚠ Traps that still bind.** Do not add a ground clamp to the handoff. It would hide a wrong restore
+everywhere else it happens, and it would fight an episode that legitimately ends below a surface. The
+single-sided colliders that make the symptom unrecoverable are a separate property, recorded from the
+air side in `BL-566`. Do not extend the same guard to `StagePlayerAircraft`: an unposed marker stages
+the airframe at the origin for the episode's length too, but that is self-correcting at the handoff
+and undrawn behind the presentation, while the codes arrive before a definition's own reparent, so
+guarding the staging would defer it by a frame for every intro that does pose the node.
 
 ---
 

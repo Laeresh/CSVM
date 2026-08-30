@@ -142,6 +142,7 @@
     "intro-wingmen": 7.87,
     "dropoff-chuteman-stage": 1.283,
     "dropoff-placement": 1.734,
+    "cutscene-handoff-unposed": 1.734,
     "hangar-door-wake": 2.292,
     "anim-clock-realtime": 0.004,
     "fog-state": 1.584,

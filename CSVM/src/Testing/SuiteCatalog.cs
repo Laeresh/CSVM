@@ -186,6 +186,7 @@ public static class SuiteCatalog
         "intro-wingmen",
         "dropoff-chuteman-stage",
         "dropoff-placement",
+        "cutscene-handoff-unposed",
         "hangar-door-wake",
         "anim-clock-realtime",
         "fog-state",
@@ -1000,6 +1001,16 @@ public static class SuiteCatalog
             + "pose that definition parked its 'player' node at, on that node's heading and at the "
             + "original's release speed, rather than out of where the pilot flew in",
             DropoffPlacement));
+
+        // BL-633: the re-placement callback read the marker wherever the build parked it, so a
+        // definition that raises it without posing that node put the pilot on the world root.
+        into.Add(new TestHarness.Suite("cutscene-handoff-unposed",
+            "where a mid-mission cutscene leaves the pilot when it authors no placement, over "
+            + "C2/M05's BUILT world: its paratrooper drop raises the same re-placement callback "
+            + "while naming no 'player' node at all, and the handoff leaves the aeroplane at the "
+            + "pose the drop found it at, above the surface measured under that pose, rather than "
+            + "on the world root the marker is parked at",
+            CutsceneHandoffUnposed));
         into.Add(new TestHarness.Suite("hangar-door-wake",
             "hangar doors over C1/M04's real world (BL-350): OBJECTIVE1's WAKE_ANIM reaches "
             + "'hangar3_doors' through the director at its authored 2 s dormancy and its four "
