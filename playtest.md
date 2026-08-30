@@ -783,6 +783,32 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome (`A4` landed on an engine suite alone, with no scripted-input
   driver to fly a human into a world trigger headlessly): a fail mints a new `BL`.
 
+### Any chapter · the campaign export, then Instant Action
+
+```powershell
+./RunGame.ps1
+```
+
+Menu path: Mode → Campaign → a profile with a mission open → its flight check → CHANGE AMMO, fit
+something unmistakable (a distinct round on gun 1, a distinct rocket on a pylon) → back → CHANGE
+PLANE → EXPORT on the pilot's slot → ACCEPT SELECTIONS → leave to the main menu → Instant Action →
+pick that plane by name, after the eleven stock airframes. The export writes ammunition and
+ordnance that only the campaign fits, so the round trip is the only place the two sides meet.
+
+- `PT-96` `[Own]` **An exported campaign plane flies Instant Action with the loadout the campaign
+  fitted.**
+  ⚠ Do not open the Instant Action loadout screen: an explicit pick there overrides the exported
+  one by design, so opening it hides exactly what this checks.
+  *Look for:*
+  - (a) EXPORT answers with a dialog naming the airframe, not the plane ("Your Devastator has been
+    exported"), which is what langui 702's placeholder carries;
+  - (b) the plane appears in the Instant Action picker under its campaign name;
+  - (c) the gun rounds and the underwing ordnance in flight are the ones the campaign fitted, not
+    the airframe's stock fit;
+  - (d) a plane exported twice keeps its paint, armour and engine, and only its loadout moves.
+  *Blocks:* nothing tracks the outcome. The write and the read are pinned by unit tests either
+  side, but no scripted run crosses the menu boundary between them, so a fail mints a new `BL`.
+
 ---
 
 ## Everything else
