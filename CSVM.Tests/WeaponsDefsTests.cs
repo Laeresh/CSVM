@@ -32,6 +32,33 @@ public class WeaponsDefsTests
         Assert.False(string.IsNullOrEmpty(r.EmptyClipSound));
     }
 
+    // The prewarm's work list. These are definition names, not WAVs: snd_40cal resolves to
+    // 40cal_gun.wav, snd_missile_bg to missile_bg.wav. Both were reached cold in flight once the
+    // sound archive had closed, so each is the shipped bug in miniature.
+    [ExtractedDataFact]
+    public void SoundCuesCoverEveryWeaponBindingAtItsPlaySiteLoopFlag()
+    {
+        var cues = WeaponDefs.Load(ZrdrPath, null).SoundCues();
+
+        // Every caliber's firing loop, forced-looped the way StartGunLoop asks for it.
+        foreach (string gun in new[] { "snd_30cal", "snd_40cal", "snd_50cal", "snd_60cal", "snd_70cal", "snd_turretgun" })
+        {
+            Assert.Contains((gun, true), cues);
+            // The looped flag is half the fix: SoundArchive caches per (wav, looped), so the same
+            // gun decoded unlooped would leave the loop a cold read into a closed archive.
+            Assert.DoesNotContain((gun, false), cues);
+        }
+
+        Assert.Contains(("snd_missile_bg", false), cues);
+        Assert.Contains(("snd_missile_explode", false), cues);
+        // A `_sg` name is a SOUND_GROUPS group whose member is picked per shot, so the prewarm has
+        // to expand it rather than decode the group name.
+        Assert.Contains(("bullet_hit_sg", false), cues);
+        Assert.DoesNotContain(("snd_missile_explode", true), cues);
+
+        Assert.All(cues, cue => Assert.False(string.IsNullOrEmpty(cue.Name)));
+    }
+
     // The engine's squared-radius convention (docs/org/ordnanceTypes.md, "The engine stores radii
     // squared"). An unchanged number proves nothing here, so this asserts the relationship between
     // the two forms over every shipped entry, and that each square is absent exactly when the

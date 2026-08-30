@@ -1438,13 +1438,24 @@ and `Find` caches the decoded stream, so each distinct sound pays a reopen at mo
 The two backing shapes fail differently, and that asymmetry is the point. A directory-backed
 archive re-reads a path per lookup and cannot be closed under itself; a zip-backed one holds a
 handle that can. The build-scoped close rested on the build-time prewarm covering every sound the
-session would ever want. It does not: `40cal_gun`, `bullet_ground`, `missile_bg` and
-`missile_explode` are all first needed in flight. On a developer tree, where `ExtractAssets.ps1
--Unzip` leaves unpacked folders that `SessionPaths.PreferUnzipped` prefers, that gap is invisible.
-On an exported build, which ships only the `.zip`, every one of those reads threw
-`ObjectDisposedException` out of `SessionSimulation.Step` and skipped every later phase, the AI
-aircraft included. Run with `--zip-assets` (`SessionPaths.ForceZipped`) to take the export's asset
-shape on a developer tree.
+session would ever want, and it did not. On a developer tree, where `ExtractAssets.ps1 -Unzip`
+leaves unpacked folders that `SessionPaths.PreferUnzipped` prefers, that gap is invisible. On an
+exported build, which ships only the `.zip`, every uncovered read threw `ObjectDisposedException`
+out of `SessionSimulation.Step` and skipped every later phase, the AI aircraft included. Run with
+`--zip-assets` (`SessionPaths.ForceZipped`) to take the export's asset shape on a developer tree.
+
+**The weapons half of the prewarm.** `GameSession.PrewarmWeaponSounds` decodes everything
+`WeaponDefs.SoundCues` names, while the archive is still open. Nothing else covers those: they are
+bound by `weapons.json` rather than by the anim program, and each is first reached in flight from a
+trigger pull or an impact. It walks the whole 48-entry catalogue, not one loadout, because the AI
+and the turret gunners fire from it too, and it expands a `SOUND_GROUPS` name (`bullet_hit_sg`) to
+its members, since the pick is per shot.
+
+⚠ A cue carries the `LOOPED` flag its PLAY SITE asks for, not the one `sounds.json` holds. `Find`
+caches per `(wav, looped)`, and both play sites override the definition: `FlightAudio.StartGunLoop`
+forces looped true on a firing loop, `ProjectilePool.PlaySound` forces false on everything else.
+That mismatch is why `snd_40cal` stayed cold through a prewarm that had already decoded it, and it
+is why `WorldSounds.Prewarm` (whose loader takes `d.Looped`) cannot serve this list.
 
 A read that still fails returns null, never a throw: this runs inside the session step, where an
 escaping exception costs every phase after it.
