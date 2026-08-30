@@ -90,9 +90,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // onto the 19 presets (docs/formats/instant-action.md, "Screen controls"). Decoded, not a fit
     // to our own layout — do not "tidy" it to the item count.
     private const int PresetWindow = 14;
-    // How many missions the campaign screenshot aids' seeded profile has flown. Three is the
-    // smallest number that gives the previous-missions list a scrollable body and leaves the
-    // cabin's Next Mission somewhere other than the campaign's first entry.
+    // How many missions the campaign screenshot aids' seeded profile has flown. Three gives the
+    // previous-missions list a body and leaves the cabin's Next Mission somewhere other than the
+    // campaign's first entry. Raising it walks campaign-briefing onto a longer narration than
+    // campaign-briefing-repaint's own 90-second window covers.
     private const int AidMissionsFlown = 3;
 
     // The lives stepper's range (Screen.MissionType, decision 15/18): 0 = unlimited, 1 = the

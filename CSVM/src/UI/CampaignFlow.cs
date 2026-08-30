@@ -93,6 +93,11 @@ public interface ICampaignPage
     /// <summary>The connector lines this page's data draws over its pictures.</summary>
     IReadOnlyList<BoardStroke> Strokes { get; }
 
+    /// <summary>Rectangles this page paints on the screen's background and under its own pictures:
+    /// a list widget's selection bar and its scrollbar track, which are what the original draws
+    /// with <c>ldrawrect</c> rather than with art.</summary>
+    IReadOnlyList<BoardFill> Fills { get; }
+
     /// <summary>Text the screen carries that is not a row: a panel heading, a title widget.</summary>
     IReadOnlyList<BoardLine> Captions { get; }
 
@@ -483,6 +488,9 @@ public abstract class CampaignPage : ICampaignPage
 
     /// <inheritdoc/>
     public virtual IReadOnlyList<BoardStroke> Strokes => Array.Empty<BoardStroke>();
+
+    /// <inheritdoc/>
+    public virtual IReadOnlyList<BoardFill> Fills => Array.Empty<BoardFill>();
 
     /// <inheritdoc/>
     public virtual IReadOnlyList<BoardLine> Captions => Array.Empty<BoardLine>();

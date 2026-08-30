@@ -125,13 +125,9 @@ public static class CampaignBoards
     public static ComposedBoard For(
         ICampaignPage page, int focusedRow, bool pressed = false, string detail = "")
     {
-        var pictures = new List<BoardPicture>();
-        if (Chrome.TryGetValue(page.Screen, out var chrome))
-        {
-            pictures.AddRange(chrome);
-        }
-
-        pictures.AddRange(page.Pictures);
+        var backdrop = Chrome.TryGetValue(page.Screen, out var chrome)
+            ? chrome
+            : Array.Empty<BoardPicture>();
         var lines = new List<BoardLine>(page.Captions);
         var plaques = new List<BoardPlaque>();
         var slots = Buttons.TryGetValue(page.Screen, out var found) ? found : Array.Empty<BoardSlot>();
@@ -161,7 +157,8 @@ public static class CampaignBoards
             lines.Add(new BoardLine(detail, note.X, note.Y, note.Width, ListFont, BoardInk.Detail));
         }
 
-        return new ComposedBoard(pictures, page.Strokes, lines, plaques, page.Notes);
+        return new ComposedBoard(
+            page.Pictures, page.Strokes, lines, plaques, page.Notes, backdrop, page.Fills);
     }
 
     /// <summary>The briefing parchment's objectives list, at the <c>LIST</c> widget's own authored
@@ -190,7 +187,6 @@ public static class CampaignBoards
             CampaignScreen.Roster => index == 0
                 ? (243f, 297f, 221f)
                 : (245f, 356f + ((index - 1) * 20f), 305f),
-            CampaignScreen.PreviousMissions => (420f, 140f + (index * 24f), 325f),
             // One heading per crew slot, at the PILOT and WINGMAN widgets.
             CampaignScreen.FlightCheck => (138f, index == 0 ? 102f : 320f, 400f),
             // Four gun groups down the ammunition panel, then eight pylons in two columns.
