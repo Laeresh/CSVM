@@ -309,10 +309,9 @@ public static class CampaignBoards
                 : (245f, 356f + ((index - 1) * 20f), 305f),
             // One heading per crew slot, at the PILOT and WINGMAN widgets.
             CampaignScreen.FlightCheck => (138f, index == 0 ? 102f : 320f, 400f),
-            // Four gun groups down the ammunition panel, then eight pylons in two columns.
-            CampaignScreen.Ammo => index < 4
-                ? (142f, 105f + (index * 42f), 200f)
-                : (index < 8 ? 135f : 410f, 320f + ((index - 4) % 4 * 28f), 152f),
+
+            // ⚠ The ammo screen has no entry here, and must not regain one: its picks are drop-down
+            // fields and its captions are the page's own lines, so no row of it reaches this table.
             _ => (20f, 20f + (index * 20f), 400f),
         };
 

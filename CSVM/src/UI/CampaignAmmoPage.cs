@@ -28,6 +28,41 @@ public sealed class CampaignAmmoPage : CampaignPage
     private const int AcceptRow = GroupRows + PylonRows;
     private const int CancelRow = AcceptRow + 1;
 
+    // [@OrdinanceLayout@]'s own geometry, with V3=136, V4=410, DROPWIDTH=148 and [GLOBALVARS]'
+    // STDITEMH=15 resolved: the gun captions (OL_T_GunName0..3), the ammunition fields
+    // (OL_D_AMMO0..3) fifteen pixels under them, and the rockets in two columns
+    // (OL_D_ROCKETS0..3 at V3, OL_D_ROCKETS4..7 at V4).
+    private const float CaptionX = 142f;
+    private const float CaptionY = 105f;
+    private const float GroupPitch = 42f;
+    private const float LeftColumnX = 136f;
+    private const float RightColumnX = 410f;
+    private const float AmmoFieldY = 120f;
+    private const float RocketFieldY = 320f;
+    private const float RocketPitch = 28f;
+    private const float DropWidth = 148f;
+    private const float ItemHeight = 15f;
+
+    // The two D rows' own trailing counts, GUNS and ROCKETS. Neither list ever outruns its window,
+    // which is why the reference screenshot's open rocket list carries no scrollbar.
+    private const int AmmoListRows = 5;
+    private const int RocketListRows = 12;
+
+    // The caption takes the same face its field's words do, which is what the reference draws.
+    private const float CaptionFont = 11f;
+    private const float HeadingFont = 15f;
+
+    // IDS_OL_AMMO_CAPTION and IDS_OL_ROCKET_CAPTION, the parenthesised notes beside the two panel
+    // headings. Both strings own a leading space, and the authored x is where that space starts.
+    private const int AmmoCaptionLabel = 1026;
+    private const int RocketCaptionLabel = 1027;
+
+    // IDS_GUNSHORTNAME, the calibre words the captions carry.
+    private const int CalibreLabel = 3320;
+
+    // The greyed marker an empty gun group shows where its calibre would be.
+    private const int NoGunLabel = 3315;
+
     // Both diagram sheets stack one frame per airframe, in the airframe id's own order.
     private const int DiagramFrames = 11;
 
@@ -40,12 +75,23 @@ public sealed class CampaignAmmoPage : CampaignPage
     private static readonly int[] OrdnanceThreshold = { 1, 1, 2, 8, 7, 12, 7, 7, 17, 17, 20, 1 };
 
     private readonly CustomPlaneStore? _planes;
+    private readonly CampaignCombo[] _groupField = new CampaignCombo[GroupRows];
+    private readonly CampaignCombo[] _pylonField = new CampaignCombo[PylonRows];
+
+    // Which ordnance table row each pylon field's entries stand for. The list holds only what the
+    // mission ordinal has unlocked, so an entry index is not a table index.
+    private readonly int[][] _pylonRows = new int[PylonRows][];
+
     private StockLoadouts? _stock;
 
     private OwnedPlane? _plane;
     private SlotBuild _build;
     private int[] _ammo = new int[4];
     private int[] _ordnance = new int[8];
+
+    // The mission ordinal the pylon lists were filled at. A later mission unlocks more rows, so a
+    // changed ordinal refills them.
+    private int _filledOrdinal = -1;
 
     /// <summary>Binds the page to its flow, resolving builds against the flow's hangar store (null
     /// off-engine, where every plane then reads as its stock fit) and the stock-loadout table.</summary>
@@ -60,6 +106,20 @@ public sealed class CampaignAmmoPage : CampaignPage
     {
         _planes = planes;
         _stock = stock;
+        for (int group = 0; group < GroupRows; group++)
+        {
+            _groupField[group] = new CampaignCombo(
+                LeftColumnX, AmmoFieldY + (group * GroupPitch), DropWidth, ItemHeight, AmmoListRows);
+        }
+
+        for (int cell = 0; cell < PylonRows; cell++)
+        {
+            _pylonField[cell] = new CampaignCombo(
+                cell < 4 ? LeftColumnX : RightColumnX,
+                RocketFieldY + (cell % 4 * RocketPitch),
+                DropWidth, ItemHeight, RocketListRows);
+            _pylonRows[cell] = Array.Empty<int>();
+        }
     }
 
     /// <inheritdoc/>
@@ -73,8 +133,9 @@ public sealed class CampaignAmmoPage : CampaignPage
     public override int RowCount => CancelRow + 1;
 
     /// <inheritdoc/>
-    public override string Footer =>
-        "↑↓  Choose       ←→  Change       Enter / A  Select       Esc / B  Back";
+    public override string Footer => Flow.OpenCombo != null
+        ? "↑↓  Choose       Enter / A  Take       Esc / B  Close"
+        : "↑↓  Choose       ←→  Change       Enter / A  Select       Esc / B  Back";
 
     /// <summary>The top view of the aircraft being fitted, the frame this airframe owns in
     /// the plan-view sheet.</summary>
@@ -101,13 +162,42 @@ public sealed class CampaignAmmoPage : CampaignPage
         }
     }
 
-    /// <summary>The screen's own title and the two panel headings, at their authored positions.</summary>
-    public override IReadOnlyList<BoardLine> Captions => new[]
+    /// <summary>The screen's own title, the two panel headings with their parenthesised notes, and
+    /// one caption per gun group: the calibre the group mounts, or the greyed marker an empty group
+    /// carries in its place. All at their authored widgets, the captions at
+    /// <c>OL_T_GunName0..3</c>.</summary>
+    public override IReadOnlyList<BoardLine> Captions
     {
-        new BoardLine("AMMO SELECTION", 138, 36, 190, 20, BoardInk.Heading),
-        new BoardLine("AMMUNITION", 138, 76, 200, 15, BoardInk.Heading),
-        new BoardLine("ROCKETS", 138, 291, 200, 15, BoardInk.Heading),
-    };
+        get
+        {
+            EnsureLoaded();
+            var lines = new List<BoardLine>
+            {
+                new("AMMO SELECTION", 138, 36, 190, 20, BoardInk.Heading),
+                new("AMMUNITION", LeftColumnX, 74, 150, HeadingFont, BoardInk.Heading),
+                new(Flow.Strings.Text(AmmoCaptionLabel, " (by gun group):"),
+                    246, 75, 200, CaptionFont, BoardInk.Detail),
+                new("ROCKETS", LeftColumnX, 290, 200, HeadingFont, BoardInk.Heading),
+                new(Flow.Strings.Text(RocketCaptionLabel, " (underwing hardpoints):"),
+                    214, 291, 200, CaptionFont, BoardInk.Detail),
+            };
+            if (_plane == null)
+            {
+                return lines;
+            }
+
+            for (int group = 0; group < GroupRows; group++)
+            {
+                bool armed = _build.GunPresent[group];
+                lines.Add(new BoardLine(
+                    armed ? CalibreName(_build.GunCalibre[group]) : Flow.Strings.Text(NoGunLabel, "No Gun"),
+                    CaptionX, CaptionY + (group * GroupPitch), 200, CaptionFont,
+                    armed ? BoardInk.Row : BoardInk.Detail));
+            }
+
+            return lines;
+        }
+    }
 
     // The stock table: the flow's, else (on-engine only, where res:// resolves) the default file.
     // Off-engine a flow without one reads every plane as fit-less rather than touching Godot.
@@ -121,18 +211,40 @@ public sealed class CampaignAmmoPage : CampaignPage
         _ => BoardButtonRef.None,
     };
 
-    /// <inheritdoc/>
+    /// <summary>The drop-down a row owns, at its authored rectangle. An empty gun group and a
+    /// hardpoint the wing does not carry own none: the original draws no field for either, and the
+    /// group's own caption says so instead.</summary>
+    public override CampaignCombo? Combo(int row)
+    {
+        EnsureLoaded();
+        if (_plane == null)
+        {
+            return null;
+        }
+
+        if (row >= 0 && row < GroupRows)
+        {
+            return _build.GunPresent[row] ? _groupField[row] : null;
+        }
+
+        if (row >= GroupRows && row < AcceptRow)
+        {
+            int cell = row - GroupRows;
+            return PylonActive(cell) ? _pylonField[cell] : null;
+        }
+
+        return null;
+    }
+
+    /// <summary>A pick row's words are its field's, and the board draws them inside the field. A
+    /// row with no field contributes no line at all, which is why these are empty rather than the
+    /// caption's words repeated.</summary>
     public override string RowText(int row)
     {
         EnsureLoaded();
-        if (row < GroupRows)
-        {
-            return GroupRowText(row);
-        }
-
         if (row < AcceptRow)
         {
-            return PylonRowText(row - GroupRows);
+            return Combo(row) is { } combo ? combo.Text : string.Empty;
         }
 
         return row == AcceptRow ? "ACCEPT LOADOUT" : "CANCEL LOADOUT";
@@ -157,32 +269,30 @@ public sealed class CampaignAmmoPage : CampaignPage
             : "Leaves the plane's saved fit unchanged";
     }
 
-    /// <inheritdoc/>
+    /// <summary>The closed field's own stepper, which takes the same door a picked list row does:
+    /// the entry beside the current one, wrapping. A pylon's list holds only the rows the mission
+    /// ordinal has unlocked, so the step skips the locked ones without knowing they exist.</summary>
     public override bool Step(int row, int dir)
     {
         EnsureLoaded();
-        if (_plane == null || dir == 0)
+        if (dir == 0 || Combo(row) is not { } combo)
         {
             return false;
         }
 
-        if (row < GroupRows)
-        {
-            return StepGroup(row, dir);
-        }
-
-        if (row < AcceptRow)
-        {
-            return StepPylon(row - GroupRows, dir);
-        }
-
-        return false;
+        return Take(row, combo.Next(dir));
     }
 
     /// <inheritdoc/>
     public override bool Accept(int row)
     {
         EnsureLoaded();
+        if (Combo(row) is { } combo)
+        {
+            // An open list's confirm takes the row under the cursor; a closed one opens.
+            return combo.Confirm() is { } picked ? Take(row, picked) : combo.Expand();
+        }
+
         if (row == AcceptRow)
         {
             Commit();
@@ -205,9 +315,26 @@ public sealed class CampaignAmmoPage : CampaignPage
     /// picture, not a per-row one, so every row shows it.</summary>
     public override HangarArt? RowArt(int row) => Diagram(PlaneDiagrams.Front);
 
-    /// <inheritdoc/>
+    /// <summary>Back closes an open list first, changing nothing; otherwise it drops the working
+    /// copy the way CANCEL does.</summary>
     public override bool Back()
     {
+        foreach (var field in _groupField)
+        {
+            if (field.Collapse())
+            {
+                return true;
+            }
+        }
+
+        foreach (var field in _pylonField)
+        {
+            if (field.Collapse())
+            {
+                return true;
+            }
+        }
+
         Discard();
         return false;
     }
@@ -262,6 +389,13 @@ public sealed class CampaignAmmoPage : CampaignPage
         var target = Flow.AmmoTarget();
         if (_plane != null && ReferenceEquals(target, _plane))
         {
+            // The unlocked ordnance is a statement about the mission, not about the plane, so a
+            // flow moved to another mission refills the pylon lists over the same working copy.
+            if (_filledOrdinal != MissionOrdinal())
+            {
+                FillPylons();
+            }
+
             return;
         }
 
@@ -269,6 +403,85 @@ public sealed class CampaignAmmoPage : CampaignPage
         _build = _plane != null ? ResolveBuild(_plane) : default;
         _ammo = _plane != null ? (int[])_plane.Ammo.Clone() : new int[4];
         _ordnance = _plane != null ? (int[])_plane.Ordnance.Clone() : new int[8];
+        FillGroups();
+        FillPylons();
+    }
+
+    // The four ammunition fields, each over the whole IDS_AMMOSHORTNAME set: which of them a group
+    // may carry does not depend on the gun, only on whether there is one at all.
+    private void FillGroups()
+    {
+        var entries = new string[4];
+        for (int ammo = 0; ammo < entries.Length; ammo++)
+        {
+            entries[ammo] = AmmoLabel(ammo);
+        }
+
+        for (int group = 0; group < GroupRows; group++)
+        {
+            _groupField[group].Load(entries, ClampAmmo(_ammo[group]));
+        }
+    }
+
+    // The eight pylon fields, each over the ordnance rows this mission has unlocked. ⚠ The row the
+    // plane already carries stays in its own list whatever the threshold says: the field draws what
+    // is fitted, and a list without it would show the wrong ordnance on a replayed mission.
+    private void FillPylons()
+    {
+        _filledOrdinal = MissionOrdinal();
+        for (int cell = 0; cell < PylonRows; cell++)
+        {
+            int current = OrdnanceTableIndex(cell);
+            var rows = new List<int>(CampaignLoadout.PylonRows);
+            var entries = new List<string>(CampaignLoadout.PylonRows);
+            int selected = 0;
+            for (int table = 0; table < CampaignLoadout.PylonRows; table++)
+            {
+                if (_filledOrdinal < OrdnanceThreshold[table] && table != current)
+                {
+                    continue;
+                }
+
+                if (table == current)
+                {
+                    selected = rows.Count;
+                }
+
+                rows.Add(table);
+                entries.Add(OrdnanceLabel(table));
+            }
+
+            _pylonRows[cell] = rows.ToArray();
+            _pylonField[cell].Load(entries, selected);
+        }
+    }
+
+    // Applies a pick to the working copy and to the field that made it. Nothing here can be
+    // refused, unlike the plane screen's own Take: the ordnance a mission forbids is simply not in
+    // the list, and every ammunition is legal for a mounted gun.
+    private bool Take(int row, int pick)
+    {
+        if (Combo(row) is not { } combo || pick == combo.Selected)
+        {
+            return false;
+        }
+
+        combo.Select(pick);
+        if (row < GroupRows)
+        {
+            _ammo[row] = ClampAmmo(pick);
+            return true;
+        }
+
+        int cell = row - GroupRows;
+        var rows = _pylonRows[cell];
+        if (pick < 0 || pick >= rows.Length)
+        {
+            return false;
+        }
+
+        _ordnance[cell] = rows[pick] + 1;
+        return true;
     }
 
     // Drops the working copy without writing it anywhere, forcing a fresh EnsureLoaded on the next
@@ -307,30 +520,13 @@ public sealed class CampaignAmmoPage : CampaignPage
             : null;
     }
 
-    private string GroupRowText(int row)
+    // IDS_GUNSHORTNAME, whose string owns a leading space; the reference prints the caption without
+    // one at the authored x, so it is trimmed. ⚠ The caption is the calibre, not the slot title:
+    // matching the original costs us the "Inner Wing Guns" wording the row text used to carry.
+    private string CalibreName(int calibre)
     {
-        string title = _plane == null
-            ? $"Slot {row + 1}"
-            : Flow.Strings.Text(HangarEconomy.Airframes[ClampAirframe(_plane.Airframe)].SlotTitle(row), $"Slot {row + 1}");
-        if (_plane == null || !_build.GunPresent[row])
-        {
-            return $"{title}: {Flow.Strings.Text(3315, "No Gun")}";
-        }
-
-        int ammo = ClampAmmo(_ammo[row]);
-        return $"{title}: {AmmoLabel(ammo)}";
-    }
-
-    private bool StepGroup(int row, int dir)
-    {
-        if (!_build.GunPresent[row])
-        {
-            return false;
-        }
-
-        int at = ((ClampAmmo(_ammo[row]) + dir) % 4 + 4) % 4;
-        _ammo[row] = at;
-        return true;
+        int idx = Math.Clamp(calibre, 0, 4);
+        return Flow.Strings.Text(CalibreLabel + idx, $" .{30 + (idx * 10)}-cal.").Trim();
     }
 
     private string GroupDescription(int row)
@@ -344,40 +540,6 @@ public sealed class CampaignAmmoPage : CampaignPage
         string title = Flow.Strings.Text(3350 + ammo, AmmoFallback[ammo]);
         string body = Flow.Strings.Text(3370 + ammo, string.Empty);
         return body.Length > 0 ? $"{title} - {body}" : title;
-    }
-
-    private string PylonRowText(int cell)
-    {
-        if (_plane == null || !PylonActive(cell))
-        {
-            return "-";
-        }
-
-        int table = OrdnanceTableIndex(cell);
-        return OrdnanceLabel(table);
-    }
-
-    private bool StepPylon(int cell, int dir)
-    {
-        if (!PylonActive(cell))
-        {
-            return false;
-        }
-
-        int ordinal = MissionOrdinal();
-        int at = OrdnanceTableIndex(cell);
-        for (int tries = 0; tries < CampaignLoadout.PylonRows; tries++)
-        {
-            at = ((at + dir) % CampaignLoadout.PylonRows + CampaignLoadout.PylonRows)
-                % CampaignLoadout.PylonRows;
-            if (ordinal >= OrdnanceThreshold[at])
-            {
-                _ordnance[cell] = at + 1;
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private string PylonDescription(int cell)
