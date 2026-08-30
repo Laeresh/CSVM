@@ -53,6 +53,10 @@ internal static class CampaignSuites
 
     private const string DangerZoneMission = "M01";
 
+    // The code that takes the chrome off and the view off the aircraft, named here rather than read
+    // off the host: what the presentation check asks of it is a property of the shipped data.
+    private const int PresentationCode = 2;
+
     // What the definition's `callback_sequence` authors, and what its RESET_STATE asserts as the
     // gameplay end state. Both lists are the shipped data, not this engine's choice.
     private static readonly int[] MovieCodes = { 20, 2, 11, 14, 913 };
@@ -610,6 +614,7 @@ internal static class CampaignSuites
 
         CutsceneHoldsObjectives(ctx);
         OpeningSceneCalledFromStartAnim(ctx);
+        PresentingFramesTheAirframe(ctx);
         ctx.Note($"hosted {IntroChapter}/{IntroMission}'s '{IntroAnim}' from its first code to the handoff, and {CalledChapter}/{CalledMission}'s '{CalledAnim}' from its start anim to the skip");
     }
 
@@ -797,6 +802,106 @@ internal static class CampaignSuites
             camera.Free();
             host.Free();
         }
+    }
+
+    // The aeroplane the episode's external camera frames, and the panel it must not frame. The
+    // presentation code silences the per-frame camera arm, which is also the only thing that
+    // re-asserts the first-person hiding, so both edges are this code's own to write: a pilot who
+    // entered from the cockpit would otherwise hold that frame's state, body undrawn and interior
+    // drawn, for the whole episode. Driven at two seats, cockpit and chase, over both exits.
+    private static void PresentingFramesTheAirframe(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, IntroChapter);
+        ctx.RequireData(texturesPath, $"{IntroChapter} textures");
+
+        var textures = new TextureArchive(texturesPath);
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var host = new CutsceneController();
+        var world = new Node3D { Name = "PresentationWorld" };
+        var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+        ctx.Host.AddChild(host);
+        ctx.Host.AddChild(world);
+        ctx.Host.AddChild(runtime);
+        Seat? cockpit = null;
+        Seat? chase = null;
+        try
+        {
+            // An empty program, bound: the host asks the runtime whether its definition still runs,
+            // and a program carrying none answers "ended", which is the ordinary exit.
+            runtime.Bind(world, new AnimProgram());
+            host.BindWorld(runtime);
+            cockpit = Seat.Build(ctx, planesGamez, textures, Flight.PilotViewMode.Cockpit, 0);
+            chase = Seat.Build(ctx, planesGamez, textures, Flight.PilotViewMode.Chase, 1);
+            if (cockpit.Body == null || cockpit.Interior == null || cockpit.Pilot.CockpitPass == null)
+            {
+                ctx.Check(false, $"the seat build carries an airframe body, an interior and its pass");
+                return;
+            }
+
+            host.BindRigs(new[] { cockpit.Rig, chase.Rig },
+                () => System.Array.Empty<Flight.FlightController>());
+            DriveEpisode(ctx, host, cockpit, chase, byDefinitionEnd: true);
+            DriveEpisode(ctx, host, cockpit, chase, byDefinitionEnd: false);
+        }
+        finally
+        {
+            chase?.Free();
+            cockpit?.Free();
+            runtime.Free();
+            world.Free();
+            host.Free();
+            textures.Dispose();
+        }
+    }
+
+    // One episode, taken to whichever exit `byDefinitionEnd` names: a tick that finds the
+    // definition ended, or a player's skip. Both go through the controller's own restore, so both
+    // owe the cockpit seat its view back.
+    private static void DriveEpisode(TestContext ctx, CutsceneController host, Seat cockpit,
+        Seat chase, bool byDefinitionEnd)
+    {
+        string exit = byDefinitionEnd ? "the definition ending" : "a player's skip";
+        // The last flying frame, written by the arm the presentation is about to silence.
+        cockpit.ApplyView();
+        chase.ApplyView();
+        ctx.Check(cockpit.Interior is { Visible: true } && cockpit.Body is { Visible: false },
+            $"the cockpit seat enters the episode with the interior drawn and the airframe hidden, which is what that view leaves standing");
+        ctx.Check(cockpit.Pilot.CockpitPass is { Visible: true },
+            $"…and its interior pass drawing over the pane");
+
+        host.Host(CutsceneController.CodeHoldsWorld, IntroAnim);
+        host.Host(PresentationCode, IntroAnim);
+        ctx.Check(host.Presenting && cockpit.Pilot.CameraOwned,
+            $"the presentation code takes the view off the aircraft, which is what stops the arm re-asserting anything");
+        ctx.Check(cockpit.Body is { Visible: true },
+            $"so the code draws the airframe itself, and the episode's camera frames an aeroplane rather than nothing ({exit} leg)");
+        ctx.Check(cockpit.Interior is { Visible: false } && cockpit.Pilot.CockpitPass is { Visible: false },
+            $"…with the cockpit interior and its pass off the screen, so no panel hangs over the shot ({exit} leg)");
+        ctx.Check(chase.Body is { Visible: true } && chase.Interior is { Visible: false },
+            $"…and the chase seat, which was already drawing its airframe, is untouched");
+
+        if (byDefinitionEnd)
+        {
+            host.Tick();
+        }
+        else
+        {
+            ctx.Check(host.Skip(), $"the skip is armed and the key press is taken");
+        }
+
+        ctx.Check(!host.Playing && !host.Presenting && !cockpit.Pilot.CameraOwned,
+            $"{exit} hands the view back");
+        ctx.Check(cockpit.Interior is { Visible: true } && cockpit.Body is { Visible: false },
+            $"…and puts the cockpit seat back in the cockpit it chose, rather than leaving it outside its own aeroplane");
+        ctx.Check(cockpit.Pilot.CockpitPass is { Visible: true },
+            $"…with its interior pass drawing again");
+        ctx.Check(cockpit.Pilot.ViewMode == Flight.PilotViewMode.Cockpit
+                  && chase.Pilot.ViewMode == Flight.PilotViewMode.Chase,
+            $"…and neither seat's SELECTED view was moved to get there");
+        ctx.Check(chase.Body is { Visible: true } && chase.Interior is { Visible: false },
+            $"…while the chase seat still draws its airframe and no interior");
     }
 
     // The objectives half of callback 20: a held director advances no dormancy timer, which is what
@@ -1349,6 +1454,88 @@ internal static class CampaignSuites
 
         public void StartTaxi(IReadOnlyList<string> names)
         {
+        }
+    }
+
+    // One human seat for the presentation check: a real interior build, the per-mode visibility rig
+    // over it and the interior's own render pass, wired the way the session's own human builder
+    // wires them. Nothing here is shared with another suite, so it frees everything it made.
+    private sealed class Seat
+    {
+        private Seat(Flight.PlayerRig rig, Flight.FlightController pilot, Node3D? body,
+            Node3D? interior, Flight.PilotViewMode view)
+        {
+            Rig = rig;
+            Pilot = pilot;
+            Body = body;
+            Interior = interior;
+            View = view;
+        }
+
+        internal Flight.PlayerRig Rig { get; }
+
+        internal Flight.FlightController Pilot { get; }
+
+        // The airframe's own `healthy` group and its `cockpit1` subtree: the two nodes the per-mode
+        // rule writes, read directly so the check reads the scene rather than the rule again.
+        internal Node3D? Body { get; }
+
+        internal Node3D? Interior { get; }
+
+        private Flight.PilotViewMode View { get; }
+
+        internal static Seat Build(TestContext ctx, GameZ planesGamez, TextureArchive textures,
+            Flight.PilotViewMode view, int index)
+        {
+            var builder = new PlaneBuilder(planesGamez, textures, spinningProps: true,
+                cockpitInterior: true);
+            var model = builder.Build(ctx.PlaneName);
+            var pilot = new Flight.FlightController
+            {
+                PlaneModel = model,
+                Collider = Flight.PlaneCollider.Build(model),
+                PlayerIndex = index,
+                IsHumanPiloted = true,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+                PinnedViewMode = view,
+                Cockpit = Flight.CockpitVisibility.Bind(model, builder.CockpitInterior),
+                CockpitInterior = builder.CockpitInterior,
+                Name = $"CutsceneSeat{index}",
+            };
+            var body = WorldAndToolSuites.FindNamed(model, "healthy");
+            pilot.AddChild(model);
+            ctx.Host.AddChild(pilot);
+            var camera = new Camera3D { Name = $"CutsceneSeatCamera{index}" };
+            ctx.Host.AddChild(camera);
+            // ⚠ After the visibility bind, and before Setup: the pass moves the interior out of the
+            // plane model, which is why hiding the airframe cannot take the panel with it.
+            if (builder.CockpitInterior is { } interior)
+            {
+                pilot.CockpitPass = Flight.CockpitOverlay.Build(ctx.Host, interior, null, null);
+            }
+
+            pilot.Setup(new Flight.FlightModel(Flight.PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName)),
+                camera, new Flight.CamParams(), Vector3.Zero, Vector3.Forward);
+            var rig = new Flight.PlayerRig
+            {
+                Index = index,
+                Camera = camera,
+                HudParent = ctx.Host,
+                Controller = pilot,
+            };
+            return new Seat(rig, pilot, body, builder.CockpitInterior, view);
+        }
+
+        // The write the per-frame camera arm makes on an ordinary flying frame in this seat's view.
+        internal void ApplyView() => Pilot.Cockpit?.Apply(View, Flight.PilotView.IsFirstPerson(View));
+
+        internal void Free()
+        {
+            Pilot.CockpitPass?.Free();
+            Pilot.Free();
+            Rig.Camera.Free();
         }
     }
 }

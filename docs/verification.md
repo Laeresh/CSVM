@@ -390,6 +390,34 @@ loss. What the engine renders was decodable from the authored constants + oscill
   cost and `phys_hz` for whether the sim keeps up (60 ticks a wall second is real time, because a
   realtime clock advances the physics-stepped sim exactly one 1/60 step per tick); both are
   `--no-det` numbers, since `--det` empties the tick.
+- **PERF-22** — **A memo whose entries are a pure function of their key belongs to the process, not
+  to the builder instance: a per-instance memo of a Godot `Shader` charges every later builder a
+  fresh compile for byte-identical text, and the bill lands wherever the material is made.** On the
+  frame path that is an AI spawn. Measured on CM18's generator launches: of a ~300 ms `ai_spawn`
+  frame, 190 ms sat in the 13 to 15 `new ShaderMaterial { Shader = … }` assignments whose `Shader`
+  was fresh, about 13 ms each, against 0.1 ms across the other 45, whose shader was already memoed;
+  generating the shader text itself cost 1.6 ms. Split fresh-key work from repeat-key work before
+  optimising anything else, or the mesh, material and texture terms it hides read as the cost.
+- **PERF-23** — **A per-object diagnostic on a shared periodic boundary is a BURST, not a spread
+  load: every object crosses that boundary on the same sim step, so N of them land inside one
+  physics tick. Ask the log filter at the call site, before the values are formatted, because
+  `Log.*` writes to the file sink whatever `--log=` says.** Measured on a flown CM11 (C2/M02):
+  `FlightController`'s ungated once-a-sim-second telemetry print cost 17.0 ms of an 18.3 ms tick
+  with nine aircraft alive (about 1.9 ms a line), and gating it took the windows whose worst tick
+  exceeds the 16.7 ms budget from 47 of 82 to 3 of 82 with the tick rate unmoved at 60.0.
+
+- **PERF-24** — **When a frame's cost is not in physics, not in the render terms and not in any
+  named script scope, count the nodes ASKING for the per-frame callback before looking at what the
+  callbacks do.** Godot dispatches `_Process` to every processing node and each C# callback crosses
+  the managed boundary whether or not its body runs, so a population that returns immediately still
+  sets the rate. Measured on CM13 (C2/M03): the whole C# `_Process` pass cost 9.4 ms of a 12.4 ms
+  frame while the bodies inside it summed to 1.06 ms, over 3,814 `Puffer` nodes of 3,879 processing
+  ones, against 709 and 2.16 ms in a `--fly` session on the same chapter and a 0.5 ms intercept, so
+  the dispatch is about 2.3 us a node. **The price of gating one off is one frame**: a node joining
+  the process group mid-pass is not visited until the next frame, so an emitter's first
+  integrate-and-draw moves. Measured on the `c1-crash` shot: 16 of the 21 emitters it starts used to
+  get their first `_Process` in the frame they were activated and now all 21 get it one frame later,
+  which is that shot's whole 1.15 % of moved pixels (GOLD-6).
 
 ## LOG — logs, error censuses, and exit codes
 
@@ -459,6 +487,8 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **WORLD-24** — **Read authored range and condition gates before placing a probe.**
 - **WORLD-25** — **A registry total counts bindings, not coverage: a larger census can mean one definition claimed objects it does not describe.** 
 - **WORLD-26** — **Anchor an effect to the object it decorates, not to a parameter that merely describes it.** C3 authors `SUNLIGHT_ORIENTATION` yaw 135 while its gamez `sun` node sits at yaw 45 — the parameter is the shading direction, not the object's position, and a flare anchored to it draws 90° from the visible sun. Anchoring to the object also survives any coordinate-conversion error, since the object and its decoration go through the same conversion (BL-165).
+- **WORLD-27** — **`--play-anim` proves a definition RUNS; it says nothing about whether the game ever reaches it.** The anim lab starts a def the way bootstrap pass 3 starts a startanim, bypassing every gate in front of it, a `WeaponHit` def's damage routing above all. CM10's `lifefall11` played all eight of its motions in the lab while no shot in the mission could reach it, because a second pool on the same anchor owned the hit. Drive the real entry point (`--debug-damage=node=…,kill` for a destructible) before concluding the definition is at fault.
+- **WORLD-28** — **A suite world with no `ContactMask` wired silently poses every untimed `OBJECT_MOTION` at rest, so half a death can be invisible to it.** A launch with no `RUN_TIME` ends only at a contact tier, and no mask means no tier, so `HandleMotion` seeks it to t=0 instead of adding it. CM10's lifeboat drop reads 0.0 m fallen that way and 6.2 m with `collision: true` plus `runtime.ContactMask = CollisionLayers.World`; a real session wires the mask and the harness does not, so a suite that must see such a launch wires it itself.
 
 ## SHELL — Windows, PowerShell, and processes
 

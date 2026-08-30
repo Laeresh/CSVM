@@ -301,6 +301,34 @@ hangar". The slot array runs 25 records (`0x0064b78c` to `0x0064cb77`), and the 
 finder `FUN_004111f0` refuses a purchase unless at least **six** slots are free or hold special
 planes, so five slots stay reserved for the campaign awards below.
 
+### The inventory screen's own strings
+
+The campaign's plane-selection screen is an inventory over the owned slots, and its `langui`
+symbols name every verb it offers. They are the words a reimplementation should use, in
+preference to inventing labels for the same actions.
+
+| Id | Symbol | Text |
+|---|---|---|
+| 1257 | `IDS_HA_TITLE` | `INVENTORY` |
+| 1258 | `IDS_HA_VALUE` | `Value: $%1!d!` |
+| 1256 | `IDS_HA_SELLEXPORT` | `Sell or Export a Plane` |
+| 1003 | `IDS_PS_B_SELL` | `Sell` |
+| 1139 | `IDS_PS_B_EXPORT` | `Export` |
+| 1149 | `IDS_PX_CASH_TITLE` | `$$$ on Hand:` |
+| 204 | `IDS_PN_TOOMANYPLANES` | the slot-cap refusal, pointing at Sell Planes |
+| 703 | `IDS_PX_PURCHASEPLANE` | `This %1!s! has been purchased and delivered to your hangar.` |
+| 702 | `IDS_PS_EXPORTPLANE` | the export confirmation, naming Multiplayer and Instant Action |
+
+**700 and 704 both carry arguments and are unusable raw.** 700 is `Your %1!s! is worth
+<B>$%2!d!<b>.  Are you sure you want to sell it?` and 704 is `This %1!s!, %2!s!, cannot be sold.`;
+%1 is the airframe's short name (`langui` 3020 + id) in both, %2 the plane's own name. 700 also
+carries the original's bold markup inline, which a renderer without it should strip rather than
+show. 701 is the only one of the three that reads correctly with no formatting at all.
+
+**Export is a verb the campaign has and Instant Action does not.** A campaign plane is not
+visible to Multiplayer or Instant Action until it is exported (702), which is the original's
+separation between the two inventories over one plane store.
+
 ### The mission reward table at `0x0061ae80`
 
 Ten live records of five dwords (stride `0x14`), terminated by a record whose mission id is 0.

@@ -29,6 +29,7 @@ using static CSVM.Testing.DamageSuites;
 using static CSVM.Testing.DestroyChoreographySuites;
 using static CSVM.Testing.DropoffChutemanSuites;
 using static CSVM.Testing.DropoffPlacementSuites;
+using static CSVM.Testing.FlightTelemetrySuites;
 using static CSVM.Testing.GeneratorRosterSuites;
 using static CSVM.Testing.InstantActionSuites;
 using static CSVM.Testing.IntroAircraftSuites;
@@ -58,6 +59,7 @@ public static class SuiteCatalog
         "puffer-distance-fade",
         "puffer-priority-size",
         "puffer-fire-column",
+        "puffer-idle-process-gate",
         "loadout-bind",
         "weapons-fire",
         "aim-assist",
@@ -86,6 +88,7 @@ public static class SuiteCatalog
         "results-board-shell",
         "flight-roster-transaction",
         "inert-aircraft",
+        "flight-telemetry-gate",
         "world-turrets",
         "turret-self-fire",
         "c1-aa-guns",
@@ -139,6 +142,7 @@ public static class SuiteCatalog
         "sun-orientation",
         "tex-dropin",
         "gltf-export",
+        "plane-shader-reuse",
         "cockpit-interior",
         "cockpit-overlay-pass",
         "look-stick",
@@ -187,6 +191,7 @@ public static class SuiteCatalog
         "intro-wingmen",
         "dropoff-chuteman-stage",
         "dropoff-placement",
+        "cutscene-handoff-unposed",
         "hangar-door-wake",
         "anim-clock-realtime",
         "fog-state",
@@ -203,6 +208,8 @@ public static class SuiteCatalog
         "campaign-objective-target-path",
         "campaign-objective-labels",
         "campaign-race-chain",
+        "campaign-balloon-marker",
+        "campaign-balloon-death",
         "landings-approach-trigger",
         "landings-wingwalk-gate",
         "landings-train-pickup-gate",
@@ -294,6 +301,10 @@ public static class SuiteCatalog
         into.Add(new TestHarness.Suite("puffer-fire-column",
             "the 30 s fire's authored column height, still air and in C1's own upward wind — the readout that retired the invented fire scales (D10)",
             PufferFireColumn));
+        into.Add(new TestHarness.Suite("puffer-idle-process-gate",
+            "a dormant emitter is off Godot's frame-callback list and each entry path puts it back, "
+            + "which is what keeps a mission's pre-warmed field from costing the frame it is idle in",
+            PufferIdleProcessGate));
         into.Add(new TestHarness.Suite("loadout-bind",
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",
@@ -508,6 +519,12 @@ public static class SuiteCatalog
             "not move under a sim step and is not drawn — then Activate re-homes it and every one " +
             "of those flips back",
             InertAircraft));
+        into.Add(new TestHarness.Suite("flight-telemetry-gate",
+            "the once-a-sim-second flight telemetry line costs nothing unasked: three aircraft " +
+            "flown a whole sim second write no line to either sink at the shipped --log= level, " +
+            "and --log=flight brings back exactly one line per aircraft, all on the SAME sim " +
+            "step, in the invariant culture",
+            FlightTelemetryGate));
         into.Add(new TestHarness.Suite("world-turrets",
             "the world AA emplacements (C9b) place at their NODES patterns against the real C1 " +
             "world (census pinned, one entry many turrets, scoped multi-segment paths), honour " +
@@ -734,6 +751,9 @@ public static class SuiteCatalog
             "the census/override flatten repaints RGB and changes nothing else", TexDropIn));
         into.Add(new TestHarness.Suite("gltf-export",
             "the viewer plane exports to glTF and re-imports with a textured mesh", GltfExport));
+        into.Add(new TestHarness.Suite("plane-shader-reuse",
+            "a second aircraft build reuses the first's Shader resources instead of generating its own copies of the same text, which is what keeps a mid-flight generator launch off Godot's per-shader compile",
+            PlaneShaderReuse));
         into.Add(new TestHarness.Suite("cockpit-interior",
             "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11)", CockpitInterior));
         into.Add(new TestHarness.Suite("cockpit-overlay-pass",
@@ -951,7 +971,11 @@ public static class SuiteCatalog
             + "declined, and the definition's end hands off with every piece of cutscene state put "
             + "back; and C3/M03's opening scene, which no start list names, is reached through its "
             + "start anim's call: the world build stages its camera and player marker, the host "
-            + "takes its codes, the destruction runs under it once, and the skip it arms ends it",
+            + "takes its codes, the destruction runs under it once, and the skip it arms ends it; "
+            + "plus what an episode owes a seat that entered it from the cockpit view, at two seats "
+            + "and over both exits: the airframe drawn and the interior pass off while the "
+            + "presentation holds, both back on the hand-back, and neither seat's selected view "
+            + "moved to get there (BL-625)",
             CampaignCutscene));
         into.Add(new TestHarness.Suite("cutscene-letterbox",
             "the letterbox bars are data (D32): the chapter ships the node switched off as its "
@@ -999,6 +1023,16 @@ public static class SuiteCatalog
             + "pose that definition parked its 'player' node at, on that node's heading and at the "
             + "original's release speed, rather than out of where the pilot flew in",
             DropoffPlacement));
+
+        // BL-633: the re-placement callback read the marker wherever the build parked it, so a
+        // definition that raises it without posing that node put the pilot on the world root.
+        into.Add(new TestHarness.Suite("cutscene-handoff-unposed",
+            "where a mid-mission cutscene leaves the pilot when it authors no placement, over "
+            + "C2/M05's BUILT world: its paratrooper drop raises the same re-placement callback "
+            + "while naming no 'player' node at all, and the handoff leaves the aeroplane at the "
+            + "pose the drop found it at, above the surface measured under that pose, rather than "
+            + "on the world root the marker is parked at",
+            CutsceneHandoffUnposed));
         into.Add(new TestHarness.Suite("hangar-door-wake",
             "hangar doors over C1/M04's real world (BL-350): OBJECTIVE1's WAKE_ANIM reaches "
             + "'hangar3_doors' through the director at its authored 2 s dormancy and its four "
@@ -1133,6 +1167,22 @@ public static class SuiteCatalog
             + "a racer dying afterwards fires its DEDG and kills the rest of the chain",
             CampaignRaceSuites.CampaignRaceChain));
 
+        into.Add(new TestHarness.Suite("campaign-balloon-marker",
+            "CM10's attack-balloon markers over C1/M05's BUILT world: its nine lifesaver sites are "
+            + "group nodes standing on the water with the balloon hung above and the lifeboat at "
+            + "the group's own origin, so the marker stands on the group's geometry clear of the "
+            + "boat, flies with the assembly and rises when the balloon alone rises, and retires "
+            + "when the balloon its objective watches goes inactive while the boat is still afloat",
+            CampaignBalloonMarker));
+
+        into.Add(new TestHarness.Suite("campaign-balloon-death",
+            "CM10's attack balloons as destructibles over C1/M05's BUILT world: each lifesaver "
+            + "group node carries two weapon-hit pools, the balloon's lifefallNM at 60 HP and the "
+            + "lifeboat's lboat_destructionNM at 40, so a hit on the envelope reaches the balloon's "
+            + "own pool on all nine sites, and killing one flies its six bursting pieces, drops the "
+            + "envelope and leaves healthy_balloon hidden for the objective graph",
+            CampaignBalloonDeathSuites.CampaignBalloonDeath));
+
         // BL-467: nothing read landings.zrd, so no mission could ever play the cutscene an
         // ANIM_STATE objective waits on.
         into.Add(new TestHarness.Suite("landings-approach-trigger",
@@ -1209,7 +1259,9 @@ public static class SuiteCatalog
             + "its active bit, it carries its own docking-hook group built retracted, and the "
             + "episode ends with that hook extended, the airframe hung at the mount offset the "
             + "extend-hook definition authors for it, and its wings turned to the angles its own "
-            + "fold definition authors where the airframe has one",
+            + "fold definition authors where the airframe has one, having swung that hook once "
+            + "(BL-628: the episode's every start counted by name, the shared extend-hook "
+            + "definition among them)",
             HookupAirframe));
         into.Add(new TestHarness.Suite("landings-hangar-drop-gate",
             "CM07's zeppelin-hangar drop over its BUILT world, every name read from the mission's "
@@ -1231,7 +1283,11 @@ public static class SuiteCatalog
             + "handoff code although the row's definition ends before it on a trailing wait, the "
             + "host hands the session back on that code, the released aeroplane flies out of the "
             + "player marker's pose where the re-placement code read it, and no frame after the "
-            + "release teleports it",
+            + "release teleports it. The hookup calls its drop and pickup legs unconditionally and "
+            + "only each leg's own REQUIRED node state keeps the wrong one off, so all three fork "
+            + "paths resolve to nodes this world built (one resolving to none would pass the gate "
+            + "vacuously), the drop leg runs on the first docking while the two pickup legs do "
+            + "not, and nothing the row reaches plays twice (BL-525, BL-628)",
             DockingHold));
 
         // BL-494: callback codes 965 to 967, which put the player in a different airframe mid

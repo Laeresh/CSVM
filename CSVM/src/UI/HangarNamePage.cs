@@ -203,22 +203,10 @@ public sealed class HangarNamePage : HangarPage
         Scratch.Name = Composed();
     }
 
-    // A name the store already holds, compared on the file identity rather than the raw string:
-    // the store sanitises a name into its filename, so two different names can land on one file
-    // and silently overwrite (CustomPlaneStore).
-    private bool Taken(string name)
-    {
-        string key = CustomPlaneStore.FileKey(name);
-        foreach (var saved in Flow.Saved)
-        {
-            if (string.Equals(CustomPlaneStore.FileKey(saved.Name), key, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    // A name a commit would land on. Not the visible roster: over a campaign flow that roster is
+    // ownership and the build directory still holds every Instant Action plane, which a campaign
+    // build must not silently overwrite.
+    private bool Taken(string name) => Flow.IsNameTaken(name);
 
     // Whether saving would land on somebody else's file. The plane being edited is not somebody
     // else: a flow opened from a saved plane is meant to write back over it, and a warning that

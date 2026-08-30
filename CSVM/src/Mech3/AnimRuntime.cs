@@ -1127,7 +1127,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 continue;
             foreach (var a in Anchors(def))
                 if (a != null && (a == subtree || subtree.IsAncestorOf(a)))
-                    pools.Add(_destructibles.Register(def, a, def.Health));
+                    pools.Add(_destructibles.Register(def, a, def.Health, DamageNodeOf(def, a)));
         }
         ApplyResetStatesWithin(subtree);
         return pools;
@@ -2016,7 +2016,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             if (def.Destructible)
                 foreach (var anchor in anchors)
                     if (anchor != null)
-                        _destructibles.Register(def, anchor, def.Health);
+                        _destructibles.Register(def, anchor, def.Health, DamageNodeOf(def, anchor));
             if (def.ResetState != null)
                 foreach (var anchor in anchors)
                     ApplyInstant(def.ResetState.Events, def, anchor);
@@ -3776,6 +3776,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // resolver-owned (see NameResolver.Anchors, which also records the once-per-def
     // anchoring census).
     private List<Node3D?> Anchors(AnimDefinition def) => _resolver.Anchors(def);
+
+    // The node a destructible's HP pool answers a weapon hit on: this definition's own
+    // ANIMATION_ROOT_NAME node inside the anchor, else the anchor itself. Resolved strictly within
+    // the anchor, so a shared root name (`healthy`) cannot bind one instance's pool onto another's.
+    // Decode: docs/formats/destructibles.md, "Which node takes the hit".
+    private Node3D DamageNodeOf(AnimDefinition def, Node3D anchor)
+    {
+        if (def.RootName is not { Length: > 0 } root)
+            return anchor;
+        if (_resolver.SymbolClaims(def, root, anchor, out var bound) && bound != null)
+            return anchor.IsAncestorOf(bound) ? bound : anchor;
+        var found = FindAll(root, anchor);
+        return found.Count > 0 ? found[0] : anchor;
+    }
 
     // The world nodes one event targets. Reader-sourced events may carry a parent→child path;
     // compiled events name a single node (under "node" or "name", which upstream spells

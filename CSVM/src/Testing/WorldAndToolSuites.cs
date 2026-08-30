@@ -60,6 +60,72 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // A second aircraft build must reuse the first's Shader resources rather than generating its
+    // own copies of the same text. Godot compiles a Shader the first time a material takes it, so a
+    // per-builder shader memo makes every mid-flight AI spawn pay that compile again; a generated
+    // aircraft is built on the frame path, where the bill lands as a stall. Able to fail: with the
+    // memo back on the instance, none of the second model's shaders is one of the first's.
+    internal static void PlaneShaderReuse(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        Node3D? first = null, second = null;
+        try
+        {
+            first = new PlaneBuilder(planesGamez, textures, spinningProps: true).Build(ctx.PlaneName);
+            var firstShaders = ShadersUnder(first);
+            second = new PlaneBuilder(planesGamez, textures, spinningProps: true).Build(ctx.PlaneName);
+            var secondShaders = ShadersUnder(second);
+
+            // The control: a model that resolved to one shader would satisfy the reuse check
+            // vacuously, and so would one carrying no ShaderMaterial at all.
+            ctx.Check(firstShaders.Count > 1,
+                $"the first build carries several distinct shaders plane={ctx.PlaneName} count={firstShaders.Count}");
+            ctx.Check(secondShaders.Count > 0, $"the second build carries shaders count={secondShaders.Count}");
+
+            int shared = secondShaders.Count(s => firstShaders.Contains(s));
+            ctx.Same(secondShaders.Count, shared,
+                $"every shader of the second build is one the first already compiled (second={secondShaders.Count} shared={shared})");
+        }
+        finally
+        {
+            first?.Free();
+            second?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // The distinct Shader resources every ShaderMaterial in the subtree points at, by reference:
+    // two builds sharing one memo hand back the same instances, two builds with their own hand back
+    // equal text on different resources.
+    internal static HashSet<Shader> ShadersUnder(Node node)
+    {
+        var found = new HashSet<Shader>();
+        void Walk(Node n)
+        {
+            if (n is MeshInstance3D mesh)
+            {
+                for (int i = 0; i < mesh.GetSurfaceOverrideMaterialCount(); i++)
+                {
+                    if (mesh.GetActiveMaterial(i) is ShaderMaterial { Shader: { } shader })
+                    {
+                        found.Add(shader);
+                    }
+                }
+            }
+            foreach (var child in n.GetChildren())
+            {
+                Walk(child);
+            }
+        }
+        Walk(node);
+        return found;
+    }
+
     // The cockpit interior's build and its per-mode hiding. Two builds of
     // the same airframe: the default one must be byte-for-byte the exterior build (an AI plane
     // pays nothing), the cockpitInterior one must gain the subtree, hidden, at the cockpit_camera

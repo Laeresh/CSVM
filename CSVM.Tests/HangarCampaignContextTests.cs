@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -188,6 +189,182 @@ public class HangarCampaignContextTests : IDisposable
         Assert.Equal(HangarExit.Built, flow.Exit);
     }
 
+    /// <summary>A fresh profile owns exactly the two seeded Devastators (docs/org/hangar.md, "The
+    /// campaign instead starts with two aircraft"), and neither was ever hangar-built, so the
+    /// roster has to resolve them from the ownership records themselves.</summary>
+    [Fact]
+    public void AFreshProfileListsExactlyItsTwoStarters()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        var flow = CampaignFlow(profile);
+
+        Assert.Equal(new[] { "Gypsy Magic", "The Knave" }, flow.Saved.Select(p => p.Name));
+        Assert.All(flow.Saved, p => Assert.Equal(5, p.Airframe));
+    }
+
+    /// <summary>Ownership separates the two modes, not storage: an Instant Action build sits in
+    /// the same user://Planes/ directory and the campaign roster does not list it, while Instant
+    /// Action's own door still does.</summary>
+    [Fact]
+    public void AnInstantActionBuildDoesNotAppearInTheCampaignList()
+    {
+        _planes.Save(new CustomPlaneDef { Name = "IA Kestrel", Airframe = 8, Engine = 0 });
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+
+        Assert.DoesNotContain(CampaignFlow(profile).Saved, p => p.Name == "IA Kestrel");
+        Assert.Contains(new HangarFlow(_planes, UiStrings.Empty).Saved, p => p.Name == "IA Kestrel");
+    }
+
+    /// <summary>A purchase debits the wallet, names the build into the profile and shows up in the
+    /// campaign roster the next time the door opens.</summary>
+    [Fact]
+    public void APurchaseAddsTheBuildToTheProfileListAndDebitsTheWallet()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        profile.Funds = 10_000;
+        profile.MissionsCompleted = 20;
+        var flow = CampaignFlow(profile);
+        Assert.Equal("Buy a New Plane", flow.Page.RowText(0));
+
+        flow.Accept(); // the buy row
+        flow.Scratch.Airframe = 10;
+        flow.Scratch.Engine = 0;
+        flow.Scratch.Name = "Bought";
+        Walk(flow, HangarScreen.Purchase);
+        int cost = HangarEconomy.Price(flow.Scratch).Total.Cost;
+        Assert.True(flow.Commit());
+
+        Assert.Equal(10_000 - cost, profile.Funds);
+        Assert.Contains(profile.Planes, p => p.Name == "Bought" && p.Airframe == 10);
+        Assert.Equal(
+            new[] { "Gypsy Magic", "The Knave", "Bought" },
+            CampaignFlow(profile).Saved.Select(p => p.Name));
+    }
+
+    /// <summary>The campaign's trailing row is a sale, not a delete: it credits the wallet at the
+    /// decoded full build cost and drops the plane from the profile and the build store together.</summary>
+    [Fact]
+    public void TheSellRowSellsThePlaneAndCreditsTheFullBuildCost()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        profile.Planes.Add(new OwnedPlane { Name = "Spare", Airframe = 10 });
+        _planes.Save(new CustomPlaneDef { Name = "Spare", Airframe = 10, Engine = 0 });
+        var campaign = new HangarCampaignContext(_profiles, profile, _planes);
+        var flow = new HangarFlow(_planes, UiStrings.Empty, campaign: campaign);
+        int price = campaign.SellPrice("Spare");
+        Assert.True(price > 0);
+
+        Assert.Equal("Sell a plane", flow.Page.RowText(flow.Saved.Count + 1));
+        flow.FocusRow(flow.Saved.Count + 1);
+        flow.Accept(); // open the sell list
+        Assert.Equal("Sell Spare", flow.Page.RowText(2));
+        flow.FocusRow(2);
+        flow.Accept();
+
+        Assert.Equal(price, profile.Funds);
+        Assert.DoesNotContain(profile.Planes, p => p.Name == "Spare");
+        Assert.Null(_planes.Load("Spare"));
+        Assert.Equal(new[] { "Gypsy Magic", "The Knave" }, flow.Saved.Select(p => p.Name));
+    }
+
+    /// <summary>A reward aircraft is refused on the sell row itself, and the row says so before
+    /// the press (docs/org/hangar.md, langui 704).</summary>
+    [Fact]
+    public void TheSellRowRefusesARewardAircraft()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        profile.Planes.Add(new OwnedPlane { Name = "Jumping Jane", Airframe = 2, Special = true });
+        profile.Planes.Add(new OwnedPlane { Name = "Spare", Airframe = 10 });
+        var flow = CampaignFlow(profile);
+
+        flow.FocusRow(flow.Saved.Count + 1);
+        flow.Accept();
+        Assert.Contains("cannot be sold", flow.Page.Detail(2), StringComparison.Ordinal);
+        flow.FocusRow(2);
+        flow.Accept();
+
+        Assert.Contains("cannot be sold", flow.Message, StringComparison.Ordinal);
+        Assert.Equal(0, profile.Funds);
+        Assert.Equal(4, profile.Planes.Count);
+    }
+
+    /// <summary>The two-aircraft floor holds on the row too: a fresh profile's sell list refuses
+    /// both of its starters and the wallet never moves (langui 701).</summary>
+    [Fact]
+    public void TheSellRowHoldsTheTwoAircraftFloor()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        var flow = CampaignFlow(profile);
+
+        flow.FocusRow(flow.Saved.Count + 1);
+        flow.Accept();
+        Assert.Contains("at least two planes", flow.Page.Detail(0), StringComparison.Ordinal);
+        flow.FocusRow(0);
+        flow.Accept();
+
+        Assert.Contains("at least two planes", flow.Message, StringComparison.Ordinal);
+        Assert.Equal(0, profile.Funds);
+        Assert.Equal(2, profile.Planes.Count);
+    }
+
+    /// <summary>An owned row is inert over a campaign flow: the decoded economy has no partial
+    /// upgrade, so editing in place would charge for the build again and strand the old plane's
+    /// value. Instant Action's own door still opens a saved plane for editing.</summary>
+    [Fact]
+    public void AnOwnedRowDoesNotOpenAnEditOverACampaignFlow()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        var flow = CampaignFlow(profile);
+        flow.FocusRow(1);
+        flow.Accept();
+
+        Assert.Equal(HangarScreen.PlaneSelection, flow.Screen);
+        Assert.Null(flow.EditingName);
+    }
+
+    /// <summary>A campaign build cannot silently overwrite an Instant Action build: the taken-name
+    /// check runs over the whole build directory, not over the visible campaign roster.</summary>
+    [Fact]
+    public void ACampaignFlowSeesInstantActionNamesAsTaken()
+    {
+        _planes.Save(new CustomPlaneDef { Name = "IA Kestrel", Airframe = 8, Engine = 0 });
+        var flow = CampaignFlow(CampaignProfileDef.NewProfile("Zachary"));
+
+        Assert.DoesNotContain(flow.Saved, p => p.Name == "IA Kestrel");
+        Assert.True(flow.IsNameTaken("IA Kestrel"));
+        Assert.True(flow.IsNameTaken("Gypsy Magic"));
+        Assert.False(flow.IsNameTaken("Nothing Named This"));
+    }
+
+    /// <summary>Rebuilding under a name the profile already owns leaves one ownership record: the
+    /// commit writes one file per name, so a second record would name one aeroplane twice and a
+    /// later sale would remove both.</summary>
+    [Fact]
+    public void RebuildingAnOwnedNameKeepsOneOwnershipRecord()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        profile.Funds = 10_000;
+        var campaign = new HangarCampaignContext(_profiles, profile, _planes);
+
+        campaign.Purchase("Gypsy Magic", 7, 500);
+
+        Assert.Equal(2, profile.Planes.Count);
+        Assert.Equal(7, profile.Planes[0].Airframe);
+        Assert.Equal(9_500, profile.Funds);
+    }
+
+    /// <summary>The two wallet-free doors keep Instant Action's own verbs: a New Plane row and a
+    /// delete that credits nothing.</summary>
+    [Fact]
+    public void InstantActionKeepsItsOwnRows()
+    {
+        _planes.Save(new CustomPlaneDef { Name = "IA Kestrel", Airframe = 8, Engine = 0 });
+        var flow = new HangarFlow(_planes, UiStrings.Empty);
+
+        Assert.Equal("New Plane", flow.Page.RowText(0));
+        Assert.Equal("Delete a saved plane", flow.Page.RowText(2));
+    }
+
     private static void Walk(HangarFlow flow, HangarScreen target)
     {
         for (int guard = 0; flow.Screen != target && guard < HangarFlow.Order.Length + 3; guard++)
@@ -208,4 +385,7 @@ public class HangarCampaignContextTests : IDisposable
 
         Assert.Equal(target, flow.Screen);
     }
+
+    private HangarFlow CampaignFlow(CampaignProfileDef profile) =>
+        new(_planes, UiStrings.Empty, campaign: new HangarCampaignContext(_profiles, profile, _planes));
 }

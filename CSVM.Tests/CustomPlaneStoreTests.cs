@@ -238,6 +238,24 @@ public class CustomPlaneStoreTests
         Assert.Throws<ArgumentException>(() => new CustomPlaneStore("Planes"));
     }
 
+    /// <summary>A plane name is user text and becomes a filename, so a name carrying separators or
+    /// a parent-directory hop must still resolve inside the store. Every campaign ownership record
+    /// is looked up by this key too, which is the other way such a name reaches the disk.</summary>
+    [Fact]
+    public void PathFor_KeepsEveryNameInsideTheStore()
+    {
+        var dir = TestData.TempDir();
+        var store = new CustomPlaneStore(dir);
+        string root = Path.GetFullPath(dir) + Path.DirectorySeparatorChar;
+
+        foreach (var name in new[] { "..", ".", "../../pwned", @"..\..\pwned", "C:/pwned", "a/b" })
+        {
+            var full = Path.GetFullPath(store.PathFor(name));
+            Assert.StartsWith(root, full, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(root, Path.GetDirectoryName(full) + Path.DirectorySeparatorChar);
+        }
+    }
+
     private static CustomPlaneDef FullDef() => new()
     {
         Name = "Blue Streak",

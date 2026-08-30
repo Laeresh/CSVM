@@ -772,6 +772,10 @@ public sealed partial class CutsceneController : Node
         {
             pilot.CameraOwned = on;
             pilot.SetPilotHudVisible(!on);
+            // ⚠ Beside CameraOwned, never instead of it: that flag is what stops the arm
+            // re-asserting the pilot's own view rules, so a cockpit seat would otherwise be framed
+            // by the episode's camera with its airframe hidden and its panel over the shot.
+            pilot.SetViewedFromOutside(on);
         }
 
         foreach (var rig in _rigs)
@@ -873,10 +877,26 @@ public sealed partial class CutsceneController : Node
             return;
         }
 
+        // The original reads the flown vehicle's OWN node, so a definition raising this code
+        // without posing `player` re-places the pilot on themselves; the stand-in marker would
+        // instead put them on the world root, under the terrain (CM15's paratrooper drop).
+        if (MarkerParked())
+        {
+            GD.Print($"cutscene: '{Anim}' raises {CodeReplacePlayer} with " +
+                     $"'{AircraftStage.PlayerNode}' unposed, so it authors no placement to fly out of");
+            return;
+        }
+
         var pose = AnimRuntime.WorldTransform(_playerMarker, out _);
         OwnerPilot?.ResumeAt(pose);
         GD.Print($"cutscene: '{Anim}' re-places P{(EpisodeOwner?.Index ?? 0) + 1} at {pose.Origin}");
     }
+
+    // Is the marker still where the build and every handoff park it: under the world root, at
+    // identity? A definition that posed it has reparented it, written a transform, or both.
+    private bool MarkerParked() =>
+        _playerMarker != null && _playerMarker.GetParent() == _markerHome
+        && _playerMarker.Transform.IsEqualApprox(Transform3D.Identity);
 
     private void MirrorCamera()
     {

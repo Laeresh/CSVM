@@ -541,8 +541,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   GEMINI by shooting the open cannon hatches"). Gasbags are not an authored substitute for that.
   *Blocked:* what a finished gasbag looks like in the original is unfilmed, so "completely" has no
   reference to compare against; `CAP-47` is that clip.
-  *Cross-refs:* `BL-640` (the same zeppelin's cannons), `BL-525` (the other prerequisite form,
-  which is dropped).
+  *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
+  parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
 
 - `BL-640` `[Bug]` **CM14 (C2B/M04): a broadside cannon takes weapon damage while its hatch is
   still shut.** *Evidence:* reported at the controls and re-confirmed on the merged build. The
@@ -897,18 +897,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   incremental migration note, `TurretController`, `BL-611`'s closing commit
   (`git log --grep=BL-611`).
 
-- `BL-621` `[Bug]` **CM07 (C1/M02): the parachutist is gone from the hangar drop since the chute
-  pool landed.** *Evidence:* reported at the controls; before `BL-608` the drop showed the pilot
-  parachuting into the hangar while the aeroplane was missing, and now the aeroplane is there and
-  the figure is not. `WorldSession`'s `ResolveLibraryRoot` serves `AircraftStage`'s staged
-  `chuteman` as pool copy 0 keyed on the call anchor and site, so a caller gets the staged actor
-  relocated to its authored site and later callers get duplicates; CM07's drop does not call the
-  figure at a site, `hdchute1` adopts it with `OBJECT_ADD_CHILD`. *Fix shape:* the placement kind
-  is the distinguishing rule, so let the pool serve the site-bearing call path alone and leave an
-  adoption's node where it is. *⚠ Traps:* CM02's three drifting chutes come from `ww_player`'s three
-  `ww_chuteman` calls and must keep their per-call copies (`campaign-capture-chutes`). *Cross-refs:*
-  `BL-608`'s closing commit (`git log --grep=BL-608`), `AircraftStage`, `docs/architecture.md`.
-
 - `BL-618` `[Bug]` **A compiled anim addressing a mech3ax `~n` dedup name resolves to nothing.**
   *Evidence:* CM13's `pzhomebase` switches `land_on` and `land_on~2` on and neither of the
   Pandora's two landing cones draws (`zeppelin-hull-activation`'s artifact records `cones 0/2`);
@@ -919,28 +907,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `pz_auto_land`. *⚠ Traps:* stripping `~n` and taking the first hit is wrong, the suffix identifies
   which sibling. *Cross-refs:* `NameResolver`, `docs/formats/gamez.md`, `BL-616`'s closing commit
   (`git log --grep=BL-616`).
-
-- `BL-612` `[Bug]` **CM09 (C1/M04): the frame rate falls under 60 for the rest of the mission once
-  the Promised Land is down and the next fighter squad spawns.** *Evidence:* reported at the
-  controls on the plan branch, and it is a sustained rate drop, not single hitches. The sortie
-  log's late `[perf] hitch` lines carry the shape in their baseline: 19 to 26 ms against 10 ms
-  earlier in the same sortie, with `script_ms` about 25 and `physics_ms` 17 to 18 while
-  `render_cpu_ms` stays near 1 and `gpu_ms` near 0.5, `nodes` about 37000 and `mem_mb` about 1300.
-  The frame is spent on the CPU in script and physics, not on the GPU. *Fix shape:* the hitch
-  detector reports outliers against a rolling baseline, so a whole-run slowdown reads only in that
-  baseline; measure the rate itself instead (a frame-time trace over the sortie, or the probe's
-  own timing), then attribute the script time with the sampler armed. Read whether the cost is the
-  zeppelin's death choreography left running (the burn, finisher and sink anims and their emitters
-  persist after the hull is down), the destroyed hull's colliders and debris still stepping, or the
-  new squad's rigs adding AI and physics on top; the node count says nothing was freed. Compare a
-  run that leaves the zeppelin alive. *⚠ Traps:* the hitch detector is opt-in (`RunTests.ps1 -Hitch`)
-  and answers a different question than this one; `attributed_ms` is 0 in these lines because the
-  sampler was not armed, so they name no culprit. CM13 (C2/M03) shows the same sustained drop and
-  is the likelier test case, since that mission spawns its whole field at the start and involves no
-  zeppelin death: if both share a cause it is the number of live aircraft, not the destruction
-  choreography, so measure CM13 first and treat CM09's zeppelin as the second variable.
-  *Cross-refs:* `HitchMonitor`, `Launcher`'s hitch tick, `BL-599`'s closing commit
-  (`git log --grep=BL-599`).
 
 - `BL-597` `[Bug]` **CM08 (C1B/M03): the Pandora does not halt exactly over the tanker and plays no
   hangar animation there.** *Evidence:* reported at the controls against the original: the Pandora
@@ -1022,29 +988,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   severity and no impulse); its writers `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` are not,
   so the ledger keeps "a wreck flies the near-field plant" as an exception. Decode when and by
   whom it is set so the wreck can fly the decoded arm.
-- `BL-562` `[Perf]` **Single physics ticks reach 70 to 180 ms in CM11 (C2/M02), and Godot's 8-step
-  catch-up cap turns each one into sim time the mission never gets back.** *Evidence (traced):* the
-  bracketed instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` /
-  `phys_hz`) over 333 windows of a loaded CM11 session puts the **mean** tick at 1.81 ms (p95
-  3.20 ms) and the tick rate at a median of 60.0 per wall second, but `phys_tick_max_ms` hit 72,
-  102 and 177 ms on individual ticks. `max_physics_steps_per_frame` is at Godot's default 8, so a
-  177 ms stall leaves about six sim steps undeliverable and they are discarded, not deferred. *Fix
-  shape:* find what a spiking tick is doing. The chain map's candidate is
-  `NameResolver.ClearFindCache`, which drops the whole find memo, so the next tick's ~60 objective
-  name resolutions re-walk the ~5000-row index calling `GodotObject.IsInstanceValid` on every row;
-  its callers are the `IndexStage` / `IndexSpawnedCopy` / `IndexRebasedStage` / `IndexPooledCopy`
-  spawn and warm-up paths in `AnimRuntime`, which is the right shape for a spike that lands on a
-  spawn rather than steadily. Confirm by bracketing a spiking tick rather than by inference. *⚠
-  Traps:* **do not chase the sustained step.** The entry used to claim a ~39 ms step and a sim at
-  half wall time; both were a misreading of Godot's `physics_ms` monitor, which holds the WORST tick
-  of the last wall second and refreshes about 1 Hz (`docs/verification.md` PERF-21, and the
-  disproof's own commit, `git log --grep=BL-562`). The mean step is a ninth of its 16.7 ms budget and
-  the sim tracks the wall clock at a ratio of 0.9999 over 306 wall seconds, so there is nothing to
-  win by optimising the steady tick. Compare durations in sim seconds, never wall seconds, and do
-  not raise `max_physics_steps_per_frame`: it deepens the catch-up spiral rather than recovering the
-  lost steps. The measurement was taken with `--debug-objective=18` driving the mission, with nobody
-  at the controls, so it under-weights projectiles and destruction cascades. *Cross-refs:*
-  `docs/plans/PLAN-M5-polish-6.md` C22, `BL-606` (the same per-sim-step suspects seen as an allocator).
+- `BL-562` `[Perf]` **CM11 (C2/M02) still spends single physics ticks of 45 to 51 ms in flight and
+  about 124 ms on the first tick after the world build.** *Evidence (traced):* the bracketed
+  instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz`) over 82
+  windows of a flown CM11, with the recurring telemetry burst removed, leaves three residual terms,
+  each attributed by a temporary sub-scope breakdown inside the tick. (a) The FIRST tick after the
+  build costs about 124 ms, 95 ms of it the 20 animation runtimes' first `Advance` (46,355 index rows
+  walked over five cold `FindAll` misses, plus a 29 ms first sim step); it reproduces on every run to
+  within 2 ms and is the world-build settling regime, not flight. (b) One tick in a sortie reaches
+  46 ms inside `FlightController`'s AI collision sweep (`SweepProbes` + `CenterRayContact`, 45.1 ms
+  in a single aircraft's step). (c) One reaches 50 ms inside a single `AnimRuntime.Advance`. Nothing
+  else exceeds 16.7 ms and the tick rate holds at a median 60.0. *Fix shape:* (b) first, since it is
+  the one a player meets mid-flight: log which collider the sweep struck on the spiking step and
+  whether the cost is the query or the report it fills. (a) is worth a separate look only if a
+  cutscene handoff or a mid-mission stage build repeats it. *⚠ Traps:* **the cap-exhaustion premise
+  is dead** — the entry used to claim 72, 102 and 177 ms ticks discarding about six sim steps each
+  against Godot's default `max_physics_steps_per_frame` of 8; over four paired 83-second runs on the
+  current build no window's worst tick reaches 133 ms, so nothing exhausts the cap. **Do not chase
+  the sustained step** either: the ~39 ms step and half-speed sim the entry once claimed were a
+  misreading of Godot's `physics_ms` monitor, which holds the WORST tick of the last wall second
+  (`docs/verification.md` PERF-21). The recurring 18 to 25 ms band that dominated every earlier
+  reading was the ungated once-a-sim-second telemetry print, one write per live aircraft in the same
+  tick (PERF-23); it is gated and gone, so do not re-derive it. Compare durations in sim seconds,
+  never wall seconds; state which mode a re-measurement flew (the numbers here are `--no-det` with
+  nobody at the controls, so they under-weight projectiles and destruction cascades); and do not
+  raise `max_physics_steps_per_frame`, which deepens the catch-up spiral rather than recovering
+  lost steps. *Cross-refs:* `docs/plans/PLAN-M5-polish-6.md` C22, `BL-606` (the same per-sim-step
+  suspects seen as an allocator), `docs/verification.md` PERF-21 and PERF-23.
 
 - `BL-627` `[Bug]` **CM12 (C2/M01): the Spruce Goose moves jittery.** *Evidence:* reported at the
   controls, and re-confirmed on the merged build in the same sortie that cleared the mission's
@@ -1687,37 +1657,46 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   CM11's closing autodock. It is not airframe-specific: the Devastator and the Bloodhawk both show
   it, and it has been there since CM01, so every docking in the campaign is affected. The hook
   engages correctly, so this is the animation running repeatedly rather than the dock failing.
-  *Fix shape:* read the hookup definition's own call graph first and count the call sites that
-  reach the hook leg. `BL-525` records the shape this most likely takes: `wv_tailhook.zrd`'s
-  `wv_initiate_hookup` `CALL_ANIMATION`s its legs unconditionally and only each definition's
-  `ACTIVATION_PREREQUISITE` keeps the wrong one from running, a prerequisite form both of CSVM's
-  parse paths silently drop. Three plays from one call site is a different fault from three call
-  sites, and the log tells which before any code moves.
-  *⚠ Traps:* do not silence it by latching "already played" on the runtime. A repeat that a
-  definition authors is data the parse is dropping, and a latch would hide the same defect wherever
-  else those prerequisites are ignored, roughly fifty definitions across several chapters
-  (`BL-525`). The player-visible hook engagement is correct today and must stay correct.
+  ⚠ **The headless count that reads "once" counts the wrong definition.** `landings-hookup-airframe`,
+  `landings-balmoral-dock` and `landings-docking-hold` assert on `player_extend_hook`, the GENERIC
+  definition, which is authored once per archive and does play once. That definition forks to an
+  airframe-specific branch (`blood_hook_extend`, `brig_hook_extend`, `bal_hook_extend`, one per
+  airframe), and no suite counts those. A census that counts the generic name proves nothing about
+  the branch the fork actually plays.
+  The Devastator's own hook animation is `pirate_hook_extend`, which the data binds to the
+  `player_pfighter` model: `extracted/zrdr/pirate_hook.zrd.json` authors
+  `NAME1 [pirate_hook_extend, [player_pfighter, pirate_hook]]`. Every one of the eleven airframes has
+  exactly one such definition bound to its own model, so no airframe is missing one.
+  Two separate faults wear this one symptom, and they explain its two halves.
+  (a) **The repeat is airframe-independent, and the duplicated definition is the FORK, not the
+  branch.** `extracted/zrdr/player_hook.zrd.json`, which authors `player_extend_hook` and its eleven
+  `If NodeActive` branches, uses a plain `NAME` and carries no `NAME1` anywhere. The mission log's own
+  census line reads "reader def(s) superseded by this mission's compiled manifest (mission-scope +
+  NAME1), not instantiated", and every entry it names is tagged `(NAME1)`. A plain-`NAME` reader
+  definition is therefore not superseded, so it coexists with the compiled
+  `C*/cam_anim/player-player_extend_hook.json` and the fork runs twice, taking its airframe branch
+  with it each time. That matches the symptom being present on every docking since CM01 and on more
+  than one airframe. ⚠ The supersede rule here is read off that log line's own wording; confirm it
+  against the parse before building on it.
+  (b) **Seven of the eleven airframes author no `_startup` definition**, the Devastator among them.
+  Only `autogyro_hook`, `balmoral_hook`, `brigand_hook` and `warhawk_hook` carry one; `avenger`,
+  `blood`, `firebrand`, `fury`, `kestrel`, `peacemaker` and `pirate` do not. If the startup is what
+  parks the hook retracted at build, that is why the Devastator's hooks are already fully deployed
+  when the episode opens, which is what was seen at the controls.
+  Separately, `blood_hook_extend` and `brig_hook_extend` are each authored twice in
+  `C*/cam_anim/` (`…-1.json`, same `name`, same `anim_name`, one byte apart) in all eight chapters.
+  That is a third duplication, and it is not what the Devastator hits.
+  *Fix shape:* settle (a) first, since it is one question about which reader definitions the
+  compiled manifest supersedes and it reaches every airframe. Then (b), which is a different
+  question: what parks a hook retracted at build for the seven airframes authoring no startup.
+  Count the AIRFRAME BRANCH, never `player_extend_hook`, in any suite written for this.
+  *⚠ Traps:* do not silence it by latching "already played" on the runtime. A repeat a definition
+  authors is data, and a latch would hide the same defect wherever else it happens. The
+  player-visible hook engagement is correct today and must stay correct. Do not open this against
+  the node-state prerequisite again; it is enforced. Do not trust a suite that counts
+  `player_extend_hook`: that is the measurement which reported this closed while it was not.
   *Playtest after fix:* any campaign docking, watching the opening shot alone: one hook swing.
-  *Cross-refs:* `BL-525` (the unconditional-call shape and the dropped prerequisite form),
-  `docs/formats/anim-definitions/cutscenes.md`.
-
-- `BL-629` `[Bug]` **CM10 (C1/M05): a shot-down attack balloon hangs in the air instead of bursting
-  and falling.** *Evidence:* reported at the controls. The parts of the chain that work are the
-  weapon hit itself, the model swap to `destroyed_balloon`, the death of the balloon's `bbtur`
-  turret and the lifeboat's drop, which falls, splashes and drives its net. What is left standing
-  is the destroyed balloon, suspended where it was killed. The authored death is more than a swap:
-  `extracted/C1/M05/mis_anim/lifesaver11-lifefall11-lifeballoon.json` (`activation: WeaponHit`,
-  `health: 60.0`) carries eight `ObjectMotion` events, of which only the first drives `lifeboat`
-  down under `gravity: -10`; the rest move `b_dbase` and `b_part1` through `b_part6`, the balloon's
-  own bursting pieces, alongside seven `ObjectOpacityFromTo` fades and fourteen puffer states. So
-  the balloon-side half of one definition is not taking effect while the boat-side half is.
-  *Fix shape:* run that definition headless and report which of its eight motions start, then
-  follow the first one that does not. Nine balloons author the same five definitions, so whatever
-  the answer is, it is the same nine times.
-  *⚠ Traps:* do not delete the balloon on death as a shortcut. The pieces are authored to fall and
-  fade, and a despawn would remove the wreck the original shows falling. `set_bbtur_off` and the
-  swap are already doing their jobs, so neither is the suspect.
-  *Playtest after fix:* CM10, shoot one balloon and watch what is left in the air.
+  *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md`.
 
 - `BL-630` `[Bug]` **CM02 (C3/M05): the docking hook's two inward-rotating side parts swing too
   far on the captured Balmoral's auto-land.** *Evidence:* seen at the controls on that mission's
@@ -1732,6 +1711,42 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps:* do not retune the angle to taste. It is authored, and the fold beside it is already
   asserted against its authored value, so a hand-set number here would sit next to a pinned one.
   *Cross-refs:* `BL-545` (the same landing's hook, height and wing-fold reads).
+
+- `BL-657` `[Research]` **An authored `capacity 0` is treated as unlimited, so every shipped enemy
+  generator launches on its own cycle with no objective asking it to.** *Evidence:* found while
+  attributing CM18's spawn stalls (`git log --grep=BL-641`). `GeneratorCycle` switches the capacity
+  check off at authored `capacity <= 0` unless a `WAKEUP_GENERATOR` has armed it. All 23 shipped
+  generators author `capacity 0`, and CM18 (C4/M03) authors no `WAKEUP_GENERATOR` at all, so
+  `cargozep1` launches a Black Swan every 4 s from mission start up to `max_active` 10.
+  [`docs/formats/mission-entities/enemy-generators.md`](formats/mission-entities/enemy-generators.md)
+  ("Capacity rule and limit") records that the literal decoded rule blocks every shipped generator on
+  its first tick, and that the data does **not** establish that 0 means unlimited, which is exactly
+  the interpretation the code runs as a stand-in. *What to settle:* what the original does with an
+  uncredited generator, and therefore whether ten enemy fighters belong in CM18 at all. This decides
+  a mission's opposition, not a constant. *⚠ Traps:* this is a gameplay change, not a tidy-up. The
+  same stand-in feeds every mission carrying an uncredited generator, so a change here moves the
+  opposition in all of them at once, and the spawn cost it decides how often to pay is the subject of
+  `BL-641` rather than of this entry. *Cross-refs:* `BL-641` (the per-spawn cost), `BL-523` (the AI
+  mode machine, which decides what the spawned aircraft then do).
+
+- `BL-652` `[Research]` **Why an authored fork's sensor nodes start inactive is not traced to a
+  rule, so a fork placed away from the world origin may start open.** *Evidence:* found while
+  verifying the node-active `ACTIVATION_PREREQUISITE` gate over C1C/M01 (`git log --grep=BL-525`).
+  A definition forks on a sensor node's active state, and the fork only starts closed because that
+  node reads INACTIVE at the world build: `wv_tailhook/dropoff_node` and `pickup_node` are both
+  inactive until OBJECTIVE11 and OBJECTIVE15 wake them, which is what keeps the wrong docking leg
+  from running. The nodes are `active: true` in C1C's gamez, so the state the gate reads comes from
+  the build's own hide-unplaced rule rather than from the data's flag, and the agreement between the
+  two was not traced. It holds today in both C1C/M01's docking and CM07's hangar drop.
+  *What would settle it:* find the build rule that decides a sensor node's initial visibility and
+  establish whether it keys on placement, on the node's own flag, or on something else, then check a
+  fork whose sensor is placed away from the world origin against it. 784 REQUIRED node entries
+  across 112 root definitions ride this, so a fork starting open is a whole authored branch running
+  when it should not. *⚠ Traps:* this is a question, not a defect: nothing observed is wrong today,
+  and a change made on the strength of the coincidence alone would move behaviour that is currently
+  correct. Do not "fix" the flag to match the observed state.
+  *Cross-refs:* [`docs/formats/anim-definitions.md`](docs/formats/anim-definitions.md) (the
+  prerequisite's census and both parse paths).
 
 ## Audio
 
@@ -2228,40 +2243,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `PLAN-cockpit-view.md` (every decision above, by wave: B11, C21, C22, D31), `BL-391`
   (engine level, kept separate from (f)).
 
-- `BL-625` `[Bug]` **A cutscene entered from the cockpit view leaves the flown airframe hidden and
-  the cockpit interior drawn, so the cutscene's external camera frames an invisible aeroplane.**
-  *Evidence:* `ApplyPresentation` (`Session/CutsceneController.cs:717-732`) sets `CameraOwned =
-  true`, which silences the whole per-frame camera arm in `FlightController`
-  (`Flight/FlightController.cs:1662`) and with it the `Cockpit?.Apply` that arm re-asserts every
-  frame (`:1738`). Whatever visibility the last flying frame left standing therefore holds for the
-  episode's whole length, and in `PilotViewMode.Cockpit` that state is `Shown(Interior: true, Body:
-  false, ...)` (`Flight/CockpitVisibility.cs:35-38`): the airframe undrawn, the interior still
-  drawn by its own overlay pass in front of the cutscene camera. The episodes this hits are the
-  ones that stage the flown aircraft at the `player` marker (`StagePlayerAircraft`,
-  `CutsceneController.cs:793-807`), which is to say the ones that mean the aeroplane to be seen.
-  *Fix shape:* the crash camera already solves the identical problem, and for the identical reason:
-  `CutToCrashView` calls `LeaveFirstPerson()` (`FlightController.cs:2447-2465`) because an external
-  vantage has to un-hide the body and `Deactivate()` the interior pass. `ApplyPresentation(true)`
-  wants that same call; `ApplyPresentation(false)` (the restore and skip paths,
-  `CutsceneController.cs:634`) wants the inverse, re-asserting the rules for the `ViewMode` the
-  pilot actually had, so a player who entered from the cockpit is back in it after the handoff. The
-  crash path needs no such restore because the respawn rebuilds the view, and the handoff does not.
-  *⚠ Traps:* Do not fix it by writing `ViewMode = Chase` for the duration. `MirrorCamera`
-  (`CutsceneController.cs:831-843`) owns every rig camera's pose outright while presenting, so the
-  view mode buys nothing there, and the mode left behind is the state the handoff restores, quietly
-  moving the player out of the cockpit they chose. Only the visibility rules and the interior pass
-  need to move. The interior lives outside `PlaneModel` under `CockpitPass`, so un-hiding the
-  airframe alone does not take it off screen (`FlightController.cs:2456-2459`). And an intro
-  cutscene drawing no aircraft is a different thing, not this bug: those definitions deactivate the
-  `player` node themselves (`ApplyOutOfFlight`, `CutsceneController.cs:734-752`).
-  *Playtest after fix:* the reported repro is CM01 (C3/M01)'s docking episode, so
-  `.\RunGame.ps1 --campaign=<profile>:0`, cycle to the cockpit view (F8) before the docking fires,
-  and watch it through: the aeroplane drawn from the external camera with no cockpit panel over it,
-  and the cockpit back on the handoff. Repeat with the skip key, which takes the other restore path.
-  *Cross-refs:* `BL-436` (the cockpit view's unjudged feel, same visibility rules), `BL-555` (the
-  skip path that shares this restore), `docs/formats/anim-definitions/cutscenes.md` (what a
-  definition owns during an episode).
-
 - `BL-631` `[Bug]` **Geometry nearer to the camera than the letterbox card draws over the bars.**
   *Evidence:* seen at the controls in CM10 (C1/M05)'s closing docking cutscene, where a walkway
   passes between the camera and the bars and is drawn on top of them, and re-confirmed on the
@@ -2283,25 +2264,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the pilot was flying a Bloodhawk in the chase view when the episode started, which rules out the
   cockpit-view visibility rules by construction. *Fix shape:* find the definition that stages the
   Balmoral for that episode and establish whether the actor is served at all before asking why it
-  is not drawn. *⚠ Traps:* `BL-625` is a different mechanism, an airframe left hidden because the
-  cutscene silences the per-frame camera arm that re-asserts cockpit visibility, and its fix cannot
-  reach a staged NPC, so do not close this against it. The two nearest known shapes are the hangar
-  hand-over that played without its aeroplane and the staged actor served only to a call that names
-  a site (`git log --grep=BL-596`, and `BL-621`); read both before opening the definition, since
-  either answer has been written once already. *Cross-refs:* `BL-625`, `BL-621`.
+  is not drawn. *⚠ Traps:* the flown airframe left hidden by the cockpit view's own rules is a
+  different mechanism, already fixed at the presentation code (`git log --grep=BL-625`), and that
+  fix cannot reach a staged NPC, so do not close this against it. The two nearest known shapes are
+  the hangar hand-over that played without its aeroplane and the staged actor served only to a call
+  that names a site (`git log --grep=BL-596`, and `git log --grep=BL-621`); read both before opening
+  the definition, since either answer has been written once already.
+  *Cross-refs:* `git log --grep=BL-633` (the same mission's other cutscene defect, where its
+  paratrooper drop left the pilot on the world root),
+  [`docs/formats/anim-definitions/cutscenes.md`](docs/formats/anim-definitions/cutscenes.md) (what a
+  definition owns during an episode).
 
-- `BL-633` `[Bug]` **CM15 (C2/M05): the player is left under the terrain when a cutscene hands
-  control back, and can only recover by crashing.** *Evidence:* reported at the controls. The
-  handoff leaves the aircraft below the ground surface rather than at the pose the episode ended
-  on, and since terrain colliders are single-sided a crossing from below is silent, so dying is the
-  only way out. *Fix shape:* log the pose the episode restores against the pose it ended on. The
-  restore is where a marker-relative position can survive the episode's own reparenting, which is
-  the failure fixed for a different episode in `BL-610` (`git log --grep=BL-610`), so the first
-  question is whether this one takes that path. *⚠ Traps:* do not add a ground clamp to the
-  handoff. It would hide a wrong restore everywhere else it happens, and it would fight an episode
-  that legitimately ends below a surface. The single-sided colliders that make the symptom
-  unrecoverable are a separate property, recorded from the air side in `BL-566`.
-  *Cross-refs:* `BL-566`, `BL-625`.
+- `BL-649` `[Bug]` **The debug vantages take the camera without giving the airframe back, so a pilot
+  pinned there from the cockpit view keeps the interior over the debug camera.** *Evidence:* found
+  while landing the cutscene presentation's own fix. `FlightController.CameraOwned` silences the
+  per-frame arm that re-asserts the first-person visibility rules, so every caller that sets it owes
+  the aircraft's visibility at both edges. The cutscene presentation now writes them through
+  `FlightController.SetViewedFromOutside` (`git log --grep=BL-625`); `--debug-spectate`
+  (`Session/GameSession.cs`) and the weapon lab set `CameraOwned` without it, so a pilot in
+  `PilotViewMode.Cockpit` when either takes the view keeps `Shown(Interior: true, Body: false)`: the
+  airframe undrawn and the cockpit panel drawn over the debug camera. *Fix shape:* call the same
+  seam from both, which is a line each; the judgement is only whether either wants the restore leg,
+  since neither hands flight back the way a cutscene does. `SpectateHandoff` needs nothing, because
+  it follows a death and `CutToCrashView` has already left first person. *⚠ Traps:* debug modes
+  only, so this changes nothing a player sees; do not widen it into the crash or respawn paths,
+  which rebuild the view themselves. *Cross-refs:* `git log --grep=BL-625` (the seam and why both
+  edges belong to the caller).
 
 ## HUD & UI
 
@@ -2426,30 +2414,66 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/controls.md`), so a resolved string that names the key needs the port's key substituted.
   *Cross-refs:* `docs/plans/PLAN-M5-polish-2.md` C10.
 
-- `BL-634` `[Bug]` **The campaign's Plane Construction lists every Instant Action build instead of
-  the profile's own aircraft, and offers Instant Action's verbs.** *Evidence:* reported at the
-  controls. The cabin opens the hangar over the global build store,
-  `CustomPlaneStore.UserPlanes()` (`UI/LaunchMenu.cs:1866-1869`), and the flow's first screen lists
-  it wholesale (`Saved = store.List()`, `UI/HangarFlow.cs:150`), which is the same
-  `user://Planes/` directory the Instant Action Build button writes into. The profile's ownership
-  list is not consulted anywhere in that screen, though it exists and is already wired for money:
-  `HangarCampaignContext` carries `Purchase`, `Sell`, `CanSell` and `SellPrice`
-  (`UI/HangarCampaignContext.cs:98-122`) with the decoded rules, a sell price equal to the full
-  build cost, reward aircraft unsellable, and a floor of two aircraft
-  ([`docs/org/hangar.md`](docs/org/hangar.md), "The sell price is the full build cost"). The rows
-  are Instant Action's as well, a New Plane row and a delete, where the campaign's are buy and
-  sell. *Fix shape:* filter the campaign flow's plane list through `Profile.Planes` and route its
-  rows to `Purchase` and `Sell`. Ownership is what separates the two modes, not storage: `Purchase`
-  already names a build into the profile, so the builds themselves can stay in the one
-  `user://Planes/` store. *⚠ Traps:* do not give the campaign its own build directory to get the
-  separation. The two starters a fresh profile is seeded with are never hangar-built and have no
-  entry there at all, which is why `SellPrice` falls back to the campaign's own Devastator spec
-  (`:74-93`); a per-mode store would strand them. The delete row is not the sell row: deleting a
-  build must not credit the wallet. *Playtest after fix:* a fresh profile shows exactly its two
-  starters, a purchase adds one and takes the money, a sale removes it and returns the full cost,
-  and Instant Action's list is unaffected by all three.
-  *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) (the wallet, the slot rules and the
-  reward table), `CampaignProfileStore`.
+- `BL-650` `[Feature]` **The campaign hangar's decoded slot cap is not enforced, so a profile can
+  buy without limit.** *Evidence:* found while landing the campaign Plane Construction screen
+  (`git log --grep=BL-634`). The original's profile holds 25 plane records and its free-slot finder
+  reserves six of them (`FUN_004111f0`), refusing a purchase past that with langui 204
+  `IDS_PN_TOOMANYPLANES`. Nothing in the remake caps a campaign purchase: `HangarCampaignContext.Purchase`
+  debits and records with no count check, so a wealthy profile grows its inventory past anything the
+  original would accept. *Fix shape:* the refusal belongs beside the two that already exist, the
+  reward-aircraft one and the two-plane floor, so the shape is a third gate reading
+  `Profile.Planes.Count` against the decoded cap and composing 204. *⚠ Traps:* the cap is on
+  RECORDS, not on the build directory, which the two modes share; counting files would let an
+  Instant Action build refuse a campaign purchase. Read what the reserved six are for before
+  choosing the number, since a cap of 25 and a cap of 19 are different readings of the same decode.
+  *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) (the slot rules), `BL-651` (the other
+  half of the two modes over one store).
+
+- `BL-651` `[Bug]` **Instant Action's build list shows every campaign plane, with no Export step to
+  put them there.** *Evidence:* the mirror image of the campaign listing fixed in
+  `git log --grep=BL-634`. Ownership now separates the campaign's roster from the shared
+  `user://Planes/` store, but Instant Action's own flow still lists that whole directory, which
+  includes every campaign build. The original gates the crossing behind an Export button on the
+  campaign side (langui 1139, 702 and 1256, refusal 1254), so a campaign aircraft reaches Instant
+  Action only when the player sends it there. *Fix shape:* the campaign flow needs the Export verb
+  and Instant Action's list needs to show only what was exported, which means a marker the store
+  carries rather than a second directory. *⚠ Traps:* do not give either mode its own build
+  directory. The two profile-seeded starters are never hangar-built and have no entry there at all,
+  which is why the campaign roster resolves them from the ownership record; a per-mode store would
+  strand them. *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) ("The inventory screen's own
+  strings"), `BL-650`.
+
+- `BL-655` `[Bug]` **The campaign hangar never shows the wallet while a plane is being built, so
+  the only way to learn a build is unaffordable is to finish it.** *Evidence:* reported at the
+  controls on the landed Plane Construction screen (`git log --grep=BL-634`). The wallet is drawn
+  once, as the detail line of the plane-selection screen's Buy row (langui 1149 `$$$ on Hand:`), and
+  every screen after it (airframe, engine, hardpoints, armour, guns) shows neither the money on hand
+  nor the running total against it, so a player picks parts blind and meets the refusal at the
+  commit. *Fix shape:* the running cost already exists, since `HangarEconomy.Price` is what the
+  totals row draws; the missing half is the wallet beside it and a mark on any row the remaining
+  funds cannot cover. Read what the original puts on those screens before choosing a layout, since
+  langui carries its own strings for the money line. *⚠ Traps:* do not block an unaffordable
+  selection outright: the decoded flow refuses at the purchase, not at the part, and a screen that
+  hides parts you cannot yet afford also hides what you are saving toward. *Cross-refs:*
+  [`docs/org/hangar.md`](docs/org/hangar.md) ("The campaign wallet"), `BL-650` (the unenforced slot
+  cap, the other half of the purchase gate).
+
+- `BL-656` `[Bug]` **CM10 (C1/M05): an attack balloon's objective marker sits on the water for a
+  moment before it settles onto the balloon.** *Evidence:* reported at the controls on the build
+  that anchors a site at the centre of what it draws (`git log --grep=BL-636`). The marker is right
+  once the wave is up, so this is the anchor being read while the group is in a state that does not
+  yet include the balloon. Each `lifesaverNM` builds with the outer group and its inner `lifesaver`
+  node switched off while `lifeballoon` and `lifeboat` are visible under them, and `attack_waveN`
+  switches the wave on later, so the mesh set the anchor reads can change between the first frame
+  the marker is offered and the frame the wave arrives. *Fix shape:* establish which mesh set the
+  anchor reads on the early frames before changing anything: the fix is either to defer offering the
+  site until its subtree is up, or to read the authored `child_bbox` the gamez node carries rather
+  than the built meshes. *⚠ Traps:* do not reintroduce a node-origin fallback or an upward offset;
+  both were removed on decoded evidence and the balloons descend as they attack, so no constant is
+  right at two altitudes. The anchor rule itself is the original's (`FUN_004cf2c0` takes the
+  midpoint of the node's active bounding box) and is not what is wrong here.
+  *Playtest after fix:* CM10, watching a wave arrive with the marker already in frame.
+  *Cross-refs:* [`docs/org/targeting.md`](docs/org/targeting.md) ("Where a mission structure is").
 
 - `BL-635` `[Bug]` **CM11 (C2/M02): the stunt planes carry no objective marker, though their roster
   blocks name one.** *Evidence:* reported at the controls and still open after the mission's other
@@ -2462,33 +2486,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   author. Two aircraft share the key, so a marker that appears on only one is not a pass.
   *Playtest after fix:* CM11, from the objective that starts the follow.
 
-- `BL-636` `[Bug]` **CM10 (C1/M05): the Destroy Attack Balloon marker sits at water level under
-  its balloon.** *Evidence:* reported at the controls, and unchanged on the merged build after the
-  mission's balloon and lifeboat behaviour was fixed. The marker tracks the right balloon
-  horizontally but hangs at the sea surface below it, which reads as a marker on the boat. Each
-  `lifesaverNM` group holds the balloon, its `bbtur` turret, the ropes and the lifeboat together,
-  so a marker anchored on the group rather than on the balloon node lands exactly there.
-  *Fix shape:* read which node the marker anchors on for these targets and move it to the balloon.
-  `BL-602`'s closing commit settled the neighbouring case, a group site anchoring on its built
-  meshes rather than on its own origin (`git log --grep=BL-602`), and is the first thing to read.
-  *⚠ Traps:* do not offset the marker upward by a constant. The balloons descend as they attack,
-  so a fixed lift is right at one altitude and wrong at every other. The marker must also retire
-  with the balloon rather than follow the boat that drops out of it.
-  *Playtest after fix:* CM10, with a wave in frame at two different heights.
-
 - `BL-637` `[Research]` **A targeted patrol boat shows no name line, and the original may show none
   either.** *Evidence:* reported at the controls in CM12 (C2/M01), where the boats can be targeted
   but carry no text. `targets.zrd` for that mission names only `sprucegoose`, its engine, the
   propane tanks and the four `tugandbarge0N`, so no authored target entry covers a boat, and the
   boats themselves are the `eshipg31` generator's. *What to settle:* whether the original draws a
-  name here at all. [`docs/org/targeting.md`](docs/org/targeting.md) (lines 512 to 540) records
+  name here at all. [`docs/org/targeting.md`](docs/org/targeting.md)'s "The HUD: the label" records
   three authors of the name string, the roster block's own `title` at `aiv` slot 20, Instant
   Action's hardcoded ids, and a template-less generator spawn taking its `egen.zrd` value raw, and
   notes that 239 of the install's 414 roster blocks author an empty `title`, so most enemies in the
   original show a box and no name. CM12's generator record authors no `title` of its own and
   resolves `Eshipg31_params` instead, so the answer turns on what that block carries.
   *⚠ Traps:* do not reach for `MSG_VEH_PATROLBOAT`. The vehicle definition's own title is read by
-  none of the three authors (`targeting.md:537`), so displaying it would invent a name the original
+  none of the three authors (that same section), so displaying it would invent a name the original
   never shows. The same page warns that a fourth author is not ruled out, only unfound.
   *Cross-refs:* `BL-626` (the same boats, their guns).
 
@@ -2889,43 +2899,6 @@ usual.
   unsettled. Do not add a leash constant. *Cross-refs:* `BL-457`, `BL-502` (`SET_AI_NET` reach),
   `BL-523`, `docs/org/aiPilot.md`.
 
-- `BL-525` `[Bug]` **CM06 (C1C/M01): the second docking at the Workers' Voyage (to collect Dr. Fassenbender)
-  completes without docking.** *Evidence (traced):* `objectives.zrd`'s two docking objectives
-  (OBJECTIVE11, first hook, `ANIM_STATE wv_drop_copilot RUNNING`; OBJECTIVE15, second hook,
-  `ANIM_STATE wv_pickup_copilot EXECUTED`) both gate on an animation the hook node's own script
-  (`extracted\C1C\M01\zrdr\wv_tailhook.zrd.json`) runs. That script's `wv_initiate_hookup` sequence
-  `CALL_ANIMATION`s `wv_drop_copilot`, `wv_pickup_fassenb` and `wv_pickup_copilot` unconditionally,
-  every time the player docks; only each definition's own `ACTIVATION_PREREQUISITE`
-  (`REQUIRED [OBJECT_ACTIVE_LIST [[wv_tailhook, dropoff_node]]]` /
-  `[[wv_tailhook, pickup_node]]`) is authored to keep the wrong leg from running. CSVM drops that
-  shape entirely: the reader parse (`AnimDefs.cs`, the `ACTIVATION_PREREQUISITE` case) only reads
-  `OPTIONS [MINIMUM_TO_SATISFY, ANIMATION_LIST]` (the zeppelin hull-death form), and the compiled
-  parse (`CompiledAnim.cs Parse`, `activ_prereqs`) only reads entries shaped `{"Animation": ...}`,
-  silently dropping the `{"Parent": ...}` / `{"Object": ...}` node-active-state shape every dock,
-  pickup and panel prerequisite in the extracted data actually carries (the same shape censuses on
-  roughly 50 files: zeppelin gasbag panel finishers, `chuteman`'s drop-direction gate,
-  `pzep_cargo_point`'s cargo stop). `ZeppelinRuntime.cs` is the only consumer of the parsed
-  `PrereqAnims`/`PrereqMinToSatisfy` fields, so nothing enforces the node-active form anywhere. Net
-  effect: `wv_pickup_copilot` reaches `EXECUTED` on the FIRST docking already (`dropoff_node` active,
-  `pickup_node` not), so `OBJECTIVE15`'s `ANIM_STATE` condition is already true the moment it wakes,
-  on the second-docking nap chain, well before any real second hook-up. At the controls the same
-  unconditional calls show as a docking that ends too early and, a few seconds after the player
-  has released and flown off, a teleport back onto the hook: the wrong leg's own hook-up
-  choreography (`wv_pickup_*`, which puts the flown airframe back on the trapeze) runs on the
-  first docking because nothing enforces its `pickup_node` prerequisite.
-  *Fix shape:* parse the node-active `ACTIVATION_PREREQUISITE` shape on both paths (reader
-  `REQUIRED [OBJECT_ACTIVE_LIST [[path...]]]`; compiled `Parent`+`Object` entry runs, the `Object`
-  leaf's `active` field the required state) into a path/required-state list on `AnimDefinition`, and
-  enforce it generically at `AnimRuntime`'s `CALL_ANIMATION`/`Start` dispatch (silent skip when
-  unmet, mirroring the existing hull-death gate's silence). `ObjectiveGraph`'s own reading of
-  `ANIM_STATE` is correct against the decode and needs no change; the gap is entirely
-  `AnimRuntime`/`CompiledAnim`'s, and its blast radius (~50 defs across several chapters) makes it
-  its own item rather than a docking-local patch. *⚠ Traps:* `ObjectiveGraph.ScanForCompletion`
-  resolves one objective per tick round-robin (`BL-458`), so a completion can land frames after its
-  cause; that round-robin is not this bug's mechanism. Do not hardcode a CM06-specific exception in
-  `AnimRuntime`: the prerequisite is data-authored and general, and a docking-only patch would leave
-  the gasbag/cargo/chute defs carrying the same shape unfixed. *Cross-refs:* `BL-458`.
-
 - `BL-558` `[Research]` **A damaged AI flies a full evasive maneuver where the original may only set a
   flag.** *Evidence:* [`docs/org/aiControlLaw.md`](docs/org/aiControlLaw.md) records `obj+0xBA` as an
   **evade flag**, set to 1 by the damage handler `FUN_004b9bc0` when the steady-hand test fails
@@ -2986,20 +2959,32 @@ usual.
   primary 3 completed), so this is not an objective bug. *Cross-refs:* `docs/org/aiPilot.md` (the
   activation primitive and `FUN_00432010`).
 
-- `BL-641` `[Bug]` **CM18 (C4/M03) stalls the frame roughly 300 ms twice early in flight, on an
-  `ai_spawn` site, at the same sim frame and magnitude whether one human flies or four.**
-  *Evidence:* `analysis/campaign-coop-4p-perf/FINDINGS.md` (D33): `--det`'s deterministic clock
-  put the stall at sim frame 241 (~320 ms, threshold 45.7 ms) and frame 482 (~290-300 ms) in every
-  one of the four 1P/4P x cockpit/external launches measured, `HitchSidecar`'s own attribution
-  assigning essentially the whole frame to one `ai_spawn` sample (`attributed_ms` within 20 ms of
-  `frame_ms` both times). Identical across player counts, so this is a single mission-script/
-  generator spawn cost on the main thread, not something splitscreen's pane count multiplies.
-  *Fix shape:* find what CM18's roster/generator script does at those two sim instants (a
-  `WAKEUP_GENERATOR`/roster credit or similar bulk spawn) and see whether it can be spread across
-  frames; not this plan's job (D33 measures, it does not fix). *⚠ Traps:* the stall is far past
-  `HitchMonitor`'s grace window and reproduces to the same frame under `--det`, so it is not
-  workstation noise (`docs/verification.md` PERF-12/13). *Cross-refs:* `BL-434` (the per-viewport
-  splitscreen cost this same measurement pass separately profiled).
+- `BL-641` `[Bug]` **Introducing one AI aircraft mid-flight costs about 90 ms of main thread,
+  which is a hitch wherever a mission spawns one: CM18 (C4/M03) still stalls about 155 ms and
+  115 ms at sim frames 241 and 482 against a 46 ms trip threshold.** *Evidence:* the two CM18
+  stalls are `cargozep1`'s first two generator launches, on the authored `ind_period` 3 +
+  `wave_period` 1 cycle (4.017 and 8.033 sim s under `--det`'s 1/60 s step), each building a
+  `Cargo_params` Black Swan through `AiFlightAssembler.Assemble`. Sharing the generated shaders
+  across builders took the frames from 363/325 ms to 156/117 ms at 1P and 337/323 ms to 135/117 ms
+  at 4P, paired A/B, two kept launches a side. What remains is genuine per-aircraft construction,
+  attributed by stopwatch inside the `ai_spawn` scope: about 50 ms crash rig (template staging, the
+  wreck subtree, and 194 to 198 pre-warmed emitters at about 19 ms), 22 ms `FlightController.Bind`
+  (prop, wing-light and control-surface animators, collider), 10 ms model build, 5 ms loadout,
+  turrets and damage visuals. *Fix shape:* the crash rig is the only block that is not needed for
+  the aircraft to be observable, since `_worldRoot.AddChild(controller)` already runs before it, so
+  it can be built a frame or more later behind a "build it now if this aircraft dies first" guard.
+  That alone leaves about 90 ms, so reaching the threshold means spreading the whole assembly over
+  three or more frames. *⚠ Traps:* the stall is far past `HitchMonitor`'s grace window and
+  reproduces to the same sim frame under `--det`, so it is not workstation noise
+  (`docs/verification.md` PERF-12/13); the 4P threshold reads 75 ms rather than 46 ms because the
+  relative term rides a slower rolling median, so compare frames against their own printed
+  threshold. Do not re-derive the shader-compile term: it is gone, and PERF-22 records it. How
+  OFTEN CM18 pays this is a separate open question: `GeneratorCycle` switches the capacity check off
+  at authored `capacity <= 0` unless a `WAKEUP_GENERATOR` has armed it, CM18 authors none, so
+  `cargozep1` launches every 4 s up to `max_active` 10 unasked by any objective, and
+  `docs/formats/mission-entities/enemy-generators.md` "Capacity rule and limit" says the data does
+  not establish that reading. *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same
+  measurement pass profiled).
 
 - `BL-643` `[Bug]` **Returning from a guest flight check to P1 reopens campaign joining after FLY
   MISSION committed the field.** *Evidence:* `CampaignFlightField.Locked` is `Current > 0`, so
@@ -3105,8 +3090,17 @@ usual.
   `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
   PERF-21.
 
-- `BL-648` `[Bug]` **`world-turrets` fails after enough suites have run before it in one engine
-  process, so a full `RunTests.ps1` can report a red the suite does not own.** *Evidence:* the
+- `BL-648` `[Bug]` **A suite fails after enough suites have run before it in one engine process, so
+  a full `RunTests.ps1` can report a red the suite does not own.** *Two suites carry this now, on
+  the same signature: the gun fires and nothing lands.* **`ai-gunnery`** fails
+  `AiSuites.cs`'s assist control, `the same geometry flagged human is assisted onto the target
+  moved=0`, after exactly `puffer-wind, aim-assist, ordnance-end-conditions, ordnance-guidance,
+  turret-self-fire, c1-aa-guns, ai-spawn-jitter, ai-actor` in one process; it passes alone over five
+  runs with byte-identical dead-eye counts, passes on either half of that prefix and on any pair
+  from it, and growing the prefix one suite at a time flips it only at the eighth. It fails
+  identically on `main`, which is green in its own four-shard run only because its weighting puts
+  `ai-gunnery` in a different shard, so a branch that adds a suite inherits a red it did not cause.
+  **`world-turrets`** is the original instance. *Evidence:* the
   failing assertion is `AiSuites.cs:744`, `…with rounds striking it moved=0` — the armed
   `multiplayer1zep` rings acquire and fire (`ShotsFired > 0` passes on the line above) but the bait
   plane's combined armour/health never moves. It is deterministic on the sequence, not random:
@@ -3114,19 +3108,31 @@ usual.
   reproduces it every time, and the suite passes alone. **Accumulation, not one bad neighbour:**
   splitting that prefix in half and running either half ahead of `world-turrets` passes, so no
   single predecessor carries it and the mechanism needs the whole run-up. *Fix shape:* find the
-  process-wide state that survives a suite's world disposal and starves the turret's rounds — a
-  shared projectile pool whose slots are never returned is the leading candidate, since the
-  failure is "the gun fires and nothing lands" and `air-to-air` already exercises whole-pool
-  overflow. Instrument the live-round count at the top of `world-turrets` under both orders before
-  changing anything; if it is already at the cap, the reset seam is the fix and the suite needs no
-  edit. *⚠ Traps:* this is not the shard balancer — the same sequence fails under a single-shard
+  process-wide state that survives a suite's world disposal and starves the rounds. The pool
+  candidate this entry used to lead with is not supported by the code: `Projectile.cs` carries no
+  mutable static, and each suite holds its own `ProjectilePool`, so there is no shared slot table to
+  exhaust. **The better-supported candidate is `Utils/Rng.cs`,** which is a static class holding one
+  stream per subsystem and whose `Rng.Reset` is called only on session build
+  (`Session/GameSession.cs`, `Session/Launcher.cs`). The `--run-tests` harness completes every suite
+  inside one `_Ready`, so a suite inherits whatever stream position its predecessors left, and the
+  world-building suites among them reset the streams part-way through a shard, which is the shape of
+  a dependence that needs a whole run-up rather than one neighbour. `Rng`'s own summary states the
+  rule this breaks: only the draw order within a stream is significant, and that order is
+  deterministic only if every consumer runs its draws in the same sequence run to run. This is a
+  reading of the seam, not a measurement: instrument the stream position and the live-round count at
+  the top of the failing suite under both orders before changing anything. If it is the streams, the
+  fix is a per-suite reset in the harness, so a suite's result is a function of the suite. *⚠ Traps:* this is not the shard balancer — the same sequence fails under a single-shard
   run. Do not "fix" it by widening the damage assertion or by giving the suite its own shard: the
   false red is the symptom, and whatever leaks would then leak silently into every later suite in
   the same process. It is also order-fragile rather than fixed: adding a suite reshuffles the
   weighted shards and can hide it (it went green when `anim-activation-prerequisite`'s weight
-  landed), so a clean full run is not evidence it is gone. *Cross-refs:* `BL-584` (the other
+  landed), so a clean full run is not evidence it is gone. Expect a per-suite reset to move other
+  suites' pinned numbers, since a value recorded while a neighbour's draws sat in the stream was
+  recorded off a position the reset removes; re-pin those against the reset harness rather than
+  loosening them. *Cross-refs:* `BL-584` (the other
   harness-integrity item, a unit test that went red once), `analysis/engine-suite-weights.json`
-  (what decides the order).
+  (what decides the order), `Utils/Rng.cs`, `Testing/TestHarness.cs`,
+  `docs/plans/PLAN-campaign-coop.md` (which met two of `main`'s suites the same way).
 
 ## Misc
 

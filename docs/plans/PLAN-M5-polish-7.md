@@ -1,0 +1,1066 @@
+# Milestone 5 polish, run 7: the campaign plays clean
+
+**COMPLETE** (written 2026-08-30, all 10 items landed 2026-08-31). Indexed in
+[`plans.md`](plans.md). Read as history: the shipped behaviour is in
+[`docs/architecture.md`](../architecture.md) and [`docs/verification.md`](../verification.md), and
+each item's record is its landing commit's message. `A2`, `E41` and `E42` landed partial, and what
+each still owes is in its own rewritten `backlog.md` entry rather than here.
+
+This run takes ten open items that a player meets while flying the delivered campaign: the
+animation prerequisite the parse drops, the two cutscene handoffs that lose the aeroplane or the
+ground under it, CM10's attack balloons and their marker, the campaign's own hangar screen, and the
+three measured frame stalls. The selection criterion is "defects a campaign flight hits, plus the
+three stalls that hitch it" (Decision 1): open `[Bug]`, `[Feature]` and `[Perf]` items that are
+unblocked, are not `[Owed-playtest]`, and whose deliverable is a code change rather than an answer.
+Out of scope by that rule: every `[Research]` item (`BL-515`, `BL-558`, `BL-637`), every
+`[Owed-playtest]` and `[Tuning]` item, everything `[Blocked: ...]` (`BL-639`'s `CAP-47`,
+`BL-314`'s `PT-45`), the plan-sized or user-deferred items (`BL-150`, `BL-446`, `BL-463`,
+`BL-256`, `BL-299`), and the AI mode machine (`BL-523`, `BL-550`, `BL-565`, `BL-566`), which is one
+subject and deserves its own run rather than a slot here.
+
+**Every item was re-verified still-open against the record in this session**, by `git log --grep`
+on each id: every hit is a filing, a minting, a trace or a cross-reference, and none is a landing.
+That check also found `BL-621` (CM07's parachutist) already fixed and merged in `e6cc93b0`
+while its entry still stands in `backlog.md`; it is excluded here and the stale entry is A1's
+housekeeping. Two items were additionally checked against the code and say so in their Evidence
+(A1, B11). The other eight carry a `<TODO: re-verify still-open against the code>`.
+That `git log --grep` check was not enough for A1: the mechanism had already landed under two
+commits that name `BL-574`/`BL-575` and `BL-599` rather than `BL-525`, so A1's section below
+records a verification and a closure instead of the implementation it was written as.
+
+**Decode stays open per item.** Each item's Approach names the data file, the decoded rule or the
+instrument that settles it where one is known, and an implementer may take that lane instead of the
+code-side lead whenever the lead runs out. A decoded rule beats a plausible fix here, as in every
+prior run.
+
+## Milestone goal
+
+- A definition's authored `ACTIVATION_PREREQUISITE` decides whether its call answers, in both parse
+  paths, so a docking objective completes on the docking that earned it and a hook swings once.
+- A cutscene hands flight back the way it took it: the flown aeroplane is drawn from the episode's
+  external camera, the cockpit the pilot chose is back on the handoff, and the aircraft is above
+  the terrain rather than under it.
+- CM10's attack balloons come apart when they are shot, and the objective marker sits on the
+  balloon it names rather than on the water below it.
+- The campaign's Plane Construction screen shows the profile's own aircraft and offers buying and
+  selling, not Instant Action's build list and its verbs.
+- The campaign's three measured stalls are attributed and answered: CM18's two spawn stalls, CM11's
+  physics tick spikes, and the sustained rate drop CM09 and CM13 share.
+
+**No item here judges a constant at the controls.** Every `[Tuning]` and `[Owed-playtest]` item is
+deliberately out; those need the user flying rather than an implementer, and they are consolidated
+in [`playtest.md`](../playtest.md). Where a fix wants a confirming flight (A2, B11, B12, C21, C22),
+the code side lands first behind a headless assertion and the flight confirms it afterwards.
+
+## Decisions (2026-08-30)
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Which selection criterion | **Defects a campaign flight hits, plus the three stalls that hitch it.** M5 delivered the campaign, so its polish run is the walk itself: what a player sees go wrong, and where the frame stops. Seven slots to visible defects, three to the measured stalls. |
+| 2 | Items needing a human at the controls | **Excluded.** All nineteen `[Owed-playtest]` items are out, so every item here can be finished and verified by an implementer without stopping on the user. |
+| 3 | Items whose deliverable is an answer | **Excluded.** No `[Research]` item takes a slot. A polish run ends with the milestone visibly better, not with new documents. |
+| 4 | Weight | **Routine, with the decode lane kept open on every item.** No up-front data survey; each item names what in the mission data, the decoded record or the instrument settles it. |
+| 5 | Size and shape | **Ten items in five waves.** One wave per subject, so a wave can be taken whole by one agent, with the file contention between waves A and E written down rather than discovered. |
+
+## ⚠ Read this before implementing anything
+
+Two readings in this plan's neighbourhood are already dead. Do not re-derive them.
+
+| # | The wrong claim | How it died |
+|---|---|---|
+| 1 | CM11's physics step costs about 39 ms per frame and its sim runs at half wall time | Godot's `physics_ms` monitor holds the WORST tick of the last wall second and refreshes at about 1 Hz, so it was read as a per-frame cost. The bracketed instrument puts the mean tick at 1.81 ms and the sim/wall ratio at 0.9999 over 306 wall seconds (`docs/verification.md` PERF-21, and `git log --grep=BL-562`). E42 is about the spikes alone. |
+| 2 | Cutting ordinary allocation shrinks the settled GC pause | Halving the allocation rate moved the collection from gen0 every 13 s at 10 to 13 ms to gen1 every 31 to 36 s at 25 to 27 ms, leaving the pause per wall second unchanged at about 0.8 ms (`git log --grep=BL-536`). Relevant to E42 and E43 if either lands on the allocator: judge on pause per second, never on per-collection pause. |
+
+The evidence quality is uneven, which is the price of picking across the campaign rather than down
+one system. Budget by the grade, not by the item's apparent size.
+
+| Confidence | Items | What that means for you |
+|---|---|---|
+| **Traced to an exact mechanism in code or data** | A1, B11, C21, D31, E41 | Confirm the trace, then implement. |
+| **Direction sound, mechanism a candidate** | A2, C22, E42 | The symptom is measured and a candidate is named. Ruling the candidate out is a result. |
+| **Leads only, no mechanism yet** | B12, E43 | Budget for investigation; either may end in a disproof. |
+
+**⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, so never use it in a
+worktree session here; use a local commit or a file copy.
+
+## Ground rules
+
+- **Original-game data drives everything.** Read the reader/compiled JSON before writing a handler;
+  never guess a value. Inventing content is the trap this project falls into most often.
+- **Evidence is a lead to verify, not a finding to implement.** Confirm every claim against the
+  data/code before building on it; **a correct disproof that lands no code is a success here**, not a
+  failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
+  TUNE / lead-only).
+- **`PROJECT_CONTEXT.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
+  landed item; a landed item gets its record in the landing commit's message (`docs/HISTORY.md` is
+  frozen — never append) and is **deleted** from
+  `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
+- **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
+  rule that bites per item.
+- **Verify against a full 8-chapter `--freecam --chapter=<X>` regression** (zero errors, same
+  mesh/node counts unless the change is meant to add coverage) plus a targeted capture at the
+  location the report came from.
+- **Read the module's entry in `docs/architecture.md` before modifying it.** Dead ends are recorded
+  there precisely so they are not re-chased.
+
+## Checklist
+
+Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items land.**
+
+### Wave A — the dropped animation prerequisite
+
+1. ☑ `BL-525` The node-active `ACTIVATION_PREREQUISITE` shape reaches both parse paths and gates the call
+2. ◐ `BL-628` A campaign docking swings its hook once, not three times (not reproducible headless; owed at the controls)
+
+### Wave B — the cutscene handoff
+
+11. ☑ `BL-625` A cutscene entered from the cockpit frames the aeroplane, and gives the cockpit back
+12. ☑ `BL-633` CM15's handoff leaves the player above the terrain, not under it
+
+### Wave C — CM10's attack balloons
+
+21. ☑ `BL-629` A shot attack balloon bursts and falls instead of hanging in the air
+22. ☑ `BL-636` The Destroy Attack Balloon marker sits on its balloon, at any altitude
+
+### Wave D — the campaign's own hangar
+
+31. ☑ `BL-634` Plane Construction lists the profile's aircraft and offers buy and sell
+
+### Wave E — the campaign's frame stalls
+
+41. ◐ `BL-641` CM18's two spawn stalls are spread across frames (largest term removed, 363/325 ms to 156/117 ms; the residual is per-aircraft construction and still trips the detector, `BL-641` rewritten)
+42. ◐ `BL-562` CM11's physics tick spikes are attributed and removed (the cap-exhaustion premise is disproved and the recurring band is gone; three one-off ticks of 46 to 124 ms remain, `BL-562` rewritten)
+43. ☑ `BL-612` CM09 and CM13 hold their rate for the whole mission (the cost was `_Process` dispatch over thousands of dormant emitters, not the zeppelin; both sorties now hold the 8.33 ms presentation floor, `BL-612` deleted)
+
+## Dependency and parallelism notes
+
+A1 comes first in its wave and A2 depends on it: A2's most likely cause is the shape A1 parses, so
+A2 begins by re-flying a docking on A1's build and is closed as fixed, or re-opened as a separate
+fault, from what that shows. B11 and B12 both edit `Session/CutsceneController.cs` and run as a
+chain, never in parallel worktrees. C21 and C22 are the same mission and one sortie verifies both,
+but they touch different systems (the animation runtime and the marker layer) and can run in
+parallel. D31 is confined to `UI/` and contends with nothing.
+
+**File contention on `Mech3/AnimRuntime.cs` is settled.** A1 closed without touching that file, C21
+touched only three regions of it (the two `DestructibleRegistry.Register` call sites and a new
+private `DamageNodeOf` near `Targets`), and E42 ruled its candidate out and touched neither
+`AnimRuntime.cs` nor `Anim/NameResolver.cs`. Nothing in wave E holds either file.
+
+E41, E42 and E43 are one measuring session's worth of work and share the instrument setup
+(`--det`, `--perf`, `HitchSidecar`'s attribution). Taking the wave whole is cheaper than three
+separate arm-and-measure cycles, but the three fixes are independent once each is attributed.
+
+---
+
+# Wave A — the dropped animation prerequisite
+
+## A1 ☑ `BL-525` The node-active `ACTIVATION_PREREQUISITE` shape reaches both parse paths and gates the call
+
+**Outcome: the mechanism was already on `main`. This item is a verification and a closure, and it
+landed no engine change.** The section as written asserted that both parse paths drop the
+node-active shape and that nothing enforces it. That is false, and all three pieces are present:
+
+- `Mech3/AnimDefs.cs`'s `ACTIVATION_PREREQUISITE` case reads `REQUIRED` and `OPTIONS` carrying
+  `OBJECT_ACTIVE_LIST` / `OBJECT_INACTIVE_LIST` node paths into `AnimDefinition.PrereqNodes` as
+  `AnimNodePrereq(path, active, required)`.
+- `Mech3/CompiledAnim.cs` reads the `Parent` run closed by an `Object` leaf into the same list,
+  taking the required state from bit 0 of `active_raw`.
+- `Mech3/AnimRuntime.cs`'s `Start` refuses a definition whose REQUIRED entries are unmet
+  (`NodePrerequisitesMet`), in silence, counted as `Start(prerequisite unmet)`.
+
+The parses and the gate landed in `4a135e13` under `BL-574`/`BL-575`, and `e3d5de68` corrected the
+compiled state word under `BL-599`. Neither commit names `BL-525`, which is why a `git log --grep`
+on the id found only filings. The durable record is already written: `docs/architecture.md`'s
+`CompiledAnim.cs` and `AnimRuntime.cs` entries and `docs/formats/anim-definitions.md`'s
+`ACTIVATION_PREREQUISITE` row all state the two parses and the `Start` gate, so the only doc edit
+this item needed was replacing that row's estimated shape count with the measured one below.
+
+**What the data authors.** `extracted/C1C/M01/zrdr/wv_tailhook.zrd.json` carries four definitions
+with the node form. `wv_drop_copilot` requires `[wv_tailhook, dropoff_node]` ACTIVE;
+`wv_pickup_copilot`, `wv_pickup_fassenb` and `wv_setup_fassenb` each require
+`[wv_tailhook, pickup_node]` ACTIVE. `wv_initiate_hookup` calls `wv_drop_copilot`,
+`wv_pickup_fassenb` and `wv_pickup_copilot` in that order with no condition of its own, so the
+prerequisite is the whole fork. The mission's objectives open one node each: OBJECTIVE11's
+`WAKE_ANIM` is `activate_dropoff_node` (the first hook) and OBJECTIVE15's is `activate_pickup_node`
+(the second). The compiled copies agree, `pickup_cpilot-wv_drop_copilot.json` carrying
+`Parent wv_tailhook` + `Object dropoff_node` with `active_raw: 1`.
+
+**What the built world does.** `landings-docking-hold` drives that docking over C1C/M01's built
+world and now reads the fork. The world build leaves both nodes INACTIVE; the mission's own
+objective chain turns `dropoff_node` on while arming the row; and at the instant
+`wv_initiate_hookup` dispatches its legs the states read `wv_tailhook/dropoff_node=ACTIVE`,
+`wv_tailhook/pickup_node=INACTIVE`. `wv_drop_copilot` plays once, `wv_pickup_fassenb` and
+`wv_pickup_copilot` play zero times, and `wv_pickup_copilot` therefore does not reach `EXECUTED` on
+the first docking, which is the condition OBJECTIVE15 wakes on. Both paths resolve to nodes this
+world built, so the gate is not passing vacuously; that unresolved-path case, which
+`NodePrerequisitesMet` treats as met, was the surviving gap worth checking and it does not apply
+here. The suite's existing no-teleport-after-release check covers the other half of the reported
+symptom.
+
+**Blast radius, as a number.** Across every `mis_anim` and `cam_anim` archive, 437 definition files
+carry a node-state prerequisite, which is 112 distinct root-animation definitions; those hold 1028
+node entries, 784 of them REQUIRED and therefore enforced at `Start`. On the reader side 26 `zrdr`
+files carry the `OBJECT_ACTIVE_LIST` / `OBJECT_INACTIVE_LIST` spelling, 52 keys in all, most of them
+in `C2/M01/goosepath.zrd` (12), `C1C/M01/wv_tailhook.zrd` (4) and `C1/M02/hangar_drop.zrd` (4). The
+entry's "roughly fifty" was an undercount.
+
+**What landed.** `backlog.md` loses `BL-525` and, as this item's housekeeping, `BL-621`, whose fix
+merged in `e6cc93b0` and whose entry was never struck. `BL-628`'s and `BL-632`'s cross-references to
+the two deleted ids are rewritten, and the Gemini gasbag item's "the other prerequisite form, which
+is dropped" now says it is parsed and enforced. `Testing/LandingApproachSuites.cs` gains the
+assertions above.
+
+**Verify.** All eleven `landings-` suites PASS in 53.7s, engine errors clean, with
+`landings-docking-hold`'s new `fork:` lines reading `wv_drop_copilot ... built=True, at dispatch
+ACTIVE, played 1x` and both pickup legs `built=True, at dispatch INACTIVE, played 0x`. The nine
+suites the section named, `anim-activation-prerequisite`, `campaign-objectives`,
+`campaign-objectives-hud`, `campaign-cutscene`, `campaign-cutscene-skip`,
+`campaign-cutscene-ownership`, `campaign-zeppelins`, `campaign-airframe-swap` and
+`campaign-hangar-handover`, PASS in 41.7s, errors clean.
+
+Red before green was taken on the gate itself, by dropping the `return` from `Start`'s
+`NodePrerequisitesMet` refusal and leaving the counter. `landings-docking-hold` then FAILs on both
+new checks:
+
+```
+and a leg runs exactly when its own required state holds at the dispatch, so the docking's wrong leg stays off expected=0 actual=2
+and no definition 'wv_initiate_hookup' reaches plays twice in one episode, the hook legs included (rem_pas x3, deactivate_pickup_node x2, deactivate_dropoff_node x2) expected=0 actual=3
+```
+
+That run starts `wv_pickup_fassenb` and `wv_pickup_copilot` at t=7.32 with `pickup_node` INACTIVE
+and pushes the handoff from t=9.93 to t=15.95, which is the reported defect reproduced on demand.
+Note what else it produces: with the gate off, `rem_pas` plays three times in one docking. That is
+A2's shape, from the mechanism A2 named, and it is off on today's build.
+
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-1 tree: build clean, units 2683
+passed of 2683, 192 engine suites passed with engine errors clean, and 18 golden shots
+hash-identical. Exit 0 in 187.3 s, the engine stage over its 100 s budget at 125.3 s (awareness
+only).
+
+## A2 ◐ `BL-628` A campaign docking swings its hook once, not three times
+
+**Goal.** The opening camera shot of a docking cutscene shows one hook swing. The hook still engages
+correctly, which it does today.
+
+**Outcome: the candidate mechanism is ruled out and the repeat does not reproduce headless. The item
+stays open, owed at the controls.** No code changed for it.
+
+**The count, measured.** The item's own discriminator, one call site playing three times against
+three call sites playing once, is now a headless number in three shipped docking episodes, each
+driven over its own built world with every start counted by name:
+
+| suite | mission | hook definitions started | repeats in the whole episode |
+|---|---|---|---|
+| `landings-hookup-airframe` | CM01 (C3/M01), Balmoral | `pz_deploy_hook`, `hook_impact`, `player_extend_hook`, `bal_hook_extend`, once each | `random_prop` x12, `wing_lights_blink` x2 |
+| `landings-hookup-airframe` | CM01, Pirate Fighter | the same four with `pirate_hook_extend`, once each | `random_prop` x12 |
+| `landings-balmoral-dock` | CM02 (C3/M05) | the same four with `bal_hook_extend`, once each | `random_prop` x12 |
+| `landings-docking-hold` | CM06 (C1C/M01) | `player_extend_hook`, `blood_hook_extend`, once each | `wing_lights_blink` x2 |
+
+`random_prop` is the ambient prop dice and `wing_lights_blink` is a blinker loop; neither is in the
+docking definition's call closure, and no definition that closure reaches starts twice.
+
+**The call-site census.** Every archive that names `player_extend_hook` names it once: the
+definition itself in each chapter's `cam_anim`, one call in `player-hooked_to_klondike` per mission
+and one in `wv_tailhook-wv_initiate_hookup`. So the shared docking and the Workers' Voyage docking
+each reach the hook leg from a single call site, and the definition itself is eleven `If NodeActive
+n` branches each closed by `StopSequence`, so one airframe branch answers. `LandingApproachRuntime`
+cannot re-fire a row underneath a playing episode either: its `Tick` returns while a cutscene is
+playing, and a manual row latches until its condition stops passing.
+
+**Why A1 does not close it.** A1's mechanism is enforced on today's build, so the fault A1 names
+cannot be producing this. The disproof is two-sided: with A1's gate deliberately switched off,
+`landings-docking-hold` does show a definition playing three times in one docking (`rem_pas` x3),
+which is the shape A2 describes; with the gate on, as it ships, nothing in the closure repeats.
+
+**What is left.** The count is only observable at the controls. Fly a campaign docking with
+`.\RunGame.ps1 --campaign=<profile>:<slot>` and watch the opening shot alone, then read
+`.scratch/logs/fly-*.log` for the episode's starts. CM11 (C2/M02)'s closing autodock is the reported
+case; CM01 (C3/M01) is the earliest. The question the sortie has to answer is which of the four hook
+definitions a docking plays is the one seen three times, because a viewer counting swings is not
+counting definitions, and the headless count says the definitions each run once.
+
+**Model recommendation.** medium, unchanged. The remaining work is one sortie and whatever it names.
+
+**Verify.** `landings-docking-hold`, `landings-hookup-airframe`, `landings-balmoral-dock` and
+`campaign-cutscene` green (with the eight other `landings-` suites and the campaign-cutscene family,
+20 suites in all). The play-count assertions above are permanent, so a regression that introduces
+the repeat fails a suite rather than waiting for a sortie. At the controls, still owed: any campaign
+docking watched through its opening shot alone, one hook swing, and the hook still engages.
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-1 tree: build clean, units 2683
+passed of 2683, 192 engine suites passed with engine errors clean, and 18 golden shots
+hash-identical. Exit 0 in 187.3 s, the engine stage over its 100 s budget at 125.3 s (awareness
+only).
+
+**⚠ Traps.** Do not silence this by latching "already played" on the runtime. A repeat that a
+definition authors is data, and a latch would hide the same defect wherever else it happens. The
+player-visible hook engagement is correct today and must stay correct. Do not re-open this against
+the node-state prerequisite; it is parsed and enforced, and the suites above assert the count.
+
+---
+
+# Wave B — the cutscene handoff
+
+## B11 ☑ `BL-625` A cutscene entered from the cockpit frames the aeroplane, and gives the cockpit back
+
+**What landed.** The presentation code writes the flown aircraft's own visibility at both edges.
+`FlightController.SetViewedFromOutside(bool)` is the new seam: on it calls the crash cut's own
+`LeaveFirstPerson`, so the airframe is drawn and the interior pass is deactivated; off it re-applies
+`CockpitVisibility.Rules` for the view the pilot still has SELECTED, re-syncs the pass and restores
+`_panelShown`. `CutsceneController.ApplyPresentation` calls it for every human beside `CameraOwned`,
+so both exits (the definition ending and a player's skip) go through it, since both reach the handoff
+code through `Restore`. A crashed pilot is skipped on the restore leg: `_Process` writes nothing to
+the camera while crashed, so a restore there would hold the interior over the crash camera until the
+respawn. No view mode is written and no ground clamp of any kind was added.
+
+**Evidence, re-verified against today's code.** The trace held. `ApplyPresentation` set `CameraOwned`
+and nothing else about visibility; the `Cockpit?.Apply` / `CockpitPass?.Sync` pair lives only in the
+final arm of `FlightController._Process`, which `CameraOwned` short-circuits, so the last flying
+frame's `Shown(Interior: true, Body: false, ...)` stood for the whole episode. `git log --grep=BL-625`
+returned only the two filing commits, no landing. The plan's line numbers were stale again by the
+time the item ran, which is why the members were re-located by name rather than by line.
+
+**Red before green, in two stages.** The assertion was added first and the whole item seen red:
+`campaign-cutscene` FAIL with `so the code draws the airframe itself, and the episode's camera frames
+an aeroplane rather than nothing (the definition ending leg)` and its interior-pass twin, on both the
+definition-ending and the skip leg. Adding only the presenting half turned those green and left the
+restore half red: `…and puts the cockpit seat back in the cockpit it chose, rather than leaving it
+outside its own aeroplane` and `…with its interior pass drawing again`. Adding the restore turned the
+suite green. Each half was therefore seen able to fail on its own.
+
+**Verify.** `campaign-cutscene` carries the new check (`PresentingFramesTheAirframe`): two real
+human seats built with `cockpitInterior: true` and their own `CockpitOverlay`, one pinned to
+`PilotViewMode.Cockpit` and one to `Chase`, driven through a whole episode twice, once ended by the
+definition and once by a skip. It asserts the entering state, then the airframe drawn with the
+interior and its pass off while presenting, then both back on the hand-back, with the chase seat
+untouched throughout and neither seat's selected view moved.
+
+Targeted results, all on this worktree with `CSVM_DATA_ROOT` set:
+
+- `-Filter cutscene`: 5 passed, 0 failed (`campaign-cutscene`, `cutscene-letterbox`,
+  `campaign-cutscene-skip`, `campaign-cutscene-ownership`, `campaign-coop-cutscene-fullscreen`),
+  engine errors clean.
+- `-Filter cockpit`: 3 passed, 0 failed (`cockpit-interior`, `cockpit-overlay-pass`,
+  `cockpit-panel-staging`).
+- `-Filter death`: 6 passed, 0 failed, which is the crash cut's own coverage past the new guard.
+- `-Filter intro`: 2 passed. `-Filter coop`: 7 passed. `-Filter landings`: 11 passed.
+  `-Filter swap`: 2 passed.
+- `.\RunTests.ps1 -Quick`: units 241 passed of 241, engine 13 passed of 13, engine errors clean.
+
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-1 tree: build clean, units 2683
+passed of 2683, 192 engine suites passed with engine errors clean, and 18 golden shots
+hash-identical. Exit 0 in 187.3 s, the engine stage over its 100 s budget at 125.3 s (awareness
+only).
+
+**Owed at the controls.** The flight that confirms the picture is not answered by a headless
+assertion and is owed as its own item: CM01 (C3/M01)'s docking episode, `.\RunGame.ps1
+--campaign=<profile>:0`, cycle to the cockpit view (F8) before the docking fires and watch it
+through, then repeat with the skip key, which takes the other restore path.
+
+**⚠ Traps that still bind.** Do not write `ViewMode = Chase` for the duration: `MirrorCamera` owns
+every rig camera's pose outright while presenting, so the view mode buys nothing there, and the mode
+left behind is what the hand-back reads. The interior lives outside `PlaneModel` under `CockpitPass`,
+so un-hiding the airframe does not take the panel off screen; the pass has to be deactivated and
+re-synced by name. An intro cutscene drawing no aircraft is a different thing: those definitions
+deactivate the `player` node themselves in `ApplyOutOfFlight`.
+
+## B12 ☑ `BL-633` CM15's handoff leaves the player above the terrain, not under it
+
+**What landed.** `CutsceneController.ReplacePlayer` declines a `player` marker still parked where the
+build and every handoff leave it, under the world root at identity. The new predicate is
+`MarkerParked()`, and nothing else changed: no ordering moved, no clamp of any kind was added, and a
+definition that does pose the marker re-places the pilot exactly as before.
+
+**The mechanism, measured.** The episode is the mission's paratrooper drop, `balmoral-drop_paratroopers`,
+the only definition in C2/M05's own `cutscenes\` directory that raises the re-placement callback. It
+names three nodes, `cargozep2`, `balmoral` and `camera1`, and no `player` at all, yet its Initial
+sequence raises 951 straight after the handoff code 1. CSVM stands a bodiless marker in for the
+original's `player` node, built under the world root at identity, so the callback read the world
+origin and flew the aeroplane there. Over the built C2/M05 world with the pilot flown in beside the
+zeppelin the drop is staged around:
+
+| | pose | surface under that XZ |
+|---|---|---|
+| the drop found the pilot at | (-2651.4, 595.0, -12270.2) | 170.6, so 424.4 m of clearance |
+| the marker when 951 landed | (0, 0, 0) | — |
+| the handoff released them at | (0, 0, 0) | 56.5, so 56.5 m UNDER the ground |
+
+12567.5 m of teleport, and under a single-sided collider, which is exactly the reported symptom. The
+decode settles what the right answer is rather than leaving it to judgement: the original's case
+`0x3b7` reads the player vehicle's OWN scene node, so a definition raising 951 without posing that
+node writes the aeroplane's pose back onto itself and changes nothing but the release speed
+([`cutscenes.md`](formats/anim-definitions/cutscenes.md), "The re-placement code 951"). Two shipped
+definitions carry that shape, this one and C5/M04's `stihellhound_eg0-milesdrop`, so the fix answers
+CM24 as well.
+
+**Both of the leads handed over from B11 are ruled out.** `_stagedFrom` is the aircraft's own
+transform at staging, not a marker-relative pose, and the restore leg through code 1 returns it
+correctly; the wrong pose arrives after that, from 951. And the RESET_STATE reading is not available
+to this episode at all: `drop_paratroopers` authors no `RESET_STATE`, so `ResetStateAuthors` raises
+nothing, and its 951 is authored in the definition's own timeline and raised during play, long
+before `Restore` reparents anything. `BL-610`'s reparenting is not in play either, since nothing in
+this definition ever touches the marker.
+
+**Red before green.** The assertion was written first and run against unchanged code, failing on both
+halves: `the handoff leaves the aeroplane where the drop found it (12567.5 m away), since the
+definition posed no 'player' node to re-place it on` and `and above the surface under it, rather than
+through the single-sided terrain the pilot cannot climb back out of`. Adding the guard turned both
+green, and neutralising the guard again (`if (MarkerParked() && false)`) reproduced the same two
+failures, so the suite is failing on the fix rather than on the weather.
+
+**Verify.** The new suite `cutscene-handoff-unposed` drives the definition over C2/M05's BUILT world
+with the colliders up, reads the definition's own node list to prove this is the unposed case, and
+measures the surface under both poses by raycast rather than assuming a ground height.
+
+Targeted results, all on this worktree with `CSVM_DATA_ROOT` set:
+
+- `-Suite cutscene-handoff-unposed`: FAIL before the fix, PASS after, engine errors clean.
+- `-Filter cutscene`: 6 passed, 0 failed, engine errors clean.
+- `-Filter dropoff`: 3 passed (`dropoff-chuteman-stage`, `dropoff-placement`, `campaign-coop-dropoff`).
+- `-Filter landings`: 11 passed, including `landings-docking-hold`, which asserts the released
+  aeroplane flies out of the marker pose the re-placement read.
+- `-Filter intro,coop,hangar,swap,wingwalk,campaign-loop`: 17 passed, 0 failed.
+- `-UnitFilter SuiteCatalogTests`: 6 passed. `.\RunTests.ps1 -Quick`: units 241 of 241, engine 13 of
+  13, engine errors clean.
+
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-2 tree, with current `main` in:
+build clean, units 2694 passed of 2694, 194 engine suites passed with engine errors clean, and 18
+golden shots hash-identical. Exit 0 in 203.1 s, the engine stage over its 100 s budget at 140.1 s
+(awareness only).
+
+**Suite count.** The catalog is 193; `CSVM.Tests/SuiteCatalogTests.cs` (192 → 193) and
+`analysis/engine-suite-weights.json` were updated with it.
+
+**Owed at the controls.** CM15 flown through the paratrooper drop and then flown on, which is the
+picture no headless assertion gives.
+
+**⚠ Traps that still bind.** Do not add a ground clamp to the handoff. It would hide a wrong restore
+everywhere else it happens, and it would fight an episode that legitimately ends below a surface. The
+single-sided colliders that make the symptom unrecoverable are a separate property, recorded from the
+air side in `BL-566`. Do not extend the same guard to `StagePlayerAircraft`: an unposed marker stages
+the airframe at the origin for the episode's length too, but that is self-correcting at the handoff
+and undrawn behind the presentation, while the codes arrive before a definition's own reparent, so
+guarding the staging would defer it by a frame for every intro that does pose the node.
+
+---
+
+# Wave C — CM10's attack balloons
+
+## C21 ☑ `BL-629` A shot attack balloon bursts and falls instead of hanging in the air
+
+**Outcome: the animation runtime was never the fault. `lifefall11` was not running at all, because
+the weapon hit was reaching the lifeboat's definition instead.** The fix is in the destructible
+registry's node mapping and touches no dispatch or motion code.
+
+**The eight-motion census, measured first.** The plan's own instrument answered the question it was
+written to answer, and answered it "all eight". The invocation, which the section left as a TODO, is
+`.\RunProbe.ps1 --anim-lab --chapter=C1 --mission=M05 --play-anim=lifefall11 --debug-anim
+--frames=400 --screenshot=<path>`: `--play-anim` resolves the definitions carrying that
+ANIMATION_NAME and starts them exactly as bootstrap pass 3 starts a startanim, and `--debug-anim`
+prints a `launch seed` line per ballistic launch and a pose line per live motion each second. Over
+C1/M05's real world all eight start and all eight move: `lifeboat`, `lifeballoon` and `b_part1`
+through `b_part6`, `8 ballistic launch(es)`, the pieces travelling 3 to 9 m in the first second and
+the envelope descending under `GRAVITY -5`. Nothing resolves to nothing, so `BL-618`'s shape does not
+apply. Two corrections to the section's own prose: the eight motions target `lifeballoon` and
+`b_part1`–`b_part6`, not `b_dbase`, and the sixth of them is `b_part6` rather than a `b_dbase` entry.
+
+**What was actually wrong.** `lifesaverNM` carries **two** compiled destructible pools, both
+anchored on the group node: `lboat_destructionNM` (`HEALTH 40`, `ANIMATION_ROOT_NAME lifesaverNM`,
+the lifeboat's own explosion) and `lifefallNM` (`HEALTH 60`, `ANIMATION_ROOT_NAME lifeballoon`, the
+balloon's burst). `DestructibleRegistry` kept ONE authoritative instance per anchor node, so the
+first of the two to register owned every hit on the whole assembly and the other could not be
+damaged through the hit path at all. `lboat_destructionNM` registers first, so every shot at the
+balloon spent the boat's 40 HP; that definition authors no visible death of its own, so
+`ApplyDeathSwap` fired its RESET-derived healthy→destroyed swap and the destroyed balloon stood
+where it was killed. Everything the report listed as working was that swap.
+
+**The decoded rule.** `crimson.exe`'s animation-definition loader `FUN_005230d0` registers the
+weapon-hit handler with `FUN_005abbf0(record, *(record + 0x6c), …, 0x004e7220)`. `def+0x6c` is the
+**animation root node** (`ANIMATION_ROOT_NAME` resolved inside the definition's own subtree, falling
+back to `def+0x48`, the NAME anchor) and not the anchor, and `FUN_005abb20` hangs the handler off a
+per-node list at `node+0xbc`, so several definitions register on one object without displacing each
+other. A hit therefore belongs to the definition whose animation root covers the piece that was
+struck. Written up in `docs/formats/destructibles.md` ("Which node takes the hit"), with the two
+registration functions added to `docs/org/sequences.md`'s function map.
+
+**The fix.** `DestructibleRegistry.Register` takes the pool's damage node, and `AnimRuntime` fills
+it from `DamageNodeOf(def, anchor)`, the def's `ANIMATION_ROOT_NAME` resolved through its symbol
+table strictly inside that anchor. A pool claims its damage node outright and its anchor only as a
+fallback, and an own-root claim outranks an anchor claim in either registration order. The anchor
+claim is kept rather than dropped for the original's one-node-only rule, because most defs root on a
+node their own death then hides and a hit on the wreck must still find the pool that owns it.
+`Instance.Anchor` is untouched, so `ANIM_HEALTH` evaluation, C22's marker layer and the AI target
+pool all read exactly what they read before.
+
+**Blast radius, as a number.** Of the install's 2,603 destructible defs, exactly **10** `NAME` groups
+hold defs with different animation roots: CM10's nine `lifesaverNM` sites, and C2's `sghangar`, whose
+`tbridg1_fire` (`HEALTH 15`, root `tarzan_bridg1`) and `tbridg2_fire` (`HEALTH 5`, root
+`tarzan_bridg2`) had the same collision and are now separated the same way (confirmed over the built
+C2 world with `--debug-damage=node=sghangar`). Every other pool's damage node is its anchor or a node
+no other pool competes for, so nothing else can change.
+
+**Verify.** New suite **`campaign-balloon-death`** over C1/M05's built world: all nine sites carry
+both pools at 60 and 40 HP, a hit on each site's `healthy_balloon` resolves to that site's
+`lifefallNM` and a hit on its `lifeboat` to `lboat_destructionNM`, the two-pools-one-anchor rule
+holds in either registration order over a two-node stand-in, and one site killed through `DamageAt`
+flies all six pieces, drops the envelope, drops the boat and leaves `healthy_balloon` hidden, which
+is what retires the objective. The suite wires `ContactMask` itself: the lifeboat's drop is an
+untimed launch only a contact tier can end, so a mask-free world poses it at rest.
+
+Red before green, taken by reverting the `DamageNodeOf` argument at bootstrap pass 1's `Register`
+call and leaving everything else in place:
+
+```
+FAIL 'lifesaver11': the balloon answers to lifefall11 and the lifeboat to lboat_destruction11 (got lboat_destruction11 / lboat_destruction11)
+FAIL and on every one of them a hit on the balloon reaches the balloon's own pool rather than the lifeboat's expected=9 actual=0
+FAIL every bursting piece leaves its rest pose, so the death is flown rather than swapped expected=6 actual=0
+FAIL and the balloon itself falls out of the sky rather than hanging where it died (fell 0.0 m)
+```
+
+with the artifact reading `pieces flew [b_part1 0.0 m, … b_part6 0.0 m]; balloon fell 0.0 m; boat
+fell 0.0 m; 'healthy_balloon' visible=False`, which is the reported defect reproduced on demand: the
+swap and nothing else. GREEN after: `pieces flew [b_part1 3.2 m, b_part2 6.2 m, b_part3 5.8 m,
+b_part4 4.1 m, b_part5 8.1 m, b_part6 8.6 m]; balloon fell 2.6 m; boat fell 6.2 m`. The
+either-order arm was separately seen able to fail with its own claim precedence disabled:
+`FAIL two pools on one anchor route by their own root whichever order they register in (inner first:
+on_inner / on_inner)`.
+
+Targeted results on this worktree, `CSVM_DATA_ROOT` set and the suite count printed non-zero:
+`-Suite campaign-balloon-death` **1 passed, 0 failed** in 3.79 s, engine errors clean; the whole
+engine tier `-SkipUnits -SkipGoldens` **193 passed, 0 failed, 0 skipped**, engine errors clean, in
+123.1 s over 4 shards (`campaign-objective-markers`, `campaign-objectives`,
+`campaign-balloon-marker`, `campaign-race-chain`, `destructible-census`, `carried-state-silent` and
+`start-state-swap-pool` among them); the unit tier `-SkipEngine -SkipGoldens` **2694 passed of
+2694**; the golden stage `-SkipUnits -SkipEngine` **18 shot(s) hash-identical**, `c1-debris-rest`
+and `c1-destroy-effects` included, which is the pixel side of the same registry.
+`.\CheckCommentCaps.ps1 -Summary`: every block within cap, and `dotnet format --verify-no-changes`
+clean.
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-2 tree, with current `main` in:
+build clean, units 2694 passed of 2694, 194 engine suites passed with engine errors clean, and 18
+golden shots hash-identical. Exit 0 in 203.1 s, the engine stage over its 100 s budget at 140.1 s
+(awareness only).
+
+**Owed at the controls.** CM10, shoot one balloon and watch what is left in the air: the envelope
+falls and fades, six pieces fly and trail, the lifeboat drops and splashes, and nothing stands still.
+This is the same sortie C22 already owes, and it rides this item's closure rather than a new id.
+
+**⚠ Traps that still bind.** Do not delete the balloon on death; the pieces are authored to fall and
+fade and the wreck belongs there. Do not give the balloon its own anchor node to separate the pools:
+the anchor is what `ANIM_HEALTH`, the objective marker and the AI target pool key on, and moving it
+would take C22's decoded bounding-box anchor with it. The lifeboat's own drop has no `RUN_TIME`, so
+it needs a contact tier to end it; any test world that drives this death must wire `ContactMask` or
+the boat half is silently posed at rest.
+
+## C22 ☑ `BL-636` The Destroy Attack Balloon marker sits on its balloon, at any altitude
+
+**Goal.** CM10's Destroy Attack Balloon marker stands on the balloon it names, at whatever altitude
+the balloon is at, and retires with the balloon rather than following the lifeboat that drops out of
+it.
+
+**Still open, confirmed against the code.** `ObjectiveSites.SiteAnchor` kept `GlobalPosition` for any
+node standing off the world origin, and a probe over the built C1/M05 world put the offered
+`lifesaver11` site at `(-10075, 0, -2375)`, the water, with the balloon at `(-10075, 16.4, -2380.1)`
+and the lifeboat's own geometry topping out at y 4.1. `BL-602`'s origin-standing branch never fired
+here, so nothing on main had already answered this.
+
+**What the mechanism turned out to be.** The plan's candidate ("a marker anchored on the group") is
+right, and the reason is the group node's own origin rather than its mesh centre. Each
+`lifesaverNM` is a direct child of `world1` carrying the no-transform `"Initial"`, flown to the water
+by the `ObjectMotionSiScript` on the inner `lifesaver` node, with `lifeballoon` hung
+`(0, 16.393, -5.07)` above that origin and `lifeboat` sitting on it. Reading the group's position
+therefore reads the boat's waterline exactly.
+
+**The decoded rule replaced the heuristic.** `crimson.exe` publishes a mission structure's targeting
+position from vtable `0x00608848` slot 0, which is `LEA EAX, [ECX + 0x74]` at `0x004a36e0`, a cached
+vector. `FUN_004a2570` fills `+0x74` from `FUN_004cf2c0(node)`, which reads the node's active
+bounding box (`FUN_004cd960`, the six floats at `node + 0x70`) and takes its midpoint
+(`FUN_004d8b10`), in the frame `FUN_004cef20` accumulates up the parent chain; `FUN_004a2730`
+recomputes it every frame for a structure whose `+0x8f` moving flag is set. So the original marks a
+site at **the centre of its node's bounding box**, never at the node's origin. `SiteAnchor` is now
+that one rule, and the `HasOwnMesh` short-circuit, the origin gate and `BL-602`'s `door`-named leaf
+rule are gone with it. The decode is written up in `docs/org/targeting.md` ("Where a mission
+structure is") with its four addresses added to that page's function map.
+
+**The port reproduces the authored bbox exactly.** The world AABB of `lifesaver11`'s built meshes
+centres at `(-10075, 11.667011, -2376.3086)`; the gamez node's authored `child_bbox` (its
+`active_bbox` is `Child`) spans y −1.4109578 to 24.744844, x ±13.761361 and z −21.070253 to
+18.45244, whose centre is `(0, 11.6669, −1.3089)` off a group origin at `(-10075, 0, -2375)`. The two
+agree to 1e-5, which is the check that the built subtree stands in for the original's active bbox.
+
+**What moved elsewhere.** C2/M03's `sghangar` improves: its anchor goes from the door-leaf pair at
+`z −5623.9`, 129 m from `dz1`, to `z −5496.6`, **2.5 m** from `dz1`, so `campaign-race-chain`'s 150 m
+assertion holds far more comfortably than before. C1/M04's `piratezep/rock_zeppelin` moves 64 m onto
+the hull's own geometry, and `campaign-objective-target-path`'s exact-equality assertion was rewritten
+to the anchor plus a new check that the site stays more than 500 m from every other `rock_zeppelin`,
+which is what that suite was really discriminating. C1/M05's `rch_hull` moves 22.6 m along the
+hospital ship and 13.3 m up; C1/M04's `ap_transmitter` moves 22 m up onto its tower.
+
+**The walk costs, and where the cost went.** The union is taken over the built subtree once per site
+per pane per frame, so it was measured rather than assumed (1000 calls on the built world, stopwatch
+in the suite, instrumentation removed afterwards). A 380-mesh site (`piratezep/rock_zeppelin`, the
+worst shipped case) cost **1.9 ms** per call with the obvious `GetChildren()` recursion, because that
+call allocates a Godot array per node; walking by `GetChildCount`/`GetChild` instead costs **0.50 ms**
+for the same result, and `lifesaver11`'s 43 meshes cost about 0.024 ms. The indexed walk is what
+landed. A cached mesh list (built once, live transforms merged per frame) measured 0.26 ms on the
+same 380 meshes, so there is another 1.9x available if a pane count ever makes it matter.
+
+**Files.** `CSVM/src/Session/ObjectiveSites.cs` (the rule), `CSVM/src/Testing/CampaignMarkerSuites.cs`
+(the new suite plus the rewritten path assertion), `CSVM/src/Testing/SuiteCatalog.cs`,
+`CSVM.Tests/SuiteCatalogTests.cs` (191 → 192), `analysis/engine-suite-weights.json`,
+`docs/architecture.md`, `docs/org/targeting.md`.
+
+**Verify.** New suite `campaign-balloon-marker`: the shipped table describes nine attack-balloon
+sites and nine objectives each retire their own site on its own `healthy_balloon`; over the built
+world the marker stands clear of the lifeboat, flies with the whole assembly and rises when the
+balloon alone rises, and retires with the balloon while the boat is still afloat. Seen RED first with
+the old `SiteAnchor` in place, `the marker stands clear of the lifeboat below it (0.0 m against the
+boat's 4.1 m)`, the artifact reading `marker y 0.0 -> assembly climbed 0.0 -> balloon alone climbed
+0.0`; GREEN after, `marker y 11.7 -> assembly climbed 311.7 -> balloon alone climbed 161.7`.
+Targeted runs on this tree, `CSVM_DATA_ROOT` set and the suite count printed non-zero each time:
+`-Filter campaign` **40 passed, 0 failed**, engine errors clean (`campaign-race-chain`,
+`campaign-objective-markers`, `campaign-objective-target-path`, `campaign-objective-labels`,
+`campaign-objectives` and `campaign-objectives-hud` among them); `-Filter target` **8 passed, 0
+failed**; `-Suite hostile-marker-hud` **1 passed**; `-UnitFilter SuiteCatalogTests` **6 passed**;
+`-Quick` **241 units and 13 engine suites passed, 0 failed**, engine errors clean.
+`.\CheckCommentCaps.ps1 -Summary`: all comment blocks within cap.
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-1 tree: build clean, units 2683
+passed of 2683, 192 engine suites passed with engine errors clean, and 18 golden shots
+hash-identical. Exit 0 in 187.3 s, the engine stage over its 100 s budget at 125.3 s (awareness
+only).
+
+**Follow-up proposed, not minted.** A site's anchor is still recomputed once per pane, so a four-pane
+co-op CM10 with nine balloons alive pays about 0.86 ms a frame and a four-pane C1/M04 about 2.0 ms.
+Computing each site's anchor once per frame and handing every pane the same value, with the cached
+mesh list above, would take both under 0.3 ms. Worth its own `[Perf]` entry alongside Wave E.
+
+**Still owed at the controls.** CM10 with a wave in frame at two different heights, to judge whether
+the assembly's bbox centre (11.7 m up, among the ropes under the envelope) reads as a marker on the
+balloon. It is where the original puts it, so a different answer would be a deliberate divergence
+rather than a bug. The same sortie is owed on C21, whose own confirming flight it also is.
+
+**⚠ Traps.** Do not offset the marker upward by a constant, and do not anchor on the balloon node
+itself: the decode says bounding-box centre, and a rule that follows one authored child would put a
+zeppelin's marker on one of its fourteen engines. `campaign-objective-target-path` and
+`campaign-race-chain` both assert world positions, so any further change to `SiteAnchor` has to be
+checked against them.
+
+---
+
+# Wave D — the campaign's own hangar
+
+## D31 ☑ `BL-634` Plane Construction lists the profile's aircraft and offers buy and sell
+
+**Landed.** Ownership now separates the campaign hangar from Instant Action's, over the one
+`user://Planes/` build store both doors still write into.
+
+**Re-verified still open against the code first.** The two cited line numbers had drifted, the
+mechanism had not. `Saved = store.List()` was exactly `UI/HangarFlow.cs:150` as filed;
+`HangarCampaignContext`'s `Purchase`/`Sell`/`CanSell`/`SellPrice` were at `:98-122` as filed; the
+campaign door is `LaunchMenu.OpenCampaignHangar` at `:1967-1981`, not the filed `:1866-1869`, and it
+does hand the flow `CustomPlaneStore.UserPlanes()` unfiltered. The money half (`Commit` debiting
+through `Purchase`, `DeleteSaved` crediting through `Sell`, the special-plane and two-plane-floor
+refusals) had already landed with PLAN-hangar's B13, so the open half was the listing and the verbs.
+
+- **The roster.** `HangarFlow.ReadRoster` puts `HangarCampaignContext.OwnedBuilds()` in `Saved` over
+  a campaign flow and the whole directory over the two wallet-free doors. `OwnedBuilds` walks
+  `Profile.Planes` in the ownership list's own order and resolves each record to its stored build,
+  else the reward aircraft's own award template (`CampaignProgression.BuildForOwned`, the order
+  `LaunchMenu`'s launch path already resolves in), else the campaign's starting-Devastator spec. The
+  two seeded starters are never hangar-built, which is why that last arm exists; `SellPrice` now
+  shares the same resolution instead of carrying its own copy of it.
+- **The verbs.** `HangarPlaneSelectionPage` reads as the original's INVENTORY (langui 1257) over a
+  campaign flow: a `Buy a New Plane` row detailing the wallet (1149), one row per owned plane with
+  its airframe short name (3020 + id) and value (1258), and a trailing `Sell a plane` opening the
+  same two-stage confirm list, whose rows read `Sell <name>` and carry either the price or the
+  refusal a press would meet. Instant Action's rows are untouched.
+- **An owned row is inert over a campaign flow.** The decoded economy has no partial upgrade: a
+  build is paid in full and a sale credits in full, so editing in place would charge again and
+  strand the old plane's value. The sell stage is what acts on an owned plane.
+- **Two holes the filter would otherwise have opened.** `IsNameTaken` spans the whole build
+  directory rather than the visible roster, so a campaign build cannot silently overwrite an Instant
+  Action plane of the same name (`HangarNamePage`'s roller and its overwrite warning both ask
+  through it). `Purchase` updates an existing ownership record rather than adding a second one for a
+  name already owned, since the commit writes one file per name and a duplicate record would let one
+  sale remove two.
+- **Fixed in passing:** `DeleteSaved`'s reward-aircraft refusal read langui 704 raw, so with the
+  real table loaded it reached the pilot as `This %1!s!, %2!s!, cannot be sold.`. It is composed now
+  through `CannotSellText`, with the airframe short name and the plane name filled in.
+- **Decode recorded.** [`docs/org/hangar.md`](org/hangar.md) gained "The inventory screen's own
+  strings": the screen's `langui` symbols (1257, 1258, 1256, 1003, 1139, 1149, 204, 702, 703), which
+  of them carry arguments and are unusable raw (700 and 704, with 700's inline bold markup), and
+  that Export is a campaign verb Instant Action does not have.
+
+**Verify.** Red before green, seen by reverting the three production branches in place
+(`Saved = stored`, the campaign flag in `RowText`, the inert-row arm in `Accept`): 8 of the 17
+`HangarCampaignContextTests` failed, including
+`Assert.Equal() Failure: Strings differ / Expected: "Sell a plane" / Actual: "Delete a saved plane"`
+and `AFreshProfileListsExactlyItsTwoStarters` with an empty actual collection. `Purchase`'s
+duplicate guard was reverted separately, failing
+`RebuildingAnOwnedNameKeepsOneOwnershipRecord` with `Expected: 2 / Actual: 3`.
+
+Green: `HangarCampaignContextTests` 17/17 (the six behaviours the item names, plus the inert row,
+the cross-mode name collision and the duplicate-ownership guard); the full unit tier 2683/2683;
+`CustomPlaneStoreTests` 16/16 including a new `PathFor_KeepsEveryNameInsideTheStore`; engine
+`-Filter hangar` 3/3 (`hangar-door-wake`, `landings-hangar-drop-gate`,
+`campaign-hangar-handover`), errors clean; engine `-Suite campaign-persistence` 1/1, errors clean.
+`CheckCommentCaps.ps1` clean over every changed file.
+
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-1 tree: build clean, units 2683
+passed of 2683, 192 engine suites passed with engine errors clean, and 18 golden shots
+hash-identical. Exit 0 in 187.3 s, the engine stage over its 100 s budget at 125.3 s (awareness
+only).
+
+**⚠ Traps.** Do not give the campaign its own build directory to get the separation. The two starters
+a fresh profile is seeded with are never hangar-built and have no entry there at all, which is why
+`SellPrice` falls back to the campaign's own Devastator spec; a per-mode store would strand them. The
+delete row is not the sell row: deleting a build must not credit the wallet.
+
+**Still open, and deliberately not taken here.** The screen has not been seen at the controls, so a
+confirming flight is owed. The decoded slot cap (25 records, the free-slot finder reserving six,
+langui 204) is not enforced on a campaign purchase. Instant Action's list still shows campaign
+builds with no export step, which is the mirror image of what this item fixed and is what langui
+702 and 1139 exist for.
+
+---
+
+# Wave E — the campaign's frame stalls
+
+## E41 ◐ `BL-641` CM18's two spawn stalls are spread across frames
+
+**Outcome: the premise held and the largest term was a redundancy rather than a spreadable bulk
+spawn, so the stalls shrank by 57 to 64 % without any change to when entities exist. They still trip
+the detector, so the item lands partial and `BL-641` is rewritten around the residual.**
+
+**What the two sim instants are.** Not a `WAKEUP_GENERATOR` and not a roster credit. CM18's
+`egen.zrd.json` authors one generator on `cargozep1` with `ind_period` 3 + `wave_period` 1, so its
+cycle fires at 4.0 s and 8.0 s, which under `--det`'s 1/60 s step is exactly sim frames 241 and 482.
+Each launch resolves `vehicle.params Cargo_params` to a disabled `aiv` block and builds one Black
+Swan through `FlightRoster.SpawnAi` → `AiFlightAssembler.Assemble`, the single `ai_spawn` scope. The
+log lines are `egen: 'cargozep1' spawn #1: 'bsfury_eg0' dropped …` and `#2: 'bsfury_eg1'`. Nothing
+about it is bulk: it is one aeroplane, twice, and it recurs every 4 s for the rest of the mission up
+to `max_active` 10.
+
+**Where the cost was.** Stopwatch attribution inside the `ai_spawn` scope, then inside
+`PlaneBuilder.Build`, then inside `SceneBuilder`: of a ~300 ms spawn, ~190 ms sat in the 13 to 15
+`new ShaderMaterial { Shader = … }` assignments whose `Shader` resource was freshly generated, about
+13 ms each, while the other 45 material assignments of the same build cost 0.1 ms between them.
+Generating the shader TEXT cost 1.6 ms; painting the livery cost 5 ms; triangulating the meshes cost
+8 ms. `SceneBuilder`'s three shader memos were instance fields, so every aircraft built its own
+copies of the same dozen shaders and paid Godot a compile for each.
+
+**What landed.** The three shader memos are process-wide, with `DebugClutterFlag` added to the bias
+key because it is the one instance field that varies the generated text. Nothing else moved: the
+mesh, material and collider memos stay per builder, since every override is baked into what they
+hold.
+
+**The numbers, paired A/B, two kept launches a side after a discarded cold-cache warmup (PERF-7),
+`--campaign=<profile>:17 --det --perf --no-vsync --mute --frames=600`.** The "before" side is this
+same tree with the three memos flipped back to instance fields and rebuilt `--no-incremental`
+(SHELL-16). Sim frame 241 is 4.017 sim s and frame 482 is 8.033 sim s, the comparable coordinate;
+PERF-12 forbids reading either as a wall time.
+
+| config | sim frame | before `frame_ms` | after `frame_ms` | threshold |
+|---|---|---:|---:|---:|
+| 1P | 241 | 362.8 / 363.5 | 156.5 / 155.8 | 46.0 / 46.2 |
+| 1P | 482 | 323.0 / 328.8 | 116.3 / 117.7 | 46.6 / 46.8 |
+| 4P | 241 | 336.8 / 334.9 | 134.2 / 136.3 | 75.6 / 76.7 |
+| 4P | 482 | 324.7 / 322.1 | 115.6 / 118.6 | 74.0 / 75.8 |
+
+`HitchSidecar` still names `ai_spawn`, at 127.6/98.0 ms (1P) and 97.0/90.4 ms (4P) against
+331.5/301.5 and 300.2/297.5 before. The 4P threshold reads 75 ms rather than 46 ms because
+`HitchMonitor`'s relative term rides a slower rolling median there, which is PERF-13's rule about
+comparing a frequency across modes applied to the threshold itself: read each frame against its own
+printed threshold, never against the plan's 45.7 ms.
+
+**Why it stops here.** The residual ~90 ms is genuine per-aircraft construction, not another
+redundancy: about 50 ms crash rig (template staging, the wreck subtree, and 194 to 198 pre-warmed
+emitters at about 19 ms of it), 22 ms `FlightController.Bind`, 10 ms model build, 5 ms loadout,
+turrets and damage visuals. Reaching the threshold means spreading the assembly over three or more
+frames. Only the crash rig can move without touching observability, because
+`_worldRoot.AddChild(controller)` already runs BEFORE the crash-rig block, so the aircraft is in the
+world and in the roster on the launch frame whatever happens to the rig afterwards. Deferring it
+needs a "build it now if this aircraft dies first" guard and still leaves ~90 ms, so it is filed on
+the rewritten `BL-641` rather than taken here.
+
+**Red before green.** `plane-shader-reuse` builds the same airframe through two `PlaneBuilder`s and
+asserts every `Shader` behind the second model's materials is one the first already made. With the
+memos on the instance it failed:
+`every shader of the second build is one the first already compiled (second=14 shared=0) expected=14 actual=0`.
+Its control arm (the first build carries several distinct shaders, the second carries any at all)
+keeps a collapse to one shader from satisfying it vacuously.
+
+**Found in a file this item does not own.** `GeneratorCycle` switches the capacity check off at
+authored `capacity <= 0` unless a `WAKEUP_GENERATOR` has armed it. All 23 shipped generators author
+`capacity 0` and CM18 authors no `WAKEUP_GENERATOR`, so `cargozep1` launches unasked every 4 s up to
+`max_active` 10, while `docs/formats/mission-entities/enemy-generators.md` says the data does not
+establish that reading. That decides how often CM18 pays this cost at all, and whether ten enemy
+fighters belong in the mission; it is recorded on `BL-641` and owed its own item.
+
+**Verification.** `plane-shader-reuse`, `campaign-squad-wakeup`, `campaign-roster` and
+`campaign-objectives` PASS with engine errors clean; goldens 18 of 18 hash-identical with
+`analysis/goldens/manifest.json` unmodified in the tree (GOLD-9); `-Quick` 241 units and 13 suites
+PASS.
+
+**Verified.** Orchestrator's full `.\RunTests.ps1` on the integrated tree, with wave E merged and
+`main` merged twice: build clean, **2766 units of 2766**, **18 goldens hash-identical**, engine
+**197 of 198 suites passed** with engine errors clean. The one failure is `ai-gunnery`, which is
+`BL-648`'s shard-order defect and not this item's: it passes alone over five runs and fails
+identically on `main` under the same nine-suite selector, main's own gate being green only because
+its weighting seats that suite in another shard.
+
+## E42 ◐ `BL-562` CM11's physics tick spikes are attributed and removed
+
+**Goal.** CM11 (C2/M02) runs no single physics tick long enough to exhaust Godot's eight-step catch-up
+cap, so no sim step is discarded.
+
+**Outcome: the named candidate is ruled out, the cap-exhaustion premise does not reproduce, and the
+recurring over-budget band was an ungated debug print rather than anything in the animation runtime.**
+The band is gone; three one-off ticks remain and `BL-562` is rewritten around them, so the item lands
+partial.
+
+**Mode, stated up front.** `.\RunProbe.ps1 --campaign=e42-perf:10 --no-det --perf --no-vsync --mute
+--no-pads --seed=1 --frames=5000 --screenshot=…`, one aeroplane, nobody at the controls, on a copy of
+the `d33-perf` profile deleted afterwards. `--no-det` is required: `--det` makes the clock
+parent-driven, which empties the physics tick and the three `phys_*` terms with it (PERF-21). The
+session's loaded phase is its first 83 seconds; at t≈70 s the unattended pilot flies into the water
+and the world goes quiet (`phys_tick_ms` 0.08, node count frozen), so the 333-window session the
+entry quoted was mostly measuring an idle world. Every window below is a 60-rendered-frame window at
+a median `phys_hz` of 60.0, so 82 windows are 82 sim seconds as well as 82 wall seconds.
+
+**The candidate, ruled out by measurement.** A temporary counter pair on `NameResolver`
+(`ClearFindCache` calls, `FindAll` calls, misses, index rows walked) read across every tick over
+12 ms says `clears=0` on all 55 spiking ticks of a sortie: not one of `IndexStage`,
+`IndexSpawnedCopy`, `IndexRebasedStage`, `IndexSpawnedVehicle` or the template stage's
+`IndexPooledCopy` fires during CM11 flight, because nothing in that mission spawns a vehicle, grows a
+stage or checks out a new library copy after the build. The memo is never dropped, so it cannot be
+re-walked. The index is about 900 rows per runtime rather than 5000, and the spiking ticks that do
+miss the memo (76 misses over 69,008 rows on the crash tick) spend 0.02 ms doing it. No narrower
+invalidation was written and none is needed.
+
+**What a spiking tick is actually doing.** A temporary `Stopwatch` breakdown inside the bracket, split
+first between `GameSession`'s `SessionSimulation.Step` and the 20 `AnimRuntime.Advance` calls, then
+across `SessionSimulation`'s seventeen named phases, then inside `FlightController.SimStep`:
+
+| tick | ms | where |
+|---|---:|---|
+| the first tick after the world build | 124 | `anim_advance` 95 ms over 20 runtimes (first `Advance`, 46,355 index rows over five cold misses), `sim_step` 29 ms |
+| the recurring band, 47 of 82 windows | 18 to 25 | `captured_ai` 16 to 22 ms, of which `telemetry` 17.0 to 21.5 ms over nine aircraft |
+| one tick a sortie | 46 | `human_ac` 38 ms, the pilot's own crash |
+| one tick a sortie | 46 | `captured_ai` 46 ms, of which one AI aircraft's `sweep` 45.1 ms |
+| one tick a sortie | 50 | a single `AnimRuntime.Advance` |
+
+**The mechanism.** `FlightController.SimStep` ended with an ungated `GD.Print` of a per-aircraft
+telemetry line every sim second. Every live aircraft starts its counter at the same instant, so all
+nine crossed the boundary on the SAME sim step and the tick paid nine console writes at about 1.9 ms
+each. The line reached only Godot's stdout, never `.scratch/logs/`, and was formatted in the host's
+CurrentCulture (`spd=55,8` on this machine), so it was neither filterable nor greppable where a
+reader looks for it.
+
+**What landed.** The line asks `Log.ConsoleShows("flight", Log.Level.Debug)` before it formats
+anything and emits through `Log.Debug("flight", …)`, so `--log=flight` turns it on and the default
+costs nothing. Nothing else changed. Recorded as `docs/verification.md` PERF-23 and on
+`FlightController`'s `docs/architecture.md` entry.
+
+**The numbers, paired A/B, two kept runs a side after a discarded warmup (PERF-7), each side rebuilt
+`--no-incremental` (SHELL-16), the "before" side being this tree with the ungated `GD.Print` put back
+in place and restored afterwards (METHOD-17).** Window 1 is excluded from the aggregates as the
+build-settling regime (PERF-19) and reported on its own.
+
+| | mean `phys_tick_ms` | median `phys_hz` | windows over 16.7 ms, of 82 | worst tick after window 1 | window 1 |
+|---|---:|---:|---:|---:|---:|
+| before | 1.249 / 1.246 | 59.9 / 60.0 | 47 / 47 | 46.3 / 47.5 | 124.8 / 124.3 |
+| after | 1.002 / 1.037 | 60.0 / 60.0 | 3 / 4 | 47.4 / 51.1 | 122.6 / 124.3 |
+
+The mean moves rather than holding, which is the same arithmetic rather than a second effect: 17 ms of
+work removed once a second is 0.28 ms off a 60 Hz tick, and 0.22 ms is what the mean lost. **No window
+on either side reaches 133 ms**, the eight-step cap, so the "about six sim steps discarded" reading
+does not reproduce on this build at all, and `phys_hz` was already 60.0 before the change.
+
+**Red before green.** `flight-telemetry-gate` flies three AI aircraft a whole sim second and counts
+telemetry lines in the scoped console sink and in the always-on log file. Both halves were seen able
+to fail, separately. Dropping only the gate (`Log.ConsoleShows(…) || true`), which leaves the console
+half suppressed and would pass a console-only check:
+
+```
+…and none to the always-on log file either, so the line costs nothing when nobody asked (got 3)
+```
+
+and putting the original ungated `GD.Print` back, which reaches neither sink:
+
+```
+--log=flight brings the line back, one per aircraft (got 0 of 3)
+…and the same lines reach the log file (got 0 of 3)
+and every aircraft emits on the SAME sim step (), which is why the cost lands on one physics tick
+…written in the invariant culture, so a decimal reads '.' rather than the host's separator
+```
+
+GREEN reads `unasked: 65 steps x 3 aircraft -> console 0, file 0, steps []` and `asked: … console 3,
+file 3, steps [54]`, the single step number being the burst this item is about.
+
+**Suite count.** The catalog is 196; `CSVM.Tests/SuiteCatalogTests.cs` (195 → 196) and
+`analysis/engine-suite-weights.json` were updated with it.
+
+**Verify.** Targeted results on this worktree with `CSVM_DATA_ROOT` set, the suite count printed
+non-zero each time: `-Suite flight-telemetry-gate` **1 passed, 0 failed** in 0.95 s, engine errors
+clean; `-Filter ai` **63 passed, 0 failed** (`inert-aircraft`, `ai-actor`, `ai-modes`,
+`ai-gunnery`, `air-to-air` and every `landings-`/`campaign-*ai*` suite the substring reaches),
+engine errors clean, 101.5 s, the engine stage 1.5 s over its 100 s budget (awareness only);
+`-Filter campaign` **41 passed, 0 failed**, engine errors clean; the unit tier
+`-SkipEngine -SkipGoldens` **2694 passed of 2694**; the golden stage `-SkipUnits -SkipEngine`
+**18 shot(s) hash-identical** with `analysis/goldens/manifest.json` unmodified in the tree (GOLD-9);
+`-Quick` **241 units and 13 engine suites passed, 0 failed**, engine errors clean.
+`.\CheckCommentCaps.ps1 -Summary`: every block within cap, and `dotnet format --verify-no-changes`
+clean.
+
+**Verified.** Orchestrator's full `.\RunTests.ps1` on the integrated tree: build clean, **2766 units
+of 2766**, **18 goldens hash-identical**, engine **197 of 198 suites passed**, engine errors clean.
+The one failure is `ai-gunnery`, `BL-648`'s shard-order defect, which reproduces on `main` under the
+same selector and is not this item's.
+
+**⚠ Traps that still bind.** Do not raise `max_physics_steps_per_frame`: it deepens the catch-up
+spiral rather than recovering the lost steps, and nothing here exhausts the cap anyway. Do not chase
+the sustained step (the disproven-claims table above). Do not re-open this against
+`NameResolver.ClearFindCache`: it is called zero times in a CM11 sortie and a memo that is never
+dropped cannot be the cost. Any re-measurement must say which mode it flew, and must use `--no-det`
+or the physics terms are empty by construction.
+
+## E43 ☑ `BL-612` CM09 and CM13 hold their rate for the whole mission
+
+**Outcome: the drop is real and reproduces, both named candidates are wrong, and the cost was Godot's
+per-node `_Process` dispatch over thousands of dormant particle emitters. Gating a dormant emitter off
+the frame-callback list takes both sorties to the machine's 8.33 ms presentation floor and holds them
+there for the whole run. `BL-612` is deleted.**
+
+**Mode, stated up front.** `.\RunProbe.ps1 --campaign=e43-perf:<seq> --players=1 --plane=player_bhawk
+--no-det --perf --no-vsync --mute --no-pads --seed=1 --frames=<n> --screenshot=…`, one aeroplane,
+nobody at the controls, on a copy of the `d33-perf` profile deleted afterwards. `--no-det` is required
+or the physics terms are empty (PERF-21). CM13 is seq 12 at 9,000 rendered frames on its own mission
+spawn; CM09 is seq 8 at 12,000 with `--pos=-7232,1500,-2564 --direction=0,0,-1 --hold=0,0,0,0.65`,
+because CM09's intro cutscene holds the sim for its first ~70 s and an unattended pilot on the authored
+spawn flies into the terrain about a minute after the handoff. **How the sortie is shown loaded where
+it is measured:** every run reported below logs `CRASH into` zero times, and every one of CM09's 99
+second-half windows and CM13's 75 steps the sim (`phys_tick_ms` above 0.4 rather than E42's idle-world
+0.08); CM09's node count climbs from 34,843 to 36,458 across a before run, which is the later squads
+arriving. ⚠ The profile must exist: with it deleted the same command still exits 0, builds a 12,000-node
+world with no roster and no crash rigs, and reads a clean 8.37 ms, so check the node count before
+quoting a campaign number.
+
+**The drop reproduces, and it is not the zeppelin.** CM09 is measured twice: as flown, and with
+`--debug-objective=30`, which is the mission's own PRIMARY (`INACTIVE1 lkgasbag05, panelleft1`, the
+Promised Land's gasbag) and wakes 38, 42 and 35 on completion, the chain that brings the next fighters.
+The zeppelin-down arm is not slower than the zeppelin-alive arm; it is marginally faster. The death
+choreography, the destroyed hull's colliders and the new squad's rigs are all ruled out as the cause of
+the sustained term. CM13, which spawns its field at the start and has no zeppelin death, carries the
+same cost, which is what said to look at a population rather than at an event.
+
+**Where the cost was.** A `_Process` bracket at the two ends of the priority order, with `Stopwatch`
+buckets inside `GameSession`, `AnimRuntime`, `FlightController`, `Puffer` and `Launcher`, plus a census
+of every node with processing enabled. On CM13 the whole C# `_Process` pass cost **9.4 ms of a 12.4 ms
+frame** while the bodies inside it summed to **1.06 ms**. The census says why: **3,814 of the 3,879
+processing nodes were `Puffer`**, almost all of them dormant, each returning on its first line. A
+`--fly --chapter=C2` control over the same world reads 709 puffers, 2.16 ms of pass and a flat 8.33 ms
+frame, so the two points give about 2.3 us per node of pure dispatch and a 0.5 ms intercept. The
+population is built rather than leaked: each aircraft's crash rig pre-warms 193 to 217 emitters, so a
+mission with twenty aircraft owns four thousand of them and every new spawn adds two hundred more.
+
+**What landed.** `Puffer._active` is written only through a new `SetActive`, which moves `SetProcess`
+with it, and `_Ready` puts the node back where `SetActive` left it, because Godot turns processing ON
+at ready for every script that defines `_Process`. Nothing else moved: the body's own first line was
+already `if (!_active) return;`. Recorded as `docs/verification.md` PERF-24 and on `Puffer`'s
+`docs/architecture.md` entry.
+
+**The numbers, paired A/B, two kept runs a side after a discarded cold warmup (PERF-7), each side
+rebuilt `--no-incremental` (SHELL-16), the "before" side being this tree with the two `SetProcess`
+calls flipped back and restored afterwards (METHOD-17).** Window 1 is excluded as the build-settling
+regime (PERF-19). The runs are `--no-vsync` throughout, so no count crosses a vsync mode (PERF-13),
+and no rendered-frame ordinal is read as a wall time (PERF-12).
+
+| config | before mean `frame_ms` | after mean `frame_ms` | windows over 8.4 ms, before → after |
+|---|---:|---:|---:|
+| CM13, 149 windows | 13.04 / 11.72 | 8.47 / 8.43 | 149, 149 → 41, 29 |
+| CM09, zeppelin alive, 199 windows | 12.09 / 12.65 | 8.45 / 8.54 | 199, 199 → 44, 59 |
+| CM09, zeppelin down, 199 windows | 11.50 / 11.58 | 8.46 / 8.42 | 199, 199 → 54, 35 |
+
+**⚠ A window is 60 RENDERED frames, so the same `--frames` budget does not buy the same sortie on
+the two sides**: the faster after side reaches sim 101.7 s where the before side reaches 145.3 s.
+Read the halves on a sim-second axis instead, which the windows carry (`phys_hz` is 60.0 in every
+run, so a window's wall span is its sim span). Mean `frame_ms` per 25 sim seconds:
+
+| run | 0-25 | 25-50 | 50-75 | 75-100 | 100-125 | 125-150 |
+|---|---:|---:|---:|---:|---:|---:|
+| CM09 alive, before | 10.54 / 10.33 | 10.48 / 10.42 | 12.63 / 12.81 | 12.82 / 12.59 | 13.36 / 17.53 | 13.72 / 14.71 |
+| CM09 alive, after | 8.37 / 8.36 | 8.36 / 8.35 | 8.52 / 8.71 | 8.57 / 8.76 | 8.33 / 8.35 | |
+| CM09 down, before | 10.33 | 10.32 | 12.01 | 12.15 | 12.35 | 12.85 |
+| CM09 down, after | 8.37 | 8.37 | 8.58 | 8.53 | 8.35 | |
+| CM13, before | 15.09 / 12.95 | 13.12 / 12.34 | 12.94 / 11.73 | 13.03 / 10.62 | 11.53 / 10.74 | |
+| CM13, after | 8.45 / 8.54 | 8.54 / 8.38 | 8.43 / 8.38 | 8.33 / 8.33 | | |
+
+That is the reported shape and its answer in one place. CM09's first 50 sim seconds are its intro
+cutscene, which holds the sim; the frame worsens from 10.4 to 13.7 ms once flight starts and the
+squads arrive, and after the fix the same stretch reads 8.35 to 8.76 ms and never trends. CM13 runs
+the other way even before the fix, improving from 15.1 to 10.7 ms as the unattended pilot leaves the
+city, which is the second reason the drop is not "the mission gets busier": the cost tracks the
+emitter population, which CM13 owns from its build.
+
+**8.33 ms is this machine's floor, not a measurement of the work**: `--stage=empty` reads 8.33 ms and
+120.0 fps flat, as PERF-12 already records for the dev box, so the after side is bounded by
+presentation and the real frame cost is lower than the figure. At the controls, where vsync is on, a
+12 to 14 ms frame misses the 8.33 ms refresh and lands on the next one, which is what "falls under
+60" was.
+
+**Red before green.** `puffer-idle-process-gate` builds a 64-strong dormant field and drives the burst
+and trail entry paths. Both halves were seen able to fail, separately. With the gate removed:
+
+```
+no unstarted emitter of a 64-strong field asks for a frame callback expected=0 actual=64
+starting one of the field puts exactly that one on the frame path expected=1 actual=64
+a built, unstarted burst emitter is off the frame path
+a finished burst takes itself off the frame path
+a built, unstarted trail emitter is off the frame path
+Clear takes it off again
+```
+
+and with the gate stuck off (`SetProcess(false)` unconditionally), which the checks above would pass:
+
+```
+starting one of the field puts exactly that one on the frame path expected=1 actual=0
+Burst puts the emitter back on the frame path
+Emit puts the trail emitter on the frame path
+```
+
+**Four goldens moved, and the price is one frame.** `c1-crash`, `c1-debris-rest`, `c1-targeting-hud`
+and `c1-ai-wreck`, every one a particle shot; `c1-destroy-effects` and `c1-flight` are bit-identical.
+Against before-images reproduced from a temporarily reverted build whose 18 hashes match the committed
+ones digit for digit (GOLD-9), the movement is 1.152 % of `c1-crash`'s pixels (0.191 % past a channel
+delta of 16), 39 px of `c1-targeting-hud` at a max delta of 3, 14 px of `c1-debris-rest` and 5 px of
+`c1-ai-wreck`. The mechanism is measured, not inferred: a node joining Godot's process group mid-pass
+is not visited until the next frame, and a stamp of activation frame against first `_Process` frame
+over `c1-crash`'s own command says 16 of its 21 emitters used to be visited in the frame they were
+started and all 21 now wait one frame. GOLD-6's shape, at the small end of its range: it moved the same
+shot by 79.7 % when every called sequence shifted a tick.
+
+**Suite count.** The catalog is 197; `CSVM.Tests/SuiteCatalogTests.cs` (196 → 197) and
+`analysis/engine-suite-weights.json` were updated with it.
+
+**Verify.** Targeted results on this worktree with `CSVM_DATA_ROOT` set, the suite count printed
+non-zero each time: `-Suite puffer-idle-process-gate` **1 passed, 0 failed**, engine errors clean;
+`-Filter puffer` **6 passed, 0 failed**; `-Filter effect` **7 passed, 0 failed**; the whole engine tier
+`-SkipUnits -SkipGoldens` **197 passed, 0 failed, 0 skipped** in 87.4 s, engine errors clean; the unit
+tier `-SkipEngine -SkipGoldens` **2694 passed of 2694**; the golden stage after the re-pin
+**18 shot(s) hash-identical**, with `git diff` on `analysis/goldens/manifest.json` showing exactly the
+four hashes and no `exercises` text (GOLD-9). `.\CheckCommentCaps.ps1 -Summary` within cap and
+`dotnet format --verify-no-changes` clean.
+
+**Verified.** Orchestrator's full `.\RunTests.ps1` on the integrated tree: build clean, **2766 units
+of 2766**, **18 goldens hash-identical** including this item's four re-pins, engine **197 of 198
+suites passed**, engine errors clean. The one failure is `ai-gunnery`, `BL-648`'s shard-order
+defect, which reproduces on `main` under the same selector and is not this item's. This item's own
+suite addition is what re-partitioned the weighted shards and seated `ai-gunnery` beside the run-up
+that trips it, which is `BL-648`'s recorded trap rather than a fault in the gate.
+
+**⚠ Traps that still bind.** Do not read `script_ms` or `physics_ms` as a per-frame cost; both are the
+worst step of the last wall second (PERF-21), and the entry's `physics_ms` 17 to 18 was E42's telemetry
+burst, gone before this item started. Do not re-open this against the zeppelin's death choreography:
+the `--debug-objective=30` arm is not slower than the arm that leaves it flying. Do not chase the
+remaining second-half windows a tenth of a millisecond over the floor, or the 13.1 to 14.1 ms window 1,
+which is the world build settling (PERF-19). And do not turn a node's `_Process` back on to recover the
+one-frame emitter delay without re-measuring the population cost: they are the same switch.

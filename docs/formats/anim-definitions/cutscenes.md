@@ -860,6 +860,12 @@ lands the pilot on `pzhookpoint`; **no mission in this install calls it**, and `
 no 951 at all, which is why the intro's own handoff is a hand-back to the authored spawn rather than
 a re-placement.
 
+**Two shipped carriers raise it while naming no `player` node at all**, so there is no placement
+anywhere in them to read: `C2/M05`'s `balmoral-drop_paratroopers` (nodes `cargozep2`, `balmoral`,
+`camera1`) and `C5/M04`'s `stihellhound_eg0-milesdrop` (nodes `stihellhound_eg0`, `camera1`). In the
+original that costs nothing, because the node the case reads IS the player's vehicle: it writes the
+aeroplane's own pose back onto itself and only the release speed changes.
+
 **CSVM.** `CutsceneController.ReplacePlayer` reads the staged `player` marker's world transform and
 hands it to `FlightController.ResumeAt`, which moves the staging's hand-back target. The move is
 applied at the hand-back rather than at the callback, because the out-of-flight hold re-asserts its
@@ -867,6 +873,14 @@ pin at zero speed on every step it runs and would wipe a speed written earlier. 
 staged no `player` marker (a mid-mission drop in a mission with no intro of its own, the limit named
 under [the `chuteman` staging gap](#a-mid-mission-drops-chuteman-is-the-same-staging-gap)) logs the
 callback and re-places nothing.
+
+⚠ **The marker is a bodiless stand-in, not the aeroplane, so an unposed one is not a placement.**
+CSVM builds it under the world root at identity and every handoff parks it back there, which is
+where the two carriers above leave it. Read as a pose, that is the world origin: measured over
+`drop_paratroopers`, the handoff moved the aeroplane 12567.5 m, from 424.4 m above the surface to
+56.5 m below it, with no way back up through the single-sided terrain. `ReplacePlayer` therefore
+declines a marker still parked at its home, which leaves the pilot where the original leaves
+them.
 
 ### Handoff and skip
 

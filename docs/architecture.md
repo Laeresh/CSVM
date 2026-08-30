@@ -543,8 +543,11 @@ where `GameZ.VertexColorsRestateMaterialColor` detects the two are the same auth
 overrides that colour with the decoded `no_clutter` bit instead. Every shader on one instance
 shares the ordered preamble in `csky_instance_uniforms.gdshaderinc`; see that file for the
 contract, and `GetBiasShader` for how the model's `lighting`/`fog` flags select shader variants
-instead of driving a uniform. Format/decode: docs/formats/gamez.md, docs/formats/world-structure.md,
-docs/formats/gotchas.md.
+instead of driving a uniform. The mesh, material and collider memos are per builder, since every
+override is baked into what they hold; the three SHADER memos are process-wide, because a generated
+text is a pure function of its key and Godot charges a compile for each fresh `Shader` a material
+takes (`docs/verification.md` PERF-22). Format/decode: docs/formats/gamez.md,
+docs/formats/world-structure.md, docs/formats/gotchas.md.
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
@@ -1414,7 +1417,12 @@ Live, mutable per-instance HP for the world's destructibles — any `AnimDefinit
 `HEALTH > 0`. One `Instance` per `(def, anchor)` pair, seeded from the authored `HEALTH`, plus a
 coarse healthy/damaged/destroyed `State` and a monotonic `DamageStage`; built during AnimRuntime's
 bootstrap, read by `ANIM_HEALTH` eval, escalated by `ApplyDamageStages`, damaged via `DamageAt`.
-`Resolve(struck)` maps a raycast-hit node back to its instance. Schema: docs/formats/destructibles.md.
+`Resolve(struck)` maps a raycast-hit node back to its instance, climbing to the nearest node a pool
+claims. A pool claims its own DAMAGE NODE (`Register`'s `damageNode`, which
+`AnimRuntime.DamageNodeOf` reads off the def's `ANIMATION_ROOT_NAME` inside that anchor) and its
+anchor only as a fallback, which is how two defs sharing one anchor are told apart; the rule and the
+`def+0x6c` decode behind it are in docs/formats/destructibles.md, "Which node takes the hit".
+Regression: the `campaign-balloon-death` suite. Schema: docs/formats/destructibles.md.
 `Instance.Reseed(max)` re-seeds a pool from a mission record — the F18 zeppelin zones, where
 `zeppelins.json` hp beats the def's own `HEALTH` — and refuses once damaged, so a late wire-up
 cannot heal a fight in progress. `Instance.Team`, `Instance.Owner` and `Instance.Dormant` are what a mission
@@ -3113,6 +3121,10 @@ unauthored state by a factor of ten, so the `puffer-modes` suite asserts both ca
 once; the archive is the key, so a chapter change never serves another chapter's frames.
 Three config knobs (`puffer.burstSizeScale`/`trailSizeScale`/`sustainSizeScale`) scale `BaseSize`
 per spawn path, registered in `Config.WarmTuningRegistry` for `--dump-config`.
+A dormant emitter is off Godot's `_Process` list: `SetActive` is the only writer of the active flag
+and it moves `SetProcess` with it, `_Ready` puts the node back where `SetActive` left it, and the
+`puffer-idle-process-gate` suite holds both directions. A mission pre-warms thousands of emitters,
+so what they cost the frame is set by how many ask for the callback.
 The wind it reads is `Effects/WorldWind.cs` — see its own entry below.
 
 **The camera-distance fade** (`DistanceAlpha`) is view-space depth off `EffectAmbience`'s camera
@@ -3521,6 +3533,8 @@ slots like the targeting keys). `PinnedViewMode` seeds the selection from `--vie
 `PLAYER_1ST_PERSON` condition. `Cockpit` (a `CockpitVisibility`, null on any rig built without an
 interior) is applied in the same block, keyed to whether the pose THIS frame was a first-person
 one rather than to the selection, so a look-behind restores the aircraft while it is down.
+`SetViewedFromOutside` is that block's stand-in for a caller that owns the camera and therefore
+silences it, the cutscene presentation being the one (`src/Session/CutsceneController.cs`).
 Head-look input is read here too and nowhere else (`HeadLookRead`, `SnapLookInput`, `FreeLookRead`,
 `MouseLookDelta`), for the same reason `OrbitInput` is: `CameraController` never learns about pads,
 mice or key layouts. `SnapLookInput` reads `Kp1`–`Kp9` and `Kp5` recenters, the original's own
@@ -3565,7 +3579,11 @@ crash runtime, the def table, the anchor and the two respawn snapshots in one ca
 cannot be half-bound and only `CrashRuntime`/`CrashAnchor` stay readable as properties. The DEATH family (`CRASH into`, `midair aspect`, every
 `vehicle health exhausted`, `graze`, `embedded in terrain`, `AI ram`, `impact`) routes through
 `Log.Info("flight", …)`, so a play session's file sink carries how each aircraft died; the
-per-round weapon breadcrumbs around them are a different family and still `GD.Print`.
+per-round weapon breadcrumbs around them are a different family and still `GD.Print`. The
+once-a-sim-second `telemetry` line is `Log.Debug("flight", …)` behind a `Log.ConsoleShows` ask
+taken BEFORE its values are formatted, since every live aircraft crosses that boundary on the same
+sim step and an unasked line is one write per aircraft inside one physics tick; `--log=flight`
+turns it on (verification.md PERF-23).
 The sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). `SimStep` also ticks
 `Turrets` (the carried gunners) after the fire outcome, so the crash branch's early
@@ -4141,6 +4159,17 @@ picker cursor inside the shortened roster afterwards. `LoadStockWeapons` is the 
 arm's gun and hardpoint reading, public and static because the campaign's EXPORT of a plane with no
 build needs the same one; a second copy of it would let the two disagree about what an airframe
 carries at rest.
+
+**Ownership, not storage, is what separates the campaign from Instant Action.** Both doors write
+into the one `user://Planes/` build store; over a campaign flow `ReadRoster` puts
+`HangarCampaignContext.OwnedBuilds()` in `Saved` instead of the whole directory, resolving each
+ownership record to its stored build, else a reward aircraft's own award template, else the
+campaign's starting-Devastator spec (the two seeded starters are never hangar-built). The screen
+then reads as the original's INVENTORY: a Buy row over the wallet, one row per owned plane with its
+value, and a trailing sale that credits the full build cost through `DeleteSaved`. An owned row is
+inert, because the decoded economy has no partial upgrade. `IsNameTaken` still spans the WHOLE
+directory rather than the visible roster, so a campaign build cannot silently overwrite an Instant
+Action plane of the same name; `HangarNamePage`'s roller and overwrite warning both ask through it.
 
 `IHangarPage` is the mount point Wave C's remaining items fill: `Title`, `RowCount`, `RowText`,
 `Detail`, `Step` (the launchscreen's live ←→ stepper), `Accept` (returning false hands the press
@@ -5632,11 +5661,12 @@ a mission that only ever REMOVES its sites would offer nothing. One `ObjectiveSi
 as long as the mission flags it, since the selection is held by source identity; its position and
 labels are re-read every frame, which is what tracks a site under a moving node. `PointFor` prefers
 the bare `TRAVELERS` point of the objective that edits a target over the world node of the same
-name, because C3/M01's village node stands at the world origin. A site on a world node is marked
-at `SiteAnchor`: the node's own position for a placed node, and for a group node standing at the
-world origin that draws nothing itself the centre of its built meshes, a `door`-named leaf pair
-winning over the whole (the stunt mode's aperture rule), because C2's `sghangar` is such a group
-and its parts carry the coordinates. A site is keyed by
+name, because C3/M01's village node stands at the world origin. A site on a world node is marked at
+`SiteAnchor`, the centre of the world bounding box of everything that node draws, which is what the
+original publishes for a mission structure (`docs/org/targeting.md`); its own position is only the
+fallback for a node that draws nothing. C1/M05's balloon groups stand on the water with the balloon
+16 m above them and C2's `sghangar` stands at the world origin, so the node's position is not the
+site. A site is keyed by
 `ObjectiveTarget.Key`, and `ResolveTarget` walks a path one name at a time with `FindNodes` scoped
 to the node before, so `piratezep/rock_zeppelin` is the hull's own child and a bare name is the
 first global match; `targets.zrd` is looked up by the whole key first (a path-authored entry
@@ -5937,7 +5967,9 @@ that advance, never sit against a camera one frame behind them. Hosted: 20 world
 (`GameSession`'s drive paths, the session clock's `SimHeld`, which is what stops a node stepping
 itself on a realtime tick, and `CampaignDirector.HoldForCutscene` read it), 2 chrome off and the
 view off the aircraft (`FlightController.CameraOwned`, which also stops the cockpit rules being
-re-asserted), 11 the player out of flight (EVERY human `Held` + `Inert` + engine audio paused, and the EPISODE
+re-asserted, so this code writes both edges itself through `SetViewedFromOutside`: the airframe
+drawn and the interior pass down while it presents, the pilot's own selected view back at the
+hand-back), 11 the player out of flight (EVERY human `Held` + `Inert` + engine audio paused, and the EPISODE
 OWNER's airframe posed on the staged `player` marker through `FlightController.StageAt` while that
 state holds, asserted in that same instant rather than on the next tick, because the definition
 raising the code goes on posing the aircraft in the same dispatch; there is exactly one marker, so
@@ -5950,7 +5982,10 @@ an objective walk still counts a parked aircraft; only what this controller park
 marker's world pose and moves the EPISODE OWNER's hand-back target through
 `FlightController.ResumeAt`, so a mid-mission drop or hookup leaves that pilot where its own
 definition parked that node rather than where it found them, and every other human flies out of its
-own coordinates. ⚠ Do not re-place a held human it did not name: `ResumeAt` on a held aircraft only
+own coordinates; a definition raising 951 without posing that marker authors no placement, so the
+code is declined and the pilot keeps the pose the episode found them at (the marker is a bodiless
+stand-in for the original's own vehicle node, and unposed it reads as the world origin). ⚠ Do not
+re-place a held human it did not name: `ResumeAt` on a held aircraft only
 moves the hand-back target, so the mistake shows up a second later as the whole field materialising
 on the drop point. 965/966/967 the mid-mission airframe swap, through the
 `SwapAirframe` seam the session fills with `FlightRoster.RunSwap` (the three codes, their def/node

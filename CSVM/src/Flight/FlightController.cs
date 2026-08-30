@@ -1194,6 +1194,34 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>Hand this aircraft's own visibility to an outside vantage, or take it back. An
+    /// episode owns the camera for its whole length, which silences the per-frame arm that
+    /// re-asserts the first-person rules, so both edges are written here instead: presenting draws
+    /// the airframe and takes the interior pass off the screen, and the hand-back puts back the
+    /// rules for the view this pilot still has selected.</summary>
+    public void SetViewedFromOutside(bool on)
+    {
+        if (on)
+        {
+            LeaveFirstPerson();
+            return;
+        }
+
+        // ⚠ A crashed pilot keeps the crash cut's own exit from first person: _Process writes
+        // nothing to the camera while crashed, so a restore here would hold the interior over the
+        // crash camera until the respawn.
+        if (Crashed || _cam == null)
+        {
+            return;
+        }
+
+        // The selection, not a frame's pose: a held numpad key or a look-behind is not something a
+        // hand-back can read, and the pilot's own view is what the episode owes them back.
+        Cockpit?.Apply(_cam.ViewMode, _cam.FirstPerson);
+        _panelShown = CockpitVisibility.Rules(_cam.ViewMode, _cam.FirstPerson).Interior;
+        CockpitPass?.Sync(_renderPose.Basis, _cam, Shake?.Roll ?? 0f, Projectiles?.ActiveMuzzleLights());
+    }
+
     /// <summary>Weapon lab: point the gun selector at a firable gun group (0-based, clamped) —
     /// the programmatic twin of G / D-pad Right, which only cycles. Interactively that cycle still
     /// wins the next time it is pressed; <see cref="InitialGunSelect"/> is the _Ready-time
@@ -1636,16 +1664,21 @@ public partial class FlightController : Node3D
         if (_sinceTelemetry >= 1.0)
         {
             _sinceTelemetry = 0;
-            var p = _model.Position;
-            // path = climb/dive angle of the flight path; nose = the attitude's pitch;
-            // wv = wing verticality |up·Y| (1 level/inverted, 0 knife-edge) — the nose-chase factor
-            GD.Print($"flight: pos=({p.X:0},{p.Y:0},{p.Z:0}) spd={_model.Speed:0.0} m/s " +
-                     $"thr={_model.Throttle:0.00} rates=({_model.PhysicalBodyRates.X:0.00},{_model.PhysicalBodyRates.Y:0.00},{_model.PhysicalBodyRates.Z:0.00}) " +
-                     $"path={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(_model.VelocityDir.Y, -1f, 1f))):0}° " +
-                     $"nose={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(-_model.Attitude.Z.Y, -1f, 1f))):0}° " +
-                     $"wv={Mathf.Abs(_model.Attitude.Y.Dot(Vector3.Up)):0.00}" +
-                     (_pilotHud.AglMeters < float.MaxValue
-                         ? $" agl={_pilotHud.AglMeters:0}" : ""));
+            // ⚠ Ask the filter before formatting or emitting. Every live aircraft crosses this
+            // boundary on the same sim step, so an unasked line puts one console write per
+            // aircraft inside a single physics tick (docs/verification.md PERF-23).
+            if (Log.ConsoleShows("flight", Log.Level.Debug))
+            {
+                var p = _model.Position;
+                var rates = _model.PhysicalBodyRates;
+                // path = climb/dive angle of the flight path; nose = the attitude's pitch;
+                // wv = wing verticality |up·Y| (1 level/inverted, 0 knife-edge), the nose-chase factor
+                float path = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(_model.VelocityDir.Y, -1f, 1f)));
+                float nose = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(-_model.Attitude.Z.Y, -1f, 1f)));
+                float wv = Mathf.Abs(_model.Attitude.Y.Dot(Vector3.Up));
+                string agl = _pilotHud.AglMeters < float.MaxValue ? $" agl={_pilotHud.AglMeters:0}" : "";
+                Log.Debug("flight", $"telemetry pos=({p.X:0},{p.Y:0},{p.Z:0}) spd={_model.Speed:0.0} m/s thr={_model.Throttle:0.00} rates=({rates.X:0.00},{rates.Y:0.00},{rates.Z:0.00}) path={path:0}° nose={nose:0}° wv={wv:0.00}{agl}");
+            }
         }
     }
 

@@ -223,6 +223,16 @@ void fragment() {
     // plane. No unscaled surface comes near it (49 levels is 0.0098), so scale 1 is untouched.
     private const float MaxScaledBias = 0.25f;
 
+    // ⚠ Process-wide, not per builder: Godot compiles a Shader the first time a material takes it,
+    // and each generated text is a pure function of its key, so a per-builder memo made every later
+    // builder recompile a shader byte-identical to one already live, on the frame path where an AI
+    // spawn builds an aircraft (docs/verification.md PERF-22). Anything an instance field varies the
+    // text by belongs in the key (`DebugClutterFlag`), or two builders that disagree about it share
+    // one shader. Main thread only, like every other builder path.
+    private static readonly Dictionary<int, Shader> BiasShaders = new(); // keyed by feature bits
+    private static readonly Dictionary<int, Shader> BillboardShaders = new(); // cloud sprites, keyed by blend/scissor bits
+    private static readonly Dictionary<int, Shader> CylindricalShaders = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
+
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
     private readonly bool _fullbright;
@@ -239,9 +249,6 @@ void fragment() {
     // flags, and Pass. Dropping one hands a cached material back at the wrong setting.
     // Non-scrolling surfaces all key on (0,0), so the common path's cache behaviour is unchanged.
     private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass, bool ClutterFade), Material> _materialCache = new();
-    private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
-    private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
-    private readonly Dictionary<int, Shader> _cylindricalShaderCache = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
     // Keyed by (model index, force-double-sided, force-lit, clutter-fade): every override is baked
     // into the built surfaces (sidedness into the geometry groups, `lit` and the fade into which
     // material/shader a surface gets), so a forced build must not be handed back for the same
@@ -1285,8 +1292,8 @@ void fragment() {
     {
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
-            | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0);
-        if (_biasShaderCache.TryGetValue(key, out var cached))
+            | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (DebugClutterFlag ? 4096 : 0);
+        if (BiasShaders.TryGetValue(key, out var cached))
             return cached;
 
         var sb = new System.Text.StringBuilder();
@@ -1432,7 +1439,7 @@ void fragment() {{");
         sb.AppendLine("}");
 
         var shader = new Shader { Code = sb.ToString() };
-        _biasShaderCache[key] = shader;
+        BiasShaders[key] = shader;
         return shader;
     }
 
@@ -1455,7 +1462,7 @@ void fragment() {{");
         lit |= glow;
         int key = (blend ? 1 : 0) | (scissor ? 2 : 0) | (glow ? 4 : 0) | (lit ? 0 : 8) | (fogged ? 0 : 16)
             | (clampUv ? 32 : 0);
-        if (_billboardShaderCache.TryGetValue(key, out var cached))
+        if (BillboardShaders.TryGetValue(key, out var cached))
             return cached;
 
         var sb = new System.Text.StringBuilder();
@@ -1520,7 +1527,7 @@ void fragment() {
         sb.AppendLine("}");
 
         var shader = new Shader { Code = sb.ToString() };
-        _billboardShaderCache[key] = shader;
+        BillboardShaders[key] = shader;
         return shader;
     }
 
@@ -1543,7 +1550,7 @@ void fragment() {
         lit |= glow; // a glow variant already ignores csky_world_light — same key
         int key = (axis == CylAxis.X ? 1 : 0) | (blend ? 2 : 0) | (scissor ? 4 : 0) | (glow ? 8 : 0)
             | (lit ? 0 : 16) | (fogged ? 0 : 32) | (clampUv ? 64 : 0);
-        if (_cylindricalShaderCache.TryGetValue(key, out var cached))
+        if (CylindricalShaders.TryGetValue(key, out var cached))
             return cached;
 
         var sb = new System.Text.StringBuilder();
@@ -1602,7 +1609,7 @@ void fragment() {{
         sb.AppendLine("}");
 
         var shader = new Shader { Code = sb.ToString() };
-        _cylindricalShaderCache[key] = shader;
+        CylindricalShaders[key] = shader;
         return shader;
     }
 }
