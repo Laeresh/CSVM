@@ -39,8 +39,9 @@ internal readonly record struct FlightRow(
 /// <see cref="CampaignScreen.Ammo"/>), CHANGE PLANE where the mission allows it, RETURN TO BRIEFING
 /// and FLY MISSION. The row list carries only these actionable items; each plane's dense text
 /// (title, both eight-row lists) and the objectives note live in <see cref="Detail"/>, the split
-/// <see cref="CampaignRosterPage"/> uses for its own descriptive text. CHANGE PLANE cycles in
-/// place because no picker screen exists. With guests joined this one page draws
+/// <see cref="CampaignRosterPage"/> uses for its own descriptive text. The seated player's CHANGE
+/// PLANE opens <see cref="CampaignScreen.PlaneSelection"/> on the row's own slot; a guest's still
+/// cycles in place. With guests joined this one page draws
 /// the whole sequence, a player at a time (<see cref="CampaignFlightField"/>).
 /// </summary>
 public sealed class CampaignFlightCheckPage : CampaignPage
@@ -137,8 +138,10 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     /// <inheritdoc/>
     public override int RowCount => Rows().Count;
 
-    /// <inheritdoc/>
-    public override string Footer => Flow.Row < Rows().Count && Rows()[Flow.Row].Kind == FlightRowKind.ChangePlane
+    /// <summary>The horizontal axis is advertised only where it still does something, which is a
+    /// guest's own CHANGE PLANE row: the seated player's opens the picker instead.</summary>
+    public override string Footer => StepsInPlace
+        && Flow.Row < Rows().Count && Rows()[Flow.Row].Kind == FlightRowKind.ChangePlane
         ? "↑↓  Choose       ←→  Change Plane       Enter / A  Select       Esc / B  Back"
         : "↑↓  Choose       Enter / A  Select       Esc / B  Back";
 
@@ -218,6 +221,10 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     // own aircraft; the seated player's page reads the profile aircraft.
     private int Player => Flow.Field.Current;
 
+    // Whether CHANGE PLANE is still a stepper. A guest's is: the picker lists the seated profile's
+    // aircraft, which is not the roster a guest chooses from.
+    private bool StepsInPlace => Player > 0;
+
     // The flow's hangar store, or null off-engine: every plane then reads as its stock fit.
     private CustomPlaneStore? Planes => _planes ??= Flow.Planes;
 
@@ -270,38 +277,18 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         return row >= 0 && row < rows.Count ? rows[row].Detail : string.Empty;
     }
 
-    /// <inheritdoc/>
+    /// <summary>A guest's CHANGE PLANE row walks their own choices. The seated player's does
+    /// nothing here: one screen changes their plane, so one place enforces the duplicate rule.</summary>
     public override bool Step(int row, int dir)
     {
         var rows = Rows();
-        if (row < 0 || row >= rows.Count || rows[row].Kind != FlightRowKind.ChangePlane || dir == 0)
+        if (row < 0 || row >= rows.Count || rows[row].Kind != FlightRowKind.ChangePlane || dir == 0
+            || !StepsInPlace)
         {
             return false;
         }
 
-        if (Player > 0)
-        {
-            return Flow.Field.Step(Player, dir);
-        }
-
-        var profile = Flow.Profile ?? EmptyProfile;
-        if (profile.Planes.Count == 0)
-        {
-            return false;
-        }
-
-        int count = profile.Planes.Count;
-        if (rows[row].Slot == 0)
-        {
-            profile.SelectedPlane = (((profile.SelectedPlane + dir) % count) + count) % count;
-        }
-        else
-        {
-            profile.WingmanPlane = (((profile.WingmanPlane + dir) % count) + count) % count;
-        }
-
-        Flow.Store.Save(profile);
-        return true;
+        return Flow.Field.Step(Player, dir);
     }
 
     /// <inheritdoc/>
@@ -318,6 +305,10 @@ public sealed class CampaignFlightCheckPage : CampaignPage
             case FlightRowKind.ChangeAmmo:
                 Flow.SetAmmoSlot(rows[row].Slot);
                 Flow.GoTo(CampaignScreen.Ammo);
+                return true;
+            case FlightRowKind.ChangePlane when !StepsInPlace:
+                Flow.SetPlaneSlot(rows[row].Slot);
+                Flow.GoTo(CampaignScreen.PlaneSelection);
                 return true;
             case FlightRowKind.ReturnToBriefing:
                 Flow.Field.Rewind();
@@ -395,10 +386,9 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         rows.Add(new FlightRow("CHANGE AMMO", string.Empty, FlightRowKind.ChangeAmmo, slot));
         if (changePlane)
         {
-            // The plaque centre-clips its label, so a stock record's long marketing title is left
-            // off: it is already written on the info row directly above.
-            string named = plane.Name == AirframeTitle(plane.Airframe) ? string.Empty : $": {plane.Name}";
-            rows.Add(new FlightRow($"CHANGE PLANE{named}", string.Empty, FlightRowKind.ChangePlane, slot));
+            // The plaque carries its label alone, the original's own FC_B_CHANGEPLANE: the plane
+            // it would name is already written on the info row directly above.
+            rows.Add(new FlightRow("CHANGE PLANE", string.Empty, FlightRowKind.ChangePlane, slot));
         }
     }
 
