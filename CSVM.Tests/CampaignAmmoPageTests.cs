@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -36,16 +38,17 @@ public class CampaignAmmoPageTests
         flow.SetAmmoSlot(0);
 
         Assert.Contains("Slug", page.RowText(0));
-        Assert.Contains("No Gun", page.RowText(1));
-        Assert.Contains("No Gun", page.RowText(2));
-        Assert.Contains("No Gun", page.RowText(3));
+        Assert.Null(page.Combo(1));
+        Assert.Null(page.Combo(2));
+        Assert.Null(page.Combo(3));
+        Assert.Equal(3, CaptionsSaying(page, "No Gun").Count);
 
-        Assert.NotEqual("-", page.RowText(4)); // left cell 0, LeftHardpoints=1
-        Assert.Equal("-", page.RowText(5));    // left cell 1, inactive
-        Assert.NotEqual("-", page.RowText(8));  // right cell 0, RightHardpoints=3
-        Assert.NotEqual("-", page.RowText(9));  // right cell 1
-        Assert.NotEqual("-", page.RowText(10)); // right cell 2
-        Assert.Equal("-", page.RowText(11));    // right cell 3, inactive
+        Assert.NotNull(page.Combo(4)); // left cell 0, LeftHardpoints=1
+        Assert.Null(page.Combo(5));    // left cell 1, inactive
+        Assert.NotNull(page.Combo(8));  // right cell 0, RightHardpoints=3
+        Assert.NotNull(page.Combo(9));  // right cell 1
+        Assert.NotNull(page.Combo(10)); // right cell 2
+        Assert.Null(page.Combo(11));    // right cell 3, inactive
 
         Directory.Delete(profileDir, true);
     }
@@ -60,17 +63,18 @@ public class CampaignAmmoPageTests
         flow.SelectProfile(profile);
         flow.SetAmmoSlot(0);
 
-        Assert.DoesNotContain("No Gun", page.RowText(0));
-        Assert.DoesNotContain("No Gun", page.RowText(1));
-        Assert.DoesNotContain("No Gun", page.RowText(2));
-        Assert.Contains("No Gun", page.RowText(3));
+        Assert.NotNull(page.Combo(0));
+        Assert.NotNull(page.Combo(1));
+        Assert.NotNull(page.Combo(2));
+        Assert.Null(page.Combo(3));
+        Assert.Single(CaptionsSaying(page, "No Gun"));
 
-        Assert.NotEqual("-", page.RowText(4));  // left cell 0
-        Assert.NotEqual("-", page.RowText(5));  // left cell 1
-        Assert.Equal("-", page.RowText(6));     // left cell 2, only 2 hardpoints per wing
-        Assert.NotEqual("-", page.RowText(8));  // right cell 0
-        Assert.NotEqual("-", page.RowText(9));  // right cell 1
-        Assert.Equal("-", page.RowText(10));    // right cell 2
+        Assert.NotNull(page.Combo(4));  // left cell 0
+        Assert.NotNull(page.Combo(5));  // left cell 1
+        Assert.Null(page.Combo(6));     // left cell 2, only 2 hardpoints per wing
+        Assert.NotNull(page.Combo(8));  // right cell 0
+        Assert.NotNull(page.Combo(9));  // right cell 1
+        Assert.Null(page.Combo(10));    // right cell 2
 
         Directory.Delete(profileDir, true);
     }
@@ -88,7 +92,8 @@ public class CampaignAmmoPageTests
         flow.SetAmmoSlot(0);
 
         Assert.False(page.Step(0, 1));
-        Assert.Contains("No Gun", page.RowText(0));
+        Assert.Null(page.Combo(0));
+        Assert.Equal(4, CaptionsSaying(page, "No Gun").Count);
 
         Directory.Delete(profileDir, true);
     }
@@ -221,6 +226,78 @@ public class CampaignAmmoPageTests
         Assert.Equal(before, File.ReadAllBytes(file));
 
         Directory.Delete(profileDir, true);
+    }
+
+    // C9: the caption is the group's calibre and the field is a drop-down under it, both at
+    // [@OrdinanceLayout@]'s own coordinates (OL_T_GunName0 at 142,105 and OL_D_AMMO0 at 136,120,
+    // DROPWIDTH 148, STDITEMH 15). Nothing may sit at the other's position.
+    [Fact]
+    public void CaptionsAndFieldsTakeTheirAuthoredPositions()
+    {
+        var (flow, page, _) = NewFlow(out string profileDir);
+        flow.SelectProfile(CampaignProfileDef.NewProfile("Zachary")); // Devastator: three guns
+        flow.SetAmmoSlot(0);
+
+        var captions = CaptionsSaying(page, "-cal.");
+        Assert.Equal(3, captions.Count);
+        Assert.Equal(new[] { 105f, 147f, 189f }, captions.Select(c => c.Y));
+        Assert.All(captions, c => Assert.Equal(142f, c.X));
+
+        var field = page.Combo(0)!;
+        Assert.Equal((136f, 120f, 148f, 15f), (field.X, field.Y, field.Width, field.RowHeight));
+        Assert.Equal(204f, page.Combo(2)!.Y);  // OL_D_AMMO2, its caption fifteen pixels above it
+        Assert.Equal(136f, page.Combo(4)!.X);  // OL_D_ROCKETS0, the left rocket column
+        Assert.Equal(410f, page.Combo(8)!.X);  // OL_D_ROCKETS4, the right one
+        Assert.Equal(new[] { 320f, 348f }, new[] { page.Combo(4)!.Y, page.Combo(5)!.Y });
+
+        Directory.Delete(profileDir, true);
+    }
+
+    // C9 adopting A1: the field opens over the screen, the axis moves inside it, and the confirm is
+    // what writes the pick. The rocket list holds only what the mission ordinal has unlocked.
+    [Fact]
+    public void ARocketFieldOpensItsListAndTheConfirmTakesThePick()
+    {
+        var (flow, page, _) = NewFlow(out string profileDir);
+        flow.SelectProfile(CampaignProfileDef.NewProfile("Zachary"));
+        flow.SetAmmoSlot(0);
+        flow.SetMission(0); // ordinal 1: only the three threshold-1 rows are offered
+
+        var field = page.Combo(4)!;
+        Assert.Equal(3, field.Entries.Count);
+        Assert.False(field.Scrolls);
+
+        Assert.True(page.Accept(4));
+        Assert.True(field.Open);
+        string before = field.Text;
+
+        // The axis moves inside the open list, which is the seam the flow hands it through.
+        Assert.True(field.Move(1));
+        Assert.True(page.Accept(4));
+        Assert.False(field.Open);
+        Assert.NotEqual(before, field.Text);
+
+        // Back on a closed field leaves the screen instead of collapsing anything.
+        Assert.True(page.Accept(4));
+        Assert.True(page.Back());
+        Assert.False(field.Open);
+
+        Directory.Delete(profileDir, true);
+    }
+
+    // The lines the page draws itself, matched on their words.
+    private static List<BoardLine> CaptionsSaying(CampaignAmmoPage page, string words)
+    {
+        var found = new List<BoardLine>();
+        foreach (var line in page.Captions)
+        {
+            if (line.Text.Contains(words))
+            {
+                found.Add(line);
+            }
+        }
+
+        return found;
     }
 
     private static (CampaignFlow Flow, CampaignAmmoPage Page, CustomPlaneStore Planes) NewFlow(out string profileDir)

@@ -4234,6 +4234,9 @@ layout leaves as unresolved authoring macros, a measurement off the reference sc
 in `docs/org/campaign-board.md`. A page names one of these buttons per row through
 `ICampaignPage.Button`; every other row lists down that screen's own text widgets via `TextSlot`,
 unless the page draws that row itself, which is what the table of contents' 80-pixel rows are.
+⚠ The ammo screen has no `TextSlot` entry at all and must not be given one: its picks are
+`ICampaignPage.Combo` drop-down fields at `[@OrdinanceLayout@]`'s own dropdown positions and its
+calibre captions are the page's own `Captions`, so no row of it reaches that table.
 `ObjectivesNote` is the one widget that is not a slot list: the briefing parchment's `LIST` flows its
 entries, so it carries a wrap box and a spacing instead of a pitch and the renderer measures it.
 ⚠ `Labelled` on a slot, not the frame count, decides whether a plaque's words are drawn over it: the
