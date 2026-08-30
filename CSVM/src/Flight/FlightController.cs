@@ -1187,6 +1187,34 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>Hand this aircraft's own visibility to an outside vantage, or take it back. An
+    /// episode owns the camera for its whole length, which silences the per-frame arm that
+    /// re-asserts the first-person rules, so both edges are written here instead: presenting draws
+    /// the airframe and takes the interior pass off the screen, and the hand-back puts back the
+    /// rules for the view this pilot still has selected.</summary>
+    public void SetViewedFromOutside(bool on)
+    {
+        if (on)
+        {
+            LeaveFirstPerson();
+            return;
+        }
+
+        // ⚠ A crashed pilot keeps the crash cut's own exit from first person: _Process writes
+        // nothing to the camera while crashed, so a restore here would hold the interior over the
+        // crash camera until the respawn.
+        if (Crashed || _cam == null)
+        {
+            return;
+        }
+
+        // The selection, not a frame's pose: a held numpad key or a look-behind is not something a
+        // hand-back can read, and the pilot's own view is what the episode owes them back.
+        Cockpit?.Apply(_cam.ViewMode, _cam.FirstPerson);
+        _panelShown = CockpitVisibility.Rules(_cam.ViewMode, _cam.FirstPerson).Interior;
+        CockpitPass?.Sync(_renderPose.Basis, _cam, Shake?.Roll ?? 0f, Projectiles?.ActiveMuzzleLights());
+    }
+
     /// <summary>Weapon lab: point the gun selector at a firable gun group (0-based, clamped) —
     /// the programmatic twin of G / D-pad Left, which only cycles. Interactively that cycle still
     /// wins the next time it is pressed; <see cref="InitialGunSelect"/> is the _Ready-time

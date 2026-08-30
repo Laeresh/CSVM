@@ -947,7 +947,11 @@ public static class SuiteCatalog
             + "declined, and the definition's end hands off with every piece of cutscene state put "
             + "back; and C3/M03's opening scene, which no start list names, is reached through its "
             + "start anim's call: the world build stages its camera and player marker, the host "
-            + "takes its codes, the destruction runs under it once, and the skip it arms ends it",
+            + "takes its codes, the destruction runs under it once, and the skip it arms ends it; "
+            + "plus what an episode owes a seat that entered it from the cockpit view, at two seats "
+            + "and over both exits: the airframe drawn and the interior pass off while the "
+            + "presentation holds, both back on the hand-back, and neither seat's selected view "
+            + "moved to get there (BL-625)",
             CampaignCutscene));
         into.Add(new TestHarness.Suite("cutscene-letterbox",
             "the letterbox bars are data (D32): the chapter ships the node switched off as its "

@@ -2215,40 +2215,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `PLAN-cockpit-view.md` (every decision above, by wave: B11, C21, C22, D31), `BL-391`
   (engine level, kept separate from (f)).
 
-- `BL-625` `[Bug]` **A cutscene entered from the cockpit view leaves the flown airframe hidden and
-  the cockpit interior drawn, so the cutscene's external camera frames an invisible aeroplane.**
-  *Evidence:* `ApplyPresentation` (`Session/CutsceneController.cs:717-732`) sets `CameraOwned =
-  true`, which silences the whole per-frame camera arm in `FlightController`
-  (`Flight/FlightController.cs:1662`) and with it the `Cockpit?.Apply` that arm re-asserts every
-  frame (`:1738`). Whatever visibility the last flying frame left standing therefore holds for the
-  episode's whole length, and in `PilotViewMode.Cockpit` that state is `Shown(Interior: true, Body:
-  false, ...)` (`Flight/CockpitVisibility.cs:35-38`): the airframe undrawn, the interior still
-  drawn by its own overlay pass in front of the cutscene camera. The episodes this hits are the
-  ones that stage the flown aircraft at the `player` marker (`StagePlayerAircraft`,
-  `CutsceneController.cs:793-807`), which is to say the ones that mean the aeroplane to be seen.
-  *Fix shape:* the crash camera already solves the identical problem, and for the identical reason:
-  `CutToCrashView` calls `LeaveFirstPerson()` (`FlightController.cs:2447-2465`) because an external
-  vantage has to un-hide the body and `Deactivate()` the interior pass. `ApplyPresentation(true)`
-  wants that same call; `ApplyPresentation(false)` (the restore and skip paths,
-  `CutsceneController.cs:634`) wants the inverse, re-asserting the rules for the `ViewMode` the
-  pilot actually had, so a player who entered from the cockpit is back in it after the handoff. The
-  crash path needs no such restore because the respawn rebuilds the view, and the handoff does not.
-  *⚠ Traps:* Do not fix it by writing `ViewMode = Chase` for the duration. `MirrorCamera`
-  (`CutsceneController.cs:831-843`) owns every rig camera's pose outright while presenting, so the
-  view mode buys nothing there, and the mode left behind is the state the handoff restores, quietly
-  moving the player out of the cockpit they chose. Only the visibility rules and the interior pass
-  need to move. The interior lives outside `PlaneModel` under `CockpitPass`, so un-hiding the
-  airframe alone does not take it off screen (`FlightController.cs:2456-2459`). And an intro
-  cutscene drawing no aircraft is a different thing, not this bug: those definitions deactivate the
-  `player` node themselves (`ApplyOutOfFlight`, `CutsceneController.cs:734-752`).
-  *Playtest after fix:* the reported repro is CM01 (C3/M01)'s docking episode, so
-  `.\RunGame.ps1 --campaign=<profile>:0`, cycle to the cockpit view (F8) before the docking fires,
-  and watch it through: the aeroplane drawn from the external camera with no cockpit panel over it,
-  and the cockpit back on the handoff. Repeat with the skip key, which takes the other restore path.
-  *Cross-refs:* `BL-436` (the cockpit view's unjudged feel, same visibility rules), `BL-555` (the
-  skip path that shares this restore), `docs/formats/anim-definitions/cutscenes.md` (what a
-  definition owns during an episode).
-
 - `BL-631` `[Bug]` **Geometry nearer to the camera than the letterbox card draws over the bars.**
   *Evidence:* seen at the controls in CM10 (C1/M05)'s closing docking cutscene, where a walkway
   passes between the camera and the bars and is drawn on top of them, and re-confirmed on the
@@ -2270,12 +2236,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the pilot was flying a Bloodhawk in the chase view when the episode started, which rules out the
   cockpit-view visibility rules by construction. *Fix shape:* find the definition that stages the
   Balmoral for that episode and establish whether the actor is served at all before asking why it
-  is not drawn. *⚠ Traps:* `BL-625` is a different mechanism, an airframe left hidden because the
-  cutscene silences the per-frame camera arm that re-asserts cockpit visibility, and its fix cannot
-  reach a staged NPC, so do not close this against it. The two nearest known shapes are the hangar
-  hand-over that played without its aeroplane and the staged actor served only to a call that names
-  a site (`git log --grep=BL-596`, and `BL-621`); read both before opening the definition, since
-  either answer has been written once already. *Cross-refs:* `BL-625`, `BL-621`.
+  is not drawn. *⚠ Traps:* the flown airframe left hidden by the cockpit view's own rules is a
+  different mechanism, already fixed at the presentation code (`git log --grep=BL-625`), and that
+  fix cannot reach a staged NPC, so do not close this against it. The two nearest known shapes are
+  the hangar hand-over that played without its aeroplane and the staged actor served only to a call
+  that names a site (`git log --grep=BL-596`, and `BL-621`); read both before opening the
+  definition, since either answer has been written once already. *Cross-refs:* `BL-621`.
 
 - `BL-633` `[Bug]` **CM15 (C2/M05): the player is left under the terrain when a cutscene hands
   control back, and can only recover by crashing.** *Evidence:* reported at the controls. The
@@ -2287,8 +2253,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   question is whether this one takes that path. *⚠ Traps:* do not add a ground clamp to the
   handoff. It would hide a wrong restore everywhere else it happens, and it would fight an episode
   that legitimately ends below a surface. The single-sided colliders that make the symptom
-  unrecoverable are a separate property, recorded from the air side in `BL-566`.
-  *Cross-refs:* `BL-566`, `BL-625`.
+  unrecoverable are a separate property, recorded from the air side in `BL-566`. The same restore
+  path was last changed to give a cockpit seat its view back (`git log --grep=BL-625`), which is the
+  nearest reading of what that path already writes. *Cross-refs:* `BL-566`.
 
 ## HUD & UI
 

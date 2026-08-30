@@ -3475,6 +3475,8 @@ slots like the targeting keys). `PinnedViewMode` seeds the selection from `--vie
 `PLAYER_1ST_PERSON` condition. `Cockpit` (a `CockpitVisibility`, null on any rig built without an
 interior) is applied in the same block, keyed to whether the pose THIS frame was a first-person
 one rather than to the selection, so a look-behind restores the aircraft while it is down.
+`SetViewedFromOutside` is that block's stand-in for a caller that owns the camera and therefore
+silences it, the cutscene presentation being the one (`src/Session/CutsceneController.cs`).
 Head-look input is read here too and nowhere else (`HeadLookRead`, `SnapLookInput`, `FreeLookRead`,
 `MouseLookDelta`), for the same reason `OrbitInput` is: `CameraController` never learns about pads,
 mice or key layouts. `SnapLookInput` reads `Kp1`–`Kp9` and `Kp5` recenters, the original's own
@@ -5877,7 +5879,9 @@ that advance, never sit against a camera one frame behind them. Hosted: 20 world
 (`GameSession`'s drive paths, the session clock's `SimHeld`, which is what stops a node stepping
 itself on a realtime tick, and `CampaignDirector.HoldForCutscene` read it), 2 chrome off and the
 view off the aircraft (`FlightController.CameraOwned`, which also stops the cockpit rules being
-re-asserted), 11 the player out of flight (EVERY human `Held` + `Inert` + engine audio paused, and the EPISODE
+re-asserted, so this code writes both edges itself through `SetViewedFromOutside`: the airframe
+drawn and the interior pass down while it presents, the pilot's own selected view back at the
+hand-back), 11 the player out of flight (EVERY human `Held` + `Inert` + engine audio paused, and the EPISODE
 OWNER's airframe posed on the staged `player` marker through `FlightController.StageAt` while that
 state holds, asserted in that same instant rather than on the next tick, because the definition
 raising the code goes on posing the aircraft in the same dispatch; there is exactly one marker, so

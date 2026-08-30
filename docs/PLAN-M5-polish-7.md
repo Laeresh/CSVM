@@ -109,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the cutscene handoff
 
-11. ☐ `BL-625` A cutscene entered from the cockpit frames the aeroplane, and gives the cockpit back
+11. ☑ `BL-625` A cutscene entered from the cockpit frames the aeroplane, and gives the cockpit back
 12. ☐ `BL-633` CM15's handoff leaves the player above the terrain, not under it
 
 ### Wave C — CM10's attack balloons
@@ -245,52 +245,65 @@ stay correct.
 
 # Wave B — the cutscene handoff
 
-## B11 ☐ `BL-625` A cutscene entered from the cockpit frames the aeroplane, and gives the cockpit back
+## B11 ☑ `BL-625` A cutscene entered from the cockpit frames the aeroplane, and gives the cockpit back
 
-**Goal.** A player in the cockpit view when a cutscene fires sees the flown aeroplane drawn from the
-episode's external camera, with no cockpit panel over it, and is back in the cockpit when flight
-returns. Both the normal end and the skip path behave the same way.
+**What landed.** The presentation code writes the flown aircraft's own visibility at both edges.
+`FlightController.SetViewedFromOutside(bool)` is the new seam: on it calls the crash cut's own
+`LeaveFirstPerson`, so the airframe is drawn and the interior pass is deactivated; off it re-applies
+`CockpitVisibility.Rules` for the view the pilot still has SELECTED, re-syncs the pass and restores
+`_panelShown`. `CutsceneController.ApplyPresentation` calls it for every human beside `CameraOwned`,
+so both exits (the definition ending and a player's skip) go through it, since both reach the handoff
+code through `Restore`. A crashed pilot is skipped on the restore leg: `_Process` writes nothing to
+the camera while crashed, so a restore there would hold the interior over the crash camera until the
+respawn. No view mode is written and no ground clamp of any kind was added.
 
-**Evidence (confidence: traced).** `ApplyPresentation` sets `CameraOwned = true`, which silences the
-whole per-frame camera arm in `Flight/FlightController.cs` and with it the `Cockpit?.Apply` that arm
-re-asserts every frame. Whatever visibility the last flying frame left standing therefore holds for
-the episode's whole length, and in `PilotViewMode.Cockpit` that state is
-`Shown(Interior: true, Body: false, ...)` (`Flight/CockpitVisibility.cs:35-38`): the airframe undrawn,
-the interior still drawn by its own overlay pass in front of the cutscene camera. The episodes this
-hits are the ones that stage the flown aircraft at the `player` marker (`StagePlayerAircraft`), which
-is to say the ones that mean the aeroplane to be seen.
+**Evidence, re-verified against today's code.** The trace held. `ApplyPresentation` set `CameraOwned`
+and nothing else about visibility; the `Cockpit?.Apply` / `CockpitPass?.Sync` pair lives only in the
+final arm of `FlightController._Process`, which `CameraOwned` short-circuits, so the last flying
+frame's `Shown(Interior: true, Body: false, ...)` stood for the whole episode. `git log --grep=BL-625`
+returned only the two filing commits, no landing. The plan's line numbers were stale again by the
+time the item ran, which is why the members were re-located by name rather than by line.
 
-**Checked in this session:** the entry's line numbers are stale, because the co-op merge moved these
-members. In today's `Session/CutsceneController.cs`, `ApplyPresentation` is declared at `:769` and
-called at `:658` (present), `:683` (restore) and `:749`; `StagePlayerAircraft` is declared at `:845`
-and called at `:447`, `:599` and `:803`. `LeaveFirstPerson` appears nowhere in the file, so the
-mechanism is intact. Re-locate before editing rather than trusting either set of numbers.
+**Red before green, in two stages.** The assertion was added first and the whole item seen red:
+`campaign-cutscene` FAIL with `so the code draws the airframe itself, and the episode's camera frames
+an aeroplane rather than nothing (the definition ending leg)` and its interior-pass twin, on both the
+definition-ending and the skip leg. Adding only the presenting half turned those green and left the
+restore half red: `…and puts the cockpit seat back in the cockpit it chose, rather than leaving it
+outside its own aeroplane` and `…with its interior pass drawing again`. Adding the restore turned the
+suite green. Each half was therefore seen able to fail on its own.
 
-**Approach.** The crash camera already solves the identical problem for the identical reason:
-`CutToCrashView` calls `LeaveFirstPerson()` (`Flight/FlightController.cs:2447-2465`) because an
-external vantage has to un-hide the body and `Deactivate()` the interior pass. `ApplyPresentation(true)`
-wants that same call. `ApplyPresentation(false)` (the restore and skip paths) wants the inverse,
-re-asserting the rules for the `ViewMode` the pilot actually had, so a player who entered from the
-cockpit is back in it after the handoff. The crash path needs no such restore because the respawn
-rebuilds the view, and the handoff does not.
+**Verify.** `campaign-cutscene` carries the new check (`PresentingFramesTheAirframe`): two real
+human seats built with `cockpitInterior: true` and their own `CockpitOverlay`, one pinned to
+`PilotViewMode.Cockpit` and one to `Chase`, driven through a whole episode twice, once ended by the
+definition and once by a skip. It asserts the entering state, then the airframe drawn with the
+interior and its pass off while presenting, then both back on the hand-back, with the chase seat
+untouched throughout and neither seat's selected view moved.
 
-**Model recommendation.** medium. The mechanism, the call to reuse and the two call sites are all
-named; the judgement left is the restore's exact shape and the interaction with the skip path.
+Targeted results, all on this worktree with `CSVM_DATA_ROOT` set:
 
-**Verify.** `campaign-cutscene`, `campaign-cutscene-skip` and `campaign-cutscene-ownership` green,
-extended with an assertion that during a presented episode entered from `PilotViewMode.Cockpit` the
-airframe is visible and the interior pass is inactive, and that both invert on the restore. Seen red
-before green. At the controls the reported repro is CM01 (C3/M01)'s docking episode:
-`.\RunGame.ps1 --campaign=<profile>:0`, cycle to the cockpit view (F8) before the docking fires, and
-watch it through, then repeat with the skip key, which takes the other restore path.
+- `-Filter cutscene`: 5 passed, 0 failed (`campaign-cutscene`, `cutscene-letterbox`,
+  `campaign-cutscene-skip`, `campaign-cutscene-ownership`, `campaign-coop-cutscene-fullscreen`),
+  engine errors clean.
+- `-Filter cockpit`: 3 passed, 0 failed (`cockpit-interior`, `cockpit-overlay-pass`,
+  `cockpit-panel-staging`).
+- `-Filter death`: 6 passed, 0 failed, which is the crash cut's own coverage past the new guard.
+- `-Filter intro`: 2 passed. `-Filter coop`: 7 passed. `-Filter landings`: 11 passed.
+  `-Filter swap`: 2 passed.
+- `.\RunTests.ps1 -Quick`: units 241 passed of 241, engine 13 passed of 13, engine errors clean.
 
-**⚠ Traps.** Do not fix this by writing `ViewMode = Chase` for the duration. `MirrorCamera` owns every
-rig camera's pose outright while presenting, so the view mode buys nothing there, and the mode left
-behind is the state the handoff restores, quietly moving the player out of the cockpit they chose.
-Only the visibility rules and the interior pass need to move. The interior lives outside `PlaneModel`
-under `CockpitPass`, so un-hiding the airframe alone does not take it off screen. An intro cutscene
-drawing no aircraft is a different thing: those definitions deactivate the `player` node themselves
-in `ApplyOutOfFlight`.
+**Verified.** <pending orchestrator run>
+
+**Owed at the controls.** The flight that confirms the picture is not answered by a headless
+assertion and is owed as its own item: CM01 (C3/M01)'s docking episode, `.\RunGame.ps1
+--campaign=<profile>:0`, cycle to the cockpit view (F8) before the docking fires and watch it
+through, then repeat with the skip key, which takes the other restore path.
+
+**⚠ Traps that still bind.** Do not write `ViewMode = Chase` for the duration: `MirrorCamera` owns
+every rig camera's pose outright while presenting, so the view mode buys nothing there, and the mode
+left behind is what the hand-back reads. The interior lives outside `PlaneModel` under `CockpitPass`,
+so un-hiding the airframe does not take the panel off screen; the pass has to be deactivated and
+re-synced by name. An intro cutscene drawing no aircraft is a different thing: those definitions
+deactivate the `player` node themselves in `ApplyOutOfFlight`.
 
 ## B12 ☐ `BL-633` CM15's handoff leaves the player above the terrain, not under it
 
