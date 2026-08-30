@@ -3090,8 +3090,17 @@ usual.
   `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
   PERF-21.
 
-- `BL-648` `[Bug]` **`world-turrets` fails after enough suites have run before it in one engine
-  process, so a full `RunTests.ps1` can report a red the suite does not own.** *Evidence:* the
+- `BL-648` `[Bug]` **A suite fails after enough suites have run before it in one engine process, so
+  a full `RunTests.ps1` can report a red the suite does not own.** *Two suites carry this now, on
+  the same signature: the gun fires and nothing lands.* **`ai-gunnery`** fails
+  `AiSuites.cs`'s assist control, `the same geometry flagged human is assisted onto the target
+  moved=0`, after exactly `puffer-wind, aim-assist, ordnance-end-conditions, ordnance-guidance,
+  turret-self-fire, c1-aa-guns, ai-spawn-jitter, ai-actor` in one process; it passes alone over five
+  runs with byte-identical dead-eye counts, passes on either half of that prefix and on any pair
+  from it, and growing the prefix one suite at a time flips it only at the eighth. It fails
+  identically on `main`, which is green in its own four-shard run only because its weighting puts
+  `ai-gunnery` in a different shard, so a branch that adds a suite inherits a red it did not cause.
+  **`world-turrets`** is the original instance. *Evidence:* the
   failing assertion is `AiSuites.cs:744`, `…with rounds striking it moved=0` — the armed
   `multiplayer1zep` rings acquire and fire (`ShotsFired > 0` passes on the line above) but the bait
   plane's combined armour/health never moves. It is deterministic on the sequence, not random:
@@ -3099,19 +3108,31 @@ usual.
   reproduces it every time, and the suite passes alone. **Accumulation, not one bad neighbour:**
   splitting that prefix in half and running either half ahead of `world-turrets` passes, so no
   single predecessor carries it and the mechanism needs the whole run-up. *Fix shape:* find the
-  process-wide state that survives a suite's world disposal and starves the turret's rounds — a
-  shared projectile pool whose slots are never returned is the leading candidate, since the
-  failure is "the gun fires and nothing lands" and `air-to-air` already exercises whole-pool
-  overflow. Instrument the live-round count at the top of `world-turrets` under both orders before
-  changing anything; if it is already at the cap, the reset seam is the fix and the suite needs no
-  edit. *⚠ Traps:* this is not the shard balancer — the same sequence fails under a single-shard
+  process-wide state that survives a suite's world disposal and starves the rounds. The pool
+  candidate this entry used to lead with is not supported by the code: `Projectile.cs` carries no
+  mutable static, and each suite holds its own `ProjectilePool`, so there is no shared slot table to
+  exhaust. **The better-supported candidate is `Utils/Rng.cs`,** which is a static class holding one
+  stream per subsystem and whose `Rng.Reset` is called only on session build
+  (`Session/GameSession.cs`, `Session/Launcher.cs`). The `--run-tests` harness completes every suite
+  inside one `_Ready`, so a suite inherits whatever stream position its predecessors left, and the
+  world-building suites among them reset the streams part-way through a shard, which is the shape of
+  a dependence that needs a whole run-up rather than one neighbour. `Rng`'s own summary states the
+  rule this breaks: only the draw order within a stream is significant, and that order is
+  deterministic only if every consumer runs its draws in the same sequence run to run. This is a
+  reading of the seam, not a measurement: instrument the stream position and the live-round count at
+  the top of the failing suite under both orders before changing anything. If it is the streams, the
+  fix is a per-suite reset in the harness, so a suite's result is a function of the suite. *⚠ Traps:* this is not the shard balancer — the same sequence fails under a single-shard
   run. Do not "fix" it by widening the damage assertion or by giving the suite its own shard: the
   false red is the symptom, and whatever leaks would then leak silently into every later suite in
   the same process. It is also order-fragile rather than fixed: adding a suite reshuffles the
   weighted shards and can hide it (it went green when `anim-activation-prerequisite`'s weight
-  landed), so a clean full run is not evidence it is gone. *Cross-refs:* `BL-584` (the other
+  landed), so a clean full run is not evidence it is gone. Expect a per-suite reset to move other
+  suites' pinned numbers, since a value recorded while a neighbour's draws sat in the stream was
+  recorded off a position the reset removes; re-pin those against the reset harness rather than
+  loosening them. *Cross-refs:* `BL-584` (the other
   harness-integrity item, a unit test that went red once), `analysis/engine-suite-weights.json`
-  (what decides the order).
+  (what decides the order), `Utils/Rng.cs`, `Testing/TestHarness.cs`,
+  `docs/plans/PLAN-campaign-coop.md` (which met two of `main`'s suites the same way).
 
 ## Misc
 

@@ -1,8 +1,10 @@
 # Milestone 5 polish, run 7: the campaign plays clean
 
-**ACTIVE PLAN** (written 2026-08-30). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE** (written 2026-08-30, all 10 items landed 2026-08-31). Indexed in
+[`plans.md`](plans.md). Read as history: the shipped behaviour is in
+[`docs/architecture.md`](../architecture.md) and [`docs/verification.md`](../verification.md), and
+each item's record is its landing commit's message. `A2`, `E41` and `E42` landed partial, and what
+each still owes is in its own rewritten `backlog.md` entry rather than here.
 
 This run takes ten open items that a player meets while flying the delivered campaign: the
 animation prerequisite the parse drops, the two cutscene handoffs that lose the aeroplane or the
@@ -798,7 +800,12 @@ fighters belong in the mission; it is recorded on `BL-641` and owed its own item
 `analysis/goldens/manifest.json` unmodified in the tree (GOLD-9); `-Quick` 241 units and 13 suites
 PASS.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Orchestrator's full `.\RunTests.ps1` on the integrated tree, with wave E merged and
+`main` merged twice: build clean, **2766 units of 2766**, **18 goldens hash-identical**, engine
+**197 of 198 suites passed** with engine errors clean. The one failure is `ai-gunnery`, which is
+`BL-648`'s shard-order defect and not this item's: it passes alone over five runs and fails
+identically on `main` under the same nine-suite selector, main's own gate being green only because
+its weighting seats that suite in another shard.
 
 ## E42 ◐ `BL-562` CM11's physics tick spikes are attributed and removed
 
@@ -904,7 +911,10 @@ engine errors clean, 101.5 s, the engine stage 1.5 s over its 100 s budget (awar
 `.\CheckCommentCaps.ps1 -Summary`: every block within cap, and `dotnet format --verify-no-changes`
 clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Orchestrator's full `.\RunTests.ps1` on the integrated tree: build clean, **2766 units
+of 2766**, **18 goldens hash-identical**, engine **197 of 198 suites passed**, engine errors clean.
+The one failure is `ai-gunnery`, `BL-648`'s shard-order defect, which reproduces on `main` under the
+same selector and is not this item's.
 
 **⚠ Traps that still bind.** Do not raise `max_physics_steps_per_frame`: it deepens the catch-up
 spiral rather than recovering the lost steps, and nothing here exhausts the cap anyway. Do not chase
@@ -1040,7 +1050,12 @@ tier `-SkipEngine -SkipGoldens` **2694 passed of 2694**; the golden stage after 
 four hashes and no `exercises` text (GOLD-9). `.\CheckCommentCaps.ps1 -Summary` within cap and
 `dotnet format --verify-no-changes` clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Orchestrator's full `.\RunTests.ps1` on the integrated tree: build clean, **2766 units
+of 2766**, **18 goldens hash-identical** including this item's four re-pins, engine **197 of 198
+suites passed**, engine errors clean. The one failure is `ai-gunnery`, `BL-648`'s shard-order
+defect, which reproduces on `main` under the same selector and is not this item's. This item's own
+suite addition is what re-partitioned the weighted shards and seated `ai-gunnery` beside the run-up
+that trips it, which is `BL-648`'s recorded trap rather than a fault in the gate.
 
 **⚠ Traps that still bind.** Do not read `script_ms` or `physics_ms` as a per-frame cost; both are the
 worst step of the last wall second (PERF-21), and the entry's `physics_ms` 17 to 18 was E42's telemetry
