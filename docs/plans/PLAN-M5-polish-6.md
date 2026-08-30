@@ -1,8 +1,10 @@
 # Milestone 5 polish, run 6: cross-theme traced polish
 
-**ACTIVE PLAN** (written 2026-08-28). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE (2026-08-30).** All eleven items resolved on `worktree-m5-polish-6` and merged into
+`main`: five landed (`A2`, `B12`, `C21`, `D31`, `D32`), four closed as disproven (`A1`, `A3`,
+`C22`, `C23`), and two landed in part (`B11`, `B13`), whose remaining halves are carried forward
+in `backlog.md` as `BL-546` (the nitro prop swap) and `BL-535` (the pool's slot re-reset). Kept in
+`docs/plans/` for those four disproofs and the measurements behind them.
 
 This run takes eleven open items from the themes the campaign walk of `PLAN-M5-polish-5.md` does
 not touch: world lighting and the clutter fade band, the effects and animation runtime, the
@@ -49,7 +51,7 @@ every prior run.
 
 **No item here judges a constant at the controls.** Every `[Tuning]` and `[Owed-playtest]` item is
 deliberately out: those need the user flying, not an implementer, and they are consolidated in
-[`playtest.md`](../playtest.md). Where an item's verification does need the user's eyes (A1, A2,
+[`playtest.md`](../../playtest.md). Where an item's verification does need the user's eyes (A1, A2,
 A3, B12), it says so and the code side lands first.
 
 ## Decisions (2026-08-28)
@@ -314,7 +316,7 @@ The user's ruling is that footage- and screenshot-derived measurements are not a
 for a fidelity change here, so this item was reduced to one question: what in `crimson.exe` decides
 whether a scene node's material is modulated by `SUNLIGHT`, and what does it key on?
 
-**The answer, written up in [`docs/org/vertexLighting.md`](org/vertexLighting.md).** A real
+**The answer, written up in [`docs/org/vertexLighting.md`](../org/vertexLighting.md).** A real
 per-surface exemption exists, it is two gates, and neither keys on a `soil` id:
 
 1. **Per model** (`FUN_00551d90`): bit 0 of the model record's flag word at `+0x08`, the flag the
@@ -449,7 +451,7 @@ How each candidate falls:
   triple it reads (`+0xd`/`+0xe`/`+0xf`) is the stamper's own step-11 output. The original does not
   fade a non-clutter building.
 
-The alpha-texture lighting gate of [`org/vertexLighting.md`](org/vertexLighting.md) is ruled
+The alpha-texture lighting gate of [`org/vertexLighting.md`](../org/vertexLighting.md) is ruled
 out too: the band is a function of camera distance and it disappears under a mip-policy switch that
 changes no lighting term. It is not `BL-613`.
 

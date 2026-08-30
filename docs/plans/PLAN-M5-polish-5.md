@@ -1,8 +1,11 @@
 # Milestone 5 polish, run 5: the D32 sortie follow-ups, CM04 to CM09
 
-**ACTIVE PLAN** (written 2026-08-28). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE (2026-08-30).** All 42 items landed on `worktree-m5-polish-5` and merged into `main`:
+the D32 follow-ups across CM04 to CM09 (`A1` to `C25`), the CM13 racer blocker (`E41`), and the
+closing sortie's own findings (`F42` to `G64`). `D31` was flown at the controls over CM04, CM06,
+CM07, CM09, CM13 and CM02's capture; what it left open was filed as `BL-597`, `BL-598`, `BL-612`,
+`BL-618`, `BL-619` and `BL-622`, with CM13's race pace and CM08's two items still owed at the
+controls. Kept in `docs/plans/` for its per-mission verdicts and the decode under each item.
 
 This run takes the follow-ups the run-4 closing sortie (D32 of `PLAN-M5-polish-4.md`, flown CM03
 to CM09) filed or handed back: the three partials whose remaining half came back (`BL-513`,
@@ -121,7 +124,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — the sortie
 
-31. ☐ Fly CM04 to CM09 end to end and judge every item where it was reported
+31. ☑ Fly CM04 to CM09 end to end and judge every item where it was reported
 
 ### Wave E — CM13 (C2/M03), the blocker
 

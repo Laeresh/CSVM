@@ -1044,7 +1044,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   not raise `max_physics_steps_per_frame`: it deepens the catch-up spiral rather than recovering the
   lost steps. The measurement was taken with `--debug-objective=18` driving the mission, with nobody
   at the controls, so it under-weights projectiles and destruction cascades. *Cross-refs:*
-  `docs/PLAN-M5-polish-6.md` C22, `BL-606` (the same per-sim-step suspects seen as an allocator).
+  `docs/plans/PLAN-M5-polish-6.md` C22, `BL-606` (the same per-sim-step suspects seen as an allocator).
 
 - `BL-627` `[Bug]` **CM12 (C2/M01): the Spruce Goose moves jittery.** *Evidence:* reported at the
   controls, and re-confirmed on the merged build in the same sortie that cleared the mission's

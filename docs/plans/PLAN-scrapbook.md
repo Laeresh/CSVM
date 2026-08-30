@@ -1,8 +1,11 @@
 # The scrapbook: the campaign's mission-end screen and the book behind it
 
-**ACTIVE PLAN** (written 2026-08-29). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE (2026-08-30).** All fourteen items landed on `worktree-bl-622-debrief-decode`, which
+was rebased onto `main` rather than merged with it (item `22`) and merged in: the decode of the
+page composition, the tallies and the navigation (`A1` to `A3`), the record and the director
+(`B11` to `B14`), the results page and the mission-end entry (`C15` to `C17`), and the book itself
+with its detail view, navigation and danger-zone slot (`D18` to `D21`). `BL-622` is closed. Kept
+in `docs/plans/` for its decode of the mission-end pass and the composition tables under Wave A.
 
 This plan delivers the screen a finished campaign mission ends on, and the book that screen is one
 page of. Today a mission ends, holds its last flown frame for two seconds, and cuts to the cabin
@@ -10,8 +13,8 @@ with no statement of whether the player won (`BL-622`). The original ends on the
 opened at the mission just flown: a two-page spread per mission with the results block on the first
 page and a page of story scraps on the second, twenty-five mission slots, every scrap clickable into
 its own detail view, and a bookmark back to the current mission. The decode of the mission-end pass
-behind it is [`docs/org/debrief.md`](org/debrief.md), produced in the session that wrote this plan;
-the record it fills is [`docs/formats/saved-games.md`](formats/saved-games.md), "The mission-result
+behind it is [`docs/org/debrief.md`](../org/debrief.md), produced in the session that wrote this plan;
+the record it fills is [`docs/formats/saved-games.md`](../formats/saved-games.md), "The mission-result
 array".
 
 Two boundaries. The cabin's **Change Memento** picker (`BL-463`) is out of scope even though it
@@ -106,7 +109,7 @@ draw order, a per-objective visibility gate, and the three langui ids of the det
 are numbered from 1 and a mission has one to three; spread 1 is the results page. 167 rows are
 `Snap_<mission>_<objective>` player captures. The widget geometry is `extracted/rof/ASSETS/LAYOUT.CSV`
 as for every other screen, including the eleven kill-stamp slots and the 26 zoom text families.
-Both are decoded in [`formats/campaign-screens.md`](formats/campaign-screens.md), "The scrapbook".
+Both are decoded in [`formats/campaign-screens.md`](../formats/campaign-screens.md), "The scrapbook".
 
 **The rows.** Every label is a langui `IDS_SB_*` row in `extracted/rof/ui_strings.json`:
 
@@ -124,7 +127,7 @@ Tabs are 1159 `Best to Date` (the merged half at `+0x54`) and 1160 `Most Recent`
 at `+0x00`); 1200 `Current Mission` is the bookmark. 1215 `%1!s! - %2!s!` is the page title (name
 and area), 1216 `%1!s! - Scrapbook` the book's own, and 1219 `Not yet flown ` an unflown slot.
 
-**The decode addresses**, all from [`docs/org/debrief.md`](org/debrief.md): the pass is
+**The decode addresses**, all from [`docs/org/debrief.md`](../org/debrief.md): the pass is
 `FUN_004194e0`, reached from `FUN_00443090`; the record is `UIData +0x1868` indexed `seq + 1`; the
 screen push is `FUN_0046fb60(0x0071d57c, …)`; the campaign win flag is `campaign +0xc58` through
 `FUN_00463be0` / `FUN_00463c10`; the attempt counter is `[0x0071b494 + idx*0x10]` with
@@ -191,7 +194,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Closing — worktree housekeeping
 
-22. ☐ Rebase onto main instead of merging it: main's history carries a rewrite (a `Co-Authored-By`
+22. ☑ Rebase onto main instead of merging it: main's history carries a rewrite (a `Co-Authored-By`
     trailer backfill across roughly 110 commits, each an identical tree to its old self) that landed
     after this worktree forked from it. `close-worktree`'s ordinary "main has moved → `git merge
     main`" step would replay every one of those rewritten commits as new work in one merge commit.
@@ -236,9 +239,9 @@ file, `extracted\rof\ASSETS\SCRAPBOOK.CSV`: one `[SCRAPBOOK]` section of 461 row
 `<mission>_<spread>_<item>`, carrying per scrap the art name, the extensions, the position, the
 clickable region, the draw order, a visibility gate and the three langui ids its detail view shows.
 The file states its own column header. The record is
-[`formats/campaign-screens.md`](formats/campaign-screens.md), "The scrapbook"; the code that reads
+[`formats/campaign-screens.md`](../formats/campaign-screens.md), "The scrapbook"; the code that reads
 it, `FUN_004061d0` and the four callers that are between them the whole book, is in
-[`org/debrief.md`](org/debrief.md).
+[`org/debrief.md`](../org/debrief.md).
 
 **Verified.** Every row resolved against the shipped install: 294 page images, 43 zoom images and
 all 26 `SB_BG_*.jpg` zoom backgrounds are present, none missing. Item numbering is contiguous from 1
@@ -313,8 +316,8 @@ total field. The stamps are an enumeration rather than a grid: `uiData` 2404 wal
 then the ace array, skips zeros, and answers the nth non-zero slot with a frame index (`i`, or
 `i + 11` for an ace) and a count, returning -1 when the tab is exhausted. That is where the art's 22
 frames for 11 airframes come from. The record is in
-[`org/debrief.md`](org/debrief.md#what-the-tallies-count) and the screen side in
-[`formats/campaign-screens.md`](formats/campaign-screens.md), "The kill stamps".
+[`org/debrief.md`](../org/debrief.md#what-the-tallies-count) and the screen side in
+[`formats/campaign-screens.md`](../formats/campaign-screens.md), "The kill stamps".
 
 **Verified.**
 
@@ -379,7 +382,7 @@ exactly one.
 
 **Landed.** The two entry paths do not converge on the same screen: a mission ending opens
 `SCRAPBOOK.SCRIPT` directly (`FUN_0046fb60(0x0071d57c, …)`, already traced in
-[`org/debrief.md`](org/debrief.md#the-pass-in-order)), but the cabin's PREVIOUS MISSIONS button
+[`org/debrief.md`](../org/debrief.md#the-pass-in-order)), but the cabin's PREVIOUS MISSIONS button
 opens `SCRAPBOOK_TOC.SCRIPT` instead (`LAYOUT.CSV`'s `PC_B_PREVIOUS` row carries
 `ScriptToExe = ScrapBook_TOC`), and the book is reached from there only by picking a row or by the
 Current Mission jump. A1's arrow-stepping and bookmark rule stand unchanged. Replay Mission forks
@@ -387,9 +390,9 @@ on a session flag, `$$SR$$`, that only the mission-end path can leave set: resta
 the mission just flown in the same session, or otherwise falling through to the cabin's own New
 Mission call sequence. The trace, the full `script_run`/`pause`/`continue`/`end` inventory across
 all three scripts, and what remains unread are in
-[`org/debrief.md`](org/debrief.md#entering-the-book-replay-mission-and-the-table-of-contents); the
+[`org/debrief.md`](../org/debrief.md#entering-the-book-replay-mission-and-the-table-of-contents); the
 transitions and the two previously-undecoded callbacks (2408, 2409) are in
-[`formats/campaign-screens.md`](formats/campaign-screens.md#entry-exit-and-the-table-of-contents).
+[`formats/campaign-screens.md`](../formats/campaign-screens.md#entry-exit-and-the-table-of-contents).
 
 **Verified.** Every `script_run`, `script_pause`, `script_continue` and `script_end` in
 `SCRAPBOOK.SCRIPT`, `SCRAPBOOKZOOM.SCRIPT` and `SCRAPBOOK_TOC.SCRIPT` is accounted for (nine
@@ -554,7 +557,7 @@ fails, so the pass is not vacuous. `dotnet format`/`dotnet build` are clean, the
 `CampaignProgression` merges them per index by maximum the way the original does.
 
 **Evidence (confidence: traced).** A2 decoded both arrays and the credit rule, in
-[`org/debrief.md`](org/debrief.md#what-the-tallies-count): the player kills a hostile aircraft, its
+[`org/debrief.md`](../org/debrief.md#what-the-tallies-count): the player kills a hostile aircraft, its
 `vehicle.json` `nodename` gives the airframe index 0 to 10, and the roster's `ace` flag (slot 67)
 chooses which of the two arrays is incremented. `MissionAttempt`
 (`CSVM/src/Session/CampaignProgression.cs:11`) has scalar `Shots` and `Hits` only, off
@@ -687,7 +690,7 @@ order (Hoplite, Hellhound, Balmoral, Bloodhawk, Brigand, Devastator, Firebrand, 
 Peacemaker, Warhawk) with the name drawn into the stamp, frames 11 to 21 the same eleven over a
 star. The eleven slots are `SB_KILL0` to `SB_KILL10` in `LAYOUT.CSV` with `SB_KILLTEXT0` to
 `SB_KILLTEXT10` for the counts, and the enumeration rule is A2's, in
-[`org/debrief.md`](org/debrief.md#the-stamps-and-the-total).
+[`org/debrief.md`](../org/debrief.md#the-stamps-and-the-total).
 
 **Approach.** Draw the strip frame the enumeration names into the slot the ordinal names. Fill slots
 densely from `SB_KILL0`, walking the plain tally's airframes in ascending index order and then the
@@ -732,9 +735,9 @@ different after a win.
 is the bookmark behaving as `uiData` 2401 says it should when the open mission is the current one.
 The entry is therefore the same position the bookmark jumps to, and A3 traced the call that performs
 it, `FUN_0046fb60(0x0071d57c, …)` off the end of `FUN_004194e0`
-([`org/debrief.md`](org/debrief.md#the-pass-in-order)). The tab is Most Recent: it resets to that on
+([`org/debrief.md`](../org/debrief.md#the-pass-in-order)). The tab is Most Recent: it resets to that on
 every entry regardless of path, mission end included
-([`org/debrief.md`](org/debrief.md#entering-the-book-replay-mission-and-the-table-of-contents)).
+([`org/debrief.md`](../org/debrief.md#entering-the-book-replay-mission-and-the-table-of-contents)).
 Replay Mission on this page restarts the just-flown mission in place, on the `$$SR$$` fork A3 found;
 the cabin never sets that flag, so `CSVM`'s Replay Mission need not distinguish the two once this
 page's own entry is the only caller that can leave it set.
@@ -840,7 +843,7 @@ the results page. `dotnet build`/`format` clean, `CheckCommentCaps.ps1` clean, a
 
 **What it changed elsewhere.** `docs/formats/campaign-screens.md`'s "Resolving a row to a file"
 section is corrected to the `Zoom`-column gate, with the exact row counts behind it. The results
-page's own worked example (`docs/PLAN-scrapbook.md`'s D18 entry, and `docs/architecture.md`) is
+page's own worked example (`docs/plans/PLAN-scrapbook.md`'s D18 entry, and `docs/architecture.md`) is
 unaffected, since D18 never read `Opens` itself.
 
 **Goal.** Clicking a scrap opens it in detail, with the text the small version does not carry.
@@ -910,7 +913,7 @@ passes: 2627 unit tests, 181 engine suites clean, 16 goldens hash-identical, 154
 > the bookmark jumps to the campaign's current mission at spread 1. A3 settled the back arrow's fall
 > into the table of contents at the front of the book (`SB_B_PREV` returning 0 from `uiData` 2402
 > mode 101) and traced the table of contents itself, `SCRAPBOOK_TOC.SCRIPT`
-> ([`org/debrief.md`](org/debrief.md#entering-the-book-replay-mission-and-the-table-of-contents)),
+> ([`org/debrief.md`](../org/debrief.md#entering-the-book-replay-mission-and-the-table-of-contents)),
 > including its own View/Current Mission jump back into the book. Whether this item also builds the
 > table of contents as its own screen, given CSVM's `CampaignPreviousMissionsPage` is already shaped
 > like it rather than like the book, is an open scope call A3 raised but did not settle.
