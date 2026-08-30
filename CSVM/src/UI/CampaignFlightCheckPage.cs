@@ -39,10 +39,10 @@ internal readonly record struct FlightRow(
 /// <see cref="CampaignScreen.Ammo"/>), CHANGE PLANE where the mission allows it, RETURN TO BRIEFING
 /// and FLY MISSION. The row list carries only these actionable items; each plane's dense text
 /// (title, both eight-row lists) and the objectives note live in <see cref="Detail"/>, the split
-/// <see cref="CampaignRosterPage"/> uses for its own descriptive text. The seated player's CHANGE
-/// PLANE opens <see cref="CampaignScreen.PlaneSelection"/> on the row's own slot; a guest's still
-/// cycles in place. With guests joined this one page draws
-/// the whole sequence, a player at a time (<see cref="CampaignFlightField"/>).
+/// <see cref="CampaignRosterPage"/> uses for its own descriptive text. CHANGE PLANE opens
+/// <see cref="CampaignScreen.PlaneSelection"/> on the row's own slot, a guest's check and the
+/// seated player's alike, so one place enforces the duplicate rule. With guests joined this one
+/// page draws the whole sequence, a player at a time (<see cref="CampaignFlightField"/>).
 /// </summary>
 public sealed class CampaignFlightCheckPage : CampaignPage
 {
@@ -138,13 +138,6 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     /// <inheritdoc/>
     public override int RowCount => Rows().Count;
 
-    /// <summary>The horizontal axis is advertised only where it still does something, which is a
-    /// guest's own CHANGE PLANE row: the seated player's opens the picker instead.</summary>
-    public override string Footer => StepsInPlace
-        && Flow.Row < Rows().Count && Rows()[Flow.Row].Kind == FlightRowKind.ChangePlane
-        ? "↑↓  Choose       ←→  Change Plane       Enter / A  Select       Esc / B  Back"
-        : "↑↓  Choose       Enter / A  Select       Esc / B  Back";
-
     /// <summary>Each crew slot's aircraft silhouette, the airframe's own frame of the icon sheet,
     /// at the authored positions of <c>fc_p_pilotplane</c> and <c>fc_p_wingplane</c>.</summary>
     public override IReadOnlyList<BoardPicture> Pictures
@@ -221,10 +214,6 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     // own aircraft; the seated player's page reads the profile aircraft.
     private int Player => Flow.Field.Current;
 
-    // Whether CHANGE PLANE is still a stepper. A guest's is: the picker lists the seated profile's
-    // aircraft, which is not the roster a guest chooses from.
-    private bool StepsInPlace => Player > 0;
-
     // The flow's hangar store, or null off-engine: every plane then reads as its stock fit.
     private CustomPlaneStore? Planes => _planes ??= Flow.Planes;
 
@@ -277,20 +266,6 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         return row >= 0 && row < rows.Count ? rows[row].Detail : string.Empty;
     }
 
-    /// <summary>A guest's CHANGE PLANE row walks their own choices. The seated player's does
-    /// nothing here: one screen changes their plane, so one place enforces the duplicate rule.</summary>
-    public override bool Step(int row, int dir)
-    {
-        var rows = Rows();
-        if (row < 0 || row >= rows.Count || rows[row].Kind != FlightRowKind.ChangePlane || dir == 0
-            || !StepsInPlace)
-        {
-            return false;
-        }
-
-        return Flow.Field.Step(Player, dir);
-    }
-
     /// <inheritdoc/>
     public override bool Accept(int row)
     {
@@ -306,7 +281,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
                 Flow.SetAmmoSlot(rows[row].Slot);
                 Flow.GoTo(CampaignScreen.Ammo);
                 return true;
-            case FlightRowKind.ChangePlane when !StepsInPlace:
+            case FlightRowKind.ChangePlane:
                 Flow.SetPlaneSlot(rows[row].Slot);
                 Flow.GoTo(CampaignScreen.PlaneSelection);
                 return true;
@@ -347,8 +322,8 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         var rows = new List<FlightRow>();
         if (Player > 0)
         {
-            // A guest cycles the stock eleven, so neither of FLIGHTCHECK.SCRIPT's plane-change
-            // gates applies: both are rules about the seated profile's own aircraft.
+            // A guest picks out of the stock eleven and copies, so neither of FLIGHTCHECK.SCRIPT's
+            // plane-change gates applies: both are rules about the seated profile's own aircraft.
             AddSlot(rows, Flow.Field.Plane(Player), slot: 0, heading: "PILOT", changePlane: true);
         }
         else

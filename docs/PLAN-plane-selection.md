@@ -148,7 +148,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — the screens that change around it
 
 7. ☑ C7 The flight check opens the picker and loses its in-place stepper
-8. ☐ C8 A guest's check gets the picker, with no EXPORT and a refusal of its own
+8. ☑ C8 A guest's check gets the picker, with no EXPORT and a refusal of its own
 9. ☐ C9 The ammo screen's captions and fields take their authored positions
 
 ### Wave D — the record
@@ -406,7 +406,7 @@ focused, not which screen is drawn. Do not remove `Step` from the page: the ammo
 but leaving the override in place with a narrower guard is the smaller change than reshaping the
 base contract.
 
-## C8 ☐ A guest's check gets the picker, with no EXPORT and a refusal of its own
+## C8 ☑ A guest's check gets the picker, with no EXPORT and a refusal of its own
 
 **Goal.** On a guest's flight check, CHANGE PLANE opens the same screen with a single slot, listing
 every stock airframe and every copy of the seated profile's aircraft. Picking one another player is

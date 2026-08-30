@@ -296,6 +296,114 @@ public class CampaignPlaneSelectionPageTests
         Assert.Null(flow.Modal);
     }
 
+    /// <summary>A guest's picker is one PILOT slot over that guest's own roster, the stock airframes
+    /// first and the seated profile's aircraft copied after them, and it draws no EXPORT: a guest
+    /// flies a session copy carrying the owner's plane name (the plan's decision 9).</summary>
+    [Fact]
+    public void AGuestsPickerIsOneSlotOverTheirOwnRosterAndDrawsNoExport()
+    {
+        var page = GuestPage(out _, players: 2);
+
+        Assert.Equal(1, page.ActiveSlots);
+        Assert.Equal(3, page.RowCount); // pick, accept, cancel
+        Assert.Equal("ACCEPT SELECTIONS", page.RowText(1));
+        Assert.Equal("CANCEL SELECTIONS", page.RowText(2));
+        for (int row = 0; row < page.RowCount; row++)
+        {
+            Assert.NotEqual(BoardButton.ExportPlane, page.Button(row).Button);
+        }
+
+        var combo = page.Combo(0)!;
+        Assert.Equal(14, combo.Entries.Count); // 11 stock airframes + the profile's three
+        Assert.Equal("Airframe 0", combo.Entries[0]);
+        Assert.Equal("Gypsy Magic - Airframe 5", combo.Entries[11]);
+        Assert.Equal(5, combo.Selected); // the starter airframe the guest opened on
+    }
+
+    /// <summary>Decision 6: langui 710 names a Pilot and a Wingman a guest's check has no concept
+    /// of, so the refusal is a line of ours. The pick reverts, exactly as the seated player's does.</summary>
+    [Fact]
+    public void AGuestPickingTheSeatedPlayersAircraftIsRefusedInItsOwnWordsAndReverts()
+    {
+        var page = GuestPage(out var flow, players: 2);
+        var combo = page.Combo(0)!;
+
+        Assert.True(page.Accept(0));
+        while (combo.Highlight != 11)
+        {
+            combo.Move(1);
+        }
+
+        Assert.True(page.Accept(0));
+
+        Assert.Equal("Each player must fly a different plane.", flow.Modal?.Message);
+        Assert.Equal(5, combo.Selected);
+        Assert.False(combo.Open);
+    }
+
+    /// <summary>The other half of the same rule: what another guest took is refused too, which is
+    /// the comparison only <c>CampaignFlightField</c> can make.</summary>
+    [Fact]
+    public void AGuestPickingWhatAnotherGuestFliesIsRefusedAndReverts()
+    {
+        var page = GuestPage(out var flow, players: 3);
+        var combo = page.Combo(0)!;
+
+        Assert.Equal(6, combo.Selected); // P2 opened on stock airframe 5, so P3 opened past it
+
+        Assert.True(page.Step(0, -1));
+
+        Assert.Equal("Each player must fly a different plane.", flow.Modal?.Message);
+        Assert.Equal(6, combo.Selected);
+    }
+
+    /// <summary>⚠ A guest's ACCEPT moves their own session-scoped pick and touches neither the
+    /// seated profile in memory nor the file on disk.</summary>
+    [Fact]
+    public void AGuestsAcceptedPickMovesTheGuestAndLeavesTheSeatedProfileAlone()
+    {
+        var page = GuestPage(out var flow, players: 2);
+
+        Assert.True(page.Step(0, 1));
+        Assert.True(page.Accept(1)); // ACCEPT SELECTIONS
+
+        var flown = flow.Field.Plane(1)!;
+        Assert.Equal(6, flown.Airframe);
+        Assert.True(flow.Field.IsStock(flown));
+        Assert.Equal(0, flow.Profile!.SelectedPlane);
+        Assert.Equal(1, flow.Profile!.WingmanPlane);
+        Assert.Equal(0, flow.Store.Load("Zachary")!.SelectedPlane);
+        Assert.Equal(CampaignScreen.FlightCheck, flow.Screen);
+    }
+
+    /// <summary>CANCEL on a guest's screen is the same restore the seated player's is: the pick the
+    /// screen opened with, and nothing written.</summary>
+    [Fact]
+    public void CancelOnAGuestsPickerLeavesThemFlyingWhatTheyFlew()
+    {
+        var page = GuestPage(out var flow, players: 2);
+
+        Assert.True(page.Step(0, 1));
+        Assert.True(page.Accept(2)); // CANCEL SELECTIONS
+
+        Assert.Equal(5, flow.Field.Plane(1)!.Airframe);
+        Assert.Equal(5, page.Combo(0)!.Selected);
+    }
+
+    // The picker for the last joined player, the flight-check walk having reached them. The
+    // mission carries a wingman, so a seated screen here would draw two slots and two EXPORTs.
+    private static CampaignPlaneSelectionPage GuestPage(out CampaignFlow flow, int players)
+    {
+        var page = NewPage(out flow, wingman: true);
+        flow.SetPlayers(players);
+        for (int i = 1; i < players; i++)
+        {
+            flow.Field.Advance();
+        }
+
+        return page;
+    }
+
     private static CampaignPlaneSelectionPage NewPage(out CampaignFlow flow, bool wingman) =>
         NewPage(out flow, out _, wingman, withPlanes: false);
 

@@ -293,7 +293,7 @@ public class CampaignFlightCheckPageTests
     }
 
     // A guest's page is one PILOT block and its two action rows: the wingman belongs to the seated
-    // profile, and CHANGE PLANE is always offered because a guest cycles the stock eleven.
+    // profile, and CHANGE PLANE is always offered because a guest picks out of their own roster.
     [Fact]
     public void AGuestsPageCarriesOnePilotBlockAndNoWingman()
     {
@@ -337,19 +337,25 @@ public class CampaignFlightCheckPageTests
         Assert.False(page.Back());
     }
 
-    // CHANGE PLANE on a guest's row cycles their own record and writes nothing to the profile. The
-    // seated player's row does not step at all: it opens the picker over the profile's aircraft,
-    // which is not the roster a guest chooses from.
+    // A guest's CHANGE PLANE takes the same door the seated player's does, on its own slot. The
+    // horizontal axis does nothing on either: one screen changes a plane, so one place enforces the
+    // duplicate rule.
     [Fact]
-    public void AGuestsChangePlaneMovesTheirOwnPickAndSavesNothing()
+    public void AGuestsChangePlaneOpensThePickerAndStepsNothingInPlace()
     {
         var page = NewPage(out var flow, out _, wingman: false);
         flow.SetPlayers(2);
         flow.Field.Advance();
+        flow.SetPlaneSlot(1);
         var before = flow.Field.Plane(1)!;
 
-        Assert.True(page.Step(2, 1));
-        Assert.NotSame(before, flow.Field.Plane(1));
+        Assert.Equal("CHANGE PLANE", page.RowText(2));
+        Assert.False(page.Step(2, 1));
+        Assert.Same(before, flow.Field.Plane(1));
+
+        Assert.True(page.Accept(2));
+        Assert.Equal(CampaignScreen.PlaneSelection, flow.Screen);
+        Assert.Equal(0, flow.PlaneSlot);
         Assert.Equal(0, flow.Store.Load("Zachary")!.SelectedPlane);
     }
 
