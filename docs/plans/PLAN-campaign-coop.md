@@ -1,8 +1,13 @@
 # Campaign co-op: splitscreen in the story campaign
 
-**ACTIVE PLAN** (written 2026-08-29). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE (2026-08-30).** All seventeen items landed on `worktree-campaign-coop`: the start grid
+and the multi-player campaign session (`A1`, `A2`), the human field and the episode owner (`A3`,
+`A4`), the mission triggers, cutscene staging, spectating, the fullscreen cutscene and the per-pane
+chrome (`B11` to `B15`), joining, the sequential flight checks and the launch shape (`C21` to
+`C23`), the seated profile's record, two goldens with four playtest items, the 4P measurement and
+the five glossary terms (`D31` to `D34`), and the replay onto the rewritten `main` (`D35`). Kept in
+`docs/plans/` for its decision table, the 4P readings in `analysis/campaign-coop-4p-perf/` and the
+suite-bookkeeping conflict surface `D35` records.
 
 This plan makes a campaign mission playable by two to four humans in one shared world on the
 existing `SplitScreen` rig, as co-op: every human sits on team id `1`, objectives count for the
@@ -116,7 +121,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 32. ☑ Goldens and playtest items
 33. ☑ The 4P cost of a heavy campaign mission
 34. ☑ The five terms in `CONTEXT.md`
-35. ☐ Land the branch: rebase onto the rewritten `main`, never merge it
+35. ☑ Land the branch: rebase onto the rewritten `main`, never merge it
 
 ## Dependency and parallelism notes
 
@@ -657,7 +662,7 @@ from the script and no duplicates, which the pre-commit hook checks.
 behind the file otherwise and the invented number is handed out again. A golden's `exercises` field
 carries no item id, no date and no "also exercises" clause.
 
-## D33 ☐ The 4P cost of a heavy campaign mission
+## D33 ☑ The 4P cost of a heavy campaign mission
 
 **Goal.** The frame cost and hitch behaviour of four panes over a full campaign mission is a known
 number rather than a surprise at the controls.
@@ -671,8 +676,10 @@ and `RunTests.ps1`'s hitch stage is opt-in via `-Hitch`.
 
 **Approach.** Measure, do not fix. Take `--perf` and `-Hitch` readings on the heaviest shipped
 campaign mission at one and four players, with and without cockpit view, and write the numbers into
-`analysis/`. <TODO: "the heaviest shipped campaign mission" is not identified. Choose it by
-draw-count and roster size rather than by impression, and record how it was chosen.> The readings
+`analysis/`. "The heaviest shipped campaign mission" is chosen by draw-count and roster size rather
+than by impression, with the choice recorded beside the readings:
+`analysis/campaign-coop-4p-perf/FINDINGS.md` picks `CM18` (C4/M03), the heaviest chapter world on
+the record carrying the largest roster that chapter ships. The readings
 go in as an instrument whose result docs can cite. If the readings are bad, the outcome of
 this item is a new `backlog.md` entry with the measurements in it, not an optimisation inside this
 plan.
@@ -715,7 +722,7 @@ other item in this plan, and no item's prose uses a word its `_Avoid_` line forb
 **⚠ Traps.** `CONTEXT.md` holds no implementation detail; the mechanism for each term lives in
 `docs/architecture.md` and in this plan, not there.
 
-## D35 ☐ Land the branch: rebase onto the rewritten `main`, never merge it
+## D35 ☑ Land the branch: rebase onto the rewritten `main`, never merge it
 
 **Goal.** This branch's own commits land on `main` as themselves, with nothing else replayed
 alongside them.
@@ -769,13 +776,23 @@ weights file. In `SuiteCatalogTests.cs` both sides edit the same two lines: the 
 from the merged registration, and the last name is whichever suite is genuinely last once the two
 orders are merged.
 
-Derive the count on the rebased tree, then check it against the arithmetic rather than the other
-way round. The fork point `b485fe7b` asserts 180; this plan adds 5 suites, so a `main` at 182 must
-merge to 187. A short count is the silent-drop case and says how much went: 186 is one of `main`'s
-suites lost, 182 is all five of this branch's lost to a wholesale "take theirs". Both compile, and
-`Names_preserve_the_registered_order` is the only thing that reports it. ⚠ 187 holds only while
-`main` sits at 182. Re-derive both numbers if anything lands on `main` first; the rule is the
-subtraction, not the total.
+Derive the count from the rebased tree's own `SuiteCatalog.Names` rather than from either side's
+arithmetic, then check that against the subtraction. The fork point `b485fe7b` asserts 180; this
+plan adds 7 suites and `main` had added 3 by the time the rebase ran, so the merged tree asserts
+190. A short count is the silent-drop case and says how much went: 187 is all three of `main`'s
+lost to a wholesale "take ours", 183 is all seven of this branch's lost to "take theirs". Both
+compile, and `Names_preserve_the_registered_order` is the only thing that reports it. The rule is
+the subtraction, not the total: re-derive both numbers rather than carrying either figure forward.
+
+**Two of `main`'s own suites also met this branch, and neither is bookkeeping.**
+`campaign-blacke-search` moved the audio LISTENER to stand for the player and left the aeroplane at
+its start point, which `A3` turned into a miss the moment a `TRAVELERS` `player` subject started
+reading the human field rather than the listener; it places the rig now, and the listener with it.
+`carried-state-silent` picks the first two HEALTHY `PERSIST_LOG` destructibles of the chapter and
+then asserts on their `healthy`/`destroyed` roles, so which two it gets depends on what earlier
+suites in the same shard already destroyed; seven new suites re-pack the shards, it drew a subject
+carrying neither role, and it requires both roles of a subject now. Both are latent order
+dependencies in suites this branch never ran, not regressions in either history.
 
 **Verify.** The rebased branch is ahead of the pinned tip by exactly this plan's own commits and
 behind it by none. Then the full `.\RunTests.ps1` before merging back, because `main` has gained

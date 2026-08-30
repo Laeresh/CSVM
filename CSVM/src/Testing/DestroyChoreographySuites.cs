@@ -431,9 +431,14 @@ internal static class DestroyChoreographySuites
             var subjects = new List<DestructibleRegistry.Instance>();
             foreach (var cand in runtime.Destructibles.All)
             {
+                // Both roles required, not assumed: the healthy pick depends on what earlier suites
+                // in the shard already destroyed, and a shipped PERSIST_LOG destructible with no
+                // healthy/destroyed pair cannot answer the pose half of this at all.
                 if (!cand.Def.PersistLog || !cand.Anchor.HasMeta(AnimRuntime.IndexMeta)
                     || runtime.Destructibles.Resolve(cand.Anchor) is not { } live
                     || live.Status != DestructibleRegistry.State.Healthy || live.MaxHealth <= 0f
+                    || runtime.FindNodes("healthy", cand.Anchor).Count == 0
+                    || runtime.FindNodes("destroyed", cand.Anchor).Count == 0
                     || subjects.Contains(live))
                 {
                     continue;

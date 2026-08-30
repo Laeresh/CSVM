@@ -797,12 +797,9 @@ public sealed class CampaignDirector
         var plane = _profile.SelectedPlane >= 0 && _profile.SelectedPlane < _profile.Planes.Count
             ? _profile.Planes[_profile.SelectedPlane]
             : null;
-        // The money an attempt banks is the hangar economy's per-objective reward table, not this
-        // director's: it reports zero today, team-aggregate once that table lands. Both of the
-        // original's mask loops run whatever the outcome, only bit 0 from the win flag
-        // (docs/org/debrief.md, "The completed-objective mask has two sources").
-        // ⚠ Shots/Hits stay the seated pilot's alone (WireScoredShooter): a guest's gunnery
-        // never counts.
+        // Money is the hangar economy's reward table, 0 today. Both mask loops run whatever the
+        // outcome, only bit 0 from the win flag (docs/org/debrief.md). ⚠ Shots/Hits stay the
+        // seated pilot's alone (WireScoredShooter): a guest's gunnery never counts.
         var attempt = new MissionAttempt(
             _mission.Seq,
             outcome == MissionOutcome.Won
