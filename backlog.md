@@ -1694,24 +1694,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* any campaign docking, watching the opening shot alone: one hook swing.
   *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md`.
 
-- `BL-629` `[Bug]` **CM10 (C1/M05): a shot-down attack balloon hangs in the air instead of bursting
-  and falling.** *Evidence:* reported at the controls. The parts of the chain that work are the
-  weapon hit itself, the model swap to `destroyed_balloon`, the death of the balloon's `bbtur`
-  turret and the lifeboat's drop, which falls, splashes and drives its net. What is left standing
-  is the destroyed balloon, suspended where it was killed. The authored death is more than a swap:
-  `extracted/C1/M05/mis_anim/lifesaver11-lifefall11-lifeballoon.json` (`activation: WeaponHit`,
-  `health: 60.0`) carries eight `ObjectMotion` events, of which only the first drives `lifeboat`
-  down under `gravity: -10`; the rest move `b_dbase` and `b_part1` through `b_part6`, the balloon's
-  own bursting pieces, alongside seven `ObjectOpacityFromTo` fades and fourteen puffer states. So
-  the balloon-side half of one definition is not taking effect while the boat-side half is.
-  *Fix shape:* run that definition headless and report which of its eight motions start, then
-  follow the first one that does not. Nine balloons author the same five definitions, so whatever
-  the answer is, it is the same nine times.
-  *⚠ Traps:* do not delete the balloon on death as a shortcut. The pieces are authored to fall and
-  fade, and a despawn would remove the wreck the original shows falling. `set_bbtur_off` and the
-  swap are already doing their jobs, so neither is the suspect.
-  *Playtest after fix:* CM10, shoot one balloon and watch what is left in the air.
-
 - `BL-630` `[Bug]` **CM02 (C3/M05): the docking hook's two inward-rotating side parts swing too
   far on the captured Balmoral's auto-land.** *Evidence:* seen at the controls on that mission's
   landing, judged by eye with no original reference open. ⚠ The sighting predates the run-5 and

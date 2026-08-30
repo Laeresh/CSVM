@@ -203,6 +203,7 @@ public static class SuiteCatalog
         "campaign-objective-labels",
         "campaign-race-chain",
         "campaign-balloon-marker",
+        "campaign-balloon-death",
         "landings-approach-trigger",
         "landings-wingwalk-gate",
         "landings-train-pickup-gate",
@@ -1141,6 +1142,14 @@ public static class SuiteCatalog
             + "boat, flies with the assembly and rises when the balloon alone rises, and retires "
             + "when the balloon its objective watches goes inactive while the boat is still afloat",
             CampaignBalloonMarker));
+
+        into.Add(new TestHarness.Suite("campaign-balloon-death",
+            "CM10's attack balloons as destructibles over C1/M05's BUILT world: each lifesaver "
+            + "group node carries two weapon-hit pools, the balloon's lifefallNM at 60 HP and the "
+            + "lifeboat's lboat_destructionNM at 40, so a hit on the envelope reaches the balloon's "
+            + "own pool on all nine sites, and killing one flies its six bursting pieces, drops the "
+            + "envelope and leaves healthy_balloon hidden for the objective graph",
+            CampaignBalloonDeathSuites.CampaignBalloonDeath));
 
         // BL-467: nothing read landings.zrd, so no mission could ever play the cutscene an
         // ANIM_STATE objective waits on.

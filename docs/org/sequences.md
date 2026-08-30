@@ -51,6 +51,8 @@ bottom rather than hidden.
 | `FUN_004edf80` | The animation start the handler calls: parks the call site's node at `callee+0x7c` (`INPUT_NODE`) with a position snapshot at `+0x80`, plus a second node/position pair at `+0x8c`/`+0x90` |
 | `FUN_004ed8c0` | The start gate, i.e. the restart refusal: the callee's own run state at `+0xa0`, the concurrency bit `0x100` in `+0x9c`, and the instance chain at `+0x10c` |
 | `FUN_00521180` | The re-anchor: swaps `+0x48`, re-resolves the root name under the new anchor only, then re-resolves every interned entry. `CALL_ANIMATION` never invokes it |
+| `FUN_005230d0` | The post-load pass over every record: registers each definition's damage handlers keyed on `activation` (`+0xa1`), **on `*(def+0x6c)`, the animation root node**, never on `+0x48` |
+| `FUN_005abbf0` / `FUN_005abb20` | The registration itself: a per-node handler list at `node+0xbc`, two slots of (owner, handler), so several definitions register on one object without displacing each other. Slot 0 is the weapon-hit handler `0x004e7220`; what this decides for a destructible is in [`../formats/destructibles.md`](../formats/destructibles.md) |
 | `FUN_004ebc80` | Resolving a callee BY NAME at run time (the stop-style events): the call table's name then its `LOCAL_NAME`, then the global animation array, first match wins, cached back into the event |
 | `FUN_0059d610` / `FUN_0059d6e0` / `FUN_0059d750` | The `*` digit odometer: scan and record the positions, step the counters, stamp them into a name |
 | `FUN_0051ff40` / `FUN_0051fe60` | The instantiation loop the odometer drives, and the `#` per-object repeat |

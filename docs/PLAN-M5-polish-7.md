@@ -117,7 +117,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — CM10's attack balloons
 
-21. ☐ `BL-629` A shot attack balloon bursts and falls instead of hanging in the air
+21. ☑ `BL-629` A shot attack balloon bursts and falls instead of hanging in the air
 22. ☑ `BL-636` The Destroy Attack Balloon marker sits on its balloon, at any altitude
 
 ### Wave D — the campaign's own hangar
@@ -397,43 +397,107 @@ colliders that make the symptom unrecoverable are a separate property, recorded 
 
 # Wave C — CM10's attack balloons
 
-## C21 ☐ `BL-629` A shot attack balloon bursts and falls instead of hanging in the air
+## C21 ☑ `BL-629` A shot attack balloon bursts and falls instead of hanging in the air
 
-**Goal.** A shot-down attack balloon in CM10 (C1/M05) comes apart and falls, as its definition
-authors, rather than hanging in the air as a destroyed model.
+**Outcome: the animation runtime was never the fault. `lifefall11` was not running at all, because
+the weapon hit was reaching the lifeboat's definition instead.** The fix is in the destructible
+registry's node mapping and touches no dispatch or motion code.
 
-**Evidence (confidence: traced).** Reported at the controls. The parts of the chain that work are the
-weapon hit, the model swap to `destroyed_balloon`, the death of the balloon's `bbtur` turret and the
-lifeboat's drop, which falls, splashes and drives its net. The authored death is more than a swap:
-`extracted/C1/M05/mis_anim/lifesaver11-lifefall11-lifeballoon.json` (`activation: WeaponHit`,
-`health: 60.0`) carries eight `ObjectMotion` events, of which only the first drives `lifeboat` down
-under `gravity: -10`; the rest move `b_dbase` and `b_part1` through `b_part6`, the balloon's own
-bursting pieces, alongside seven `ObjectOpacityFromTo` fades and fourteen puffer states. The
-balloon-side half of one definition is not taking effect while the boat-side half is. Nine balloons
-author the same five definitions, so the answer applies nine times.
-`<TODO: re-verify still-open against the code>`
+**The eight-motion census, measured first.** The plan's own instrument answered the question it was
+written to answer, and answered it "all eight". The invocation, which the section left as a TODO, is
+`.\RunProbe.ps1 --anim-lab --chapter=C1 --mission=M05 --play-anim=lifefall11 --debug-anim
+--frames=400 --screenshot=<path>`: `--play-anim` resolves the definitions carrying that
+ANIMATION_NAME and starts them exactly as bootstrap pass 3 starts a startanim, and `--debug-anim`
+prints a `launch seed` line per ballistic launch and a pose line per live motion each second. Over
+C1/M05's real world all eight start and all eight move: `lifeboat`, `lifeballoon` and `b_part1`
+through `b_part6`, `8 ballistic launch(es)`, the pieces travelling 3 to 9 m in the first second and
+the envelope descending under `GRAVITY -5`. Nothing resolves to nothing, so `BL-618`'s shape does not
+apply. Two corrections to the section's own prose: the eight motions target `lifeballoon` and
+`b_part1`–`b_part6`, not `b_dbase`, and the sixth of them is `b_part6` rather than a `b_dbase` entry.
 
-**Approach.** Run that definition headless in the anim lab on the real C1/M05 world and report which
-of its eight motions start, then follow the first one that does not. Establish whether the balloon
-pieces resolve as nodes at all before asking why they do not move; a name that resolves to nothing is
-the cheapest of the candidate answers and `BL-618` records that shape.
-`<TODO: name the anim-lab invocation for a single mis_anim definition on a built world, from
-docs/verification.md, so the measurement is reproducible.>`
+**What was actually wrong.** `lifesaverNM` carries **two** compiled destructible pools, both
+anchored on the group node: `lboat_destructionNM` (`HEALTH 40`, `ANIMATION_ROOT_NAME lifesaverNM`,
+the lifeboat's own explosion) and `lifefallNM` (`HEALTH 60`, `ANIMATION_ROOT_NAME lifeballoon`, the
+balloon's burst). `DestructibleRegistry` kept ONE authoritative instance per anchor node, so the
+first of the two to register owned every hit on the whole assembly and the other could not be
+damaged through the hit path at all. `lboat_destructionNM` registers first, so every shot at the
+balloon spent the boat's 40 HP; that definition authors no visible death of its own, so
+`ApplyDeathSwap` fired its RESET-derived healthy→destroyed swap and the destroyed balloon stood
+where it was killed. Everything the report listed as working was that swap.
 
-**Model recommendation.** high. The diagnosis runs through the animation runtime's dispatch and the
-name resolver, and the fix has to hold for all nine balloons and five definitions rather than for the
-one that was watched.
+**The decoded rule.** `crimson.exe`'s animation-definition loader `FUN_005230d0` registers the
+weapon-hit handler with `FUN_005abbf0(record, *(record + 0x6c), …, 0x004e7220)`. `def+0x6c` is the
+**animation root node** (`ANIMATION_ROOT_NAME` resolved inside the definition's own subtree, falling
+back to `def+0x48`, the NAME anchor) and not the anchor, and `FUN_005abb20` hangs the handler off a
+per-node list at `node+0xbc`, so several definitions register on one object without displacing each
+other. A hit therefore belongs to the definition whose animation root covers the piece that was
+struck. Written up in `docs/formats/destructibles.md` ("Which node takes the hit"), with the two
+registration functions added to `docs/org/sequences.md`'s function map.
 
-**Verify.** A new suite over C1/M05 that kills one balloon and asserts the `b_part1` to `b_part6`
-pieces move and fade while the lifeboat still falls and splashes, seen red before green with the fix
-reverted. `campaign-objective-markers` and `campaign-objectives` green (the mission's own progress
-must not move), and the complete `.\RunTests.ps1` before landing. At the controls, CM10: shoot one
-balloon and watch what is left in the air. `<TODO: name the new suite.>`
+**The fix.** `DestructibleRegistry.Register` takes the pool's damage node, and `AnimRuntime` fills
+it from `DamageNodeOf(def, anchor)`, the def's `ANIMATION_ROOT_NAME` resolved through its symbol
+table strictly inside that anchor. A pool claims its damage node outright and its anchor only as a
+fallback, and an own-root claim outranks an anchor claim in either registration order. The anchor
+claim is kept rather than dropped for the original's one-node-only rule, because most defs root on a
+node their own death then hides and a hit on the wreck must still find the pool that owns it.
+`Instance.Anchor` is untouched, so `ANIM_HEALTH` evaluation, C22's marker layer and the AI target
+pool all read exactly what they read before.
 
-**⚠ Traps.** Do not delete the balloon on death as a shortcut. The pieces are authored to fall and
-fade, and a despawn would remove the wreck the original shows falling. `set_bbtur_off` and the model
-swap are already doing their jobs, so neither is the suspect. If the fix reaches `AnimRuntime`, check
-the file-contention queue in the dependency notes first.
+**Blast radius, as a number.** Of the install's 2,603 destructible defs, exactly **10** `NAME` groups
+hold defs with different animation roots: CM10's nine `lifesaverNM` sites, and C2's `sghangar`, whose
+`tbridg1_fire` (`HEALTH 15`, root `tarzan_bridg1`) and `tbridg2_fire` (`HEALTH 5`, root
+`tarzan_bridg2`) had the same collision and are now separated the same way (confirmed over the built
+C2 world with `--debug-damage=node=sghangar`). Every other pool's damage node is its anchor or a node
+no other pool competes for, so nothing else can change.
+
+**Verify.** New suite **`campaign-balloon-death`** over C1/M05's built world: all nine sites carry
+both pools at 60 and 40 HP, a hit on each site's `healthy_balloon` resolves to that site's
+`lifefallNM` and a hit on its `lifeboat` to `lboat_destructionNM`, the two-pools-one-anchor rule
+holds in either registration order over a two-node stand-in, and one site killed through `DamageAt`
+flies all six pieces, drops the envelope, drops the boat and leaves `healthy_balloon` hidden, which
+is what retires the objective. The suite wires `ContactMask` itself: the lifeboat's drop is an
+untimed launch only a contact tier can end, so a mask-free world poses it at rest.
+
+Red before green, taken by reverting the `DamageNodeOf` argument at bootstrap pass 1's `Register`
+call and leaving everything else in place:
+
+```
+FAIL 'lifesaver11': the balloon answers to lifefall11 and the lifeboat to lboat_destruction11 (got lboat_destruction11 / lboat_destruction11)
+FAIL and on every one of them a hit on the balloon reaches the balloon's own pool rather than the lifeboat's expected=9 actual=0
+FAIL every bursting piece leaves its rest pose, so the death is flown rather than swapped expected=6 actual=0
+FAIL and the balloon itself falls out of the sky rather than hanging where it died (fell 0.0 m)
+```
+
+with the artifact reading `pieces flew [b_part1 0.0 m, … b_part6 0.0 m]; balloon fell 0.0 m; boat
+fell 0.0 m; 'healthy_balloon' visible=False`, which is the reported defect reproduced on demand: the
+swap and nothing else. GREEN after: `pieces flew [b_part1 3.2 m, b_part2 6.2 m, b_part3 5.8 m,
+b_part4 4.1 m, b_part5 8.1 m, b_part6 8.6 m]; balloon fell 2.6 m; boat fell 6.2 m`. The
+either-order arm was separately seen able to fail with its own claim precedence disabled:
+`FAIL two pools on one anchor route by their own root whichever order they register in (inner first:
+on_inner / on_inner)`.
+
+Targeted results on this worktree, `CSVM_DATA_ROOT` set and the suite count printed non-zero:
+`-Suite campaign-balloon-death` **1 passed, 0 failed** in 3.79 s, engine errors clean; the whole
+engine tier `-SkipUnits -SkipGoldens` **193 passed, 0 failed, 0 skipped**, engine errors clean, in
+123.1 s over 4 shards (`campaign-objective-markers`, `campaign-objectives`,
+`campaign-balloon-marker`, `campaign-race-chain`, `destructible-census`, `carried-state-silent` and
+`start-state-swap-pool` among them); the unit tier `-SkipEngine -SkipGoldens` **2694 passed of
+2694**; the golden stage `-SkipUnits -SkipEngine` **18 shot(s) hash-identical**, `c1-debris-rest`
+and `c1-destroy-effects` included, which is the pixel side of the same registry.
+`.\CheckCommentCaps.ps1 -Summary`: every block within cap, and `dotnet format --verify-no-changes`
+clean.
+**Verified.** `<pending orchestrator run>`
+
+**Owed at the controls.** CM10, shoot one balloon and watch what is left in the air: the envelope
+falls and fades, six pieces fly and trail, the lifeboat drops and splashes, and nothing stands still.
+This is the same sortie C22 already owes, and it rides this item's closure rather than a new id.
+
+**⚠ Traps that still bind.** Do not delete the balloon on death; the pieces are authored to fall and
+fade and the wreck belongs there. Do not give the balloon its own anchor node to separate the pools:
+the anchor is what `ANIM_HEALTH`, the objective marker and the AI target pool key on, and moving it
+would take C22's decoded bounding-box anchor with it. The lifeboat's own drop has no `RUN_TIME`, so
+it needs a contact tier to end it; any test world that drives this death must wire `ContactMask` or
+the boat half is silently posed at rest.
 
 ## C22 ☑ `BL-636` The Destroy Attack Balloon marker sits on its balloon, at any altitude
 
@@ -520,7 +584,7 @@ mesh list above, would take both under 0.3 ms. Worth its own `[Perf]` entry alon
 **Still owed at the controls.** CM10 with a wave in frame at two different heights, to judge whether
 the assembly's bbox centre (11.7 m up, among the ropes under the envelope) reads as a marker on the
 balloon. It is where the original puts it, so a different answer would be a deliberate divergence
-rather than a bug. The same sortie is already owed on `BL-629`, C21.
+rather than a bug. The same sortie is owed on C21, whose own confirming flight it also is.
 
 **⚠ Traps.** Do not offset the marker upward by a constant, and do not anchor on the balloon node
 itself: the decode says bounding-box centre, and a rule that follows one authored child would put a
