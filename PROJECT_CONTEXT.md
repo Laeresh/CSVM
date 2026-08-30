@@ -241,8 +241,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1 through 5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI (aircraft that patrol, engage, evade and die, turrets, zeppelins, pilot voice), and all four Instant Action mission types plus the 2–4-player splitscreen Dogfight deathmatch are playable and scored. M5 added the single-player campaign: per-profile progression across the cabin, briefing and flight-check screens, and missions that run their authored `objectives.zrd` choreography with intro cutscenes, letterbox and campaign wingmen.
 
-**Active plans:** [`docs/PLAN-M5-polish-7.md`](docs/PLAN-M5-polish-7.md), ten items in five waves, none started, and [`docs/PLAN-plane-selection.md`](docs/PLAN-plane-selection.md), ten items in four waves, none started. Runs 5 and 6, the scrapbook and the campaign co-op are archived in [`docs/plans/plans.md`](docs/plans/plans.md).
-Next: `A1`, then `A2`; run 6 handed back `BL-546` and `BL-535`, and CM13's race pace with CM08's `BL-597` are owed at the controls.
+**Active plans:** [`docs/PLAN-M5-polish-7.md`](docs/PLAN-M5-polish-7.md), ten items in five waves, none started, and [`docs/PLAN-plane-selection.md`](docs/PLAN-plane-selection.md), ten items in four waves, wave A done and wave B open. Runs 5 and 6, the scrapbook and the campaign co-op are archived in [`docs/plans/plans.md`](docs/plans/plans.md).
+Next: polish-7's `A1`, then `A2`; plane selection's `B5`; run 6 handed back `BL-546` and `BL-535`, and CM13's race pace with CM08's `BL-597` are owed at the controls.
 `PT-84`, `PT-85`, `PT-88` to `PT-93` and `BL-120`/`PT-53` remain owed playtests.
 
 Use the targeted/quick development loop above, then verify landed code with the complete
