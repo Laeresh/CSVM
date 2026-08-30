@@ -783,46 +783,6 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome (`A4` landed on an engine suite alone, with no scripted-input
   driver to fly a human into a world trigger headlessly): a fail mints a new `BL`.
 
-### CM01 (C3/M01) · the docking episode, entered from the cockpit
-
-```powershell
-./RunGame.ps1 --campaign=<profile>:0
-```
-
-- `PT-94` `[Own]` **A cutscene entered from the cockpit frames the aeroplane, and gives the cockpit
-  back** (`PLAN-M5-polish-7.md` `B11`). Cycle to the cockpit view (F8) BEFORE the docking fires,
-  then watch the episode through. Relaunch and repeat with the skip key, which takes the other
-  restore path.
-  *Look for:*
-  - (a) the aeroplane is drawn from the episode's external camera, rather than the camera framing
-    empty air where the airframe should be;
-  - (b) no cockpit panel hangs over the shot for any part of the episode;
-  - (c) the cockpit is back when flight returns, with the interior drawn again, and the view mode
-    is still the one you chose rather than having quietly become the chase view;
-  - (d) the skip path behaves identically to the definition's own ending on all three.
-  *Blocks:* nothing tracks the outcome (`B11` landed on an engine suite that drives two seats over
-  both exits, but the picture itself is not asserted): a fail mints a new `BL`.
-
-### The campaign cabin · Plane Construction
-
-```powershell
-./RunGame.ps1 --campaign=<profile>
-```
-
-- `PT-95` `[Own]` **The campaign hangar lists the profile's own aircraft and spends its wallet**
-  (`PLAN-M5-polish-7.md` `D31`). Open Plane Construction from the cabin on a FRESH profile, then
-  buy, then sell. Check Instant Action's Build list before and after.
-  *Look for:*
-  - (a) a fresh profile shows exactly its two starters, Gypsy Magic and The Knave, with their
-    values, and none of your Instant Action builds;
-  - (b) the buy row reads the wallet, and a purchase both adds the plane and takes the money;
-  - (c) selling a third plane returns the FULL build cost, not a depreciated figure;
-  - (d) the two starters refuse with the two-plane floor message and a reward aircraft refuses with
-    its own, both naming the aeroplane rather than showing raw `%1!s!` placeholders;
-  - (e) Instant Action's Build list is unchanged by all of it.
-  *Blocks:* nothing tracks the outcome (`D31` landed on unit tests over the flow and the context;
-  the screen has not been seen at the controls): a fail mints a new `BL`.
-
 ---
 
 ## Everything else

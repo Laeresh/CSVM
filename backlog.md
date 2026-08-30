@@ -1675,22 +1675,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   CM11's closing autodock. It is not airframe-specific: the Devastator and the Bloodhawk both show
   it, and it has been there since CM01, so every docking in the campaign is affected. The hook
   engages correctly, so this is the animation running repeatedly rather than the dock failing.
-  The repeat does not reproduce headless. Three shipped docking episodes driven over their own
-  built worlds count every start by name and each hook definition starts exactly once:
-  `landings-hookup-airframe` (CM01, both airframes), `landings-balmoral-dock` (CM02) and
-  `landings-docking-hold` (CM06), where the only repeats in the whole episode are the ambient
-  `random_prop` dice and the `wing_lights_blink` blinker. The call-site census agrees: every
-  archive that names `player_extend_hook` names it once, so `hooked_to_klondike` and
-  `wv_initiate_hookup` each reach the hook leg from a single site, and the node-state
-  `ACTIVATION_PREREQUISITE` those legs carry is parsed and enforced today, which rules out the
-  dropped-prerequisite candidate. *Fix shape:* the count is only observable at the controls, so the
-  next step is a sortie that says which of the episode's hook definitions swings three times. CM01's
-  episode starts four of them, once each: `pz_deploy_hook`, `hook_impact`, `player_extend_hook` and
-  the airframe branch that definition picks.
+  ⚠ **The headless count that reads "once" counts the wrong definition.** `landings-hookup-airframe`,
+  `landings-balmoral-dock` and `landings-docking-hold` assert on `player_extend_hook`, the GENERIC
+  definition, which is authored once per archive and does play once. That definition forks to an
+  airframe-specific branch (`blood_hook_extend`, `brig_hook_extend`, `bal_hook_extend`, one per
+  airframe), and no suite counts those. A census that counts the generic name proves nothing about
+  the branch the fork actually plays.
+  Two faults in the data wear this one symptom, and both are read out of `extracted/*/cam_anim/`:
+  (a) **`blood_hook_extend` and `brig_hook_extend` are each authored TWICE**, as
+  `blood_hook-blood_hook_extend.json` and `…-1.json`, carrying the same `name` (`blood_hook`) and the
+  same `anim_name` and differing by one byte, in every one of the eight chapters. `ByAnimName`
+  resolves both, so one `CALL_ANIMATION` starts two instances and the Bloodhawk and the Brigand play
+  their hook twice. The other nine airframes have no twin.
+  (b) **The Devastator has no hook definition at all.** Ten airframes carry one (`gyro`, `avenger`,
+  `bal`, `blood`, `brig`, `fire`, `fury`, `kest`, `peace`, `war`); airframe 3005 has none anywhere in
+  the extract, which is consistent with its hook being fully deployed before the episode's animation
+  runs, as seen at the controls.
+  *Fix shape:* settle (a) first, since it is a duplicate-instantiation question the runtime can
+  answer: establish whether both twins are meant to be instantiated, or whether the compiled
+  manifest is supposed to supersede one (the mission log's own "reader def(s) superseded by this
+  mission's compiled manifest" line names `bal_hook_*` and `gyro_hook_*` but not the twins). Then
+  (b), which is a different question: what the original does for an airframe that authors no hook
+  definition. Count the AIRFRAME BRANCH, never `player_extend_hook`, in any suite written for this.
   *⚠ Traps:* do not silence it by latching "already played" on the runtime. A repeat a definition
   authors is data, and a latch would hide the same defect wherever else it happens. The
   player-visible hook engagement is correct today and must stay correct. Do not open this against
-  the node-state prerequisite again; it is enforced, and the three suites above assert the count.
+  the node-state prerequisite again; it is enforced. Do not trust a suite that counts
+  `player_extend_hook`: that is the measurement which reported this closed while it was not.
   *Playtest after fix:* any campaign docking, watching the opening shot alone: one hook swing.
   *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md`.
 
@@ -1707,6 +1718,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps:* do not retune the angle to taste. It is authored, and the fold beside it is already
   asserted against its authored value, so a hand-set number here would sit next to a pinned one.
   *Cross-refs:* `BL-545` (the same landing's hook, height and wing-fold reads).
+
+- `BL-657` `[Research]` **An authored `capacity 0` is treated as unlimited, so every shipped enemy
+  generator launches on its own cycle with no objective asking it to.** *Evidence:* found while
+  attributing CM18's spawn stalls (`git log --grep=BL-641`). `GeneratorCycle` switches the capacity
+  check off at authored `capacity <= 0` unless a `WAKEUP_GENERATOR` has armed it. All 23 shipped
+  generators author `capacity 0`, and CM18 (C4/M03) authors no `WAKEUP_GENERATOR` at all, so
+  `cargozep1` launches a Black Swan every 4 s from mission start up to `max_active` 10.
+  [`docs/formats/mission-entities/enemy-generators.md`](formats/mission-entities/enemy-generators.md)
+  ("Capacity rule and limit") records that the literal decoded rule blocks every shipped generator on
+  its first tick, and that the data does **not** establish that 0 means unlimited, which is exactly
+  the interpretation the code runs as a stand-in. *What to settle:* what the original does with an
+  uncredited generator, and therefore whether ten enemy fighters belong in CM18 at all. This decides
+  a mission's opposition, not a constant. *⚠ Traps:* this is a gameplay change, not a tidy-up. The
+  same stand-in feeds every mission carrying an uncredited generator, so a change here moves the
+  opposition in all of them at once, and the spawn cost it decides how often to pay is the subject of
+  `BL-641` rather than of this entry. *Cross-refs:* `BL-641` (the per-spawn cost), `BL-523` (the AI
+  mode machine, which decides what the spawned aircraft then do).
 
 - `BL-652` `[Research]` **Why an authored fork's sensor nodes start inactive is not traced to a
   rule, so a fork placed away from the world origin may start open.** *Evidence:* found while
@@ -2408,6 +2436,38 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   which is why the campaign roster resolves them from the ownership record; a per-mode store would
   strand them. *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) ("The inventory screen's own
   strings"), `BL-650`.
+
+- `BL-655` `[Bug]` **The campaign hangar never shows the wallet while a plane is being built, so
+  the only way to learn a build is unaffordable is to finish it.** *Evidence:* reported at the
+  controls on the landed Plane Construction screen (`git log --grep=BL-634`). The wallet is drawn
+  once, as the detail line of the plane-selection screen's Buy row (langui 1149 `$$$ on Hand:`), and
+  every screen after it (airframe, engine, hardpoints, armour, guns) shows neither the money on hand
+  nor the running total against it, so a player picks parts blind and meets the refusal at the
+  commit. *Fix shape:* the running cost already exists, since `HangarEconomy.Price` is what the
+  totals row draws; the missing half is the wallet beside it and a mark on any row the remaining
+  funds cannot cover. Read what the original puts on those screens before choosing a layout, since
+  langui carries its own strings for the money line. *⚠ Traps:* do not block an unaffordable
+  selection outright: the decoded flow refuses at the purchase, not at the part, and a screen that
+  hides parts you cannot yet afford also hides what you are saving toward. *Cross-refs:*
+  [`docs/org/hangar.md`](docs/org/hangar.md) ("The campaign wallet"), `BL-650` (the unenforced slot
+  cap, the other half of the purchase gate).
+
+- `BL-656` `[Bug]` **CM10 (C1/M05): an attack balloon's objective marker sits on the water for a
+  moment before it settles onto the balloon.** *Evidence:* reported at the controls on the build
+  that anchors a site at the centre of what it draws (`git log --grep=BL-636`). The marker is right
+  once the wave is up, so this is the anchor being read while the group is in a state that does not
+  yet include the balloon. Each `lifesaverNM` builds with the outer group and its inner `lifesaver`
+  node switched off while `lifeballoon` and `lifeboat` are visible under them, and `attack_waveN`
+  switches the wave on later, so the mesh set the anchor reads can change between the first frame
+  the marker is offered and the frame the wave arrives. *Fix shape:* establish which mesh set the
+  anchor reads on the early frames before changing anything: the fix is either to defer offering the
+  site until its subtree is up, or to read the authored `child_bbox` the gamez node carries rather
+  than the built meshes. *⚠ Traps:* do not reintroduce a node-origin fallback or an upward offset;
+  both were removed on decoded evidence and the balloons descend as they attack, so no constant is
+  right at two altitudes. The anchor rule itself is the original's (`FUN_004cf2c0` takes the
+  midpoint of the node's active bounding box) and is not what is wrong here.
+  *Playtest after fix:* CM10, watching a wave arrive with the marker already in frame.
+  *Cross-refs:* [`docs/org/targeting.md`](docs/org/targeting.md) ("Where a mission structure is").
 
 - `BL-635` `[Bug]` **CM11 (C2/M02): the stunt planes carry no objective marker, though their roster
   blocks name one.** *Evidence:* reported at the controls and still open after the mission's other
