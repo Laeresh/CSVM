@@ -848,7 +848,8 @@ public static class SuiteCatalog
             + "re-entering the playing state never restarts it, the objective stingers alternate "
             + "their two takes instead of drawing at random, and a combat ping cuts prebattle to "
             + "battle at silence, ramps it to full in a quarter second, holds it 20 s and fades it "
-            + "out over four",
+            + "out over four; and the briefing's duck rides over that fade without touching it, "
+            + "holding the channel down while the screen shows and lifting when it goes",
             MusicStates));
         into.Add(new TestHarness.Suite("campaign-objectives",
             "the objectives runtime (D31) over a shipped mission's own choreography, headless: the "

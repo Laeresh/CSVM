@@ -33,6 +33,7 @@ internal static class MusicSuites
             CheckStates(ctx, music, rng, report);
             CheckStingersAlternate(ctx, music, rng, report);
             CheckBattleHold(ctx, music, rng, report);
+            CheckDuck(ctx, music, rng, report);
         }
         finally
         {
@@ -143,5 +144,34 @@ internal static class MusicSuites
         report.AppendLine($"battle faded out after {guard} steps of {Step:0.##}s");
         ctx.Check(music.Current.Length == 0, $"the expired hold fades battle music to silence");
         ctx.Check(guard * Step > 3f, $"the fade takes the decoded four seconds, not a cut steps={guard}");
+    }
+
+    private static void CheckDuck(TestContext ctx, MusicPlayer music, Random rng, StringBuilder report)
+    {
+        music.Enter(MusicState.Menu, rng);
+        music.Ducked = true;
+        int guard = 0;
+        while (music.Duck > MusicPlayer.DuckLevel && guard++ < 1000)
+        {
+            music.Tick(Step, rng);
+        }
+
+        report.AppendLine($"duck reached {music.Duck:0.###} in {guard} steps, gain={music.Gain:0.###}");
+        ctx.Check(music.Duck <= MusicPlayer.DuckLevel + 0.001f, $"a ducking screen holds the channel down duck={music.Duck:0.###}");
+        ctx.Check(guard * Step <= 1f, $"the duck arrives inside a second steps={guard}");
+
+        // The duck is a mix decision over the fade, so the track keeps playing and keeps its place.
+        ctx.Check(music.Current.Length > 0, $"the ducked track keeps playing current={music.Current}");
+        ctx.Check(music.Gain >= 0.999f, $"ducking leaves the decoded fade gain alone gain={music.Gain:0.###}");
+
+        music.Ducked = false;
+        guard = 0;
+        while (music.Duck < 1f && guard++ < 1000)
+        {
+            music.Tick(Step, rng);
+        }
+
+        ctx.Check(music.Duck >= 0.999f, $"leaving the screen lifts the duck duck={music.Duck:0.###}");
+        music.Enter(MusicState.Silent, rng);
     }
 }

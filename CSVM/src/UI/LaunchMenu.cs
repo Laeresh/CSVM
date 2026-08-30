@@ -46,7 +46,8 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     /// <summary>The process's music channel, or null when the host built none. The board enters
     /// <see cref="MusicState.Menu"/> on every screen it shows, which is a no-op for the track
-    /// already playing.</summary>
+    /// already playing. The briefing is the one screen that also ducks it, so the narration is not
+    /// read over a full-level splash track.</summary>
     public MusicPlayer? Music;
 
     /// <summary>The draw the music channel's own weighted picks come from, the host's.</summary>
@@ -2029,6 +2030,13 @@ public sealed partial class LaunchMenu : CanvasLayer
             return false;
         }
 
+        // Held for the whole stay rather than per line: the gaps between lines are short, and a
+        // duck that lifted in them would pump the splash track under the narration.
+        if (Music != null)
+        {
+            Music.Ducked = true;
+        }
+
         page.Advance(delta);
         if (page.NarrationStarts != _narrationStarts)
         {
@@ -2062,10 +2070,17 @@ public sealed partial class LaunchMenu : CanvasLayer
         Utils.Log.Info("sound", $"briefing narration start={_narrationStarts} wav={wav} stream={got}");
     }
 
+    // Lifts the music duck too: every door out of the briefing comes through here, including the
+    // launch, which hides the board and so stops TickCampaignAudio from running again.
     private void StopNarration()
     {
         _narrationStarts = 0;
         _briefingRunning = false;
+        if (Music != null)
+        {
+            Music.Ducked = false;
+        }
+
         if (_narration is { Playing: true })
         {
             _narration.Stop();

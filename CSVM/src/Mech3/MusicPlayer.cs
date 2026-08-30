@@ -63,6 +63,17 @@ public sealed partial class MusicPlayer : Node
     /// options menu can carry a music slider.</summary>
     public const float ChannelLevel = 0.2f;
 
+    /// <summary>⚠ TUNE. The share of <see cref="ChannelLevel"/> the channel keeps while
+    /// <see cref="Ducked"/> is set. The briefing ducks for the whole of its stay, not just while a
+    /// line plays: its narration is one dry voice against a full-band track, and even at
+    /// ChannelLevel the words are hard to follow at the controls. This one survives an options
+    /// menu: a slider sets the level a duck is a share of.</summary>
+    public const float DuckLevel = 0.1f;
+
+    /// <summary>Gain per second the duck moves at, so opening or leaving a ducking screen dips the
+    /// channel over a fifth of a second instead of cutting it.</summary>
+    public const float DuckPerSecond = 5f;
+
     /// <summary>Resolves a definition's WAV into a stream, the same seam
     /// <see cref="WorldSounds.Loader"/> uses. The bool is the stream's own forward-loop flag.</summary>
     public Func<SoundDef, bool, AudioStreamWav?>? Loader;
@@ -85,6 +96,7 @@ public sealed partial class MusicPlayer : Node
     private float _target = 1f;
     private float _fadeRate;
     private float _battleHold;
+    private float _duck = 1f;
 
     public MusicPlayer(IReadOnlyDictionary<string, SoundDef> defs,
         IReadOnlyDictionary<string, SoundGroup>? groups = null)
@@ -108,6 +120,16 @@ public sealed partial class MusicPlayer : Node
 
     /// <summary>The channel's current gain, which only the battle fade moves off 1.</summary>
     public float Gain => _gain;
+
+    /// <summary>Whether a screen is holding the channel down to <see cref="DuckLevel"/>. Separate
+    /// from <see cref="Gain"/> so the two never fight: the fade is the decode's own ramp and the
+    /// duck is a mix decision on top of it. A ducking screen sets this while it shows and clears it
+    /// when it stops showing; the track underneath keeps playing and keeps its place.</summary>
+    public bool Ducked { get; set; }
+
+    /// <summary>Where the duck ramp has reached: 1 while nothing ducks, <see cref="DuckLevel"/>
+    /// once a ducking screen has held it there.</summary>
+    public float Duck => _duck;
 
     /// <summary>Whether the original's proximity scan would ping: it counts other vehicles inside
     /// <see cref="BattleScanRadiusM"/> of the player and fires above <see cref="BattleScanMinNearby"/>
@@ -214,6 +236,7 @@ public sealed partial class MusicPlayer : Node
     {
         StepBattle(dt, rng);
         StepFade(dt);
+        StepDuck(dt);
         StepLoop();
     }
 
@@ -326,6 +349,20 @@ public sealed partial class MusicPlayer : Node
         }
     }
 
+    private void StepDuck(float dt)
+    {
+        float target = Ducked ? DuckLevel : 1f;
+        if (Mathf.IsEqualApprox(_duck, target))
+        {
+            return;
+        }
+
+        _duck = _duck < target
+            ? Math.Min(_duck + (DuckPerSecond * dt), target)
+            : Math.Max(_duck - (DuckPerSecond * dt), target);
+        SetGain(_gain);
+    }
+
     private void StepLoop()
     {
         if (_wav.Length == 0 || _loopForever || _player.Playing || _loopsLeft <= 1)
@@ -341,8 +378,8 @@ public sealed partial class MusicPlayer : Node
     private void SetGain(float gain)
     {
         // Gain stays the fade's own 0..1 value, so every assertion about the ramp reads what the
-        // decode describes; ChannelLevel is applied at the mixer alone.
+        // decode describes; ChannelLevel and the duck are applied at the mixer alone.
         _gain = gain;
-        _player.VolumeDb = Mathf.LinearToDb(Math.Max(gain * ChannelLevel, 0.0001f));
+        _player.VolumeDb = Mathf.LinearToDb(Math.Max(gain * ChannelLevel * _duck, 0.0001f));
     }
 }
