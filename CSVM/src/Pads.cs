@@ -83,14 +83,25 @@ public static class Pads
         return assignment;
     }
 
-    /// <summary>Log who flies what, for either source of the binding (the roster split above or
-    /// the launchscreen's join flow) — a silent plane is otherwise hard to diagnose.
-    /// ⚠ Through the run log, not <c>GD.Print</c>: which device a seat ended up on is decided once
-    /// at build and is unrecoverable afterwards, so a player reporting two pilots on one plane has
-    /// nothing to hand over unless the line survives in the file sink. That is the whole evidence
-    /// for a mis-seated pad, and a terminal nobody was watching does not keep it.</summary>
+    /// <summary>Log the connected roster and who flies what, for either source of the binding (the
+    /// roster split above or the launchscreen's join flow) — a silent plane is otherwise hard to
+    /// diagnose.
+    /// ⚠ Through the run log, not <c>GD.Print</c>: the binding is settled once at build and is
+    /// unrecoverable afterwards, so a player reporting two pilots on one plane has nothing to hand
+    /// over unless it survives in the file sink. What each line answers: docs/architecture.md.</summary>
     public static void LogPads(int[][] assignment)
     {
+        // The roster POSITIONS, not just the ids: AssignPads seats P2-P4 by position, so a device
+        // holding one without producing input takes that seat and the real pad falls back to P1
+        // (docs/architecture.md). The per-seat lines below cannot show that device.
+        var roster = new List<string>();
+        int slot = 0;
+        foreach (int pad in Connected())
+        {
+            roster.Add($"[{slot++}] pad {pad} \"{Input.GetJoyName(pad)}\"");
+        }
+
+        Log.Info("core", $"pad roster: {(roster.Count > 0 ? string.Join(", ", roster) : "none connected")}");
         for (int i = 0; i < assignment.Length; i++)
         {
             var pads = new List<string>(assignment[i].Length);

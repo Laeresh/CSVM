@@ -24,6 +24,22 @@ public static class ScrapbookCompositionFixture
         return root;
     }
 
+    /// <summary>The same one openable scrap, plus the <c>RESRC1.H</c> that turns its two symbols
+    /// into langui ids: the path a scrap's own words take from <c>SCRAPBOOK.CSV</c> through that
+    /// header into the string table.</summary>
+    public static string WriteResolvableScrap(string root, int mission)
+    {
+        WriteMinimalOpenableScrap(root, mission);
+        string dir = Path.Combine(root, "extracted", "rof", "ASSETS", "SCRIPTS");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "RESRC1.H"),
+            "//{{NO_DEPENDENCIES}}\n" +
+            "#define IDS_TEST_TITLE                  40002\n" +
+            "#define IDS_TEST_BODY                   40003\n" +
+            "#define _APS_NEXT_RESOURCE_VALUE        200\n");
+        return root;
+    }
+
     /// <summary>Writes a fresh temp <c>dataRoot</c> holding a three-mission book: mission 1 carries
     /// two spreads, missions 2 and 3 carry one each, so the book runs (1,1) -&gt; (1,2) -&gt; (2,1)
     /// -&gt; (3,1) with no spread beyond it -- enough to exercise both the within-mission and

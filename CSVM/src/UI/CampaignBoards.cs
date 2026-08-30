@@ -46,6 +46,11 @@ public static class CampaignBoards
     // screens, and both open the book on the campaign's own current mission.
     private static readonly BoardArt CurrentMissionTab = Ui("SB_B_Currentmissiontab.png", StripFrames);
 
+    // SB_B_NEXT, the book's forward page tab. The table of contents is a page of that same book, so
+    // it takes the tab at the same place; [@ScrapBook_TOC@] authors no arrow of its own, leaving
+    // that page with nothing a pad can turn forward by.
+    private static readonly BoardArt MoreTab = Ui("SB_B_more_tab.png", StripFrames);
+
     // The briefing's plaque is the one that ships beside the mission art rather than with the
     // screen chrome, and the one that carries no words: its label is drawn over it in one of three
     // fonts, which is the whole of its focus state.
@@ -73,6 +78,7 @@ public static class CampaignBoards
         {
             new BoardSlot(BoardButton.ViewMission, 0, PaperButton, 440, 505, true),
             new BoardSlot(BoardButton.ReplayMission, 0, PaperButton, 596, 505, true),
+            new BoardSlot(BoardButton.ScrapbookNext, 0, MoreTab, 708, 465),
             new BoardSlot(BoardButton.CurrentMission, 0, CurrentMissionTab, 558, 7, true),
             new BoardSlot(BoardButton.ReturnToCabin, 0, ReturnToCabinArt, 593, 561),
         },
@@ -82,7 +88,7 @@ public static class CampaignBoards
             new BoardSlot(BoardButton.ViewAllMissions, 0, Ui("SB_B_ViewAllMissions.png", StripFrames), 375, 560),
             new BoardSlot(BoardButton.ReturnToCabin, 0, ReturnToCabinArt, 593, 561),
             new BoardSlot(BoardButton.ScrapbookPrev, 0, Ui("SB_B_back_tab.png", StripFrames), 0, 465),
-            new BoardSlot(BoardButton.ScrapbookNext, 0, Ui("SB_B_more_tab.png", StripFrames), 708, 465),
+            new BoardSlot(BoardButton.ScrapbookNext, 0, MoreTab, 708, 465),
             new BoardSlot(BoardButton.CurrentMission, 0, CurrentMissionTab, 558, 7, true),
             new BoardSlot(BoardButton.BestTab, 0, StatCardTab, 432, 283, true),
             new BoardSlot(BoardButton.MostTab, 0, StatCardTab, 594, 283, true),

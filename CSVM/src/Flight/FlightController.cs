@@ -190,7 +190,7 @@ public partial class FlightController : Node3D
 
     /// <summary>--gun-select=N: the gun selector's initial firable group (0-based; 0 = the first
     /// group, the default). Only one gun group fires at a time. A headless testing hook so a scripted
-    /// run can fire one group in isolation; interactively the selector cycles with G / gamepad D-pad Left.</summary>
+    /// run can fire one group in isolation; interactively the selector cycles with G / gamepad D-pad Right.</summary>
     public int InitialGunSelect;
 
     /// <summary>This airframe's DESTROY def — the anim slot the original starts the instant health
@@ -1216,7 +1216,7 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>Weapon lab: point the gun selector at a firable gun group (0-based, clamped) —
-    /// the programmatic twin of G / D-pad Left, which only cycles. Interactively that cycle still
+    /// the programmatic twin of G / D-pad Right, which only cycles. Interactively that cycle still
     /// wins the next time it is pressed; <see cref="InitialGunSelect"/> is the _Ready-time
     /// equivalent and cannot be re-applied once the rig is built.</summary>
     public void SelectGunGroup(int index) => _fire?.SelectGunGroup(index);
@@ -2020,9 +2020,12 @@ public partial class FlightController : Node3D
     // pause-menu Resume cannot also read as the rocket trigger's next pull.
     private void SuppressRocketTriggerOnRegainedInput() => _rocketLatch.ArmIfHeld(RocketButtonDown());
 
-    // G / gamepad D-pad Left — cycles the gun selector through the firable groups (1 → 2 →
+    // G / gamepad D-pad Right — cycles the gun selector through the firable groups (1 → 2 →
     // … → 1). Only ONE group fires at a time; the gun trigger fires the selected one. Caller edge-detects.
-    private bool GunSelectPressed() => KeyDown(Key.G) || PadPressed(JoyButton.DpadLeft);
+    // ⚠ The D-pad side follows the cockpit dial it drives: the GUNS gauge sits in the right column
+    // (above the speedometer) and ROCKETS in the left, so pressing away from the dial reads as a
+    // mis-binding at the controls.
+    private bool GunSelectPressed() => KeyDown(Key.G) || PadPressed(JoyButton.DpadRight);
 
     // F9 / gamepad left-stick click, the auto-land button, read live by
     // LandingApproachRuntime.Tick() so a press lands in the same frame it happens. Kept beside the
@@ -2031,11 +2034,11 @@ public partial class FlightController : Node3D
     internal bool AutoLandPressed() => AutoLand || KeyDown(Key.F9) || PadPressed(JoyButton.LeftStick);
 #pragma warning restore SA1202
 
-    // H / gamepad D-pad Right — moves the hardpoint selector to the next pylon that still
+    // H / gamepad D-pad Left — moves the hardpoint selector to the next pylon that still
     // carries ordnance (each pylon is its own selectable slot, whatever it loads — even a plane with
     // one uniform ordnance type). The rocket trigger then launches from the selected pylon. Caller
     // edge-detects.
-    private bool RocketSelectPressed() => KeyDown(Key.H) || PadPressed(JoyButton.DpadRight);
+    private bool RocketSelectPressed() => KeyDown(Key.H) || PadPressed(JoyButton.DpadLeft);
 
     // This frame's pilot-HUD feed. The pipper's inputs are resolved HERE and only where there is a
     // reticle to draw: a muzzle midpoint reads one world transform per barrel, which every aircraft

@@ -152,10 +152,12 @@ public enum BoardButton
 public sealed record BoardArt(BoardArtLibrary Library, string Name, int Frames = 1);
 
 /// <summary>A picture placed at its authored pixel position. <paramref name="Centered"/> is the
-/// briefing script's own <c>center</c> flag: the coordinate is the middle, not the top left.</summary>
+/// briefing script's own <c>center</c> flag: the coordinate is the middle, not the top left.
+/// <paramref name="Scale"/> grows the art about its own middle and leaves its authored corner
+/// where it is, which is the <c>scale()</c> a scrapbook scrap takes under the pointer.</summary>
 public sealed record BoardPicture(
     BoardArt Art, float X, float Y, int Frame = 0, bool Centered = false,
-    float Opacity = 1f, float Revs = 0f, float Width = 0f, float Height = 0f);
+    float Opacity = 1f, float Revs = 0f, float Width = 0f, float Height = 0f, float Scale = 1f);
 
 /// <summary>A straight connector line between two authored points in its authored colour, which
 /// is the briefing script's <c>Line</c> opcode and the only non-picture element any board draws.

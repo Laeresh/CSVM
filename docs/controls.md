@@ -14,8 +14,8 @@ Flags are specified in [`cli.md`](cli.md).
 | `Shift` / `Ctrl` | triggers | throttle up / down |
 | `Space` | B | fire guns |
 | `F` | A | fire rockets — one per pull |
-| `G` | D-pad ← | select gun group (one at a time) |
-| `H` | D-pad → | select ordnance (steps forward only; the original also steps back, `BL-357`) |
+| `G` | D-pad → | select gun group (one at a time). The pad side follows the cockpit dial: the **GUNS** gauge is in the right column, **ROCKETS** in the left (`docs/formats/hud.md`, "Weapon gauges") |
+| `H` | D-pad ← | select ordnance (steps forward only; the original also steps back, `BL-357`) |
 | `N` | X | nitro boost (the original's "Use Nitro-Booster"): engages only with a nitrous engine fitted and the tank at 99 % or more, then burns the whole tank (9.5 s) with no way to stop it, and re-arms after a 28 s refill. The nitro dial appears at the bottom of the right column, below the speedometer, with the injector fitted (`docs/org/flightModel.md`, "Nitro") |
 | `F5` | | damage lab on the flown plane — `--damage=` |
 | `B` | | weapon lab panel — `--weapon-lab` sessions only; its steppers arm the plane's live loadout and Space/`F` then fire it (`--weapon-lab=` picks the weapon, `--weapon-mount=` the mount, `--weapon-cycle=` steps the list) |

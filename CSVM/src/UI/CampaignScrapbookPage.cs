@@ -115,7 +115,8 @@ public sealed class CampaignScrapbookPage : CampaignPage
     /// <summary>The shown spread's shipped scraps (<c>SCRAPBOOK.CSV</c>), gated on the mission's
     /// merged best-to-date mask and with a capture skipped when the profile carries no such file;
     /// spread 1 then lays the unselected tab, the results card and the selected half's kill stamps
-    /// over them.</summary>
+    /// over them. The scrap the cursor stands on draws last and two percent bigger, which is what
+    /// the original does to the one under the pointer.</summary>
     public override IReadOnlyList<BoardPicture> Pictures
     {
         get
@@ -128,7 +129,8 @@ public sealed class CampaignScrapbookPage : CampaignPage
             var (mission, spread) = Position();
             var result = Result();
             var pictures = new List<BoardPicture>(ScrapbookComposition.Pictures(
-                Flow.DataRoot, mission, spread, result?.Best.CompletedMask ?? 0, Flow.CapturePath));
+                Flow.DataRoot, mission, spread, result?.Best.CompletedMask ?? 0, Flow.CapturePath,
+                ScrapAt(Flow.Row)?.Item ?? -1));
             if (spread != 1)
             {
                 return pictures;
@@ -203,7 +205,8 @@ public sealed class CampaignScrapbookPage : CampaignPage
     public override bool Accept(int row)
     {
         var (mission, spread) = Position();
-        switch (KindAt(row))
+        var kind = KindAt(row);
+        switch (kind)
         {
             case RowKind.Replay:
                 Flow.SetMission(mission - 1);
@@ -219,6 +222,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
                 if (Previous() is { } prev)
                 {
                     (_viewMission, _viewSpread) = prev;
+                    Refocus(kind);
                 }
                 else
                 {
@@ -230,12 +234,14 @@ public sealed class CampaignScrapbookPage : CampaignPage
                 if (Next() is { } next)
                 {
                     (_viewMission, _viewSpread) = next;
+                    Refocus(kind);
                 }
 
                 return true;
             case RowKind.CurrentMission:
                 _viewMission = Flow.MissionSeq + 1;
                 _viewSpread = 1;
+                Refocus(kind);
                 return true;
             case RowKind.ViewAllMissions:
                 Flow.GoTo(CampaignScreen.PreviousMissions);
@@ -255,19 +261,22 @@ public sealed class CampaignScrapbookPage : CampaignPage
         }
     }
 
-    // The first of title, caption, then the image's own name, so the hint line never reads empty
-    // for a scrap this page actually offers to open.
-    private static string ScrapHint(ScrapbookScrap scrap)
+    // The hint band's line for a scrap: the words on the scrap itself where its row names a string,
+    // read off the first line of the title the zoom view heads with. Never the image name, which is
+    // an asset path and not something to show a player, and never the raw IDS_ symbol either: most
+    // rows name no string at all, so the fallback says what a confirm does instead.
+    private string ScrapHint(ScrapbookScrap scrap)
     {
-        foreach (var key in new[] { scrap.TitleKey, scrap.CaptionKey, scrap.TextKey })
+        foreach (var key in new[] { scrap.TitleKey, scrap.CaptionKey })
         {
-            if (key.Length > 0 && key != "0")
+            if (ScrapbookComposition.StringId(Flow.DataRoot, key) is { } id
+                && Flow.Strings.Text(id).Trim() is { Length: > 0 } text)
             {
-                return key;
+                return text.Split('\n')[0].Trim();
             }
         }
 
-        return scrap.ImageName;
+        return "Look closer";
     }
 
     // The rows this page offers right now, in the order the cursor steps them. Only the widgets
@@ -317,6 +326,16 @@ public sealed class CampaignScrapbookPage : CampaignPage
     }
 
     private int RowOf(RowKind kind) => Rows().IndexOf(kind);
+
+    // Puts the cursor back on the control just pressed, at whatever row the new position gives it.
+    // Row lists are rebuilt per position and a page turn off spread 1 drops three rows above the
+    // arrows, so a cursor left on its old index slides down onto RETURN TO CABIN instead. A control
+    // the new position no longer offers hands the cursor to the back arrow, which every one has.
+    private void Refocus(RowKind kind)
+    {
+        int at = RowOf(kind);
+        Flow.FocusRow(at >= 0 ? at : RowOf(RowKind.PrevPage));
+    }
 
     // uiData 2411: Replay Mission is offered once either half of the mission's record holds a
     // time, which a lost attempt also does, so completion bits are not the gate. The script adds

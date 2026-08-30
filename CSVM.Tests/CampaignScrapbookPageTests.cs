@@ -169,7 +169,9 @@ public class CampaignScrapbookPageTests
 
         int scrapRow = flow.Page.RowCount - 1; // the one openable scrap, after every button
         flow.FocusRow(scrapRow);
-        Assert.Equal("IDS_TEST_TITLE", flow.Page.Detail(scrapRow));
+        // No RESRC1.H in this fixture, so the row's symbol resolves to nothing and the hint band
+        // says what a confirm does rather than printing the symbol or the image's own name.
+        Assert.Equal("Look closer", flow.Page.Detail(scrapRow));
         flow.Accept();
 
         Assert.Equal(CampaignScreen.ScrapbookZoom, flow.Screen);
@@ -187,6 +189,26 @@ public class CampaignScrapbookPageTests
         var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
 
         Assert.Equal(string.Empty, flow.Page.RowText(flow.Page.RowCount - 1));
+    }
+
+    /// <summary>A scrap row draws no plaque and no list text, so the original's own hover is the
+    /// whole of its focus state: the scrap under the cursor grows and lifts, and steps back the
+    /// moment the cursor moves off it.</summary>
+    [Fact]
+    public void TheScrapUnderTheCursorGrowsAndSettlesBackWhenTheCursorLeaves()
+    {
+        string root = ScrapbookCompositionFixture.WriteMinimalOpenableScrap(TestData.TempDir(), mission: 1);
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        Assert.Equal(1f, Scraps(flow.Page)[0].Scale); // the cursor opens on a button
+
+        flow.FocusRow(flow.Page.RowCount - 1); // the one openable scrap
+        Assert.Equal(1.02f, Scraps(flow.Page)[0].Scale);
+
+        flow.FocusRow(0);
+        Assert.Equal(1f, Scraps(flow.Page)[0].Scale);
     }
 
     /// <summary>The forward arrow steps within mission 1's two spreads, then rolls to mission 2's
@@ -228,6 +250,42 @@ public class CampaignScrapbookPageTests
 
         StepPrev(flow); // (2,1) -> (1,2), the previous mission's own last spread, not its first
         Assert.EndsWith("01_02_a.PNG", flow.Page.Pictures[0].Art.Name);
+    }
+
+    /// <summary>Turning a page leaves the cursor on the arrow that turned it, not on the row index
+    /// that arrow used to hold: a spread-1 page drops the Replay row and both tabs above the arrows,
+    /// which slides an unmoved cursor down onto RETURN TO CABIN.</summary>
+    [Fact]
+    public void TurningAPageKeepsTheCursorOnTheArrowThatTurnedIt()
+    {
+        string root = ScrapbookCompositionFixture.WriteBook(TestData.TempDir());
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        StepNext(flow); // (1,1) -> (1,2), where the three spread-1 rows are gone
+        Assert.Equal(BoardButton.ScrapbookNext, flow.Page.Button(flow.Row).Button);
+
+        StepPrev(flow); // (1,2) -> (1,1), where they are back
+        Assert.Equal(BoardButton.ScrapbookPrev, flow.Page.Button(flow.Row).Button);
+    }
+
+    /// <summary>The last page of the book offers no forward arrow to stay on, so the cursor lands on
+    /// the back arrow beside it rather than on whatever row the index now names.</summary>
+    [Fact]
+    public void TurningToTheLastPageLeavesTheCursorOnTheBackArrow()
+    {
+        string root = ScrapbookCompositionFixture.WriteBook(TestData.TempDir());
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        StepNext(flow); // (1,1) -> (1,2)
+        StepNext(flow); // (1,2) -> (2,1)
+        StepNext(flow); // (2,1) -> (3,1), the book's last page
+
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ScrapbookNext));
+        Assert.Equal(BoardButton.ScrapbookPrev, flow.Page.Button(flow.Row).Button);
     }
 
     /// <summary>The Current Mission bookmark shows only while the browsed mission differs from the
