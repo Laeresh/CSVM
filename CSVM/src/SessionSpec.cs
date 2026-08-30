@@ -482,6 +482,12 @@ public sealed record SessionSpec
     /// pilot flies in and the one the cycle key changes. Dropped outside flight, like
     /// <see cref="View"/>.</summary>
     public Flight.PilotViewMode ViewMode { get; private set; }
+    /// <summary><b>Resolved.</b> The <c>--look=x,y</c> right-stick deflection held for the whole
+    /// run, both in [−1, 1], +x right and +y up: the scripted twin of pushing the look stick, and
+    /// the only way a headless run aims it. Drives the chase camera's swing and the first-person
+    /// head alike, so one run can compare the two. Zero (the default) is a centred stick, i.e.
+    /// exactly today's behaviour, and a live stick beats it while deflected.</summary>
+    public Vector2 PinnedLook { get; private set; }
     /// <summary>Deprecated spellings seen, first-seen order, deduplicated, with their replacement.</summary>
     public IReadOnlyList<(string Old, string New)> Deprecated { get; private set; }
         = Array.Empty<(string, string)>();
@@ -1135,6 +1141,18 @@ public sealed record SessionSpec
                     }
                 }
             }
+            else if (arg.StartsWith("--look="))
+            {
+                string want = arg["--look=".Length..];
+                if (ParseLook(want) is { } look)
+                {
+                    s.PinnedLook = look;
+                }
+                else
+                {
+                    notes.Add(new Note("core", $"--look={want} is not an x,y pair — leaving the look stick centred"));
+                }
+            }
         }
 
         s._notes = notes;
@@ -1225,6 +1243,21 @@ public sealed record SessionSpec
     {
         var parts = s.Split(',');
         return new Vector3(Flt(parts[0]), Flt(parts[1]), Flt(parts[2]));
+    }
+
+    /// <summary>Parse <c>--look=x,y</c> into a right-stick deflection, clamped to [−1, 1] on both
+    /// axes. Null on anything that is not two invariant-culture numbers, which the caller reports
+    /// as a note rather than throwing: a typo in a capture script should not kill the run.</summary>
+    public static Vector2? ParseLook(string s)
+    {
+        var parts = s.Split(',');
+        if (parts.Length != 2
+            || !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)
+            || !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
+        {
+            return null;
+        }
+        return new Vector2(Mathf.Clamp(x, -1f, 1f), Mathf.Clamp(y, -1f, 1f));
     }
 
     /// <summary>The numpad view digit for <c>--view=</c>, or the look-behind

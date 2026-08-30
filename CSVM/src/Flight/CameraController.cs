@@ -47,12 +47,6 @@ public sealed class CameraController
     // so only the radius below comes from the data.
     private const float BaseBack = 16f, BaseUp = 4.5f;
 
-    // E42's pad look-around range: how far the right stick swings the view left/right and up/down
-    // from the ordinary chase direction. Not decoded — the original binds no such control — so
-    // this is a UX judgement call for the port, not authored data. Kept well short of vertical
-    // (baseDir sits ~74° off the up axis; ±60° pitch leaves a comfortable margin before
-    // Basis.LookingAt's up hint goes parallel to the view direction).
-    private const float PadLookYawMaxDeg = 150f, PadLookPitchMaxDeg = 60f;
     private const float CamLookAhead = 40f;
     private const float CamSmooth = 8f;         // 1/s — position catch-up
     private const float CamRotSmooth = 7f;      // 1/s — orientation (basis) catch-up; a touch of
@@ -273,16 +267,16 @@ public sealed class CameraController
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
     }
 
-    /// <summary>Analog look-around: the right stick swings the view around the plane at
-    /// the same dynamic radius the chase camera and numpad views share. <paramref name="stickX"/>/
-    /// <paramref name="stickY"/> arrive pre-curved and dead-zoned, so both at 0 reduces to the
-    /// ordinary chase direction. Rigid and instant like <see cref="FixedView"/>; releasing it lets
-    /// <see cref="Chase"/> resume its own catch-up next frame. Not a decode — see
-    /// docs/controls.md.</summary>
+    /// <summary>Analog look-around: the right stick swings the view around the plane at the same
+    /// dynamic radius the chase camera and numpad views share. <paramref name="stickX"/>/<paramref
+    /// name="stickY"/> arrive pre-curved and dead-zoned, so both at 0 reduces to the ordinary chase
+    /// direction. Rigid and instant like <see cref="FixedView"/>; releasing it lets
+    /// <see cref="Chase"/> resume its catch-up next frame. Not a decode; the envelope is
+    /// <see cref="HeadLook"/>'s, shared with the first-person head (docs/controls.md).</summary>
     public void PadLook(in Transform3D renderPose, float stickX, float stickY)
     {
-        float yaw = Mathf.DegToRad(stickX * PadLookYawMaxDeg);
-        float pitch = Mathf.DegToRad(-stickY * PadLookPitchMaxDeg);  // stick up = look up
+        float yaw = Mathf.DegToRad(stickX * HeadLook.PadLookYawMaxDeg);
+        float pitch = Mathf.DegToRad(-stickY * HeadLook.PadLookPitchMaxDeg);  // stick up = look up
         var baseDir = new Vector3(0f, BaseUp, BaseBack).Normalized();
         var dir = new Basis(Vector3.Up, yaw) * (new Basis(Vector3.Right, pitch) * baseDir);
         _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * _radius));

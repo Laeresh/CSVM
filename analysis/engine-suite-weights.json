@@ -97,6 +97,7 @@
     "gltf-export": 0.571,
     "cockpit-interior": 0.883,
     "cockpit-overlay-pass": 0.589,
+    "look-stick": 1.820,
     "collision-visibility": 8.570,
     "nodelab-visibility": 1.083,
     "trail-world-anchor": 0.011,
