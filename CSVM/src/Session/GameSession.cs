@@ -1729,6 +1729,56 @@ public partial class GameSession : Node3D
     // --fly (and --stunt): builds every rendered rig's aircraft (model, loadout, HUD, audio,
     // stunt/crash hookup) over the session-wide flight data loaded once above the per-player loop.
     // The per-player body lives in its own HumanFlightAdapter.
+    /// <summary>Decodes every sound the weapons catalogue binds, at the <c>LOOPED</c> flag its play
+    /// site asks for (<see cref="WeaponDefs.SoundCues"/>). A name may be a <c>SOUND_GROUPS</c>
+    /// group, whose members are picked at random per shot, so every member decodes.
+    /// ⚠ Silent on a miss: a per-chapter archive legitimately lacks weapons another chapter uses,
+    /// and the report that matters is the one at the point of use.</summary>
+    private void PrewarmWeaponSounds(BuildState state, WeaponDefs weaponDefs)
+    {
+        if (state.Sounds is not { } archive || state.SoundDefs is not { } soundDefs)
+        {
+            return;
+        }
+        long mark = StartupProfile.Mark();
+        int decoded = 0;
+        foreach (var (name, looped) in weaponDefs.SoundCues())
+        {
+            foreach (string member in ExpandSoundGroup(name, state.SoundGroups))
+            {
+                if (soundDefs.TryGetValue(member, out var def)
+                    && archive.Find(def.WavName, looped, warn: false) != null)
+                {
+                    decoded++;
+                }
+            }
+        }
+        StartupProfile.Record("prewarm", mark);
+        Log.Info("sound", $"weapons prewarm: {decoded} stream(s) decoded before the archive closed");
+    }
+
+    // A cue name is either a SOUND_GROUPS group or a plain definition. Mirrors WorldSounds.Prewarm's
+    // expansion, including the dialogue chains a group can carry.
+    private IEnumerable<string> ExpandSoundGroup(string name, Dictionary<string, SoundGroup>? groups)
+    {
+        if (groups == null || !groups.TryGetValue(name, out var group))
+        {
+            yield return name;
+            yield break;
+        }
+        foreach (var (member, _) in group.Members)
+        {
+            yield return member;
+        }
+        foreach (var chain in group.Chains)
+        {
+            foreach (string line in chain)
+            {
+                yield return line;
+            }
+        }
+    }
+
     private void BuildFlightRigs(BuildState state)
     {
         long mark = StartupProfile.Mark();
@@ -1824,6 +1874,10 @@ public partial class GameSession : Node3D
         mark = StartupProfile.Mark();
         var weaponMessages = Messages.Load(state.MessagesPath);
         var weaponDefs = WeaponDefs.Load(state.ZrdrPath, weaponMessages);
+        // Decode the catalogue's own sounds while the archive is open. Nothing else covers them:
+        // weapons.json names them, not the anim program, and every one is first reached in flight
+        // from a trigger pull or an impact — long after the build scope closes.
+        PrewarmWeaponSounds(state, weaponDefs);
         var stockLoadouts = StockLoadouts.Load();
         var shakeDefs = ShakeDefs.Load(state.ZrdrPath);
         // The ai.zrd turret table. A missing/broken file costs the gunners, not the session.

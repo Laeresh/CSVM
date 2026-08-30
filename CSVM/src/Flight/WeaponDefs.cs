@@ -233,6 +233,39 @@ public sealed class WeaponDefs
 
     public WeaponDef? Get(string id) => _byId.TryGetValue(id, out var d) ? d : null;
 
+    /// <summary>Every sound name this catalogue binds, each paired with the <c>LOOPED</c> flag its
+    /// PLAY SITE asks for, which is not the one sounds.json carries: <c>StartGunLoop</c> forces
+    /// true on a firing loop, <c>ProjectilePool.PlaySound</c> false on everything else.
+    /// ⚠ The pair is the prewarm key — <c>SoundArchive</c> caches per (wav, looped), so a gun loop
+    /// decoded unlooped is still a cold read. Whole catalogue, not one loadout: the AI and the
+    /// turrets fire from it too.</summary>
+    public IReadOnlyCollection<(string Name, bool Looped)> SoundCues()
+    {
+        var cues = new HashSet<(string, bool)>();
+        foreach (var weapon in _all)
+        {
+            if (!string.IsNullOrEmpty(weapon.LoopedSoundName))
+            {
+                cues.Add((weapon.LoopedSoundName!, true));
+            }
+            AddOneShot(weapon.Fire?.Sound);
+            AddOneShot(weapon.Flyout?.Sound);
+            foreach (var impact in weapon.Impact)
+            {
+                AddOneShot(impact?.Sound);
+            }
+        }
+        return cues;
+
+        void AddOneShot(string? name)
+        {
+            if (!string.IsNullOrEmpty(name))
+            {
+                cues.Add((name!, false));
+            }
+        }
+    }
+
     public bool TryGet(string id, out WeaponDef def)
     {
         var d = Get(id);

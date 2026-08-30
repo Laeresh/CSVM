@@ -61,13 +61,45 @@ public sealed class SessionSimulationTests
     }
 
     [Fact]
-    public void PhaseFailureStopsTheRemainderOfTheStep()
+    public void PhaseFailureStopsTheRemainderOfTheStepAndIsCaught()
     {
         var runtime = new RecordingRuntime("ai-1") { ThrowAt = "generators" };
+        var simulation = new SessionSimulation(runtime);
 
-        Assert.Throws<InvalidOperationException>(() => new SessionSimulation(runtime).Step(0.25f));
+        // Does not escape: Godot already swallowed it at the callback boundary, so letting it out
+        // bought nothing and cost the only record. Caught here, it reaches our own log by phase.
+        simulation.Step(0.25f);
 
         Assert.Equal("generators:0.25", runtime.Calls[^1]);
+        Assert.DoesNotContain("ai-1:0.25", runtime.Calls);
+        Assert.Equal(1, simulation.PhaseFailures);
+    }
+
+    [Fact]
+    public void APhaseThatThrowsEveryStepIsCountedEveryTime()
+    {
+        var runtime = new RecordingRuntime("ai-1") { ThrowAt = "generators" };
+        var simulation = new SessionSimulation(runtime);
+
+        simulation.Step(0.25f);
+        simulation.Step(0.25f);
+        simulation.Step(0.25f);
+
+        Assert.Equal(3, simulation.PhaseFailures);
+    }
+
+    [Fact]
+    public void APhaseFailureDoesNotStopThePhasesBeforeItOnLaterSteps()
+    {
+        var runtime = new RecordingRuntime("ai-1") { ThrowAt = "generators" };
+        var simulation = new SessionSimulation(runtime);
+
+        simulation.Step(0.25f);
+        simulation.Step(0.25f);
+
+        // The player kept flying while the AI stood still: this is the shipped symptom, and it is
+        // the ordering that produces it, not a dead session.
+        Assert.Equal(2, runtime.Calls.FindAll(call => call == "human-aircraft:0.25").Count);
         Assert.DoesNotContain("ai-1:0.25", runtime.Calls);
     }
 
