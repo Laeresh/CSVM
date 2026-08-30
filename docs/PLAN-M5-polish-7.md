@@ -231,7 +231,10 @@ and pushes the handoff from t=9.93 to t=15.95, which is the reported defect repr
 Note what else it produces: with the gate off, `rem_pas` plays three times in one docking. That is
 A2's shape, from the mechanism A2 named, and it is off on today's build.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-1 tree: build clean, units 2683
+passed of 2683, 192 engine suites passed with engine errors clean, and 18 golden shots
+hash-identical. Exit 0 in 187.3 s, the engine stage over its 100 s budget at 125.3 s (awareness
+only).
 
 ## A2 ◐ `BL-628` A campaign docking swings its hook once, not three times
 
@@ -282,7 +285,10 @@ counting definitions, and the headless count says the definitions each run once.
 20 suites in all). The play-count assertions above are permanent, so a regression that introduces
 the repeat fails a suite rather than waiting for a sortie. At the controls, still owed: any campaign
 docking watched through its opening shot alone, one hook swing, and the hook still engages.
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-1 tree: build clean, units 2683
+passed of 2683, 192 engine suites passed with engine errors clean, and 18 golden shots
+hash-identical. Exit 0 in 187.3 s, the engine stage over its 100 s budget at 125.3 s (awareness
+only).
 
 **⚠ Traps.** Do not silence this by latching "already played" on the runtime. A repeat that a
 definition authors is data, and a latch would hide the same defect wherever else it happens. The
@@ -339,7 +345,10 @@ Targeted results, all on this worktree with `CSVM_DATA_ROOT` set:
   `-Filter swap`: 2 passed.
 - `.\RunTests.ps1 -Quick`: units 241 passed of 241, engine 13 passed of 13, engine errors clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-1 tree: build clean, units 2683
+passed of 2683, 192 engine suites passed with engine errors clean, and 18 golden shots
+hash-identical. Exit 0 in 187.3 s, the engine stage over its 100 s budget at 125.3 s (awareness
+only).
 
 **Owed at the controls.** The flight that confirms the picture is not answered by a headless
 assertion and is owed as its own item: CM01 (C3/M01)'s docking episode, `.\RunGame.ps1
@@ -498,7 +507,10 @@ Targeted runs on this tree, `CSVM_DATA_ROOT` set and the suite count printed non
 failed**; `-Suite hostile-marker-hud` **1 passed**; `-UnitFilter SuiteCatalogTests` **6 passed**;
 `-Quick` **241 units and 13 engine suites passed, 0 failed**, engine errors clean.
 `.\CheckCommentCaps.ps1 -Summary`: all comment blocks within cap.
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-1 tree: build clean, units 2683
+passed of 2683, 192 engine suites passed with engine errors clean, and 18 golden shots
+hash-identical. Exit 0 in 187.3 s, the engine stage over its 100 s budget at 125.3 s (awareness
+only).
 
 **Follow-up proposed, not minted.** A site's anchor is still recomputed once per pane, so a four-pane
 co-op CM10 with nine balloons alive pays about 0.86 ms a frame and a four-pane C1/M04 about 2.0 ms.
@@ -577,7 +589,10 @@ the cross-mode name collision and the duplicate-ownership guard); the full unit 
 `campaign-hangar-handover`), errors clean; engine `-Suite campaign-persistence` 1/1, errors clean.
 `CheckCommentCaps.ps1` clean over every changed file.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged wave-1 tree: build clean, units 2683
+passed of 2683, 192 engine suites passed with engine errors clean, and 18 golden shots
+hash-identical. Exit 0 in 187.3 s, the engine stage over its 100 s budget at 125.3 s (awareness
+only).
 
 **⚠ Traps.** Do not give the campaign its own build directory to get the separation. The two starters
 a fresh profile is seeded with are never hangar-built and have no entry there at all, which is why
