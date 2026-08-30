@@ -88,6 +88,70 @@ public class ScrapbookCompositionTests
         Assert.EndsWith("coin.PNG", pictures[2].Art.Name);
     }
 
+    /// <summary>The focused scrap takes the original's own hover (<c>SCRAPBOOK.SCRIPT</c>'s 10002):
+    /// two percent bigger, and last in the list so it stands over the neighbours it was under.
+    /// </summary>
+    [Fact]
+    public void TheFocusedScrapDrawsLastAndSlightlyBigger()
+    {
+        // news3 stacks bottom by DrawOrder; focusing it must put it on top of the other two.
+        var pictures = ScrapbookComposition.Pictures(
+            Root(), 1, 1, bestMask: 1, scrap => OnDisk(scrap), focusedItem: 2);
+
+        Assert.Equal(3, pictures.Count);
+        Assert.EndsWith("news3.PNG", pictures[2].Art.Name);
+        Assert.Equal(1.02f, pictures[2].Scale);
+        Assert.Equal(1f, pictures[0].Scale);
+        Assert.Equal(1f, pictures[1].Scale);
+    }
+
+    /// <summary>A capture's grime frame is lifted and grown with the capture it dirties, and the
+    /// frame itself does not change as the cursor moves: the generator walks by picture index, so
+    /// reordering during composition rather than after it would re-roll every smudge behind it.
+    /// </summary>
+    [Fact]
+    public void AFocusedCaptureCarriesItsGrimeUpWithItAtTheSameFrame()
+    {
+        var resting = ScrapbookComposition.Pictures(Root(), 4, 1, bestMask: 1, scrap => OnDisk(scrap));
+        var focused = ScrapbookComposition.Pictures(
+            Root(), 4, 1, bestMask: 1, scrap => OnDisk(scrap), focusedItem: 1);
+
+        // At rest: capture, grime, corner mount. Focused: the mount drops under the pair.
+        Assert.EndsWith("DZ_generic_corners.PNG", focused[0].Art.Name);
+        Assert.Equal(BoardArtLibrary.Loose, focused[1].Art.Library);
+        Assert.Equal("SB_P_Grime.Png", focused[2].Art.Name);
+        Assert.Equal(new[] { 1.02f, 1.02f }, new[] { focused[1].Scale, focused[2].Scale });
+        Assert.Equal(resting[1].Frame, focused[2].Frame);
+    }
+
+    /// <summary>An item ordinal no visible scrap carries (the cursor on a button, or on a scrap the
+    /// objective gate hides) leaves the page stacked exactly as it rests.</summary>
+    [Fact]
+    public void AnUnmatchedFocusLeavesTheStackAlone()
+    {
+        var resting = ScrapbookComposition.Pictures(Root(), 1, 1, bestMask: 1, scrap => OnDisk(scrap));
+        var focused = ScrapbookComposition.Pictures(
+            Root(), 1, 1, bestMask: 1, scrap => OnDisk(scrap), focusedItem: 99);
+
+        Assert.Equal(resting, focused);
+    }
+
+    /// <summary>A scrap's title and body columns are langui symbols, and <c>RESRC1.H</c>'s own
+    /// <c>#define</c> table is what turns one into the id the string table holds its text under.
+    /// The CSV's <c>0</c> sentinel and a symbol the header lacks both resolve to nothing.</summary>
+    [Fact]
+    public void AScrapsStringSymbolResolvesThroughResrc1H()
+    {
+        string root = ScrapbookCompositionFixture.WriteResolvableScrap(TestData.TempDir(), mission: 1);
+
+        Assert.Equal(40002, ScrapbookComposition.StringId(root, "IDS_TEST_TITLE"));
+        Assert.Equal(40003, ScrapbookComposition.StringId(root, "IDS_TEST_BODY"));
+        Assert.Null(ScrapbookComposition.StringId(root, "0"));
+        Assert.Null(ScrapbookComposition.StringId(root, string.Empty));
+        Assert.Null(ScrapbookComposition.StringId(root, "IDS_NOT_IN_THE_HEADER"));
+        Assert.Null(ScrapbookComposition.StringId(null, "IDS_TEST_TITLE"));
+    }
+
     [Fact]
     public void AnObjectiveOfZeroAlwaysDraws()
     {

@@ -115,7 +115,8 @@ public sealed class CampaignScrapbookPage : CampaignPage
     /// <summary>The shown spread's shipped scraps (<c>SCRAPBOOK.CSV</c>), gated on the mission's
     /// merged best-to-date mask and with a capture skipped when the profile carries no such file;
     /// spread 1 then lays the unselected tab, the results card and the selected half's kill stamps
-    /// over them.</summary>
+    /// over them. The scrap the cursor stands on draws last and two percent bigger, which is what
+    /// the original does to the one under the pointer.</summary>
     public override IReadOnlyList<BoardPicture> Pictures
     {
         get
@@ -128,7 +129,8 @@ public sealed class CampaignScrapbookPage : CampaignPage
             var (mission, spread) = Position();
             var result = Result();
             var pictures = new List<BoardPicture>(ScrapbookComposition.Pictures(
-                Flow.DataRoot, mission, spread, result?.Best.CompletedMask ?? 0, Flow.CapturePath));
+                Flow.DataRoot, mission, spread, result?.Best.CompletedMask ?? 0, Flow.CapturePath,
+                ScrapAt(Flow.Row)?.Item ?? -1));
             if (spread != 1)
             {
                 return pictures;
@@ -259,19 +261,22 @@ public sealed class CampaignScrapbookPage : CampaignPage
         }
     }
 
-    // The first of title, caption, then the image's own name, so the hint line never reads empty
-    // for a scrap this page actually offers to open.
-    private static string ScrapHint(ScrapbookScrap scrap)
+    // The hint band's line for a scrap: the words on the scrap itself where its row names a string,
+    // read off the first line of the title the zoom view heads with. Never the image name, which is
+    // an asset path and not something to show a player, and never the raw IDS_ symbol either: most
+    // rows name no string at all, so the fallback says what a confirm does instead.
+    private string ScrapHint(ScrapbookScrap scrap)
     {
-        foreach (var key in new[] { scrap.TitleKey, scrap.CaptionKey, scrap.TextKey })
+        foreach (var key in new[] { scrap.TitleKey, scrap.CaptionKey })
         {
-            if (key.Length > 0 && key != "0")
+            if (ScrapbookComposition.StringId(Flow.DataRoot, key) is { } id
+                && Flow.Strings.Text(id).Trim() is { Length: > 0 } text)
             {
-                return key;
+                return text.Split('\n')[0].Trim();
             }
         }
 
-        return scrap.ImageName;
+        return "Look closer";
     }
 
     // The rows this page offers right now, in the order the cursor steps them. Only the widgets

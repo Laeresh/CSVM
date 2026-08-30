@@ -169,7 +169,9 @@ public class CampaignScrapbookPageTests
 
         int scrapRow = flow.Page.RowCount - 1; // the one openable scrap, after every button
         flow.FocusRow(scrapRow);
-        Assert.Equal("IDS_TEST_TITLE", flow.Page.Detail(scrapRow));
+        // No RESRC1.H in this fixture, so the row's symbol resolves to nothing and the hint band
+        // says what a confirm does rather than printing the symbol or the image's own name.
+        Assert.Equal("Look closer", flow.Page.Detail(scrapRow));
         flow.Accept();
 
         Assert.Equal(CampaignScreen.ScrapbookZoom, flow.Screen);
@@ -187,6 +189,26 @@ public class CampaignScrapbookPageTests
         var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
 
         Assert.Equal(string.Empty, flow.Page.RowText(flow.Page.RowCount - 1));
+    }
+
+    /// <summary>A scrap row draws no plaque and no list text, so the original's own hover is the
+    /// whole of its focus state: the scrap under the cursor grows and lifts, and steps back the
+    /// moment the cursor moves off it.</summary>
+    [Fact]
+    public void TheScrapUnderTheCursorGrowsAndSettlesBackWhenTheCursorLeaves()
+    {
+        string root = ScrapbookCompositionFixture.WriteMinimalOpenableScrap(TestData.TempDir(), mission: 1);
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        Assert.Equal(1f, Scraps(flow.Page)[0].Scale); // the cursor opens on a button
+
+        flow.FocusRow(flow.Page.RowCount - 1); // the one openable scrap
+        Assert.Equal(1.02f, Scraps(flow.Page)[0].Scale);
+
+        flow.FocusRow(0);
+        Assert.Equal(1f, Scraps(flow.Page)[0].Scale);
     }
 
     /// <summary>The forward arrow steps within mission 1's two spreads, then rolls to mission 2's

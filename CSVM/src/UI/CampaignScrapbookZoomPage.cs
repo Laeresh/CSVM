@@ -11,10 +11,10 @@ namespace CSVM.UI;
 /// image, up to three text lines at the family's own boxes
 /// (<see cref="ScrapbookComposition.ZoomFamily"/>), and EXPORT TO DESKTOP. <c>TitleKey</c>,
 /// <c>CaptionKey</c> and <c>TextKey</c> are the shipped <c>SCRAPBOOK.CSV</c> row's own langui
-/// symbols (<c>IDS_SB_...</c>): the numeric ids <c>RESRC1.H</c> assigns them belong to
-/// <c>ScrapBook.Rc</c>, a resource script never extracted, so no string table anywhere resolves
-/// them. Shown as the raw symbol rather than invented English, the same degrade
-/// <see cref="CampaignBriefingPage"/> and <c>BriefingObjectives</c> use for an unresolved key.
+/// symbols (<c>IDS_SB_...</c>), resolved to their text through the ids <c>RESRC1.H</c> assigns
+/// them (<see cref="ScrapbookComposition.StringId"/>). A symbol neither file carries is shown as
+/// itself rather than as invented English, the same degrade <see cref="CampaignBriefingPage"/> and
+/// <c>BriefingObjectives</c> use for an unresolved key.
 /// </summary>
 public sealed class CampaignScrapbookZoomPage : CampaignPage
 {
@@ -105,9 +105,9 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
             }
 
             var lines = new List<BoardLine>();
-            AddIfPresent(lines, scrap.TitleKey, family.TitleX, family.TitleY, family.TitleWidth, TitleFont, BoardInk.Heading);
-            AddIfPresent(lines, scrap.CaptionKey, family.CaptionX, family.CaptionY, family.CaptionWidth, BodyFont, BoardInk.Row);
-            AddIfPresent(lines, scrap.TextKey, family.TextX, family.TextY, family.TextWidth, BodyFont, BoardInk.Row);
+            AddIfPresent(lines, Words(scrap.TitleKey), family.TitleX, family.TitleY, family.TitleWidth, TitleFont, BoardInk.Heading);
+            AddIfPresent(lines, Words(scrap.CaptionKey), family.CaptionX, family.CaptionY, family.CaptionWidth, BodyFont, BoardInk.Row);
+            AddIfPresent(lines, Words(scrap.TextKey), family.TextX, family.TextY, family.TextWidth, BodyFont, BoardInk.Row);
             return lines;
         }
     }
@@ -167,6 +167,13 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
             lines.Add(new BoardLine(key, x, y, width, size, ink));
         }
     }
+
+    // A scrap's own words: the langui text its symbol names, or the symbol itself when RESRC1.H or
+    // the table does not carry it, the same degrade an unresolved briefing key takes.
+    private string Words(string key) =>
+        ScrapbookComposition.StringId(Flow.DataRoot, key) is { } id
+            ? Flow.Strings.Text(id, key)
+            : key;
 
     private string Message(int id, string fallback, string argument) =>
         Flow.Strings.Has(id) ? Flow.Strings.Format(id, argument) : fallback;
