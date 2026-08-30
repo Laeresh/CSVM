@@ -1901,6 +1901,14 @@ public sealed partial class LaunchMenu : CanvasLayer
             dirty |= driver.Erase && flow.Backspace();
         }
 
+        // X is the screen's own shortcut, not a press of the focused plaque, so it lights no button
+        // and is read before the confirm. While a name field is armed the keyboard's own X alias is
+        // a letter being typed, which must not fire it.
+        if (!typing && driver.Presets)
+        {
+            dirty |= flow.Secondary();
+        }
+
         if (driver.Accept)
         {
             _pressFrames = PressFrames;

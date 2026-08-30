@@ -8,8 +8,9 @@ namespace CSVM.Tests;
 
 /// <summary>The scrapbook's table of contents: one 80-pixel row per completed mission in <c>seq</c>
 /// order with its icon and three lines, a four-row window with a scrollbar past that, VIEW SELECTED
-/// as a no-op, REPLAY MISSION opening the briefing without advancing the campaign, and RETURN TO
-/// CABIN never stacking a second cabin.</summary>
+/// and the secondary press both opening the book, the forward tab turning into it, REPLAY MISSION
+/// opening the briefing without advancing the campaign, and RETURN TO CABIN never stacking a second
+/// cabin.</summary>
 public class CampaignPreviousMissionsPageTests
 {
     [Fact]
@@ -21,9 +22,9 @@ public class CampaignPreviousMissionsPageTests
         CampaignProgression.Record(profile, Attempt(1, mask: 4)); // no primary: not "finished"
         var flow = OpenedOnPreviousMissions(profile);
 
-        // Two finished missions (0 and 2), then VIEW SELECTED, REPLAY MISSION, the CURRENT MISSION
-        // bookmark and RETURN TO CABIN.
-        Assert.Equal(6, flow.Page.RowCount);
+        // Two finished missions (0 and 2), then VIEW SELECTED, REPLAY MISSION, the forward page
+        // tab, the CURRENT MISSION bookmark and RETURN TO CABIN.
+        Assert.Equal(7, flow.Page.RowCount);
         Assert.Equal(string.Empty, flow.Page.RowText(0)); // a mission row draws its own three lines
         Assert.Equal("VIEW SELECTED", flow.Page.RowText(2));
         Assert.Equal("Mission 1", flow.Page.Detail(0)); // seq 0 (1-based ordinal 1) comes first
@@ -166,7 +167,50 @@ public class CampaignPreviousMissionsPageTests
         var flow = OpenedOnPreviousMissions(CampaignProfileDef.NewProfile("Zachary"));
 
         Assert.Equal(-1, RowOf(flow.Page, BoardButton.ReplayMission));
-        Assert.Equal(3, flow.Page.RowCount); // VIEW SELECTED, the bookmark, RETURN TO CABIN
+        Assert.Equal(4, flow.Page.RowCount); // VIEW SELECTED, the tab, the bookmark, RETURN TO CABIN
+    }
+
+    /// <summary>The forward page tab turns out of the contents and into the book at its first
+    /// mission, which is the page the book's own back arrow falls off to reach this screen.</summary>
+    [Fact]
+    public void TheForwardTabTurnsIntoTheBookAtItsFirstMission()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(2));
+        var flow = OpenedOnPreviousMissions(profile);
+
+        Press(flow, BoardButton.ScrapbookNext);
+
+        Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
+        Assert.Equal(0, flow.MissionSeq); // the front of the book, not the finished mission
+    }
+
+    /// <summary>The secondary press is VIEW SELECTED without walking down to the button: on a
+    /// mission row it picks that row and opens the book there.</summary>
+    [Fact]
+    public void TheSecondaryPressViewsTheMissionTheCursorStandsOn()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        CampaignProgression.Record(profile, Attempt(1));
+        var flow = OpenedOnPreviousMissions(profile);
+
+        flow.FocusRow(1); // the seq-1 row, never confirmed
+        Assert.True(flow.Secondary());
+
+        Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
+        Assert.Equal(1, flow.MissionSeq);
+    }
+
+    /// <summary>A profile with nothing finished has nothing to view, so the press is unhandled
+    /// rather than opening the book on a mission the list does not carry.</summary>
+    [Fact]
+    public void TheSecondaryPressIsNothingWithNoFinishedMission()
+    {
+        var flow = OpenedOnPreviousMissions(CampaignProfileDef.NewProfile("Zachary"));
+
+        Assert.False(flow.Secondary());
+        Assert.Equal(CampaignScreen.PreviousMissions, flow.Screen);
     }
 
     /// <summary>VIEW SELECTED opens the book at the picked mission's first spread, which is the

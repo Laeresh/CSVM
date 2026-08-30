@@ -213,6 +213,15 @@ public sealed partial class ComposedBoardView : Control
             at -= span / 2f;
         }
 
+        // Growing about the middle rather than the corner, so a scrap swelling under the cursor
+        // stays where the page put it instead of creeping down and to the right.
+        if (picture.Scale != 1f)
+        {
+            var grown = span * picture.Scale;
+            at -= (grown - span) / 2f;
+            span = grown;
+        }
+
         var tint = new Color(1f, 1f, 1f, Mathf.Clamp(picture.Opacity, 0f, 1f));
         if (picture.Revs == 0f)
         {

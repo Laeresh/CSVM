@@ -23,6 +23,23 @@ public class CampaignScrapbookZoomPageTests
         Assert.Contains(flow.Page.Captions, l => l.Text == "IDS_TEST_BODY");
     }
 
+    /// <summary>A scrap's title and body are langui symbols, not text: SCRAPBOOK.CSV names them,
+    /// RESRC1.H turns each into an id, and ui_strings.json holds the words. The zoom view draws the
+    /// words, and a symbol no header carries still degrades to itself.</summary>
+    [Fact]
+    public void AScrapsOwnWordsResolveThroughResrc1HIntoTheStringTable()
+    {
+        string root = ScrapbookCompositionFixture.WriteResolvableScrap(TestData.TempDir(), mission: 1);
+        var strings = UiStrings.Parse(
+            "[{\"id\":40002,\"text\":\"[FREE18]\\nMy Dearest Nathan,\",\"dll\":\"langui\"}," +
+            "{\"id\":40003,\"text\":\"Your princess, Loni Ne\",\"dll\":\"langui\"}]");
+        var flow = OpenedOnZoom(root, strings);
+
+        Assert.Contains(flow.Page.Captions, l => l.Text == "\nMy Dearest Nathan,");
+        Assert.Contains(flow.Page.Captions, l => l.Text == "Your princess, Loni Ne");
+        Assert.DoesNotContain(flow.Page.Captions, l => l.Text == "IDS_TEST_TITLE");
+    }
+
     [Fact]
     public void CloseReturnsToTheScrapbookPage()
     {
@@ -79,18 +96,18 @@ public class CampaignScrapbookZoomPageTests
         Assert.False(flow.Page.Accept(CampaignScrapbookZoomPage.ExportRow));
     }
 
-    private static CampaignFlow OpenedOnZoom()
+    private static CampaignFlow OpenedOnZoom(string? root = null, UiStrings? strings = null)
     {
-        var flow = FlowOnScrapbook();
+        var flow = FlowOnScrapbook(root, strings);
         flow.FocusRow(flow.Page.RowCount - 1); // the one openable scrap, after every button
         flow.Accept();
         Assert.Equal(CampaignScreen.ScrapbookZoom, flow.Screen);
         return flow;
     }
 
-    private static CampaignFlow FlowOnScrapbook()
+    private static CampaignFlow FlowOnScrapbook(string? root = null, UiStrings? strings = null)
     {
-        string root = ScrapbookCompositionFixture.WriteMinimalOpenableScrap(TestData.TempDir(), mission: 1);
+        root ??= ScrapbookCompositionFixture.WriteMinimalOpenableScrap(TestData.TempDir(), mission: 1);
         var profile = CampaignProfileDef.NewProfile("Zachary");
         CampaignProgression.Record(profile, new MissionAttempt(
             0, CompletedMask: 1, TimeMs: 40000, Shots: 10, Hits: 5, Money: 0,
@@ -100,7 +117,7 @@ public class CampaignScrapbookZoomPageTests
         Directory.CreateDirectory(dir);
         var store = new CampaignProfileStore(dir);
         store.Save(profile);
-        var flow = new CampaignFlow(store, UiStrings.Empty, root);
+        var flow = new CampaignFlow(store, strings ?? UiStrings.Empty, root);
         flow.SelectProfile(store.Load(profile.Name)!);
         flow.SetMission(0);
         flow.GoTo(CampaignScreen.Scrapbook);

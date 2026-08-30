@@ -203,8 +203,9 @@ public static class CampaignScrapbookResults
 /// silhouette beside the mission's short name, the area it was flown over and the plane that flew
 /// it, in a four-row window with the listbox's own scrollbar beside it, then VIEW SELECTED, REPLAY
 /// MISSION and RETURN TO CABIN. A confirm on a row picks it and a second confirm on the row already
-/// picked is REPLAY MISSION's own press. VIEW SELECTED has no screen of its own to open (its whole
-/// job is naming which row the two buttons act on), so it is a no-op.
+/// picked is REPLAY MISSION's own press; the secondary press is VIEW SELECTED on whatever the cursor
+/// stands on. The forward page tab is this screen's own rather than the original's, which leaves the
+/// contents page with no arrow a pad can turn it forward by.
 /// </summary>
 public sealed class CampaignPreviousMissionsPage : CampaignPage
 {
@@ -288,6 +289,13 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
 
     /// <inheritdoc/>
     public override string Title => "PREVIOUS MISSIONS";
+
+    /// <summary>The one screen with a secondary press, so it says what X does rather than leaving
+    /// the shortcut to be discovered. Kept short: the band is centred over the board and a longer
+    /// line runs its right end under the CURRENT MISSION bookmark this screen carries at the top.
+    /// </summary>
+    public override string Footer =>
+        "↑↓  Choose       Enter / A  Select       X  View       Esc / B  Back";
 
     /// <inheritdoc/>
     public override int RowCount => Seqs().Count + Buttons().Count;
@@ -420,6 +428,7 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
             BoardButton.ViewMission => "Opens the scrapbook at this mission",
             BoardButton.ReplayMission when SelectedSeq(seqs) is { } seq =>
                 Flow.Strings.Text(3450 + seq, $"Mission {seq + 1}"),
+            BoardButton.ScrapbookNext => "Forward into the book",
             BoardButton.CurrentMission => "Opens the scrapbook at the current mission",
             _ => "Back to the cabin",
         };
@@ -454,6 +463,9 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
                 return true;
             case BoardButton.ReplayMission:
                 return SelectedSeq(seqs) is { } replaying && Replay(replaying);
+            case BoardButton.ScrapbookNext:
+                Flow.OpenScrapbook(0);
+                return true;
             case BoardButton.CurrentMission:
                 Flow.OpenScrapbook(CurrentSeq());
                 return true;
@@ -463,15 +475,36 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         }
     }
 
+    /// <summary>VIEW SELECTED without walking down to the button: on a mission row it picks that row
+    /// and opens the book there, and on any other row it opens the book on whatever is picked
+    /// already. Nothing to open (a profile with no finished mission) leaves the press unhandled.
+    /// </summary>
+    public override bool Secondary(int row)
+    {
+        var seqs = Seqs();
+        if (row >= 0 && row < seqs.Count)
+        {
+            _selected = row;
+        }
+
+        if (SelectedSeq(seqs) is not { } seq)
+        {
+            return false;
+        }
+
+        Flow.OpenScrapbook(seq);
+        return true;
+    }
+
     // The finished seqs, in story order, per CampaignProgression.CompletedSeqs. Read fresh every
     // call rather than cached: a replay recorded through the briefing/flight-check screens must
     // show up here the next time this page draws.
     private List<int> Seqs() =>
         Flow.Profile is { } profile ? CampaignProgression.CompletedSeqs(profile) : new List<int>();
 
-    // The buttons under the list, in the order they take rows. REPLAY MISSION is offered only
-    // where uiData 2411 offers it, on a picked mission whose record holds a time; the other three
-    // are created active and stay so.
+    // The buttons under the list, in the order they take rows, the arrow among them where the book
+    // itself carries it. REPLAY MISSION is offered only where uiData 2411 offers it, on a picked
+    // mission whose record holds a time; the other four are created active and stay so.
     private List<BoardButton> Buttons()
     {
         var buttons = new List<BoardButton> { BoardButton.ViewMission };
@@ -482,6 +515,7 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
             buttons.Add(BoardButton.ReplayMission);
         }
 
+        buttons.Add(BoardButton.ScrapbookNext);
         buttons.Add(BoardButton.CurrentMission);
         buttons.Add(BoardButton.ReturnToCabin);
         return buttons;
