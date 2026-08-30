@@ -1,6 +1,6 @@
 # The golden-image tripwire
 
-Fifteen pinned `--det` captures, each reduced to one md5. `RunTests.ps1` re-renders them and compares;
+Eighteen pinned `--det` captures, each reduced to one md5. `RunTests.ps1` re-renders them and compares;
 a mismatch names the shot and leaves the actual PNG in `.scratch/goldens/` next to that run's engine
 log. Nothing here is a picture — `manifest.json` holds command lines and hashes only, which is what
 keeps it inside the repo's no-game-assets rule.
@@ -64,19 +64,24 @@ you know which instrument to reach for.
 Each entry's `exercises` field says what that shot covers and carries its measured
 frame-sensitivity — frame N against N+1, which is
 the check that a pose has any animated surface in it at all (SHOT-12: a pose that renders identically
-twice proves nothing, because most poses show nothing that moves). Seven shots move on a one-frame
-perturbation (`c1-targeting-hud` 48.18 %, `c1-flight` 34.52 %, `empty-stage` 12.21 %, `c4-snow`
-3.74 %, `c2b-rain` 3.47 %, `c1c-rain` 2.50 %, `c1-waterfall` 1.28 %); the rest are geometry-and-shading
-shots and say so.
+twice proves nothing, because most poses show nothing that moves). Nine shots move on a one-frame
+perturbation (`c1-targeting-hud` 48.18 %, `c1-flight` 34.52 %, `campaign-4p-grid` 73.79 %,
+`empty-stage` 12.21 %, `c4-snow` 3.74 %, `c2b-rain` 3.47 %, `campaign-intro-fill` 3.89 %,
+`c1c-rain` 2.50 %, `c1-waterfall` 1.28 %); the rest are geometry-and-shading shots and say so.
 
 **The 2-second window is itself a gap.** Every shot is captured at frame 120 = **2.00 s** of sim
 (`viewer-bhawk` 30, `c1-crash` 20), so anything whose period is seconds long is barely sampled: the
 ground-vehicle route animations loop on 1.0 s and up, and two rollovers do not move a car far enough
 to change a hash. A change to authored animation *timing* can pass all 13 untouched and still be
 wrong — `BL-237` (2026-08-02) was exactly that, and a long-horizon unit test covers it instead.
+`campaign-4p-grid` and `campaign-intro-fill` share that 2-second window too, so neither one samples
+a campaign mission's later minutes.
 
 **Not covered, deliberately.** The `TextureCycler` flipbooks are below screenshot resolution — the
 water frames differ by ~2/255 and no pose in this set moves more than 9 px across a full cycle
 (SHOT-3), so `--debug-anim`'s per-flipbook frame log remains the only instrument for them. Sound is
-muted in every shot. Splitscreen, the launchscreen and the labs are unrepresented; add a shot rather
-than assuming they are watched.
+muted in every shot. The launchscreen and the labs are unrepresented; add a shot rather than
+assuming they are watched. `campaign-4p-grid` and `campaign-intro-fill` cover a co-op campaign
+launch and its intro collapse alone — a mid-mission cutscene trigger, a guest capture, a downed
+pilot's spectator camera and a cutscene skip all need a human at the controls (`playtest.md`
+`PT-90`–`PT-93`) rather than a scripted frame.

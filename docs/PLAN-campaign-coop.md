@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — Recording, evidence and words
 
 31. ☑ What a co-op sortie writes to the seated profile
-32. ☐ Goldens and playtest items
+32. ☑ Goldens and playtest items
 33. ☐ The 4P cost of a heavy campaign mission
 34. ☐ The five terms in `CONTEXT.md`
 35. ☐ Land the branch: rebase onto the rewritten `main`, never merge it
@@ -618,7 +618,7 @@ records exactly what it records today. Full `.\RunTests.ps1`.
 against, and the store is in `user://`, so a poisoned record is not repaired by a later code
 change. `BL-313` documents that same failure mode for the stunt scoreboard.
 
-## D32 ☐ Goldens and playtest items
+## D32 ☑ Goldens and playtest items
 
 **Goal.** The two visual states this plan introduces are pinned against silent regression, and the
 judgements only a person can make are queued as owed playtests.
@@ -632,10 +632,20 @@ shot covers today, is capped at 250 characters and is rewritten on a re-pin rath
 frame from `B14`. Mint four playtest items with `New-ItemId.ps1`: the join and sequential
 flight-check flow at the controls; a capture performed by a guest, confirming the guest ends up in
 the captured aeroplane; the spectator camera after a death; and skip attribution naming the right
-player. Each names the plan item it judges. <TODO: which shipped mission each golden pins is
-unchosen. The four-pane shot wants a mission with an open `PLAYER_INIT` (so `A1`'s grid is not the
-subject) and the cutscene shot wants one of the nine story missions shipping a `cutscenes\`
-directory; pick both from `docs/formats/campaign-missions.md` and name them here.>
+player. Each names the plan item it judges.
+
+Both goldens pin `CM01` (`C3/M01`): its `PLAYER_INIT` sits at 320 m over open water (`A1`'s own
+verify already placed a four-human field on it, at 60 m spacing — not the tight-start case `A1`'s
+trap warns of), and it is one of the nine missions shipping a `cutscenes\` directory, with its own
+`generic_intro` playing fullscreen from mission load with nobody needing to fly anywhere. A survey
+of every `M0x/zrdr/startanims.zrd.json` found 13 of the 24 missions author an intro under
+`NEW_GAME_START`; `CM01` is both an intro mission and a `cutscenes\`-shipping one, so one mission
+pins both states with no discovery risk for a second choice. Both goldens fly `--plane=` stock
+Bloodhawks for all four seats against a profile name (`csvm-golden`) that exists nowhere on disk:
+`CampaignDirector.TryCreate` warns `no such profile — flying without a mission` and returns no
+director, but `GameSession`'s `StartGrid` arm and `ResolveSeatedPlane`'s `--plane=` override both
+key off `SessionSpec.CampaignProfile != null` alone, so the field still spawns and flies exactly as
+decision 15 says a golden needs to, with no hand-authored profile checked in or created at runtime.
 
 **Model recommendation.** medium, low effort. Mechanical once the behaviours land.
 
