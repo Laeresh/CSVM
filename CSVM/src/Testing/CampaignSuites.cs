@@ -341,8 +341,8 @@ internal static class CampaignSuites
     /// <summary>A co-op sortie's <c>Shots</c>/<c>Hits</c> are the seated pilot's alone. Two
     /// human rigs each fire a real cannon round at the other's aircraft; only the seated pilot's
     /// (rig 0's) round reaches the recorded attempt, proving <c>WireScoredShooter</c> gates on the
-    /// scripted player and never a guest. <c>Money</c> sums to 0 for both today, since the cash
-    /// half of the mission reward table is a separate, unlanded item.</summary>
+    /// scripted player and never a guest. <c>Money</c> sums to 0 because no mission reward source
+    /// feeds the director.</summary>
     internal static void CampaignCoopAttempt(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

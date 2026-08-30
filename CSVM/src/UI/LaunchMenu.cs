@@ -999,7 +999,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (_screen != Screen.Plane && _screen != Screen.Campaign)
             return false;
         // The seated player's FLY MISSION opens the first guest's check instead of leaving, so
-        // the field's own lock is what closes joining now.
+        // the field's own lock closes joining.
         if (_campaign is { Field.Locked: true })
             return false;
         foreach (int pad in Pads.Connected())
