@@ -5916,7 +5916,10 @@ an objective walk still counts a parked aircraft; only what this controller park
 marker's world pose and moves the EPISODE OWNER's hand-back target through
 `FlightController.ResumeAt`, so a mid-mission drop or hookup leaves that pilot where its own
 definition parked that node rather than where it found them, and every other human flies out of its
-own coordinates. ⚠ Do not re-place a held human it did not name: `ResumeAt` on a held aircraft only
+own coordinates; a definition raising 951 without posing that marker authors no placement, so the
+code is declined and the pilot keeps the pose the episode found them at (the marker is a bodiless
+stand-in for the original's own vehicle node, and unposed it reads as the world origin). ⚠ Do not
+re-place a held human it did not name: `ResumeAt` on a held aircraft only
 moves the hand-back target, so the mistake shows up a second later as the whole field materialising
 on the drop point. 965/966/967 the mid-mission airframe swap, through the
 `SwapAirframe` seam the session fills with `FlightRoster.RunSwap` (the three codes, their def/node

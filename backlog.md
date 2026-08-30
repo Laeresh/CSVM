@@ -2254,23 +2254,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the hangar hand-over that played without its aeroplane and the staged actor served only to a call
   that names a site (`git log --grep=BL-596`, and `git log --grep=BL-621`); read both before opening
   the definition, since either answer has been written once already.
-  *Cross-refs:* `BL-633` (the same mission's other cutscene defect),
+  *Cross-refs:* `git log --grep=BL-633` (the same mission's other cutscene defect, where its
+  paratrooper drop left the pilot on the world root),
   [`docs/formats/anim-definitions/cutscenes.md`](docs/formats/anim-definitions/cutscenes.md) (what a
   definition owns during an episode).
-
-- `BL-633` `[Bug]` **CM15 (C2/M05): the player is left under the terrain when a cutscene hands
-  control back, and can only recover by crashing.** *Evidence:* reported at the controls. The
-  handoff leaves the aircraft below the ground surface rather than at the pose the episode ended
-  on, and since terrain colliders are single-sided a crossing from below is silent, so dying is the
-  only way out. *Fix shape:* log the pose the episode restores against the pose it ended on. The
-  restore is where a marker-relative position can survive the episode's own reparenting, which is
-  the failure fixed for a different episode in `BL-610` (`git log --grep=BL-610`), so the first
-  question is whether this one takes that path. *⚠ Traps:* do not add a ground clamp to the
-  handoff. It would hide a wrong restore everywhere else it happens, and it would fight an episode
-  that legitimately ends below a surface. The single-sided colliders that make the symptom
-  unrecoverable are a separate property, recorded from the air side in `BL-566`. The same restore
-  path was last changed to give a cockpit seat its view back (`git log --grep=BL-625`), which is the
-  nearest reading of what that path already writes. *Cross-refs:* `BL-566`.
 
 - `BL-649` `[Bug]` **The debug vantages take the camera without giving the airframe back, so a pilot
   pinned there from the cockpit view keeps the interior over the debug camera.** *Evidence:* found
