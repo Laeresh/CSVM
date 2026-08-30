@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
 
@@ -130,6 +131,11 @@ public sealed class HangarFlow
     // Each airframe's stock armour allocations in units, read once from the vehicle defs.
     private readonly Dictionary<int, int[]> _stockArmour = new();
 
+    // Every name a commit would land on, by the store's own file identity: the whole build
+    // directory plus, over a campaign flow, the owned planes that were never built into it. Held
+    // rather than re-scanned because the name screen asks per frame.
+    private HashSet<string> _taken = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Opens a flow over <paramref name="store"/>, reading its saved planes once for the
     /// plane-selection screen. <paramref name="strings"/>, <paramref name="dataRoot"/>,
     /// <paramref name="stockFits"/> and <paramref name="zrdrPath"/> may be null or empty; the
@@ -147,7 +153,8 @@ public sealed class HangarFlow
         StockFits = stockFits;
         ZrdrPath = zrdrPath;
         Campaign = campaign;
-        Saved = store.List();
+        Saved = Array.Empty<CustomPlaneDef>();
+        ReadRoster();
     }
 
     /// <summary>The langui table the screens title and label themselves from.</summary>
@@ -185,8 +192,10 @@ public sealed class HangarFlow
     /// the plane-being-built name is the one it had then).</summary>
     public string DefaultsAskText { get; private set; } = string.Empty;
 
-    /// <summary>The store's saved planes, the plane-selection roster. Re-read only by
-    /// <see cref="DeleteSaved"/>: the other writer is this flow's own commit, which ends it.</summary>
+    /// <summary>The plane-selection roster: the store's saved planes over the two wallet-free
+    /// doors, and the profile's own aircraft over a campaign flow (<see cref="Campaign"/>). Re-read
+    /// only by <see cref="DeleteSaved"/>: the other writer is this flow's own commit, which ends
+    /// it.</summary>
     public IReadOnlyList<CustomPlaneDef> Saved { get; private set; }
 
     /// <summary>The plane being built. Replaced outright when the plane-selection screen starts a
@@ -437,7 +446,7 @@ public sealed class HangarFlow
         {
             if (campaign.IsSpecial(name))
             {
-                Message = Strings.Text(704, "This plane cannot be sold.");
+                Message = CannotSellText(name);
                 return false;
             }
 
@@ -454,10 +463,27 @@ public sealed class HangarFlow
             gone = _store.Delete(name);
         }
 
-        Saved = _store.List();
+        ReadRoster();
         ClampedRow();
         return gone;
     }
+
+    /// <summary>The reward aircraft's own refusal, langui 704 with both of its arguments filled
+    /// (the airframe's short name and the plane's). Read raw the string reaches the pilot with its
+    /// <c>%1!s!</c> placeholders still in it, which is why it is composed here.</summary>
+    public string CannotSellText(string planeName)
+    {
+        int airframe = Campaign?.Profile.Planes
+            .FirstOrDefault(p => string.Equals(p.Name, planeName, StringComparison.OrdinalIgnoreCase))
+            ?.Airframe ?? 0;
+        string text = Strings.Format(704, AirframeShortName(airframe), planeName);
+        return text.Length > 0 ? text : $"This {AirframeShortName(airframe)}, {planeName}, cannot be sold.";
+    }
+
+    /// <summary>Whether a commit under this name would land on a plane that already exists: the
+    /// whole build directory, plus a campaign flow's owned planes that were never built into it.
+    /// Compared on the store's file identity, since two names can sanitise to one file.</summary>
+    public bool IsNameTaken(string name) => _taken.Contains(CustomPlaneStore.FileKey(name));
 
     /// <summary>Puts the cursor on a row, clamped into the page's current list. A page that
     /// changes how many rows it draws calls this so the cursor lands on something real.</summary>
@@ -586,6 +612,11 @@ public sealed class HangarFlow
     public string AirframeName(int airframe) =>
         Strings.Text(3000 + airframe, $"Airframe {airframe}");
 
+    /// <summary>The airframe's short name (langui 3020 + id, "Devastator" to 3005's "Hughes P21-J
+    /// MKIII Devastator"), which is the form the sell strings take their %1 in.</summary>
+    public string AirframeShortName(int airframe) =>
+        Strings.Text(3020 + airframe, $"Airframe {airframe}");
+
     /// <summary>The engine's name for an airframe (langui 3100 + airframe*6 + id), or the
     /// no-engine line for id 6.</summary>
     public string EngineName(int airframe, int engine) =>
@@ -610,6 +641,20 @@ public sealed class HangarFlow
 
         string prefix = Strings.Format(506, 2);
         return (prefix.Length == 0 ? "(2)" : prefix.TrimEnd()) + " " + name;
+    }
+
+    // The roster and the taken-name set together, since the campaign's roster is ownership while
+    // the names a commit can collide with are still the whole build directory: a campaign plane
+    // must not silently overwrite an Instant Action build of the same name.
+    private void ReadRoster()
+    {
+        var stored = _store.List();
+        Saved = Campaign is { } campaign ? campaign.OwnedBuilds() : stored;
+        _taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var def in stored.Concat(Saved))
+        {
+            _taken.Add(CustomPlaneStore.FileKey(def.Name));
+        }
     }
 
     // The page for a screen, built on first sight and kept, so a page may hold state of its own.
@@ -771,14 +816,14 @@ public abstract class HangarPage : IHangarPage
 /// one always have a plane to edit.
 ///
 /// <para>It also removes planes, the role the original's Sell Plane button (<c>ps_b_sellp</c>)
-/// fills on its own plane-selection screen; with no economy to sell into, ours deletes. The
-/// gesture is two-stage rather than a stepper, because a stepper on a destructive action is one
-/// stray nudge away from losing a build: a trailing row opens a second list whose every row reads
-/// "Delete &lt;name&gt;", so the press that removes a plane names the plane it removes.</para>
+/// fills. The gesture is two-stage rather than a stepper, because a stepper on a destructive action
+/// is one stray nudge away from losing a build: a trailing row opens a second list whose every row
+/// names the plane it acts on. Over a campaign flow the screen is the profile's INVENTORY (langui
+/// 1257), its roster is what the profile owns and its removal is a sale (docs/org/hangar.md).</para>
 /// </summary>
 public sealed class HangarPlaneSelectionPage : HangarPage
 {
-    private bool _deleting;
+    private bool _removing;
 
     /// <summary>Binds the page to its flow.</summary>
     public HangarPlaneSelectionPage(HangarFlow flow)
@@ -791,28 +836,46 @@ public sealed class HangarPlaneSelectionPage : HangarPage
 
     /// <inheritdoc/>
     public override int RowCount =>
-        _deleting ? Flow.Saved.Count + 1 : Flow.Saved.Count + (Flow.Saved.Count > 0 ? 2 : 1);
+        _removing ? Flow.Saved.Count + 1 : Flow.Saved.Count + (Flow.Saved.Count > 0 ? 2 : 1);
+
+    /// <summary>The screen's own heading: the campaign's is the inventory it lists (langui 1257),
+    /// and the two wallet-free doors keep PLANE SELECTION (1017).</summary>
+    public override string Title =>
+        Flow.Campaign is null ? base.Title : Flow.Strings.Text(1257, "INVENTORY");
 
     /// <inheritdoc/>
     public override string RowText(int row)
     {
-        if (_deleting)
+        bool campaign = Flow.Campaign is not null;
+        if (_removing)
         {
-            return row < Flow.Saved.Count ? "Delete " + Flow.Saved[row].Name : "Cancel";
+            return row < Flow.Saved.Count
+                ? (campaign ? "Sell " : "Delete ") + Flow.Saved[row].Name
+                : "Cancel";
         }
 
         if (row == 0)
         {
-            return "New Plane";
+            return campaign ? "Buy a New Plane" : "New Plane";
         }
 
-        return row <= Flow.Saved.Count ? Flow.Saved[row - 1].Name : "Delete a saved plane";
+        if (row <= Flow.Saved.Count)
+        {
+            return Flow.Saved[row - 1].Name;
+        }
+
+        return campaign ? "Sell a plane" : "Delete a saved plane";
     }
 
     /// <inheritdoc/>
     public override string Detail(int row)
     {
-        if (_deleting)
+        if (Flow.Campaign is { } campaign)
+        {
+            return CampaignDetail(campaign, row);
+        }
+
+        if (_removing)
         {
             return row < Flow.Saved.Count
                 ? $"Removes {Flow.Saved[row].Name} from the hangar for good"
@@ -835,39 +898,46 @@ public sealed class HangarPlaneSelectionPage : HangarPage
     /// the delete stage, Cancel) and has no plane to price, so the row hides: the scratch plane's
     /// own totals would be a stale figure from a build this screen has not started yet.</remarks>
     public override CustomPlaneDef? TotalsPlane(int row) =>
-        !_deleting && row >= 1 && row <= Flow.Saved.Count ? Flow.Saved[row - 1] : null;
+        !_removing && row >= 1 && row <= Flow.Saved.Count ? Flow.Saved[row - 1] : null;
 
     /// <inheritdoc/>
     public override bool Accept(int row)
     {
-        if (_deleting)
+        if (_removing)
         {
-            return AcceptDelete(row);
+            return AcceptRemove(row);
         }
 
         if (row > Flow.Saved.Count)
         {
-            _deleting = true;
+            _removing = true;
             Flow.FocusRow(0);
-            return true; // the delete list is this screen's own stage, not the next screen
+            return true; // the removal list is this screen's own stage, not the next screen
         }
 
         if (row == 0)
         {
             Flow.StartNewPlane();
-        }
-        else
-        {
-            Flow.StartFromSaved(Flow.Saved[row - 1]);
+            return false; // let the flow advance to the first build screen
         }
 
-        return false; // let the flow advance to the first build screen
+        // A campaign plane cannot be edited in place: the decoded economy pays for a build in full
+        // and credits a sale in full, so an edit would charge again and strand the old plane's
+        // value. The row is the inventory entry it reads as, and the sell stage is what acts on it.
+        if (Flow.Campaign is not null)
+        {
+            return true;
+        }
+
+        Flow.StartFromSaved(Flow.Saved[row - 1]);
+        return false;
     }
 
-    // The delete list's own press: a Delete row removes that plane and the list stays up while
-    // any remain, Cancel (and the last plane going) returns to the pick list. Which row Cancel is
-    // has to be read BEFORE the delete, since the roster shrinks under it.
-    private bool AcceptDelete(int row)
+    // The removal list's own press: a plane row removes (or sells) that plane and the list stays
+    // up while any remain, Cancel (and the last plane going) returns to the pick list. Which row
+    // Cancel is has to be read BEFORE the removal, since the roster can shrink under it. A refused
+    // sale leaves the roster alone and the flow's own message saying why.
+    private bool AcceptRemove(int row)
     {
         bool cancel = row >= Flow.Saved.Count;
         if (!cancel)
@@ -875,10 +945,57 @@ public sealed class HangarPlaneSelectionPage : HangarPage
             Flow.DeleteSaved(Flow.Saved[row].Name);
         }
 
-        _deleting = !cancel && Flow.Saved.Count > 0;
+        _removing = !cancel && Flow.Saved.Count > 0;
         // Stay on a plane row rather than sliding onto Cancel when the list's last one went.
-        Flow.FocusRow(_deleting ? Math.Min(row, Flow.Saved.Count - 1) : 0);
+        Flow.FocusRow(_removing ? Math.Min(row, Flow.Saved.Count - 1) : 0);
         return true;
+    }
+
+    // The campaign's own detail lines: the wallet the buy row spends (langui 1149), an owned
+    // plane's airframe and value (1258), and on the sell stage the refusal a press would meet
+    // (704 for a reward aircraft, 701 for the two-plane floor) in place of that value.
+    private string CampaignDetail(HangarCampaignContext campaign, int row)
+    {
+        if (_removing)
+        {
+            if (row >= Flow.Saved.Count)
+            {
+                return "Keep every plane";
+            }
+
+            var plane = Flow.Saved[row];
+            if (campaign.IsSpecial(plane.Name))
+            {
+                return Flow.CannotSellText(plane.Name);
+            }
+
+            return campaign.CanSell(plane.Name)
+                ? Value(plane)
+                : Flow.Strings.Text(701, "You must keep at least two planes in your hangar.");
+        }
+
+        if (row == 0)
+        {
+            return Flow.Strings.Text(1149, "$$$ on Hand:") + " $" + campaign.Funds;
+        }
+
+        if (row > Flow.Saved.Count)
+        {
+            return "Sell a plane back at its full build cost";
+        }
+
+        var owned = Flow.Saved[row - 1];
+        return Flow.AirframeShortName(owned.Airframe) + "   " + Value(owned);
+    }
+
+    // One plane's worth, langui 1258's own line. Priced off the roster's own def rather than
+    // through the context, which would re-read the plane's file on every frame this line is drawn;
+    // the roster resolved that same def once, so the two figures cannot disagree.
+    private string Value(CustomPlaneDef plane)
+    {
+        int price = HangarEconomy.Price(plane).Total.Cost;
+        string text = Flow.Strings.Format(1258, price);
+        return text.Length > 0 ? text : $"Value: ${price}";
     }
 }
 
