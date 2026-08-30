@@ -130,6 +130,7 @@ public static class SuiteCatalog
         "forward-rotation",
         "launch-direction-cache",
         "barracuda-drive",
+        "anim-activation-prerequisite",
         "self-ref-launch",
         "nulled-launch",
         "destructible-census",
@@ -714,6 +715,8 @@ public static class SuiteCatalog
             "a vector-form OBJECT_MOTION's third triple is the compiled launch DIRECTION the tumble reads back, not a random spread: two bodies fly the identical path and end exactly where initial × run_time puts them", LaunchDirectionCache));
         into.Add(new TestHarness.Suite("barracuda-drive",
             "a chain of OBJECT_MOTION events on one placed node integrates every leg from the node's live pose: C3/M03's sub_movement drives the Barracuda 1680 m along +Z from its reset placement with no frame-to-frame jump and ends within metres of its closing FromTo in the bay", BarracudaDrive));
+        into.Add(new TestHarness.Suite("anim-activation-prerequisite",
+            "a CALL_ANIMATION is answered only once MINIMUM_TO_SATISFY of the animations the callee's ACTIVATION_PREREQUISITE names have run: CM18's cargozep_floatfree holds the Black Swan at its mooring through four of its five restraint deaths and releases it on the fifth, while an explicit Play still starts a hull death carrying the same shape", ActivationPrerequisite));
         into.Add(new TestHarness.Suite("self-ref-launch",
             "an OBJECT_MOTION naming the MAIN_ROOT_NODE sentinel launches the node its def was invoked on, taking that node over from whatever was driving it", SelfRefLaunch));
         into.Add(new TestHarness.Suite("nulled-launch",

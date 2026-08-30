@@ -793,6 +793,72 @@ internal static class AnimationAndEffectsSuites
         });
     }
 
+    // ---- the animation-list ACTIVATION_PREREQUISITE: a call answered on the Nth caller ----------
+
+    // CM18's release is the install's plainest carrier: cargozep_floatfree names its own five
+    // restraint deaths and authors MINIMUM_TO_SATISFY 5, and each of those five calls it. Ungated,
+    // the Black Swan tears loose on the FIRST tie-down and its 190 s "too late to hook" clock runs
+    // out while the player is still shooting the other four, which closes the hookup the whole back
+    // half of the mission hangs off. âš  Play must stay ungated: every zeppelin hull death carries
+    // the same shape and is fired from ZeppelinRuntime's damage model, which owns that kill.
+    internal static void ActivationPrerequisite(TestContext ctx)
+    {
+        const float Tick = 1f / 30f;
+        const float SettleSeconds = 4f;
+        const float MovedM = 1f;
+        string[] restraints =
+        {
+            "breaktiedown01", "breaktiedown02", "breaktiedown03", "breaktiedown04", "breakmainclamp",
+        };
+
+        ctx.WithWorld("C4", collision: false, "M03", world =>
+        {
+            var runtime = world.Runtime;
+            var hulls = runtime.FindNodes("cargozep1");
+            ctx.Same(1, hulls.Count, $"C4/M03 builds one cargozep1 node");
+            if (hulls.Count != 1)
+            {
+                return;
+            }
+            var hull = hulls[0];
+            var moored = hull.GlobalPosition;
+            var report = new StringBuilder();
+            report.AppendLine($"moored at ({moored.X:0.0},{moored.Y:0.0},{moored.Z:0.0})");
+
+            for (int i = 0; i < restraints.Length; i++)
+            {
+                ctx.Check(runtime.Play(restraints[i]).Count > 0, $"'{restraints[i]}' starts");
+                for (int step = 0; step < (int)(SettleSeconds / Tick); step++)
+                {
+                    runtime.Advance(Tick);
+                }
+
+                int state = runtime.AnimStateOf("cargozep_floatfree");
+                float drift = hull.GlobalPosition.DistanceTo(moored);
+                bool last = i == restraints.Length - 1;
+                report.AppendLine($"after {i + 1}/5 '{restraints[i]}': floatfree state={state} drift={drift:0.00} m");
+                if (last)
+                {
+                    ctx.Check(state != 0, $"the fifth restraint releases the hull (state={state})");
+                    ctx.Check(drift > MovedM, $"the hull is under way after the fifth ({drift:0.00} m)");
+                }
+                else
+                {
+                    ctx.Same(0, state, $"{i + 1} of 5 restraints leaves cargozep_floatfree unstarted");
+                    ctx.Check(drift <= MovedM, $"the hull holds its mooring after {i + 1} of 5 ({drift:0.00} m)");
+                }
+            }
+
+            // The Play bypass, on this world's own hull-death def: no finish_cg1zepgasbag* has run,
+            // so the count is 0 of 3 and only an explicit Play may still start it.
+            int death = runtime.Play("all_cg1zep_gasbags").Count;
+            ctx.Check(death > 0,
+                $"an explicit Play still starts a hull death whose gasbag count is unmet ({death} instance(s))");
+            ctx.WriteArtifact("test-activation-prerequisite.txt", report.ToString());
+            ctx.Note($"released {hull.GlobalPosition.DistanceTo(moored):0.0} m from the mooring on the fifth restraint (per-restraint trace in test-activation-prerequisite.txt)");
+        });
+    }
+
     // ---- the MAIN_ROOT_NODE self-reference: a launch onto the def's own anchor -------------------
 
     // MAIN_ROOT_NODE / INPUT_NODE mean "the node this definition was invoked on", a sentinel and not a

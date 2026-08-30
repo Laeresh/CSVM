@@ -64,7 +64,7 @@ bare flag (`LOCAL_NODES_ONLY`).
 | `LOCAL_NODES_ONLY` | bare flag | Op node names resolve inside the instance subtree only (building/vehicle templates). |
 | `ACTIVATION` | `ON_STARTUP` \| `ON_CALL` | ON_STARTUP defs run their sequences at mission load (`zepstate`); ON_CALL waits for `CALL_ANIMATION`/game events. Sequences may carry their own `ACTIVATION ON_CALL` (run only via `CALL_SEQUENCE`). |
 | `EXECUTION_BY_RANGE` | 1 float, **metres** | Proximity gate: the def executes only with a player within this distance of its anchor. Compiled as `execution: {ByRange: {min, max}}` in **metres SQUARED** (reader 50 ↔ compiled 2500) — the same reader↔compiled unit divergence as `PLAYER_RANGE`; `min` is 0 across the install. On an ON_STARTUP def the runtime defers the start until a player first enters the band (the C3 `spiderweb_gone` 50 m fade; the 300 m nacelle-prop spins; C1's reader-only `cloudparent#` at 1900 m). 883 compiled defs carry it. |
-| `ACTIVATION_PREREQUISITE` | `OPTIONS [MINIMUM_TO_SATISFY n, ANIMATION_LIST …]` or `REQUIRED`/`OPTIONS [OBJECT_ACTIVE_LIST [[path…]…], OBJECT_INACTIVE_LIST […]]` | A start gate. The anim-list form is the zeppelin hull death (`all_pzep_gasbags`: 3 of the 6 `finish_pzepgasbag*`). The node-state form names node paths and the active state each must read for the definition to start; compiled as a run of `Parent` entries closed by one `Object` leaf carrying `active_raw`/`required`, where the state is BIT 0 of `active_raw` (bit 1 is the def's LOCAL_NODES_ONLY scope, so a local INACTIVE entry reads 2, which mech3ax's `active` field misreports as true; [compiled-archives.md](anim-definitions/compiled-archives.md)). The shipped weight of the node form is the zeppelin gasbag finishers (`finished_lkgasbag0*`, `finish_pzepgasbag*`: `REQUIRED [OBJECT_INACTIVE_LIST [[gasbag, panelleftb1], [gasbag, panelrightb1]]]`, local), called by the burn that switched those panels off, and C1/M04's `hk_zep` (no zeppelin record) sinks only through them: door death, gasbag burn, finisher, three finishers satisfy `finish_locklear`. C1/M02's hangar drop is the shipped fork: `hangar_drop` calls both `hdplayer1` (`REQUIRED [OBJECT_INACTIVE_LIST [[hdrop_direction]]]`) and `hdplayer1b` (the same node ACTIVE), and `hdchute1`/`hdchute1b` likewise, so the direction sensor's state picks one camera leg of each pair. Roughly 50 defs carry the node form (gasbag panel finishers, `pzep_cargo_point`'s cargo stop, C1C/M01's docking legs). The runtime enforces the REQUIRED entries at `Start`; optional entries and a `MINIMUM_TO_SATISFY` over nodes are parsed only. |
+| `ACTIVATION_PREREQUISITE` | `OPTIONS [MINIMUM_TO_SATISFY n, ANIMATION_LIST …]` or `REQUIRED`/`OPTIONS [OBJECT_ACTIVE_LIST [[path…]…], OBJECT_INACTIVE_LIST […]]` | A start gate. The anim-list form is a counter over the definition's own callers (`all_pzep_gasbags`: 3 of the 6 `finish_pzepgasbag*`); see [The anim-list form counts the definition's callers](#the-anim-list-form-counts-the-definitions-callers). The node-state form names node paths and the active state each must read for the definition to start; compiled as a run of `Parent` entries closed by one `Object` leaf carrying `active_raw`/`required`, where the state is BIT 0 of `active_raw` (bit 1 is the def's LOCAL_NODES_ONLY scope, so a local INACTIVE entry reads 2, which mech3ax's `active` field misreports as true; [compiled-archives.md](anim-definitions/compiled-archives.md)). The shipped weight of the node form is the zeppelin gasbag finishers (`finished_lkgasbag0*`, `finish_pzepgasbag*`: `REQUIRED [OBJECT_INACTIVE_LIST [[gasbag, panelleftb1], [gasbag, panelrightb1]]]`, local), called by the burn that switched those panels off, and C1/M04's `hk_zep` (no zeppelin record) sinks only through them: door death, gasbag burn, finisher, three finishers satisfy `finish_locklear`. C1/M02's hangar drop is the shipped fork: `hangar_drop` calls both `hdplayer1` (`REQUIRED [OBJECT_INACTIVE_LIST [[hdrop_direction]]]`) and `hdplayer1b` (the same node ACTIVE), and `hdchute1`/`hdchute1b` likewise, so the direction sensor's state picks one camera leg of each pair. Roughly 50 defs carry the node form (gasbag panel finishers, `pzep_cargo_point`'s cargo stop, C1C/M01's docking legs). The runtime enforces the REQUIRED node entries at `Start` and the anim-list count at `CALL_ANIMATION`; optional node entries and a `MINIMUM_TO_SATISFY` over nodes are parsed only. |
 | `RESET_TIME` | 1–2 floats (−1 common) | Reset scheduling (undecoded detail). |
 | `RESET_STATE` | op list | The object's **base state**, applied at load: healthy variants ACTIVE, `destroyed` variants INACTIVE, doors at rest pose. This is what fixes the destroyed-over-healthy coplanar flicker. |
 | `SEQUENCE_DEFINITION` | op list (repeatable) | One timeline of ops; optional `NAME`, optional `ACTIVATION`. |
@@ -617,6 +617,41 @@ component tracks up/down. `he_ground_effect` lifts its fireball 12 m over a ring
 0.1 m thick; `muzzle_burst_*` puts its flash 1 m along −Z, out of the barrel; `shipsink` spreads
 seven explosions over 165 m of a 231 m hull at constant height. **A reading that is 8 m too high is
 therefore authored, not mis-parsed** — look at where the def's host was staged, not at the axes.
+
+### The anim-list form counts the definition's callers
+
+`ACTIVATION_PREREQUISITE OPTIONS [MINIMUM_TO_SATISFY n, ANIMATION_LIST …]` is not a general
+start gate but a counter, and the counting is done by the callers themselves. Censused over
+every `mis_anim` archive in the install, **18 definitions** carry the anim-list form, and each
+one is called by exactly the animations its own list names — nothing else calls it. The list
+is therefore the set of events that can advance the count, `MINIMUM_TO_SATISFY` picks which of
+those calls the definition answers, and every earlier call is refused in silence.
+
+| Carrier | Minimum | The callers it counts |
+|---|---|---|
+| `all_*zep_gasbags` (9 hulls), `all_wvzep_gasbags` | 3 of 5, 3 of 6, 5 of 10 | that hull's `finish_*gasbag*` burns |
+| `finish_locklear` | 3 of 4 | `finished_lkgasbag0*` (C1/M04's `hk_zep`, which carries no zeppelin record) |
+| `goose_cooked` | 4 of 8 | `g_engine_destroy1..8` (C2/M01's Spruce Goose) |
+| `stein_first_sound`, `stein_second_sound`, `stein_third_sound` | 1, 2, 3 of 4 | `sbox_destroy1..4` (C5/M01) — three radio lines over one set of supply boxes, staggered by their minimums alone |
+| `cargozep_floatfree` | 5 of 5 | `breaktiedown01..04`, `breakmainclamp` (C4/M03) |
+
+The count reads **started**, not completed. The last caller's own animation is on the list it
+must satisfy — `breakmainclamp` calls `cargozep_floatfree` from its own first event — so a rule
+waiting for completion would refuse the very call that completes the count, and nothing would
+call the definition again.
+
+CM18's release is what the mechanism is for and what an unenforced count costs. The Black Swan
+is moored by four tie-downs and a main clamp; ungated, the first one shot tears it loose, and
+`cargozep_floatfree`'s own clocks (`activate_cghookup_node` at +20 s, `start_gb1`/`2`/`3` at
++60/+125/+190 s, the last of which calls `too_late_to_hook`) run out while the player is still
+shooting the other four. The hookup closes, and with it OBJECTIVE12, which is the only wake for
+the mission's whole back half.
+
+⚠ The count gates a `CALL_ANIMATION` and nothing else. A zeppelin hull death carrying this
+shape is also reached from the zeppelin damage runtime, which owns that kill off
+`num_healthy_required` rather than off the animation count (`ZeppelinRuntime.PlayHullDeath`
+selects the def by this prerequisite's presence), and gating that path would leave every
+zeppelin in the game unkillable.
 
 ## Sequence stopping
 
