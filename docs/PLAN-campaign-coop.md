@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 31. ☑ What a co-op sortie writes to the seated profile
 32. ☑ Goldens and playtest items
 33. ☑ The 4P cost of a heavy campaign mission
-34. ☐ The five terms in `CONTEXT.md`
+34. ☑ The five terms in `CONTEXT.md`
 35. ☐ Land the branch: rebase onto the rewritten `main`, never merge it
 
 ## Dependency and parallelism notes
@@ -689,7 +689,7 @@ what a perf reading means; state which switch each reading used. A busy workstat
 numbers, and the `over budget` marker in `RunTests.ps1` is awareness only and never changes the
 exit code.
 
-## D34 ☐ The five terms in `CONTEXT.md`
+## D34 ☑ The five terms in `CONTEXT.md`
 
 **Goal.** The three different things this plan calls "the player" have three different names, fixed
 in the glossary.
