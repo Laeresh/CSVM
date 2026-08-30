@@ -12,10 +12,8 @@ namespace CSVM.Testing;
 /// aircraft and nothing else, and the mission ends only when the last of them is down. Driven over
 /// the first story mission of C3, the same world <c>campaign-player-death</c> uses and for the same
 /// reason: C3/M01 authors no <c>INSTANTLOSS</c> and no <c>LOST</c> objective, so a Lost outcome
-/// here can only be a human's own death. Four legs, so the rule is measured against every
-/// alternative it could have been: the guest down first, the SCRIPTED PLAYER down first (which the
-/// pre-co-op rule would have ended the mission on), <c>--no-crash-loss</c>, and a solo sortie that
-/// must answer exactly as it did before there was a field.</summary>
+/// here can only be a human's own death. Four legs measure the guest down first, the SCRIPTED
+/// PLAYER down first, <c>--no-crash-loss</c>, and the solo sortie's single-aircraft loss rule.</summary>
 internal static class CoopDeathSuites
 {
     private const string Chapter = "C3";
@@ -90,8 +88,8 @@ internal static class CoopDeathSuites
             ctx.Check(guestFirst.ReturnToCabin && !guestFirst.WreckFallingAtEnd,
                 $"…handed back to the cabin, with no wreck of either of them still falling: {guestFirst.Line}");
 
-            // ⚠ The able-to-fail leg for the whole item: the scripted player IS the aeroplane the
-            // pre-co-op rule ended on, so this leg goes red the moment the rule reads P1 alone.
+            // ⚠ Able-to-fail control: the scripted player goes down first, so this leg fails if
+            // the terminal rule reads P1 alone instead of the whole human field.
             var playerFirst = run.Fly("player-first", humans: 2, endsOnPlayerDeath: true, new[] { 0, 1 });
             ctx.Check(!playerFirst.EndedAfter(0),
                 $"the SCRIPTED PLAYER's own death is one seat of the field, not the mission: {playerFirst.Line}");
@@ -108,7 +106,7 @@ internal static class CoopDeathSuites
 
             var solo = run.Fly("solo", humans: 1, endsOnPlayerDeath: true, new[] { 0 });
             ctx.Check(solo.EndedAfter(0) && solo.Outcome == MissionOutcome.Lost && solo.ReturnToCabin,
-                $"a 1P campaign death is unchanged: it ends the mission lost at once: {solo.Line}");
+                $"a 1P campaign death ends the mission lost at once: {solo.Line}");
             ctx.Check(solo.Handed.Count == 0 && !solo.Spectating[0],
                 $"…with no pane handed over, since nothing is left to watch: {solo.Line}");
         }

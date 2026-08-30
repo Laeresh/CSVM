@@ -129,9 +129,8 @@ public sealed partial class CutsceneController : Node
     private PlayerRig? _ownerRig;
     // The episode owner, latched when the episode took the session: the human the swap and the
     // staging follow. Null means the scripted player, resolved live below rather than at the claim,
-    // because a suite (and the intro) can own an episode before BindRigs has run. Rewritten as the
-    // NEXT episode takes the session rather than at the handoff, the way the code record is, so the
-    // aeroplane a swap left the mission with stays the one a hookup definition resolves.
+    // because a suite (and the intro) can own an episode before BindRigs has run. Latch it as each
+    // episode takes the session, not at handoff, so a swap remains the aircraft a hookup resolves.
     private PlayerRig? _episodeOwner;
     // The world root `camera1` belongs under, so Restore can undo a definition's own reparent.
     private Node3D? _cameraHome;
@@ -212,8 +211,7 @@ public sealed partial class CutsceneController : Node
     public Aabb CardBox => _cardBox;
 
     // The scripted player's rig: P1's, the one aeroplane an authored `player` token means. It is
-    // what an unclaimed episode owns, so a 1P session and every mission intro answer exactly what
-    // they answered before there was a field to choose from.
+    // what an unclaimed episode owns, so a 1P session and every mission intro resolve to P1.
     private PlayerRig? ScriptedPlayer => _rigs.Count > 0 ? _rigs[0] : null;
 
     // The one pilot the staged `player` marker poses and the re-placement moves: the episode owner's,

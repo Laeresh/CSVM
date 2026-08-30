@@ -131,8 +131,7 @@ internal static class CampaignHumanFieldSuites
         }
     }
 
-    // The condition the whole item is about: OBJECTIVE5 asks where "the player" is, and with two
-    // humans flying it is the field that answers.
+    // OBJECTIVE5 asks where "the player" is; with two humans flying, the human field answers.
     private static void CheckTravelers(TestContext ctx, TestWorld world, ObjectiveScript script,
         CampaignMission mission, string missionZrdr, ProjectilePool live,
         FlightController p1, FlightController guest, Vector3 where, StringBuilder report)
@@ -158,9 +157,8 @@ internal static class CampaignHumanFieldSuites
         ctx.Check(!graph.CompletedOf(TravelersObjective),
             $"nobody is near the authored point, so OBJECTIVE{TravelersObjective} has not completed");
 
-        // The able-to-fail control: the guest arrives while it is NOT in the field, which is what
-        // this mission answered before the field existed. A read that had quietly widened to every
-        // aircraft in the session would complete here and the leg would go red.
+        // Able-to-fail control: the guest arrives while it is NOT in the field. A read widened to
+        // every aircraft in the session would complete here and make this leg fail.
         guest.PlaceHeld(where, where + Vector3.Forward);
         Step(director, ScanWindow);
         ctx.Check(!graph.CompletedOf(TravelersObjective),

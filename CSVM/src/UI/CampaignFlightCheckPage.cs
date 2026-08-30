@@ -215,7 +215,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     // Whose check this is: 0 the seated player, 1 and up a guest. A guest's page is this same
     // screen re-entered, so everything below reads the player rather than assuming the profile's
-    // own aircraft; the seated player's page is unchanged.
+    // own aircraft; the seated player's page reads the profile aircraft.
     private int Player => Flow.Field.Current;
 
     // The flow's hangar store, or null off-engine: every plane then reads as its stock fit.

@@ -9,8 +9,8 @@ namespace CSVM.Session;
 public readonly record struct HumanState(Vector3 Position, int? Group, bool Crashed);
 
 /// <summary>
-/// The human field's own rules, engine-free so <c>CSVM.Tests</c> pins them without a world: what a
-/// condition that used to ask about one aeroplane asks once two to four humans fly the mission.
+/// The human field's own rules, engine-free so <c>CSVM.Tests</c> pins them without a world: what an
+/// objective condition asks when two to four humans fly the mission.
 /// The scripted player is NOT here. That is one aircraft, the one an authored <c>player</c> token
 /// means, and <c>CampaignDirector</c> answers it; this type only ever answers "any of them".
 /// </summary>
@@ -23,8 +23,8 @@ public static class CampaignHumanField
     public static bool Travelers(IReadOnlyList<HumanState> humans, Vector3 reference, float radius,
         bool approaching)
     {
-        // A wreck still counts, because it did before there was a field: the single-player read
-        // this replaces is the pilot rig's own position, which a crash does not stop reporting.
+        // A wreck still counts because the pilot rig continues reporting its position after a
+        // crash; human-field proximity keeps that same positional source.
         float nearest = float.MaxValue;
         foreach (var human in humans)
         {

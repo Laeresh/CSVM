@@ -138,8 +138,7 @@ internal static class CoopEpisodeOwnerSuites
         }
     }
 
-    // The reading the item is about: the owner is flying the airframe the code named, and the human
-    // who did not earn the swap is flying exactly the aeroplane it was flying before.
+    // The owner flies the airframe the code named; the other human keeps their existing aeroplane.
     private static void CheckRigs(TestContext ctx, AirframeSwapCode wanted, PlayerRig owner,
         PlayerRig other, IReadOnlyList<FlightController> before, Flying was, StringBuilder report)
     {
