@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using CSVM.Mech3;
 using CSVM.Session;
 
 namespace CSVM.UI;
@@ -152,7 +153,7 @@ public static class CampaignScrapbookResults
     /// <summary>The results card's own placeholder for a page whose mission has no recorded
     /// attempt yet: langui 1219, at the outcome line's own position.</summary>
     public static BoardLine NotYetFlown() =>
-        new(NotYetFlownText, TitleX, OutcomeY, 0, RowFont, BoardInk.Heading);
+        new(NotYetFlownText, TitleX, OutcomeY, 0, RowFont, BoardInk.Heading, Italic: true);
 
     /// <summary>The outcome line, the heading and the four drawn rows (title then value), at
     /// their <c>LAYOUT.CSV</c> positions. Time is <c>mm:ss</c> off milliseconds truncated the way
@@ -170,22 +171,22 @@ public static class CampaignScrapbookResults
         {
             new BoardLine(
                 Won(result, bestToDate) ? MissionCompletedText : MissionFailedText,
-                TitleX, OutcomeY, 0, RowFont, BoardInk.Heading),
-            new BoardLine(ResultsHeadingText, TitleX, HeadingY, 0, RowFont, BoardInk.Heading),
+                TitleX, OutcomeY, 0, RowFont, BoardInk.Heading, Italic: true),
+            new BoardLine(ResultsHeadingText, TitleX, HeadingY, 0, RowFont, BoardInk.Heading, Italic: true),
 
-            new BoardLine(RunTimeTitle, TitleX, TimeY, 0, RowFont, BoardInk.Row),
-            new BoardLine($"{minutes:00}:{seconds:00}", ValueX, TimeY, 0, RowFont, BoardInk.Row),
+            new BoardLine(RunTimeTitle, TitleX, TimeY, 0, RowFont, BoardInk.Row, Italic: true),
+            new BoardLine($"{minutes:00}:{seconds:00}", ValueX, TimeY, 0, RowFont, BoardInk.Row, Italic: true),
 
-            new BoardLine(GunHitRatioTitle, TitleX, HitsY, 0, RowFont, BoardInk.Row),
-            new BoardLine($"{hitRatio}%", ValueX, HitsY, 0, RowFont, BoardInk.Row),
+            new BoardLine(GunHitRatioTitle, TitleX, HitsY, 0, RowFont, BoardInk.Row, Italic: true),
+            new BoardLine($"{hitRatio}%", ValueX, HitsY, 0, RowFont, BoardInk.Row, Italic: true),
 
-            new BoardLine(CashEarnedTitle, TitleX, CashY, 0, RowFont, BoardInk.Row),
-            new BoardLine($"${run.Money}", ValueX, CashY, 0, RowFont, BoardInk.Row),
+            new BoardLine(CashEarnedTitle, TitleX, CashY, 0, RowFont, BoardInk.Row, Italic: true),
+            new BoardLine($"${run.Money}", ValueX, CashY, 0, RowFont, BoardInk.Row, Italic: true),
 
-            new BoardLine(PlanesDownedTitle, TitleX, PlanesY, 0, RowFont, BoardInk.Row),
+            new BoardLine(PlanesDownedTitle, TitleX, PlanesY, 0, RowFont, BoardInk.Row, Italic: true),
             new BoardLine(
                 PlanesDowned(result, bestToDate).ToString(CultureInfo.InvariantCulture),
-                ValueX, PlanesY, 0, RowFont, BoardInk.Row),
+                ValueX, PlanesY, 0, RowFont, BoardInk.Row, Italic: true),
         };
     }
 
@@ -289,7 +290,7 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     public override string Title => "PREVIOUS MISSIONS";
 
     /// <inheritdoc/>
-    public override int RowCount => Seqs().Count + 3;
+    public override int RowCount => Seqs().Count + Buttons().Count;
 
     /// <summary>The two header widgets, then the three lines of every row the window shows.</summary>
     public override IReadOnlyList<BoardLine> Captions
@@ -388,30 +389,20 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
 
     /// <summary>A mission row draws no list text of its own: its three lines already stand at their
     /// authored positions inside the row.</summary>
-    public override string RowText(int row)
+    public override string RowText(int row) => ButtonAt(row) switch
     {
-        int offset = row - Seqs().Count;
-        return offset switch
-        {
-            0 => "VIEW SELECTED",
-            1 => "REPLAY MISSION",
-            2 => "RETURN TO CABIN",
-            _ => string.Empty,
-        };
-    }
+        BoardButton.ViewMission => "VIEW SELECTED",
+        BoardButton.ReplayMission => "REPLAY MISSION",
+        BoardButton.CurrentMission => Flow.Strings.Text(1200, "Current Mission"),
+        BoardButton.ReturnToCabin => "RETURN TO CABIN",
+        _ => string.Empty,
+    };
 
     /// <inheritdoc/>
-    public override BoardButtonRef Button(int row)
-    {
-        int offset = row - Seqs().Count;
-        return offset switch
-        {
-            0 => new BoardButtonRef(BoardButton.ViewMission),
-            1 => new BoardButtonRef(BoardButton.ReplayMission),
-            2 => new BoardButtonRef(BoardButton.ReturnToCabin),
-            _ => BoardButtonRef.None,
-        };
-    }
+    public override BoardButtonRef Button(int row) =>
+        ButtonAt(row) is var button && button != BoardButton.None
+            ? new BoardButtonRef(button)
+            : BoardButtonRef.None;
 
     /// <inheritdoc/>
     public override string Detail(int row)
@@ -424,17 +415,20 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
                 : Flow.Strings.Text(3450 + seqs[row], $"Mission {seqs[row] + 1}");
         }
 
-        return (row - seqs.Count) switch
+        return ButtonAt(row) switch
         {
-            0 or 1 when SelectedSeq(seqs) is { } seq =>
+            BoardButton.ViewMission => "Opens the scrapbook at this mission",
+            BoardButton.ReplayMission when SelectedSeq(seqs) is { } seq =>
                 Flow.Strings.Text(3450 + seq, $"Mission {seq + 1}"),
-            0 or 1 => "Pick a mission first",
+            BoardButton.CurrentMission => "Opens the scrapbook at the current mission",
             _ => "Back to the cabin",
         };
     }
 
     /// <summary>A mission row's first confirm picks it and its second replays it, which is the
-    /// original's own double-click on a row folded onto a pad's single button.</summary>
+    /// original's own double-click on a row folded onto a pad's single button. VIEW SELECTED and
+    /// the bookmark both open the book (<c>uiData</c> 2405 mode 1) on the picked mission and on
+    /// the campaign's own current one.</summary>
     public override bool Accept(int row)
     {
         var seqs = Seqs();
@@ -449,19 +443,21 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
             return true;
         }
 
-        switch (row - seqs.Count)
+        switch (ButtonAt(row))
         {
-            case 0: // VIEW SELECTED: the picked row's own three lines say everything it would.
-                return true;
-            case 1: // REPLAY MISSION
-                if (SelectedSeq(seqs) is not { } seq)
+            case BoardButton.ViewMission:
+                if (SelectedSeq(seqs) is { } viewing)
                 {
-                    Flow.SetMessage("Select a mission first.");
-                    return true;
+                    Flow.OpenScrapbook(viewing);
                 }
 
-                return Replay(seq);
-            default: // RETURN TO CABIN
+                return true;
+            case BoardButton.ReplayMission:
+                return SelectedSeq(seqs) is { } replaying && Replay(replaying);
+            case BoardButton.CurrentMission:
+                Flow.OpenScrapbook(CurrentSeq());
+                return true;
+            default:
                 Flow.GoTo(CampaignScreen.Cabin);
                 return true;
         }
@@ -472,6 +468,44 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     // show up here the next time this page draws.
     private List<int> Seqs() =>
         Flow.Profile is { } profile ? CampaignProgression.CompletedSeqs(profile) : new List<int>();
+
+    // The buttons under the list, in the order they take rows. REPLAY MISSION is offered only
+    // where uiData 2411 offers it, on a picked mission whose record holds a time; the other three
+    // are created active and stay so.
+    private List<BoardButton> Buttons()
+    {
+        var buttons = new List<BoardButton> { BoardButton.ViewMission };
+        if (SelectedSeq(Seqs()) is { } seq && Flow.Profile is { } profile
+            && CampaignProgression.ResultOf(profile, seq) is { } result
+            && (result.Latest.TimeMs != 0 || result.Best.TimeMs != 0))
+        {
+            buttons.Add(BoardButton.ReplayMission);
+        }
+
+        buttons.Add(BoardButton.CurrentMission);
+        buttons.Add(BoardButton.ReturnToCabin);
+        return buttons;
+    }
+
+    private BoardButton ButtonAt(int row)
+    {
+        var buttons = Buttons();
+        int offset = row - Seqs().Count;
+        return offset >= 0 && offset < buttons.Count ? buttons[offset] : BoardButton.None;
+    }
+
+    // The mission the campaign is on, which the bookmark opens the book at: the next unflown one,
+    // or the last of the twenty-four once the campaign is finished.
+    private int CurrentSeq()
+    {
+        if (Flow.Profile is not { } profile)
+        {
+            return 0;
+        }
+
+        return Math.Clamp(
+            CampaignProgression.NextMissionSeq(profile), 0, CampaignSequence.MissionCount - 1);
+    }
 
     // How strongly a row's wash draws, or null for a row that is neither picked nor focused.
     private float? Wash(int row) =>

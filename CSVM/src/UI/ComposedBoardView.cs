@@ -271,9 +271,12 @@ public sealed partial class ComposedBoardView : Control
 
         // Wrapped, because a description panel's text is a block and a row's own text may still be
         // longer than the widget it sits in; a single-line draw would run off the board.
-        var justify = line.Justify == BoardJustify.Right
-            ? HorizontalAlignment.Right
-            : HorizontalAlignment.Left;
+        var justify = line.Justify switch
+        {
+            BoardJustify.Right => HorizontalAlignment.Right,
+            BoardJustify.Center => HorizontalAlignment.Center,
+            _ => HorizontalAlignment.Left,
+        };
         DrawMultilineString(font, at, line.Text, justify, fit.Length(line.Width),
             points, -1, InkOf(line.Ink));
     }
@@ -328,9 +331,13 @@ public sealed partial class ComposedBoardView : Control
     // screen backgrounds ship as, which no engine-free decoder here covers.
     private Texture2D? Load(BoardArt art)
     {
-        string path = art.Library == BoardArtLibrary.Rimage
-            ? Path.Combine(_dataRoot, "extracted", "rimage", art.Name.ToLowerInvariant() + ".png")
-            : Path.Combine(_dataRoot, "extracted", "rof", "ASSETS", "GRAPHICS", art.Name);
+        string path = art.Library switch
+        {
+            BoardArtLibrary.Rimage =>
+                Path.Combine(_dataRoot, "extracted", "rimage", art.Name.ToLowerInvariant() + ".png"),
+            BoardArtLibrary.Loose => art.Name,
+            _ => Path.Combine(_dataRoot, "extracted", "rof", "ASSETS", "GRAPHICS", art.Name),
+        };
         if (_textures.TryGetValue(path, out var cached))
         {
             return cached;

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -225,6 +226,12 @@ public sealed class CampaignFlow
     /// opening the ammo screen.</summary>
     public int AmmoSlot { get; private set; }
 
+    /// <summary>How many times the book has been opened through <see cref="OpenScrapbook"/>. The
+    /// page watches this rather than <see cref="MissionSeq"/> alone, so reopening it on the mission
+    /// it is already browsing still lands on that mission's spread 1, which is what the original's
+    /// <c>uiData</c> 2405 mode 1 does however the book is reached.</summary>
+    public int ScrapbookEntry { get; private set; }
+
     /// <summary>The scrap <see cref="CampaignScreen.ScrapbookZoom"/> is open on: the
     /// <c>SCRAPBOOK.CSV</c> mission slot, spread and item a scrapbook page's row named. Null
     /// until <see cref="SetScrapbookZoom"/> is called.</summary>
@@ -382,8 +389,33 @@ public sealed class CampaignFlow
     /// <summary>Points the ammo screen at the pilot's (0) or the wingman's (1) aircraft.</summary>
     public void SetAmmoSlot(int slot) => AmmoSlot = slot;
 
+    /// <summary>Where a scrapbook capture's file is for the seated profile, or null when there is
+    /// none on disk. A <c>Snap_</c> row resolves against the profile's own directory rather than
+    /// the asset library (<c>docs/formats/campaign-screens.md</c>, "The scrapbook"), which is the
+    /// one thing the book draws that no extraction holds.</summary>
+    public string? CapturePath(ScrapbookScrap scrap)
+    {
+        if (Profile is not { } profile)
+        {
+            return null;
+        }
+
+        string path = Path.Combine(Store.DirFor(profile.Name), scrap.FileName);
+        return File.Exists(path) ? path : null;
+    }
+
     /// <summary>Names the scrap <see cref="CampaignScreen.ScrapbookZoom"/> opens on.</summary>
     public void SetScrapbookZoom(int mission, int spread, int item) => ZoomTarget = (mission, spread, item);
+
+    /// <summary>Opens the book on a mission's first spread, the original's <c>uiData</c> 2405 mode
+    /// 1: the mission-end entry, the table of contents' VIEW SELECTED and both CURRENT MISSION
+    /// bookmarks all take this door.</summary>
+    public void OpenScrapbook(int seq)
+    {
+        SetMission(seq);
+        ScrapbookEntry++;
+        GoTo(CampaignScreen.Scrapbook);
+    }
 
     /// <summary>Takes the joined-player count from the shell, once a frame.</summary>
     public void SetPlayers(int players) => Field.SetPlayers(players);

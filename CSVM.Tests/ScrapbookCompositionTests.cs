@@ -53,7 +53,7 @@ public class ScrapbookCompositionTests
     public void ANullDataRootReadsAsNoComposition()
     {
         Assert.Empty(ScrapbookComposition.Items(null, 1, 1));
-        Assert.Empty(ScrapbookComposition.Pictures(null, 1, 1, bestMask: -1, scrap => true));
+        Assert.Empty(ScrapbookComposition.Pictures(null, 1, 1, bestMask: -1, scrap => OnDisk(scrap)));
     }
 
     [Theory]
@@ -80,7 +80,7 @@ public class ScrapbookCompositionTests
     {
         // Item order is coin(100), news3(60), mag2(90); stacked bottom first that is news3, mag2,
         // coin -- A1's own CM01 reading (coin over magazine over the Aloha Daily).
-        var pictures = ScrapbookComposition.Pictures(Root(), 1, 1, bestMask: 1, scrap => true);
+        var pictures = ScrapbookComposition.Pictures(Root(), 1, 1, bestMask: 1, scrap => OnDisk(scrap));
 
         Assert.Equal(3, pictures.Count);
         Assert.EndsWith("news3.PNG", pictures[0].Art.Name);
@@ -122,11 +122,11 @@ public class ScrapbookCompositionTests
     public void ThePicturesGateFollowsVisibleRowByRow()
     {
         const int primary = 1;
-        var withoutBit3 = ScrapbookComposition.Pictures(Root(), 2, 1, primary, scrap => true);
+        var withoutBit3 = ScrapbookComposition.Pictures(Root(), 2, 1, primary, scrap => OnDisk(scrap));
         Assert.Single(withoutBit3); // only the -3 row (bit 3 clear) draws; the +3 row's bit is unset
         Assert.Equal("SCRAPBOOK/SB_02_01_notgated.PNG", withoutBit3[0].Art.Name);
 
-        var withBit3 = ScrapbookComposition.Pictures(Root(), 2, 1, primary | (1 << 3), scrap => true);
+        var withBit3 = ScrapbookComposition.Pictures(Root(), 2, 1, primary | (1 << 3), scrap => OnDisk(scrap));
         Assert.Single(withBit3); // now the +3 row's gate passes and the -3 row's fails: still one
         Assert.Equal("SCRAPBOOK/SB_02_01_gated.PNG", withBit3[0].Art.Name);
     }
@@ -134,11 +134,51 @@ public class ScrapbookCompositionTests
     [Fact]
     public void ACaptureIsSkippedWhenItsFileIsNotOnDisk()
     {
-        var withoutFile = ScrapbookComposition.Pictures(Root(), 4, 1, bestMask: 1, scrap => false);
+        var withoutFile = ScrapbookComposition.Pictures(Root(), 4, 1, bestMask: 1, scrap => null);
         Assert.Single(withoutFile); // just the corner mount, not the missing Snap_
 
-        var withFile = ScrapbookComposition.Pictures(Root(), 4, 1, bestMask: 1, scrap => true);
-        Assert.Equal(2, withFile.Count);
+        var withFile = ScrapbookComposition.Pictures(Root(), 4, 1, bestMask: 1, scrap => OnDisk(scrap));
+        Assert.Equal(3, withFile.Count); // the capture, its grime, then the corner mount over both
+    }
+
+    /// <summary>A capture draws from the resolver's own path rather than the asset library, three
+    /// and four pixels off its authored position, with a <c>SB_P_Grime</c> frame over it at the
+    /// same place.</summary>
+    [Fact]
+    public void ACaptureCarriesItsOwnPathAndAGrimeFrameOverIt()
+    {
+        var pictures = ScrapbookComposition.Pictures(Root(), 4, 1, bestMask: 1, scrap => OnDisk(scrap));
+
+        Assert.Equal(BoardArtLibrary.Loose, pictures[0].Art.Library);
+        Assert.Equal(Path.Combine("profile", "Snap_4_1.PNG"), pictures[0].Art.Name);
+        Assert.Equal(8f, pictures[0].X); // the row's own 5, plus 3
+        Assert.Equal(10f, pictures[0].Y); // and its 6, plus 4
+
+        Assert.Equal("SB_P_Grime.Png", pictures[1].Art.Name);
+        Assert.Equal(10, pictures[1].Art.Frames);
+        Assert.Equal(pictures[0].X, pictures[1].X);
+        Assert.Equal(pictures[0].Y, pictures[1].Y);
+        Assert.InRange(pictures[1].Frame, 0, 9);
+    }
+
+    /// <summary>The grime generator hands out each of the ten frames once before repeating, and a
+    /// page's own sequence is the same every time it is turned to.</summary>
+    [Fact]
+    public void GrimeFramesAreStablePerPageAndUseAllTenBeforeRepeating()
+    {
+        var first = new List<int>();
+        var again = new List<int>();
+        var run = new ScrapbookGrime(1, 1);
+        var rerun = new ScrapbookGrime(1, 1);
+        for (int i = 0; i < 10; i++)
+        {
+            first.Add(run.Next(i));
+            again.Add(rerun.Next(i));
+        }
+
+        Assert.Equal(first, again);
+        Assert.Equal(10, new HashSet<int>(first).Count);
+        Assert.NotEqual(first[0], new ScrapbookGrime(1, 2).Next(0)); // a neighbouring page differs
     }
 
     [Fact]
@@ -182,11 +222,11 @@ public class ScrapbookCompositionTests
     public void OpenableCombinesTheObjectiveGateWithOpens()
     {
         const int primary = 1;
-        var withoutBit3 = ScrapbookComposition.Openable(Root(), 2, 1, primary, scrap => true);
+        var withoutBit3 = ScrapbookComposition.Openable(Root(), 2, 1, primary, scrap => OnDisk(scrap));
         Assert.Single(withoutBit3);
         Assert.Equal("SB_02_01_notgated", withoutBit3[0].ImageName);
 
-        var withBit3 = ScrapbookComposition.Openable(Root(), 2, 1, primary | (1 << 3), scrap => true);
+        var withBit3 = ScrapbookComposition.Openable(Root(), 2, 1, primary | (1 << 3), scrap => OnDisk(scrap));
         Assert.Single(withBit3);
         Assert.Equal("SB_02_01_gated", withBit3[0].ImageName);
     }
@@ -226,6 +266,10 @@ public class ScrapbookCompositionTests
 
     // Writes the fixture into a fresh temp dataRoot's extracted/rof/ASSETS/SCRAPBOOK.CSV, the
     // path ScrapbookComposition.Items resolves against -- never the shipped file itself.
+    // Stands in for CampaignFlow.CapturePath: every capture resolves, under a profile directory
+    // that is not the asset library. Returning null instead is "no such file on disk".
+    private static string OnDisk(ScrapbookScrap scrap) => Path.Combine("profile", scrap.FileName);
+
     private static string Root()
     {
         string root = TestData.TempDir();
@@ -299,7 +343,7 @@ public class ScrapbookCompositionExtractedTests
         // Every bit these rows gate on set: the three shipped scraps and both corner mounts draw;
         // the captures still do not, since CSVM saves none yet (D21's known gap, not invented).
         int mask = 1 | (1 << 1) | (1 << 3) | (1 << 12);
-        var pictures = ScrapbookComposition.Pictures(root, 1, 2, mask, scrap => false);
+        var pictures = ScrapbookComposition.Pictures(root, 1, 2, mask, scrap => null);
         Assert.Equal(5, pictures.Count);
     }
 

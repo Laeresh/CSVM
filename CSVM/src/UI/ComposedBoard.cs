@@ -13,6 +13,11 @@ public enum BoardArtLibrary
 
     /// <summary>Screen chrome, <c>extracted/rof/ASSETS/GRAPHICS/&lt;name&gt;</c>, named with it.</summary>
     Ui,
+
+    /// <summary>A file outside the extraction, <see cref="BoardArt.Name"/> being its whole path: a
+    /// scrapbook capture, which lives in the profile's own directory and is the one thing the book
+    /// draws that no asset library holds.</summary>
+    Loose,
 }
 
 /// <summary>How a piece of board text is inked. The authored colours are per widget and mostly
@@ -47,6 +52,9 @@ public enum BoardJustify
 {
     /// <summary>Against the widget's left edge, the layout's 0.</summary>
     Left,
+
+    /// <summary>Centred in its width, the layout's 1.</summary>
+    Center,
 
     /// <summary>Against its right edge, the layout's 2.</summary>
     Right,
@@ -116,6 +124,18 @@ public enum BoardButton
 
     /// <summary><c>SBZ_B_RETURN</c>, the scrap detail view's close button.</summary>
     CloseZoom,
+
+    /// <summary><c>SBZ_B_EXPORT</c>, the scrap detail view's Export to Desktop.</summary>
+    ExportScrap,
+
+    /// <summary><c>SB_B_TOC</c>, the book's VIEW ALL MISSIONS.</summary>
+    ViewAllMissions,
+
+    /// <summary><c>SB_B_BEST</c>, the results card's Best to Date tab.</summary>
+    BestTab,
+
+    /// <summary><c>SB_B_MOST</c>, the results card's Most Recent tab.</summary>
+    MostTab,
 
     /// <summary><c>sb_b_prev</c>, the book's page-back arrow.</summary>
     ScrapbookPrev,

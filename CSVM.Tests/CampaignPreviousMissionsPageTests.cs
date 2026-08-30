@@ -21,8 +21,9 @@ public class CampaignPreviousMissionsPageTests
         CampaignProgression.Record(profile, Attempt(1, mask: 4)); // no primary: not "finished"
         var flow = OpenedOnPreviousMissions(profile);
 
-        // Two finished missions (0 and 2) plus VIEW SELECTED / REPLAY MISSION / RETURN TO CABIN.
-        Assert.Equal(5, flow.Page.RowCount);
+        // Two finished missions (0 and 2), then VIEW SELECTED, REPLAY MISSION, the CURRENT MISSION
+        // bookmark and RETURN TO CABIN.
+        Assert.Equal(6, flow.Page.RowCount);
         Assert.Equal(string.Empty, flow.Page.RowText(0)); // a mission row draws its own three lines
         Assert.Equal("VIEW SELECTED", flow.Page.RowText(2));
         Assert.Equal("Mission 1", flow.Page.Detail(0)); // seq 0 (1-based ordinal 1) comes first
@@ -157,31 +158,48 @@ public class CampaignPreviousMissionsPageTests
         Assert.Equal(0, flow.MissionSeq);
     }
 
+    /// <summary>Replay Mission is offered only where <c>uiData</c> 2411 offers it, so a profile
+    /// with nothing flown carries no such row rather than a row that refuses.</summary>
     [Fact]
-    public void ReplayMissionWithNoFinishedMissionsRefuses()
+    public void WithNoFinishedMissionsThereIsNoReplayRowAtAll()
     {
         var flow = OpenedOnPreviousMissions(CampaignProfileDef.NewProfile("Zachary"));
 
-        flow.FocusRow(1); // REPLAY MISSION (0 mission rows + VIEW SELECTED before it)
-        flow.Accept();
-
-        Assert.Equal(CampaignScreen.PreviousMissions, flow.Screen);
-        Assert.NotEqual(string.Empty, flow.Message);
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ReplayMission));
+        Assert.Equal(3, flow.Page.RowCount); // VIEW SELECTED, the bookmark, RETURN TO CABIN
     }
 
+    /// <summary>VIEW SELECTED opens the book at the picked mission's first spread, which is the
+    /// original's <c>uiData</c> 2405 mode 1 and the only way the table of contents reaches it.</summary>
     [Fact]
-    public void ViewSelectedConsumesThePressAndChangesNothing()
+    public void ViewSelectedOpensTheBookAtThePickedMission()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        CampaignProgression.Record(profile, Attempt(1));
+        var flow = OpenedOnPreviousMissions(profile);
+
+        flow.FocusRow(1); // the seq-1 row
+        flow.Accept();    // pick it
+        Press(flow, BoardButton.ViewMission);
+
+        Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
+        Assert.Equal(1, flow.MissionSeq);
+    }
+
+    /// <summary>The CURRENT MISSION bookmark opens the book at the campaign's own next mission,
+    /// whatever the list's cursor is on.</summary>
+    [Fact]
+    public void TheBookmarkOpensTheBookAtTheCampaignsCurrentMission()
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
         CampaignProgression.Record(profile, Attempt(0));
         var flow = OpenedOnPreviousMissions(profile);
 
-        flow.FocusRow(1); // VIEW SELECTED
-        bool moved = flow.Accept();
+        Press(flow, BoardButton.CurrentMission);
 
-        Assert.True(moved);
-        Assert.Equal(CampaignScreen.PreviousMissions, flow.Screen);
-        Assert.Equal(-1, flow.MissionSeq);
+        Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
+        Assert.Equal(1, flow.MissionSeq); // the win advanced the campaign past seq 0
     }
 
     /// <summary>RETURN TO CABIN lands on the cabin already on the stack (from
@@ -198,6 +216,28 @@ public class CampaignPreviousMissionsPageTests
         Assert.Equal(CampaignScreen.Cabin, flow.Screen);
         flow.Back();
         Assert.Equal(CampaignScreen.Roster, flow.Screen);
+    }
+
+    // The button rows shift as Replay comes and goes, so a test presses one by name.
+    private static void Press(CampaignFlow flow, BoardButton button)
+    {
+        int row = RowOf(flow.Page, button);
+        Assert.NotEqual(-1, row);
+        flow.FocusRow(row);
+        flow.Accept();
+    }
+
+    private static int RowOf(ICampaignPage page, BoardButton button)
+    {
+        for (int row = 0; row < page.RowCount; row++)
+        {
+            if (page.Button(row).Button == button)
+            {
+                return row;
+            }
+        }
+
+        return -1;
     }
 
     private static MissionAttempt Attempt(int seq, int mask = 1) =>

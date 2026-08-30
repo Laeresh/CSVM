@@ -2950,15 +2950,6 @@ usual.
   workstation noise (`docs/verification.md` PERF-12/13). *Cross-refs:* `BL-434` (the per-viewport
   splitscreen cost this same measurement pass separately profiled).
 
-- `BL-642` `[Bug]` **Scrapbook Replay Mission can launch an unflown future mission.**
-  *Evidence:* `CampaignScrapbookPage` always exposes `ReplayRow`, and accepting it calls
-  `SetMission(mission - 1)` even when the same spread says `Not yet flown`. The book can browse
-  unflown missions, while the original offers Replay only when either half of that mission's record
-  has a non-zero time (`docs/plans/PLAN-scrapbook.md`, A3's `uiData 2411` decode). *Fix shape:* gate
-  the row and its action on `Latest.TimeMs != 0 || Best.TimeMs != 0`, with tests covering a loss,
-  a completed mission, and an unflown future mission. *⚠ Traps:* completion bits are not the gate;
-  a failed attempt may have no primary bit and must still be replayable.
-
 - `BL-643` `[Bug]` **Returning from a guest flight check to P1 reopens campaign joining after FLY
   MISSION committed the field.** *Evidence:* `CampaignFlightField.Locked` is `Current > 0`, so
   `Retreat()` from P2 decrements `Current` to zero and `LaunchMenu.ScanJoins` accepts new pads again;
@@ -2968,15 +2959,6 @@ usual.
   abandoned through `Rewind`. *⚠ Traps:* revisiting P1's check is navigation inside a committed
   roster, not abandonment; guest Back presses must not change the field size while latched.
 
-- `BL-644` `[Bug]` **The scrapbook has no functional Best to Date tab.** *Evidence:*
-  `CampaignScrapbookPage` passes `bestToDate: false` to every results row, stamp label and stamp
-  picture; only `CampaignScrapbookResults.TabTitle` and its helper tests know the two tab names. The
-  completed scrapbook plan required Best to Date / Most Recent tabs. *Fix shape:* add the page's tab
-  controls and state, drive all results and stamps from the selected half, and reset to Most Recent
-  on every book entry. *⚠ Traps:* preserve the original's decoded Best to Date outcome bug — that
-  tab reads Mission Failed from its never-written outcome offset even when its merged statistics
-  represent a win.
-
 - `BL-645` `[Feature]` **Co-op campaign money is hard-coded to zero instead of aggregating the human
   field.** *Evidence:* `CampaignDirector.OnMissionEnded` constructs every `MissionAttempt` with
   `Money = 0`; `campaign-coop-attempt` proves only that zero remains zero and explicitly says no
@@ -2985,14 +2967,6 @@ usual.
   earned mission money at the director boundary, sum it once into the attempt, and add the promised
   two-rig positive-value assertion plus a 1P invariant. *⚠ Traps:* do not aggregate gunnery or plane
   identity; those fields feed a seated pilot's best-of record.
-
-- `BL-646` `[Bug]` **The scrapbook results page omits the `SB_STATCARD` background.** *Evidence:*
-  `CampaignScrapbookPage.Pictures` draws `SCRAPBOOK.CSV` scraps and kill stamps only, while the
-  decoded results layout places `SB_STATCARD` at `(403,297)` and the archived plan records the gap
-  under D18. *Fix shape:* draw the shipped stat-card chrome through the composed-board asset path at
-  its authored `LAYOUT.CSV` position, beneath the results rows and stamps, and pin it with the CM01
-  screenshot fixture. *⚠ Traps:* `SB_STATCARD` is layout chrome, not a scrapbook-composition row;
-  do not add it to `SCRAPBOOK.CSV` parsing or author replacement art.
 
 ## Tooling, platform & docs
 

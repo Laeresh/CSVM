@@ -23,7 +23,8 @@ public sealed record BoardPalette(
         LabelActivate: new Color(0f, 0f, 0f),
         Hint: new Color(0.176f, 0.220f, 0.263f));
 
-    /// <summary>The scrapbook's photograph album.</summary>
+    /// <summary>The scrapbook's own three screens: the book, its table of contents and a scrap's
+    /// detail view, all black ink on paper the way their layout rows ask for.</summary>
     public static readonly BoardPalette Album = new(
         Row: new Color(0.07f, 0.06f, 0.05f),
         Focus: new Color(0.55f, 0.10f, 0.06f),
@@ -71,7 +72,8 @@ public sealed record BoardPalette(
     public static BoardPalette For(CampaignScreen screen) => screen switch
     {
         CampaignScreen.FlightCheck or CampaignScreen.Ammo => Paper,
-        CampaignScreen.PreviousMissions => Album,
+        CampaignScreen.PreviousMissions or CampaignScreen.Scrapbook
+            or CampaignScreen.ScrapbookZoom => Album,
         CampaignScreen.Briefing => Parchment,
         _ => Panel,
     };

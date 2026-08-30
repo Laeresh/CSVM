@@ -37,6 +37,15 @@ public static class CampaignBoards
     private static readonly BoardArt PaperButton = Ui("SB_B_PaperButton.png", StripFrames);
     private static readonly BoardArt ReturnToCabinArt = Ui("GN_B_ReturntoCabin.png", StripFrames);
 
+    // The results card's two tabs share one strip. Which of them draws over the card and which
+    // behind it is the whole of the selection, so the page draws the unselected one itself
+    // (CampaignScrapbookPage.Pictures) and only the selected one reaches this slot table.
+    private static readonly BoardArt StatCardTab = Ui("SB_B_Statcardtab.png", StripFrames);
+
+    // SB_B_CURRENT and SBTOC_B_CURRENT are the same bookmark at the same place on both scrapbook
+    // screens, and both open the book on the campaign's own current mission.
+    private static readonly BoardArt CurrentMissionTab = Ui("SB_B_Currentmissiontab.png", StripFrames);
+
     // The briefing's plaque is the one that ships beside the mission art rather than with the
     // screen chrome, and the one that carries no words: its label is drawn over it in one of three
     // fonts, which is the whole of its focus state.
@@ -64,19 +73,24 @@ public static class CampaignBoards
         {
             new BoardSlot(BoardButton.ViewMission, 0, PaperButton, 440, 505, true),
             new BoardSlot(BoardButton.ReplayMission, 0, PaperButton, 596, 505, true),
+            new BoardSlot(BoardButton.CurrentMission, 0, CurrentMissionTab, 558, 7, true),
             new BoardSlot(BoardButton.ReturnToCabin, 0, ReturnToCabinArt, 593, 561),
         },
         [CampaignScreen.Scrapbook] = new[]
         {
             new BoardSlot(BoardButton.ReplayMission, 0, PaperButton, 594, 505, true),
+            new BoardSlot(BoardButton.ViewAllMissions, 0, Ui("SB_B_ViewAllMissions.png", StripFrames), 375, 560),
             new BoardSlot(BoardButton.ReturnToCabin, 0, ReturnToCabinArt, 593, 561),
             new BoardSlot(BoardButton.ScrapbookPrev, 0, Ui("SB_B_back_tab.png", StripFrames), 0, 465),
             new BoardSlot(BoardButton.ScrapbookNext, 0, Ui("SB_B_more_tab.png", StripFrames), 708, 465),
-            new BoardSlot(BoardButton.CurrentMission, 0, Ui("SB_B_Currentmissiontab.png", StripFrames), 558, 7, true),
+            new BoardSlot(BoardButton.CurrentMission, 0, CurrentMissionTab, 558, 7, true),
+            new BoardSlot(BoardButton.BestTab, 0, StatCardTab, 432, 283, true),
+            new BoardSlot(BoardButton.MostTab, 0, StatCardTab, 594, 283, true),
         },
         [CampaignScreen.ScrapbookZoom] = new[]
         {
             new BoardSlot(BoardButton.CloseZoom, 0, Ui("GN_B_Continue.png", StripFrames), 640, 519),
+            new BoardSlot(BoardButton.ExportScrap, 0, Ui("SB_B_ExportToDesktop.png", StripFrames), 593, 561),
         },
         [CampaignScreen.Briefing] = new[]
         {
@@ -159,6 +173,16 @@ public static class CampaignBoards
 
         return new ComposedBoard(
             page.Pictures, page.Strokes, lines, plaques, page.Notes, backdrop, page.Fills);
+    }
+
+    /// <summary>Where one of a screen's authored buttons sits and what art it draws, for a page
+    /// that has to draw that button itself rather than let it become a plaque: the results card's
+    /// unselected tab, which the original puts behind the card. Null when the screen has no such
+    /// button.</summary>
+    public static (BoardArt Art, float X, float Y)? SlotOf(CampaignScreen screen, BoardButton button)
+    {
+        var slots = Buttons.TryGetValue(screen, out var found) ? found : Array.Empty<BoardSlot>();
+        return Find(slots, new BoardButtonRef(button)) is { } slot ? (slot.Art, slot.X, slot.Y) : null;
     }
 
     /// <summary>The briefing parchment's objectives list, at the <c>LIST</c> widget's own authored

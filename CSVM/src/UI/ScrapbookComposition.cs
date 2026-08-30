@@ -64,6 +64,13 @@ public readonly record struct ScrapbookZoomFamily(
 /// </summary>
 public static class ScrapbookComposition
 {
+    // How far the original shifts a capture off its authored position before laying the smudge
+    // over it, and the ten-frame smudge strip itself.
+    private const float CaptureNudgeX = 3f;
+    private const float CaptureNudgeY = 4f;
+
+    private static readonly BoardArt GrimeArt = new(BoardArtLibrary.Ui, "SB_P_Grime.Png", 10);
+
     private static readonly Dictionary<string, Dictionary<string, string[]>?> Files =
         new(StringComparer.Ordinal);
 
@@ -97,21 +104,33 @@ public static class ScrapbookComposition
     }
 
     /// <summary>The spread's scraps as drawable pictures, gated and ordered the way the original
-    /// draws them: the <c>Objective</c> gate applied against <paramref name="bestMask"/> (the
-    /// mission's merged best-to-date completion mask), a capture skipped when
-    /// <paramref name="captureExists"/> says its file is not on disk, and the survivors stacked by
-    /// ascending <c>DrawOrder</c> (background first).</summary>
+    /// draws them: the <c>Objective</c> gate against <paramref name="bestMask"/> (the mission's
+    /// merged best-to-date mask), a capture skipped when <paramref name="capturePath"/> returns
+    /// null for it, and the survivors stacked by ascending <c>DrawOrder</c>. A capture draws from
+    /// that resolver's own path, offset the three and four pixels the original moves it, and
+    /// carries a <c>SB_P_Grime</c> frame over it.</summary>
     public static IReadOnlyList<BoardPicture> Pictures(
-        string? dataRoot, int mission, int spread, int bestMask, Func<ScrapbookScrap, bool> captureExists)
+        string? dataRoot, int mission, int spread, int bestMask, Func<ScrapbookScrap, string?> capturePath)
     {
-        var visible = Filtered(dataRoot, mission, spread, bestMask, captureExists);
+        var visible = Filtered(dataRoot, mission, spread, bestMask, capturePath);
         visible.Sort((a, b) => a.DrawOrder.CompareTo(b.DrawOrder));
 
+        var grime = new ScrapbookGrime(mission, spread);
         var pictures = new List<BoardPicture>(visible.Count);
         foreach (var scrap in visible)
         {
+            if (!scrap.IsCapture)
+            {
+                pictures.Add(new BoardPicture(
+                    new BoardArt(BoardArtLibrary.Ui, $"SCRAPBOOK/{scrap.FileName}"), scrap.X, scrap.Y));
+                continue;
+            }
+
+            float x = scrap.X + CaptureNudgeX;
+            float y = scrap.Y + CaptureNudgeY;
             pictures.Add(new BoardPicture(
-                new BoardArt(BoardArtLibrary.Ui, $"SCRAPBOOK/{scrap.FileName}"), scrap.X, scrap.Y));
+                new BoardArt(BoardArtLibrary.Loose, capturePath(scrap) ?? string.Empty), x, y));
+            pictures.Add(new BoardPicture(GrimeArt, x, y, grime.Next(pictures.Count)));
         }
 
         return pictures;
@@ -120,9 +139,9 @@ public static class ScrapbookComposition
     /// <summary>The spread's scraps a player can open into detail, in item order: the same gate
     /// <see cref="Pictures"/> applies, narrowed to <see cref="ScrapbookScrap.Opens"/>.</summary>
     public static IReadOnlyList<ScrapbookScrap> Openable(
-        string? dataRoot, int mission, int spread, int bestMask, Func<ScrapbookScrap, bool> captureExists)
+        string? dataRoot, int mission, int spread, int bestMask, Func<ScrapbookScrap, string?> capturePath)
     {
-        var visible = Filtered(dataRoot, mission, spread, bestMask, captureExists);
+        var visible = Filtered(dataRoot, mission, spread, bestMask, capturePath);
         visible.RemoveAll(s => !s.Opens);
         return visible;
     }
@@ -159,7 +178,7 @@ public static class ScrapbookComposition
     }
 
     private static List<ScrapbookScrap> Filtered(
-        string? dataRoot, int mission, int spread, int bestMask, Func<ScrapbookScrap, bool> captureExists)
+        string? dataRoot, int mission, int spread, int bestMask, Func<ScrapbookScrap, string?> capturePath)
     {
         var visible = new List<ScrapbookScrap>();
         foreach (var scrap in Items(dataRoot, mission, spread))
@@ -169,7 +188,7 @@ public static class ScrapbookComposition
                 continue;
             }
 
-            if (scrap.IsCapture && !captureExists(scrap))
+            if (scrap.IsCapture && capturePath(scrap) == null)
             {
                 continue;
             }
@@ -355,5 +374,50 @@ public static class ScrapbookComposition
 
         ZoomFamilies[path] = families;
         return families;
+    }
+}
+
+/// <summary>
+/// The smudge overlay's frame picker, <c>uiData</c> 2413: seeded from the page it dirties and
+/// handing out each of <c>SB_P_Grime.Png</c>'s ten frames once before repeating, so a page's grime
+/// is the same every time it is turned to and different from its neighbours'
+/// (<c>docs/formats/campaign-screens.md#the-grime</c>). The original reseeds from the clock once
+/// the page is composed; nothing here needs that, since a frame is only ever asked for while a page
+/// is being composed.
+/// </summary>
+public sealed class ScrapbookGrime
+{
+    private const int Frames = 10;
+
+    private readonly int _seed;
+    private int _used;
+
+    /// <summary>Seeds the generator for one spread, the original's <c>(mission &lt;&lt; 8) | spread</c>.</summary>
+    public ScrapbookGrime(int mission, int spread) => _seed = (mission << 8) | spread;
+
+    /// <summary>The frame for the <paramref name="index"/>-th grimed scrap of this page, 0 to 9,
+    /// each taken once before the ten are offered again.</summary>
+    public int Next(int index)
+    {
+        if (_used == (1 << Frames) - 1)
+        {
+            _used = 0;
+        }
+
+        // A fixed walk from a page-derived start rather than a real PRNG: the original's own
+        // generator hashes the seed with the draw ordinal, and what matters here is only that a
+        // page is stable and its neighbours differ.
+        int start = ((_seed * 31) + index) % Frames;
+        for (int step = 0; step < Frames; step++)
+        {
+            int frame = (start + step) % Frames;
+            if ((_used & (1 << frame)) == 0)
+            {
+                _used |= 1 << frame;
+                return frame;
+            }
+        }
+
+        return 0;
     }
 }
