@@ -122,10 +122,43 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Exporting release build to $ExportExe..." -ForegroundColor Cyan
-& $GodotExe --path $ProjectDir --headless --export-release "Windows Desktop" $ExportExe
-if ($LASTEXITCODE -ne 0) {
-    throw "Godot export failed (exit $LASTEXITCODE)."
+# NOT --headless, unlike the import above: the preset's Shader Baker compiles the pipeline
+# variants into the pack, and it needs a live rendering device on the renderer the target will
+# use. Headless has a dummy one, so the bake is skipped in silence and the export still reports
+# success -- the payload just ships without it and every player pays the compile at first draw.
+# The driver and method are pinned rather than left to the editor's own setting for the same
+# reason: baking on a different renderer than the target cannot include the core shaders.
+# A real editor rewrites project.godot on startup: same values, but its own key order and NONE
+# of the comments, so an export would silently strip every decode the file carries. Snapshot and
+# restore it byte-for-byte around the run. Copy-Item both ways rather than a text round-trip,
+# which is what keeps PowerShell 5.1's ANSI default away from the file (see CLAUDE.md).
+$ProjectGodot = Join-Path $ProjectDir "project.godot"
+$ProjectGodotBackup = Join-Path $env:TEMP "csvm-project-godot-$PID.bak"
+Copy-Item $ProjectGodot $ProjectGodotBackup -Force
+
+$ExportLog = Join-Path $ExportDir "export.log"
+try {
+    & $GodotExe --path $ProjectDir --rendering-driver vulkan --rendering-method forward_plus `
+        --export-release "Windows Desktop" $ExportExe | Tee-Object -FilePath $ExportLog
+    $exportExit = $LASTEXITCODE
+} finally {
+    # In a finally so a failed or interrupted export cannot leave the stripped file behind.
+    Copy-Item $ProjectGodotBackup $ProjectGodot -Force
+    Remove-Item $ProjectGodotBackup -Force
 }
+if ($exportExit -ne 0) {
+    throw "Godot export failed (exit $exportExit)."
+}
+
+# A skipped bake is the failure this script cannot see any other way: it costs no exit code, no
+# warning and no missing file, only a slower first draw on someone else's machine. Assert the
+# stage ran rather than trusting the flag, since the preset key and the renderer have to agree
+# for it to do anything.
+if (-not (Select-String -Path $ExportLog -Pattern "baking_shaders" -Quiet)) {
+    throw "Export finished but baked no shaders -- check shader_baker/enabled in " +
+        "CSVM\export_presets.cfg and that this export ran with a real rendering device."
+}
+Remove-Item $ExportLog -Force
 
 Write-Host "Staging release files..." -ForegroundColor Cyan
 foreach ($file in $ReleaseFiles) {
