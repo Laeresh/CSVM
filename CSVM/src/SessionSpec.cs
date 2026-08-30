@@ -1183,11 +1183,10 @@ public sealed record SessionSpec
 
     /// <summary>The campaign cabin's FLY MISSION, <see cref="FromMenu"/>'s counterpart for a story
     /// mission: the profile and story position <c>--campaign=</c> would name, and
-    /// <paramref name="planeNodes"/>, one entry per joined human in player order — entry 0 the
-    /// SEATED pilot's aircraft, entries 1 and up guests'. The chapter and mission are NOT settled
-    /// here: they come out of <c>cm_sequence.zrd</c>, so
-    /// <see cref="Session.CampaignDirector.ResolveSpec"/> resolves them in the session's constructor
-    /// as for a command line. ⚠ Derived from the pristine <paramref name="cli"/>.</summary>
+    /// <paramref name="planeNodes"/>, one entry per joined human in player order (entry 0 the
+    /// SEATED pilot's aircraft, entries 1 and up guests'). The chapter and mission are settled by
+    /// <see cref="Session.CampaignDirector.ResolveSpec"/> in the constructor, out of
+    /// <c>cm_sequence.zrd</c>, as for a command line. ⚠ Derived from the pristine <paramref name="cli"/>.</summary>
     public static SessionSpec FromCampaign(SessionSpec cli, string profile, int seq,
         IReadOnlyList<string> planeNodes, int players,
         IReadOnlyList<LoadoutChoice?>? fits = null, IReadOnlyList<CustomPlaneDef?>? customs = null) =>

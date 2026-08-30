@@ -240,6 +240,7 @@ public static class SuiteCatalog
         "campaign-coop-approach-row",
         "campaign-coop-dropoff",
         "campaign-coop-death",
+        "campaign-coop-attempt",
         "campaign-coop-cutscene-fullscreen",
     };
 
@@ -1527,6 +1528,13 @@ public static class SuiteCatalog
             + "it lost once no wreck is still falling, whichever of them went first; "
             + "--no-crash-loss pins neither, and a solo death answers exactly as it did before",
             CoopDeathSuites.CampaignCoopDeath));
+        into.Add(new TestHarness.Suite("campaign-coop-attempt",
+            "what a co-op sortie writes to the seated profile (D31): two human rigs each fire a real "
+            + "cannon round at the other's aircraft, and only the seated pilot's reaches the recorded "
+            + "attempt's Shots/Hits, WireScoredShooter gating on the scripted player and never a "
+            + "guest; Money sums to 0 across the field today, since the mission reward table's cash "
+            + "half is a separate, unlanded item",
+            CampaignCoopAttempt));
         into.Add(new TestHarness.Suite("campaign-coop-cutscene-fullscreen",
             "the window a cutscene plays in at 2, 3 and 4 panes: an episode gives pane 1 the whole "
             + "window, takes the other panes down and leaves EXACTLY ONE listener-enabled viewport "

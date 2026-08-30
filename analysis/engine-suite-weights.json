@@ -196,6 +196,7 @@
     "campaign-coop-approach-row": 4.23,
     "campaign-coop-dropoff": 4.62,
     "campaign-coop-death": 3.03,
+    "campaign-coop-attempt": 1.32,
     "campaign-coop-cutscene-fullscreen": 0.16
   }
 }

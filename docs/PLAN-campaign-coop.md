@@ -112,7 +112,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Recording, evidence and words
 
-31. ☐ What a co-op sortie writes to the seated profile
+31. ☑ What a co-op sortie writes to the seated profile
 32. ☐ Goldens and playtest items
 33. ☐ The 4P cost of a heavy campaign mission
 34. ☐ The five terms in `CONTEXT.md`
@@ -586,7 +586,7 @@ may pick a granted aircraft from the seated profile.
 
 # Wave D — Recording, evidence and words
 
-## D31 ☐ What a co-op sortie writes to the seated profile
+## D31 ☑ What a co-op sortie writes to the seated profile
 
 **Goal.** A co-op sortie records the seated pilot's own gunnery and the squadron's money, and
 changes nothing else about progression.

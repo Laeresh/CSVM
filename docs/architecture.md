@@ -5687,7 +5687,11 @@ every runtime a directive can touch is up, applies the chapter's persist log and
 `DangerZoneRibbons` to every roster pilot; `Step(dt)` is
 called from BOTH of `GameSession`'s drive paths. Every graph transition is one
 `[campaign] objective N woke|napped|completed|killed|slept|expired [by M] [for Ns] at Ts` line
-through `Log.Info`, so the file sink carries the chain a sortie report is about. Mission end records the attempt through
+through `Log.Info`, so the file sink carries the chain a sortie report is about. `WireScoredShooter`
+registers the scripted player's aircraft into `ProjectilePool.ScoredShooters`, deferred into `Step`
+like the damage ping because that aircraft is built after `Attach` runs, so the recorded attempt's
+`Shots`/`Hits` read the seated pilot alone and a guest's cannon fire is never counted (decision 13).
+Mission end records the attempt through
 `CampaignProgression`, merges `CampaignPersistLog.Capture` into the profile, saves it, writes any
 aircraft award's build into `CustomPlaneStore` (`SaveAwardedBuilds`, which is where the cabin's
 launch looks a plane's fit up by name), and starts the LEAVING HOLD; `ReturnToCabin` and

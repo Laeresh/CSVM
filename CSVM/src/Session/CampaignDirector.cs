@@ -94,6 +94,11 @@ public sealed class CampaignDirector
     private Action<FlightController>? _beginSpectate;
     private bool _playerLost;
 
+    // D31: the seated pilot's own gunnery, wired the same deferred way as the damage ping, since
+    // the scripted player's aircraft is also built after Attach runs.
+    private ProjectilePool? _projectiles;
+    private FlightController? _scoredShooterWiredTo;
+
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
         CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath,
@@ -437,6 +442,7 @@ public sealed class CampaignDirector
     {
         _world = new World(this, inputs);
         _beginSpectate = inputs.BeginSpectate;
+        _projectiles = inputs.Projectiles;
         _paths ??= inputs.Runtime is { } animRuntime
             ? new ScriptedPathVehicles(name => animRuntime.FindNodes(name))
             : null;
@@ -486,6 +492,7 @@ public sealed class CampaignDirector
         }
 
         WirePlayerDeath();
+        WireScoredShooter();
         if (_cutsceneHold)
         {
             return;
@@ -557,6 +564,21 @@ public sealed class CampaignDirector
             int down = seat;
             human.Downed += (_, _) => OnPlayerDown(down, human);
         }
+    }
+
+    // The seated pilot is the only shooter Shots/Hits answers for (decision 13).
+    // ProjectilePool.ScoredShooters is the sole gate its two counters have. Registering just the
+    // scripted player's aircraft here keeps a guest's cannon fire out of them, whatever the human
+    // field's size.
+    private void WireScoredShooter()
+    {
+        if (_world?.Player() is not { } player || ReferenceEquals(player, _scoredShooterWiredTo))
+        {
+            return;
+        }
+
+        _scoredShooterWiredTo = player;
+        _projectiles?.ScoredShooters.Add(player.PlayerIndex);
     }
 
     // Losing the aircraft loses the mission, in the original's two stages: the death stops the
@@ -775,9 +797,12 @@ public sealed class CampaignDirector
         var plane = _profile.SelectedPlane >= 0 && _profile.SelectedPlane < _profile.Planes.Count
             ? _profile.Planes[_profile.SelectedPlane]
             : null;
-        // The money an attempt banks is the hangar economy's, not this director's: it reports zero.
-        // Both of the original's mask loops run whatever the outcome, only bit 0 from the win flag
+        // The money an attempt banks is the hangar economy's per-objective reward table, not this
+        // director's: it reports zero today, team-aggregate once that table lands. Both of the
+        // original's mask loops run whatever the outcome, only bit 0 from the win flag
         // (docs/org/debrief.md, "The completed-objective mask has two sources").
+        // ⚠ Shots/Hits stay the seated pilot's alone (WireScoredShooter): a guest's gunnery
+        // never counts.
         var attempt = new MissionAttempt(
             _mission.Seq,
             outcome == MissionOutcome.Won
