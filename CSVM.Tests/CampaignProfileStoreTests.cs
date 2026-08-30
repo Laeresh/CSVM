@@ -41,6 +41,7 @@ public class CampaignProfileStoreTests
         def.MissionResults.Add(new MissionResult
         {
             Seq = 0,
+            Attempts = 3,
             Latest = new MissionRun { CompletedMask = 1, TimeMs = 45000, PlaneName = "Gypsy Magic" },
             Best = new MissionRun
             {
@@ -65,6 +66,7 @@ public class CampaignProfileStoreTests
         Assert.Equal(11, loaded.Planes[0].Ordnance[0]);
         var result = Assert.Single(loaded.MissionResults);
         Assert.Equal(0, result.Seq);
+        Assert.Equal(3, result.Attempts);
         Assert.Equal(1, result.Best.CompletedMask);
         Assert.Equal(45000, result.Best.TimeMs);
         Assert.Equal(120, result.Best.Shots);

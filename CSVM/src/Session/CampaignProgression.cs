@@ -7,17 +7,27 @@ namespace CSVM.Session;
 
 /// <summary>One flown mission's raw statistics, as a mission director hands them over at mission
 /// end. <c>Seq</c> is the <c>cm_sequence</c> story position; <c>CompletedMask</c> is the run's
-/// completed-objective bitmask, whose bit 0 is the primary objective.</summary>
+/// completed-objective bitmask, whose bit 0 is the primary objective. <c>Kills</c> and
+/// <c>AceKills</c> are <see cref="CampaignProgression.AirframeCount"/>-slot per-airframe kill
+/// tallies, plain and ace (<c>docs/org/debrief.md#what-the-tallies-count</c>); a caller that omits
+/// them reports a mission with no aircraft kills.</summary>
 public readonly record struct MissionAttempt(
     int Seq, int CompletedMask, int TimeMs, int Shots, int Hits, int Money,
-    int Airframe, string PlaneName);
+    int Airframe, string PlaneName, int[]? Kills = null, int[]? AceKills = null)
+{
+    public int[] Kills { get; init; } = Kills ?? new int[CampaignProgression.AirframeCount];
+
+    public int[] AceKills { get; init; } = AceKills ?? new int[CampaignProgression.AirframeCount];
+}
 
 /// <summary>What recording an attempt changed: whether it completed the primary objective, whether
-/// it raised the campaign position, the airframe ids of any aircraft awards it granted, and the
-/// builds those awards fly, which the caller persists to the build store its launches read.</summary>
+/// it raised the campaign position, the airframe ids of any aircraft awards it granted, the builds
+/// those awards fly, which the caller persists to the build store its launches read, and whether
+/// this failure was the one that raises the skip offer, which the screen showing the result asks
+/// the player and answers through <see cref="CampaignProgression.AcceptSkip"/>.</summary>
 public readonly record struct MissionRecorded(
     bool PrimaryCompleted, bool Advanced, IReadOnlyList<int> AwardedAirframes,
-    IReadOnlyList<CustomPlaneDef> AwardedBuilds);
+    IReadOnlyList<CustomPlaneDef> AwardedBuilds, bool SkipOffered = false);
 
 /// <summary>One record of the campaign's aircraft-award table: the mission ordinal that pays it,
 /// the objective bit it is gated on, and the airframe and plane name it grants
@@ -38,6 +48,24 @@ public static class CampaignProgression
     /// <summary>The completed-objective mask bit that means the primary objective, and with it the
     /// mission itself. It gates the whole best-of merge and the advance.</summary>
     public const int PrimaryObjectiveMask = 1;
+
+    /// <summary>The eleven airframes the debrief's kill tallies index, in the engine's own order
+    /// (Hoplite, Hellhound, Balmoral, Bloodhawk, Brigand, Devastator, Firebrand, Fury, Kestrel,
+    /// Peacemaker, Warhawk; docs/org/debrief.md#what-the-tallies-count).</summary>
+    public const int AirframeCount = 11;
+
+    /// <summary>How many failed attempts at an uncompleted mission raise the offer to skip it. The
+    /// original tests <c>counter % 4 == 0</c> on a counter it never resets while the mission stands
+    /// uncompleted, so the offer returns on every fourth failure and this is a total rather than a
+    /// consecutive-failure count (<c>docs/org/debrief.md</c>, "The four-attempt skip offer").</summary>
+    public const int SkipOfferAttempts = 4;
+
+    /// <summary>⚠ A PLACEHOLDER wording, not the original's. The offer is langui string 191, which
+    /// is absent from the shipped extraction (its ids jump from 136 to 200), so no original text
+    /// exists to quote here. Formatted with <see cref="SkipOfferAttempts"/>, which is the literal
+    /// the original passes its own string.</summary>
+    public const string SkipOfferPrompt =
+        "You have failed this mission {0} times. Skip it and go on with the campaign?";
 
     /// <summary>The five aircraft awards, keyed by the 1-based mission ordinal (not by <c>seq</c>
     /// and not by the save id). Each is granted once per profile: the original marks a per-airframe
@@ -136,17 +164,18 @@ public static class CampaignProgression
 
     /// <summary>Records one attempt: its statistics into the mission's record, and, when it
     /// completed the primary objective, the best-of merge, the money, the position raise and any
-    /// aircraft award. An attempt that leaves bit 0 clear records statistics and nothing
-    /// else.</summary>
+    /// aircraft award. An attempt that leaves bit 0 clear records statistics, counts itself against
+    /// the skip offer and nothing else.</summary>
     public static MissionRecorded Record(CampaignProfileDef profile, MissionAttempt attempt)
     {
+        ArgumentNullException.ThrowIfNull(profile);
         var result = ResultFor(profile, attempt.Seq);
         result.Latest = RunOf(attempt);
         bool primary = (attempt.CompletedMask & PrimaryObjectiveMask) != 0;
         if (!primary)
         {
             return new MissionRecorded(
-                false, false, Array.Empty<int>(), Array.Empty<CustomPlaneDef>());
+                false, false, Array.Empty<int>(), Array.Empty<CustomPlaneDef>(), CountFailure(result));
         }
 
         int maskBefore = result.Best.CompletedMask;
@@ -161,6 +190,27 @@ public static class CampaignProgression
         }
 
         return new MissionRecorded(true, advanced, awarded.Airframes, awarded.Builds);
+    }
+
+    /// <summary>Takes the skip offer <see cref="MissionRecorded.SkipOffered"/> raised. The original
+    /// answers Yes by setting the campaign win flag and re-entering the debrief, so the skip is a
+    /// synthetic win and nothing more: the same attempt is recorded again with the primary bit set,
+    /// which merges the best-of, banks the money, pays whatever the mask awards and advances the
+    /// position. <paramref name="capture"/> is the failed attempt's world state, which the win flag
+    /// is what makes the save gate pass on (<c>docs/org/debrief.md</c>).</summary>
+    public static MissionRecorded AcceptSkip(
+        CampaignProfileDef profile, MissionAttempt attempt, int chapter,
+        IEnumerable<PersistedObject>? capture = null)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        var recorded = Record(
+            profile, attempt with { CompletedMask = attempt.CompletedMask | PrimaryObjectiveMask });
+        if (capture != null)
+        {
+            profile.PersistLog.Merge(chapter, attempt.Seq, capture);
+        }
+
+        return recorded;
     }
 
     /// <summary>The story position Next Mission resolves to: the profile's own progress, clamped to
@@ -213,7 +263,8 @@ public static class CampaignProgression
 
     // The merge rules are the original's own, one per field (docs/formats/saved-games.md, "The
     // mission-result array"): OR the mask, keep the faster time ignoring 0, keep the pair with the
-    // better hit ratio, accumulate the money, and take the plane of a run that completed more.
+    // better hit ratio, accumulate the money, take the plane of a run that completed more, and
+    // merge both kill tallies per index by maximum.
     private static void MergeBest(MissionRun best, MissionAttempt attempt)
     {
         if (attempt.TimeMs > 0 && (best.TimeMs == 0 || attempt.TimeMs < best.TimeMs))
@@ -235,6 +286,33 @@ public static class CampaignProgression
 
         best.Money += attempt.Money;
         best.CompletedMask |= attempt.CompletedMask;
+        MergeMax(best.Kills, attempt.Kills);
+        MergeMax(best.AceKills, attempt.AceKills);
+    }
+
+    // The skip offer's gate, whose two halves are both the original's: the counter moves only while
+    // the mission has never been completed, so a lost replay of a finished mission never offers a
+    // skip, and it is never reset, so a fifth failure counts 5 rather than starting again at 1.
+    private static bool CountFailure(MissionResult result)
+    {
+        if ((result.Best.CompletedMask & PrimaryObjectiveMask) != 0)
+        {
+            return false;
+        }
+
+        result.Attempts++;
+        return result.Attempts % SkipOfferAttempts == 0;
+    }
+
+    private static void MergeMax(int[] best, int[] attempt)
+    {
+        for (int i = 0; i < AirframeCount; i++)
+        {
+            if (attempt[i] > best[i])
+            {
+                best[i] = attempt[i];
+            }
+        }
     }
 
     private static (List<int> Airframes, List<CustomPlaneDef> Builds) GrantAwards(
@@ -292,6 +370,8 @@ public static class CampaignProgression
         Money = attempt.Money,
         Airframe = attempt.Airframe,
         PlaneName = attempt.PlaneName ?? string.Empty,
+        Kills = (int[])attempt.Kills.Clone(),
+        AceKills = (int[])attempt.AceKills.Clone(),
     };
 
     private static float Ratio(int hits, int shots) => shots <= 0 ? 0f : hits / (float)shots;

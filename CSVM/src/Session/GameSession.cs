@@ -107,9 +107,10 @@ public partial class GameSession : Node3D
     // session and builds a fresh one. Nothing here can put a mission's opposition back on its own.
     private readonly Action _restartSession;
     // A campaign mission's end: the Launcher frees this session and reopens the launchscreen on
-    // the named profile's cabin. Null outside a menu-driven process (a --campaign= run from the
-    // command line has no cabin to return to and simply stays in the flown world).
-    private readonly Action<string>? _returnToCabin;
+    // the named profile's cabin, carrying the result so a page can be opened on it (B12). Null
+    // outside a menu-driven process (a --campaign= run from the command line has no cabin to
+    // return to and simply stays in the flown world).
+    private readonly Action<string, CampaignMissionResult>? _returnToCabin;
     // The process's music channel, owned by the Launcher so one channel outlives every session.
     // Handed to CampaignDirector, which is what routes the mission's own music cues into it.
     private readonly MusicPlayer? _music;
@@ -779,7 +780,7 @@ public partial class GameSession : Node3D
         }
 
         GD.Print($"campaign: {result.Outcome} — returning '{profile}' to the cabin");
-        _returnToCabin(profile);
+        _returnToCabin(profile, result);
     }
 
     // Places every rig at the --pos= placement BuildFlightRigs withheld while the intro owned

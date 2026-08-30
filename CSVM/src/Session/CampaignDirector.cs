@@ -8,9 +8,13 @@ using Godot;
 namespace CSVM.Session;
 
 /// <summary>What one flown campaign mission ended as: the outcome the objectives graph derived,
-/// the attempt recorded into the profile, and what recording it changed.</summary>
+/// the attempt recorded into the profile, and what recording it changed. <c>Chapter</c> and
+/// <c>SkipCapture</c> are what a screen taking the skip offer needs to record it as the win the
+/// original makes it (<see cref="CampaignProgression.AcceptSkip"/>); the capture is null unless
+/// this failure raised the offer, since it exists only while the flown world is still up.</summary>
 public readonly record struct CampaignMissionResult(
-    MissionOutcome Outcome, MissionAttempt Attempt, MissionRecorded Recorded);
+    MissionOutcome Outcome, MissionAttempt Attempt, MissionRecorded Recorded,
+    int Chapter = 0, IReadOnlyList<PersistedObject>? SkipCapture = null);
 
 /// <summary>
 /// The engine-side runtime of one campaign mission, behind <c>GameSession</c>'s one nullable
@@ -52,6 +56,12 @@ public sealed class CampaignDirector
     private readonly Dictionary<string, FlightController> _roster = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SurfaceVehicle> _vessels = new(StringComparer.OrdinalIgnoreCase);
+
+    // The two per-airframe kill tallies A2 decoded (docs/org/debrief.md#what-the-tallies-count),
+    // credited as the roster's own aircraft go down. Read into the mission-end attempt; never
+    // written from anywhere else.
+    private readonly int[] _kills = new int[CampaignProgression.AirframeCount];
+    private readonly int[] _aceKills = new int[CampaignProgression.AirframeCount];
     private World? _world;
     private ScriptedPathVehicles? _paths;
 
@@ -302,6 +312,7 @@ public sealed class CampaignDirector
             _roster[spawn.Name] = rig;
             _rosterPlans[spawn.Name] = spawn;
             rig.Group = spawn.Group;
+            rig.Downed += (_, killer) => CreditKill(spawn, killer);
             // The chapter's own copy of this vehicle is never placed, so anything it authors past
             // the shared airframe is grafted onto the rig here, while the rig is the plane the
             // block named and is already in the tree.
@@ -637,36 +648,82 @@ public sealed class CampaignDirector
         Log.Info("campaign", $"objective {t.Number} {kind}{by}{nap} at {t.Elapsed:0.0}s{gated}");
     }
 
+    // The single credit site, mirroring the original's one damage-resolver branch
+    // (docs/org/debrief.md#what-the-tallies-count): the player did it, the victim is hostile to
+    // the player, and the victim's airframe resolves against the eleven stock nodes. Everything
+    // else (a wingman going down, a mutual kill between two enemies, a surface or turret target,
+    // which never reaches this event) scores nowhere the debrief can see.
+    private void CreditKill(RosterSpawnPlan victim, int? killer)
+    {
+        if (killer is not int shooter || _world?.Player() is not { } player || shooter != player.PlayerIndex)
+        {
+            return;
+        }
+
+        if (victim.Team is not int side || !AimAssist.Hostile(AimAssist.PlayerTeam, side))
+        {
+            return;
+        }
+
+        if (UI.PlanePickerRoster.AirframeOf(victim.PlaneNode) is not { } airframe)
+        {
+            return;
+        }
+
+        if (victim.Ace)
+        {
+            _aceKills[airframe]++;
+        }
+        else
+        {
+            _kills[airframe]++;
+        }
+    }
+
     private void OnMissionEnded(MissionOutcome outcome)
     {
         var graph = Graph!;
         var plane = _profile.SelectedPlane >= 0 && _profile.SelectedPlane < _profile.Planes.Count
             ? _profile.Planes[_profile.SelectedPlane]
             : null;
-        // The money an attempt banks is the hangar economy's per-objective reward table, not this
-        // director's: it reports zero and CampaignProgression banks what it is told.
+        // The money an attempt banks is the hangar economy's, not this director's: it reports zero.
+        // Both of the original's mask loops run whatever the outcome, only bit 0 from the win flag
+        // (docs/org/debrief.md, "The completed-objective mask has two sources").
         var attempt = new MissionAttempt(
             _mission.Seq,
-            outcome == MissionOutcome.Won ? graph.CompletedMask : 0,
+            outcome == MissionOutcome.Won
+                ? graph.CompletedMask
+                : graph.CompletedMask & ~CampaignProgression.PrimaryObjectiveMask,
             (int)(graph.Elapsed * 1000f),
             _world?.Shots ?? 0,
             _world?.Hits ?? 0,
             0,
             plane?.Airframe ?? 0,
-            plane?.Name ?? string.Empty);
+            plane?.Name ?? string.Empty,
+            (int[])_kills.Clone(),
+            (int[])_aceKills.Clone());
         if (_world?.Runtime is { } runtime && CampaignPersistLog.CommitsOn(outcome))
         {
             _profile.PersistLog.Merge(_mission.Campaign, _mission.Seq, CampaignPersistLog.Capture(runtime));
         }
 
         var recorded = CampaignProgression.Record(_profile, attempt);
+        // The skip offer's Yes is a synthetic win whose save gate writes what the failed attempt
+        // left (docs/org/debrief.md), and that state exists only while the world is up. Captured
+        // here and carried; nothing commits it unless the offer is taken.
+        var skipCapture = recorded.SkipOffered && _world?.Runtime is { } lostWorld
+            ? CampaignPersistLog.Capture(lostWorld)
+            : null;
         _store?.Save(_profile);
         SaveAwardedBuilds(recorded);
-        Result = new CampaignMissionResult(outcome, attempt, recorded);
+        Result = new CampaignMissionResult(
+            outcome, attempt, recorded, _mission.Campaign, skipCapture);
         _leaving = LeavingHoldS;
         GD.Print($"campaign: mission {_mission.Ordinal} {outcome} — mask 0x{attempt.CompletedMask:x}, " +
                  $"{attempt.TimeMs / 1000}s, primary={recorded.PrimaryCompleted}, " +
-                 $"advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s); " +
+                 $"advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s), " +
+                 $"attempt {CampaignProgression.ResultOf(_profile, _mission.Seq)?.Attempts ?? 0} " +
+                 $"(skip offered={recorded.SkipOffered}); " +
                  $"holding the world {LeavingHoldS:0.#}s before leaving it");
     }
 

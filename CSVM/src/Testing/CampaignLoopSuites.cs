@@ -619,8 +619,9 @@ internal static class CampaignLoopSuites
         ctx.Check(result.Recorded.Advanced, $"and the campaign position advanced");
     }
 
-    // The cabin a flown mission returns to (Launcher.OpenCabin -> LaunchMenu.OpenCampaignCabin): a
-    // fresh flow over the store, seated on the profile as re-read from its file.
+    // The cabin the campaign flow lands on for a fresh profile pick, checked here on a flow built
+    // straight from the store (Launcher.OpenDebrief -> LaunchMenu.OpenCampaignScrapbook opens the
+    // debrief on top of it instead, C17, which is not this suite's own path).
     private static void ReturnToTheCabin(
         TestContext ctx, CampaignProfileStore store, UiStrings strings, StockLoadouts stock, StringBuilder report)
     {

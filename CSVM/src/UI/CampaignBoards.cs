@@ -66,6 +66,18 @@ public static class CampaignBoards
             new BoardSlot(BoardButton.ReplayMission, 0, PaperButton, 596, 505, true),
             new BoardSlot(BoardButton.ReturnToCabin, 0, ReturnToCabinArt, 593, 561),
         },
+        [CampaignScreen.Scrapbook] = new[]
+        {
+            new BoardSlot(BoardButton.ReplayMission, 0, PaperButton, 594, 505, true),
+            new BoardSlot(BoardButton.ReturnToCabin, 0, ReturnToCabinArt, 593, 561),
+            new BoardSlot(BoardButton.ScrapbookPrev, 0, Ui("SB_B_back_tab.png", StripFrames), 0, 465),
+            new BoardSlot(BoardButton.ScrapbookNext, 0, Ui("SB_B_more_tab.png", StripFrames), 708, 465),
+            new BoardSlot(BoardButton.CurrentMission, 0, Ui("SB_B_Currentmissiontab.png", StripFrames), 558, 7, true),
+        },
+        [CampaignScreen.ScrapbookZoom] = new[]
+        {
+            new BoardSlot(BoardButton.CloseZoom, 0, Ui("GN_B_Continue.png", StripFrames), 640, 519),
+        },
         [CampaignScreen.Briefing] = new[]
         {
             new BoardSlot(BoardButton.ReplayBriefing, 0, BriefButton, 197, 560, true),
@@ -101,6 +113,7 @@ public static class CampaignBoards
             new BoardPicture(Ui("CM_BackGround.png"), 193, 251),
         },
         [CampaignScreen.PreviousMissions] = new[] { new BoardPicture(Ui("SB_BackgroundTOC.jpg"), 0, 0) },
+        [CampaignScreen.Scrapbook] = new[] { new BoardPicture(Ui("SB_BackGround.jpg"), 0, 0) },
         [CampaignScreen.FlightCheck] = new[] { new BoardPicture(Ui("FC_BackGround.jpg"), 0, 0) },
         [CampaignScreen.Ammo] = new[] { new BoardPicture(Ui("OL_BackGround.jpg"), 0, 0) },
     };

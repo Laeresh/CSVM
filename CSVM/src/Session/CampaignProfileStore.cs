@@ -32,8 +32,9 @@ public sealed class OwnedPlane
     public bool Special { get; set; }
 }
 
-/// <summary>One run of a mission, the eight fields <c>saved-games.md</c>'s mission-result decode
-/// closed. The two twelve-byte counter arrays it left undecoded are not carried.</summary>
+/// <summary>One run of a mission, the eight scalar fields <c>saved-games.md</c>'s mission-result
+/// decode closed, plus the two per-airframe kill tallies A2 decoded
+/// (<c>docs/org/debrief.md#what-the-tallies-count</c>).</summary>
 public sealed class MissionRun
 {
     /// <summary>Completed-objective bitmask; bit 0 is the primary objective.</summary>
@@ -44,6 +45,14 @@ public sealed class MissionRun
     public int Money { get; set; }
     public int Airframe { get; set; }
     public string PlaneName { get; set; } = string.Empty;
+
+    /// <summary>Plain per-airframe kill counts, <see cref="CampaignProgression.AirframeCount"/>
+    /// slots wide. A file saved before this field existed reads all zero, which is the correct
+    /// reading: an earlier attempt left no per-airframe record to reconstruct.</summary>
+    public int[] Kills { get; set; } = new int[CampaignProgression.AirframeCount];
+
+    /// <summary>Ace per-airframe kill counts, same shape as <see cref="Kills"/>.</summary>
+    public int[] AceKills { get; set; } = new int[CampaignProgression.AirframeCount];
 }
 
 /// <summary>One mission's record, the original's two halves (<c>saved-games.md</c>, "The
@@ -61,6 +70,13 @@ public sealed class MissionResult
     /// <summary>The merged best/cumulative result, updated only by an attempt that completed the
     /// primary objective.</summary>
     public MissionRun Best { get; set; } = new();
+
+    /// <summary>Failed attempts at a mission that has never been completed: the original's own
+    /// per-mission counter at <c>[0x0071b494 + idx*0x10]</c>, whose every fourth increment raises
+    /// the skip offer (<c>docs/org/debrief.md</c>, "The four-attempt skip offer"). It belongs to
+    /// neither half, since it spans attempts where the attempt half is cleared by each one, and a
+    /// file saved before it existed reads 0.</summary>
+    public int Attempts { get; set; }
 }
 
 /// <summary>One campaign profile's persisted state: wallet, owned planes with their campaign fit,
@@ -224,6 +240,7 @@ public sealed class CampaignProfileStore
             {
                 w.WriteStartObject();
                 w.WriteNumber("seq", result.Seq);
+                w.WriteNumber("attempts", result.Attempts);
                 WriteRun(w, "latest", result.Latest);
                 WriteRun(w, "best", result.Best);
                 w.WriteEndObject();
@@ -333,6 +350,7 @@ public sealed class CampaignProfileStore
                     def.MissionResults.Add(new MissionResult
                     {
                         Seq = ReadInt(r, "seq", 0),
+                        Attempts = ReadInt(r, "attempts", 0),
                         Latest = ReadRun(r, "latest"),
                         Best = ReadRun(r, "best"),
                     });
@@ -521,6 +539,8 @@ public sealed class CampaignProfileStore
         w.WriteNumber("money", run.Money);
         w.WriteNumber("airframe", run.Airframe);
         w.WriteString("planeName", run.PlaneName);
+        WriteInts(w, "kills", run.Kills);
+        WriteInts(w, "aceKills", run.AceKills);
         w.WriteEndObject();
     }
 
@@ -531,7 +551,7 @@ public sealed class CampaignProfileStore
             return new MissionRun();
         }
 
-        return new MissionRun
+        var run = new MissionRun
         {
             CompletedMask = ReadInt(r, "completedMask", 0),
             TimeMs = ReadInt(r, "timeMs", 0),
@@ -543,6 +563,9 @@ public sealed class CampaignProfileStore
                 ? n.GetString() ?? string.Empty
                 : string.Empty,
         };
+        ReadInts(r, "kills", run.Kills);
+        ReadInts(r, "aceKills", run.AceKills);
+        return run;
     }
 
     private static void ReadPersistLog(JsonElement root, CampaignProfileDef def)

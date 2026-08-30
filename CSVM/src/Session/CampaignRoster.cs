@@ -91,6 +91,11 @@ public sealed class RosterSpawnPlan
 
     public bool Nitro { get; init; }
 
+    /// <summary>The roster's own <c>ace</c> flag (slot 67): the block a mission script singles
+    /// out, whose kill the debrief credits into the starred tally instead of the plain one
+    /// (docs/org/debrief.md#what-the-tallies-count).</summary>
+    public bool Ace { get; init; }
+
     public string? TaxiPath { get; init; }
 
     public float? PrefEngageAlt { get; init; }
@@ -263,6 +268,7 @@ public sealed class CampaignRosterPlan
                 Biases = AiSkills.RosterRatingBiases(fields),
                 AccentId = AiSkills.RosterAccentId(fields),
                 Nitro = AiSkills.RosterNitro(fields),
+                Ace = AiSkills.RosterAce(fields),
                 TaxiPath = AiSkills.RosterTaxiPath(fields),
                 PrefEngageAlt = AiSkills.RosterPrefEngageAlt(fields),
                 Title = AiSkills.RosterTitle(fields),

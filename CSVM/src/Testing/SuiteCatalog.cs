@@ -192,6 +192,7 @@ public static class SuiteCatalog
         "campaign-roster",
         "generator-roster-params",
         "campaign-bomber-formation",
+        "campaign-kill-credit",
         "campaign-loop",
         "campaign-zeppelins",
         "campaign-danger-zones",
@@ -1038,6 +1039,13 @@ public static class SuiteCatalog
             + "and fly one node of it together for a minute with nobody engaging them, and a "
             + "certain steady-hand failure on one leaves it on that node and back with the other two",
             BomberFormation));
+        into.Add(new TestHarness.Suite("campaign-kill-credit",
+            "the debrief's two per-airframe kill tallies (BL-622/B13), credited off real Downed "
+            + "reports over C3/M05's shipped roster: two of the three netted britbalmoral bombers "
+            + "and three of the five plain britpeace Peacemakers land in the plain array, the ace "
+            + "britpeace_7 lands in the starred array instead, and a friendly wingman's loss and an "
+            + "unattributed one reach neither",
+            CampaignKillCredit));
 
         // ⚠ Keep after every other content suite: it leaves its own profile file behind for the
         // next process to read. campaign-zeppelins below touches none of that state.

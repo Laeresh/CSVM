@@ -66,7 +66,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 57–64 | `anose hnose atail htail aleft hleft aright hright` | **per-zone armour + health**, in `(armor, health)` pairs over the four damage zones nose / tail / left / right — the same zone set and the same armour-first two-pool model as the player's `destroyable_parts` ([vehicle.md](vehicle.md#armor-and-hit-points)) |
 | 65 | `accentID` | **the voice id** → row in `voice.zrd` → `soundsh/VO_id<N>_*` clips |
 | 66 | `armor` | |
-| 67 | `ace` | `1` on **26 blocks** across the 53 rosters and `0` on the other 388. Every one of the 26 also authors a `MSG_*_NAME` in slot 20 and a complete skill vector, and each is the block the mission's own script singles out. **It is read**: the block reader stores it at the block struct's `+0xa4` (`0x00437ea0`) and the spawn path copies it to the AI entity's `+0x988` (`0x0047ca42`–`0x0047ca4b`), where one read at `0x0047cde2` sits immediately before the skill block and gates skill interpolation. The Instant Action spawner sets the same field. ⚠ **What the gate does to a rating is not decoded**, nor is the second read at `0x004ba23a`. Narrower than the skill vector, see [below](#the-skill-vector) |
+| 67 | `ace` | `1` on **26 blocks** across the 53 rosters and `0` on the other 388. Every one of the 26 also authors a `MSG_*_NAME` in slot 20 and a complete skill vector, and each is the block the mission's own script singles out. **It is read**: the block reader stores it at the block struct's `+0xa4` (`0x00437ea0`) and the spawn path copies it to the AI entity's `+0x988` (`0x0047ca42`–`0x0047ca4b`), where one read at `0x0047cde2` sits immediately before the skill block and gates skill interpolation. The Instant Action spawner sets the same field. **The second read, at `0x004ba23a`, is the scrapbook's**: it picks which of the mission's two per-airframe kill tallies a kill is credited to, and the ace tally is the one the debrief draws with a star ([org/debrief.md](../org/debrief.md#what-the-tallies-count)). ⚠ **What the skill-path gate does to a rating is still not decoded.** Narrower than the skill vector, see [below](#the-skill-vector) |
 | 68–71 | `pattern decal1 decal2 decal3` | livery ([paint.md](paint.md)) |
 | 72–80 | `r1 g1 b1 r2 g2 b2 r3 g3 b3` | livery colours ([paint.md](paint.md)) |
 
@@ -207,8 +207,11 @@ string adjacency. CM02 (`C3/M05`, "The Great British Bomber Heist") is the worke
 
 - **The flag.** Slot 67 is `1` on `britpeace_7` and on no other block in the mission. The five other
   British Peacemakers author no slot-20 title either, so the roster distinguishes exactly one of the
-  six. The engine carries the flag through to the AI entity and reads it on the skill path
-  ([above](#field-table)); what it does there is undecoded, so treat the flag as identity here.
+  six. The engine carries the flag through to the AI entity and reads it twice
+  ([above](#field-table)): what the skill path does with it is undecoded, but the debrief counts an
+  ace kill into its own tally and stamps it with a star. CM02's own scrapbook page is the confirming
+  case, a starred `1 Peacemaker` beside the plain `3 Peacemaker` of the other five
+  ([org/debrief.md](../org/debrief.md#the-stamps-and-the-total)).
 - **The cohort and the mission script.** `britpeace_7` is the sole member of `group` 4, and the
   mission's SECONDARY objective is a `DEDG` over group 4 whose completion plays the ace's death
   chatter (`snd_HA5AceDead`). `group` is the join key ([above](#group-is-a-cohort-id-not-a-formation)),

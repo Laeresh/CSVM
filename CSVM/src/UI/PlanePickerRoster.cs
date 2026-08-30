@@ -40,6 +40,20 @@ public static class PlanePickerRoster
     public static string AirframeNode(int airframe) =>
         AirframeNodes[Math.Clamp(airframe, 0, AirframeNodes.Length - 1)];
 
+    /// <summary>The inverse of <see cref="AirframeNode"/>: the airframe id a stock player node
+    /// flies as, or null when the node names none of the eleven (a surface hull's own
+    /// library-root model has no airframe).</summary>
+    public static int? AirframeOf(string node)
+    {
+        for (int i = 0; i < AirframeNodes.Length; i++)
+        {
+            if (string.Equals(AirframeNodes[i], node, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+
+        return null;
+    }
+
     /// <summary>Builds the picker roster: every stock row in its given order, then one row per
     /// saved custom in the store's own (name-sorted) order.</summary>
     public static IReadOnlyList<PickerPlane> Build(

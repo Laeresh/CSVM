@@ -26,6 +26,14 @@ public enum CampaignScreen
 
     /// <summary>Ammunition and ordnance for one aircraft.</summary>
     Ammo,
+
+    /// <summary>The scrapbook's results page (spread 1), opened on the mission a finished mission
+    /// just flew, cabin on its far side (C17).</summary>
+    Scrapbook,
+
+    /// <summary>One scrap's detail view (D19), opened on <see cref="CampaignFlow.ZoomTarget"/> and
+    /// closing back to <see cref="Scrapbook"/>.</summary>
+    ScrapbookZoom,
 }
 
 /// <summary>How a campaign flow ended, or that it is still running.</summary>
@@ -141,6 +149,8 @@ public sealed class CampaignFlow
         [CampaignScreen.Briefing] = flow => new CampaignBriefingPage(flow),
         [CampaignScreen.FlightCheck] = flow => new CampaignFlightCheckPage(flow),
         [CampaignScreen.Ammo] = flow => new CampaignAmmoPage(flow),
+        [CampaignScreen.Scrapbook] = flow => new CampaignScrapbookPage(flow),
+        [CampaignScreen.ScrapbookZoom] = flow => new CampaignScrapbookZoomPage(flow),
     };
 
     private readonly Dictionary<CampaignScreen, ICampaignPage> _pages = new();
@@ -204,6 +214,11 @@ public sealed class CampaignFlow
     /// check's two rows, <c>docs/formats/campaign-screens.md</c>). The flight check sets it before
     /// opening the ammo screen.</summary>
     public int AmmoSlot { get; private set; }
+
+    /// <summary>The scrap <see cref="CampaignScreen.ScrapbookZoom"/> is open on: the
+    /// <c>SCRAPBOOK.CSV</c> mission slot, spread and item a scrapbook page's row named (D19). Null
+    /// until <see cref="SetScrapbookZoom"/> is called.</summary>
+    public (int Mission, int Spread, int Item)? ZoomTarget { get; private set; }
 
     /// <summary>The screen showing.</summary>
     public CampaignScreen Screen => _stack[^1];
@@ -356,6 +371,9 @@ public sealed class CampaignFlow
 
     /// <summary>Points the ammo screen at the pilot's (0) or the wingman's (1) aircraft.</summary>
     public void SetAmmoSlot(int slot) => AmmoSlot = slot;
+
+    /// <summary>Names the scrap <see cref="CampaignScreen.ScrapbookZoom"/> opens on.</summary>
+    public void SetScrapbookZoom(int mission, int spread, int item) => ZoomTarget = (mission, spread, item);
 
     /// <summary>Seats the profile every screen after the roster reads, and opens the cabin.</summary>
     public void SelectProfile(CampaignProfileDef profile)

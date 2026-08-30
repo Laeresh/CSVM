@@ -203,6 +203,93 @@ public class CampaignProgressionTests
         Assert.Empty(recorded.AwardedBuilds);
     }
 
+    /// <summary>BL-622/B14: the offer is on a counter, not on a single failure. Three failures pass
+    /// in silence and the fourth raises it, and the counter is the mission's own, so a failure at
+    /// another mission does not move it (docs/org/debrief.md, "The four-attempt skip offer").</summary>
+    [Fact]
+    public void TheSkipOfferComesOnTheFourthFailedAttemptAndNotTheThird()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+
+        var failures = new bool[4];
+        for (int i = 0; i < 4; i++)
+        {
+            CampaignProgression.Record(profile, Attempt(1, mask: 0, timeMs: 20000));
+            failures[i] = CampaignProgression.Record(profile, Attempt(0, mask: 4, timeMs: 61000)).SkipOffered;
+        }
+
+        Assert.Equal(new[] { false, false, false, true }, failures);
+        Assert.Equal(4, CampaignProgression.ResultOf(profile, 0)!.Attempts);
+        Assert.Equal(0, profile.MissionsCompleted);
+    }
+
+    /// <summary>Declining is doing nothing: the offer leaves no mark of its own, so the campaign
+    /// stands where the fourth failure left it and the fifth failure counts 5 rather than starting
+    /// the count again.</summary>
+    [Fact]
+    public void DecliningTheSkipLeavesTheCampaignWhereItWas()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        for (int i = 0; i < 4; i++)
+        {
+            CampaignProgression.Record(profile, Attempt(0, mask: 0, timeMs: 61000));
+        }
+
+        var fifth = CampaignProgression.Record(profile, Attempt(0, mask: 0, timeMs: 61000));
+
+        Assert.False(fifth.SkipOffered);
+        Assert.Equal(5, CampaignProgression.ResultOf(profile, 0)!.Attempts);
+        Assert.Equal(0, profile.MissionsCompleted);
+        Assert.Equal(0, CampaignProgression.ResultOf(profile, 0)!.Best.CompletedMask);
+        Assert.Empty(CampaignProgression.CompletedSeqs(profile));
+    }
+
+    /// <summary>Accepting is the original's synthetic win: the win flag is set and the debrief runs
+    /// again, so the position advances, the best-of merges and the failed attempt's world state is
+    /// committed the way a won mission's is.</summary>
+    [Fact]
+    public void AcceptingTheSkipAdvancesTheCampaignTheWayAWinDoes()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        var attempt = Attempt(0, mask: 4, timeMs: 61000);
+        for (int i = 0; i < 4; i++)
+        {
+            CampaignProgression.Record(profile, attempt);
+        }
+
+        var skipped = CampaignProgression.AcceptSkip(profile, attempt, chapter: 1, capture: new[]
+        {
+            new PersistedObject(12, "aa_gun", "aa_gun_03", true, 0f, 0),
+        });
+
+        Assert.True(skipped.PrimaryCompleted);
+        Assert.True(skipped.Advanced);
+        Assert.Equal(1, profile.MissionsCompleted);
+        var result = CampaignProgression.ResultOf(profile, 0)!;
+        Assert.Equal(5, result.Latest.CompletedMask);
+        Assert.Equal(5, result.Best.CompletedMask);
+        Assert.Equal(4, result.Attempts);
+        Assert.Equal(1, profile.PersistLog.Count);
+        Assert.Equal(new[] { 0 }, CampaignProgression.CompletedSeqs(profile).ToArray());
+    }
+
+    /// <summary>The counter moves only while the mission stands uncompleted, so a mission already
+    /// finished never offers a skip however many replays are lost.</summary>
+    [Fact]
+    public void ACompletedMissionNeverOffersASkipHoweverOftenItIsLost()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0, mask: 1, timeMs: 45000));
+
+        for (int i = 0; i < 8; i++)
+        {
+            Assert.False(CampaignProgression.Record(profile, Attempt(0, mask: 0, timeMs: 61000)).SkipOffered);
+        }
+
+        Assert.Equal(0, CampaignProgression.ResultOf(profile, 0)!.Attempts);
+        Assert.Equal(1, profile.MissionsCompleted);
+    }
+
     private static MissionAttempt Attempt(int seq, int mask, int timeMs) =>
         new(seq, mask, timeMs, 100, 25, 0, 5, "Gypsy Magic");
 }

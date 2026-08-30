@@ -897,21 +897,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   incremental migration note, `TurretController`, `BL-611`'s closing commit
   (`git log --grep=BL-611`).
 
-- `BL-622` `[Feature]` **No debrief screen: a finished mission drops straight back to the cabin.**
-  *Evidence:* reported at the controls, on a won and on a lost mission alike. `CampaignDirector`
-  records the attempt, writes the profile and raises `ReturnToCabin`; `GameSession.
-  OnCampaignMissionEnded` prints one `GD.Print` and calls the launcher's return, which reopens the
-  launchscreen on the cabin, so nothing between the mission ending and the cabin exists. The
-  result the screen would show is already carried: `CampaignMissionResult` has the outcome, the
-  attempt, the recorded flags and the won mission's `CompletedMask`. *Fix shape:* a page in the
-  `CampaignFlow` board family (`CampaignCabinPage`, `CampaignPreviousMissionsPage` are the nearest
-  shapes) shown between the mission and the cabin, reading that result; the original's own debrief
-  layout, its per-objective lines and its scoring are undecoded and are the first job.
-  *⚠ Traps:* the world stays up for the rest of the frame after the end is raised, so the page
-  belongs to the launchscreen side, not the session's. *Cross-refs:* `CampaignFlow`,
-  `CampaignProgression`, `docs/formats/saved-games.md`, `BL-620`'s and `BL-623`'s closing commits
-  (`git log --grep=BL-620`); the held two seconds `BL-623` added are where this screen belongs.
-
 - `BL-621` `[Bug]` **CM07 (C1/M02): the parachutist is gone from the hangar drop since the chute
   pool landed.** *Evidence:* reported at the controls; before `BL-608` the drop showed the pilot
   parachuting into the hangar while the aeroplane was missing, and now the aeroplane is there and

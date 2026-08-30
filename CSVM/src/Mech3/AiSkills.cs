@@ -127,6 +127,10 @@ public sealed class AiSkills
     private const int TaxiPathSlot = 40;
     private const int AccentSlot = 65;
 
+    // Roster slot 67: ace, the flag the debrief's kill-crediting reads to choose the starred
+    // tally over the plain one (docs/formats/ai-rosters.md "Field table").
+    private const int AceSlot = 67;
+
     private readonly Dictionary<string, (float At1, float At9)> _params =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -286,6 +290,12 @@ public sealed class AiSkills
     /// <summary>Reads a roster block's <c>accentID</c> (slot 65), the voice id, or null on
     /// <c>-1</c> or a short block.</summary>
     public static int? RosterAccentId(IReadOnlyList<object?> fields) => IntSlot(fields, AccentSlot);
+
+    /// <summary>Reads a roster block's <c>ace</c> flag (slot 67): true on the 26 blocks a mission
+    /// script singles out, whose kill the debrief credits into the starred tally instead of the
+    /// plain one (docs/org/debrief.md#what-the-tallies-count).</summary>
+    public static bool RosterAce(IReadOnlyList<object?> fields) =>
+        fields.Count > AceSlot && fields[AceSlot] is float f && f >= 1f;
 
     /// <summary>Reads a roster block's <c>rating_biases</c> (slot 33): the authored
     /// [pattern, bias, ?] entries in order, or an empty list when the slot is null, omitted or
