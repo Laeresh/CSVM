@@ -1726,6 +1726,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   asserted against its authored value, so a hand-set number here would sit next to a pinned one.
   *Cross-refs:* `BL-545` (the same landing's hook, height and wing-fold reads).
 
+- `BL-652` `[Research]` **Why an authored fork's sensor nodes start inactive is not traced to a
+  rule, so a fork placed away from the world origin may start open.** *Evidence:* found while
+  verifying the node-active `ACTIVATION_PREREQUISITE` gate over C1C/M01 (`git log --grep=BL-525`).
+  A definition forks on a sensor node's active state, and the fork only starts closed because that
+  node reads INACTIVE at the world build: `wv_tailhook/dropoff_node` and `pickup_node` are both
+  inactive until OBJECTIVE11 and OBJECTIVE15 wake them, which is what keeps the wrong docking leg
+  from running. The nodes are `active: true` in C1C's gamez, so the state the gate reads comes from
+  the build's own hide-unplaced rule rather than from the data's flag, and the agreement between the
+  two was not traced. It holds today in both C1C/M01's docking and CM07's hangar drop.
+  *What would settle it:* find the build rule that decides a sensor node's initial visibility and
+  establish whether it keys on placement, on the node's own flag, or on something else, then check a
+  fork whose sensor is placed away from the world origin against it. 784 REQUIRED node entries
+  across 112 root definitions ride this, so a fork starting open is a whole authored branch running
+  when it should not. *⚠ Traps:* this is a question, not a defect: nothing observed is wrong today,
+  and a change made on the strength of the coincidence alone would move behaviour that is currently
+  correct. Do not "fix" the flag to match the observed state.
+  *Cross-refs:* [`docs/formats/anim-definitions.md`](docs/formats/anim-definitions.md) (the
+  prerequisite's census and both parse paths).
+
 ## Audio
 
 - `BL-455` `[Feature]` **There is no audio options menu, so the music level is a hard-coded
@@ -2253,6 +2272,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   path was last changed to give a cockpit seat its view back (`git log --grep=BL-625`), which is the
   nearest reading of what that path already writes. *Cross-refs:* `BL-566`.
 
+- `BL-649` `[Bug]` **The debug vantages take the camera without giving the airframe back, so a pilot
+  pinned there from the cockpit view keeps the interior over the debug camera.** *Evidence:* found
+  while landing the cutscene presentation's own fix. `FlightController.CameraOwned` silences the
+  per-frame arm that re-asserts the first-person visibility rules, so every caller that sets it owes
+  the aircraft's visibility at both edges. The cutscene presentation now writes them through
+  `FlightController.SetViewedFromOutside` (`git log --grep=BL-625`); `--debug-spectate`
+  (`Session/GameSession.cs`) and the weapon lab set `CameraOwned` without it, so a pilot in
+  `PilotViewMode.Cockpit` when either takes the view keeps `Shown(Interior: true, Body: false)`: the
+  airframe undrawn and the cockpit panel drawn over the debug camera. *Fix shape:* call the same
+  seam from both, which is a line each; the judgement is only whether either wants the restore leg,
+  since neither hands flight back the way a cutscene does. `SpectateHandoff` needs nothing, because
+  it follows a death and `CutToCrashView` has already left first person. *⚠ Traps:* debug modes
+  only, so this changes nothing a player sees; do not widen it into the crash or respawn paths,
+  which rebuild the view themselves. *Cross-refs:* `git log --grep=BL-625` (the seam and why both
+  edges belong to the caller).
+
 ## HUD & UI
 
 - `BL-496` `[Feature]` **The aiv `ace` flag reaches the entity and nothing is known about what it
@@ -2375,6 +2410,35 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   mapping is decoded. ⚠ The binding is `F9` / left-stick click, not the original's `A`
   (`docs/controls.md`), so a resolved string that names the key needs the port's key substituted.
   *Cross-refs:* `docs/plans/PLAN-M5-polish-2.md` C10.
+
+- `BL-650` `[Feature]` **The campaign hangar's decoded slot cap is not enforced, so a profile can
+  buy without limit.** *Evidence:* found while landing the campaign Plane Construction screen
+  (`git log --grep=BL-634`). The original's profile holds 25 plane records and its free-slot finder
+  reserves six of them (`FUN_004111f0`), refusing a purchase past that with langui 204
+  `IDS_PN_TOOMANYPLANES`. Nothing in the remake caps a campaign purchase: `HangarCampaignContext.Purchase`
+  debits and records with no count check, so a wealthy profile grows its inventory past anything the
+  original would accept. *Fix shape:* the refusal belongs beside the two that already exist, the
+  reward-aircraft one and the two-plane floor, so the shape is a third gate reading
+  `Profile.Planes.Count` against the decoded cap and composing 204. *⚠ Traps:* the cap is on
+  RECORDS, not on the build directory, which the two modes share; counting files would let an
+  Instant Action build refuse a campaign purchase. Read what the reserved six are for before
+  choosing the number, since a cap of 25 and a cap of 19 are different readings of the same decode.
+  *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) (the slot rules), `BL-651` (the other
+  half of the two modes over one store).
+
+- `BL-651` `[Bug]` **Instant Action's build list shows every campaign plane, with no Export step to
+  put them there.** *Evidence:* the mirror image of the campaign listing fixed in
+  `git log --grep=BL-634`. Ownership now separates the campaign's roster from the shared
+  `user://Planes/` store, but Instant Action's own flow still lists that whole directory, which
+  includes every campaign build. The original gates the crossing behind an Export button on the
+  campaign side (langui 1139, 702 and 1256, refusal 1254), so a campaign aircraft reaches Instant
+  Action only when the player sends it there. *Fix shape:* the campaign flow needs the Export verb
+  and Instant Action's list needs to show only what was exported, which means a marker the store
+  carries rather than a second directory. *⚠ Traps:* do not give either mode its own build
+  directory. The two profile-seeded starters are never hangar-built and have no entry there at all,
+  which is why the campaign roster resolves them from the ownership record; a per-mode store would
+  strand them. *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) ("The inventory screen's own
+  strings"), `BL-650`.
 
 - `BL-635` `[Bug]` **CM11 (C2/M02): the stunt planes carry no objective marker, though their roster
   blocks name one.** *Evidence:* reported at the controls and still open after the mission's other
