@@ -126,6 +126,26 @@ public sealed partial class ComposedBoardView : Control
             DrawPlaque(fit, font, plaque);
         }
 
+        // Over the finished screen: an open drop-down list covers the widgets it hangs across, and
+        // a dialog covers the list too.
+        foreach (var panel in board.Overlays)
+        {
+            foreach (var fill in panel.Fills)
+            {
+                DrawFill(fit, fill);
+            }
+
+            foreach (var picture in panel.Pictures)
+            {
+                DrawPicture(fit, picture);
+            }
+
+            foreach (var line in panel.Lines)
+            {
+                DrawText(fit, line.Italic ? Slanted(font) : font, line);
+            }
+        }
+
         DrawHints(fit, font);
     }
 

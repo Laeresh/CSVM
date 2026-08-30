@@ -110,6 +110,11 @@ public interface ICampaignPage
     /// <see cref="BoardButton.None"/> means the row is list text, which is the default.</summary>
     BoardButtonRef Button(int row);
 
+    /// <summary>The drop-down list row <paramref name="row"/> is, or null when it is not one. ⚠ A
+    /// combo may only be open while its own row is focused: the flow finds the open one by asking
+    /// the focused row, so a page that leaves one open behind a moved cursor strands it.</summary>
+    CampaignCombo? Combo(int row);
+
     /// <summary>A second, smaller picture for the focused row, or null for none.</summary>
     HangarArt? RowArt(int row);
 
@@ -261,6 +266,13 @@ public sealed class CampaignFlow
     /// reads this to decide whether to hand over its cursor axes or the pad's alone.</summary>
     public bool CapturesText => Page.TextEntry is { Active: true };
 
+    /// <summary>The drop-down list standing open, or null. Only the focused row's own combo can be
+    /// one, which is the invariant <see cref="ICampaignPage.Combo"/> states.</summary>
+    public CampaignCombo? OpenCombo =>
+        Page.Combo(Math.Clamp(Row, 0, Math.Max(0, Page.RowCount - 1))) is { Open: true } combo
+            ? combo
+            : null;
+
     /// <summary>Whether a screen has a page of its own yet.</summary>
     public static bool HasPage(CampaignScreen screen) => Registry.ContainsKey(screen);
 
@@ -272,6 +284,13 @@ public sealed class CampaignFlow
         if (Page.TextEntry is { Active: true } entry)
         {
             return dir < 0 ? entry.Append() : entry.Backspace();
+        }
+
+        // An open drop-down owns the axis: the cursor is inside the list, not on the screen's rows.
+        if (OpenCombo is { } combo)
+        {
+            Message = string.Empty;
+            return combo.Move(dir);
         }
 
         int count = Page.RowCount;
@@ -297,6 +316,13 @@ public sealed class CampaignFlow
         if (Page.TextEntry is { Active: true } entry)
         {
             return entry.StepLast(dir);
+        }
+
+        // The stepper is the closed field's shortcut. Inside an open list it means nothing, and
+        // stepping the pick under the cursor would leave the two disagreeing.
+        if (OpenCombo != null)
+        {
+            return false;
         }
 
         Message = string.Empty;
@@ -554,6 +580,9 @@ public abstract class CampaignPage : ICampaignPage
 
     /// <inheritdoc/>
     public virtual BoardButtonRef Button(int row) => BoardButtonRef.None;
+
+    /// <inheritdoc/>
+    public virtual CampaignCombo? Combo(int row) => null;
 
     /// <inheritdoc/>
     public virtual HangarArt? RowArt(int row) => null;

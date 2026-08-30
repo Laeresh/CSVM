@@ -49,6 +49,13 @@ shell draws, not a rider on this screen, and it has its own item.
 | 9 | Can a guest export? | **No, the button is not drawn on a guest's check.** A guest flies a session copy carrying the owner's plane name, and exporting it would rewrite the owner's stored record. |
 | 10 | How is any of this seen? | **A debug flag opens the flow on a named screen**, so a scripted `--screenshot` captures each one against the reference images. |
 
+## ⚠ Read this before implementing anything
+
+| # | The wrong claim | How it died |
+|---|---|---|
+| 1 | Nothing opens a campaign screen for a screenshot, so this plan needs a new debug flag. | `--menu=` already takes a screen name and `LaunchMenu.OpenCampaignAid` already accepts twelve campaign values, including `campaign-flightcheck` and `campaign-ammo`, each over a scratch profile (`LaunchMenu.cs:1678`). A3 shrank to registering one more value. |
+| 2 | The screenshot aid's seeded profile owns two planes, so CHANGE PLANE is not drawn on it. | `AidProfileStore` flies three missions and ordinal 2 grants "Jumping Jane" (`CampaignProgression.AircraftAwards`), so it owns three and the gate passes. Nothing needed seeding. |
+
 ## What the data actually ships
 
 `extracted/rof/ASSETS/LAYOUT.CSV`, section `[@PlaneSelection@]`, with `GX=553`, `V3=444`,
@@ -128,9 +135,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the machinery
 
-1. ☐ A1 A combo-box widget on the campaign board, closed field and scrolling popup list
+1. ☑ A1 A combo-box widget on the campaign board, closed field and scrolling popup list
 2. ☐ A2 A flow-level modal dialog over the composed board
-3. ☐ A3 A debug flag that opens the campaign flow on a named screen
+3. ☐ A3 Register `campaign-planeselection` with the existing `--menu=` aid (runs after B4)
 
 ### Wave B — the plane selection screen
 
@@ -150,9 +157,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ## Dependency and parallelism notes
 
-A1 and A2 are independent of each other and both block Wave B; A3 is independent of everything and
-is worth landing first because every later item is verified through it. B4 needs A1; B5 needs A2 and
-B4; B6 needs A2 and B4. C7, C8 and C9 all need Wave B done, and C9 additionally needs A1 alone.
+A1 and A2 are independent of each other and both block Wave B. A3 is the exception to its own wave:
+the aid cannot open a screen that does not exist, so it runs after B4 even though its machinery is
+Wave A's. B4 needs A1; B5 needs A2 and B4; B6 needs A2 and B4. C7, C8 and C9 all need Wave B done,
+and C9 additionally needs A1 alone.
 
 File contention, so these must not run as parallel worktrees: A1, B4 and C9 all edit
 `CampaignBoards.cs`; A2, B4 and C8 all edit `CampaignFlow.cs`; C7 and C8 both edit
@@ -162,7 +170,7 @@ File contention, so these must not run as parallel worktrees: A1, B4 and C9 all 
 
 # Wave A — the machinery
 
-## A1 ☐ A combo-box widget on the campaign board, closed field and scrolling popup list
+## A1 ☑ A combo-box widget on the campaign board, closed field and scrolling popup list
 
 **Goal.** A page can declare a combo box: a value, a list of entries and an authored rectangle.
 Closed it draws the current entry and the down arrow. Confirming on it opens a list at the layout's
@@ -234,33 +242,34 @@ navigation. The modal is not that, and the two must not be wired together: a ref
 raises a modal would show the same words twice. A modal raised from inside `Accept` must not have
 its own confirm consumed by the same press that raised it.
 
-## A3 ☐ A debug flag that opens the campaign flow on a named screen
+## A3 ☐ Register `campaign-planeselection` with the existing `--menu=` aid
 
-**Goal.** One command opens the game on a named campaign screen over a seeded profile, so a
-scripted `--screenshot` captures the flight check, the plane selection and the ammo screen without
-anyone clicking through the launchscreen.
+**Goal.** `--menu=campaign-planeselection --screenshot` photographs the new screen over the same
+scratch profile every other campaign aid uses.
 
-**Evidence (confidence: traced).** `docs/cli.md` lists no flag that opens a menu screen;
-`--campaign=<profile>:<seq>` launches a mission and skips the screens entirely, and `--menu` only
-forces the launchscreen's first page. The flow is already constructible off a profile store
-(`CampaignFlow`'s constructor) and already opens on an arbitrary screen through `GoTo`, so the flag
-is a launch-time call rather than a new path through the shell.
+**Evidence (confidence: traced. ⚠ This item's first reading was wrong and is recorded below.)** The
+flag this plan set out to add already exists. `--menu=` takes a screen name
+(`SessionSpec.MenuStartScreen`, `Launcher.cs:902`) and `LaunchMenu.OpenCampaignAid` already accepts
+`campaign-flightcheck`, `campaign-ammo`, `campaign-guestcheck[:player]` and nine more, each walking
+a seeded scratch profile under `%TEMP%\CSVM\menu-aid-profiles` so no aid can write into a real
+campaign (`LaunchMenu.cs:1678-1812`). The seeded profile is also already rich enough for this
+screen: `AidProfileStore` flies three missions, and ordinal 2's award grants airframe 2 as
+"Jumping Jane" (`CampaignProgression.AircraftAwards`), so the profile owns three planes and
+`ChangePlaneAllowed`'s three-plane gate passes.
 
-**Approach.** A `--debug-campaign-screen=<screen>[:<seq>]` flag parsed where the other debug flags
-are, selecting or creating a profile with enough planes for the screen to be interesting (the plane
-picker needs three owned planes to draw CHANGE PLANE at all), setting the mission sequence and
-calling `GoTo`. Document it in `docs/cli.md` beside the other debug flags. Screens beyond the three
-this plan touches are worth accepting by name too, since the cost is one enum parse.
+**Approach.** One value in `OpenCampaignAid`'s accepted set, one `case` in `WalkCampaignAid` that
+sets the mission, the slot and goes to the new screen, and the value added to `docs/cli.md`'s
+`--menu=` list. The cursor-step argument the other campaign values take applies unchanged, which is
+how a shot lands focus on EXPORT or on the wingman combo.
 
-**Model recommendation.** medium. Mechanical plumbing along a path the CLI already has many
-examples of.
+**Model recommendation.** medium. Three lines along a path with a dozen worked examples beside them.
 
-**Verify.** Run it for each of the three screens with `--screenshot` and confirm the shot lands on
-the named screen. This item's own output is the instrument the rest of the plan is verified with, so
-it is worth checking that a wrong screen name fails loudly rather than opening the roster.
+**Verify.** `--menu=campaign-planeselection --screenshot` lands on the screen, and
+`--menu=campaign-planeselection:3` moves the focus.
 
-**⚠ Traps.** The seeded profile must not be written into the player's real profile directory as a
-side effect of a debug flag. Use an obviously-named throwaway profile, the way `--campaign=` does.
+**⚠ Traps.** This item now runs after B4, since the aid cannot open a screen that does not exist.
+An unrecognised value returns silently from `OpenCampaignAid` and leaves the launchscreen on its
+mode page, so a typo looks like a screenshot of the wrong screen rather than an error.
 
 # Wave B — the plane selection screen
 
