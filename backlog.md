@@ -675,7 +675,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   directions.** *Evidence:* the user at the controls of the original, 2026-08-14: the player selects
   an individual hardpoint (the half that settled `BL-062`, closed the same day), and the selection
   can be stepped clockwise *and* counter-clockwise. Ours has exactly one selector input per weapon,
-  `H` / D-pad Right for pylons and `G` / D-pad Left for gun groups
+  `H` / D-pad Left for pylons and `G` / D-pad Right for gun groups
   (`FlightController.cs:1456`, `docs/controls.md`), and `WeaponCursor.NextSelectable`
   (`WeaponCursor.cs:34`) only ever scans forward. **Direct corroboration, `PLAN-targeting.md` A1
   (2026-08-16):** the original's own Weapons keybind page carries `Cycle guns clockwise` (`F3`) and
