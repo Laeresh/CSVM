@@ -7,10 +7,10 @@ namespace CSVM.UI;
 /// The four ratings the plane selection screen prints beside an aircraft (<c>PS_T_TOPSPEEDP</c> and
 /// its three neighbours), each as a 0-to-4 index into langui 501-505, Poor to Excellent.
 ///
-/// <para>⚠ Only <see cref="Agility"/> is decoded. The other three are stand-ins built from the
+/// ⚠ Only <see cref="Agility"/> is decoded. The other three are stand-ins built from the
 /// airframe stat table, with thresholds chosen so the two aircraft the reference screenshots show
-/// read as they do there, and nothing else pins them: `BL-653` carries what a real decode has to
-/// settle. Do not read a number here as the original's.</para>
+/// read as they do there, and nothing else pins them. Do not read a number here as the original's.
+/// Decode status: <c>docs/formats/campaign-screens.md</c>, "Plane selection".
 /// </summary>
 public static class PlaneRatings
 {
@@ -38,7 +38,7 @@ public static class PlaneRatings
 
     // ⚠ Stand-in. The hangar's own armour star formula ((armour + units*5 - 1) / 0x49) reads Fair
     // for both reference aircraft where the screen prints Average, so it is not what this widget
-    // shows; halving-to-fifty is the coarser rule that matches both. BL-653.
+    // shows; halving-to-fifty is the coarser rule that matches both.
     private static int Armour(int airframe, PlaneFit fit)
     {
         int armour = HangarEconomy.Airframes[airframe].Armour + (fit.ArmourUnits * 5);
@@ -46,8 +46,7 @@ public static class PlaneRatings
     }
 
     // ⚠ Stand-in. Power over weight, the two quantities the airframe table does carry. It ranks the
-    // autogyro highest, which no reading of the original would; BL-653 names that as the thing a
-    // decode has to fix.
+    // autogyro highest, which no reading of the original would; this value remains undecoded.
     private static int Speed(int airframe, PlaneFit fit)
     {
         var stats = HangarEconomy.Airframes[airframe];
@@ -57,7 +56,7 @@ public static class PlaneRatings
         return Band(power / Math.Max(1, stats.Weight), SpeedBands);
     }
 
-    // ⚠ Stand-in. One point per ten millimetres of every barrel, plus one per hardpoint. BL-653.
+    // ⚠ Stand-in. One point per ten millimetres of every barrel, plus one per hardpoint.
     private static int Offense(PlaneFit fit)
     {
         int score = fit.Hardpoints;
