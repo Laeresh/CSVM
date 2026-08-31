@@ -3111,17 +3111,25 @@ usual.
   process-wide state that survives a suite's world disposal and starves the rounds. The pool
   candidate this entry used to lead with is not supported by the code: `Projectile.cs` carries no
   mutable static, and each suite holds its own `ProjectilePool`, so there is no shared slot table to
-  exhaust. **The better-supported candidate is `Utils/Rng.cs`,** which is a static class holding one
-  stream per subsystem and whose `Rng.Reset` is called only on session build
-  (`Session/GameSession.cs`, `Session/Launcher.cs`). The `--run-tests` harness completes every suite
-  inside one `_Ready`, so a suite inherits whatever stream position its predecessors left, and the
-  world-building suites among them reset the streams part-way through a shard, which is the shape of
-  a dependence that needs a whole run-up rather than one neighbour. `Rng`'s own summary states the
-  rule this breaks: only the draw order within a stream is significant, and that order is
-  deterministic only if every consumer runs its draws in the same sequence run to run. This is a
-  reading of the seam, not a measurement: instrument the stream position and the live-round count at
-  the top of the failing suite under both orders before changing anything. If it is the streams, the
-  fix is a per-suite reset in the harness, so a suite's result is a function of the suite. *⚠ Traps:* this is not the shard balancer — the same sequence fails under a single-shard
+  exhaust. **The carrier is `Utils/Rng.cs`'s shared `Rng.Weapons` stream.** `Rng` is a static class
+  holding one generator per subsystem, seeded once per process: `Rng.Reset` has two call sites, both
+  session build (`Session/GameSession.cs`, `Session/Launcher.cs`), and no suite builds a session, so
+  a `--run-tests` run seeds the streams once in `Launcher._Ready` and never again. Every suite
+  completes inside that one `_Ready`, so each inherits whatever position its predecessors' draws
+  left, which is the shape of a dependence that needs a whole run-up rather than one neighbour. The
+  coupling is demonstrated rather than inferred: `Testing/OrdnanceSuites.cs` save/restores the
+  `Rng.Weapons` position around one burst and records why, that one extra burst there reads
+  `moved=0` in `ai-gunnery`. The failing assertion's own consumer is that stream,
+  `FlightController._aimRng`, the assist's 1° launch scatter. `Rng`'s summary states the rule this
+  breaks: only the draw order within a stream is significant, and that order is deterministic only
+  if every consumer runs its draws in the same sequence run to run. The fix is a per-suite rewind in
+  the harness, so a suite's result is a function of the suite. It must reseed the existing stream
+  objects in place rather than call `Rng.Reset`, whose `Streams.Clear()` leaves a captured reference
+  (`FlightController._aimRng`, `Projectile._rng`) drawing on an orphaned generator no later reset
+  can reach, and `TestContext` caches built worlds across suites, so such a reference outlives the
+  suite that made it. Instrument the stream position and the live-round count at the top of the
+  failing suite under both orders before changing anything: the round count is what separates a
+  scattered miss from starved rounds. *⚠ Traps:* this is not the shard balancer — the same sequence fails under a single-shard
   run. Do not "fix" it by widening the damage assertion or by giving the suite its own shard: the
   false red is the symptom, and whatever leaks would then leak silently into every later suite in
   the same process. It is also order-fragile rather than fixed: adding a suite reshuffles the
