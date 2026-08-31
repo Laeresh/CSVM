@@ -749,6 +749,18 @@ internal static class WorldAndToolSuites
                 var registry = world.Runtime.Destructibles;
                 ctx.Same(instances, registry.Count, $"{chapter} destructible instances");
                 ctx.Same(anchors, registry.DistinctAnchors, $"{chapter} destructible node groups");
+
+                // The two 8-inch cannons are the whole install's only pools whose RESET_STATE
+                // switches `dbase` ON beside `healthy` ACTIVE. Reading that base as half a death
+                // booted both of them destroyed, which absorbed every shot and left the mission
+                // objective that owns them unclearable.
+                foreach (var gun in registry.All.Where(i =>
+                    AnimRuntime.NameOf(i.Anchor).StartsWith("8igun", System.StringComparison.OrdinalIgnoreCase)))
+                {
+                    ctx.Check(gun.Status == DestructibleRegistry.State.Healthy
+                              && gun.Health == gun.MaxHealth,
+                        $"{chapter} {AnimRuntime.NameOf(gun.Anchor)} boots standing hp={gun.Health}/{gun.MaxHealth} state={gun.Status}");
+                }
             });
         }
     }
