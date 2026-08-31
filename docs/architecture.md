@@ -5196,7 +5196,40 @@ unspecified. No suite depends on running after another. A malformed declaration 
 rather than being skipped, because a suite that quietly fails to register runs nowhere and is
 reported by nothing. `QuickTier` is the checked-in membership of `--run-tests=tier:quick`, resolved
 through `Tier(name)`, and holds one representative per failure surface rather than the cheapest
-rows. The suites cover plane/loadout bindings (stock and, since M3 B4,
+rows.
+
+## src/Testing/*Suites.cs
+Seventeen domain modules hold the in-engine scenario bodies, each named for the whole of what it
+files: `PufferSuites` (the emitter model's modes, wind, fades and fire column), `CombatSuites`
+(loadouts, live fire, aim assist and the hit chain), `OrdnanceSuites` (a round's flight, guidance
+and ends), `InstantActionSuites` (the mission runtime from spawn to wrap-up), `AiSuites` (how a
+computer-controlled combatant behaves: pilots, mounted gunners, combat voice, and the inert state
+they wait in), `TargetingSuites` (the `TargetRef` abstraction, candidate pool, sticky selection,
+input decoding and marker HUD), `TargetingCandidateSuites` (D36's widened AI acquisition,
+`BL-363`: the team gate over a registered structure and the win routed to `GroundTarget`, never
+`Target`), `WingmanSuites` (D34's netless `mode wingman` station-keeping, as geometry and flown
+against a scripted leader), `CampaignSuites` (profile persistence, the objectives runtime and the
+mission-end flow), `MusicSuites` (the state-driven score), `ZeppelinSuites` (motion, fighter
+launch, multi-zone damage,
+broadsides), `DamageSuites` (spending armor and health, and the injure staging those ledgers
+fire), `DestroyChoreographySuites` (the choreography a death dispatches: destroy defs, wreck
+flights, crash rigs, callbacks and stops), `AnimationAndEffectsSuites` (anim launches, effect
+templates, washes and burst timelines), `WorldAndToolSuites` (the built world's data gates
+and censuses, lighting and viewers, and the lab surfaces), and `WorldFidelitySuites` (the
+mid-mission world behaviours the shipped data drives: the area-selected node toggle over C3's three
+story rectangles, the scripted-path follower over C1's own takeoff path, the mission script's and
+the generator's hangar doors over C1/M04, and the `FOG_STATE` event over its intro), plus
+`AlphaCutoutRaySuites` (the BL-477 census: what actually stops a weapon ray short of C3/M01's cargo
+zeppelin's slung tanks, as first-collider node names over a sphere of aspects) and
+`AirframeColliderSuites` (the collision hulls measured against the mesh they came from) and
+`CampaignRacerSuites` (CM13's six racers spawned from C2/M03's roster into its collidable world,
+flying `dzpath1` and `dzpath2` on rails end to end with the mission's opening stepped through the
+director, so the propane tanks hung in `dzpath1`'s gate are blown before anyone reaches them, and
+nobody rams the `dbase` arch). They depend on
+`TestHarness` through
+`TestContext`; shared fixtures are separate focused modules, not an all-purpose suite helper.
+
+The suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
 build from ai.zrd + the thirdp mount, arc-centre rest pose, track/fire/hit under the host's
 shooter id, bored-window fire suppression with live tracking, the nearer-end-stop park, YAW [0,0]
@@ -5298,37 +5331,6 @@ against each one's own triangles: every hull inside the box it replaces and abov
 floor, the fuselage leading the part order with only the four names `PlaneDamage.MapStruckPart`
 knows, and no more than 0.5 % of the silhouette's triangle area outside every hull; its artifact
 lists the per-part box and hull volumes, which is the overhang the sweep no longer bridges.
-
-## src/Testing/*Suites.cs
-Seventeen domain modules hold the in-engine scenario bodies, each named for the whole of what it
-files: `PufferSuites` (the emitter model's modes, wind, fades and fire column), `CombatSuites`
-(loadouts, live fire, aim assist and the hit chain), `OrdnanceSuites` (a round's flight, guidance
-and ends), `InstantActionSuites` (the mission runtime from spawn to wrap-up), `AiSuites` (how a
-computer-controlled combatant behaves: pilots, mounted gunners, combat voice, and the inert state
-they wait in), `TargetingSuites` (the `TargetRef` abstraction, candidate pool, sticky selection,
-input decoding and marker HUD), `TargetingCandidateSuites` (D36's widened AI acquisition,
-`BL-363`: the team gate over a registered structure and the win routed to `GroundTarget`, never
-`Target`), `WingmanSuites` (D34's netless `mode wingman` station-keeping, as geometry and flown
-against a scripted leader), `CampaignSuites` (profile persistence, the objectives runtime and the
-mission-end flow), `MusicSuites` (the state-driven score), `ZeppelinSuites` (motion, fighter
-launch, multi-zone damage,
-broadsides), `DamageSuites` (spending armor and health, and the injure staging those ledgers
-fire), `DestroyChoreographySuites` (the choreography a death dispatches: destroy defs, wreck
-flights, crash rigs, callbacks and stops), `AnimationAndEffectsSuites` (anim launches, effect
-templates, washes and burst timelines), `WorldAndToolSuites` (the built world's data gates
-and censuses, lighting and viewers, and the lab surfaces), and `WorldFidelitySuites` (the
-mid-mission world behaviours the shipped data drives: the area-selected node toggle over C3's three
-story rectangles, the scripted-path follower over C1's own takeoff path, the mission script's and
-the generator's hangar doors over C1/M04, and the `FOG_STATE` event over its intro), plus
-`AlphaCutoutRaySuites` (the BL-477 census: what actually stops a weapon ray short of C3/M01's cargo
-zeppelin's slung tanks, as first-collider node names over a sphere of aspects) and
-`AirframeColliderSuites` (the collision hulls measured against the mesh they came from) and
-`CampaignRacerSuites` (CM13's six racers spawned from C2/M03's roster into its collidable world,
-flying `dzpath1` and `dzpath2` on rails end to end with the mission's opening stepped through the
-director, so the propane tanks hung in `dzpath1`'s gate are blown before anyone reaches them, and
-nobody rams the `dbase` arch). They depend on
-`TestHarness` through
-`TestContext`; shared fixtures are separate focused modules, not an all-purpose suite helper.
 
 ## src/Testing/SuiteConstants.cs
 The shared golden inputs used by more than one scenario module: airframe and weapon counts, puffer
