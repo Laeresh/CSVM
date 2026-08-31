@@ -809,7 +809,7 @@ internal static class AnimationAndEffectsSuites
     // restraint deaths and authors MINIMUM_TO_SATISFY 5, and each of those five calls it. Ungated,
     // the Black Swan tears loose on the FIRST tie-down and its 190 s "too late to hook" clock runs
     // out while the player is still shooting the other four, which closes the hookup the whole back
-    // half of the mission hangs off. âš  Play must stay ungated: every zeppelin hull death carries
+    // half of the mission hangs off. ⚠ Play must stay ungated: every zeppelin hull death carries
     // the same shape and is fired from ZeppelinRuntime's damage model, which owns that kill.
     [Suite("anim-activation-prerequisite",
         "a CALL_ANIMATION is answered only once MINIMUM_TO_SATISFY of the animations the callee's ACTIVATION_PREREQUISITE names have run: CM18's cargozep_floatfree holds the Black Swan at its mooring through four of its five restraint deaths and releases it on the fifth, while an explicit Play still starts a hull death carrying the same shape")]
