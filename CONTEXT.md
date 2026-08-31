@@ -129,6 +129,36 @@ _Avoid_: death effects, destruction sequence, kill animation
 
 ## Boards and the sim clock
 
+**Menu presentation**:
+One player-selectable realization of the menus, owning their screen graph, artwork, layout,
+animation and interaction while sharing the state and operations that configure and launch play.
+_Avoid_: menu renderer, menu theme, menu skin
+
+**Built-in presentation**:
+The permanently supported menu presentation that ships without depending on extracted menu
+artwork and acts as the fallback when another selected presentation is unavailable.
+_Avoid_: current menu, legacy menu, temporary menu, fallback UI
+
+**Original presentation**:
+The menu presentation that follows the original's screen composition and evidenced interaction,
+scaling its authored 4:3 canvas uniformly while preserving the extracted artwork's pixelated look.
+_Avoid_: original renderer, classic skin, pixel-perfect menu
+
+**Options**:
+Process-wide player preferences persisted independently of profiles, including the selected menu
+presentation. A seated profile never owns or overrides them.
+_Avoid_: profile settings, campaign options, preferences (as a separate store)
+
+**Decoded menu layout**:
+The structured screen geometry, artwork roles and widget metadata produced before play from the
+original's menu data. Runtime consumes it but performs no format or executable analysis.
+_Avoid_: runtime decode, binary menu layout, hardcoded screen
+
+**Menu input source**:
+One seat's producer of semantic menu commands, independent of whether keyboard, mouse, pad or a
+future flight-control setup supplied them.
+_Avoid_: pad reader, controller input (as the menu abstraction), input device
+
 **Board**:
 A full-screen overlay panel drawn over the flight, in the shared board style.
 _Avoid_: overlay, screen, popup, dialog, panel
