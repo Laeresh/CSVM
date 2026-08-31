@@ -155,12 +155,7 @@ internal static class OrdnanceSuites
                 new Transform3D(Basis.Identity, new Vector3(0f, 0.55f, 0f)));
             ctx.Host.AddChild(serverBody);
             bodies.Add(serverBody);
-            // The pool's effect scatter draws off the shared Weapons stream, and ai-gunnery's assist
-            // verdict later in the run reads that stream's position (one extra burst here reads
-            // "moved=0" there), so this phase leaves the stream where it found it.
-            ulong weaponsRng = Rng.Stream(Rng.Weapons).State;
             Burst(serverSite);
-            Rng.Stream(Rng.Weapons).State = weaponsRng;
             float serverShare = full * (1f - (15f * 15f) / (radius * radius));
             ctx.Check(Mathf.Abs(DealtTo(serverBody) - serverShare) < 1f,
                 $"a body with server-side shapes and no shape owners, its origin sunk in the ground, takes the curve's {serverShare:0.#} at 15 m (dealt {DealtTo(serverBody):0.#})");

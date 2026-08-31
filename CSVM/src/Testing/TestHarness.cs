@@ -123,6 +123,9 @@ public static class TestHarness
             ctx.Notes.Clear();
             ctx.Counts.Clear();
             ctx.ResetForSuite();
+            // Every suite starts from the same stream positions, so its verdict is a function of
+            // the suite rather than of how many draws its predecessors left in this one process.
+            Rng.Rewind();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             SuiteStatus status;
             string detail = suite.What;
