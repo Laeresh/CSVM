@@ -3420,9 +3420,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return;
         var name = RoleName(ev);
         bool active = ev.Data.Bool("state");
-        bool destroyedRole = name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("dbase", StringComparison.OrdinalIgnoreCase);
+        bool dbaseRole = name.Contains("dbase", StringComparison.OrdinalIgnoreCase);
+        bool destroyedRole = dbaseRole
+            || name.Contains("destroyed", StringComparison.OrdinalIgnoreCase);
         bool healthyRole = name.Contains("healthy", StringComparison.OrdinalIgnoreCase);
+        if (active && dbaseRole && HealthyRootStands(inst))
+            return;
         if ((active && destroyedRole) || (!active && healthyRole))
         {
             if (inst.Status != DestructibleRegistry.State.Destroyed)
@@ -3440,6 +3443,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             }
         }
     }
+
+    // Is this pool's own healthy geometry still standing? A `dbase` node is the wreck's ground
+    // base, so switching it on is normally half of a death. The two 8-inch cannons author it ON in
+    // their RESET_STATE beside `healthy` ACTIVE, where it is a concrete plinth under a live gun and
+    // not a death at all (docs/formats/destructibles.md). Every genuine death that touches `dbase`
+    // also switches its healthy-role node OFF, so the death still reads.
+    private bool HealthyRootStands(DestructibleRegistry.Instance inst) =>
+        inst.Def.RootName is { Length: > 0 } root
+        && root.Contains("healthy", StringComparison.OrdinalIgnoreCase)
+        && DamageNodeOf(inst.Def, inst.Anchor).Visible;
 
     private bool Flipped(string kind, Node3D? anchor, bool result)
     {
