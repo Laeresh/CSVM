@@ -76,6 +76,12 @@ public sealed class PathFollower
     /// <summary>Current ground speed. Held at <see cref="TaxiSpeed"/> until the final leg.</summary>
     public float Speed { get; private set; }
 
+    /// <summary>The velocity <see cref="Position"/> is integrated by, m/s, which is the engine's
+    /// own object velocity field and not <see cref="Speed"/>: it carries the turn scaling below,
+    /// so a vehicle cornering hard is led less as well as moving slower. Zero while frozen or
+    /// finished, the state a placed vehicle waits in.</summary>
+    public Vector3 Velocity { get; private set; }
+
     /// <summary>The waypoint being flown toward. The last one is the final leg.</summary>
     public int Leg { get; private set; }
 
@@ -131,6 +137,7 @@ public sealed class PathFollower
     {
         if (!Following || Frozen || dt <= 0f)
         {
+            Velocity = Vector3.Zero;
             return;
         }
 
@@ -144,11 +151,11 @@ public sealed class PathFollower
         // It barely advances while turning hard: a full-rate turn stops the vehicle dead, which is
         // what keeps a taxiing aeroplane on the tarmac through a corner. The motion is pitched at
         // the target's height over the horizontal distance to it, the yaw being the heading.
-        float step = Speed * (1f - Mathf.Abs(turn)) * dt;
         Pitch = Mathf.Atan2(to.Y, new Vector2(to.X, to.Z).Length());
         float flat = Mathf.Cos(Pitch);
         var direction = new Vector3(-Mathf.Sin(Heading) * flat, Mathf.Sin(Pitch), -Mathf.Cos(Heading) * flat);
-        Position += direction * step;
+        Velocity = direction * (Speed * (1f - Mathf.Abs(turn)));
+        Position += Velocity * dt;
 
         // The finish is measured to the steering target along the leg, so a final leg ends at its
         // overshoot point and not at the last waypoint.

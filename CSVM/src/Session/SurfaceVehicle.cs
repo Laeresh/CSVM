@@ -102,6 +102,15 @@ public sealed class SurfaceVehicle
     /// <summary>Yaw in radians, Godot's convention (forward is -Z at 0).</summary>
     public float Heading { get; private set; }
 
+    /// <summary>How fast the hull is really moving, m/s, and so the aim assist's lead term. Flat,
+    /// because <see cref="WritePose"/> pins the hull to the water and drops the route's height:
+    /// the follower's pitched vector is motion this hull does not have. A hull with no route, one
+    /// still inert, or a destroyed one reads zero.</summary>
+    public Vector3 Velocity =>
+        _follower == null || Inert || IsDestroyed
+            ? Vector3.Zero
+            : new Vector3(_follower.Velocity.X, 0f, _follower.Velocity.Z);
+
     /// <summary>The <c>WAKEUP_ENEMIES</c> half: the hull appears where it was placed, its pool
     /// becomes a target and its route, if it has one, starts. False when it was never inert.</summary>
     public bool Wake()

@@ -146,6 +146,11 @@ internal static class SurfaceVehicleSuites
                 vessels.SimStep(StepDt);
             }
             ctx.Check(Unmoved(parked, director.Vessels), $"a deactivated hull holds its spot");
+            foreach (var vessel in director.Vessels.Values)
+            {
+                ctx.Check(vessel.Velocity == Vector3.Zero,
+                    $"'{vessel.Name}' reports no velocity while deactivated: {vessel.Velocity}");
+            }
 
             // Woken: the hull appears, its wake starts on its own emitters, and it drives its net
             // at the scripted-path law's taxi speed with its height pinned to the water.
@@ -220,6 +225,43 @@ internal static class SurfaceVehicleSuites
                 ctx.Check(Mathf.Abs(vessel.Position.Y - parked[name].Y) < 0.01f,
                     $"'{name}' stays on the water while driving: y={vessel.Position.Y:0.##}");
             }
+
+            // A driving hull carries its velocity into the candidate set, so the lead solver aims
+            // ahead of it. Flat, since the hull is pinned to the water, and never above the
+            // taxi speed, which the turn scaling only ever reduces.
+            candidates.Clear();
+            vessels.CollectVehicles(candidates);
+            foreach (var c in candidates.Vehicles)
+            {
+                string who = c.Source is SurfaceVehicle sv ? sv.Name : "?";
+                report.AppendLine($"{who}: candidate velocity ({c.Velocity.X:0.##},{c.Velocity.Y:0.##},{c.Velocity.Z:0.##})");
+                ctx.Check(c.Velocity.Length() > 0.1f && c.Velocity.Length() <= PathFollower.TaxiSpeed + 0.01f,
+                    $"'{who}' is a candidate with its own velocity: {c.Velocity.Length():0.##} m/s");
+                ctx.Check(Mathf.Abs(c.Velocity.Y) < 1e-4f,
+                    $"'{who}' leads flat, the route's height being the water's: vy={c.Velocity.Y:0.####}");
+            }
+
+            // The lead is real: the assisted line off a stationary shooter abeam a driving hull
+            // points ahead of where the hull is, not at it.
+            var lead = director.Vessels[BoatBlocks[0]];
+            var leadFrom = lead.Position + new Vector3(0f, 0f, 300f);
+            var leadScan = new AimScan
+            {
+                MuzzlePosition = leadFrom,
+                ShooterVelocity = Vector3.Zero,
+                Forward = (lead.Position - leadFrom).Normalized(),
+                Team = AimAssist.PlayerTeam,
+                Speed = 300f,
+                RangeSquared = 4000f * 4000f,
+                ConeCos = Mathf.Cos(Mathf.DegToRad(30f)),
+                DistFactor = 0f,
+                Self = null,
+            };
+            bool led = AimAssist.Scan(leadScan, candidates, out var leadResult);
+            float ahead = led ? leadResult.Direction.Dot(lead.Velocity.Normalized()) : 0f;
+            report.AppendLine($"lead: |v|={lead.Velocity.Length():0.##} m/s, aim.v={ahead:0.###}");
+            ctx.Check(led && ahead > 0.01f,
+                $"the assisted line leads '{lead.Name}' along its own velocity: {ahead:0.###}");
 
             // Killed: the pool reaches zero through the same call a weapon hit makes, the hull
             // reports its death once, stops where it died and leaves the DEDG count.
