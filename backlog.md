@@ -887,16 +887,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
-- `BL-619` `[Task]` **The turret census and the `WAKEUP_TURRETS` arm are `GD.Print`, so a sortie log
-  cannot say whether a mission's emplacements woke.** *Evidence:* `BL-611` looked like a turret
-  defect for most of its investigation because the log reads identically whether the guns are alive
-  or dead: neither `turrets: N world emplacement(s) placed for <chapter>` nor `campaign:
-  WAKEUP_TURRETS armed N emplacement(s)` reaches the file sink. *Fix shape:* route both through
-  `Log.Info("flight", ...)` and add the per-gun alive and awake counts. *⚠ Traps:* `Log.Info` takes a
-  `FormattableString`, so fold each line into one interpolated string. *Cross-refs:* `Log.cs`'s
-  incremental migration note, `TurretController`, `BL-611`'s closing commit
-  (`git log --grep=BL-611`).
-
 - `BL-618` `[Bug]` **A compiled anim addressing a mech3ax `~n` dedup name resolves to nothing.**
   *Evidence:* CM13's `pzhomebase` switches `land_on` and `land_on~2` on and neither of the
   Pandora's two landing cones draws (`zeppelin-hull-activation`'s artifact records `cones 0/2`);
@@ -3080,43 +3070,6 @@ usual.
   older records hold. *Cross-refs:* `BL-562`'s closing commit (the same misreading, found there),
   `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
   PERF-21.
-
-- `BL-661` `[Bug]` **Every content commit hook checks the tree its own process sits in, not the
-  tree being committed, and none of them runs on a merge at all.** *Evidence (mechanism confirmed
-  by experiment):* hook 5's command was taken verbatim out of `.claude/settings.json`, fed a
-  synthetic `PreToolUse` payload on stdin, and run against a scratch worktree holding one known bad
-  character, varying only the hook process's directory. With the directory inside the worktree it
-  exits 2 and names the file. With the directory in the main checkout it exits 0, both for
-  `git -C <worktree> commit` and for a plain `git commit` whose session never left the main
-  checkout, and its own output shows it reading the main checkout's files. A `git merge` exits 0
-  with no output at all, because hooks 4 to 7 guard on `command -notmatch 'git\s+commit'` and a
-  merge is not a commit command. *What it cost:* a double-encoded warning sign (`U+00E2 U+0161`
-  where `⚠` belongs) entered `CSVM/src/Testing/AnimationAndEffectsSuites.cs` at `4385f15e`, on a
-  worktree branch, and reached main through a merge; it was found only when an unrelated merge put
-  it in the main checkout's own changed set, and `41c69ed8` repaired it. The tripwire predates that
-  arrival (`c80c74f8`) and its regex matches those bytes, so nothing about the detection needs
-  changing. *Which hooks:* 4 (duplicate item ID), 5 (encoding), 6 (golden manifest prose) and
-  7 (comment caps) all take `$root` from `git rev-parse --show-toplevel` in the hook's own
-  directory; 4 and 5 then build a file list from `git diff --name-only HEAD` there. **Hook 7 is not
-  immune despite `CheckCommentCaps.ps1` using `$PSScriptRoot`**: the hook picks WHICH COPY of the
-  script to run with `Join-Path $root 'CheckCommentCaps.ps1'`, so a wrong root runs the wrong
-  tree's copy, whose `$PSScriptRoot` is then that wrong tree. Hook 3 has the same defect from the
-  other direction: it hands the relative path `CSVM/CSVM.csproj` to `dotnet format`/`dotnet build`,
-  which resolves against the hook's directory. *Fix shape:* one line in each hook rather than a
-  per-hook virtue: derive the root from the command's own `-C` argument when it has one, else from
-  the tool call's working directory, and use that root everywhere the hook already uses `$root`.
-  Widening the matcher past `git\s+commit` is a separate decision: a merge brings content into a
-  tree without any hook seeing it, which is how this character finished its journey. *⚠ Traps:* the
-  reading that a commit from a worktree is unchecked is wrong, and gives false confidence in the
-  wrong direction. A session sitting in its own worktree is checked correctly, which is how this
-  was caught; what fails is a commit whose target tree is not the hook's directory. Do not chase
-  the staging state either: `git diff --name-only HEAD --diff-filter=ACM` reports unstaged
-  modifications too, so a file is visible to the check before `git add`. *Exposure:* the orchestration
-  practice this project uses puts per-item work on a worktree branch while the orchestrator commits
-  from the main checkout, which is exactly the shape that passes silently, and merges into main run
-  no content hook at all. *Cross-refs:* `.claude/settings.json` (the seven `PreToolUse` hooks),
-  `CheckCommentCaps.ps1` lines 37-40, `CLAUDE.md` (PowerShell 5.1 corrupts UTF-8; the tripwire is
-  called the backstop there, not the plan).
 
 ## Misc
 

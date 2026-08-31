@@ -18,37 +18,50 @@ never changes the exit code.
   other `.agents/`-aware tools — see [`AGENTS.md`](AGENTS.md)). Written by
   `/setup-matt-pocock-skills`; edit the files directly. Invoke with their slash commands, e.g.
   `/domain-modeling`, `/commit-next`, `/new-plan`.
-- **Hooks:** `.claude/settings.json` runs seven `PreToolUse` hooks. (1) A shell-syntax guard that
+- **Hooks:** `.claude/settings.json` runs four `PreToolUse` hooks. (1) A shell-syntax guard that
   rejects a PowerShell here-string (`@'…'@`) sent to the **Bash** tool, and a heredoc or
   `/dev/null` sent to the **PowerShell** tool. (2) The **Bash** tool is blocked outright with
   "Use Powershell instead of bash" — the one exception is a command whose every `&&`/`||`/`;`/`|`
   segment starts with `git` or `gh`, since those behave identically in either shell.
   (3) `dotnet format` / `dotnet build` before `RunTests.ps1`, `dotnet test`, and `git commit`,
-  blocking on remaining StyleCop warnings. (4) A duplicate item-ID check before `git commit`:
-  `backlog.md`/`playtest.md` defining the same `BL-`/`PT-`/`CAP-` ID twice fails the commit.
-  (5) An encoding tripwire before `git commit`: any changed text file containing double-encoded
-  UTF-8 (mojibake) fails the commit, naming the file and line.
-  (6) A golden-manifest prose check before `git commit`: an `exercises` field in
-  `analysis/goldens/manifest.json` over 250 chars, or carrying an item id, a date or an
-  "also exercises" clause, fails the commit. That field says what a shot covers *today* and is
-  REWRITTEN on a re-pin, never appended to — the history is `git log -p` on the file.
-  (7) A comment-cap check before `git commit`, running [`CheckCommentCaps.ps1`](CheckCommentCaps.ps1)
-  over `CSVM/src` and `CSVM.Tests`: a comment block over its cap fails the commit, naming the file,
-  the line and which cap applies. Run the script yourself (`-Summary` for one line per file) while
-  editing. A block over cap has outgrown its subject, so reflowing it is the wrong fix: move the
-  decode into `docs/` and leave the prohibition on the member it binds.
+  blocking on remaining StyleCop warnings. (4) The content gate,
+  [`CheckCommitContent.ps1`](CheckCommitContent.ps1), before `git commit`.
+- **The content gate** runs four checks, each its own script you can also run by hand while
+  editing: [`CheckEncoding.ps1`](CheckEncoding.ps1) (double-encoded UTF-8, whole tree),
+  [`CheckItemIds.ps1`](CheckItemIds.ps1) (`backlog.md`/`playtest.md` defining the same
+  `BL-`/`PT-`/`CAP-` ID twice), [`CheckGoldenProse.ps1`](CheckGoldenProse.ps1) (an `exercises`
+  field in `analysis/goldens/manifest.json` over 250 chars, or carrying an item id, a date or an
+  "also exercises" clause — that field says what a shot covers *today* and is REWRITTEN on a
+  re-pin, never appended to, since the history is `git log -p` on the file), and
+  [`CheckCommentCaps.ps1`](CheckCommentCaps.ps1) over `CSVM/src` and `CSVM.Tests` (`-Summary` for
+  one line per file). A comment block over cap has outgrown its subject, so reflowing it is the
+  wrong fix: move the decode into `docs/` and leave the prohibition on the member it binds.
+  ⚠ **The gate checks every worktree, not the one you are in.** A hook runs in whatever directory
+  the session sits in, which is not always the tree the commit writes to, so a commit was cleared
+  against one tree and written to another. When the command names a tree (`git -C`, `--work-tree`,
+  `--git-dir`) the gate checks that one; otherwise it checks them all. That is also what catches
+  content arriving by merge or pull, since a `PreToolUse` hook on a merge would inspect the tree
+  before the content got there. So a file in a worktree you are not touching can block your
+  commit, and the message names which worktree. Set `CSVM_SKIP_CONTENT_CHECKS=1` to land something
+  first. `.\CheckCommitContent.ps1 -SelfTest` exercises the whole gate; `-ShowRoots -Command '…'`
+  says which trees a given command would check.
+- **The same gate serves Codex and pi.** `.codex/hooks/pre-tool-use.ps1` and
+  `.pi/extensions/hooks.ts` call `CheckCommitContent.ps1` rather than reimplementing the checks;
+  three hand-maintained copies had already drifted apart. Add a check to the repo scripts, never
+  to a harness.
 - ⚠ **PowerShell 5.1 corrupts UTF-8 silently.** It reads BOM-less files as ANSI, so a
   `Get-Content`/`Set-Content` round-trip without `-Encoding utf8` on **both** ends turns every
   em dash, arrow and warning sign into double-encoded garbage — and a BOM-less `.ps1` containing
   non-ASCII is mangled by the *interpreter itself* before it runs. Edit repo text with the
   Read/Edit/Write tools; when a script must write a repo file, pass `-Encoding utf8` (or use
   `[IO.File]` with an explicit `UTF8Encoding`) and keep the script itself pure ASCII, building
-  any non-ASCII characters from `[char]` codes. Hook (5) above is the backstop, not the plan.
+  any non-ASCII characters from `[char]` codes. The encoding check above is the backstop, not the
+  plan.
 - ⚠ **Leave `videodata/` alone entirely, and never let PowerShell near it.** These per-clip decode
   sidecars are inert: the gauge-decode pipeline that wrote and read them went with footage-derived
   flight analysis, so nothing consumes them and no result may be quoted from them. They are
-  git-ignored, so hook (5) *cannot* see them and a PS round-trip would mojibake them with no
-  backstop at all. Clip filenames under `OriginalScreenshots/` carry non-ASCII too
+  git-ignored, so the encoding check *cannot* see them and a PS round-trip would mojibake them
+  with no backstop at all. Clip filenames under `OriginalScreenshots/` carry non-ASCII too
   (`CAP-10 90° Banked Pith Up Down.mp4`), so the same care applies to those paths.
 - ⚠ **Multi-line commit messages: `Write` the message to a file, then `git commit -F <file>`.**
   Shell quoting is where this goes wrong: PowerShell's `@'…'@` needs its closing delimiter at

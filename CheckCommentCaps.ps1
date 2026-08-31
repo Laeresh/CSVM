@@ -18,10 +18,12 @@
 # Usage:
 #   ./CheckCommentCaps.ps1                 the whole scope
 #   ./CheckCommentCaps.ps1 -Summary        one line per file, worst first
+#   ./CheckCommentCaps.ps1 -Root <path>    another worktree, with this copy's rules
 #   ./CheckCommentCaps.ps1 a.cs b.cs       just these files
 [CmdletBinding()]
 param(
     [switch]$Summary,
+    [string]$Root,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Path
 )
@@ -34,11 +36,14 @@ $labels = @{
     stmt   = '// above a statement'
 }
 
-# $PSScriptRoot names the worktree this file lives in regardless of the caller's cwd; a
-# git-rev-parse-on-cwd root scanned whatever worktree the caller happened to be sitting in.
-$root = $PSScriptRoot
-if (-not $root) { $root = git rev-parse --show-toplevel 2>$null }
-if (-not $root) { $root = (Get-Location).Path }
+# -Root names the tree to scan; a caller sweeping several worktrees passes each in turn, and this
+# copy's rules apply to all of them. Without it, $PSScriptRoot names the worktree this file lives
+# in regardless of the caller's cwd; a git-rev-parse-on-cwd root scanned whatever worktree the
+# caller happened to be sitting in.
+if (-not $Root) { $Root = $PSScriptRoot }
+if (-not $Root) { $Root = git rev-parse --show-toplevel 2>$null }
+if (-not $Root) { $Root = (Get-Location).Path }
+$root = $Root
 
 function Get-Scope {
     param([string]$Root)
@@ -125,7 +130,7 @@ foreach ($f in $targets) {
     if (-not $Summary) {
         foreach ($b in $bad) {
             $shortDecl = if ($b.Decl.Length -gt 60) { $b.Decl.Substring(0, 60) } else { $b.Decl }
-            Write-Host ('{0}:{1}  {2} lines, cap {3} ({4})  {5}' -f
+            Write-Output ('{0}:{1}  {2} lines, cap {3} ({4})  {5}' -f
                 $rel, $b.Line, $b.Length, $caps[$b.Kind], $labels[$b.Kind], $shortDecl)
         }
     }
@@ -133,15 +138,15 @@ foreach ($f in $targets) {
 
 if ($Summary) {
     foreach ($r in ($rows | Sort-Object Excess -Descending)) {
-        Write-Host ('{0,6} excess  {1,4} blocks  {2}' -f $r.Excess, $r.Blocks, $r.File)
+        Write-Output ('{0,6} excess  {1,4} blocks  {2}' -f $r.Excess, $r.Blocks, $r.File)
     }
 }
 
 if ($totalBlocks -gt 0) {
-    Write-Host ''
-    Write-Host ('{0} blocks over cap, {1} excess lines, {2} files' -f
+    Write-Output ''
+    Write-Output ('{0} blocks over cap, {1} excess lines, {2} files' -f
         $totalBlocks, $totalExcess, $rows.Count)
     exit 1
 }
-Write-Host 'all comment blocks within cap'
+Write-Output 'all comment blocks within cap'
 exit 0
