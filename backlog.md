@@ -2253,21 +2253,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   [`docs/formats/anim-definitions/cutscenes.md`](docs/formats/anim-definitions/cutscenes.md) (what a
   definition owns during an episode).
 
-- `BL-649` `[Bug]` **The debug vantages take the camera without giving the airframe back, so a pilot
-  pinned there from the cockpit view keeps the interior over the debug camera.** *Evidence:* found
-  while landing the cutscene presentation's own fix. `FlightController.CameraOwned` silences the
-  per-frame arm that re-asserts the first-person visibility rules, so every caller that sets it owes
-  the aircraft's visibility at both edges. The cutscene presentation now writes them through
-  `FlightController.SetViewedFromOutside` (`git log --grep=BL-625`); `--debug-spectate`
-  (`Session/GameSession.cs`) and the weapon lab set `CameraOwned` without it, so a pilot in
-  `PilotViewMode.Cockpit` when either takes the view keeps `Shown(Interior: true, Body: false)`: the
-  airframe undrawn and the cockpit panel drawn over the debug camera. *Fix shape:* call the same
-  seam from both, which is a line each; the judgement is only whether either wants the restore leg,
-  since neither hands flight back the way a cutscene does. `SpectateHandoff` needs nothing, because
-  it follows a death and `CutToCrashView` has already left first person. *⚠ Traps:* debug modes
-  only, so this changes nothing a player sees; do not widen it into the crash or respawn paths,
-  which rebuild the view themselves. *Cross-refs:* `git log --grep=BL-625` (the seam and why both
-  edges belong to the caller).
+- `BL-649` `[Bug]` `[Owed-playtest]` **The outside vantages take the camera without giving the
+  airframe back, so a pilot pinned there from the cockpit view keeps the interior over that
+  camera.** *Evidence:* `FlightController.CameraOwned` silences the per-frame arm that re-asserts
+  the first-person visibility rules, so every caller that sets it owes the aircraft's visibility at
+  both edges through `FlightController.SetViewedFromOutside`. Three callers set it bare, leaving a
+  pilot in `PilotViewMode.Cockpit` on `Shown(Interior: true, Body: false)` for the vantage's whole
+  length: `--debug-spectate`, the weapon lab's free camera, and photo mode, which a player reaches
+  from a board and whose whole purpose is composing a shot. All three now call the seam, and the
+  obligation is stated on `CameraOwned` itself rather than restated per site. What is owed is the
+  flight: fly `--view=cockpit`, pause, enter photo mode, and check the aeroplane is in the shot
+  rather than hidden behind its own panel, then leave photo mode and confirm the cockpit comes back
+  over a world that is still halted. *⚠ Traps:* photo mode's hand-back cannot be left to the arm,
+  because it returns to the halted world the board froze and `halted` is its own no-write branch in
+  `_Process`. The debug callers are not covered by an automated check: all three sites are private
+  methods behind a live session, so the suites reach the seam but not its callers.
+  *Cross-refs:* `git log --grep=BL-625` (the seam and why both edges belong to the caller).
 
 ## HUD & UI
 
