@@ -1024,7 +1024,7 @@ public static class SuiteCatalog
             + "original's release speed, rather than out of where the pilot flew in",
             DropoffPlacement));
 
-        // BL-633: the re-placement callback read the marker wherever the build parked it, so a
+        // The re-placement callback reads the marker wherever the build parked it, so a
         // definition that raises it without posing that node put the pilot on the world root.
         into.Add(new TestHarness.Suite("cutscene-handoff-unposed",
             "where a mid-mission cutscene leaves the pilot when it authors no placement, over "

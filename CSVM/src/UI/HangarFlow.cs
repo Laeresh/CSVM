@@ -312,7 +312,7 @@ public sealed class HangarFlow
 
     /// <summary>Writes an airframe's stock guns and per-wing hardpoint counts onto
     /// <paramref name="def"/>, leaving every other field alone: stock caliber 30..70 is calibre row
-    /// 0..4 and a two-marker slot is the twin mount (the A3 mapping read backwards), and the pylons
+    /// 0..4 and a two-marker slot is the twin mount (the stored mapping read backwards), and the pylons
     /// are split by <see cref="StockWingCounts"/>. Both the airframe-defaults arm here and the
     /// campaign's EXPORT of a plane that has no build need this reading, and a second copy of it
     /// would let the two disagree about what an airframe carries at rest.</summary>

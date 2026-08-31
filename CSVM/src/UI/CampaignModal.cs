@@ -9,9 +9,9 @@ namespace CSVM.UI;
 /// export, and the script reaches both the same way, by setting a message id and running that
 /// script over whatever screen was showing.
 ///
-/// <para>It lives on <see cref="CampaignFlow"/> rather than on a page because it is a facility
+/// It lives on <see cref="CampaignFlow"/> rather than on a page because it is a facility
 /// every screen shares. ⚠ It is not <see cref="CampaignFlow.Message"/>, which is the one-line
-/// refusal band any navigation clears: a refusal answered in both places says itself twice.</para>
+/// refusal band any navigation clears: a refusal answered in both places says itself twice.
 /// </summary>
 public sealed class CampaignModal
 {

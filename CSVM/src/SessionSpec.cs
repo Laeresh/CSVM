@@ -482,7 +482,7 @@ public sealed record SessionSpec
     /// pilot flies in and the one the cycle key changes. Dropped outside flight, like
     /// <see cref="View"/>.</summary>
     public Flight.PilotViewMode ViewMode { get; private set; }
-    /// <summary><b>Resolved.</b> The <c>--look=x,y</c> right-stick deflection held for the whole
+    /// <summary>The <c>--look=x,y</c> right-stick deflection held for the whole
     /// run, both in [−1, 1], +x right and +y up: the scripted twin of pushing the look stick, and
     /// the only way a headless run aims it. Drives the chase camera's swing and the first-person
     /// head alike, so one run can compare the two. Zero (the default) is a centred stick, i.e.

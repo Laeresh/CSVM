@@ -206,7 +206,7 @@ public class CampaignAmmoPageTests
         Directory.Delete(profileDir, true);
     }
 
-    // ⚠ C22/decision 4: a guest's ammunition edits are free and discarded. ACCEPT writes their own
+    // ⚠ A guest's ammunition edits are free and discarded. ACCEPT writes their own
     // session-scoped record, and the seated profile's file is not rewritten at all.
     [Fact]
     public void AGuestsAcceptWritesTheirOwnRecordAndLeavesTheProfileFileUntouched()
@@ -228,7 +228,7 @@ public class CampaignAmmoPageTests
         Directory.Delete(profileDir, true);
     }
 
-    // C9: the caption is the group's calibre and the field is a drop-down under it, both at
+    // The caption is the group's calibre and the field is a drop-down under it, both at
     // [@OrdinanceLayout@]'s own coordinates (OL_T_GunName0 at 142,105 and OL_D_AMMO0 at 136,120,
     // DROPWIDTH 148, STDITEMH 15). Nothing may sit at the other's position.
     [Fact]
@@ -253,7 +253,7 @@ public class CampaignAmmoPageTests
         Directory.Delete(profileDir, true);
     }
 
-    // C9 adopting A1: the field opens over the screen, the axis moves inside it, and the confirm is
+    // The field opens over the screen, the axis moves inside it, and the confirm is
     // what writes the pick. The rocket list holds only what the mission ordinal has unlocked.
     [Fact]
     public void ARocketFieldOpensItsListAndTheConfirmTakesThePick()

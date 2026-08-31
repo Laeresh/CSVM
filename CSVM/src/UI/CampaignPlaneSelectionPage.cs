@@ -24,10 +24,10 @@ internal readonly record struct PlaneRow(PlaneRowKind Kind, int Slot = 0);
 /// ACCEPT/CANCEL SELECTIONS. The flight check's CHANGE PLANE opens it and names the slot the
 /// cursor lands on (<see cref="CampaignFlow.PlaneSlot"/>). It edits live, restores the picks it
 /// opened with on CANCEL, and writes them into the profile on ACCEPT.
-/// <para>A guest's check opens this screen over that guest's own roster
+/// A guest's check opens this screen over that guest's own roster
 /// (<see cref="CampaignGuest.Choices"/>): one PILOT slot, no EXPORT, a refusal of its own since
 /// langui 710 names a Pilot and a Wingman a guest's check has no concept of, and an ACCEPT that
-/// moves the guest's pick and writes nothing.</para>
+/// moves the guest's pick and writes nothing.
 /// </summary>
 public sealed class CampaignPlaneSelectionPage : CampaignPage
 {
@@ -515,7 +515,7 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     }
 
     // ACCEPT: the two picks into the profile, and the profile to disk. A guest's ACCEPT moves their
-    // own session-scoped pick instead and writes nothing at all, which is decision 4's whole point.
+    // own session-scoped pick instead and writes nothing at all, keeping the profile unchanged.
     private void Commit()
     {
         if (Guest != null)
