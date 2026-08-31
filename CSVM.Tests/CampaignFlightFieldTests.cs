@@ -19,7 +19,7 @@ public class CampaignFlightFieldTests
         Assert.Equal(1, flow.Field.Players);
         Assert.Empty(flow.Field.Guests);
         Assert.False(flow.Field.Advance());
-        Assert.False(flow.Field.Locked);
+        Assert.True(flow.Field.Locked);
     }
 
     [Fact]
@@ -48,8 +48,12 @@ public class CampaignFlightFieldTests
         Assert.True(flow.Field.Advance());
         Assert.True(flow.Field.Locked);
         Assert.True(flow.Field.Retreat());
-        Assert.False(flow.Field.Locked);
+        Assert.True(flow.Field.Locked);
         Assert.False(flow.Field.Retreat());
+
+        flow.Field.Rewind();
+
+        Assert.False(flow.Field.Locked);
     }
 
     [Fact]
@@ -79,6 +83,7 @@ public class CampaignFlightFieldTests
 
         Assert.Single(flow.Field.Guests);
         Assert.Equal(1, flow.Field.Current);
+        Assert.True(flow.Field.Locked);
     }
 
     [Fact]

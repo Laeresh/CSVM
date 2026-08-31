@@ -2977,15 +2977,6 @@ usual.
   not establish that reading. *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same
   measurement pass profiled).
 
-- `BL-643` `[Bug]` **Returning from a guest flight check to P1 reopens campaign joining after FLY
-  MISSION committed the field.** *Evidence:* `CampaignFlightField.Locked` is `Current > 0`, so
-  `Retreat()` from P2 decrements `Current` to zero and `LaunchMenu.ScanJoins` accepts new pads again;
-  `CampaignFlightFieldTests.TheFieldLocksOnceTheWalkStartsAndUnlocksWhenItIsAbandoned` currently
-  asserts that behavior. *Fix shape:* latch the field when P1 first advances, keep it latched while
-  moving backward or forward through player checks, and clear it only when the whole walk is
-  abandoned through `Rewind`. *⚠ Traps:* revisiting P1's check is navigation inside a committed
-  roster, not abandonment; guest Back presses must not change the field size while latched.
-
 - `BL-653` `[Research]` **The plane selection screen's TOP SPEED and OFFENSE ratings have no decoded
   formula, and ship as a stand-in.** *Evidence:* `PS_T_TOPSPEEDP`/`PS_T_OFFENSEP` and their wingman
   twins are four text widgets fed one of langui 501-505 (`Poor`, `Fair`, `Average`, `Good`,

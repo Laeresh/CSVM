@@ -69,6 +69,7 @@ public sealed class CampaignFlightField
     private CampaignProfileDef? _rosterProfile;
 
     private int _players = 1;
+    private bool _locked;
 
     internal CampaignFlightField(CampaignFlow flow) => _flow = flow;
 
@@ -78,8 +79,8 @@ public sealed class CampaignFlightField
     /// <summary>Whose flight check is showing: 0 the seated player, 1 and up a guest.</summary>
     public int Current { get; private set; }
 
-    /// <summary>Whether the field is closed to new players while a guest's flight check is shown.</summary>
-    public bool Locked => Current > 0;
+    /// <summary>Whether the seated player has committed the field by pressing FLY MISSION.</summary>
+    public bool Locked => _locked;
 
     /// <summary>The guests, in player order. Empty for a solo campaign.</summary>
     public IReadOnlyList<CampaignGuest> Guests
@@ -105,6 +106,7 @@ public sealed class CampaignFlightField
     /// which is the caller's cue to launch.</summary>
     public bool Advance()
     {
+        _locked = true;
         if (Current + 1 >= _players)
         {
             return false;
@@ -130,7 +132,11 @@ public sealed class CampaignFlightField
 
     /// <summary>Abandons the sequence and puts the seated player back on their own check: RETURN
     /// TO BRIEFING, which is a decision to start the whole walk again.</summary>
-    public void Rewind() => Current = 0;
+    public void Rewind()
+    {
+        Current = 0;
+        _locked = false;
+    }
 
     /// <summary>The aircraft player <paramref name="player"/> flies: the profile's selected plane
     /// for the seated player, that guest's own pick for anybody else, null when neither exists.</summary>
