@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Flight;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -52,6 +53,25 @@ public sealed partial class TurretEmplacementRuntime : Node
         }
     }
 
+    /// <summary>How many emplacements are alive right now. A snapshot, not a stored flag:
+    /// <see cref="TurretController.Alive"/> reads the site's <c>HEALTHY_NODE</c> visibility in the
+    /// tree, so this counts nothing meaningful before the subtree is added to it.</summary>
+    public int AliveCount
+    {
+        get
+        {
+            int n = 0;
+            foreach (var t in _turrets)
+            {
+                if (t.Alive)
+                {
+                    n++;
+                }
+            }
+            return n;
+        }
+    }
+
     /// <summary>The <c>WAKEUP_TURRETS</c> stand-in: wakes every dormant emplacement, one
     /// breadcrumb per turret so a log shows exactly what the flag armed.</summary>
     public int WakeAll()
@@ -63,7 +83,7 @@ public sealed partial class TurretEmplacementRuntime : Node
             {
                 t.Wake();
                 woken++;
-                GD.Print($"turret {t.Label}: woken (--wake-turrets stand-in for WAKEUP_TURRETS)");
+                Log.Info("flight", $"turret {t.Label}: woken (--wake-turrets stand-in for WAKEUP_TURRETS)");
             }
         }
         return woken;

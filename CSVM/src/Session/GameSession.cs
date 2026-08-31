@@ -2635,15 +2635,15 @@ public partial class GameSession : Node3D
                 int touched = _turretEmplacements.SetActivatedUnder(zepNode, objective);
                 if (touched > 0)
                 {
-                    GD.Print($"ia: zeppelin '{zepName}' turrets: {touched} emplacement(s) " +
-                             (objective ? "ACTIVATED with the objective" : "stowed with the hull"));
+                    string arm = objective ? "ACTIVATED with the objective" : "stowed with the hull";
+                    Log.Info("flight", $"ia: zeppelin '{zepName}' turrets: {touched} emplacement(s) {arm}");
                 }
             }
             int woken = _spec.WakeTurrets ? _turretEmplacements.WakeAll() : 0;
-            GD.Print($"turrets: {_turretEmplacements.Count} world emplacement(s) placed for " +
-                     $"{_spec.Chapter} ({awakeByData} awake by data, " +
-                     $"{_turretEmplacements.Count - awakeByData} dormant" +
-                     (woken > 0 ? $", {woken} woken by --wake-turrets" : "") + ")");
+            string wokenTail = woken > 0 ? $", {woken} woken by --wake-turrets" : string.Empty;
+            // ⚠ Alive as well as awake: a census of the wake state alone reads identically
+            // whether the guns can fire or not.
+            Log.Info("flight", $"turrets: {_turretEmplacements.Count} world emplacement(s) placed for {_spec.Chapter} ({awakeByData} awake by data, {_turretEmplacements.Count - awakeByData} dormant{wokenTail}); {_turretEmplacements.AwakeCount} awake and {_turretEmplacements.AliveCount} alive now");
             if (_turretEmplacements.Count > 0)
             {
                 state.What += $" + {_turretEmplacements.Count} emplacement(s)";
