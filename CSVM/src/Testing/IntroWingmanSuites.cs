@@ -46,6 +46,11 @@ internal static class IntroWingmanSuites
     /// <summary>Drives C1/M04's shipped intro over its BUILT world and reads the staged
     /// <c>piratefighter</c> during the launch and dive beats: its definition ran, the prop is
     /// drawn, posed off the origin and inside the cutscene camera's frustum.</summary>
+    [Suite("intro-wingmen",
+        "the wingman C1/M04's shipped intro shows beside the player, over its BUILT world: "
+        + "'playerdrop' and 'playerthruclouds' each run their 'pfighterNN' definition, and the "
+        + "aircraft archive's 'piratefighter' prop is drawn, posed off the origin and inside the "
+        + "cutscene camera's frustum through the launch and the dive")]
     internal static void IntroWingmen(TestContext ctx)
     {
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission), $"{Chapter}/{Mission} zrdr");

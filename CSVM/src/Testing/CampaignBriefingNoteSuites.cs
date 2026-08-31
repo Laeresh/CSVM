@@ -30,6 +30,13 @@ internal static class CampaignBriefingNoteSuites
     private static readonly System.Globalization.CultureInfo Invariant =
         System.Globalization.CultureInfo.InvariantCulture;
 
+    // BL-490: an objective wrapped to a second line drew over the next one's authored slot,
+    // which only shows on a mission whose sentences are longer than the first's.
+    [Suite("campaign-briefing-note",
+        "how the briefing's objectives note flows (BL-490): all 24 missions' reveals driven to "
+        + "their end, each composed note measured with the font the screen writes it in, and "
+        + "no entry allowed to start above the bottom of the one before it or to run past the "
+        + "parchment's authored 240 px box")]
     internal static void CampaignBriefingNote(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

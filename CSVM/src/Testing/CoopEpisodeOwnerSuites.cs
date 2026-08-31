@@ -30,6 +30,12 @@ internal static class CoopEpisodeOwnerSuites
     // definition raises its swap behind.
     private const float PlayBudgetS = 30f;
 
+    [Suite("campaign-coop-episode-owner",
+        "the episode owner over CM02's own capture with two humans flying: the mission's swap "
+        + "rebuilds the rig whose trigger claimed the episode, on the record the code names, "
+        + "while the other human keeps the aeroplane it was flying; the swapped pilot keeps "
+        + "their own shooter id and their one near-miss registration, the other pilot's is "
+        + "untouched, and the same capture claimed by nobody swaps the scripted player")]
     internal static void CampaignCoopEpisodeOwner(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

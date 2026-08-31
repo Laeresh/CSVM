@@ -42,6 +42,8 @@ internal static class LookStickSuites
 
     /// <summary>Flies one aircraft per view with the same pinned stick and reads what the camera
     /// did with it.</summary>
+    [Suite("look-stick",
+        "the right stick's look-around flown in both views with --look= standing in for the stick: the flag parses, clamps and survives a typo, and one deflection through one reader and one envelope swings the chase camera and the cockpit head the same angle to the same side of the aeroplane, each returning to its settled pose when the stick centres")]
     internal static void LookStick(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

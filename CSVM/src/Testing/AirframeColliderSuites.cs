@@ -20,6 +20,11 @@ internal static class AirframeColliderSuites
     // the allowance exists for the slivers ClipAxis drops as degenerate.
     private const float MaxUncoveredFraction = 0.005f;
 
+    [Suite("airframe-hull-coverage",
+        "every player airframe's collision hulls measured against its own mesh: each hull "
+        + "inside the box it replaces, the whole silhouette's triangle area covered by some hull "
+        + "within the tolerance, the part names and their order the damage mapping relies on, "
+        + "and the per-part box-to-hull volume the sweep no longer bridges")]
     internal static void AirframeHullCoverage(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

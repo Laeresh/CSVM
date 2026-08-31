@@ -47,6 +47,13 @@ internal static class CampaignRaceSuites
     /// order with every racer alive completes the zone objectives one after another and no
     /// racer-death objective fires, while a racer dying afterwards fires its DEDG objective and
     /// kills the rest of the chain, which is what a rammed racer does to the race.</summary>
+    [Suite("campaign-race-chain",
+        "the Hollywood race (C2/M03) over its own files: against the BUILT chapter world the "
+        + "first site's marker stands on the seaplane hangar the zone runs through (a group "
+        + "node at the world origin, its parts carrying the coordinates) beside dz1, and "
+        + "headless over the real graph a player flying dzpath1, 2 and 3 in order with every "
+        + "racer alive completes OBJECTIVE17, 18 and 19 with no racer-death DEDG firing, while "
+        + "a racer dying afterwards fires its DEDG and kills the rest of the chain")]
     internal static void CampaignRaceChain(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

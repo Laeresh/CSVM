@@ -20,6 +20,13 @@ internal static class CampaignZeppelinSuites
     private const string ZepChapter = "C3";
     private const string ZepMission = "M01";
 
+    // BL-451: a --campaign= launch's SessionSpec never carried Zeppelins/Generators, so the
+    // mission's zeppelins sat deactivated at the origin.
+    [Suite("campaign-zeppelins",
+        "SessionSpec.FromCampaign sets neither Zeppelins nor Generators; GameSession's "
+        + "campaign-mission peek turns Zeppelins on for C3/M01 (ships zeppelins.zrd) and leaves "
+        + "Generators off (its egen.zrd is authored empty), and the mission's own zeppelins "
+        + "place live once the flag is on")]
     internal static void CampaignZeppelins(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

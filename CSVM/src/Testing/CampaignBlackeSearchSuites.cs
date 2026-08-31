@@ -57,6 +57,17 @@ internal static class CampaignBlackeSearchSuites
         (6, 34, 38),
     };
 
+    // CM17 could not be finished: WARP_VEHICLE was a named no-op and a node-form TRAVELERS
+    // could not see a roster aircraft, so all four of the mission's spot checks went
+    // unanswered and its PRIMARY 1 never woke.
+    [Suite("campaign-blacke-search",
+        "CM17's search for Blacke over C4/M02's own BUILT world: OBJECTIVE23 hides "
+        + "bhatgyro_1 on one of four authored waypoints, each of the four search locations "
+        + "wakes a 500 m spot check and naps the radio line that kills it two seconds later, "
+        + "and nothing but a spot check wakes the mission's PRIMARY 1; the aircraft is a "
+        + "roster block with no world node of its name, the warp places it while it is still "
+        + "deactivated, a player half a radius away completes the check and wakes the "
+        + "primary, and a player four radii away reads FALSE rather than unanswered")]
     internal static void CampaignBlackeSearch(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

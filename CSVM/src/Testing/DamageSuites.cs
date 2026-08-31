@@ -12,6 +12,7 @@ namespace CSVM.Testing;
 /// staging those ledgers fire.</summary>
 internal static class DamageSuites
 {
+    [Suite("damage-stages", "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep")]
     internal static void DamageStages(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -28,6 +29,7 @@ internal static class DamageSuites
         });
     }
 
+    [Suite("damage-hd", "weapon hits destroy, swap, drop colliders, and survive destroy→reset→destroy")]
     internal static void DamageHd(TestContext ctx)
     {
         // Collision forced on: the collider census measures which destructible geometry is solid
@@ -64,6 +66,8 @@ internal static class DamageSuites
     // their own pdpN, on a runtime carrying the crash rig's role flags plus the pool. Without the pool
     // the second call restarts the single shared planeflakes root mid-flight, which is the "panels fly
     // away repeatedly, and from the wrong site" symptom.
+    [Suite("damage-template-pool",
+        "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)")]
     internal static void DamageTemplatePool(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -159,6 +163,8 @@ internal static class DamageSuites
     // crosses no per-part threshold at all. Driven on a real plane model with the shipped injure_anims:
     // strip the zone's armour and no panel may flip, then drive health under the threshold and the
     // panel must appear. The first half is what fails when the staging is fed PartState.Fraction.
+    [Suite("damage-staging-pool",
+        "the injure staging reads health only: a zone stripped of armour tears no panel though its combined fraction has crossed the threshold, and the panel appears once health itself crosses (BL-384)")]
     internal static void DamageStagingPool(TestContext ctx)
     {
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
@@ -246,6 +252,8 @@ internal static class DamageSuites
     // both), checks the cockpit panel tears alongside its exterior namesake, survives a
     // CockpitVisibility view-mode switch (the group hide/show never touches a child's own Visible),
     // and clears on Reset() exactly like the exterior panel.
+    [Suite("cockpit-panel-staging",
+        "the cockpit-interior torn panels pcdp4/pcdp6 flip off the SAME pdpanel4/pdpanel6 injure entries as their exterior namesakes, survive a CockpitVisibility view-mode switch, and clear together on respawn's Reset() (B12)")]
     internal static void CockpitPanelStaging(TestContext ctx)
     {
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
@@ -331,6 +339,8 @@ internal static class DamageSuites
     // on the anim name plays five of them never. Three halves: the count over the real ladder, the
     // retraction a repair makes (cleared on the upward crossing alone, never by staying below), and
     // the per-(part, entry) keying, which no shipped def exercises — see the synthetic ladder below.
+    [Suite("damage-stage-slots",
+        "the injure ladder stages per ENTRY: fury's six random_remote_damage thresholds each fire, a repair retracts what it lifted back over, and one entry on four zones fires four times (BL-385/BL-384)")]
     internal static void DamageStageSlots(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -434,6 +444,8 @@ internal static class DamageSuites
     // the sink the wiring under test installs. Phase 1 (the DamageVisuals) and phase 2 (the sink and
     // stops, wired inside BuildFlightCrashRuntime) live in different files, so "the object exists"
     // and "it plays into a runtime" are separate failures and asserted separately.
+    [Suite("ai-damage-stages",
+        "an AI plane spawned through FlightRoster stages end to end: its hull falls through the take-hit path and the rig runtime starts six random_remote_damage instances plus one pfsmoketrail, all anchored inside that aircraft, a repair tears each stage down once, and the Bloodhawk's missing elevator pair is named (BL-385)")]
     internal static void AiDamageStages(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

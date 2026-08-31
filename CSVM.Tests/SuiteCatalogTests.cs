@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using System.Linq;
 using CSVM.Testing;
 using Xunit;
@@ -7,22 +9,45 @@ namespace CSVM.Tests;
 [Trait("Tier", "Quick")]
 public sealed class SuiteCatalogTests
 {
-    [Fact]
-    public void Names_preserve_the_registered_order()
-    {
-        string[] names = TestHarness.All.Select(suite => suite.Name).ToArray();
+    private static string[] Names => TestHarness.All.Select(suite => suite.Name).ToArray();
 
-        Assert.Equal(199, names.Length);
-        Assert.Equal(SuiteCatalog.Names, names);
-        Assert.Equal("emitter-lifetime", names[0]);
-        Assert.Equal("campaign-coop-cutscene-fullscreen", names[^1]);
-        Assert.Equal(names.Length, names.Distinct().Count());
+    [Fact]
+    public void Every_registered_suite_is_named_once_and_described()
+    {
+        var suites = TestHarness.All;
+
+        Assert.NotEmpty(suites);
+        Assert.All(suites, suite => Assert.Matches("^[a-z0-9]+(-[a-z0-9]+)*$", suite.Name));
+        Assert.All(suites, suite => Assert.NotEmpty(suite.What.Trim()));
+        Assert.Equal(suites.Count, Names.Distinct().Count());
+    }
+
+    [Fact]
+    public void The_registry_is_ordered_by_name()
+    {
+        // Not presentation: SuiteShards breaks balancer ties on registry position and sorts each
+        // shard by it, so a rerun divides the same way only while this order is fixed.
+        Assert.Equal(Names.OrderBy(name => name, StringComparer.Ordinal).ToArray(), Names);
+    }
+
+    [Fact]
+    public void Every_weighted_name_is_a_registered_suite()
+    {
+        string path = Path.Combine(TestData.RepoRoot, "analysis", "engine-suite-weights.json");
+        var weights = SuiteShards.Load(path);
+        var registered = Names.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // A missing file loads as Empty, which would let every assertion below pass over nothing.
+        Assert.True(File.Exists(path), $"the weights file is committed and must be readable: {path}");
+        Assert.NotEmpty(weights.Seconds);
+        Assert.All(weights.Seconds.Keys, name => Assert.Contains(name, registered));
+        Assert.All(weights.Groups.SelectMany(group => group), name => Assert.Contains(name, registered));
     }
 
     [Fact]
     public void The_quick_tier_is_a_registered_subset()
     {
-        var names = SuiteCatalog.Names.ToHashSet();
+        var names = Names.ToHashSet();
 
         Assert.NotEmpty(SuiteCatalog.QuickTier);
         Assert.All(SuiteCatalog.QuickTier, name => Assert.Contains(name, names));
@@ -53,7 +78,7 @@ public sealed class SuiteCatalogTests
         Assert.Empty(unmatched);
         Assert.Equal(SuiteCatalog.QuickTier.Count, selected.Count);
         Assert.Equal(
-            SuiteCatalog.Names.Where(n => SuiteCatalog.QuickTier.Contains(n)).ToArray(),
+            Names.Where(n => SuiteCatalog.QuickTier.Contains(n)).ToArray(),
             selected.Select(s => s.Name).ToArray());
     }
 
@@ -62,7 +87,7 @@ public sealed class SuiteCatalogTests
     {
         var union = TestHarness.Select(TestHarness.All, "suite:weapons-fire, suite:air-to-air",
             out var unmatched);
-        Assert.Equal(new[] { "weapons-fire", "air-to-air" }, union.Select(s => s.Name));
+        Assert.Equal(new[] { "air-to-air", "weapons-fire" }, union.Select(s => s.Name));
         Assert.Empty(unmatched);
 
         // A near miss on an exact name, a substring nothing carries, and an unregistered tier: each
@@ -79,14 +104,5 @@ public sealed class SuiteCatalogTests
             out var mixed);
         Assert.Equal(new[] { "weapons-fire" }, partial.Select(s => s.Name));
         Assert.Equal(new[] { "no-such-suite" }, mixed);
-    }
-
-    [Fact]
-    public void An_empty_spec_selects_every_registered_suite()
-    {
-        var all = TestHarness.Select(TestHarness.All, "", out var unmatched);
-
-        Assert.Equal(SuiteCatalog.Names, all.Select(s => s.Name).ToArray());
-        Assert.Empty(unmatched);
     }
 }

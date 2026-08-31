@@ -40,6 +40,13 @@ internal static class CampaignRacerSuites
         "dzpath1", "dzpath2", "dzpath3", "dzpath10", "dzpath6", "dzpath7", "dzpath9",
     };
 
+    [Suite("campaign-racers",
+        "CM13's six hafury racers spawned from C2/M03's own aiv roster into its built world "
+        + "with the colliders up: each resolves basic_airplane's single origin collision probe "
+        + "(the decoded AI contact shape, so its wings clip through the dbase arch dzpath2 "
+        + "threads at rail height), and over the flown run every racer flies its net's seven "
+        + "tagged zones on rails in course order, each end to end and once only, returning to "
+        + "its net between them and never ramming anything")]
     internal static void CampaignRacers(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

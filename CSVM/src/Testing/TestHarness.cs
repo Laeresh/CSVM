@@ -69,7 +69,7 @@ public static class TestHarness
             {
                 if (Registry.Count == 0)
                 {
-                    SuiteCatalog.RegisterAll(Registry);
+                    Registry.AddRange(SuiteCatalog.Discover());
                 }
                 return Registry;
             }
@@ -638,6 +638,25 @@ public static class TestHarness
         double WallSeconds);
 
     public sealed record Suite(string Name, string What, Action<TestContext> Body);
+}
+
+/// <summary>Marks a body as a registered in-engine suite and carries its two facts: the name every
+/// selector, log line, shard plan and weights key spells it by, and the one-line description the
+/// report table prints. Both are literals rather than doc comments because the build generates no
+/// documentation file, so a comment is unreadable at run time.
+/// ⚠ The name is not derived from the method name and must not be: 47 of them differ.</summary>
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class SuiteAttribute : Attribute
+{
+    public SuiteAttribute(string name, string what)
+    {
+        Name = name;
+        What = what;
+    }
+
+    public string Name { get; }
+
+    public string What { get; }
 }
 
 /// <summary>Thrown by <see cref="TestContext.RequireData"/> to end a suite as SKIP.</summary>

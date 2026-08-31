@@ -15,6 +15,23 @@ namespace CSVM.Testing;
 
 internal static class InstantActionSuites
 {
+    [Suite("instant-action",
+        "the C8/D9/E11 Instant Action runtime: an Instant Action display name (\"Warhawk\") " +
+        "resolves to its gamez node and an unrecognised one resolves to null rather than a " +
+        "guess, the ace's own spawn draw substitutes the LITERAL last index on a collision " +
+        "with the player's (never a re-roll), a mixed ace_stats vector averages to one " +
+        "representative AI rating, FlightRoster.SpawnAi given an authored team/livery " +
+        "wears them as-is (the ace lands on team 2 flying its configured airframe), the " +
+        "wingman fan/escort-chain/accent-id table and the decision-8a flight-size clamp are " +
+        "pure over their inputs, a real spawn census puts N wingmen on team 1 flying the " +
+        "configured airframe with wingmen 2/4's PrimaryTargetName resolving to wingmen 1/3's " +
+        "own spawned name, ApplyActorVolumes puts the authored 10000 m on all three of a " +
+        "spawned actor's range gates over the airframe's own 2000/2000/1200, the wave-member " +
+        "personality/accent draws are pure over theirs, " +
+        "and a real InstantActionWaves sequence over spawned aircraft advances from wave 1 " +
+        "to wave 2 exactly on the last kill, activating wave 2's built-inert member at a " +
+        "drawn spawn point at least 500 m from the human, where its patrol net re-seats on " +
+        "the node by that arrival, not the one by the parking pose it seated on while inert")]
     internal static void InstantActionAce(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -277,6 +294,19 @@ internal static class InstantActionSuites
     // `ia.zrd.json` / `egen.zrd.json` / `zeppelins.zrd.json`, on the same host +
     // `cargobay` stand-in world the `zeppelin-launch` suite uses, so the drop geometry
     // under test is the one `AiGeneratorRuntime` already owns.
+    [Suite("instant-action-zeppelin",
+        "the F12 zeppelin run over C1/IA1's own data: zeppelin_type selects the objective node " +
+        "(cargo/passenger/military, an unauthored or unrecognised value falling back to cargo " +
+        "the way the record reset does), the mission script's own deactivation of " +
+        "multiplayer1zep is undone for the objective while a non-selected zeppelin is switched " +
+        "off AND held (placed, no longer flown), and the wave arm is the generator alone: the " +
+        "claimed generator launches nothing on an uncredited budget, one wave's credit " +
+        "releases exactly that wave's built-inert members from the live cargobay drop point " +
+        "and no more, a still-parked member counts as present so the " +
+        "sequencer does not skip the wave, and the last kill advances it; in C1/IA1's real " +
+        "world the objective starts hidden with every one of its gasbag's collision shapes " +
+        "switched off, and the activation brings the hull and those colliders back together " +
+        "(leaving off only the descendants that are themselves deactivated)")]
     internal static void InstantActionZeppelin(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -571,6 +601,19 @@ internal static class InstantActionSuites
     // ⚠ Pair every win check with a SECOND runtime of another mission type on the same signal that
     // must stay Running. Reporting an objective the mission does not run on is the one mistake this
     // design can make.
+    [Suite("instant-action-end",
+        "the G13 mission end, one mission type at a time and each through the real signal: an " +
+        "ace's own Downed report wins the duel, the wave sequencer's last kill wins the " +
+        "squadron (with a wave still flying it does not), the LAST pilot in wins the stunt run " +
+        "over C1/IA1's authored zones while the first does not — and the last still-flying one " +
+        "does when the other is out of lives — and really shooting out every one of C1/M04's " +
+        "piratezep engines wins the zeppelin run with its hull still alive (one engine short " +
+        "does not), as does the gasbag threshold on its own; each with a second mission of " +
+        "another type subscribed to the same " +
+        "signal and staying Running, plus a hull that is not the objective leaving it running; " +
+        "and the lives ledger on a real aircraft: with a life left the armed 3 s crash cam " +
+        "respawns it, out of lives the wreck is still there 10 s later and the solo mission " +
+        "is LOST")]
     internal static void InstantActionEnd(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -902,6 +945,11 @@ internal static class InstantActionSuites
     // single choke point for both, so this fires real rounds through the real pool at a real target
     // rather than asserting on the arithmetic in isolation. The board's other two rows are a live read
     // of StuntMission.CompletedCount and a Downed tally already exercised by InstantActionEnd.
+    [Suite("instant-action-wrapup",
+        "the G14 wrap-up board's two shot counters, ScoredShooters-filtered exactly as the " +
+        "decode's own 'the local player' is: a scored shooter's cannon round counts as both " +
+        "fired and hit, an unscored (AI) shooter's identical shot moves neither counter, and " +
+        "a scored shooter's ROCKET (not CANNON) round is excluded from both")]
     internal static void InstantActionWrapup(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -991,6 +1039,11 @@ internal static class InstantActionSuites
 
     // The shell contract every results board inherits, asserted once against a stub subclass, plus
     // the one deviant: IaWrapupBoard's menu-driven retire, asserted against the real board.
+    [Suite("results-board-shell",
+        "the ResultsBoard shell contract, once for all four results boards: waking raises " +
+        "Ended, the resting Photo Mode row changes nothing, the standard Restart leaves the " +
+        "release to the live flag, the flag clearing retires the board and releases the " +
+        "clock — and the wrap-up board's own menu-driven retire, which no flag ever performs")]
     internal static void ResultsBoardShell(TestContext ctx)
     {
         var state = new PauseState();

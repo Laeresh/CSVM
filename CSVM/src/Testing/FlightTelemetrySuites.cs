@@ -26,6 +26,11 @@ internal static class FlightTelemetrySuites
     // What the emitted line is recognised by, in both sinks.
     private const string Marker = "telemetry pos=";
 
+    [Suite("flight-telemetry-gate",
+        "the once-a-sim-second flight telemetry line costs nothing unasked: three aircraft " +
+        "flown a whole sim second write no line to either sink at the shipped --log= level, " +
+        "and --log=flight brings back exactly one line per aircraft, all on the SAME sim " +
+        "step, in the invariant culture")]
     internal static void FlightTelemetryGate(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

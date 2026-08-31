@@ -16,6 +16,15 @@ internal static class TargetingSuites
     // aircraft with both health pools, a sub-part with health alone, a turret emplacement with
     // neither. That spread is the point, since the turret's nulls are the case that must not
     // silently become 1.0.
+    [Suite("target-ref",
+        "the one abstraction over every selectable thing, tree-free: a TargetRef built for "
+        + "each of the three source kinds (aircraft, zeppelin sub-part, turret emplacement) "
+        + "forwards the wrapped AimCandidate's pose/team/liveness/source and reads its own "
+        + "identity back; health and armor are genuinely optional, so the turret carries "
+        + "neither and the structure carries health alone; the label line runs the original's "
+        + "four format strings; Classify reproduces FUN_004b5cd0's order (objective over "
+        + "otherTarget over the team split, an unflagged turret not selectable at all); and "
+        + "identity is the SOURCE object, not the wrapper")]
     internal static void TargetRefModel(TestContext ctx)
     {
         int ownTeam = AimAssist.PlayerTeam;
@@ -136,6 +145,14 @@ internal static class TargetingSuites
     /// action: <see cref="TapHoldButton"/>'s tap-versus-hold rule, and the attacker queue's live
     /// wiring through a real <see cref="FlightController.TakeProjectileHit"/> on real rigs in a real
     /// pool. The key and pad reads themselves are owed as live play.</summary>
+    [Suite("target-input",
+        "the tap/hold decoding, which is what the suite CAN read (a gamepad and a bare key "
+        + "press it cannot): TapHoldButton's resolve-on-release rule — a short press taps, "
+        + "crossing 250 ms fires the hold ONCE mid-press and the release is then spent, a held "
+        + "button never repeats, and an up button with no press reports nothing; plus the "
+        + "attacker queue's live wiring, where a real hostile round through TakeProjectileHit "
+        + "records its shooter, a friendly-fire round and an unowned one record nothing, and "
+        + "ProjectilePool.RigOfShooter resolves a shooter id to its plane")]
     internal static void TargetInputModel(TestContext ctx)
     {
         // --- the tap/hold decision: pure, no device involved --------------------------------
@@ -263,6 +280,15 @@ internal static class TargetingSuites
     // a plane at the origin on the identity basis, no world. The geometry is chosen so the decoded
     // sector order and a plain nearest-in-space order DISAGREE (nearest is 100 m off the right
     // wing, the cycle head is 400 m ahead), so an implementation that sorted by range fails.
+    [Suite("target-selection",
+        "the sticky selection, tree-free: the decoded cycle order in one assertion "
+        + "(objectives, then ahead/behind/left/right with distance inside a sector), the "
+        + "auto-acquire at the head, Next/Previous stepping and wrapping, Nearest as HEAD OF "
+        + "CYCLE rather than nearest-in-space, target death dropping to the head and not to the "
+        + "dead entry's neighbour, own respawn preserving a live selection, range/bearing/"
+        + "attitude changes never dropping one, Target Nothing STAYING cleared through repeated "
+        + "rebuilds, nearest-crosshairs scoring the NOSE cone (not the pipper) with its 2 km cap "
+        + "and reaching an ally, and 0x24's attacker queue walked backwards")]
     internal static void TargetSelectionModel(TestContext ctx)
     {
         var ahead1 = new object();      // 900 m ahead   -> sector 0
@@ -447,6 +473,13 @@ internal static class TargetingSuites
     // no tree, so the whole grammar is pinned here rather than only by the two screenshot runs. The
     // pool is built from REAL sources rather than hand-filed refs, because the claim is about the
     // names TargetPool actually produces.
+    [Suite("target-flag",
+        "the --target= scripted twin: the four words mapping onto the ordinary actions "
+        + "(nearest as head-of-cycle, next, crosshair, none), a name pinning an aircraft the "
+        + "auto-acquire would NOT have chosen, the same one grammar reaching an ally and a "
+        + "zeppelin sub-part by writing the class back, case-insensitive matching, an unknown "
+        + "name leaving the selection alone, two selectors given one spec landing on the same "
+        + "target, and the flag NOT pinning against later input")]
     internal static void TargetFlagModel(TestContext ctx)
     {
         int own = AimAssist.PlayerTeam;
@@ -580,6 +613,17 @@ internal static class TargetingSuites
     // every membership and exclusion rule; the world half runs C1's REAL emplacement census through
     // the same pool, because "an emplacement is selectable" is a claim about objects the session
     // builds. The carried-gunner exclusion rides the turret-gunner suite, where one already exists.
+    [Suite("target-pool",
+        "the classed candidate pool: the three cycles built off the aim assist's own typed "
+        + "lists. A wingman lands in Ally and an enemy in Enemy off the TEAM FIELD (never the "
+        + "pilot-index derivation, which is the wingman-in-the-marker bug), the selecting plane "
+        + "is excluded from its own pool, a dead plane and a destroyed zeppelin engine are "
+        + "absent, the destructible registry contributes nothing however full "
+        + "AimCandidateSet.Structures is, an ordnance entry with the admission byte clear is "
+        + "refused (the TARGETABLE half is the shootable-flyout suite's), and a zeppelin "
+        + "contributes one entry per gasbag/engine/cannon with its hull's velocity; plus C1's "
+        + "real emplacements, every site dead as ia1.gw leaves it and the five aaguns landing "
+        + "on the Non-Aircraft cycle once their sites are switched on")]
     internal static void TargetPoolModel(TestContext ctx)
     {
         var self = new FlightController { PlayerIndex = 1, Team = AimAssist.PlayerTeam };
@@ -751,6 +795,17 @@ internal static class TargetingSuites
     // runs the tracker against real spawned AI planes in a live pool, covering acquisition, the
     // switch to a closer hostile, the crash drop and the empty-pool null. A hud built without a
     // pool never tracks, which is the seam that keeps the golden VS output untouched.
+    [Suite("hostile-marker-hud",
+        "the targeting HUD (TargetHud, every flight session): the tracker picks the " +
+        "pane's nearest LIVE AI hostile off the pool's own aircraft roster (a closer human, " +
+        "dead plane or neutral is never picked), switches to a closer hostile, drops a " +
+        "crashed one, and a hud built without a pool never tracks; plus --debug-markers' " +
+        "own selection, which takes EVERY live aircraft instead of the nearest, flags each " +
+        "by team against the pane's own, skips a crashed one and skips the pane's own " +
+        "aircraft; plus the shipped marker's rules — the three decoded colours, the bracket " +
+        "gate's gun reach (inside RANGE brackets, past it does not, a target outrunning the " +
+        "round never does, and the hysteresis holds the boundary case), and the label lines " +
+        "an aircraft, an off-screen target and a named objective each compose")]
     internal static void HostileMarkerHud(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1039,6 +1094,12 @@ internal static class TargetingSuites
     // here is only the dispatch: an aircraft source crashes (Downed fires with the given killer), a
     // destructible source is destroyed through the same DamageAt a rocket uses, and a source with no
     // decoded kill path (a turret, or anything else) is left alone.
+    [Suite("debug-kill-target",
+        "the F17 debug kill key's routing (A2, BL-534): an aircraft source crashes through the " +
+        "attributed DebugForceCrash/Downed path, a destructible source (a zeppelin sub-part) is " +
+        "destroyed through the same AnimRuntime.DamageAt a rocket uses, and a turret or any " +
+        "other source with no decoded HEALTH key is left inert rather than inventing a kill " +
+        "path for it; nothing selected does not throw")]
     internal static void DebugKillTargetRouting(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

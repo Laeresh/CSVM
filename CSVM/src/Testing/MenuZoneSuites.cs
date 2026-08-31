@@ -19,6 +19,11 @@ internal static class MenuZoneSuites
     private static readonly Vector2I SmallWindow = new(1280, 720);
     private static readonly Vector2I LargeWindow = new(2560, 1440);
 
+    [Suite("menu-zone-layout",
+        "whether the launchscreen holds still: a real LaunchMenu is walked over every row of "
+        + "the paint screen, whose descriptions differ in length row by row, and the two fixed "
+        + "bands must keep their heights throughout and through a refusal; then the viewport "
+        + "under it is resized and the layout must follow with no press to prompt it")]
     internal static void MenuZoneLayout(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

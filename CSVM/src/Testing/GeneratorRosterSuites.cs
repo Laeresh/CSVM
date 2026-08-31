@@ -27,6 +27,16 @@ internal static class GeneratorRosterSuites
     private const string ShipMission = "M01";
     private const string ShipGenerator = "eshipg31";
 
+    [Suite("generator-roster-params",
+        "the mission spawner's roster read (BL-453) over C5/M04: the dantezep generator's "
+        + "vehicle.params label 'Miles' resolves to the disabled block stihellhound_5_7 with "
+        + "no campaign profile in the run, the aircraft it launches carries that block's "
+        + "nitro slot and its own authored name, its volumes reach the machine under the "
+        + "min_ai_active_dist floor, the CLI-airframe fallback a parameterless generator "
+        + "takes installs no injector, and over C1/M04 eairg32's misspelt 'Eairg32_params' "
+        + "resolves the decoded empty launch (nothing built, no airframe) while eairg31's "
+        + "label resolves its block, and over C2/M01 eshipg31's 'Eshipg31_params' resolves a "
+        + "surface launch of the patrolboat hull")]
     internal static void GeneratorRosterParams(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

@@ -73,6 +73,13 @@ internal static class CampaignMarkerSuites
     /// flag, exactly one is selected at a time, a site under a node that moves is marked where it
     /// now is, and flying a site's own <c>TRAVELERS</c> approach retires it and leaves the
     /// rest.</summary>
+    // BL-468: the objective-target store had no consumer, so a flown mission never showed the
+    // player where its sites were.
+    [Suite("campaign-objective-markers",
+        "the campaign's objective markers over the first story mission's BUILT world: every "
+        + "site its targets.zrd flags carries a marker with the original's category line over "
+        + "the site name, in the decoded blue, sitting on the world node the mission named, "
+        + "and flying one site's own TRAVELERS approach retires that marker alone")]
     internal static void CampaignObjectiveMarkers(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -108,6 +115,11 @@ internal static class CampaignMarkerSuites
     /// rock_zeppelin]]</c> offers ONE site, standing on the hull's own child, with the
     /// <c>SET_HELP_LABEL</c> written against the same path on it; the hull's root and the ground
     /// node stay unmarked.</summary>
+    [Suite("campaign-objective-target-path",
+        "a path-authored objective target over C1/M04's BUILT world: with two rock_zeppelin "
+        + "nodes present, ADD_OBJECTIVE_TARGET [[piratezep, rock_zeppelin]] is held as one key, "
+        + "offers one site standing on the hull's own child rather than the ground node, and "
+        + "carries the SET_HELP_LABEL written against the same path")]
     internal static void CampaignObjectiveTargetPath(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -152,6 +164,11 @@ internal static class CampaignMarkerSuites
     /// category line and proper name (the chapter's <c>targets.zrd</c>, since the mission ships
     /// none) and the colour its action earns, with the node name kept as the identity alone.
     /// The mission's own table would label nothing, which is the raw-node-name marker.</summary>
+    [Suite("campaign-objective-labels",
+        "the objective marker's text over C1C/M01's BUILT world, the one mission with no "
+        + "targets.zrd of its own: its three flown targets take the chapter's table through the "
+        + "reader search path and label 'Zeppelin [Disable] -' over 'Worker's Voyage' in red and "
+        + "'[Dock] -' over each docking hook's proper name in blue, the node key kept as identity")]
     internal static void CampaignObjectiveLabels(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -199,6 +216,12 @@ internal static class CampaignMarkerSuites
     /// and the lifeboat at its own origin, so the marker belongs on the group's geometry rather
     /// than on the node. Asserted over the shipped table and script, then flown at two balloon
     /// altitudes, and retired by the balloon rather than by the boat.</summary>
+    [Suite("campaign-balloon-marker",
+        "CM10's attack-balloon markers over C1/M05's BUILT world: its nine lifesaver sites are "
+        + "group nodes standing on the water with the balloon hung above and the lifeboat at "
+        + "the group's own origin, so the marker stands on the group's geometry clear of the "
+        + "boat, flies with the assembly and rises when the balloon alone rises, and retires "
+        + "when the balloon its objective watches goes inactive while the boat is still afloat")]
     internal static void CampaignBalloonMarker(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

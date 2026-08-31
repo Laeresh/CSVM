@@ -36,6 +36,15 @@ internal static class DropoffChutemanSuites
     /// archive's <c>chuteman</c> subtree joins the runtime's node table at the chapter's own
     /// cross-archive base, and calling the drop's own definition reparents it under the aiming
     /// node and switches it visible.</summary>
+    // BL-540: the aircraft archive's 'chuteman' subtree never joined the world build, so a
+    // mid-mission drop-off's own definition claimed a symbol with a null binding, the same
+    // staging gap B8 fixed for the intro's two aircraft.
+    [Suite("dropoff-chuteman-stage",
+        "the parachutist a mid-mission drop-off animates, over C3/M01's BUILT world: the "
+        + "aircraft archive's 'chuteman'/'chutemanparent'/'pilot'/'stamp' answer the compiled "
+        + "drop's own cross-archive pointers in the runtime's node table, the subtree ships "
+        + "switched off as the shared def's own base state, and calling the drop's definition "
+        + "directly (never the approach cone) switches it visible")]
     internal static void DropoffChutemanStage(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
