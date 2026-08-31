@@ -3090,6 +3090,35 @@ usual.
   `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
   PERF-21.
 
+- `BL-661` `[Bug]` **A commit hook can check a different tree than the one being committed.**
+  *Evidence:* a double-encoded warning sign (`U+00E2 U+0161` where `⚠` belongs) entered
+  `CSVM/src/Testing/AnimationAndEffectsSuites.cs` at `4385f15e` and survived until a merge into
+  another worktree surfaced it (`41c69ed8` repaired it). The encoding tripwire predates that
+  arrival (`c80c74f8`), the file was in the arriving commit's changed set, and the hook's own regex
+  matches the content, so the check should have fired and did not. Hooks 4 (duplicate item ID),
+  5 (encoding) and 6 (golden manifest prose) all resolve `git rev-parse --show-toplevel` in the
+  hook process's own directory and read the tree that root names; 4 and 5 build their file list
+  from `git diff --name-only HEAD` there as well. Hook 7 is safe by construction and is the pattern
+  to copy: it delegates to `CheckCommentCaps.ps1`, which takes `$PSScriptRoot` precisely so the
+  scan follows the script's own worktree rather than the caller's directory.
+  *⚠ The mechanism is inferred, not observed, and one obvious reading of it is already refuted.*
+  "Commits from a worktree are unchecked" is too strong: hook 5 fired correctly on a commit made
+  from inside a worktree whose session directory was that worktree, which is how the character was
+  finally caught. What separates the two cases is whether the hook's directory and the tree being
+  committed are the same, so the shape to suspect is a commit whose target is elsewhere
+  (`git -C <path> commit`, or a session whose directory stayed in the main checkout). A second
+  candidate that has not been ruled out is how the file list reads for a command whose `git add`
+  has not run at hook time. *Fix shape:* settle it first, cheaply: make a worktree, put one known
+  bad character in a tracked file there, and commit it both with the session sitting in that
+  worktree and with `git -C` from the main checkout. Whichever attempt passes names the mechanism.
+  Then derive the root from the tree the commit targets, or from the tool call's working directory,
+  the way hook 7 already does. *Exposure:* most commits here are made from worktrees, so if the
+  directory reading holds, most commits are unchecked for encoding and for duplicate item IDs, and
+  the manifest-prose check reads a manifest that is not the one being committed. *Cross-refs:*
+  `.claude/settings.json` (the seven `PreToolUse` hooks), `CheckCommentCaps.ps1` lines 37-40,
+  `CLAUDE.md` (PowerShell 5.1 corrupts UTF-8; the tripwire is called the backstop there, not the
+  plan).
+
 ## Misc
 
 - `BL-072` `[Feature]` **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`
