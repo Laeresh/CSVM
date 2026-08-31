@@ -371,6 +371,32 @@ public class SessionSpecMenuTests
         Assert.NotEqual(joined[1], derived[1]);
     }
 
+    // ---- Which aircraft each pane actually flies -------------------------------------------------
+
+    /// <summary>The wizard writes PLAYER 1's pick into the def's player_plane, so that field is a
+    /// label rather than an override: each pane flies the aircraft its own pilot selected. Taking
+    /// it as an override is what put player 2 in player 1's aircraft.</summary>
+    [Fact]
+    public void AnInstantActionWizardLaunchLeavesEveryPaneItsOwnPick()
+    {
+        var spec = SessionSpec.FromMenu(Cli(), "C1", new[] { "player_bhawk", "player_fury" },
+            MenuMode.Stunt, WizardDef("stunt_flying"));
+
+        Assert.Null(Session.PlaneRoster.InstantActionOverride(spec, "player_bhawk"));
+        Assert.Equal("player_bhawk", Session.PlaneRoster.PlaneFor(spec, 0));
+        Assert.Equal("player_fury", Session.PlaneRoster.PlaneFor(spec, 1));
+    }
+
+    /// <summary>A def read off a file has no per-player pick behind it, so its one player_plane
+    /// still stands for every human — the reading <c>--ia=</c> has always had.</summary>
+    [Fact]
+    public void AnIaFileLaunchStillPutsEveryHumanInTheDefsPlane()
+    {
+        var spec = Cli("--ia=mission.json", "--plane=player_bhawk,player_fury");
+
+        Assert.Equal("player_kestrel", Session.PlaneRoster.InstantActionOverride(spec, "player_kestrel"));
+    }
+
     private static InstantActionDef WizardDef(string missionType) => new()
     {
         MissionType = missionType,

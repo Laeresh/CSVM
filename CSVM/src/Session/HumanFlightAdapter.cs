@@ -100,8 +100,8 @@ internal sealed class HumanFlightAdapter
     {
         bool verbose = pi == 0; // the per-plane detail lines are identical for every player
         string tag = _human.RigCount > 1 ? $"P{pi + 1} " : "";
-        // Each player flies their own pick; an active Instant Action mission overrides this for
-        // every human alike, since the def carries one player_plane, not a per-player list. A
+        // Each player flies their own pick; an Instant Action mission read off a file overrides
+        // this for every human alike (PlaneRoster.InstantActionOverride settles which do). A
         // mission's own swap outranks both: it names the airframe the script hands the player.
         string planeName = swap?.PlaneNode
             ?? _human.InstantActionPlayerPlaneNode

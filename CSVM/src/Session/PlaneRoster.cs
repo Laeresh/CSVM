@@ -14,6 +14,15 @@ public static class PlaneRoster
     public static string PlaneFor(SessionSpec spec, int index) =>
         spec.PlaneNames.Count == 0 ? spec.PlaneName : spec.PlaneNames[Math.Min(index, spec.PlaneNames.Count - 1)];
 
+    /// <summary>The aircraft an Instant Action mission forces on every human, or null to leave
+    /// each player the pick <see cref="PlaneFor"/> returns. A def read off a file (<c>--ia=</c>,
+    /// <c>ia.zrd.json</c>) names one <c>player_plane</c> and no human behind it picked anything,
+    /// so it stands for all of them. The launchscreen wizard's def carries PLAYER 1's pick in that
+    /// same field (<see cref="UI.LaunchMenu"/>'s FireLaunch), so honouring it would fly P2..P4 in
+    /// player 1's aircraft instead of their own.</summary>
+    public static string? InstantActionOverride(SessionSpec spec, string? iaPlayerNode) =>
+        spec.IaDef != null ? null : iaPlayerNode;
+
     /// <summary>A readable plane name: the def's own authored <c>title</c> where it has been
     /// resolved ("Medusa Kestrel"), else derived from the vehicle.json def name — the player defs
     /// are "p&lt;name&gt;" (pbloodhawk, ppeacemaker, pfury, …), so strip the leading p and
