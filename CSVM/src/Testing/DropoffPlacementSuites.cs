@@ -64,6 +64,15 @@ internal static class DropoffPlacementSuites
     /// origin: the definition's own re-placement callback puts the aeroplane on the pose its
     /// <c>player</c> node was parked at, facing the way that node faces, at the original's release
     /// speed.</summary>
+    // BL-553: the drop-off's handoff put the pilot back where the cutscene found them, so the
+    // pose its own definition parks the 'player' node at, and the callback that reads it, both
+    // went nowhere.
+    [Suite("dropoff-placement",
+        "where a mid-mission cutscene leaves the pilot, over C3/M01's BUILT world: the mission's "
+        + "own cutscenes directory carries the definition raising the re-placement callback, and "
+        + "driving it directly (never the approach cone) flies the aeroplane out of the world "
+        + "pose that definition parked its 'player' node at, on that node's heading and at the "
+        + "original's release speed, rather than out of where the pilot flew in")]
     internal static void DropoffPlacement(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -98,6 +107,14 @@ internal static class DropoffPlacementSuites
     /// without naming the <c>player</c> node, so there is no authored placement to read: the
     /// handoff has to leave the aeroplane where the drop found it, above the surface under it.
     /// </summary>
+    // The re-placement callback reads the marker wherever the build parked it, so a
+    // definition that raises it without posing that node put the pilot on the world root.
+    [Suite("cutscene-handoff-unposed",
+        "where a mid-mission cutscene leaves the pilot when it authors no placement, over "
+        + "C2/M05's BUILT world: its paratrooper drop raises the same re-placement callback "
+        + "while naming no 'player' node at all, and the handoff leaves the aeroplane at the "
+        + "pose the drop found it at, above the surface measured under that pose, rather than "
+        + "on the world root the marker is parked at")]
     internal static void CutsceneHandoffUnposed(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

@@ -68,6 +68,16 @@ internal static class WingWalkCameraSuites
     /// <summary>Plays CM02's own capture definition over that mission's built world and reads the
     /// camera it poses: the shot has to sit on the captured aeroplane rather than at the world
     /// origin, which is where a wing-walk frame with no host to hang off lands.</summary>
+    // BL-542: the capture cutscene's camera rides the wing walk's moving frame, and that frame
+    // is posed onto the aeroplane the capture belongs to.
+    [Suite("campaign-wingwalk-camera",
+        "CM02's capture cutscene framing over that mission's BUILT world: the mission's own "
+        + "capture definition started through the mission-trigger seam its approach table "
+        + "starts it with, played on a realtime clock as isolated camera choreography, "
+        + "with the captured aeroplane spawned from its own roster block at the position the "
+        + "mission authors it -- far from the world origin, so a shot posed off nothing is not "
+        + "mistaken for a framed one -- and camera1 read once a second against that "
+        + "aeroplane's own position")]
     internal static void WingWalkCamera(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

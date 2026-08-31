@@ -21,6 +21,8 @@ internal static class AnimationAndEffectsSuites
     // Asserts every effects-test entry on a full replica stage so sweep verdicts fail the build.
     // The fixed ~180 m play point detects a template that failed to relocate.
     // ⚠ Puffer and mesh tallies are golden only for seed 1 with this counting factory.
+    [Suite("effects-census",
+        "the full --effects-test sweep as verdicts: every effect resolves, template meshes show at the CALL SITE (not the stage origin), and none stays lit after its stop")]
     internal static void EffectsCensus(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -149,6 +151,8 @@ internal static class AnimationAndEffectsSuites
     // thrown downward from a known height, so flight time, resting height and branch are predictable.
     // ⚠ Keep the last case, the same bodies with no mask handed over, running their full clock far
     // below the surface: without it a suite that fired no query at all would pass its landing checks.
+    [Suite("ground-contact",
+        "a gravity-bearing OBJECT_MOTION is cut short by real geometry through the right tier (default column, do_intersections sweep, no_altitude neither), rests on the surface and picks its BOUNCE_SEQUENCE branch from what it struck, and does none of it without a mask")]
     internal static void GroundContact(TestContext ctx)
     {
         const float Tick = 1f / 60f;
@@ -530,6 +534,8 @@ internal static class AnimationAndEffectsSuites
     // body, with min = max ranges and the pose read back as geometry, not as the euler triple written.
     // ⚠ A vector-translation body turns about its COMPILED direction (`rnd_xz`) and holds exactly
     // when that is zero; both cases fail if the axis is ever "fixed" to a mesh axis.
+    [Suite("forward-rotation",
+        "an OBJECT_MOTION tumble turns at the authored RATE about its own launch direction's horizontal perpendicular, scaled by that direction's length — a vector-translation launch about its compiled direction, and not at all when that is zero")]
     internal static void ForwardRotation(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -662,6 +668,8 @@ internal static class AnimationAndEffectsSuites
     // extractor names `rnd_xz`. Nothing on the vector form is random, so two bodies must fly the
     // identical path and end exactly where `initial` puts them. ⚠ Read as a spread, the third triple
     // walked the Barracuda's 40 s cruise up to 44 m per draw, snapped away by the next placement.
+    [Suite("launch-direction-cache",
+        "a vector-form OBJECT_MOTION's third triple is the compiled launch DIRECTION the tumble reads back, not a random spread: two bodies fly the identical path and end exactly where initial × run_time puts them")]
     internal static void LaunchDirectionCache(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -728,6 +736,8 @@ internal static class AnimationAndEffectsSuites
     // closing FromTo 1.2 m past where the legs end. The original integrates every leg from the
     // node's live translation, so the hull never leaves its line. ⚠ A launch seeded from the
     // authored rest pose plays the whole drive at the map origin and snaps back into the bay.
+    [Suite("barracuda-drive",
+        "a chain of OBJECT_MOTION events on one placed node integrates every leg from the node's live pose: C3/M03's sub_movement drives the Barracuda 1680 m along +Z from its reset placement with no frame-to-frame jump and ends within metres of its closing FromTo in the bay")]
     internal static void BarracudaDrive(TestContext ctx)
     {
         const float Tick = 1f / 30f;
@@ -801,6 +811,8 @@ internal static class AnimationAndEffectsSuites
     // out while the player is still shooting the other four, which closes the hookup the whole back
     // half of the mission hangs off. âš  Play must stay ungated: every zeppelin hull death carries
     // the same shape and is fired from ZeppelinRuntime's damage model, which owns that kill.
+    [Suite("anim-activation-prerequisite",
+        "a CALL_ANIMATION is answered only once MINIMUM_TO_SATISFY of the animations the callee's ACTIVATION_PREREQUISITE names have run: CM18's cargozep_floatfree holds the Black Swan at its mooring through four of its five restraint deaths and releases it on the fifth, while an explicit Play still starts a hull death carrying the same shape")]
     internal static void ActivationPrerequisite(TestContext ctx)
     {
         const float Tick = 1f / 30f;
@@ -867,6 +879,8 @@ internal static class AnimationAndEffectsSuites
     // the only carrier a player can reach, and having no placement of its own, a launch that re-homes
     // to rest teleports the wreck kilometres away, so the launch must take the node over from the live
     // playback. ⚠ Stay branch-agnostic; randomdestseq opens with IF RandomWeight and either may draw.
+    [Suite("self-ref-launch",
+        "an OBJECT_MOTION naming the MAIN_ROOT_NODE sentinel launches the node its def was invoked on, taking that node over from whatever was driving it")]
     internal static void SelfRefLaunch(TestContext ctx)
     {
         const float Tick = 1f / 60f;
@@ -963,6 +977,8 @@ internal static class AnimationAndEffectsSuites
     // asserts on the dispatch timeline. Scope and able-to-fail: this module's docs/architecture.md entry.
     // ⚠ Assert a BAND, never an exact time; both launches draw speed and elevation per instance and
     // the draw moves with suite order. ⚠ Do not read the emitter census here; that is emitter-lifetime's.
+    [Suite("bounce-launch",
+        "a bounce-terminated OBJECT_MOTION flies its solved parabola and fires its BOUNCE_SEQUENCE on landing")]
     internal static void BounceLaunch(TestContext ctx)
     {
         // The two bounce-terminated events of refuel1's healthy def: t = 2*v0y/|g| over the authored speed
@@ -1148,6 +1164,8 @@ internal static class AnimationAndEffectsSuites
     // cannon's eight parts are the reachable repro (analysis/bl-257-nulled-launch/).
     // ⚠ Measure the GAP between each part's launch and its own deactivation, not a mesh count, which
     // reads 8/8 either way. ⚠ Assert a BAND; elevation and speed are per-instance draws, and linear.
+    [Suite("nulled-launch",
+        "an OBJECT_MOTION naming NEITHER RUN_TIME nor BOUNCE_SEQUENCE flies its solved parabola before its own deactivation switches it off (BL-257)")]
     internal static void NulledLaunch(TestContext ctx)
     {
         // extracted/*/cam_anim/zep_can_dstry1-dblcannon_flying_parts.json: eight parts, each
@@ -1266,6 +1284,8 @@ internal static class AnimationAndEffectsSuites
     // otherwise start with the splash instead of after it.
     // ⚠ Assert the control too, the nine unflagged calls that must still all start at t=0. A runtime
     // that held every call would pass the spray check and fail those.
+    [Suite("wait-for-completion",
+        "a WAIT_FOR_COMPLETION call holds the caller's next event for its callee, and an unflagged one beside it does not (BL-228)")]
     internal static void WaitForCompletion(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -1357,6 +1377,8 @@ internal static class AnimationAndEffectsSuites
     // install-wide census splits, and the split is total (analysis/bl-229-emitter-host-deactivation/).
     // SPLASH is plane_big_splash, whose emitter must survive its host's deactivation and still be gone
     // by ~0.7 s; DEBRIS is m_build01, whose deactivation is the trail's only authored stop.
+    [Suite("emitter-host-deactivation",
+        "a host going inactive spares the emitter that started in its own instant and still ends the one that did not (BL-229)")]
     internal static void EmitterHostDeactivation(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -1538,6 +1560,8 @@ internal static class AnimationAndEffectsSuites
     // ⚠ Assert both: revealing and never hiding leaves a mesh burning at the last hit point for the
     // session, while hiding eagerly or never revealing shows nothing at all. The CALLED case is
     // he_ground_effect's staged he_ring1; the ENDED case is 3040ap_gunhit's stop-retired chunk mesh.
+    [Suite("effect-template-mesh",
+        "an effect's template meshes show at the call site — including a CALLED template's — and go dark when it ends (BL-061)")]
     internal static void EffectTemplateMesh(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -1599,6 +1623,8 @@ internal static class AnimationAndEffectsSuites
     // in one instant. It then asserts the routing, that each step reports where the burst was and the
     // def's own gate, and that the gate answers to the NEAREST human rather than to one camera.
     // Full inventory: this module's docs/architecture.md entry.
+    [Suite("fbfx-flash",
+        "he_ground_effect's six-step full-screen wash reports its authored run times, so the 1.2 s ramp does not collapse into one instant; the ramp routes by pane proximity and the victim-routed blend wash by player index, composited over it")]
     internal static void FbfxFlash(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -1873,6 +1899,8 @@ internal static class AnimationAndEffectsSuites
     // and docs/org/sequences.md.
     // ⚠ Derive the staged roots (EffectCatalogue.StageRootsFor), never hand-list them; a def whose
     // anchor root was not staged plays nothing, silently. ⚠ Do not inherit --effects-test's 0.3 s TTL.
+    [Suite("ordnance-burst-timeline",
+        "the HE, flash and sonic bursts play end to end and every sequence's whole event timeline matches the authored JSON — in order, at the authored time (D31)")]
     internal static void OrdnanceBurstTimeline(TestContext ctx)
     {
         var report = new System.Text.StringBuilder();

@@ -25,6 +25,12 @@ internal static class OrdnanceSuites
     // distance IS the range. Phase one is the curve at 0.25R/0.5R/0.75R; phase two the same target
     // without and then with a wall in the way; phase three forty targets against the 32 cap; phase
     // four a body built the way the clutter builder builds one, with a ground-level origin.
+    [Suite("blast-curve-cover-cap",
+        "splash damage follows 1 - d^2/R^2 at 0.25R, 0.5R and 0.75R (C10), a destructible " +
+        "behind a wall takes nothing while the same layout without the wall takes the curve's " +
+        "value (C11), a burst over 40 targets damages exactly the nearest 32 (C11), and a " +
+        "chapter-style body (server-side shapes, no shape owners, origin at ground level) " +
+        "takes the curve's value with no engine error")]
     internal static void BlastCurveCoverCap(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -173,6 +179,13 @@ internal static class OrdnanceSuites
     // torpedo launched fast leaves fast and settles onto its authored VELOCITY over LOCK_ON
     // seconds, one launched slow barely changes, a round holding no target sheds nothing, and
     // neither a gun nor a rocket without LOCK_ON reads any differently than it does today.
+    [Suite("launch-velocity-decay",
+        "a LOCK_ON round carries its launcher's velocity and sheds it linearly over LOCK_ON " +
+        "seconds (BL-290): wep_14 launched at 120 m/s leaves at 180, reads 120 at half the " +
+        "window and holds its authored 60 from 2.5 s on, while a slow launch barely changes; " +
+        "the decay runs for a LOCK_ON round holding NO target too (the recorded divergence " +
+        "from the original's target-gated step); and neither a gun nor a rocket without " +
+        "LOCK_ON changes")]
     internal static void LaunchVelocityDecay(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -271,6 +284,12 @@ internal static class OrdnanceSuites
     // cap seeded from VELOCITY plus the launcher's speed, hold there, and nothing anywhere slows a
     // round down. wep_26 is the launcher-speed case because it authors no LOCK_ON, so its sampled
     // world velocity is its own velocity with nothing inherited riding on top.
+    [Suite("motor-acceleration",
+        "a round authoring ACCELERATION climbs to its speed cap and stops there (A3): wep_04 " +
+        "off a standing launcher reads 150/300/450 m/s at 1/2/3 s and holds 450 from then on, " +
+        "the same weapon off a 100 m/s launcher caps 100 higher, and no step of any round's " +
+        "flight — motor, coasting rocket or gun — ever reduces its own speed, because the " +
+        "original carries no drag term")]
     internal static void MotorAcceleration(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -363,6 +382,14 @@ internal static class OrdnanceSuites
     // same travelled-distance accumulator. The detonation observer is the pool's EffectSink: a round
     // that ends by detonating hands its IMPACT row's effect name and the point it went off, and one
     // that expires quietly hands nothing, so the same seam reads all four outcomes.
+    [Suite("ordnance-end-conditions",
+        "the three ways a round ends itself (A4): wep_24 flies its authored 1000 m and " +
+        "detonates there while wep_12, authoring no LOCK_ON, flies the same 1000 m and " +
+        "expires silently; wep_15's 2.0 s timed fuse ends it two metres out with nothing near; a " +
+        "round fuses on its OWN target while a registered aircraft is nearer, and the same " +
+        "round holding no target flies past that point and is fused by the aircraft sweep " +
+        "instead, proving the two paths are separate; and wep_14 is unhittable for its first " +
+        "300 m and hittable from there on")]
     internal static void OrdnanceEndConditions(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -548,6 +575,15 @@ internal static class OrdnanceSuites
     // only exists past RANGE_MINIMUM, and a destruction that plays DESTROY_ANIMATION and does NOT
     // detonate. An ordinary rocket carries neither and is inert to both. The body itself is drawn
     // from the spawn frame in the launch look its def's RESET_STATE poses (wings and prop off).
+    [Suite("shootable-flyout",
+        "the torpedo's two shootable halves (E19/E20): a live wep_14 is the player's one Enemy " +
+        "entry, named for --target= and labelled 'Aerial torpedo' with a full health bar, " +
+        "sorting ahead of every sector as incoming ordnance, while a fused wep_06 reaches the " +
+        "same fourth list with the admission byte clear and contributes nothing; the entry " +
+        "vanishes when the round ends; and the 10-point pair spends armour-then-health, holds " +
+        "the −1.0 sentinel on a round without FLYOUT_HEALTH, and on zero plays " +
+        "torpedo_destroy_effect with no detonation at all; the body is drawn from launch in " +
+        "torpedo_trail's folded look and unfolds its wings at the def's 3.5 s")]
     internal static void ShootableFlyout(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -804,6 +840,17 @@ internal static class OrdnanceSuites
     // B6-B9 on a live pool with a lab tag list beside it: the turn clamp and its speed penalty, the
     // sentinel rate under the same gate, the target-free decay, LOCK_ON_LEAD's blend on a lab def
     // (no shipped carrier reaches its onset), the seeker's per-frame pick, and the beeper's paint.
+    [Suite("ordnance-guidance",
+        "the steering step and the beeper pair on a live pool (B6-B9): wep_11 turns onto a target " +
+        "abeam at its authored 1.25 rad/s and its speed reads the per-frame 0.8+0.2cos penalty " +
+        "exactly; wep_14 with a target turns its 0.001 sentinel and no more, so the gate is on " +
+        "LOCK_ON and not the rate; a LOCK_ON round with no target sheds its launcher's velocity " +
+        "and does not turn; LOCK_ON_LEAD on a lab def eases from bearing to the AimAssist " +
+        "intercept between element 0 and 1 with no step at either end, while every shipped " +
+        "carrier expires before element 0; a seeker's held target is the tag list's pick every " +
+        "frame, overriding what it was launched with, never an untagged aircraft, and nothing " +
+        "once nothing is painted; and a wep_10 hit paints its victim for TIME with the damage " +
+        "ledger untouched, expiring at 20 s and collapsing on death")]
     internal static void OrdnanceGuidance(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -1119,6 +1166,13 @@ internal static class OrdnanceSuites
     // "behind". Two AI and two more humans sit where the cone must catch or miss them, the pool
     // and the flight models run for real, and the wash goes through a real two-pane ScreenFlash
     // wrapped by a recording sink so the third human (no pane) is still observable.
+    [Suite("smoke-screen",
+        "a smoke screen laid through SmokeScreens.Lay on a live roster (D18): the AI directly " +
+        "behind the layer inside 600 m is stunned for the whole 8 s TIME with its stun refreshed " +
+        "every step and recovers after the screen expires, an AI off to the side beyond 85° is " +
+        "never touched, the human behind gets the grey-green wash on its own pane at 0.97 then " +
+        "0.9 every 1.5 s while a second human elsewhere and the layer's own pane stay clear, " +
+        "and a layer going down ends its screen on the spot")]
     internal static void SmokeScreenSuite(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1319,6 +1373,16 @@ internal static class OrdnanceSuites
     // AI rigs, all held so every distance is the one laid out here, shot in turn with the sonic,
     // the flash and the choker. What the pool owes is the routing (a human's pane, an AI's pilot,
     // an engine either way) and the numbers the decoded curves give at the measured distances.
+    [Suite("disabling-hits",
+        "the hit-side dispatch of the no-damage types on a live pool (D15-D17): a wep_08 into a " +
+        "human's tail washes that pane red at weight 1 for 5 s after a 1 s delay and no other " +
+        "pane, a wep_09 from behind does nothing while one from ahead washes white, two humans " +
+        "hit in one second each carry their own wash and an AI 20 m from one burst is stunned; " +
+        "an AI is stunned for DisablingIntensity's seconds by a burst on the ground inside " +
+        "IMPACT_PROXIMITY, raised to 5 s by a direct hit and overwritten back down by the next " +
+        "ground burst; a wep_12 leaves a 2 s cloud that chokes the struck AI for the formula's " +
+        "seconds at its origin distance and a human 20 m out for the 5 s floor, refreshes both " +
+        "while it lives and lets the timer run once gone; and no ledger moves")]
     internal static void DisablingHits(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1568,6 +1632,11 @@ internal static class OrdnanceSuites
     // C12's SURFACE_ANIMATION orientation on a live pool: the same rocket into a 30° slope and into
     // flat ground, and the choker (whose default row is a plain ANIMATION) into the slope, with the
     // effect sink recording the basis each play was handed.
+    [Suite("impact-orientation",
+        "the IMPACT row's SURFACE_ANIMATION is placed with world up rotated onto the struck " +
+        "normal while the plain ANIMATION keeps its fixed axis (C12): a wep_06 into a 30° slope " +
+        "hands he_ground_effect a basis whose Y is the slope normal, the same round into flat " +
+        "ground hands identity, and a wep_12's scatter_effect on the slope stays identity")]
     internal static void ImpactOrientation(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -1655,6 +1724,12 @@ internal static class OrdnanceSuites
     // still plays the authored nothing; and the seeker's ground impact hands ballflare.flt — a
     // bound ON_CALL def anchored on a same-named gamez root — to the effects sink instead of
     // standing a static instance of its template in for the authored white flare.
+    [Suite("ordnance-impact-effects",
+        "the beeper/seeker impacts play what the data authors (PT-67): a wep_10 bursting on its " +
+        "own fused target indexes the aircraft's IMPACT row and plays large_fireball, the same " +
+        "burst on a non-aircraft target plays the named-and-empty default row's nothing, and a " +
+        "wep_11 into the ground hands its authored ballflare.flt to the effects runtime — the " +
+        "white growing flare — instead of standing a static gamez-template instance in for it")]
     internal static void OrdnanceImpactEffects(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -1812,6 +1887,12 @@ internal static class OrdnanceSuites
     // through FireControl, and the pool is never stepped, so every round still stands at the pose
     // it launched from. No shipped airframe cants a pylon marker, so the salvo flies off markers
     // this suite cants itself; an aligned rig cannot tell the aircraft axis from the marker's.
+    [Suite("ordnance-launch-axis",
+        "a player's pylon salvo leaves along the AIRCRAFT's axis while an AI's leaves along its " +
+        "mount's (A5): no shipped airframe cants a pylon marker, so the widest rig's markers are " +
+        "canted 20° here, and every round a human fires still flies parallel to the nose from " +
+        "its own marker's position while the same rig flown by an AI fans by the full 20°; plus " +
+        "D18's launch hook, where a wep_13 pylon lays a screen, spends its ammo and spawns no round")]
     internal static void OrdnanceLaunchAxis(TestContext ctx)
     {
         // The yaw this suite puts on each pylon marker, alternating in sign: big enough that a
@@ -2030,6 +2111,8 @@ internal static class OrdnanceSuites
     // that pose is what every burst starts from; the pool reuses each copy, so from the wrap on it
     // is what every burst starts WITHOUT unless the checkout re-applies it. Four slots, five plays:
     // the fifth lands on the first's copy, and its rings must draw as the first's did.
+    [Suite("effect-pool-reset",
+        "a pooled effect copy is re-reset on checkout: the sonic burst played five times over a four-slot pool draws its rings on the fifth play exactly as on the first (BL-406)")]
     internal static void EffectPoolReset(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -2092,6 +2175,8 @@ internal static class OrdnanceSuites
     // play's motions running lets the new launch take over from a MID-FLIGHT pose, so the burst
     // walks outward on every wrap. Four slots, five OVERLAPPING plays: the fifth takes the first's
     // live copy, and its debris must start where the first's did.
+    [Suite("effect-pool-spawn-pose",
+        "a pooled effect copy is restored to its SPAWN POSE on checkout: the HE burst played five times over a four-slot pool, overlapping so the fifth play takes the first's still-live copy, launches its debris from the same pose the first did (BL-511)")]
     internal static void EffectPoolSpawnPose(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>

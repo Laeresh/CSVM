@@ -56,8 +56,20 @@ function Get-Scope {
 # Which cap applies to the block ending at $end, and what it is attached to.
 function Get-BlockKind {
     param([string[]]$Lines, [int]$End, [bool]$IsXml)
+    # Blank lines and attributes sit between a comment and what it is attached to. An attribute may
+    # wrap over several lines ([Suite("name", "a long description ...")] does), and only its first
+    # line starts with '['; skipping just that one read the description as the declaration and
+    # charged the comment the statement cap.
     $k = $End
-    while ($k -lt $Lines.Count -and ($Lines[$k].Trim() -eq '' -or $Lines[$k] -match '^\s*\[')) { $k++ }
+    while ($k -lt $Lines.Count) {
+        if ($Lines[$k].Trim() -eq '') { $k++; continue }
+        if ($Lines[$k] -match '^\s*\[') {
+            while ($k -lt $Lines.Count -and $Lines[$k].TrimEnd() -notmatch '\]$') { $k++ }
+            $k++
+            continue
+        }
+        break
+    }
     $decl = if ($k -lt $Lines.Count) { $Lines[$k].Trim() } else { '' }
     if ($decl -match '\b(class|struct|enum|interface|record)\b' -and -not $decl.EndsWith(';')) {
         return @{ Kind = 'type'; Decl = $decl }

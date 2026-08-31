@@ -70,6 +70,9 @@ internal static class WorldFidelitySuites
         (-15360f, -7168f, -8192f, -14336f),
     };
 
+    [Suite("campaign-submarine",
+        "CM04's authored-inactive barracuda remains built but hidden until sub_movement "
+        + "resolves and activates it after the patrol phase")]
     internal static void CampaignSubmarine(TestContext ctx)
     {
         ctx.WithWorld("C3", collision: false, mission: "M03", world =>
@@ -131,6 +134,12 @@ internal static class WorldFidelitySuites
         });
     }
 
+    [Suite("partition-areas",
+        "the area-selected node toggle (BL-037) over C3's own three story rectangles: each " +
+        "resolves through the partition grid to real world content, the half-open cell rule " +
+        "holds (a rectangle inside one cell selects nothing), corner order does not change " +
+        "the selection, and C3/M01's built world really has its third area switched off with " +
+        "the first left standing")]
     internal static void PartitionAreas(TestContext ctx)
     {
         ctx.WithWorld(AreaChapter, collision: false, AreaMission, world =>
@@ -189,6 +198,12 @@ internal static class WorldFidelitySuites
         });
     }
 
+    [Suite("scripted-path",
+        "the second movement law (BL-361) over C1's authored pp1 takeoff path: a placed " +
+        "vehicle sits frozen on its first waypoint however long the mission runs, START_TAXI " +
+        "releases it onto a 40 mph taxi, the final leg accelerates past that speed and lifts " +
+        "it off the strip, and reaching the final leg's decoded 300 m point hands it back at " +
+        "the speed it reached")]
     internal static void ScriptedPathTaxi(TestContext ctx)
     {
         ctx.WithWorld(PathChapter, collision: false, PathMission, world =>
@@ -263,6 +278,13 @@ internal static class WorldFidelitySuites
     // A surface generator's launch, from the decoded pose down the whole authored run and into
     // the flight model at the final leg's overshoot point: C1/M02's eairg31 over its five-point
     // eag31 ground roll, judged the instant the hold releases.
+    [Suite("generator-takeoff-run",
+        "a surface generator's launch flies its take-off run (BL-522) over C1/M02's eairg31: " +
+        "the launched aircraft is held on the run from the decoded launch pose, passes every " +
+        "eag31_aip point in order at the taxi law's speeds, and at the final leg's decoded " +
+        "300 m overshoot point, well past the last point and climbing, is released into the " +
+        "flight model well above the taxi speed with the lever open, nose up, its patrol net " +
+        "reseated where it arrived")]
     internal static void GeneratorTakeOffRun(TestContext ctx)
     {
         WithGeneratorLaunch(ctx, collision: false, (points, generators, rig) =>
@@ -329,6 +351,10 @@ internal static class WorldFidelitySuites
     // The same launch on the real airfield with the world's colliders up, flown on for thirty
     // seconds after the hand-off by its own pilot: the launched aircraft must live and climb away
     // from the field, not fly its first turn at ground level into the strip.
+    [Suite("generator-launch-climb-out",
+        "the same eairg31 launch on C1/M02's real airfield with the world's colliders up, " +
+        "flown by its own pilot for 30 s after the hand-off: the Peacemaker is alive with no " +
+        "ram and no crash, never came back down to the strip, and ends above the field")]
     internal static void GeneratorLaunchClimbOut(TestContext ctx)
     {
         WithGeneratorLaunch(ctx, collision: true, (points, generators, rig) =>
@@ -371,6 +397,13 @@ internal static class WorldFidelitySuites
     }
 
 
+    [Suite("hangar-door-wake",
+        "hangar doors over C1/M04's real world (BL-350): OBJECTIVE1's WAKE_ANIM reaches "
+        + "'hangar3_doors' through the director at its authored 2 s dormancy and its four "
+        + "panels slide their authored 50 m by 12 s; the generator eairg31's own hangar takes "
+        + "the loader's node-name door default (eairg_open31, the close resolving the open), "
+        + "and its door starts opening the decoded 4 s before the spawn, which lands at that "
+        + "hangar")]
     internal static void HangarDoorWake(TestContext ctx)
     {
         CampaignMission? found = null;
@@ -523,6 +556,13 @@ internal static class WorldFidelitySuites
 
     // Which Godot callback feeds the runtime under each clock mode. Read off the runtime's own
     // sim-seconds accumulator, with the clock's BeginFrame run the way GameSession runs it.
+    [Suite("anim-clock-realtime",
+        "which callback feeds the animation runtime under each clock mode: on a realtime "
+        + "session the physics tick advances it by its own dt and the frame's wall delta "
+        + "advances nothing, a cutscene hold hands the advance back to the frame, a halt "
+        + "advances neither until a queued step, and fixed-step takes exactly one step per "
+        + "frame from the frame; a mission-ending hold keeps both callbacks quiet on the "
+        + "last flown pose")]
     internal static void AnimClockRealtime(TestContext ctx)
     {
         const float physicsDt = 1f / 60f;
@@ -597,6 +637,12 @@ internal static class WorldFidelitySuites
         }
     }
 
+    [Suite("fog-state",
+        "the FOG_STATE animation event (BL-038) over C1/M04's intro definition: a weather "
+        + "rig writes the zone's fog at build, playing the intro raises its RESET_STATE fog "
+        + "through the runtime's own dispatch, the three fog globals change to the event's "
+        + "authored 'drop_fog' values, an event raised before the rig has built lands after "
+        + "the zone, and a field the event omits is left as the zone wrote it")]
     internal static void FogStateEvent(TestContext ctx)
     {
         ctx.WithWorld(DoorChapter, collision: false, DoorMission, world =>

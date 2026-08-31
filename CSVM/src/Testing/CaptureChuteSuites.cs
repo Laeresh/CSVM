@@ -36,6 +36,12 @@ internal static class CaptureChuteSuites
     // itself is (0, -2, 8.5) and the frame moves 15 m/s, so a frame's slack covers both.
     private const float SiteToleranceM = 30f;
 
+    [Suite("campaign-capture-chutes",
+        "the crew bailing out at the end of CM02's capture over C3/M05's BUILT world, the "
+        + "capture played through the cutscene host from the approach row's trigger: the wing "
+        + "walk's player definition calls the chute definition three times, each figure is "
+        + "placed at the walk frame the call sites it on rather than at the archive's own "
+        + "origin, three hang in the air at once, and each stays drawn for its whole drift")]
     internal static void CaptureChutes(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

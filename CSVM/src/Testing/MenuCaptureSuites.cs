@@ -14,6 +14,13 @@ namespace CSVM.Testing;
 /// </summary>
 internal static class MenuCaptureSuites
 {
+    // BL-489: the screenshot key reached the launcher only when no menu was up, so a menu
+    // defect could be described but not shown.
+    [Suite("menu-screenshot-key",
+        "the screenshot key on the menu screens: a real key event is pushed through the real "
+        + "viewport with a LaunchMenu standing, once on the launchscreen and once on a "
+        + "campaign board, and each press must leave one more file in the folder the flight "
+        + "capture writes to")]
     internal static void MenuScreenshotKey(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

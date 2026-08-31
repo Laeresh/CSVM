@@ -17,6 +17,13 @@ internal static class TargetingCandidateSuites
     // scan at all. Proves the widened SelectRankedTarget routes a non-aircraft winner into
     // AiGunner.GroundTarget (never Target, so AiPilot's flight law is untouched) and that the
     // gunner then fires real rounds at it; and that a same-team structure is refused.
+    [Suite("targeting-candidates",
+        "the D36 widened AI acquisition (BL-363): a registered structure whose pool authors no " +
+        "team is nobody's target and a same-team one is refused, while " +
+        "a real team's AI routes a winning structure candidate into AiGunner.GroundTarget " +
+        "rather than the aircraft-only Target field (so AiPilot's flight law sees nothing new), " +
+        "and the gunner fires real rounds at a zeppelin structure with no aircraft in the scan " +
+        "at all")]
     internal static void TargetingCandidates(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -161,6 +168,10 @@ internal static class TargetingCandidateSuites
     // a carried gunner rode the ranked pool as a second entry beside its own aircraft's Vehicle
     // entry, one silhouette read as two candidates. Mirrors the guard TargetPool.Offer already
     // applies for the player (TargetPool.IsEmplacement), now shared by both pools.
+    [Suite("ranked-pool-carried-turret-dedup",
+        "the AI ranked pool's carried-turret guard (BL-507): a hostile aircraft with a crewed " +
+        "rear mount rides the pool as one Vehicle entry, never a second entry for its own " +
+        "turret, while a world emplacement in the same scene still reaches the pool")]
     internal static void RankedPoolCarriedTurretDedup(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

@@ -161,6 +161,15 @@ internal static class LandingApproachSuites
     /// the animations arms none of them, the drop-off rows start disarmed, the mission's own
     /// objective chain arms them, and flying one cone starts the drop cutscene, which completes the
     /// primary objective gated on it.</summary>
+    // BL-467: nothing read landings.zrd, so no mission could ever play the cutscene an
+    // ANIM_STATE objective waits on.
+    [Suite("landings-approach-trigger",
+        "the mid-mission cutscene trigger over the first story mission's BUILT world: the "
+        + "chapter's landings.zrd rows resolve to the cone, half-cone and sphere volumes their "
+        + "approach nodes author, a mission carrying none of the animations resolves none of "
+        + "them, the drop-off rows start disarmed and fire nothing, the mission's own objective "
+        + "chain arms them, and flying one cone starts the drop cutscene through the cutscene "
+        + "host, runs it to EXECUTED and completes the primary objective gated on it")]
     internal static void LandingApproachTrigger(TestContext ctx) =>
         DriveMission(ctx, FirstSeq, "test-landing-approach", Drive);
 
@@ -170,12 +179,30 @@ internal static class LandingApproachSuites
     /// three <c>land_on</c> nodes by gamez index, which arms and un-arms the rows it now reaches;
     /// an arming objective that waits on those planes' aiv group being down to one; and a driven
     /// approach at an armed Balmoral starting the capture.</summary>
+    // BL-492/BL-495: CM02's wing-walk capture, whose approach rows the mission gates on a
+    // land_on node state switched for all three Balmorals at once, and whose approach nodes
+    // reach the world only on the rigs the roster spawns.
+    [Suite("landings-wingwalk-gate",
+        "CM02's Balmoral capture gate over its BUILT world with its own roster spawned: the "
+        + "mission's three approach rows resolve and differ only by index, the world build "
+        + "alone reaches none of them, the roster spawn grafts each onto the rig its block "
+        + "spawned so all five rows bind, one pair of definitions arms and un-arms all three "
+        + "land_on nodes by gamez index, the objective calling the arming one waits on those "
+        + "planes' aiv group being down to one, and a driven approach at an armed Balmoral "
+        + "starts the capture where the same approach before the gate starts nothing")]
     internal static void WingWalkCaptureGate(TestContext ctx) =>
         DriveMission(ctx, WingWalkSeq, "test-wingwalk-gate", DriveWingWalk);
 
     /// <summary>Drives CM07's caboose pickup through its range-triggered start animation: the
     /// passenger's library-root rig appears on the train, the train's own pickup timing opens the
     /// late approach cone, and flying that cone starts the pickup cutscene and clears its objective.</summary>
+    [Suite("landings-train-pickup-gate",
+        "CM07's caboose pickup through its real range-triggered mission path: approaching the "
+        + "train stages the passenger and flare rig, ladder sensor and docking cone from their "
+        + "library root, the train's own pickup_timing opens land_on in its first flyable "
+        + "phase, the landing trigger discovers that late-created cone, and flying it starts "
+        + "the hosted pickup cutscene beside the caboose, faces the passenger, runs to handoff "
+        + "and clears the primary pickup objective")]
     internal static void TrainPickupGate(TestContext ctx) =>
         DriveMission(ctx, TrainPickupSeq, "test-train-pickup-gate", DriveTrainPickup);
 
@@ -183,6 +210,15 @@ internal static class LandingApproachSuites
     /// rides the moving train as its child, waves with the lit flare once the pickup timing opens
     /// the switch, the rope ladder drops on a level approach inside the sensor, and the pickup
     /// cutscene's call to <c>caboosepickup</c> holds a live instance for the person's climb.</summary>
+    [Suite("landings-train-pickup-ride",
+        "CM07's caboose pickup as the original runs it, over the mission's real moving train: "
+        + "the staged passenger is the caboose's child and keeps its offset while the caboose "
+        + "travels, the pickup timing opening the switch selects the wave with the lit flare "
+        + "and its smoke trail laying sprites on that passenger's own hand, a level aircraft "
+        + "inside the 100 m sensor drops the rope ladder and the drop's own callback settles it "
+        + "deployed swinging on its looped wind script, and the pickup cutscene's call to "
+        + "caboosepickup holds a live instance for the person's climb while cabpkup_ladder "
+        + "swings the rungs he climbs")]
     internal static void TrainPickupRide(TestContext ctx)
     {
         // The harness retires the world's puffer factory with the build's texture archive, where a
@@ -196,6 +232,11 @@ internal static class LandingApproachSuites
     /// the dock objective's definition stages the approach cone from its library root under the
     /// trailer's sensor, the landing trigger discovers it, and flying that cone starts the pickup
     /// cutscene and clears the dock objective.</summary>
+    [Suite("landings-trailer-pickup-gate",
+        "CM11's trailer pickup through the objective script's own WAKE_ANIM: the dock "
+        + "objective's definition stages the approach cone from its library root under the "
+        + "trailer's sensor, the landing trigger discovers that late-created cone, and flying "
+        + "it starts the hosted pickup cutscene, runs to handoff and clears the dock objective")]
     internal static void TrailerPickupGate(TestContext ctx) =>
         DriveMission(ctx, TrailerPickupSeq, "test-trailer-pickup-gate", DriveTrailerPickup);
 
@@ -205,6 +246,12 @@ internal static class LandingApproachSuites
     /// <c>WAIT_FOR_COMPLETION</c> releases, 4.85 s later. Both beats are pinned against the
     /// authored script lengths, the row that started the episode must not fire again underneath
     /// it, and the film's completion code is what wins the mission.</summary>
+    [Suite("landings-car-pickup-credit",
+        "CM16's armoured-car pickup, the one whose own film destroys what the mission is "
+        + "watching: the mission's chain stages the cone and the waving passenger, flying it "
+        + "starts the pickup, the row does not fire again underneath the episode, the film "
+        + "calls destroy_car01 on its authored beat and reaches got_sparks on its own, and the "
+        + "mission-completion code it raises wins the mission")]
     internal static void CarPickupCredit(TestContext ctx) =>
         DriveMission(ctx, CarPickupSeq, "test-car-pickup-credit", DriveCarPickup);
 
@@ -212,12 +259,24 @@ internal static class LandingApproachSuites
     /// into the chapter's <c>auto</c> row lights <see cref="LandingApproachRuntime.AutoLandOffered"/>
     /// but starts nothing on its own, pressing the button starts the row's animation the way the
     /// manual row would, and holding the button past the handoff does not re-fire it.</summary>
+    [Suite("landings-auto-land-button",
+        "the auto-land button over the first story mission's BUILT world: flying the chapter's "
+        + "auto row lights AutoLandOffered but starts nothing while the button is up, a realtime "
+        + "frame of the flown rig's own _Process actually draws the prompt, pressing the button "
+        + "starts the same animation the manual row would, the cutscene host still runs it, and "
+        + "holding the button past the handoff does not re-fire the row")]
     internal static void AutoLandButton(TestContext ctx) =>
         DriveMission(ctx, FirstSeq, "test-autoland-button", DriveAutoLand);
 
     /// <summary>Drives the campaign's first mission's own <c>auto</c> row with two humans flying:
     /// the prompt is offered per pane, the row starts once however many humans stand in its sphere,
     /// and the episode belongs to the human who pressed rather than to player 1.</summary>
+    [Suite("campaign-coop-approach-row",
+        "the first story mission's own auto row flown by two humans: the guest inside the "
+        + "sphere is offered the prompt in their own pane while the scripted player a kilometre "
+        + "out is not and their held button starts nothing, the guest's press starts the row "
+        + "and the episode belongs to the guest rather than to player 1, and a second human "
+        + "standing in the same volume is not a second entry into it")]
     internal static void CampaignCoopApproachRow(TestContext ctx) =>
         DriveMission(ctx, FirstSeq, "test-campaign-coop-approach-row", DriveCoopApproachRow);
 
@@ -226,6 +285,18 @@ internal static class LandingApproachSuites
     /// branches are decidable, and the episode ends with that airframe's docking hook extended, its
     /// authored mount offset applied, and its wings folded where the airframe authors a fold.
     /// </summary>
+    // The hookup plays with no hook, the aeroplane too high and the wings unfolded when the
+    // flown airframe's own subtree is not in the runtime's node table.
+    [Suite("landings-hookup-airframe",
+        "the zeppelin hookup on two airframes over the first story mission's BUILT world, "
+        + "every value read from the aircraft archive's own definitions: the flown aircraft is "
+        + "in the animation runtime's node table so the hookup's per-airframe branches can read "
+        + "its active bit, it carries its own docking-hook group built retracted, and the "
+        + "episode ends with that hook extended, the airframe hung at the mount offset the "
+        + "extend-hook definition authors for it, and its wings turned to the angles its own "
+        + "fold definition authors where the airframe has one, having swung that hook once "
+        + "(BL-628: the episode's every start counted by name, the shared extend-hook "
+        + "definition among them)")]
     internal static void HookupAirframe(TestContext ctx) =>
         DriveMission(ctx, FirstSeq, "test-hookup-airframe", DriveHookupAirframe);
 
@@ -234,6 +305,22 @@ internal static class LandingApproachSuites
     /// row's definition rather than the callee that raised the first code, control stays locked
     /// from the hookup to the authored handoff, and the aeroplane is left where the re-placement
     /// code put it rather than teleported when the definition runs out.</summary>
+    // The docking cutscene handed the player flight back when its first callee ended and
+    // teleported them when the row's definition ran out, because the episode was booked to
+    // whichever definition raised the first code.
+    [Suite("landings-docking-hold",
+        "CM06's docking onto the Workers' Voyage over its BUILT world, the one shipped row "
+        + "whose definition raises no code of its own: the episode belongs to the row the "
+        + "trigger started rather than the hookup callee that raised the first code, the "
+        + "player is held out of flight from the hookup through the drop to the unhook's own "
+        + "handoff code although the row's definition ends before it on a trailing wait, the "
+        + "host hands the session back on that code, the released aeroplane flies out of the "
+        + "player marker's pose where the re-placement code read it, and no frame after the "
+        + "release teleports it. The hookup calls its drop and pickup legs unconditionally and "
+        + "only each leg's own REQUIRED node state keeps the wrong one off, so all three fork "
+        + "paths resolve to nodes this world built (one resolving to none would pass the gate "
+        + "vacuously), the drop leg runs on the first docking while the two pickup legs do "
+        + "not, and nothing the row reaches plays twice (BL-525, BL-628)")]
     internal static void DockingHold(TestContext ctx) =>
         DriveMission(ctx, DockingSeq, "test-docking-hold", DriveDockingHold);
 
@@ -242,6 +329,17 @@ internal static class LandingApproachSuites
     /// folds a wing. The episode has to hold through that branch's authored turn, both wings reach
     /// the angle the fold authors, and the mission-completion code lands at its end rather than
     /// before it.</summary>
+    [Suite("landings-balmoral-dock",
+        "CM02's own ending over C3/M05's BUILT world: the docking row flown in the Balmoral the "
+        + "capture hands over, whose branch of the shared hookup is the only one that folds a "
+        + "wing. The episode holds through that branch's authored two-second turn, both wings "
+        + "reach the angle the fold authors, and the mission-completion code lands at its end "
+        + "while the definition is still running, so it beats the objective watching that same "
+        + "definition for EXECUTED and wins the mission on its own frame, once, with a later "
+        + "completion code changing nothing; the world then stands still for the whole leaving "
+        + "hold, taking no aeroplane step, no animation advance and no stick, so the film's "
+        + "last live frame is the code's own and the session goes to the cabin two seconds "
+        + "after it rather than on it")]
     internal static void BalmoralDock(TestContext ctx) =>
         DriveMission(ctx, WingWalkSeq, "test-balmoral-dock", DriveBalmoralDock);
 
@@ -249,6 +347,13 @@ internal static class LandingApproachSuites
     /// reaction's <c>CALL_ANIMATION</c> only ARMS it, because the definition is range-gated;
     /// reaching the hangar runs it; and the authored <c>RESET_STATE</c> at the handoff is what
     /// clears the objective node the mission gates "Fly Through Zeppelin Hangar" on.</summary>
+    [Suite("landings-hangar-drop-gate",
+        "CM07's zeppelin-hangar drop over its BUILT world, every name read from the mission's "
+        + "own data: the one cutscene definition it range-gates, the ambient definition that "
+        + "calls it, and the objective node the drop's RESET_STATE clears. The call ARMS the "
+        + "drop without running it while the player is outside the authored band, reaching the "
+        + "hangar runs it and hands it to the cutscene host, and the reset block at the handoff "
+        + "clears that node, which is what completes the fly-through objective")]
     internal static void HangarDropGate(TestContext ctx) =>
         DriveMission(ctx, TrainPickupSeq, "test-hangar-drop-gate", DriveHangarDrop);
 

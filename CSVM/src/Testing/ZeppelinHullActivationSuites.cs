@@ -22,6 +22,14 @@ internal static class ZeppelinHullActivationSuites
     // and switches both landing cones on. The dock is live from here.
     private const string DockAnim = "pzhomebase";
 
+    [Suite("zeppelin-hull-activation",
+        "CM13's Pandora over C2/M03's real world: C2 alone ships the piratezep node with its " +
+        "gamez active bit clear and no mission .gw sets it back, so the world builds the hull " +
+        "hidden and the zeppelin record is what switches it on. With it on, the hook point, " +
+        "the hangar bay and both landing cones resolve UNDER the hull, and after pzhomebase " +
+        "(the anim OBJECTIVE8 wakes at the end of the race) has run its dock choreography the " +
+        "hull, the hook and the hangar bay all draw — rather than a live dock on an invisible " +
+        "Pandora")]
     internal static void ZeppelinHullActivation(TestContext ctx)
     {
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);

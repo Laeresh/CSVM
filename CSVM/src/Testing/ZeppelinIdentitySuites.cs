@@ -18,6 +18,12 @@ internal static class ZeppelinIdentitySuites
     private const string AllyZep = "multiplayer2zep";
     private const string PlainZep = "multiplayer1zep";
 
+    [Suite("zeppelin-identity",
+        "the owning-zeppelin identity a zone and a gun carry (BL-476): C5/M03's authored "
+        + "cargozep* exclusion reaches a gasbag only through its hull's name and not through "
+        + "the zone's own, and over C1/MP3's built world the record team fans onto every "
+        + "emplacement standing on the ally hull while the unauthored sibling's guns keep "
+        + "their TURRET default")]
     internal static void ZeppelinIdentity(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

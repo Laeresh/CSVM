@@ -34,6 +34,13 @@ internal static class CampaignHumanFieldSuites
     // Far outside that radius on every axis, and clear of the mission terrain.
     private static readonly Vector3 FarAway = new(2000f, 900f, 2000f);
 
+    [Suite("campaign-coop-human-field",
+        "the human field over C3/M01's own shipped script and gate geometry: OBJECTIVE5's "
+        + "authored 'player' TRAVELERS completes on the guest who reaches the point while the "
+        + "scripted player stays 5 km out, and completes on nobody while the same aeroplane sits "
+        + "there outside the field, an escorting block's 'player' leader still resolves to P1's "
+        + "rig alone, and dzpath1's gate pair completes when P1 flies the green gate and the "
+        + "guest the red one, which neither half completes by itself")]
     internal static void CampaignCoopHumanField(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

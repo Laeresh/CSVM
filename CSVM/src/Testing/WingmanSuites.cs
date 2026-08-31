@@ -100,6 +100,13 @@ internal static class WingmanSuites
     private const string EngageChapter = "C3";
     private const string EngageMission = "M05";
 
+    [Suite("wingman-station",
+        "the D34 campaign wingman (BL-362): the decoded netless mode-wingman escort law as " +
+        "geometry (both body-frame stations, the rolled-leader frame, the 106.68/259.08 m " +
+        "target station, the 80 m separation push, the 700 m and 20.576 m/s join gates) and " +
+        "then flown against a scripted leader, a live wingman joining from 1200 m abeam, " +
+        "staying with the leader for the rest of the run, and riding the aft station behind " +
+        "a player leader where it rides the forward one behind an AI leader")]
     internal static void WingmanStation(TestContext ctx)
     {
         StationGeometry(ctx);
@@ -139,6 +146,12 @@ internal static class WingmanSuites
     /// wingman blocks fly, and then a flown leg with one bandit inside those gates, reporting
     /// whether the wingman acquires it, whether the guns fire while the station is held, and
     /// whether the decoded escort state moves.</summary>
+    [Suite("wingman-engage",
+        "what a campaign wingman does about a hostile (BL-505): every escorting block CM02 " +
+        "plans flies an attack gate wider than BL-504's 1 m and most author rating_biases, " +
+        "and over a flown leg with one bandit ahead of the pair the wingman acquires it " +
+        "through the ordinary ranking and fires from the station, while the decoded escort " +
+        "state never leaves the formation, which is FUN_0041e760's own shape")]
     internal static void WingmanEngage(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

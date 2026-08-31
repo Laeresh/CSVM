@@ -26,6 +26,14 @@ internal static class ZeppelinCannonBurnoutSuites
         ("lbroad2", "left_lkgasbag02", "finished_lkgasbag02"),
     };
 
+    [Suite("zeppelin-cannon-burnout",
+        "the animation-authored zeppelin kill on C1/M04's hk_zep (no zeppelin record): its " +
+        "sabotaged broadside doors are deployed from t=0, real gun rounds destroy one door and " +
+        "DamageAt two more, each door's WeaponHit death calls its gasbag burn, the burn " +
+        "switches the panels off and calls the finisher whose REQUIRED OBJECT_INACTIVE_LIST " +
+        "prerequisite reads those panels (compiled active_raw 2 = inactive, bit 1 is the " +
+        "local-nodes scope), three finishers satisfy finish_locklear, lockleargoesdown brings " +
+        "the hull down and the primary completes off lkgasbag05/panelleft1")]
     internal static void ZeppelinCannonBurnout(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");

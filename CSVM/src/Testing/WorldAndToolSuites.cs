@@ -17,6 +17,7 @@ internal static class WorldAndToolSuites
     // Exports a built plane to a temp .glb and asserts the file lands and re-imports with at least one
     // textured mesh: the round trip the viewer's --export-gltf=/F10 path relies on, including that the
     // shader skins convert to a glTF-serializable material.
+    [Suite("gltf-export", "the viewer plane exports to glTF and re-imports with a textured mesh")]
     internal static void GltfExport(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -65,6 +66,8 @@ internal static class WorldAndToolSuites
     // per-builder shader memo makes every mid-flight AI spawn pay that compile again; a generated
     // aircraft is built on the frame path, where the bill lands as a stall. Able to fail: with the
     // memo back on the instance, none of the second model's shaders is one of the first's.
+    [Suite("plane-shader-reuse",
+        "a second aircraft build reuses the first's Shader resources instead of generating its own copies of the same text, which is what keeps a mid-flight generator launch off Godot's per-shader compile")]
     internal static void PlaneShaderReuse(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -131,6 +134,8 @@ internal static class WorldAndToolSuites
     // pays nothing), the cockpitInterior one must gain the subtree, hidden, at the cockpit_camera
     // marker. Able to fail: without the Skip arm the interior build finds no cockpit1; without the
     // mount it sits at the plane origin at authored (~20x) scale.
+    [Suite("cockpit-interior",
+        "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11)")]
     internal static void CockpitInterior(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -232,6 +237,8 @@ internal static class WorldAndToolSuites
     // coordinate enters its transform chain. Able to fail: a pass that shares the main World3D, one
     // that leaves the mount translation on the interior, a camera placed anywhere but the origin,
     // or an FOV taken from a second copy of the per-mode table instead of the camera's own.
+    [Suite("cockpit-overlay-pass",
+        "--cockpit-pass moves the interior into a world of its own, where it and the camera both sit at the origin and no chapter-scale coordinate reaches the panel's transform")]
     internal static void CockpitOverlayPass(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -564,6 +571,8 @@ internal static class WorldAndToolSuites
     // setup script, RESET_STATEs, ON_STARTUP, the unplaced sweep — no collider may still be
     // enabled where nothing is drawn. Every chapter, because what each mission hides differs and
     // the failure is silent until someone flies into it (C1/IA1's `hk_zep`).
+    [Suite("collision-visibility",
+        "nothing a chapter hides is left solid: no enabled collider under an invisible node")]
     internal static void CollisionVisibility(TestContext ctx)
     {
         foreach (var (chapter, _, _) in Census)
@@ -582,6 +591,7 @@ internal static class WorldAndToolSuites
 
     // ---- needs Godot's Image, nothing else -------------------------------------------------------
 
+    [Suite("tex-dropin", "the census/override flatten repaints RGB and changes nothing else")]
     internal static void TexDropIn(TestContext ctx)
     {
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
@@ -652,6 +662,8 @@ internal static class WorldAndToolSuites
     // dressed again in the SAME process with no Rng reset, which is the strong form because it proves
     // the stream is a function of the data alone. See docs/org/clutter.md.
     // ⚠ Never seed it from Rng.Master; that rerolls C1's forest on every unpinned launch.
+    [Suite("clutter-determinism",
+        "templates.zrd's substitute + scale_range move C1's species mix and sizes without changing the instance total, and two builds of the same chapter are identical transform for transform")]
     internal static void ClutterDeterminism(TestContext ctx)
     {
         const string chapter = "C1";
@@ -738,6 +750,7 @@ internal static class WorldAndToolSuites
         ctx.Note($"{chapter} bare firtree1={bareFir1} firtree2={bareFir2}; dressed firtree1={dressedFir1} firtree2={dressedFir2}; scales {lo:0.000}-{hi:0.000}");
     }
 
+    [Suite("destructible-census", "per-chapter destructible registry totals")]
     internal static void DestructibleCensus(TestContext ctx)
     {
         foreach (var (chapter, instances, anchors) in Census)
@@ -770,6 +783,8 @@ internal static class WorldAndToolSuites
     // a zone edge firing without carrying it, and a screenshot cannot either.
     // ⚠ Do not simplify this onto C1/IA1. C2/MP2 is the only shape in the install whose two zones
     // author different bearings, so anywhere else a zone change would pass with the write deleted.
+    [Suite("sun-orientation",
+        "the world's light wears the flown zone's authored SUNLIGHT_ORIENTATION, and follows it across a zone change (BL-324)")]
     internal static void SunOrientation(TestContext ctx)
     {
         string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C2", "MP2");
@@ -831,6 +846,8 @@ internal static class WorldAndToolSuites
     // registrations, both true of C2 and C3 and of nothing else. Both directions are asserted, because
     // nothing about C1 looking correct would tell you a flare rig had started building there.
     // Data-only on purpose, so it stays a fast suite rather than a third eight-chapter world sweep.
+    [Suite("lens-flare-gates",
+        "the sun's lens flare is gated on chapter data alone, and its two independent gates — the gamez `sun` node and init.gw's LensFlareTexture slots — agree chapter by chapter, in C2 and C3 and nowhere else (BL-165)")]
     internal static void LensFlareGates(TestContext ctx)
     {
         ctx.RequireData(ctx.InterpPath, $"interp.json");
@@ -877,6 +894,7 @@ internal static class WorldAndToolSuites
     // button, only through Node3D.Visible. A def re-showing a node the user hid is correct behaviour,
     // so the row must follow it. ⚠ Use a chapter other than TestContext.Chapter: that one is cached
     // and shared with damage-hd, so the candidate search would otherwise depend on suite run order.
+    [Suite("nodelab-visibility", "the node lab's tree row follows live Visible, not the hide button's last action")]
     internal static void NodeLabVisibility(TestContext ctx)
     {
         ctx.WithWorld("C2", collision: false, world =>
@@ -964,6 +982,10 @@ internal static class WorldAndToolSuites
     // which takes it out of the World3D listener set. With no listener-enabled viewport left,
     // AudioStreamPlayer3D finds no listener in range, clears its bus volumes, and every 3D emitter in
     // the world is silent, with nothing logged or counted to say so.
+    [Suite("splitscreen-listeners",
+        "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default — the "
+        + "pinned listener model (A2), and the one thing standing between splitscreen and a "
+        + "world with no listener at all")]
     internal static void SplitscreenListeners(TestContext ctx)
     {
         var main = ctx.Host.GetViewport();
@@ -1004,6 +1026,12 @@ internal static class WorldAndToolSuites
     // there is no per-player placement flag to give two scripted panes independent spots (the
     // same CLI gap B11/B12 hit), so the rule is pinned here instead and the visual verdict is
     // PT-52's, alongside B11/B12's own owed at-the-controls check.
+    [Suite("world-lights-nearest-viewer",
+        "WorldLights budgets its 900-1500 m distance fade and its MaxActive significance rank "
+        + "against the NEAREST of every pane's camera, not player 1's alone (B13, BL-366): a "
+        + "light 2000 m from a lone P1 stays committed once a second viewer sits 100 m from it, "
+        + "the able-to-fail control against P1 alone drops the same light, and the one-viewer "
+        + "case reads exactly what it read before")]
     internal static void WorldLightsNearestViewer(TestContext ctx)
     {
         var p1 = Vector3.Zero;
