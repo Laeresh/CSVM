@@ -317,8 +317,18 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     }
 
     /// <summary>Back on a guest's check returns to the player before them, the inverse of FLY
-    /// MISSION; on the seated player's own it is unconsumed, so the flow leaves the screen.</summary>
-    public override bool Back() => Flow.Field.Retreat();
+    /// MISSION. On the seated player's own it abandons the walk and is left unconsumed, so the
+    /// flow leaves the screen.</summary>
+    public override bool Back()
+    {
+        if (Flow.Field.Retreat())
+        {
+            return true;
+        }
+
+        Flow.Field.Rewind();
+        return false;
+    }
 
     // Every row this screen draws, computed fresh each call from the profile and the mission's
     // wingman flag: the PILOT block, its two action rows, the WINGMAN block and its own two action

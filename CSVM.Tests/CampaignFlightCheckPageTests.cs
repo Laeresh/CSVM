@@ -280,9 +280,14 @@ public class CampaignFlightCheckPageTests
     public void ReturnToBriefingNavigatesBack()
     {
         var page = NewPage(out var flow, out _, wingman: false);
+        flow.SetPlayers(2);
+        flow.Field.Advance();
+
+        Assert.True(flow.Field.Locked);
 
         Assert.True(page.Accept(page.RowCount - 2));
         Assert.Equal(CampaignScreen.Briefing, flow.Screen);
+        Assert.False(flow.Field.Locked);
     }
 
     // C22: FLY MISSION advances to the next joined player's check and only the last one launches,
@@ -349,7 +354,9 @@ public class CampaignFlightCheckPageTests
 
         Assert.True(page.Back());
         Assert.Equal(0, flow.Field.Current);
+        Assert.True(flow.Field.Locked);
         Assert.False(page.Back());
+        Assert.False(flow.Field.Locked);
     }
 
     // A guest's CHANGE PLANE takes the same door the seated player's does, on its own slot. The

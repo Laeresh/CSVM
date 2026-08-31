@@ -4266,16 +4266,17 @@ Off-engine coverage: `CSVM.Tests/CampaignFlowTests.cs`,
 `CSVM.Tests/CampaignPlaneSelectionPageTests.cs`.
 
 ## src/UI/CampaignFlightField.cs
-Owns the humans flying one campaign sortie: how many joined, whose flight check is showing, and
-what each guest picked. Player 0 keeps the seated profile's aircraft; later players fly
-session-scoped stock records or copies of that profile's aircraft, so guest edits cannot persist.
-`Advance`/`Retreat`/`Rewind` walk one reused `FlightCheck` page through the field, while `Locked`
-exposes whether a guest check is active. The no-duplicate filter identifies stock choices by
-airframe and profile choices by plane name; `Taken(player, pick)` is that filter's public face, the
-question `CampaignPlaneSelectionPage` asks before it commits a guest's pick, and `Choose` is the
-commit, refusing a taken entry itself so no caller can seat two humans in one aeroplane. There is
-no stepper here: the picker replaced the in-place cycle, so the roster is chosen from rather than
-walked over. `IsStock` keeps stock records out of `CustomPlaneStore` lookups. Off-engine coverage: `CSVM.Tests/CampaignFlightFieldTests.cs`,
+Owns a campaign sortie's humans: joined count, current flight check and each guest's pick. Player 0
+keeps the seated profile's aircraft; later players fly session-scoped stock records or copies, so
+guest edits cannot persist.
+`Advance`/`Retreat`/`Rewind` walk one reused `FlightCheck` page through the field. The seated
+player's first FLY MISSION latches `Locked` across that walk; only `Rewind` to the briefing clears
+it, while a physical disconnect may still shrink the committed field. The no-duplicate filter
+identifies stock choices by airframe and profile choices by plane name. `Taken(player, pick)` is
+the question `CampaignPlaneSelectionPage` asks; `Choose` also refuses a taken entry, so no caller
+can seat two humans in one aeroplane. The picker replaced the in-place stepper, so the roster is
+chosen from rather than walked. `IsStock` keeps stock records out of `CustomPlaneStore` lookups.
+Off-engine coverage: `CSVM.Tests/CampaignFlightFieldTests.cs`,
 `CampaignFlightCheckPageTests.cs`, and `CampaignAmmoPageTests.cs`.
 
 ## src/UI/BoardFit.cs
