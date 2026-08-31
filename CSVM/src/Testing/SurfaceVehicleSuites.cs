@@ -227,7 +227,7 @@ internal static class SurfaceVehicleSuites
             }
 
             // A driving hull carries its velocity into the candidate set, so the lead solver aims
-            // ahead of it (BL-605). Flat, since the hull is pinned to the water, and never above the
+            // ahead of it. Flat, since the hull is pinned to the water, and never above the
             // taxi speed, which the turn scaling only ever reduces.
             candidates.Clear();
             vessels.CollectVehicles(candidates);

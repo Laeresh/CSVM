@@ -546,9 +546,9 @@ reasons that have nothing to do with any of these checks.
   on the Enemy cycle and wins the aim-assist scan. Nobody has seen it on screen. Fly CM08 past
   the 181 s wake and cycle targets: a boat should bracket like any other target and the gun
   should snap to it.
-  ⚠ The gun lead will sit ON the hull rather than ahead of it, because the candidate carries no
-  velocity yet (`BL-605`). Expected, not a fault, and worth confirming it looks wrong in exactly
-  that way rather than in some other way.
+  The candidate carries the hull's own velocity, so the gun line should sit AHEAD of a driving
+  boat by about its speed times the round's flight time, not on the hull. A lead that sits on the
+  hull is a fault; a boat mid-turn is led less, which is not one.
   *Blocks:* nothing; it confirms a landed item on screen.
 
 ### AI flight — external view, own build (F52 AI arm)
