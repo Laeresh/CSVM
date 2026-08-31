@@ -121,6 +121,11 @@ public interface ICampaignPage
     /// <summary>A second, smaller picture for the focused row, or null for none.</summary>
     HangarArt? RowArt(int row);
 
+    /// <summary>Whether the cursor may stand on row <paramref name="row"/>. False makes the row
+    /// text the screen draws and never selects: the flight check's crew headings name the aircraft
+    /// under the cursor's reach rather than being a thing to press.</summary>
+    bool Focusable(int row);
+
     /// <summary>Row <paramref name="row"/>'s text.</summary>
     string RowText(int row);
 
@@ -344,6 +349,7 @@ public sealed class CampaignFlow
 
         Message = string.Empty;
         Row = (((Row + dir) % count) + count) % count;
+        Settle(dir);
         return true;
     }
 
@@ -638,6 +644,19 @@ public sealed class CampaignFlow
     private int ClampedRow()
     {
         Row = Math.Clamp(Row, 0, Math.Max(0, Page.RowCount - 1));
+        return Settle(1);
+    }
+
+    // Walks the cursor along dir until it stands on a row the page takes focus on, one lap at most:
+    // a page that refuses every row keeps the cursor where it was rather than spinning.
+    private int Settle(int dir)
+    {
+        int count = Page.RowCount;
+        for (int step = 0; step < count && !Page.Focusable(Row); step++)
+        {
+            Row = (((Row + (dir < 0 ? -1 : 1)) % count) + count) % count;
+        }
+
         return Row;
     }
 }
@@ -699,6 +718,9 @@ public abstract class CampaignPage : ICampaignPage
 
     /// <inheritdoc/>
     public virtual HangarArt? RowArt(int row) => null;
+
+    /// <inheritdoc/>
+    public virtual bool Focusable(int row) => true;
 
     /// <inheritdoc/>
     public abstract string RowText(int row);

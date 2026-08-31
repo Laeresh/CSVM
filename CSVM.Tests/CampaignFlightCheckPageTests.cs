@@ -26,6 +26,21 @@ public class CampaignFlightCheckPageTests
         Assert.Equal("CHANGE AMMO", page.RowText(1));
     }
 
+    // The crew headings are the aircraft's name written where the layout puts it, not a control:
+    // the cursor reaches CHANGE AMMO and CHANGE PLANE under them and never the heading itself.
+    [Fact]
+    public void TheCrewHeadingRowsTakeNoFocus()
+    {
+        var page = NewPage(out _, out _, wingman: true);
+
+        for (int row = 0; row < page.RowCount; row++)
+        {
+            string text = page.RowText(row);
+            bool heading = text.StartsWith("PILOT") || text.StartsWith("WINGMAN");
+            Assert.Equal(!heading, page.Focusable(row));
+        }
+    }
+
     [Fact]
     public void WithNoWingmanFlagTheWingmanRowsAreAbsent()
     {

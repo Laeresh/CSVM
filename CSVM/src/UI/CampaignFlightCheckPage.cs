@@ -250,6 +250,14 @@ public sealed class CampaignFlightCheckPage : CampaignPage
             : null;
     }
 
+    /// <summary>The crew headings are text, not a control: a slot's name and aircraft are what the
+    /// two action rows under them act on, so the cursor steps over them to reach those.</summary>
+    public override bool Focusable(int row)
+    {
+        var rows = Rows();
+        return row >= 0 && row < rows.Count && rows[row].Kind != FlightRowKind.Info;
+    }
+
     /// <inheritdoc/>
     public override string RowText(int row)
     {
