@@ -751,9 +751,8 @@ internal static class WorldAndToolSuites
                 ctx.Same(anchors, registry.DistinctAnchors, $"{chapter} destructible node groups");
 
                 // The two 8-inch cannons are the whole install's only pools whose RESET_STATE
-                // switches `dbase` ON beside `healthy` ACTIVE. Reading that base as half a death
-                // booted both of them destroyed, which absorbed every shot and left the mission
-                // objective that owns them unclearable.
+                // switches `dbase` ON beside `healthy` ACTIVE, so a base misread as half a death
+                // boots them destroyed and nothing else in the install shows it.
                 foreach (var gun in registry.All.Where(i =>
                     AnimRuntime.NameOf(i.Anchor).StartsWith("8igun", System.StringComparison.OrdinalIgnoreCase)))
                 {
