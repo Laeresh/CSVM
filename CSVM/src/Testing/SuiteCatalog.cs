@@ -237,6 +237,7 @@ public static class SuiteCatalog
         "zeppelin-identity",
         "campaign-briefing-repaint",
         "menu-screenshot-key",
+        "menu-zone-layout",
         "perf-hud-layout",
         "campaign-briefing-note",
         "campaign-capture-group",
@@ -1497,6 +1498,12 @@ public static class SuiteCatalog
             + "campaign board, and each press must leave one more file in the folder the flight "
             + "capture writes to",
             MenuScreenshotKey));
+        into.Add(new TestHarness.Suite("menu-zone-layout",
+            "whether the launchscreen holds still: a real LaunchMenu is walked over every row of "
+            + "the paint screen, whose descriptions differ in length row by row, and the two fixed "
+            + "bands must keep their heights throughout and through a refusal; then the viewport "
+            + "under it is resized and the layout must follow with no press to prompt it",
+            MenuZoneSuites.MenuZoneLayout));
         into.Add(new TestHarness.Suite("perf-hud-layout",
             "where the frame-cost readout lands: the real Full tier is driven a frame, then its "
             + "label and its frame-time strip are both required to keep their right edge 8 px "
