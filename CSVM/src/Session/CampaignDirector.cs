@@ -797,13 +797,14 @@ public sealed class CampaignDirector
         var plane = _profile.SelectedPlane >= 0 && _profile.SelectedPlane < _profile.Planes.Count
             ? _profile.Planes[_profile.SelectedPlane]
             : null;
-        // Money is the hangar economy's reward table, 0 today. Both mask loops run whatever the
-        // outcome, only bit 0 from the win flag (docs/org/debrief.md). ⚠ Shots/Hits stay the
-        // seated pilot's alone (WireScoredShooter): a guest's gunnery never counts.
+        // Money is the hangar economy's reward table, 0 today. The objective bits are recorded
+        // whatever the outcome, and bit 0 is the win flag laid over them, never an objective of its
+        // own (docs/org/debrief.md). ⚠ Shots/Hits stay the seated pilot's alone
+        // (WireScoredShooter): a guest's gunnery never counts.
         var attempt = new MissionAttempt(
             _mission.Seq,
             outcome == MissionOutcome.Won
-                ? graph.CompletedMask
+                ? graph.CompletedMask | CampaignProgression.PrimaryObjectiveMask
                 : graph.CompletedMask & ~CampaignProgression.PrimaryObjectiveMask,
             (int)(graph.Elapsed * 1000f),
             _world?.Shots ?? 0,

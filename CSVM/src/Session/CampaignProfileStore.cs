@@ -142,8 +142,11 @@ public sealed class CampaignProfileDef
 public sealed class CampaignProfileStore
 {
     /// <summary>The schema version written into every file. A file claiming a version this reader
-    /// does not know is treated as malformed rather than half-read.</summary>
-    public const int Version = 2;
+    /// does not know is treated as malformed rather than half-read. ⚠ Version 3 exists because
+    /// version 2's <c>completedMask</c> was indexed by display row rather than by <c>IDENTITY</c>
+    /// priority: those bits are not stale data a reader can ignore, they are wrong input to the
+    /// reward table's pay-once gate, so such a file must not load at all.</summary>
+    public const int Version = 3;
 
     private const string FileName = "profile.json";
 

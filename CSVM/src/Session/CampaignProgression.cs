@@ -45,8 +45,11 @@ public readonly record struct AircraftAward(int Ordinal, int ObjectiveBit, int A
 /// </summary>
 public static class CampaignProgression
 {
-    /// <summary>The completed-objective mask bit that means the primary objective, and with it the
-    /// mission itself. It gates the whole best-of merge and the advance.</summary>
+    /// <summary>The completed-objective mask bit that means the mission was won, and with it the
+    /// primary objective. It gates the whole best-of merge and the advance. Every other bit is an
+    /// <c>IDENTITY</c> priority, which is why this one is free to mean the mission: the shipped
+    /// data numbers priorities from 1 (docs/formats/objectives.md, "IDENTITY and the objectives
+    /// display").</summary>
     public const int PrimaryObjectiveMask = 1;
 
     /// <summary>The eleven airframes the debrief's kill tallies index, in the engine's own order

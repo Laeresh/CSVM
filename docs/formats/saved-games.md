@@ -278,7 +278,7 @@ each field's merge rule is what identifies it:
 
 | Offset | Best at | Merge | Field |
 |---|---|---|---|
-| `+0x00` | `+0x54` | bitwise OR | completed-objective mask; bit 0 is the primary objective and gates the whole merge |
+| `+0x00` | `+0x54` | bitwise OR | completed-objective mask; bit 0 is the mission-won flag and gates the whole merge, every other bit an `IDENTITY` priority (see below) |
 | `+0x04` | `+0x58` | keep the smaller, ignoring 0 | mission time in **milliseconds**, the writer multiplying the mission clock in seconds by a stored `1000.0f` |
 | `+0x08` | `+0x5c` | per-index maximum | twelve single-byte counters, eleven of them written: per-airframe kill tallies, plain kills |
 | `+0x14` | `+0x68` | per-index maximum | twelve more single-byte counters on the same indexing: the same eleven airframes' ace kills |
@@ -299,7 +299,21 @@ The attempt half is written at mission end by the debrief, which zeroes the whol
 first and leaves the merged half alone; money, the airframe and the plane name are the completion
 recorder's, and they are the only attempt-half fields the debrief does not fill. The mask's bits
 above bit 0 are set whether the mission was won or lost, so a failed attempt still records which
-objectives it met. The screen that displays the record is the **scrapbook**, whose Best to Date and
+objectives it met.
+
+⚠ **A mask bit is an `IDENTITY` priority, not a display-row index.** The writer (`FUN_004194e0`)
+sets bit 0 from the mission-won flag, then walks the objectives display and, for each completed
+row, ORs `1 << row.priority` from the row's own stored priority (row stride `0x1c`, completed flag
+at `+0x10`, priority at `+0x14`), skipping a priority of 0. Priorities are the numbers authored in
+`IDENTITY` and are neither contiguous nor row-ordered, so a mission whose six rows are priorities
+1, 2, 3, 4, 11 and 12 records bits 1, 2, 3, 4, 11 and 12, never bits 0 to 5. This is what the
+mission-reward table's objective-bit column names ([`../org/hangar.md`](../org/hangar.md), "The
+mission reward table"), and reading it as a row index pays the wrong missions. A second loop in the
+same writer ORs bits 18 to 30 from another subsystem, one flag per index; which subsystem is **not
+decoded here**, and the shipped data's highest authored priority is 17, so the two ranges do not
+overlap.
+
+The screen that displays the record is the **scrapbook**, whose Best to Date and
 Most Recent tabs are this record's merged and attempt halves. That pass, the bit numbering, the
 per-mission retry counter behind the original's skip-this-mission offer and the screen's rows are
 [`org/debrief.md`](../org/debrief.md).

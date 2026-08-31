@@ -210,7 +210,7 @@ public class ObjectiveGraphTests
     }
 
     [Fact]
-    public void Identity_rows_are_one_per_unique_priority_and_bit_zero_is_the_primary()
+    public void Identity_rows_are_one_per_unique_priority_and_a_bit_is_that_priority()
     {
         var (graph, _) = Build(
             "\"OBJECTIVE1\",[\"IDENTITY\",[\"SECONDARY\",11,\"MSG_B\"],\"INACTIVE1\",[\"never\"]],"
@@ -223,7 +223,26 @@ public class ObjectiveGraphTests
         Assert.Equal(11, graph.Rows[1].Priority);
         Run(graph, 0.5f);
         Assert.True(graph.Rows[0].Completed);
-        Assert.Equal(CampaignProgression.PrimaryObjectiveMask, graph.CompletedMask);
+
+        // The completed row is priority 1, so the mask is bit 1, not bit 0 (the win flag, which the
+        // graph never sets) and not bit 0 as "row zero".
+        Assert.Equal(1 << 1, graph.CompletedMask);
+        Assert.Equal(0, graph.CompletedMask & CampaignProgression.PrimaryObjectiveMask);
+    }
+
+    /// <summary>A mask bit is the row's authored priority, so a mission whose rows are 1 and 11
+    /// records bits 1 and 11 and never bits 0 and 1.</summary>
+    [Fact]
+    public void A_completed_row_sets_the_bit_its_priority_names_not_its_row_position()
+    {
+        var (graph, _) = Build(
+            "\"OBJECTIVE1\",[\"IDENTITY\",[\"SECONDARY\",11,\"MSG_B\"]],"
+            + "\"OBJECTIVE2\",[\"IDENTITY\",[\"PRIMARY\",1,\"MSG_A\"]]");
+        Assert.Equal(2, graph.Rows.Count);
+        Run(graph, 0.5f);
+        Assert.True(graph.Rows[0].Completed);
+        Assert.True(graph.Rows[1].Completed);
+        Assert.Equal((1 << 1) | (1 << 11), graph.CompletedMask);
     }
 
     [Fact]

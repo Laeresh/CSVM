@@ -231,7 +231,8 @@ internal static class CampaignSuites
         "the objectives runtime (D31) over a shipped mission's own choreography, headless: the "
         + "BEGIN_DORMANT wake timings and their sound/turret actions, the primary completing "
         + "off an INACTIVEn node, its KILL/WAKE/NAP chains and target-list edits, the display "
-        + "rows and the mask's bit 0, plus BOTH endings the script authors — the INSTANTWIN "
+        + "rows and the mask bit their IDENTITY priority names (bit 0 staying clear, since it is "
+        + "the win flag the director lays on), plus BOTH endings the script authors — the INSTANTWIN "
         + "path and the 300 s reminder fuse that naps the INSTANTLOSS objective")]
     internal static void CampaignObjectives(TestContext ctx)
     {
@@ -274,8 +275,10 @@ internal static class CampaignSuites
         ctx.Check(graph.IsOtherTarget("ftank01"), $"ADD_OTHER_TARGET added the fuel tank");
         ctx.Check(!graph.IsObjectiveTarget("caboose_polys"), $"REMOVE_OBJECTIVE_TARGET dropped the caboose");
         ctx.Check(graph.Rows[0].Completed, $"the primary's display row is marked");
-        ctx.Same(CampaignProgression.PrimaryObjectiveMask, graph.CompletedMask & 1,
-            $"bit 0 of the recorded mask is that primary");
+        ctx.Same(1 << graph.Rows[0].Priority, graph.CompletedMask & (1 << graph.Rows[0].Priority),
+            $"the recorded mask carries that primary at bit {graph.Rows[0].Priority}, its IDENTITY priority rather than its row position");
+        ctx.Same(0, graph.CompletedMask & CampaignProgression.PrimaryObjectiveMask,
+            $"and bit 0 stays clear in the graph's own mask: it is the win flag the director lays on");
         for (int n = 19; n <= 24; n++)
         {
             ctx.Check(!graph.AliveOf(n), $"the primary's KILL list retired the reminder loop OBJECTIVE{n}");
@@ -343,7 +346,8 @@ internal static class CampaignSuites
             ctx.Check(director.ReturnToCabin, $"the mission end raised the return-to-cabin exit");
             var result = director.Result!.Value;
             ctx.Check(result.Outcome == MissionOutcome.Won, $"the outcome is the graph's own");
-            ctx.Same(graph.CompletedMask, result.Attempt.CompletedMask, $"the recorded mask is the graph's rows");
+            ctx.Same(graph.CompletedMask | CampaignProgression.PrimaryObjectiveMask, result.Attempt.CompletedMask,
+                $"the recorded mask is the graph's completed priorities under the win flag at bit 0");
             ctx.Check(CampaignProgression.ResultOf(profile, mission.Seq) != null,
                 $"the attempt reached the profile's mission record");
             bool primary = (result.Attempt.CompletedMask & CampaignProgression.PrimaryObjectiveMask) != 0;
