@@ -53,6 +53,12 @@ internal static class CampaignSuites
 
     private const string DangerZoneMission = "M01";
 
+    // The reward-cash suite names its mission rather than following --chapter: C3/M01 is ordinal 1,
+    // and it is the paying record whose objective bit a suite can reach without flying the mission.
+    private const string CashChapter = "C3";
+
+    private const string CashMission = "M01";
+
     // The code that takes the chrome off and the view off the aircraft, named here rather than read
     // off the host: what the presentation check asks of it is a property of the shipped data.
     private const int PresentationCode = 2;
@@ -231,7 +237,8 @@ internal static class CampaignSuites
         "the objectives runtime (D31) over a shipped mission's own choreography, headless: the "
         + "BEGIN_DORMANT wake timings and their sound/turret actions, the primary completing "
         + "off an INACTIVEn node, its KILL/WAKE/NAP chains and target-list edits, the display "
-        + "rows and the mask's bit 0, plus BOTH endings the script authors — the INSTANTWIN "
+        + "rows and the mask bit their IDENTITY priority names (bit 0 staying clear, since it is "
+        + "the win flag the director lays on), plus BOTH endings the script authors — the INSTANTWIN "
         + "path and the 300 s reminder fuse that naps the INSTANTLOSS objective")]
     internal static void CampaignObjectives(TestContext ctx)
     {
@@ -274,8 +281,10 @@ internal static class CampaignSuites
         ctx.Check(graph.IsOtherTarget("ftank01"), $"ADD_OTHER_TARGET added the fuel tank");
         ctx.Check(!graph.IsObjectiveTarget("caboose_polys"), $"REMOVE_OBJECTIVE_TARGET dropped the caboose");
         ctx.Check(graph.Rows[0].Completed, $"the primary's display row is marked");
-        ctx.Same(CampaignProgression.PrimaryObjectiveMask, graph.CompletedMask & 1,
-            $"bit 0 of the recorded mask is that primary");
+        ctx.Same(1 << graph.Rows[0].Priority, graph.CompletedMask & (1 << graph.Rows[0].Priority),
+            $"the recorded mask carries that primary at bit {graph.Rows[0].Priority}, its IDENTITY priority rather than its row position");
+        ctx.Same(0, graph.CompletedMask & CampaignProgression.PrimaryObjectiveMask,
+            $"and bit 0 stays clear in the graph's own mask: it is the win flag the director lays on");
         for (int n = 19; n <= 24; n++)
         {
             ctx.Check(!graph.AliveOf(n), $"the primary's KILL list retired the reminder loop OBJECTIVE{n}");
@@ -343,7 +352,8 @@ internal static class CampaignSuites
             ctx.Check(director.ReturnToCabin, $"the mission end raised the return-to-cabin exit");
             var result = director.Result!.Value;
             ctx.Check(result.Outcome == MissionOutcome.Won, $"the outcome is the graph's own");
-            ctx.Same(graph.CompletedMask, result.Attempt.CompletedMask, $"the recorded mask is the graph's rows");
+            ctx.Same(graph.CompletedMask | CampaignProgression.PrimaryObjectiveMask, result.Attempt.CompletedMask,
+                $"the recorded mask is the graph's completed priorities under the win flag at bit 0");
             ctx.Check(CampaignProgression.ResultOf(profile, mission.Seq) != null,
                 $"the attempt reached the profile's mission record");
             bool primary = (result.Attempt.CompletedMask & CampaignProgression.PrimaryObjectiveMask) != 0;
@@ -363,13 +373,15 @@ internal static class CampaignSuites
     /// <summary>A co-op sortie's <c>Shots</c>/<c>Hits</c> are the seated pilot's alone. Two
     /// human rigs each fire a real cannon round at the other's aircraft; only the seated pilot's
     /// (rig 0's) round reaches the recorded attempt, proving <c>WireScoredShooter</c> gates on the
-    /// scripted player and never a guest. <c>Money</c> sums to 0 because no mission reward source
-    /// feeds the director.</summary>
+    /// scripted player and never a guest. Money is the mission's, not the field's: the sortie banks
+    /// what the reward table owes for the mission flown and the mask reached, once, however many
+    /// humans were up.</summary>
     [Suite("campaign-coop-attempt",
         "what a co-op sortie writes to the seated profile: two human rigs each fire a real "
         + "cannon round at the other's aircraft, and only the seated pilot's reaches the recorded "
         + "attempt's Shots/Hits, WireScoredShooter gating on the scripted player and never a "
-        + "guest; Money sums to 0 because no mission reward source feeds the director")]
+        + "guest; the money banked is the mission reward table's answer for this mission and mask, "
+        + "taken once rather than once per human")]
     internal static void CampaignCoopAttempt(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -465,10 +477,18 @@ internal static class CampaignSuites
             var attempt = director.Result!.Value.Attempt;
             ctx.Same(1, attempt.Shots, $"the recorded attempt carries the seated pilot's shot count alone");
             ctx.Same(1, attempt.Hits, $"...and hit count alone, never the guest's");
-            ctx.Same(0, attempt.Money, $"money sums to 0 across the human field: no source pays it yet");
+
+            // Money is the mission's own, not the field's: a reward is per objective and banked
+            // once whatever the headcount, so what two humans bank is what the table answers for
+            // this mission and this mask. Computed from the table rather than hard-coded, since
+            // which mission this suite flies follows --chapter.
+            int owed = ExpectedReward(mission.Seq, attempt.CompletedMask);
+            int paid = director.Result!.Value.Recorded.MoneyPaid;
+            ctx.Same(owed, paid,
+                $"the sortie banks the mission's own reward, not one per human: expected ${owed} for mask 0x{attempt.CompletedMask:x}");
 
             report.AppendLine($"{mission.ChapterFolder}/{mission.MissionFolder}: seated shots="
-                + $"{attempt.Shots} hits={attempt.Hits} money={attempt.Money}, guest's cannon round "
+                + $"{attempt.Shots} hits={attempt.Hits} money=${paid} banked once, guest's cannon round "
                 + $"never reached ScoredShooters");
         }
         finally
@@ -483,6 +503,97 @@ internal static class CampaignSuites
         ctx.WriteArtifact(
             $"test-campaign-coop-attempt-{mission.ChapterFolder}-{mission.MissionFolder}.txt", report.ToString());
         ctx.Note($"{mission.ChapterFolder}/{mission.MissionFolder}: a co-op sortie's Shots/Hits stay the seated pilot's alone");
+    }
+
+    /// <summary>BL-645: the mission reward table's cash half, end to end on the one mission whose
+    /// reward the shipped data can reach without flying it. C3/M01 is ordinal 1, which pays $900 on
+    /// objective bit 12; that bit is its <c>SECONDARY 12</c> (<c>OBJECTIVE31</c>), conditionless and
+    /// gated only on <c>OBJECTIVE30</c> being awake, so waking the pair completes it for real. Two
+    /// human rigs are up, and the payout is the mission's own, taken once: a squadron is paid what
+    /// the objective pays, not that times the headcount. Flying the same mission again banks
+    /// nothing, which is the gate on the mask as it stood before the run.</summary>
+    [Suite("campaign-mission-cash",
+        "BL-645's mission reward cash on C3/M01 (ordinal 1, $900 on bit 12) with two humans up: "
+        + "waking OBJECTIVE30 and its dependent SECONDARY 12 completes the paying objective for "
+        + "real, the recorded mask carries bit 12 as a priority and not a row index, the sortie "
+        + "banks $900 once rather than once per human, the wallet and the mission's Cash Earned "
+        + "both read it, and a replay of the same objective banks nothing")]
+    internal static void CampaignMissionCash(TestContext ctx)
+    {
+        var missions = CampaignSequence.Load(ctx.ZrdrPath);
+        if (MissionAt(missions, CashChapter, CashMission) is not { } mission)
+        {
+            throw new SuiteSkippedException($"{CashChapter}/{CashMission} is not in cm_sequence");
+        }
+
+        var reward = FirstReward(mission.Seq);
+        if (reward is not { Cash: > 0 })
+        {
+            throw new SuiteSkippedException($"{CashChapter}/{CashMission} carries no paying reward record");
+        }
+
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
+        ctx.RequireData(missionZrdr, $"{CashChapter}/{CashMission} zrdr");
+        var script = ObjectiveScript.Load(missionZrdr);
+
+        // The paying objective is found by its own IDENTITY priority, which is what the reward
+        // record names. Its gate objective comes off the script too, so neither is a magic number.
+        var paying = script.Objectives.Find(d => d.Identity?.Priority == reward.Value.ObjectiveBit);
+        ctx.Check(paying != null, $"the mission authors an IDENTITY at priority {reward.Value.ObjectiveBit}, the record's bit");
+        int winner = EndObjective(script);
+        ctx.Check(winner > 0, $"{CashChapter}/{CashMission} authors an INSTANTWIN objective");
+        if (paying == null || winner == 0)
+        {
+            return;
+        }
+
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, mission.ChapterFolder);
+        ctx.RequireData(texturesPath, $"{CashChapter} textures");
+        var textures = new TextureArchive(texturesPath);
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var seatedPos = new Vector3(0f, 800f, 0f);
+        var guestPos = new Vector3(0f, 800f, -2000f);
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        var report = new StringBuilder();
+        Flight.ProjectilePool? pool = null;
+        Flight.FlightController? seated = null;
+        Flight.FlightController? guest = null;
+        try
+        {
+            var live = new Flight.ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            seated = BuildAttemptRig(ctx, planesGamez, textures, live, 0, seatedPos);
+            guest = BuildAttemptRig(ctx, planesGamez, textures, live, 1, guestPos);
+            var field = new List<Flight.FlightController> { seated, guest };
+
+            int paid = FlyForTheReward(ctx, script, mission, profile, live, seated, field, paying.Number, winner);
+            ctx.Same(reward.Value.Cash, paid,
+                $"two humans up and the mission banks its own ${reward.Value.Cash}, once, not once per human");
+            ctx.Same(reward.Value.Cash, profile.Funds, $"which is what reached the wallet the hangar spends");
+            var result = CampaignProgression.ResultOf(profile, mission.Seq);
+            ctx.Same(reward.Value.Cash, result!.Best.Money, $"and the mission's own Cash Earned, which the scrapbook prints");
+
+            // The same sortie again: the paying bit is in the profile's mask now, so the gate holds.
+            int again = FlyForTheReward(ctx, script, mission, profile, live, seated, field, paying.Number, winner);
+            ctx.Same(0, again, $"flying the same paying objective again banks nothing: each bonus is once per profile");
+            ctx.Same(reward.Value.Cash, profile.Funds, $"so the wallet still holds one payout, not two");
+
+            report.AppendLine($"{CashChapter}/{CashMission} ordinal {mission.Seq + 1}: OBJECTIVE{paying.Number} "
+                + $"is IDENTITY priority {reward.Value.ObjectiveBit}, completing it with 2 humans up banked "
+                + $"${paid} once; replay banked ${again}; funds ${profile.Funds}");
+        }
+        finally
+        {
+            pool?.Free();
+            seated?.Free();
+            guest?.Free();
+            textures.Dispose();
+        }
+
+        ctx.WriteArtifact($"test-campaign-mission-cash-{CashChapter}-{CashMission}.txt", report.ToString());
+        ctx.Note($"{CashChapter}/{CashMission}: a two-human sortie banks the mission's own reward, once");
     }
 
     /// <summary>BL-458: a campaign mission's own <c>dzpathN</c> gates, resolved against real
@@ -1240,6 +1351,75 @@ internal static class CampaignSuites
         }
 
         return node;
+    }
+
+    // What the reward table owes a fresh profile for one mission at one mask: every record on this
+    // ordinal whose objective bit the run set. A fresh profile has banked nothing, so there is no
+    // prior mask to gate against here.
+    private static int ExpectedReward(int seq, int completedMask)
+    {
+        int owed = 0;
+        foreach (var reward in CampaignProgression.MissionRewards)
+        {
+            if (reward.Ordinal == seq + 1 && (completedMask & (1 << reward.ObjectiveBit)) != 0)
+            {
+                owed += reward.Cash;
+            }
+        }
+
+        return owed;
+    }
+
+    // One sortie on a fresh director: wake the paying objective's gate, wake the objective, then
+    // end the mission on its own INSTANTWIN. Returns what the reward table paid for it.
+    private static int FlyForTheReward(
+        TestContext ctx, ObjectiveScript script, CampaignMission mission, CampaignProfileDef profile,
+        Flight.ProjectilePool live, Flight.FlightController seated,
+        List<Flight.FlightController> field, int payingNumber, int winner)
+    {
+        var director = CampaignDirector.Create(script, mission, profile, null);
+        var seatedPos = seated.WorldPosition;
+        director.Attach(new CampaignDirector.WorldInputs
+        {
+            Projectiles = live,
+            ListenerPosition = () => seatedPos,
+            PlayerAircraft = () => seated,
+            Humans = () => field,
+        });
+        director.Step(0.1f);
+
+        // TICK_DEPENDS_ON_OBJ gates the whole objective on its dependency being AWAKE, so the gate
+        // is woken first and left awake; the paying objective carries no conditions and completes
+        // on its first eligible tick.
+        var graph = director.Graph!;
+        var paying = script.ByNumber(payingNumber)!;
+        if (paying.TickDependsOn > 0)
+        {
+            graph.Wake(paying.TickDependsOn);
+        }
+
+        graph.Wake(payingNumber);
+        Advance(director, 1f);
+        ctx.Check((graph.CompletedMask & (1 << paying.Identity!.Value.Priority)) != 0,
+            $"OBJECTIVE{payingNumber} completed and sits at mask bit {paying.Identity!.Value.Priority}");
+        graph.Wake(winner);
+        Advance(director, CampaignDirector.LeavingHoldS + 2.2f);
+        ctx.Check(director.Result != null, $"the sortie ended and banked its result");
+        return director.Result!.Value.Recorded.MoneyPaid;
+    }
+
+    // The reward record a mission ordinal carries, or null where the table names no reward for it.
+    private static MissionReward? FirstReward(int seq)
+    {
+        foreach (var reward in CampaignProgression.MissionRewards)
+        {
+            if (reward.Ordinal == seq + 1)
+            {
+                return reward;
+            }
+        }
+
+        return null;
     }
 
     private static int EndObjective(ObjectiveScript script)

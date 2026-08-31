@@ -110,7 +110,7 @@ public class CampaignScrapbookZoomPageTests
         root ??= ScrapbookCompositionFixture.WriteMinimalOpenableScrap(TestData.TempDir(), mission: 1);
         var profile = CampaignProfileDef.NewProfile("Zachary");
         CampaignProgression.Record(profile, new MissionAttempt(
-            0, CompletedMask: 1, TimeMs: 40000, Shots: 10, Hits: 5, Money: 0,
+            0, CompletedMask: 1, TimeMs: 40000, Shots: 10, Hits: 5,
             Airframe: 5, PlaneName: "Gypsy Magic"));
 
         var dir = Path.Combine(TestData.TempDir(), "Profiles");

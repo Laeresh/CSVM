@@ -66,16 +66,19 @@ public class CampaignProgressionTests
     public void TheBestOfMergeKeepsTheBetterHalfOfEachField()
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
-        CampaignProgression.Record(profile, new MissionAttempt(0, 1, 45000, 120, 30, 900, 5, "Gypsy Magic"));
+        CampaignProgression.Record(profile, new MissionAttempt(0, 1, 45000, 120, 30, 5, "Gypsy Magic"));
 
-        CampaignProgression.Record(profile, new MissionAttempt(0, 5, 61000, 40, 30, 900, 3, "The Knave"));
+        CampaignProgression.Record(profile, new MissionAttempt(0, 5, 61000, 40, 30, 3, "The Knave"));
 
         var result = Assert.Single(profile.MissionResults);
         Assert.Equal(5, result.Best.CompletedMask);
         Assert.Equal(45000, result.Best.TimeMs);
         Assert.Equal(40, result.Best.Shots);
         Assert.Equal(30, result.Best.Hits);
-        Assert.Equal(1800, result.Best.Money);
+
+        // Mission ordinal 1 pays on bit 12 and neither run set it, so the money field accumulates
+        // nothing. What it accumulates when a reward IS owed is TheCashRewardIsPaidOncePerProfile.
+        Assert.Equal(0, result.Best.Money);
         Assert.Equal(3, result.Best.Airframe);
         Assert.Equal("The Knave", result.Best.PlaneName);
         Assert.Equal(61000, result.Latest.TimeMs);
@@ -113,7 +116,7 @@ public class CampaignProgressionTests
         Assert.Empty(recorded.AwardedAirframes);
         Assert.Empty(profile.GrantedAircraft);
         Assert.Equal(new[] { 2, 7, 13, 17, 19 },
-            CampaignProgression.AircraftAwards.Select(a => a.Ordinal).ToArray());
+            CampaignProgression.MissionRewards.Where(r => r.AwardsAircraft).Select(r => r.Ordinal).ToArray());
     }
 
     [Fact]
@@ -162,11 +165,11 @@ public class CampaignProgressionTests
     [Fact]
     public void OnlyTheBlueStreakTemplateCarriesNitrous()
     {
-        foreach (var award in CampaignProgression.AircraftAwards)
+        foreach (var reward in CampaignProgression.MissionRewards.Where(r => r.AwardsAircraft))
         {
-            var build = CampaignProgression.AwardBuild(award.Airframe);
+            var build = CampaignProgression.AwardBuild(reward.Airframe);
             Assert.NotNull(build);
-            Assert.Equal(award.Airframe == 3, CustomPlaneBuild.HasNitrous(build!));
+            Assert.Equal(reward.Airframe == 3, CustomPlaneBuild.HasNitrous(build!));
         }
 
         Assert.Null(CampaignProgression.AwardBuild(5));
@@ -290,6 +293,98 @@ public class CampaignProgressionTests
         Assert.Equal(1, profile.MissionsCompleted);
     }
 
+    /// <summary>The six paying records, their bits and their amounts, as the table at
+    /// <c>0x0061ae80</c> holds them. $140,900 is the campaign's whole cash income.</summary>
+    [Fact]
+    public void TheRewardTableIsTheSixPayingRecordsTheOriginalHolds()
+    {
+        var paying = CampaignProgression.MissionRewards.Where(r => r.Cash > 0).ToArray();
+
+        Assert.Equal(new[] { 1, 5, 6, 12, 19, 24 }, paying.Select(r => r.Ordinal).ToArray());
+        Assert.Equal(new[] { 12, 1, 3, 1, 1, 1 }, paying.Select(r => r.ObjectiveBit).ToArray());
+        Assert.Equal(new[] { 900, 20_000, 5_000, 10_000, 5_000, 100_000 }, paying.Select(r => r.Cash).ToArray());
+        Assert.Equal(140_900, CampaignProgression.MissionRewards.Sum(r => r.Cash));
+    }
+
+    /// <summary>Mission ordinal 1 pays $900 on bit 12 and nothing on any other bit, so the payout
+    /// follows the objective and not the mere fact of completing the mission.</summary>
+    [Fact]
+    public void TheCashFollowsTheRecordsOwnObjectiveBit()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+
+        var without = CampaignProgression.Record(profile, Attempt(0, mask: 1, timeMs: 45000));
+
+        Assert.Equal(0, without.MoneyPaid);
+        Assert.Equal(0, profile.Funds);
+
+        var with = CampaignProgression.Record(profile, Attempt(0, mask: 1 | (1 << 12), timeMs: 45000));
+
+        Assert.Equal(900, with.MoneyPaid);
+        Assert.Equal(900, profile.Funds);
+    }
+
+    /// <summary>Each bonus is taken once per profile, replays included: the gate is the mask as it
+    /// stood before the run, so flying the same paying objective again banks nothing.</summary>
+    [Fact]
+    public void TheCashRewardIsPaidOncePerProfile()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        int bit12 = 1 | (1 << 12);
+
+        var first = CampaignProgression.Record(profile, Attempt(0, mask: bit12, timeMs: 45000));
+        var replay = CampaignProgression.Record(profile, Attempt(0, mask: bit12, timeMs: 40000));
+
+        Assert.Equal(900, first.MoneyPaid);
+        Assert.Equal(0, replay.MoneyPaid);
+        Assert.Equal(900, profile.Funds);
+        Assert.Equal(900, CampaignProgression.ResultOf(profile, 0)!.Best.Money);
+        Assert.Equal(0, CampaignProgression.ResultOf(profile, 0)!.Latest.Money);
+    }
+
+    /// <summary>A lost run banks nothing however many paying objectives it met, since the whole
+    /// reward pass sits behind the mission-won flag.</summary>
+    [Fact]
+    public void ALostRunBanksNothing()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+
+        var lost = CampaignProgression.Record(profile, Attempt(0, mask: 1 << 12, timeMs: 45000));
+
+        Assert.False(lost.PrimaryCompleted);
+        Assert.Equal(0, lost.MoneyPaid);
+        Assert.Equal(0, profile.Funds);
+    }
+
+    /// <summary>Ordinal 19 is the one record that pays cash and grants an aircraft, which is why the
+    /// two halves are one table: a single qualifying run takes both.</summary>
+    [Fact]
+    public void OrdinalNineteenPaysCashAndGrantsAnAircraft()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+
+        var recorded = CampaignProgression.Record(profile, Attempt(18, mask: 3, timeMs: 45000));
+
+        Assert.Equal(5_000, recorded.MoneyPaid);
+        Assert.Equal(new[] { 10 }, recorded.AwardedAirframes.ToArray());
+        Assert.Equal(5_000, profile.Funds);
+    }
+
+    /// <summary>The skip offer's Yes is a synthetic win, so it banks whatever the failed attempt's
+    /// own mask qualifies for and nothing more.</summary>
+    [Fact]
+    public void TakingTheSkipOfferBanksWhatTheFailedMaskQualifiesFor()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        var failed = Attempt(0, mask: 1 << 12, timeMs: 45000);
+
+        var recorded = CampaignProgression.AcceptSkip(profile, failed, chapter: 1);
+
+        Assert.True(recorded.PrimaryCompleted);
+        Assert.Equal(900, recorded.MoneyPaid);
+        Assert.Equal(900, profile.Funds);
+    }
+
     private static MissionAttempt Attempt(int seq, int mask, int timeMs) =>
-        new(seq, mask, timeMs, 100, 25, 0, 5, "Gypsy Magic");
+        new(seq, mask, timeMs, 100, 25, 5, "Gypsy Magic");
 }

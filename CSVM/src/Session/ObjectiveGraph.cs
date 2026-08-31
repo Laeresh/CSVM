@@ -266,19 +266,21 @@ public sealed class ObjectiveGraph
     /// <summary>The help labels `SET_HELP_LABEL` has written, target key to message key.</summary>
     public IReadOnlyDictionary<string, string> HelpLabels => _helpLabels;
 
-    /// <summary>The completed-objective bitmask a mission attempt records. Bit n is display row n,
-    /// so bit 0 is the lowest priority, which is the primary objective the profile's merge gates
-    /// on (docs/formats/saved-games.md, "The mission-result array").</summary>
+    /// <summary>The completed-objective bitmask a mission attempt records, objective bits only:
+    /// a completed display row sets the bit its own <c>IDENTITY</c> priority names, NOT the row's
+    /// index. ⚠ Bit 0 is the mission-won flag and belongs to the caller, which is why a priority of
+    /// 0 is skipped here exactly as the original skips it
+    /// (docs/formats/saved-games.md, "The mission-result array").</summary>
     public int CompletedMask
     {
         get
         {
             int mask = 0;
-            for (int i = 0; i < _rows.Count && i < 32; i++)
+            foreach (var row in _rows)
             {
-                if (_rows[i].Completed)
+                if (row.Completed && row.Priority > 0 && row.Priority < 32)
                 {
-                    mask |= 1 << i;
+                    mask |= 1 << row.Priority;
                 }
             }
 

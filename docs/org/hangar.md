@@ -347,7 +347,9 @@ Read by `FUN_00405ce0` (the cash half) and `FUN_00405f00` (the aircraft half).
 | 19 | 1 | $5,000 | 10 Warhawk, `langui` 517 "Accipiter Annie" |
 | 24 | 1 | $100,000 | none |
 
-Field `+0x00` is the mission id in the `nMission` numbering, `+0x04` an objective bit index,
+Field `+0x00` is the mission id in the `nMission` numbering, `+0x04` an objective bit index, which
+is an `IDENTITY` priority rather than a display-row position
+([`../formats/objectives.md`](../formats/objectives.md), "IDENTITY and the objectives display"),
 `+0x08` the cash, `+0x0c` an airframe id with **11 meaning no aircraft award**, and `+0x10` a
 pointer into the dword run at `0x00646384` that **no code reads** (one slot per record; left as
 an unread field, not interpreted).

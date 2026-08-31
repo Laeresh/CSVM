@@ -2995,15 +2995,6 @@ usual.
   abandoned through `Rewind`. *⚠ Traps:* revisiting P1's check is navigation inside a committed
   roster, not abandonment; guest Back presses must not change the field size while latched.
 
-- `BL-645` `[Feature]` **Co-op campaign money is hard-coded to zero instead of aggregating the human
-  field.** *Evidence:* `CampaignDirector.OnMissionEnded` constructs every `MissionAttempt` with
-  `Money = 0`; `campaign-coop-attempt` proves only that zero remains zero and explicitly says no
-  reward source pays it yet. The co-op contract calls for team-aggregate money while keeping
-  `Shots`, `Hits`, `Airframe` and `PlaneName` seated-pilot-only. *Fix shape:* expose each human's
-  earned mission money at the director boundary, sum it once into the attempt, and add the promised
-  two-rig positive-value assertion plus a 1P invariant. *⚠ Traps:* do not aggregate gunnery or plane
-  identity; those fields feed a seated pilot's best-of record.
-
 - `BL-653` `[Research]` **The plane selection screen's TOP SPEED and OFFENSE ratings have no decoded
   formula, and ship as a stand-in.** *Evidence:* `PS_T_TOPSPEEDP`/`PS_T_OFFENSEP` and their wingman
   twins are four text widgets fed one of langui 501-505 (`Poor`, `Fair`, `Average`, `Good`,

@@ -487,8 +487,9 @@ internal static class CampaignLoopSuites
             $"primary completed={graph.Rows[0].Completed}");
         ctx.Check(graph.Rows[0].Completed,
             $"flying the approach completed the primary objective, closest {closest:0} m");
-        ctx.Check((graph.CompletedMask & CampaignProgression.PrimaryObjectiveMask) != 0,
-            $"which is bit 0 of the mask a mission attempt records");
+        int primaryBit = 1 << graph.Rows[0].Priority;
+        ctx.Check((graph.CompletedMask & primaryBit) != 0,
+            $"which the recorded mask carries at bit {graph.Rows[0].Priority}, its IDENTITY priority rather than its row position");
     }
 
     // Where the primary objective's own TRAVELERS condition points: the world node it names, or the

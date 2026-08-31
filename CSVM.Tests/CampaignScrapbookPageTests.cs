@@ -18,7 +18,7 @@ public class CampaignScrapbookPageTests
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
         CampaignProgression.Record(profile, new MissionAttempt(
-            0, CompletedMask: 1, TimeMs: 215000, Shots: 25, Hits: 4, Money: 0,
+            0, CompletedMask: 1, TimeMs: 215000, Shots: 25, Hits: 4,
             Airframe: 5, PlaneName: "Gypsy Magic", Kills: KillsOf((8, 3))));
         var flow = OpenedOnScrapbook(profile, seq: 0);
 
@@ -45,7 +45,7 @@ public class CampaignScrapbookPageTests
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
         CampaignProgression.Record(profile, new MissionAttempt(
-            0, CompletedMask: 1, TimeMs: 215000, Shots: 25, Hits: 4, Money: 0,
+            0, CompletedMask: 1, TimeMs: 215000, Shots: 25, Hits: 4,
             Airframe: 5, PlaneName: "Gypsy Magic", Kills: KillsOf((8, 3))));
         var flow = OpenedOnScrapbook(profile, seq: 0);
 
@@ -92,7 +92,7 @@ public class CampaignScrapbookPageTests
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
         CampaignProgression.Record(profile, new MissionAttempt(
-            0, CompletedMask: 0, TimeMs: 40000, Shots: 10, Hits: 5, Money: 0,
+            0, CompletedMask: 0, TimeMs: 40000, Shots: 10, Hits: 5,
             Airframe: 5, PlaneName: "Gypsy Magic"));
         var flow = OpenedOnScrapbook(profile, seq: 0);
 
@@ -422,7 +422,7 @@ public class CampaignScrapbookPageTests
     }
 
     private static MissionAttempt Attempt(int seq) =>
-        new(seq, CompletedMask: 1, TimeMs: 40000, Shots: 10, Hits: 5, Money: 0,
+        new(seq, CompletedMask: 1, TimeMs: 40000, Shots: 10, Hits: 5,
             Airframe: 5, PlaneName: "Gypsy Magic");
 
     private static int[] KillsOf(params (int Index, int Count)[] kills)

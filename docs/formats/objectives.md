@@ -233,6 +233,11 @@ matches (`FUN_004ad240`). Consequences, all decoded:
   share one display row; the shipped data keeps primaries at 1..9 and secondaries from 11 up.
 - It is also the sort key and the value reported to the per-class completion list; it is not a
   weight and has no effect on objective logic.
+- **It is the bit index in the recorded completed-objective mask.** At mission end `FUN_004194e0`
+  ORs `1 << priority` for every completed row, over bit 0, which is the mission-won flag; a
+  priority of 0 is skipped. So the mask is indexed by the numbers a mission authors, not by row
+  position, and the campaign's reward table matches its objective-bit column against them
+  ([saved-games.md](saved-games.md), "The mission-result array").
 - The `MSG_key` third argument is display text only; the mission parser never reads it. An
   `IDENTITY` without it (authored, for example `["SECONDARY", 11]`) produces a row with empty
   text that still tracks completion.
