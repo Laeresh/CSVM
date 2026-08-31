@@ -230,6 +230,38 @@ or a negative discriminant — i.e. a target outrunning the round is simply not 
 root is the `(x >> 1) + 0x1fc00000` bit-trick approximation, so the lead is accurate to roughly a
 per-cent, not exactly.
 
+### Where the two velocities come from, and why a boat is led
+
+`FUN_004bae60` takes the candidate's velocity from **vtable slot `+4`** on the candidate and the
+shooter's from the same slot on `DAT_0071c298`, and hands the difference to the solver. Position
+is slot `+0` on the same object. The scorer branches on nothing else about the entity, so what
+kind of thing a candidate is never reaches the lead term.
+
+Slot `+4` returns the object's velocity vector at **`+0x924`**, with `+0x930` its squared
+magnitude and `+0x934` its magnitude. `FUN_004871e0` reads the slot, negates the Y it gets back,
+writes the result into `+0x924` and recomputes the two magnitudes from it, which is only coherent
+if the accessor returns that field; the roster spawner writes it directly (`0x0047d7de`, the zero
+vector `DAT_0075d1b8`/`bc`/`c0`, and `0x0047d870` for a spawn given an initial airspeed).
+
+**Both movement laws write `+0x924`.** The flight integrator `FUN_0048e580` writes it at
+`0x0048e99b`, the scripted-path follower `FUN_0048a110` at `0x0048a4e2`, each recomputing
+`+0x930`/`+0x934` immediately after. The follower is not a separate class: it branches on the
+movement class at `+0x67C` for its ride height and otherwise drives the same object layout
+([`flightModel.md`](flightModel.md), "The scripted-path follower"). A path-driven ground or sea
+vehicle therefore carries a live velocity in the field the assist reads, and **the original leads
+a moving boat exactly as it leads an aeroplane**. There is no zero-velocity special case to
+reproduce.
+
+The magnitude, for a hull on a net: `dir × 17.8816 × (1 − |clamped heading error|)`, the same
+vector the follower integrates position by, so the `(1 − |turn|)` factor belongs to the velocity
+and not only to the position step. A hull turning hard is both slower over the ground and led
+less.
+
+A hull that has not been released carries zero. `FUN_0048a110` returns at its first line while the
+freeze flag `+0xd4` is set, so `+0x924` keeps the zero the spawner wrote, and the generator launch
+`FUN_00451bf0` places its hull with a zero velocity too. The velocity is a property of having been
+woken, not of having a route.
+
 ### The scatter cone — `FUN_004608a0`
 
 Build any perpendicular to the aim direction, rotate it about the aim axis by `rand()/32767 · 2π`

@@ -910,18 +910,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fires. *Cross-refs:* `ZeppelinMotion`, `docs/formats/mission-entities.md` "Steering",
   `zeppelin-pandora-dead-end`.
 
-- `BL-605` `[Bug]` **A surface vehicle's aim-assist candidate carries zero velocity, so the lead
-  solver never leads a moving boat.** *Evidence (traced):*
-  `SurfaceVehicleRuntime.CollectVehicles` adds each hull with `Vector3.Zero` for velocity, where
-  `ProjectilePool.CollectAircraft` passes the rig's own; the aim assist's lead term is therefore
-  zero on a boat driving its net at the taxi speed, and the gun snaps to where the hull is rather
-  than where it will be. *Fix shape:* expose the `PathFollower`'s current velocity on
-  `SurfaceVehicle` and feed it through `CollectVehicles`. *⚠ Traps:* the candidate list membership
-  itself is settled and must not move (`VehicleList`, `docs/org/aim-assist.md` "The four lists");
-  this is the velocity field alone. Whether the original leads a surface vehicle at all is the
-  first question, not the magnitude. *Cross-refs:* `AimAssist.Scan`, `BL-523` (the boats' own
-  gunnery, a separate item).
-
 - `BL-626` `[Bug]` **A turret acquires only aircraft, so no boat, balloon or emplacement gun ever
   fires at a ship.** *Evidence:* reported at the controls in two missions. In CM10 (C1/M05) the
   lifeboats a downed attack balloon drops reach the water, drive their nets and shoot at nothing
@@ -936,14 +924,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   holds, then widen the acquisition to match. The aim assist already keeps a vehicle list beside
   its aircraft list ([`docs/org/aim-assist.md`](docs/org/aim-assist.md), "The four lists"), so the
   classes exist to draw on. *⚠ Traps:* do not reach the behaviour by making a ship an
-  aircraft-class entity so that the existing list picks it up. `BL-605` is the neighbouring defect
-  on the aim assist's vehicle candidates and concerns the velocity field alone, not membership, so
-  the two must not be folded together. A patrol boat's own gunnery runs through the AI mode machine
+  aircraft-class entity so that the existing list picks it up. The assist's own vehicle list is a
+  separate mechanism, its membership settled and its candidates already carrying each hull's
+  velocity, so nothing here should reach into it. A patrol boat's own gunnery runs through the AI mode machine
   (`BL-523`), so a turret-side fix by itself does not make a boat shoot.
   *Playtest after fix:* CM10 with a dropped lifeboat and the hospital ship in frame, then CM12 as
   the Goose passes the boats. The original's behaviour is on film in
   `OriginalScreenshots/CM10.mkv`, where patrol boats attack the hospital ship shortly after the
-  start. *Cross-refs:* `BL-605`, `BL-523`, `docs/org/targeting.md`.
+  start. *Cross-refs:* `BL-523`, `docs/org/targeting.md`.
 
 ## Flight model & collision physics
 
