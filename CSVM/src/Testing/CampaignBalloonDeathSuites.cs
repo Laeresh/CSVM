@@ -43,6 +43,12 @@ internal static class CampaignBalloonDeathSuites
     /// pool, so the suite asserts which one a hit on each half reaches, then kills a balloon through
     /// the hit path and reads the burst off the world: the envelope falls, the six pieces fly, and
     /// the objective's own <c>healthy_balloon</c> ends hidden.</summary>
+    [Suite("campaign-balloon-death",
+        "CM10's attack balloons as destructibles over C1/M05's BUILT world: each lifesaver "
+        + "group node carries two weapon-hit pools, the balloon's lifefallNM at 60 HP and the "
+        + "lifeboat's lboat_destructionNM at 40, so a hit on the envelope reaches the balloon's "
+        + "own pool on all nine sites, and killing one flies its six bursting pieces, drops the "
+        + "envelope and leaves healthy_balloon hidden for the objective graph")]
     internal static void CampaignBalloonDeath(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

@@ -23,6 +23,11 @@ internal static class PerfHudSuites
     // strip. The numbers themselves are never asserted on.
     private const double SampleFrameMs = 16.0;
 
+    [Suite("perf-hud-layout",
+        "where the frame-cost readout lands: the real Full tier is driven a frame, then its "
+        + "label and its frame-time strip are both required to keep their right edge 8 px "
+        + "inside the window and their left edge on screen, since a top-right control placed "
+        + "by its LEFT edge walks its own width off the side")]
     internal static void PerfHudLayout(TestContext ctx)
     {
         var hud = new PerfHud { InitialMode = PerfHud.Mode.Full, Monitor = new HitchMonitor() };

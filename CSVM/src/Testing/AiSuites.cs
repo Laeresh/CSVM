@@ -12,6 +12,10 @@ namespace CSVM.Testing;
 /// combat voice, and the inert state they wait in.</summary>
 internal static class AiSuites
 {
+    [Suite("flight-roster-transaction",
+        "FlightRoster owns human and AI assembly as atomic transactions: a late second-human " +
+        "failure removes external bindings, a retry commits both humans in order with complete " +
+        "bindings, and a late AI failure restores pilot/RNG state and consumes no identity")]
     internal static void FlightRosterTransaction(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -176,6 +180,13 @@ internal static class AiSuites
         }
     }
 
+    [Suite("inert-aircraft",
+        "the E10 inert state, each claim watched passing on a live aircraft first and on the " +
+        "inert one AFTER activation: a plane built inert is not returned by a raycast, is " +
+        "listed by the aim assist's candidate collector but not as LIVE (so a scan pointed " +
+        "straight at it finds nothing), takes no damage from a round fired through it, does " +
+        "not move under a sim step and is not drawn — then Activate re-homes it and every one " +
+        "of those flips back")]
     internal static void InertAircraft(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -356,6 +367,13 @@ internal static class AiSuites
         }
     }
 
+    [Suite("carried-turrets",
+        "a carried turret gunner (C9a) builds from ai.zrd + the vehicle def's thirdp mount, " +
+        "poses at its arc centre, tracks and fires on a hostile plane inside DETECTION_RANGE " +
+        "with hits landing under the host's shooter id (never on the host's own airframe), " +
+        "holds fire while tracking through a bored window, parks at the NEARER yaw end stop " +
+        "out of arc, treats YAW [0,0] as unrestricted rather than locked, and goes quiet with " +
+        "a crashed host — plus the aim assist's turret candidate list is fed")]
     internal static void CarriedTurrets(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -544,6 +562,17 @@ internal static class AiSuites
     // switch. Zeppelin-slung entries are placed (they are world nodes) and their one gameplay
     // path is checked here too: the Instant Action builder's subtree-scoped activation of the
     // objective hull's rings, both directions, plus the fire it puts on a plane alongside.
+    [Suite("world-turrets",
+        "the world AA emplacements (C9b) place at their NODES patterns against the real C1 " +
+        "world (census pinned, one entry many turrets, scoped multi-segment paths), honour " +
+        "shipped ACTIVATED (a dormant aagun holds fire with a hostile plane in range until " +
+        "the --wake-turrets stand-in wakes it, then acquires and fires under its own " +
+        "enemy-default team), take the Instant Action builder's subtree-scoped ACTIVATED " +
+        "write on the objective zeppelin (14 rings armed and shooting back, nothing outside " +
+        "the hull touched, the same call with the flag cleared stowing them again), keep " +
+        "their own mounting SECTION out of their own sight line while the rest of the hull " +
+        "stays cover, skip same-team targets, join the aim-assist candidate list, and go permanently quiet " +
+        "when the emplacement's own destructible dies")]
     internal static void WorldTurrets(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -861,6 +890,11 @@ internal static class AiSuites
     // An emplacement standing on a subtree the mission's own .gw script switched OFF is out of
     // the world: dead to its own tick and unranked by every gunner. C3/M03 switches the six
     // barrage balloons and their turrets off by name; C3/M02 leaves them up and is the control.
+    [Suite("mission-off-turrets",
+        "an emplacement whose site the mission's .gw switched OFF is out of the world: C3/M03's " +
+        "six balloon turrets read dead, tick to Dead once woken, and are listed dead in the gunner " +
+        "scan with no structure candidate on their canopies, while C3/M02 leaves the same six " +
+        "standing and alive")]
     internal static void MissionOffTurrets(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -950,6 +984,11 @@ internal static class AiSuites
     // plane parked low on eight bearings so the line of fire crosses the fort, and every DamageAt on
     // an aagun node attributed to the only rounds in flight, the gun's own. The trace behind the
     // shooter-exclusion rule: a gun must never take its own burst, a neighbour's burst still lands.
+    [Suite("turret-self-fire",
+        "C1's five aagun emplacements, each woken alone and fired at a plane parked low on " +
+        "eight bearings so the line of fire crosses the fort's own structures: no gun ever " +
+        "takes damage from its own rounds, whether by a muzzle-side strike on its own mount " +
+        "or by its burst's splash, while a neighbour's burst still reaches it")]
     internal static void TurretSelfFire(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1103,6 +1142,14 @@ internal static class AiSuites
     // chapter's persist log is what this pins hardest: CM07 is chapter 1's FIRST mission, so the
     // engine's backwards walk finds no earlier carrier and a log holding these guns wrecked must
     // not reach them, or the whole fort opens silent.
+    [Suite("c1-aa-guns",
+        "CM07's own flak on the mission it is flown in: C1/M02 places five aagun emplacements, "
+        + "all standing and shipped dormant, the mission's OBJECTIVE1 WAKEUP_TURRETS 'aagun**' "
+        + "arms exactly those five through the world lookup and the subtree write, each one "
+        + "acquires a plane parked inside DETECTION_RANGE and fires without taking its own "
+        + "rounds, and a chapter 1 persist log holding all five wrecked carries NOTHING into "
+        + "CM07, since it is that chapter's first mission and the engine's backwards walk finds "
+        + "no earlier carrier (the same log applied with a cut that reaches it kills them all)")]
     internal static void C1AaGuns(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1262,6 +1309,11 @@ internal static class AiSuites
     // HUD and IsHumanPiloted false. It pins presence as a hit target, ticking along its ordered course,
     // mid-flight retargeting, part pools moved by the weapon's own ARMOR_DAMAGE, and a kill attributed
     // to the human shooter through Downed. Inventory: this module's docs/architecture.md entry.
+    [Suite("ai-actor",
+        "the M4 AI actor seam: an AI-piloted plane (AiPilot input, IsHumanPiloted false, no " +
+        "camera/HUD/devices) spawned into an already-running sim flies its orders, takes a " +
+        "mid-flight retarget, and is present, ticking, damageable by the weapon's own values " +
+        "and killable with the kill attributed to the shooter through Downed")]
     internal static void AiActor(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1451,6 +1503,12 @@ internal static class AiSuites
     // that range is measured, and that the plant switches on it. The branch's own arithmetic is
     // engine-free in CSVM.Tests/FarFieldPlantTests; only the seam needs an engine.
     // Inventory: this module's docs/architecture.md entry.
+    [Suite("ai-far-field-plant",
+        "the far-field plant's session plumbing on live rigs: an AI 1200 m from the human " +
+        "flies the decoded speed-hold branch and one at 100 m keeps the aerodynamics, the " +
+        "range is horizontal (3 km of altitude is not distance), the NEAREST of several " +
+        "humans decides it, an unbound seam stays near-field, and the far rig holds " +
+        "throttle x fd_speed + 5 m/s where the near rig on the same orders does not")]
     internal static void AiFarFieldPlant(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1566,6 +1624,17 @@ internal static class AiSuites
     // Downed, and the IsHumanPiloted assist exclusion A/B'd on one rig. Inventory: docs/architecture.md.
     // ⚠ Park the target at its spawn pose and never move it; a body moved inside the suite's single
     // frame is invisible to the rounds' space queries (INSTR-13).
+    [Suite("ai-gunnery",
+        "the D14 AI gunner + D12 acquisition: acquires through the decoded target ranking " +
+        "as mutable state (0.7 player weight, primary_target override, a 'player' assignment " +
+        "resolving to the NEAREST human of several, 1e21 activation " +
+        "cutoff, all live in the engine), refuses the shot " +
+        "when the residual after the ±11° traverse clamp exceeds the gun's 10° aim gate, and " +
+        "outside its quick-draw cone off the target's " +
+        "nose/tail, fires real rounds through the fire-control path under its own shooter id " +
+        "with dead-eye scatter (skill 1 hits measurably less than skill 9), downs the target " +
+        "with the kill attributed, and NEVER gets the human aim assist (the IsHumanPiloted " +
+        "gate, A/B'd in place)")]
     internal static void AiGunnery(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1870,6 +1939,15 @@ internal static class AiSuites
     // REAL projectile hit through TakeProjectileHit, the same call the pool makes, so the hit-path
     // wiring is what is exercised rather than the machine API. The plane may genuinely fly between
     // phases: no phase here queries physics at a flown-to position (INSTR-13).
+    [Suite("ai-modes",
+        "the D11 nine-mode machine on a live AI plane: patrol activates into pursue inside " +
+        "the shipped 2000 m radius, a scripted failed steady-hand roll on a real projectile " +
+        "hit breaks off into an evasive maneuver that plays to Done and returns, a failed " +
+        "sixth-sense roll stuns (gunner silent) and recovers after stun_recovery_interval, " +
+        "the avoid-crash override climbs out on a blocked probe and releases, and the D15 " +
+        "rubber-band assist: a chasing human fallen behind puts the machine in lay off " +
+        "(throttle eased, fire held) and --no-assist's switch never enters it under the " +
+        "same geometry — every transition in the engine's own mode vocabulary")]
     internal static void AiModes(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2122,6 +2200,12 @@ internal static class AiSuites
     // source-following one-shot is asserted by position only; audibility is the user's half
     // (docs/verification.md). Closes with the measured cost of prewarming the entire voice bank, the
     // number that justifies the roster-subset choice.
+    [Suite("voice-runtime",
+        "the B8 combat-voice runtime: the accent→voice.zrd→pilot-clip chain resolves against " +
+        "the real archive, a roster-subset prewarm makes the lines playable after the loader " +
+        "is retired (a never-prewarmed def stays null), a source-following one-shot tracks a " +
+        "moving node and survives its source's death, and the full-set prewarm cost is " +
+        "measured and reported")]
     internal static void VoiceRuntime(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"shared zrdr");
@@ -2226,6 +2310,12 @@ internal static class AiSuites
     // dice; audibility itself is the user's half (docs/verification.md, "What this project
     // cannot verify itself") — what IS assertable is the dispatch decision, the resolved clip
     // name and the PlayOneShot call.
+    [Suite("ai-voice",
+        "the E16 trigger dispatch on a live AI plane against the real archive: a projectile "
+        + "hit crossing a DI threshold plays exactly ONE source-following line the pilot's "
+        + "accent owns (the 15 s slot cooldown swallowing the follow-up hits), and the kill "
+        + "plays the dead pilot's own death cry through the force flag while an unforced "
+        + "dispatch on the same dead speaker stays silent")]
     internal static void AiVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2388,6 +2478,12 @@ internal static class AiSuites
         return last;
     }
 
+    [Suite("ai-net-follow",
+        "net following (B5): a real chapter net resolves by id and by name, its node fields " +
+        "ride along inert on an AIRCRAFT walk, and an AI plane with a net-following pilot captures node after " +
+        "node with every hop an EDGE of the graph, never node order. Then the same net, " +
+        "anchored (BL-377), rides its target 6 km east and the plane laps the MOVED ring at " +
+        "its authored altitude, never seating on the edgeless anchor node")]
     internal static void AiNetFollow(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

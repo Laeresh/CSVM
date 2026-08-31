@@ -41,6 +41,18 @@ internal static class SurfaceVehicleSuites
         "patrolboat_1", "patrolboat_2", "patrolboat_3", "patrolboat_4",
     };
 
+    [Suite("campaign-surface-vehicles",
+        "a mode ship roster block or generator launch builds a hull, not an aircraft: CM08's "
+        + "four patrolboat blocks in C1B's built world sit on the water at their authored "
+        + "spots on their Patrolboat nets, deactivated and hidden until woken, count for DEDG "
+        + "only once woken, start their wake emitters on their own pt_emitter nodes, drive "
+        + "their nets under the scripted-path law at the taxi speed with their height pinned "
+        + "to the water, land on the HUD's Enemy cycle and the gun aim assist's VehicleList "
+        + "once woken, and die once through the chapter's destructible pool; CM12's eshipg31 "
+        + "launch resolves a surface launch off Eshipg31_params, builds patrolboat_eg0 on the "
+        + "host's first take-off point kilometres from the world origin, runs the path "
+        + "westward at the taxi speed, never asks for an aircraft, and a realtime simulation "
+        + "request advances it once through the shared session owner")]
     internal static void CampaignSurfaceVehicles(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

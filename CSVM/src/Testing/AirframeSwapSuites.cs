@@ -80,6 +80,23 @@ internal static class AirframeSwapSuites
     /// the mission's compiled definitions, the rig off the session's roster, and the replacement is
     /// read for the named airframe's own stock fit, hardpoint table and armour rather than the
     /// airframe it replaced.</summary>
+    // BL-494: callback codes 965 to 967, which put the player in a different airframe mid
+    // mission and reached nothing until the roster grew a swap.
+    [Suite("campaign-airframe-swap",
+        "the mission-script host's airframe swap over CM02's BUILT world: the three decoded "
+        + "codes name the defs the shipped stat rows carry, the mission's own capture "
+        + "definition authors the Balmoral one, and driving that code through the host "
+        + "rebuilds the player's rig on the named airframe at the pose, heading and speed it "
+        + "was flying, with that airframe's stock hardpoint table at full ammunition and its "
+        + "own armour pools and damage zones rather than the airframe it replaced, the "
+        + "outgoing aircraft out of the world with no registration of its own left in the "
+        + "projectile pool, and the cutscene flags the code sets landing on the aircraft the "
+        + "swap built; plus the two things 967 does past that rebuild, on the same data: the "
+        + "capture definition's own aircraft hidden with what is left of its hull carried onto "
+        + "the player's, and the outgoing aeroplane handed to wingman_4 -- authored "
+        + "deactivated, flying the player's own airframe in this mission and its own def's "
+        + "everywhere else, revealed 100 m off the old nose at -45 degrees on the player's own "
+        + "heading with the sums measured off the hull it was given")]
     internal static void AirframeSwap(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -115,6 +132,25 @@ internal static class AirframeSwapSuites
     /// starts, and the 965 it raises rebuilds the player on the Blue Streak build in its shipped
     /// skins rather than on a stock Bloodhawk in the pilot's own paint; the flown aeroplane is
     /// drawn on the staged <c>player</c> marker through the lift leg, with the undercarriage.</summary>
+    // BL-574/BL-575: the hangar hand-over gave a stock Bloodhawk in the pilot's own paint, and
+    // both camera legs of the drop ran at once because their node-state prerequisite was
+    // parsed away.
+    [Suite("campaign-hangar-handover",
+        "CM07's hangar drop over that mission's BUILT world, played through the runtime on a "
+        + "realtime clock: each camera leg and its twin carry opposite node-state "
+        + "prerequisites on hdrop_direction, exactly one of each pair starts and it is the one "
+        + "the sensor's state picks, the two legs after the hand-over start, and the 965 the "
+        + "drop raises rebuilds the player on the Blue Streak build the special-plane template "
+        + "carries -- twin 40 over twin 30, one pylon a wing, 20 armour a zone, the nitrous "
+        + "injector -- in its shipped blo_* skins with no scheme over them (the blue-grey "
+        + "body and yellow wingtips of the original), while a plain swap onto the same node "
+        + "stays a stock Bloodhawk with no injector; the flown aeroplane rides the drop in "
+        + "view: the hangar-floor Bloodhawk prop shows for the first leg and goes at the "
+        + "swap, and after it the rig is drawn on the player marker, wearing the staged "
+        + "undercarriage, as the lift leg moves that marker, and the parachutist the drop's "
+        + "own site-less chute call animates is the one staged figure, drawn for the whole "
+        + "leg, hanging under the actor the stage left where it stands and coming down at the "
+        + "hangar rather than kilometres off it")]
     internal static void HangarHandover(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

@@ -11,6 +11,14 @@ namespace CSVM.Testing;
 /// damage, and the broadside cannons.</summary>
 internal static class ZeppelinSuites
 {
+    [Suite("zeppelin-motion",
+        "zeppelin motion (F17): C1/M04's piratezep record loads, its world node is placed at " +
+        "the authored pose, which is PirateZep1's node 0 and an ARMED stop point, so it sits " +
+        "docked until SetStopPoint releases stop-point id 1 — then flown between manual sim " +
+        "steps (every hop an EDGE, displacement never over max_speed·dt) until the route's " +
+        "far end, armed under the unaddressable id 0, docks it for good; total engine loss " +
+        "decelerates it to a stop through the decoded sqrt curve, and a deactivated record " +
+        "is placed but held")]
     internal static void ZeppelinMotionSuite(TestContext ctx)
     {
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
@@ -197,6 +205,12 @@ internal static class ZeppelinSuites
     // two stops the file DOES arm (ids 7 and 8) lets the walk run the whole chain to that bare
     // end, proving the structural dead-end hold (AiNetFollower) parks it there instead of
     // re-picking node 1 and shuttling the route's altitude swing (150 to 400 m) forever.
+    [Suite("zeppelin-pandora-dead-end",
+        "the structural dead-end hold (BL-529): CM08's piratezep flies its own Klondike1 " +
+        "chain, releasing the two stops the file arms (ids 7 and 8), pitch never past the " +
+        "steepest leg's slope the whole route, until it reaches node 0 — an open end with NO " +
+        "stop point authored at all — and holds there for good rather than re-picking node " +
+        "1 and shuttling the altitude swing back and forth forever")]
     internal static void ZeppelinPandoraDeadEndSuite(TestContext ctx)
     {
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1B");
@@ -291,6 +305,12 @@ internal static class ZeppelinSuites
     // whose 185-frame script flies the Pandora from (-11314,554,-13697) to the record's own seat,
     // node 0 of M3PirateZep. The record is where the script ENDS: the script owns the pose from
     // its first frame, the follower parks under it and resumes from its last frame.
+    [Suite("zeppelin-scripted-pose",
+        "a zeppelin under an ObjectMotionSiScript: CM04's pzep_todrydock owns piratezep's " +
+        "pose from its frame 0 over C3/M03's built world, the zeppelin runtime places " +
+        "nothing over it and its follower parks (never stepped, no frame jumps, never at the " +
+        "record seat) until the script ends 61.65 s later ON the record seat, where the " +
+        "follower resumes from the script's last frame and holds node 0's armed stop point")]
     internal static void ZeppelinScriptedPoseSuite(TestContext ctx)
     {
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C3");
@@ -320,6 +340,14 @@ internal static class ZeppelinSuites
         ctx.Note($"C3/M03: pzep_todrydock owns piratezep's pose for 61.65 s from its frame 0, the follower parks under it and resumes at the record seat");
     }
 
+    [Suite("zeppelin-launch",
+        "zeppelin fighter launch (F20): C1/IA1's zeppelin-launch generator authors the " +
+        "decoded shape (cargobay origin, −90° drop, mp1 door anims — both shipped as " +
+        "compiled OnCall defs over door_left/door_right), holds below the 100 m gate with " +
+        "the door shut, and on F17's flown zeppelin opens the door and drops fighters at " +
+        "the origin node's LIVE position on the composed 7 s schedule — the fast cycle " +
+        "leaving the hangar open (close early only past an 8 s gap) — while a max_active 1 " +
+        "clone stops after one live spawn")]
     internal static void ZeppelinLaunch(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -534,6 +562,14 @@ internal static class ZeppelinSuites
     // the bulk gasbag kills go through runtime.DamageAt directly, the same sink minus the flight time.
     // ⚠ Aim rounds at the gasbag collider's BUILT pose, captured before ZeppelinRuntime places the
     // node: a moved physics body never re-enters the space queries inside one frame (INSTR-13).
+    [Suite("zeppelin-damage",
+        "multi-zone zeppelin damage (F18) on C1/M04's piratezep in its own mission world: " +
+        "gasbag pools seeded from the record (120 over the def-less 0), engines from their " +
+        "compiled defs (40), a no-DAMAGES_ZEPPELIN gun round strikes a gasbag and is refused " +
+        "while a DAMAGES_ZEPPELIN round spends real hp, an engine kill slows the zeppelin " +
+        "through the F17 sqrt seam, and the survivor threshold kills with the decoded " +
+        "polarity — dead at survivors 3 < required 4, NOT at the design's destroy count — " +
+        "playing the authored all_pzep_gasbags death and stopping the motion")]
     internal static void ZeppelinDamageSuite(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
@@ -688,6 +724,16 @@ internal static class ZeppelinSuites
     // bearing), hold-and-retract out of arc, thinning, scatter, and the gasbag pick.
     // ⚠ Assert rounds at the spawn seam, count and direction, never as hits: a moved body never
     // re-enters the one-frame space queries (INSTR-13).
+    [Suite("zeppelin-broadside",
+        "broadside cannons (F19): C3/M03's Pandora as shipped (no COMPLETED_ZEPCANNONS) " +
+        "neither deploys nor fires on a player abeam inside range for 30 s and does both " +
+        "once engaged; then on C1/M04's engaged, flying piratezep a player inside the port " +
+        "arc triggers the authored deploy anims (durations read from the defs, 4 s), the " +
+        "readied side volleys real unowned wep_28 rounds lead-solved at the player while " +
+        "the far side stays stowed, out-of-arc holds fire and retracts after the invented " +
+        "idle window, an F18-destroyed cannon thins the next volley to 5, a " +
+        "cannon_inaccuracy clone shows real scatter, and the zeppelin-vs-zeppelin arm " +
+        "rand()-picks only the target's IN-ARC gasbags on constructed geometry")]
     internal static void ZeppelinBroadsideSuite(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");

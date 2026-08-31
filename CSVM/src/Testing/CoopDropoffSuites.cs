@@ -45,6 +45,12 @@ internal static class CoopDropoffSuites
     /// flying: the episode owner is posed on the staged <c>player</c> marker for the whole episode
     /// and flies out of the re-placement the definition authors, while the other human is held inert
     /// at its own coordinates throughout and is back in play there at the handoff.</summary>
+    [Suite("campaign-coop-dropoff",
+        "the first story mission's own drop-off driven with two humans flying 2 km apart: the "
+        + "episode owner rides the staged 'player' marker for every frame of the episode and "
+        + "flies out of the re-placement the definition authors, while the other human is inert "
+        + "at its own coordinates throughout and back in play there at the handoff; the same "
+        + "definition claimed by nobody poses the scripted player and holds the guest instead")]
     internal static void CampaignCoopDropoff(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

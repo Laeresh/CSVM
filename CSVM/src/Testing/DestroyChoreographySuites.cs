@@ -20,6 +20,8 @@ internal static class DestroyChoreographySuites
     // ⚠ Assert the unknown code and the unwired control too. A handler that acted on every code
     // would pass the two arms and still be inventing behaviour, and one wired to nothing at all
     // leaves the wreck motionless exactly as it did before this existed.
+    [Suite("callback-events",
+        "a destroy def's CALLBACK 16 hands the instance the rig's wreck velocity and its 15 stops the damage stages, on player-player and fury-fury; an authored code the runtime does not act on is counted, and no def in the chapter authors the free arm, code 0 (D18)")]
     internal static void CallbackEvents(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -36,6 +38,8 @@ internal static class DestroyChoreographySuites
     // four copies and the Balmoral's three chuteman calls at `destroyed` become three parachutes.
     // Keyed per anchor alone, calls two to four resolve to the first call's copy and the live guard
     // drops them, which is the "one chute where the data asks for three" symptom.
+    [Suite("repeat-call-slots",
+        "a template root CALLED REPEATEDLY from one anchor takes a pooled copy per authored call, not one for the anchor: pdpanel7's four gimmeflakes calls at pdp7 hold four copies, and a second tear reclaims those four rather than wrapping the pool (D21)")]
     internal static void RepeatCallSlots(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -121,6 +125,8 @@ internal static class DestroyChoreographySuites
     // dispatch timeline via AnimRuntime.OnEventDispatched, so it needs no textures: the rocket
     // fireball's ON_CALL stopper is named by a stop nothing runs and must stay silent, and the 30 s
     // fire's emitting poll loop is halted, since an un-halted Loop{-1} re-fires every frame forever.
+    [Suite("stop-sequence",
+        "authored STOP_SEQUENCE stops run: the fireball's 0.3 s stopper, the 30 s fire's halt, and the car lap's stopped car_dust1 refusing every later lap's call")]
     internal static void StopSequenceStops(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -253,6 +259,8 @@ internal static class DestroyChoreographySuites
     // the exterior bulletholes are what a pilot NOT in a cockpit gets. Its second Initial sequence
     // runs either way and is the control: it proves the def ran at all, so a zero call count reads
     // as "the branch was taken", never as "nothing happened".
+    [Suite("first-person-condition",
+        "the PLAYER_1ST_PERSON condition follows the pilot's selected view mode: the bullethole def's else branch runs in Chase and is skipped in Cockpit and Nose (A1)")]
     internal static void PlayerFirstPersonCondition(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -316,6 +324,8 @@ internal static class DestroyChoreographySuites
     // nearly all of large_30sec_fire's death calls. An unparsed block no-ops every one of them and
     // every "the fire ends on time" check reads the absence as a pass (DIAG-20). Subject: a C1 AA gun.
     // Able to fail: with RunDeathSlot deleted, no destruction_slot lane ever dispatches.
+    [Suite("death-slot",
+        "a killed destructible dispatches its compiled destruction slot — the block carrying the 30 s fire's 1,035 death calls (BL-276)")]
     internal static void DeathSlotDispatches(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -378,6 +388,8 @@ internal static class DestroyChoreographySuites
     // already reads destroyed, so a later hit finds a live pool and replays the whole death
     // choreography on an object that looks dead already. Subject: the first shipped destructible
     // AuthorsOwnSwap finds; able to fail with SyncDestructiblePool's call site removed.
+    [Suite("start-state-swap-pool",
+        "a destructible whose own Initial sequence authors the healthy/destroyed swap directly (a start-state script's shape, never DamageAt) leaves the HP pool destroyed too, so a later hit does not replay the death choreography (BL-513, BL-521)")]
     internal static void StartStateSwapSyncsThePool(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -423,6 +435,8 @@ internal static class DestroyChoreographySuites
     // the healthy role is hidden and the destroyed one shown, and a later hit is a no-op. A carried
     // partial HP lands at its damage stage with no stage burst. Subjects: shipped PERSIST_LOG
     // destructibles. Able to fail with ApplyTo routed back through DamageAt.
+    [Suite("carried-state-silent",
+        "a persist-log state lands on the pool and the destroyed pose with no instance started, a carried partial HP lands at its stage, and a later hit on the carried kill is a no-op")]
     internal static void CarriedStateIsSilent(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -528,6 +542,8 @@ internal static class DestroyChoreographySuites
     // meets the ground first plays the ground-impact def and is hidden only then.
     // ⚠ Keep the unwired control: the bug this pins is a hull hidden on the death frame.
     // Decode: docs/org/vehicleDamage.md, "What happens to the wreck".
+    [Suite("ai-wreck-fall",
+        "a killed AI aircraft's whole fall: the kill starts its self-named destroy def and no ai_crash_* def, the airframe is drawn on every frame of the fall, the hull travels under the flight model until Callback 15 releases it at the authored 3.0 s, Callback 16 hands the anim the velocity it reached THERE, a wreck that meets the ground first plays its surface-indexed crash def and is hidden only then (D21), and the lever/surface command last written by the AI think reads back bit-identical every frame of the fall (BL-451)")]
     internal static void AiWreckFall(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -599,6 +615,8 @@ internal static class DestroyChoreographySuites
     // ⚠ Both arms are READ, never guessed: `If NODE_ACTIVE 1` names entry one of the def's own node
     // list, `player_autogyro`, so the rotor arm is an airframe test and every other airframe takes
     // `random_destroy`. Decode: docs/org/vehicleDamage.md.
+    [Suite("player-destroy-choreography",
+        "a shot-down player plays player-player whole: the two authored arms are chosen by the def's own IF NODE_ACTIVE 1 (its node one is `player_autogyro`, so only the autogyro stops its rotor), the cockpit eject stages and shows its cpilot, all four wreck pieces appear and fly their own OBJECT_MOTION, and the camera-only Callback 3 stays counted rather than invented (D25)")]
     internal static void PlayerDestroyChoreography(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -633,6 +651,8 @@ internal static class DestroyChoreographySuites
     // name is the model root itself, and the reset chain must not relocate the aircraft the way it
     // places effect templates. ⚠ Every pooled template copy of one root must show the same lit mesh
     // count as its slot-0 sibling; a copy the reset pass missed stays lit for the whole session.
+    [Suite("crash-rig-anchors",
+        "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose")]
     internal static void CrashRigAnchors(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -805,6 +825,8 @@ internal static class DestroyChoreographySuites
     // PlaneModel fallback. ⚠ No flyable player_* model carries nitropropN (that disc geometry
     // ships only on the separate bare-named library root); the fix restores what the flown
     // plane's own nodes CAN show, the nitropuffN exhaust puffers at exhaust1..4.
+    [Suite("nitro-boost-anchors",
+        "nitro_boost/nitro_decay author NAME \"warhawk\" as their anchor, which never resolves inside a per-plane crash rig; Play's PlaneModel fallback (the same shape startprops/stopprops already use) starts both defs on the flown Warhawk and sustains its nitropuff1 exhaust puffer, though no flyable model carries the nitropropN disc geometry itself")]
     internal static void NitroBoostAnchors(TestContext ctx)
     {
         const string model = "player_warhawk";
@@ -862,6 +884,8 @@ internal static class DestroyChoreographySuites
     // The pre-warm's contract on a replica rig: after Bind and PrewarmEmitters nothing emits, a
     // crash and a panel tear reach the factory for no emitter, the claims count as built, and
     // respawn keeps the emitters so the next crash builds nothing either.
+    [Suite("emitter-prewarm",
+        "a crash rig's and the world-effects stage's PUFFER_STATE emitters are built at bind, unstarted: a crash, a panel tear, a post-respawn crash and five sonic bursts over a four-slot pool all reach the factory for no emitter, and the claims still count as built")]
     internal static void EmitterPrewarm(TestContext ctx)
     {
         const string model = "player_bhawk";
@@ -1011,6 +1035,8 @@ internal static class DestroyChoreographySuites
     // dirt selects ai_crash_dirt, and a crash with no struck body takes the null-material arm to slot
     // 0, ai_crash_default, never a player_crash_* def. ⚠ Keep the human-piloted A/B control; without
     // it a family mix-up in the pick would be invisible from the AI side alone.
+    [Suite("ai-crash-defs",
+        "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default, and the def switches off both the airframe's healthy subtree and the crash root's wreck — while a human rig off the same factory keeps player_crash_* (G21)")]
     internal static void AiCrashDefs(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

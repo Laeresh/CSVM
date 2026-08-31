@@ -15,6 +15,7 @@ namespace CSVM.Testing;
 
 internal static class CombatSuites
 {
+    [Suite("loadout-bind", "every stock loadout binds to its model with every marker resolved")]
     internal static void LoadoutBind(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -116,6 +117,7 @@ internal static class CombatSuites
 
     // ---- needs a built plane in the tree --------------------------------------------------------
 
+    [Suite("weapons-fire", "all 48 weapons mount and fire from a built plane")]
     internal static void WeaponsFire(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -176,6 +178,16 @@ internal static class CombatSuites
     // and weapons.json values the assist consumes parse at their documented shipped figures
     // at their shipped figures. The ordnance list is the one
     // case that needs a live pool, since the list IS a filter over the rounds in flight.
+    [Suite("aim-assist",
+        "the gun aim assist's per-muzzle slot (B2): a ~0.2 s catch-up time constant that snaps "
+        + "outright past 1/catchup_rate, and a forget timer keyed to the last SHOT, not to losing "
+        + "a lock; plus the shipped sticky_bullet_* values player.json actually carries, B3's "
+        + "constant-velocity intercept solver (dead-ahead, crossing, and outrun-with-no-solution) "
+        + "and B4's candidate scan — every rejection gate proved able to fail, the most-aligned "
+        + "selection the shipped dist_factor 0.0 produces, and a real fused round in a live pool "
+        + "outranking the aircraft behind it; plus B5's 1° launch scatter (flat in the polar "
+        + "angle, not over the solid angle) and the fire call's asymmetric step order, which "
+        + "fires the SMOOTHED line while the scan updates the target")]
     internal static void AimAssistSuite(TestContext ctx)
     {
         AimAssistCatchup(ctx);
@@ -668,6 +680,7 @@ internal static class CombatSuites
     // covering every `firepointN` the rig actually carries (the Kestrel's odd 7th), one
     // hardpoint per `pylonN`, no marker bound to two groups, and every synthesized group
     // fireable even where stock marks the slot a turret.
+    [Suite("loadout-forrig", "Loadout.ForRig covers every firepoint/pylon on all 11 airframes, seeded from stock")]
     internal static void LoadoutForRig(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -756,6 +769,8 @@ internal static class CombatSuites
     // basis and every world-space puff was yawed around the world origin. Invisible at the identity
     // -Z heading, which is why the parked viewer and every scripted dive looked fine. The suite feeds
     // a trail under a carrier at the C1 spawn pose and asserts the emitter re-anchored to identity.
+    [Suite("trail-world-anchor",
+        "a trail emitter under a rotated carrier anchors at world identity and drops puffs where it is fed")]
     internal static void TrailWorldAnchor(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -816,6 +831,8 @@ internal static class CombatSuites
     // GlobalTransform write on the hull root, propagated by the scene tree), and the emitter must
     // follow rather than hold the pose it started at. The no-GPU CountingEmitterFactory lets the
     // assertion read EmitterDirector.Tick's own fed position instead of a MultiMesh buffer.
+    [Suite("turret-death-effect-world-anchor",
+        "a carried turret's death fire, anchored on TurretController.Site under a moving/rotating hull, follows the hull between ticks rather than freezing at the pose it started at (BL-514)")]
     internal static void TurretDeathEffectWorldAnchor(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -912,6 +929,8 @@ internal static class CombatSuites
     // runtime TopLevel-places. A real C1/M04 piratezep ring is killed with the hand-off wired to a
     // real effects stage, the hull is moved as ZeppelinRuntime.Place moves it, and the emitter's fed
     // position is read against the ring's live pose: the fire must move by the ring's displacement.
+    [Suite("turret-death-fire-follows-hull",
+        "a zeppelin gun ring's death fire, routed WITH_NODE to the world-effects stage, moves with the ring as the hull flies on instead of holding the point it was placed at")]
     internal static void TurretDeathFireFollowsHull(TestContext ctx)
     {
         ctx.WithWorld("C1", collision: false, mission: "M04", world =>
@@ -986,6 +1005,8 @@ internal static class CombatSuites
     // original: the AT_NODE fireballs (routed to the effects stage) and the flying-parts debris (the
     // world runtime's own library copy) must move with the hull over the next frames, not stand in
     // the air where the ring died. C1C/M01's piratezep doublecannon4 carries both calls.
+    [Suite("ring-death-effects-follow-hull",
+        "a C1C/M01 gun ring killed on the moving hull: its AT_NODE fireball and its flying-parts debris move with the hull over the next frames instead of standing where the ring died")]
     internal static void RingDeathEffectsFollowHull(TestContext ctx)
     {
         ctx.WithWorld("C1C", collision: false, mission: "M01", world =>
@@ -1097,6 +1118,7 @@ internal static class CombatSuites
     // registers none, and a round a hundred metres wide of the aircraft registers none either, so a
     // pass count of 1 means the geometry. The accumulator's own arithmetic is unit-tested off-engine
     // (WarningShotCueTests); this is the pool half, on real ballistics.
+    [Suite("warning-shot", "the incoming-fire near-miss cue fires on another pilot's round, never on your own")]
     internal static void WarningShot(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -1168,6 +1190,13 @@ internal static class CombatSuites
     // the player-only gate, where an AI rig on the same trajectory gets only the position correction,
     // and both orientations. ⚠ The wall assertion is about the rebound AXIS, not a
     // per-surface coefficient; the impulse has no surface dependence, only the contact normal differs.
+    [Suite("graze-bounce",
+        "the decoded graze restitution (C25) on real contacts: a player rig flown into a floor " +
+        "rebounds along the contact normal off the shipped bounce_factor, an AI rig on the " +
+        "identical trajectory never gains normal speed (the original's player-only impulse " +
+        "gate) and is destroyed outright by that same contact (the decoded local_11 rule), " +
+        "and the same impulse on a vertical face is entirely horizontal — one coefficient, " +
+        "no surface test anywhere in it")]
     internal static void GrazeBounce(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1313,6 +1342,11 @@ internal static class CombatSuites
     // live in different places. The data half pins the resolver over all eleven airframes; the spawn
     // half pins the glue, since a null PlaneDamage is invulnerable and a drifted DefName misses the
     // stock-loadout table and flies unarmed. Both would ship green without this.
+    [Suite("ai-plane-defs",
+        "an AI aircraft resolves its OWN vehicle def for the damage model (BL-386): all eleven " +
+        "airframes seed the authored whole armor/health pair with no destroyable_parts at all " +
+        "and the AI seven-entry injure ladder, while the player def still supplies the loadout " +
+        "key and the rig — and a real spawn comes out damageable, zone-less and armed")]
     internal static void AiPlaneDefs(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -1449,6 +1483,12 @@ internal static class CombatSuites
     // Two aircraft off one airframe, given the same pose and the same orders, must fly apart; the same
     // ordinal drawn again must fly the same line; and the cache must come out untouched, since every
     // later spawn and every human rig reads it.
+    [Suite("ai-spawn-jitter",
+        "the decoded per-spawn dynamics spread (C26) through the real spawner: two AI aircraft " +
+        "off ONE airframe cache, given the same pose and the same orders, fly measurably apart " +
+        "but by a few percent rather than as different aeroplanes; the same spawn ordinal drawn " +
+        "again replays the same line (the --det property); and the shared per-airframe stats " +
+        "every later spawn and every human rig reads come out unperturbed")]
     internal static void AiSpawnJitter(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1546,6 +1586,9 @@ internal static class CombatSuites
     // beside one end of a long neighbour whose transform origin sits outside the blast radius while
     // its near face sits well inside it. Origin-scored falloff reads zero splash, so a real fix scores
     // measurable splash, and the struck wall's own direct-hit damage stays unscaled either way.
+    [Suite("blast-neighbor-shape",
+        "splash falloff on a neighbour scores to its nearest collision-shape surface, not its " +
+        "transform origin (BL-239)")]
     internal static void BlastNeighborShape(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -1634,6 +1677,13 @@ internal static class CombatSuites
     // docs/formats/vehicle.md, "The engine slot's pitch and gain are not throttle alone".
     // ⚠ The measured numbers are a CHECK on the decode, never its source. If one disagrees, the
     // coefficients still stand: they are read from the image and a recording may not contest them.
+    [Suite("engine-note",
+        "the engine slot's two non-throttle terms (BL-423): a sustained vertical dive drops the " +
+        "note to 0.94 against the 0.9370 CAP-10 measured off the original, ±0.3 rad/s both RAISE " +
+        "it by the +3.0 % that item measured because the term is a MAGNITUDE, a 4 rad/s roll " +
+        "moves it not at all because the nose-axis component is dropped, a climb reads the " +
+        "opposite sign to a dive off a real attitude, neither term is audible on the shipped " +
+        "flat volume curve, and the authored 1.5 parameter clamp holds a tumble")]
     internal static void EngineNote(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -1716,6 +1766,14 @@ internal static class CombatSuites
     // the rocket proximity fuse and blast falloff. Full inventory: this module's architecture entry.
     // ⚠ The zero-self-hits negative case stays non-optional; without it a broken owner exclusion
     // arrives silently as "guns too strong".
+    [Suite("air-to-air",
+        "a round strikes the target plane's body, maps to the data part, moves armor/HP by the " +
+        "weapon's own values, downs it when whole-vehicle health exhausts (a lone dead critical " +
+        "part no longer kills — the decoded rule, D14) with the kill attributed through the " +
+        "Downed event — never hits the shooter's own geometry — a rocket fuses on a passing " +
+        "plane, blasting with falloff and attributing the kill, concentrated fire on ONE " +
+        "bearing kills through the decoded redirect + whole-pool overflow (the 2026-08-14 " +
+        "correction), and a Fury dies to a few HE rockets")]
     internal static void AirToAir(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2188,6 +2246,13 @@ internal static class CombatSuites
     // Proves the plumbing end to end (ProjectilePool.CollectAircraft into AimAssist.Scan): a shooter's
     // scan snaps onto a same-index-range aircraft on a different team and never onto one sharing its
     // own. A round that reaches a teammate still costs it HP; there is no damage gate, only targeting.
+    [Suite("team-model",
+        "the B7 team model: two distinct pilot indices (real PlayerIndex values, not synthetic " +
+        "ints) share one explicit FlightController.Team and a third sits on another — " +
+        "impossible under the retired pilot-index-derived stand-in — the plumbed aim-assist " +
+        "scan reads Team and snaps onto the enemy while refusing the teammate, and a real " +
+        "fired round that reaches the teammate still costs it HP (Decision 3/A2: targeting is " +
+        "gated, damage never is)")]
     internal static void TeamModel(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

@@ -15,6 +15,8 @@ namespace CSVM.Testing;
 
 internal static class PufferSuites
 {
+    [Suite("emitter-lifetime",
+        "a destructible's death starts a PUFFER_STATE emitter and BL-236's own retirement rule stops it")]
     internal static void EmitterLifetime(TestContext ctx)
     {
         const string chapter = "C1";   // the only chapter shipping refuel* (5 defs) — matches bounce-launch
@@ -90,6 +92,8 @@ internal static class PufferSuites
     // states are read from the shipped readers, so every expected number derives from authored data.
     // ⚠ Keep GameClock.Current detached for the suite's duration. The harness clock is a FixedStep
     // one nothing steps, so FrameDt is 0 and every check would pass vacuously.
+    [Suite("puffer-modes",
+        "every continuous emitter path through Emit/Stop (plus Burst), driven through a fake renderer with no GPU")]
     internal static void PufferModes(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr effect readers");
@@ -157,6 +161,9 @@ internal static class PufferSuites
     // closed form. Three claims, each with the control that makes its "unchanged" readable: at zero
     // wind the coupling is algebraically absent, acceleration is applied after the position step and
     // before the damp, and WIND_FACTOR 0 is becalmed while 1 is fully carried behind the friction gate.
+    [Suite("puffer-wind",
+        "the traced integration order (position on last frame's velocity, then accel, then damp) "
+        + "and friction damping toward the WIND rather than toward rest, WIND_FACTOR and all (B6)")]
     internal static void PufferWind(TestContext ctx)
     {
         var clock = GameClock.Current;
@@ -181,6 +188,10 @@ internal static class PufferSuites
     // Every distance below is a VIEW-SPACE DEPTH: the camera sits at the origin looking down −Z
     // (Godot's forward), so a particle placed at `(0, 0, −d)` is at depth `d`, and one
     // pushed sideways is deliberately used to prove the measure is depth and not range.
+    [Suite("puffer-distance-fade",
+        "the NEAR_FADE/FAR_FADE camera-distance alpha and its two culls, against the shipped "
+        + "bands of C3's spew_puffer and volcanosmoke — the cross-wire included (C7), and the "
+        + "most-favourable-pane rule every viewer gets an answer from (B11)")]
     internal static void PufferDistanceFade(TestContext ctx)
     {
         var clock = GameClock.Current;
@@ -440,6 +451,8 @@ internal static class PufferSuites
     // than the same state at PRIORITY 0 — `1 + 0.02·10 = 1.2`, the hardware-path `K`
     // (`PriorityScaleDefault`). Burst mode, NUMBER 1, a degenerate SIZE_RANGE so the drawn
     // size is deterministic and the only thing that can move it is PRIORITY.
+    [Suite("puffer-priority-size",
+        "PRIORITY inflates the drawn sprite by 1 + K·PRIORITY, folded into BaseSize at spawn (C8)")]
     internal static void PufferPrioritySize(TestContext ctx)
     {
         static PufferState State(float priority) => new()
@@ -1088,6 +1101,9 @@ internal static class PufferSuites
     // What it costs the frame to own an emitter that is doing nothing. Godot dispatches _Process to
     // every processing node, and a mission pre-warms thousands of emitters, so the claim is that a
     // dormant one does not ask for the callback at all — through each entry path and each end.
+    [Suite("puffer-idle-process-gate",
+        "a dormant emitter is off Godot's frame-callback list and each entry path puts it back, "
+        + "which is what keeps a mission's pre-warmed field from costing the frame it is idle in")]
     internal static void PufferIdleProcessGate(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr effect readers");
@@ -1379,6 +1395,8 @@ internal static class PufferSuites
     // still air and in C1 IA1's authored upward wind, which friction damps toward. docs/org/puffer.md.
     // ⚠ Assert ratios and bands, never a pinned decimal; a height is one seed's extreme and moves
     // about 1.5 m with suite order, so the exact figures belong in ctx.Note.
+    [Suite("puffer-fire-column",
+        "the 30 s fire's authored column height, still air and in C1's own upward wind — the readout that retired the invented fire scales (D10)")]
     internal static void PufferFireColumn(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>

@@ -14,6 +14,14 @@ internal static class MusicSuites
     // which is what the fade assertions read.
     private const float Step = 0.1f;
 
+    [Suite("music-states",
+        "the state-driven score (D37): each game state cues the track family its data names, "
+        + "prebattle and battle loop while the stingers and the success tracks play once, "
+        + "re-entering the playing state never restarts it, the objective stingers alternate "
+        + "their two takes instead of drawing at random, and a combat ping cuts prebattle to "
+        + "battle at silence, ramps it to full in a quarter second, holds it 20 s and fades it "
+        + "out over four; and the briefing's duck rides over that fade without touching it, "
+        + "holding the channel down while the screen shows and lifting when it goes")]
     internal static void MusicStates(TestContext ctx)
     {
         var defs = SoundDefs.Load(ctx.ZrdrPath);

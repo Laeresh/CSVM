@@ -25,6 +25,14 @@ internal static class CampaignBriefingRepaintSuites
     private static readonly System.Globalization.CultureInfo Invariant =
         System.Globalization.CultureInfo.InvariantCulture;
 
+    // BL-485: the shell advanced the reveal every frame and repainted the board only when a
+    // discrete property moved, which a shot taken at a named second cannot see.
+    [Suite("campaign-briefing-repaint",
+        "the briefing reveal reaching the screen, driven frame by frame through a real "
+        + "LaunchMenu: the composed board the surface holds is compared against a board "
+        + "composed from the page on each of 5400 driven frames, the reveal must compose the "
+        + "screen afresh on far more than the handful of frames an objective count moves on, "
+        + "and one frame's board is counted so the cost of repainting it is on the record")]
     internal static void CampaignBriefingRepaint(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

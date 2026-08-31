@@ -29,6 +29,12 @@ internal static class CoopDeathSuites
     // neither death is the other's collision.
     private const float ApartM = 2000f;
 
+    [Suite("campaign-coop-death",
+        "the co-op loss rule over C3/M01, a mission whose script authors no loss at all: one "
+        + "human down leaves the mission running and hands that pane a spectator camera with "
+        + "the wreck pinned, while the other keeps flying; the LAST human's death is what ends "
+        + "it lost once no wreck is still falling, whichever of them went first; "
+        + "--no-crash-loss pins neither, and a solo death ends the mission on its only human")]
     internal static void CampaignCoopDeath(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

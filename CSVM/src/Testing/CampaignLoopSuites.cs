@@ -51,6 +51,17 @@ internal static class CampaignLoopSuites
     /// <summary>Walks the campaign loop end to end and leaves its profile on disk. What a second
     /// process finds there is checked at the top of the next run, which is the only place the
     /// persistence claim can be made: a first green run proves nothing about it.</summary>
+    // ⚠ Do not point another suite at this store: user://Testing/campaign-loop/ is this suite's
+    // alone, and what a second process finds there is the persistence claim itself. Registry order
+    // never protected it and cannot: the order is alphabetical and no suite's position is authored.
+    [Suite("campaign-loop",
+        "the whole campaign loop on the campaign's first mission (E41): a profile created on a "
+        + "store holding none, the cabin, the briefing, the flight check, an ammunition change "
+        + "that reaches the flown aircraft's guns, the mission's intro cutscene holding the "
+        + "objectives clock, its primary objective completed by flying the approach it names, a "
+        + "track its own data cues, the authored end recorded into the profile, and the cabin "
+        + "again with Next Mission advanced; the profile is left on disk, so a second run "
+        + "reads what the first one wrote")]
     internal static void CampaignLoop(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

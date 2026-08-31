@@ -45,6 +45,16 @@ internal static class IntroAircraftSuites
     /// chapter's own cross-archive base, the intro's scripts fly both away from the origin, the prop
     /// ends up under the airship, the flown airframe is drawn on the marker while the pilot is out
     /// of flight, and the launch cue fires.</summary>
+    // BL-482: the world build put no aircraft-archive node in the runtime's node table, so both
+    // names an intro animates claimed a symbol with a null binding and the camera moved over an
+    // empty sky.
+    [Suite("intro-aircraft-stage",
+        "the two aircraft a story-mission intro animates, over the first story mission's BUILT "
+        + "world: the aircraft archive's 'player' and 'piratefighter' answer the compiled "
+        + "intro's own cross-archive pointers in the runtime's node table, the intro's scripts "
+        + "fly both away from the world origin, its OBJECT_ADD_CHILD puts the prop under the "
+        + "airship, the flown airframe is drawn on the 'player' marker while callback 11 holds "
+        + "the pilot out of flight, and the drop's launch cue fires")]
     internal static void IntroAircraftStage(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

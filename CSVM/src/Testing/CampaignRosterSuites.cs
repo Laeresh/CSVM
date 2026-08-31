@@ -77,6 +77,16 @@ internal static class CampaignRosterSuites
         "britbalmoral_1", "britbalmoral_2", "britbalmoral_3",
     };
 
+    [Suite("campaign-roster",
+        "the campaign roster spawner (D34, BL-362/BL-364) over C1/M04's shipped aiv roster in "
+        + "its built world: every enabled non-player block gets a rig, while disabled blocks "
+        + "remain generator templates; the decoded fork puts an escort "
+        + "on the netless wingman_1 (leader: the player rig) and on wingman_2/3 (leaders: the "
+        + "devastator blocks) and a patrol net on every netted block with no block carrying "
+        + "both, the deactivated blocks are inert, the four taxiPath vehicles are placed frozen, "
+        + "a net's authored 700 m return radius reaches its block under the min_ai_active_dist "
+        + "floor, and over a two-minute flown run wingman_1 holds the scripted player inside "
+        + "the wingman-station leash")]
     internal static void CampaignRoster(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -198,6 +208,12 @@ internal static class CampaignRosterSuites
     /// netted <c>britbalmoral</c> bombers, three plain <c>britpeace</c> Peacemakers and the ace
     /// <c>britpeace_7</c>, reproducing CM02's own drawn stamps (2/3/starred 1, total 6); a friendly
     /// wingman's loss and an unattributed one must reach neither tally.</summary>
+    [Suite("campaign-kill-credit",
+        "the debrief's two per-airframe kill tallies, credited off real Downed "
+        + "reports over C3/M05's shipped roster: two of the three netted britbalmoral bombers "
+        + "and three of the five plain britpeace Peacemakers land in the plain array, the ace "
+        + "britpeace_7 lands in the starred array instead, and a friendly wingman's loss and an "
+        + "unattributed one reach neither")]
     internal static void CampaignKillCredit(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -336,6 +352,14 @@ internal static class CampaignRosterSuites
     /// <c>rating_biases</c> is authored with reach it, and an authored bias then moves the pick.
     /// Spawns run through the session's own <see cref="FlightRoster"/> and the same
     /// <see cref="CampaignRosterPlan.SpawnFor"/> record the campaign director builds.</summary>
+    // BL-401: the assembler named every spawn ai{n}_{plane}, which no authored pattern can
+    // match, so rating_biases was dead on the campaign path.
+    [Suite("roster-spawn-names",
+        "BL-401's authored spawn identity over C1/M02's shipped roster: a campaign spawn "
+        + "wears its roster block's own name while a spawn with none keeps the counter form, "
+        + "wingman_4's authored exclusion on the bloodhawk_2 BLOCK matches the spawned node "
+        + "and moves the live pick off it, and bloodhawk_2's always-target on the 'player' "
+        + "role takes the human rig over a nearer aircraft")]
     internal static void RosterSpawnNames(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -550,6 +574,12 @@ internal static class CampaignRosterSuites
     /// <see cref="AiVoiceRuntime"/> through <see cref="CampaignDirector.BuildRoster"/>'s own voice
     /// hand-off, not the session's flat rating-5 default. No chapter world is built: the roster
     /// phase alone is under test, over <c>Spawner</c>'s lightweight rig factory.</summary>
+    // BL-497: CampaignDirector passed null where a spawn's own talker/constitution ratings
+    // would go, so every campaign pilot chattered at the session's flat rating-5 default.
+    [Suite("roster-voice-ratings",
+        "BL-497's voice hand-off over C5/M01's shipped roster: autogyro_1 authors both talker "
+        + "and constitution (7, 8) and an accent, and its resolved chances each read their own "
+        + "authored rating on their own curve rather than the session's rating-5 fallback")]
     internal static void RosterVoiceRatings(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -712,6 +742,11 @@ internal static class CampaignRosterSuites
     /// is hit hard enough that its steady-hand test is certain to fail. What is under test is that
     /// the three leave their seat node the same way and stay on one node together, which the seeded
     /// branch draw did not do (<c>BL-498</c>).</summary>
+    [Suite("campaign-bomber-formation",
+        "CM02's three netted bombers (BL-498) spawned from C3/M05's own aiv roster into its "
+        + "built world: all three carry net 19, they leave their shared seat node the same way "
+        + "and fly one node of it together for a minute with nobody engaging them, and a "
+        + "certain steady-hand failure on one leaves it on that node and back with the other two")]
     internal static void BomberFormation(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

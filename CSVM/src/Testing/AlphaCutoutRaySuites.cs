@@ -34,6 +34,15 @@ internal static class AlphaCutoutRaySuites
 
     private static readonly float[] Elevations = { -60f, -30f, 0f, 30f, 60f };
 
+    // BL-477: what stops a shot at the cargo zeppelin's slung tanks was inferred from the
+    // geometry; this measures it. The original's own ray test reads no texture at all
+    // (docs/org/weaponRay.md), so this is a census of OUR occluders, not a fidelity gate.
+    [Suite("alpha-cutout-ray-census",
+        "the occluders standing between a weapon ray and C3/M01's cargo zeppelin: rays at "
+        + "hydrogentank1's mesh centre from 36 azimuths at five elevations, each naming the "
+        + "first collider's gamez node, over the mission's own world with the zeppelins placed "
+        + "at their authored pose; then the splash half, a burst on the hull underside plate "
+        + "g482 run through the production cover ray down to each of hydrogentank1..4")]
     internal static void AlphaCutoutRayCensus(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);

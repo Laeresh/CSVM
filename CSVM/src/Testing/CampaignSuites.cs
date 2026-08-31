@@ -69,6 +69,13 @@ internal static class CampaignSuites
     private static readonly float[] LetterboxAspects =
         { 4f / 3f, 1.6f, 1.64211f, 16f / 9f, 2558f / 1408f, 21f / 9f, 3440f / 1440f };
 
+    [Suite("campaign-persistence",
+        "the cross-mission state log (B12, BL-243): three PERSIST_LOG objects destroyed in one "
+        + "campaign mission are captured, survive the profile file and a second store instance, "
+        + "and start the next mission of the SAME chapter destroyed, while a save-only "
+        + "destructible killed alongside them never enters the log and starts that mission "
+        + "intact; the later world is built from the bootstrap, so the log is the only thing "
+        + "that could have wrecked them")]
     internal static void CampaignPersistence(TestContext ctx)
     {
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
@@ -220,6 +227,12 @@ internal static class CampaignSuites
     /// <summary>Drives one shipped mission's objectives graph headless against a scripted world:
     /// the wake timings, the chains, the target-list edits, the display rows, and both endings the
     /// script authors. No world is built, so this suite costs nothing but the parse.</summary>
+    [Suite("campaign-objectives",
+        "the objectives runtime (D31) over a shipped mission's own choreography, headless: the "
+        + "BEGIN_DORMANT wake timings and their sound/turret actions, the primary completing "
+        + "off an INACTIVEn node, its KILL/WAKE/NAP chains and target-list edits, the display "
+        + "rows and the mask's bit 0, plus BOTH endings the script authors — the INSTANTWIN "
+        + "path and the 300 s reminder fuse that naps the INSTANTLOSS objective")]
     internal static void CampaignObjectives(TestContext ctx)
     {
         string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, GraphChapter, GraphMission);
@@ -284,6 +297,11 @@ internal static class CampaignSuites
     /// <c>INACTIVEn</c> condition off real node state, the graph's own end is what ends the
     /// mission, and the result reaches the profile through <see cref="CampaignProgression"/> with
     /// the destruction log captured and the return-to-cabin exit raised.</summary>
+    [Suite("campaign-mission-end",
+        "the campaign mission-end flow against a BUILT world (D31): a scripted kill drives an "
+        + "INACTIVEn condition off real node state, the graph's own end ends the mission, and "
+        + "the result reaches the profile through CampaignProgression with the destruction log "
+        + "captured and the return-to-cabin exit raised")]
     internal static void CampaignMissionEnd(TestContext ctx)
     {
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
@@ -347,6 +365,11 @@ internal static class CampaignSuites
     /// (rig 0's) round reaches the recorded attempt, proving <c>WireScoredShooter</c> gates on the
     /// scripted player and never a guest. <c>Money</c> sums to 0 because no mission reward source
     /// feeds the director.</summary>
+    [Suite("campaign-coop-attempt",
+        "what a co-op sortie writes to the seated profile: two human rigs each fire a real "
+        + "cannon round at the other's aircraft, and only the seated pilot's reaches the recorded "
+        + "attempt's Shots/Hits, WireScoredShooter gating on the scripted player and never a "
+        + "guest; Money sums to 0 because no mission reward source feeds the director")]
     internal static void CampaignCoopAttempt(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -467,6 +490,12 @@ internal static class CampaignSuites
     /// over C3/M01's shipped SECONDARY (OBJECTIVE3, <c>dzpath1</c>) and OBJECTIVE11
     /// (<c>dzpath4</c>): both gate-crossing tests and completion through the director's real
     /// <c>NotifyDangerZoneCompleted</c> path.</summary>
+    [Suite("campaign-danger-zones",
+        "BL-458's campaign danger zones over C3/M01's own dzpathN gates, resolved against real "
+        + "world geometry: the mission's DANGER_ZONES_COMPLETED names (dzpath1, dzpath4) are "
+        + "armed and no others, a scripted crossing of both authored gates fires each zone's "
+        + "completion, and the director's real NotifyDangerZoneCompleted path completes the "
+        + "SECONDARY (OBJECTIVE3) and OBJECTIVE11 the way a flown mission would")]
     internal static void CampaignDangerZoneObjectives(TestContext ctx)
     {
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
@@ -555,6 +584,18 @@ internal static class CampaignSuites
     /// <summary>The cutscene host over the shipped intro definition: the codes the definition
     /// raises reach it through the runtime's own dispatch, the world and the objectives update
     /// stop while it holds them, and the handoff puts every piece of session state back.</summary>
+    [Suite("campaign-cutscene",
+        "the cutscene host over C1/M04's shipped intro definition (D32): its authored callback "
+        + "codes reach the host through the runtime's own dispatch, the world and the "
+        + "objectives update stop while callback 20 holds them, the vehicle-death codes are "
+        + "declined, and the definition's end hands off with every piece of cutscene state put "
+        + "back; and C3/M03's opening scene, which no start list names, is reached through its "
+        + "start anim's call: the world build stages its camera and player marker, the host "
+        + "takes its codes, the destruction runs under it once, and the skip it arms ends it; "
+        + "plus what an episode owes a seat that entered it from the cockpit view, at two seats "
+        + "and over both exits: the airframe drawn and the interior pass off while the "
+        + "presentation holds, both back on the hand-back, and neither seat's selected view "
+        + "moved to get there (BL-625)")]
     internal static void CampaignCutscene(TestContext ctx)
     {
         var host = new CutsceneController();
@@ -621,6 +662,11 @@ internal static class CampaignSuites
     /// <summary>The bars are data: the shared <c>letterbox</c> definition switches the node on and
     /// copies the cutscene camera's whole frame onto it every tick, so they hold their place in the
     /// frame through any camera path.</summary>
+    [Suite("cutscene-letterbox",
+        "the letterbox bars are data (D32): the chapter ships the node switched off as its "
+        + "definition's base state, calling the definition switches it on outright with no "
+        + "reveal, and the AT_NODE re-assert copies the cutscene camera's whole frame onto it "
+        + "every tick")]
     internal static void CutsceneLetterbox(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>

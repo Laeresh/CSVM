@@ -26,6 +26,12 @@ internal static class CutsceneOwnershipSuites
     private const float PlayBudgetS = 40f;
     private const float SettleS = 2f;
 
+    [Suite("campaign-cutscene-ownership",
+        "which definition an episode belongs to when the OBJECTIVE SCRIPT starts it rather than "
+        + "a landings row, over C5/M02's BUILT world and its own objective chain: an ordinary "
+        + "WAKE_ANIM left running claims no cutscene slot, the mission's ending is woken and "
+        + "its first code comes from a callee, yet the episode belongs to the definition the "
+        + "objective started and outlives that callee to the code the mission ends on")]
     internal static void CutsceneOwnership(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");

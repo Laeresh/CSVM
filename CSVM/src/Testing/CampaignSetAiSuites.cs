@@ -57,6 +57,20 @@ internal static class CampaignSetAiSuites
     private static readonly string[] Squad = { "britpeace_7", "britpeace_8", "britpeace_9" };
     private static readonly string[] FirstSquad = { "britpeace_1", "britpeace_2", "britpeace_3" };
 
+    // BL-500: the three SET_AI_* directives were named no-ops, so most of what CM02 does to
+    // its own aircraft never happened and every one of them flew its roster block all mission.
+    [Suite("campaign-set-ai-net",
+        "a mission re-commanding the aircraft it spawned, over C3/M05's own BUILT world: the "
+        + "three Balmorals fly the M5Bombers their own blocks author until OBJECTIVE4 puts all "
+        + "three on M5Bombrun, each capturing the route at the node nearest where it is rather "
+        + "than restarting it, the net's own volumes reaching the aeroplane; the ace squad is "
+        + "on M5Escort after the mission's own wake chain naps OBJECTIVE68 awake; an "
+        + "appended objective drives SET_AI_TEAM and SET_AI_ATTACK_RADIUS, which no shipped "
+        + "mission authors, including a name that is there for neither; and a bomber on that "
+        + "1 m attack radius still carries the two turret gunners britbalmoral authors, "
+        + "tracking and hitting a Fortune Hunter under its own shooter id while its pilot "
+        + "stays out of combat, taking nothing on its own airframe and going quiet when it is "
+        + "downed")]
     internal static void CampaignSetAiNet(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

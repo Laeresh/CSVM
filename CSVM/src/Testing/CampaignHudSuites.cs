@@ -29,6 +29,16 @@ internal static class CampaignHudSuites
     /// graph's rows, and a wake/complete sound-group cue starts a real
     /// <see cref="AudioStreamPlayer3D"/> (<see cref="WorldSounds.OneShotsStarted"/>). A group name
     /// is not guaranteed to resolve here, so both halves try every candidate.</summary>
+    [Suite("campaign-objectives-hud",
+        "D33's in-flight objectives display and cue firing against a BUILT campaign world: " +
+        "ObjectivesHud carries one line per ObjectiveGraph display row, a scripted " +
+        "IDENTITY objective completing off whichever condition the chapter's own mission " +
+        "authors (an INACTIVEn node list, a danger zone, or no condition at all) marks its " +
+        "own readout line " +
+        "(not only the graph's), a WAKEUP_SOUND_GROUP the mission authors starts a real " +
+        "AudioStreamPlayer3D through WorldSounds (D31's existing routing, counted rather than " +
+        "duplicated), and whichever cue surface the mission chose, WAKEUP_SOUND_GROUP or " +
+        "COMPLETED_SOUND_GROUP, one of its groups reaches a real player (BL-483)")]
     internal static void CampaignObjectivesHud(TestContext ctx)
     {
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
@@ -115,6 +125,15 @@ internal static class CampaignHudSuites
     /// definition classes the data authors, a VO dialogue chain speaking all its lines in order,
     /// a plain radio line beside it, and the queue's spacing, wait tolerance and cancellation.
     /// Built against a real world so the streams are the ones the mission prewarmed.</summary>
+    // BL-465/BL-461: mission callouts played from a point in the world, and a cue naming a VO
+    // dialogue chain played nothing at all.
+    [Suite("mission-radio",
+        "the mission radio queue over the first story mission's own callout vocabulary: every "
+        + "wake/complete cue the mission authors is a queued radio line or a chain of them and "
+        + "none is a positional definition, a chain speaks all of its lines in order, a second "
+        + "cue queues behind the one speaking instead of cutting in, the whole queue drains "
+        + "without starting a positional player, and STOP_QUEUED_SOUNDS drops a call that has "
+        + "not begun")]
     internal static void MissionRadioCallouts(TestContext ctx)
     {
         var missions = CampaignSequence.Load(ctx.ZrdrPath);

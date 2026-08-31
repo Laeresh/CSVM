@@ -48,6 +48,15 @@ internal static class CampaignSquadWakeSuites
     private static readonly string[] Squad = { "britpeace_7", "britpeace_8", "britpeace_9" };
     private static readonly string[] FirstSquad = { "britpeace_1", "britpeace_2", "britpeace_3" };
 
+    // BL-499: the aircraft arm of the same directive, which the zeppelin arm above does not
+    // stand in for. CM02's ace squad is the worked case.
+    [Suite("campaign-squad-wakeup",
+        "CM02's ace squad over C3/M05's own BUILT world: britpeace_7/8/9 ship deactivated and "
+        + "OBJECTIVE8 names exactly them in WAKEUP_ENEMIES, the three are inert and out of play "
+        + "at mission start while the first Peacemaker squad flies, wiping group 1 completes "
+        + "OBJECTIVE5 and its authored nap puts them into the world 15 s later through the real "
+        + "graph, each woken block walks a patrol net, and britpeace_8's authored always-target "
+        + "on the player role moves its live pick off a nearer candidate onto the human")]
     internal static void CampaignSquadWakeup(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
