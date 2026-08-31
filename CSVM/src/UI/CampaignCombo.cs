@@ -10,10 +10,10 @@ namespace CSVM.UI;
 /// confirm commits; a closed field still steps on the horizontal axis, which is how every other
 /// campaign row changes.
 ///
-/// <para>⚠ The combo never decides its own value. <see cref="Confirm"/> and <see cref="Next"/>
+/// ⚠ The combo never decides its own value. <see cref="Confirm"/> and <see cref="Next"/>
 /// return a candidate and <see cref="Select"/> is the only thing that moves the pick, because the
 /// screens that own one refuse some picks: a plane another crew slot flies is answered with a
-/// dialog and the field left where it was (<c>PLANESELECTION.SCRIPT</c>'s own revert).</para>
+/// dialog and the field left where it was (<c>PLANESELECTION.SCRIPT</c>'s own revert).
 /// </summary>
 public sealed class CampaignCombo
 {

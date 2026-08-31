@@ -37,8 +37,8 @@ public class CampaignScrapbookPageTests
     }
 
     /// <summary>The two tabs are the whole of the selection: the one showing is a plaque over the
-    /// card, the other a picture under it, and switching moves the card's own frame with them
-    /// (<c>BL-644</c>). The Best to Date tab keeps the original's decoded outcome bug, reading
+    /// card, the other a picture under it, and switching moves the card's own frame with them. The
+    /// Best to Date tab keeps the original's decoded outcome bug, reading
     /// Mission Failed off an offset the merge never writes.</summary>
     [Fact]
     public void TheTabsSwitchWhichHalfTheResultsBlockReads()
@@ -66,7 +66,7 @@ public class CampaignScrapbookPageTests
     }
 
     /// <summary>Replay Mission is offered only where <c>uiData</c> 2411 offers it: a mission whose
-    /// record holds a time, and only on the results page (<c>BL-642</c>).</summary>
+    /// record holds a time, and only on the results page.</summary>
     [Fact]
     public void ReplayMissionIsOfferedOnlyOnAFlownMissionsResultsPage()
     {

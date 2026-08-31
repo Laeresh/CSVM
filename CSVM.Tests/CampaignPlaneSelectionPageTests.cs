@@ -260,7 +260,7 @@ public class CampaignPlaneSelectionPageTests
         Assert.Equal(5, exported.Airframe);
     }
 
-    /// <summary>The plan's own trap: export sets the loadout and leaves the build alone, or a
+    /// <summary>Export sets the loadout and leaves the build alone, or a
     /// hangar plane loses its paint, armour and engine the first time the campaign exports it.</summary>
     [Fact]
     public void ExportLeavesAnExistingBuildsPaintArmourAndEngineAlone()
@@ -298,7 +298,7 @@ public class CampaignPlaneSelectionPageTests
 
     /// <summary>A guest's picker is one PILOT slot over that guest's own roster, the stock airframes
     /// first and the seated profile's aircraft copied after them, and it draws no EXPORT: a guest
-    /// flies a session copy carrying the owner's plane name (the plan's decision 9).</summary>
+    /// flies a session copy carrying the owner's plane name.</summary>
     [Fact]
     public void AGuestsPickerIsOneSlotOverTheirOwnRosterAndDrawsNoExport()
     {
@@ -320,7 +320,7 @@ public class CampaignPlaneSelectionPageTests
         Assert.Equal(5, combo.Selected); // the starter airframe the guest opened on
     }
 
-    /// <summary>Decision 6: langui 710 names a Pilot and a Wingman a guest's check has no concept
+    /// <summary>Langui 710 names a Pilot and a Wingman a guest's check has no concept
     /// of, so the refusal is a line of ours. The pick reverts, exactly as the seated player's does.</summary>
     [Fact]
     public void AGuestPickingTheSeatedPlayersAircraftIsRefusedInItsOwnWordsAndReverts()

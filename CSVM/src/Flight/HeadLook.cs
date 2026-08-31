@@ -6,11 +6,11 @@ namespace CSVM.Flight;
 /// <summary>One frame of look input, in the head's own conventions: a snap direction as a
 /// composed (x, y) with +x right and +y forward, a free-look direction with +right and +up, the
 /// center key, and the pad's absolute aim with the same +right/+up signs.
-/// <para>The snap and free-look directions are read for DIRECTION only, so a half-deflected input
+/// The snap and free-look directions are read for DIRECTION only, so a half-deflected input
 /// pans exactly as fast as a full one, which is what the original's hat-switch input does. That
 /// rule does NOT bind <paramref name="PadRight"/>/<paramref name="PadUp"/>: those carry a
 /// MAGNITUDE, because the pad aims absolutely (docs/controls.md). Defaulted, so a caller forcing
-/// one of the other paths cannot leave a stale deflection on the frame.</para></summary>
+/// one of the other paths cannot leave a stale deflection on the frame.</summary>
 public readonly record struct HeadLookInput(
     float SnapX, float SnapY, float FreeRight, float FreeUp, bool Center,
     float PadRight = 0f, float PadUp = 0f);

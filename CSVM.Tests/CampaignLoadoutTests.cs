@@ -93,7 +93,7 @@ public class CampaignLoadoutTests
     }
 
     /// <summary>An exported plane's own stored picks read the same way the profile record's do, so
-    /// Instant Action flies what the campaign fitted (B6's read side).</summary>
+    /// Instant Action flies what the campaign fitted.</summary>
     [Fact]
     public void AnExportedPlanesStoredPicksReadLikeTheProfileRecords()
     {
