@@ -119,8 +119,8 @@ public sealed partial class SurfaceVehicleRuntime : Node
     /// the aircraft roster (docs/org/aim-assist.md "The four lists": the decoded list holds
     /// "aircraft and AI ground/sea vehicles"), never the structure or turret list. An inert hull
     /// (not yet woken) is present but not live, the same shape a crashed pilot takes, so it neither
-    /// brackets nor draws a gun lock before its wake. No velocity: nothing here reads the follower's
-    /// speed yet.</summary>
+    /// brackets nor draws a gun lock before its wake. The velocity is the hull's own, since the
+    /// engine's scorer leads a boat as it leads an aeroplane (the same docs page).</summary>
     public void CollectVehicles(AimCandidateSet into)
     {
         foreach (var vessel in _vessels)
@@ -129,7 +129,7 @@ public sealed partial class SurfaceVehicleRuntime : Node
             {
                 continue;
             }
-            into.AddVehicle(vessel.Position, Vector3.Zero, vessel.Team ?? AimAssist.NeutralTeam,
+            into.AddVehicle(vessel.Position, vessel.Velocity, vessel.Team ?? AimAssist.NeutralTeam,
                 !vessel.Inert && !vessel.IsDestroyed, vessel);
         }
     }

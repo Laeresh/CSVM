@@ -918,9 +918,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   than where it will be. *Fix shape:* expose the `PathFollower`'s current velocity on
   `SurfaceVehicle` and feed it through `CollectVehicles`. *⚠ Traps:* the candidate list membership
   itself is settled and must not move (`VehicleList`, `docs/org/aim-assist.md` "The four lists");
-  this is the velocity field alone. Whether the original leads a surface vehicle at all is the
-  first question, not the magnitude. *Cross-refs:* `AimAssist.Scan`, `BL-523` (the boats' own
-  gunnery, a separate item).
+  this is the velocity field alone. *Decoded:* the original does lead a surface vehicle. The
+  scorer `FUN_004bae60` reads a candidate's velocity through vtable slot `+4`, which is the object
+  velocity at `+0x924`, and the scripted-path follower `FUN_0048a110` writes that field at
+  `0x0048a4e2` exactly as the flight integrator `FUN_0048e580` does at `0x0048e99b`; the value is
+  `dir × 17.8816 × (1 − |clamped heading error|)`, and it is zero while the freeze flag `+0xd4`
+  holds the hull. So the `(1 − |turn|)` factor belongs to the exposed velocity and an inert hull
+  must read zero rather than `PathFollower.Speed`
+  ([`docs/org/aim-assist.md`](docs/org/aim-assist.md), "Where the two velocities come from").
+  *Cross-refs:* `AimAssist.Scan`, `BL-523` (the boats' own gunnery, a separate item).
 
 - `BL-626` `[Bug]` **A turret acquires only aircraft, so no boat, balloon or emplacement gun ever
   fires at a ship.** *Evidence:* reported at the controls in two missions. In CM10 (C1/M05) the
