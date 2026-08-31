@@ -730,11 +730,12 @@ public partial class FlightController : Node3D
     /// a rolled aircraft is off that approach by the roll as much as by the heading.</summary>
     public Basis Attitude => _model.Attitude;
 
-    /// <summary>The weapon lab's free camera: while set, this controller writes NOTHING to the
-    /// camera — no chase, no fixed view, no orbit, and <see cref="SnapCamera"/> is a no-op — because
-    /// the lab has handed the same <see cref="Camera3D"/> to a <see cref="SpectatorCamera"/> so the
-    /// tester can fly out and watch an impact from a metre away. Clearing it re-seeds the orbit from
-    /// wherever the free camera left the eye, so the hand-back does not jump.</summary>
+    /// <summary>Another vantage owns this pane's camera: while set, this controller writes NOTHING
+    /// to it (no chase, no fixed view, no orbit, <see cref="SnapCamera"/> a no-op), and clearing it
+    /// re-seeds the orbit from where that vantage left the eye so the hand-back does not jump.
+    /// ⚠ It also silences the arm re-asserting the first-person visibility rules, so every caller
+    /// owes this aircraft's visibility through <see cref="SetViewedFromOutside"/> at BOTH edges,
+    /// beside this flag and never instead of it, or a cockpit seat keeps a hidden airframe.</summary>
     public bool CameraOwned
     {
         get => _cameraOwned;

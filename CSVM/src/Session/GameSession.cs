@@ -3252,6 +3252,8 @@ public partial class GameSession : Node3D
             pilot.Held = true;
             pilot.Inert = true;
             pilot.CameraOwned = true;   // The controller writes this pane's camera no more.
+            // No hand-back leg: the mode holds the pane for the rest of the session.
+            pilot.SetViewedFromOutside(true);
             // The cockpit instruments belong to an aircraft nobody is flying; the marker HUD is a
             // sibling on the same canvas and stays, which is the whole point of the mode.
             pilot.PilotHud.SetInstrumentsVisible(false);
@@ -3325,6 +3327,7 @@ public partial class GameSession : Node3D
         SuspendBoards();
         pilot.BeginPhotoMode();
         pilot.CameraOwned = true;   // The controller writes this pane's camera no more.
+        pilot.SetViewedFromOutside(true);
         pilot.SetPilotHudVisible(false);
         var eye = rig.Camera.Position;
         _photoCamera = new SpectatorCamera(rig.Camera, eye, eye - rig.Camera.Basis.Z,
@@ -3361,6 +3364,10 @@ public partial class GameSession : Node3D
         {
             pilot.SetPilotHudVisible(true);
             pilot.CameraOwned = false;
+            // ⚠ The arm cannot cover this edge: photo mode returns to the halted world the board
+            // froze, and halted is its own no-write branch, so the rules would stay off until
+            // flight resumed.
+            pilot.SetViewedFromOutside(false);
             pilot.EndPhotoMode();   // seeds the pause edge, or the held Escape unpauses too
         }
         _photoPilot = null;

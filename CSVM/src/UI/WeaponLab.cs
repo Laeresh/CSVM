@@ -474,6 +474,7 @@ public sealed partial class WeaponLab : Node3D
         if (on)
         {
             _host.CameraOwned = true;
+            _host.SetViewedFromOutside(true);
             // The scripted twin has no hands on WASD, so the free camera would hand the view back
             // from exactly where it took it and the no-jump check could not fail. Displace it on
             // the way out, so the hand-back is measured from an eye the orbit never chose.
@@ -493,6 +494,9 @@ public sealed partial class WeaponLab : Node3D
             _spectator?.QueueFree();
             _spectator = null;
             _host.CameraOwned = false;
+            // The arm would resume next frame anyway, but V is a hand-back the tester is watching,
+            // so the selected view's rules go back on this frame rather than one late.
+            _host.SetViewedFromOutside(false);
         }
         Log.Info("ui", $"weapon lab: camera -> {(on ? "free (V returns it)" : "orbit")} at ({eye.X:0.0},{eye.Y:0.0},{eye.Z:0.0})");
         _settleEye = eye;   // the next frame logs where the new owner actually put the eye
