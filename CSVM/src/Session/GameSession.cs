@@ -1857,6 +1857,11 @@ public partial class GameSession : Node3D
             GD.PushWarning($"ia: player plane '{iaRt.Def.PlayerPlane}' is not one of " +
                             $"the eleven airframes — flying '{_spec.PlaneName}' instead");
         }
+
+        // What the mission forces on every human, which the wizard's own def does not: its
+        // player_plane IS player 1's pick, so PlaneRoster.InstantActionOverride hands it back
+        // as null and each pane flies the aircraft its pilot selected.
+        string? iaOverride = PlaneRoster.InstantActionOverride(_spec, iaPlayerNode);
         // One spawn list for the session; each player takes the next index (wrapping).
         // The empty stage has no mission, so nothing to read: ChooseSpawn takes the
         // --pos/default override placed over the grid origin.
@@ -2049,7 +2054,7 @@ public partial class GameSession : Node3D
             Race = race,
             VersusMatch = versus,
             Rigs = _rigs,
-            InstantActionPlayerPlaneNode = iaPlayerNode,
+            InstantActionPlayerPlaneNode = iaOverride,
             InstantActionActive = iaRt != null,
             Coop = _spec.Coop,
             SmokeScreens = _smokeScreens,
@@ -2090,7 +2095,7 @@ public partial class GameSession : Node3D
         // Splitscreen binds P1 only: the panel is one overlay, not one per pane.
         if (_rigs.Count > 0 && _rigs[0].Controller is { Damage: not null } p1)
         {
-            var p1Stats = StatsFor(iaPlayerNode ?? PlaneRoster.PlaneFor(_spec, 0));
+            var p1Stats = StatsFor(iaOverride ?? PlaneRoster.PlaneFor(_spec, 0));
             _damageLab = new DamageLab(p1Stats,
                 new FlightDamageTarget(p1, _rigs.Count > 1 ? "P1" : null), _spec.DamagePreset)
             {
@@ -2716,12 +2721,12 @@ public partial class GameSession : Node3D
         {
             var flown = new List<string>(_rigs.Count);
             for (int pi = 0; pi < _rigs.Count; pi++)
-                flown.Add($"P{pi + 1} '{iaPlayerNode ?? PlaneRoster.PlaneFor(_spec, pi)}'");
+                flown.Add($"P{pi + 1} '{iaOverride ?? PlaneRoster.PlaneFor(_spec, pi)}'");
             state.What += $" + splitscreen {string.Join(", ", flown)}";
         }
         else
         {
-            state.What += $" + '{iaPlayerNode ?? _spec.PlaneName}' flying";
+            state.What += $" + '{iaOverride ?? _spec.PlaneName}' flying";
         }
     }
 
