@@ -797,11 +797,9 @@ public sealed class CampaignDirector
         var plane = _profile.SelectedPlane >= 0 && _profile.SelectedPlane < _profile.Planes.Count
             ? _profile.Planes[_profile.SelectedPlane]
             : null;
-        // The objective bits are recorded whatever the outcome, and bit 0 is the win flag laid over
-        // them, never an objective of its own (docs/org/debrief.md). No money is passed: what the
-        // mission pays is the reward table's, gated on what this profile already banked, so
-        // CampaignProgression works it out and reports it back. ⚠ Shots/Hits stay the seated
-        // pilot's alone (WireScoredShooter): a guest's gunnery never counts.
+        // No money is passed: what the mission pays is the reward table's, gated on what this
+        // profile already banked, so CampaignProgression works it out (docs/org/debrief.md).
+        // ⚠ Shots/Hits stay the seated pilot's alone (WireScoredShooter): a guest's never count.
         var attempt = new MissionAttempt(
             _mission.Seq,
             outcome == MissionOutcome.Won
@@ -1182,10 +1180,9 @@ public sealed class CampaignDirector
                 }
             }
 
-            if (armed > 0)
-            {
-                GD.Print($"campaign: WAKEUP_TURRETS armed {armed} emplacement(s)");
-            }
+            // Logged even when it arms nothing: silence on armed=0 makes a script that matched no
+            // node indistinguishable from no script at all.
+            Log.Info("flight", $"campaign: WAKEUP_TURRETS armed {armed} emplacement(s) from {patterns.Count} pattern(s); {_in.Turrets.AwakeCount} awake and {_in.Turrets.AliveCount} alive of {_in.Turrets.Count}");
         }
 
         public void WakeupZepTurrets(IReadOnlyList<string> nodes) => WakeupTurrets(nodes);

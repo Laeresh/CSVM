@@ -479,8 +479,7 @@ internal static class CampaignSuites
             ctx.Same(1, attempt.Hits, $"...and hit count alone, never the guest's");
 
             // Money is the mission's own, not the field's: a reward is per objective and banked
-            // once whatever the headcount, so what two humans bank is what the table answers for
-            // this mission and this mask. Computed from the table rather than hard-coded, since
+            // once whatever the headcount. Computed from the table rather than hard-coded, since
             // which mission this suite flies follows --chapter.
             int owed = ExpectedReward(mission.Seq, attempt.CompletedMask);
             int paid = director.Result!.Value.Recorded.MoneyPaid;
@@ -506,12 +505,11 @@ internal static class CampaignSuites
     }
 
     /// <summary>BL-645: the mission reward table's cash half, end to end on the one mission whose
-    /// reward the shipped data can reach without flying it. C3/M01 is ordinal 1, which pays $900 on
-    /// objective bit 12; that bit is its <c>SECONDARY 12</c> (<c>OBJECTIVE31</c>), conditionless and
-    /// gated only on <c>OBJECTIVE30</c> being awake, so waking the pair completes it for real. Two
-    /// human rigs are up, and the payout is the mission's own, taken once: a squadron is paid what
-    /// the objective pays, not that times the headcount. Flying the same mission again banks
-    /// nothing, which is the gate on the mask as it stood before the run.</summary>
+    /// reward the shipped data can reach without flying it. Two human rigs are up, and the payout
+    /// is the mission's own, taken once: a squadron is paid what the objective pays, not that
+    /// times the headcount. Flying the same mission again banks nothing, which is the gate on the
+    /// mask as it stood before the run. The mission and its paying bit are named on the
+    /// <c>[Suite]</c> description below.</summary>
     [Suite("campaign-mission-cash",
         "BL-645's mission reward cash on C3/M01 (ordinal 1, $900 on bit 12) with two humans up: "
         + "waking OBJECTIVE30 and its dependent SECONDARY 12 completes the paying objective for "
