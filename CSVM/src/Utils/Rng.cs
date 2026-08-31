@@ -89,6 +89,21 @@ public static class Rng
         return rng.Seed;
     }
 
+    /// <summary>Reseeds every live subsystem stream to its master-derived start, IN PLACE: unlike
+    /// <see cref="Reset"/> it keeps each generator object, so a consumer holding a captured
+    /// reference is rewound too rather than left drawing on an orphan.
+    /// ⚠ The in-engine harness only, before each suite: without it a suite's verdict is a function
+    /// of how many draws its predecessors left in the stream. A session must use
+    /// <see cref="Reset"/>, whose master can change.</summary>
+    public static void Rewind()
+    {
+        foreach (var (name, rng) in Streams)
+        {
+            rng.Seed = SeedFor(name);
+        }
+        GD.Seed(Master);
+    }
+
     /// <summary>The named subsystem's seed. Pure: the same name and master always give the same
     /// value, whatever else has drawn.</summary>
     public static ulong SeedFor(string subsystem) => Mix(Master ^ Fnv1a(subsystem));

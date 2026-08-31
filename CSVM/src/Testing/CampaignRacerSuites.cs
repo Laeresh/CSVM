@@ -76,12 +76,6 @@ internal static class CampaignRacerSuites
             var textures = new TextureArchive(texturesPath);
             var rigs = new List<FlightController>();
             ProjectilePool? pool = null;
-            // The net followers draw their branch picks off the session's AI stream, which every
-            // earlier suite in the process has advanced; a fresh stream makes the flown course the
-            // same one whatever ran before, and the state is handed back afterwards.
-            var aiStream = Utils.Rng.Stream(Utils.Rng.Ai);
-            ulong aiState = aiStream.State;
-            aiStream.Seed = Utils.Rng.SeedFor(Utils.Rng.Ai);
             try
             {
                 var live = new ProjectilePool(textures, null, null);
@@ -154,7 +148,6 @@ internal static class CampaignRacerSuites
                 }
                 pool?.Free();
                 textures.Dispose();
-                aiStream.State = aiState;
             }
         });
 
