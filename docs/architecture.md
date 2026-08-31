@@ -238,6 +238,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
 - `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session; also the hangar's two doors, the campaign's one (`OpenCampaignCabin`) and its mission-end debrief (`OpenCampaignScrapbook`, both re-reading the profile from the store), and the renderer both flows draw through.
+- `src/UI/MenuZones.cs` — how the launchscreen divides a window: a fixed header band, a fixed footer band, the selection list in what is left, and the one scale all three share. Engine-free.
 - `src/UI/InstantActionPresets.cs` — the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
 - `src/UI/PlanePickerRoster.cs` — the one roster every human plane picker draws: 11 stock airframes then the store's saved customs, each custom carrying its store name and its airframe's stock node (D32's launch seam); engine-free build/lookup rules.
 - `src/UI/PlaneDiagrams.cs` — the two plane-diagram sheets the original draws beside a fitted aircraft, framed per airframe: `OL_PLANEDIAGRAMSTOP.PNG` (204x1870) and `OL_PLANEDIAGRAMSFRONT.PNG` (245x1100), each eleven equal frames stacked top to bottom in airframe-id order. Shared by ammo selection, the campaign's flight check and the hangar's airframe list; the decode is cached for the process, misses included, and a sheet whose height is not a whole multiple of the airframe count draws nothing rather than a mis-sliced picture.
@@ -3967,6 +3968,27 @@ launcher's, because a board is what a menu defect has to be reported from (`BL-4
 `menu-screenshot-key` pushes a real key event through the real viewport on both layouts and fails if
 the menu leaves the key to whatever is above it.
 
+The centred layout is three bands, divided by `MenuZones`: a header (`CRIMSON SKIES`, the
+breadcrumb, the join strip), the middle (heading, the hangar's totals line, the rows with the art
+column beside them, two status slots), and a footer (the focused row's description, then the
+controls line). Header and footer are held at the heights their own metrics ask for and the middle
+takes the rest, so the rows are the only thing a screen can move. Every slot outside the rows is
+drawn whether or not it has anything in it, and a refusal takes the description's own slot rather
+than a line of its own, which is what keeps a longer description or an appearing status line from
+shifting the screen under the cursor. `Zones` measures the three reference heights off the theme
+font at the 720p metrics and `MenuZones.For` turns them into one shared scale; a band's own
+separation scales with it, or the height it spends is height the metrics never budgeted. `_Process`
+watches the viewport size as well as the input, since a resize or a resolution change arrives as no
+press at all. `menu-zone-layout` walks the paint screen row by row and then resizes a viewport under
+a real menu; `CSVM.Tests/MenuZonesTests.cs` holds the division rule itself.
+
+## src/UI/MenuZones.cs
+How the launchscreen's three bands divide a window: the two fixed heights, the middle taking the
+slack, and the one scale all three share, capped so the tallest screen still fits instead of losing
+its footer. Pure and public, so the rule is testable with no menu instance behind it
+(`CSVM.Tests/MenuZonesTests.cs`). The property the layout rests on is that growing the middle's
+reference height leaves the other two bands where they were, as long as the content still fits.
+
 ## src/UI/InstantActionPresets.cs
 The original's Table of Contents: the 19 preset scenarios decoded from 19 `0x230`-byte records at
 `0x0061b090` and applied by `FUN_004102c0` (docs/formats/instant-action.md, "Table of Contents
@@ -3987,18 +4009,19 @@ fly stock airframes, so nothing here waits on the hangar. Units in
 The hangar (`HangarFlow`) has two doors, both through `OpenHangar`, which remembers the screen to
 land back on: a trailing `Build Custom Plane` row past the three Mode rows, and the same row past
 the eleven airframes on the Instant Action plane pick. `Screen.Hangar`
-draws through the same centred body every other screen uses: heading, rows, detail and footer all
-read off `_hangar.Page`. The rows and their detail line live in a content column of their own, so
+draws through the same three bands every other centred screen uses: heading, rows, description and
+controls all read off `_hangar.Page`. The rows live in a content column of their own, so
 that when the page's `Art` is non-null an art column (`HangarArtColumn`) stands to its LEFT, the
 side the original's own paint screen puts its preview on: the page's decoded RGBA as a
 letterboxed texture with a caption, and under it the focused row's own smaller picture when
 `RowArt` returns one (the paint screen's decal tile). Each texture is rebuilt only when the page
-hands over a different image, and `LayoutScale` counts the column only where it is taller than the
-rows it stands beside. The detail label autowraps in that 560px content column, which is what
+hands over a different image, and the middle band's metrics count the column only where it is taller
+than the rows it stands beside, at its full height whether or not the focused row has a picture of
+its own. The description label autowraps in the footer band's 560px column, which is what
 keeps the airframe-defaults ask (langui 206, a two-sentence question) on a 16:9 screen instead of
-stretching the centred body past its edges. Every hangar screen also carries the persistent totals line under its heading
-(`HangarFlow.TotalsLine`), error-coloured via `TotalsOverweight` and
-counted by `LayoutScale` the same way. A page needs no change here, art included. The hangar's
+stretching that column past its edges. Every hangar screen also carries the persistent totals line under its heading
+(`HangarFlow.TotalsLine`), error-coloured via `TotalsOverweight`, in a slot the middle band reserves
+on every screen. A page needs no change here, art included. The hangar's
 screens sit behind a flow rather than behind the screen enum, so `--menu=` reaches them through
 `OpenHangarAid`: `hangar` the plane list, `airframe` the airframe list, `defaults` its ask, `paint` the
 preview on a Fury in Fortune Hunters colours with a nose decal chosen. A screenshot aid only.
@@ -4027,8 +4050,8 @@ nothing a `--det` run can touch.
 
 The campaign (`CampaignFlow`) has one door, the `Campaign` row between the three modes and the
 hangar's, and `Screen.Campaign` draws as a composed board (`ComposedBoardView`/`CampaignBoards`,
-below) rather than through the centred body every other screen uses: heading, rows, detail and
-footer all read off `_campaign.Page`, and the footer is the page's own, since a screen with an armed
+below) rather than through the three bands every other screen uses: heading, rows, description and
+controls all read off `_campaign.Page`, and the footer is the page's own, since a screen with an armed
 text field has a different control set from the same screen with the cursor on its list. The art
 column is shared with the hangar through `PageArt`/`PageRowArt`, so a campaign page that hands over
 a picture needs no change here. Navigation is player 1's everywhere except a guest's own flight

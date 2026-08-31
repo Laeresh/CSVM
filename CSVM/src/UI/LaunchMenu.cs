@@ -67,6 +67,18 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int FooterFont = 15;
     private const int ErrorFont = 15;
 
+    // The centred layout's content column at 720p: the width every band's text is centred in and
+    // the description wraps at, and the vertical padding the header keeps above the title and the
+    // footer below the controls line.
+    private const int ContentWidth = 560;
+    private const int ZonePad = 18;
+    // How many description lines the footer reserves. The band's height must not depend on the
+    // focused row, so the slot is this tall whatever the row says; a longer description than this
+    // wraps into the space above the controls line rather than moving them.
+    private const int DetailReserveLines = 2;
+    // The separation every band's content column carries between its children.
+    private const int ZoneSeparation = 6;
+
     // The hangar art block's 720p height; the 358x335 TGAs letterbox into it. It
     // stands beside the rows, so it is as tall as the column has room for rather than
     // as short as a block over them had to be.
@@ -322,13 +334,22 @@ public sealed partial class LaunchMenu : CanvasLayer
     // --menu=campaign-guestcheck: which guest's flight check the aid asked for, applied by
     // DebugJoin, since the aid runs inside ShowMenu and the players arrive right after it.
     private int _aidGuest;
-    private VBoxContainer _body = null!;
-    private CenterContainer _center = null!;
+    // The viewport as the layout was last built for. Every metric here is derived from it, so a
+    // resize or a resolution change owes a repaint that no keypress asked for.
+    private Vector2 _viewSize;
+    // The centred layout's three bands, top to bottom: header (title, breadcrumb, join strip),
+    // middle (heading, rows, the art column beside them), footer (the focused row's description,
+    // the error slot, the controls line). Each holds one centred content column rebuilt per frame;
+    // the bands themselves are built once and keep the fixed heights MenuZones gives them.
+    private VBoxContainer _zones = null!;
+    private HBoxContainer _header = null!;
+    private HBoxContainer _middle = null!;
+    private HBoxContainer _footer = null!;
     // The splitscreen plane-select root (one panel per player + a shared bottom strip). Shown
-    // instead of _center on the Plane screen once more than one player has joined.
+    // instead of _zones on the Plane screen once more than one player has joined.
     private Control _paneRoot = null!;
 
-    // The campaign's composed-board surface, drawn instead of _center on every campaign screen.
+    // The campaign's composed-board surface, drawn instead of _zones on every campaign screen.
     private ComposedBoardView _boardRoot = null!;
 
     // The campaign chip strip: `P1 P2 P3 P4` in `SplitScreen.PlayerColor`, top-right, shown while a
@@ -357,10 +378,25 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// are driven through it, not around it.</summary>
     public CampaignFlow? Campaign => _campaign;
 
+    /// <summary>The hangar flow while one is open, or null. Read-only, for the same reason
+    /// <see cref="Campaign"/> is: its screens are driven through it, not around it.</summary>
+    public HangarFlow? Hangar => _hangar;
+
     /// <summary>The composed board currently on screen, or null when no campaign screen is up.
     /// This is what the pilot is looking at, so a check that the screen keeps up with a running
     /// briefing reveal compares it against a board freshly composed from the page.</summary>
     public ComposedBoard? ShownBoard => _boardRoot?.Board;
+
+    /// <summary>How the centred layout divides the window right now. A check that the screen does
+    /// not jump reads this as the cursor moves: the two fixed bands must not move with it.</summary>
+    public MenuZones ShownZones => Zones();
+
+    /// <summary>The header band, the fixed one at the top. Public so a check can read the height
+    /// the layout is actually holding it at rather than the one it was told to.</summary>
+    public Control HeaderBand => _header;
+
+    /// <summary>The footer band, the fixed one at the bottom.</summary>
+    public Control FooterBand => _footer;
 
     // The chapter roster the picked mode offers — the Chapter screen and everything
     // downstream (breadcrumb, launch) index into this, never the full list. Free Flight/Dogfight
@@ -390,6 +426,9 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Campaign => _campaign?.Row ?? 0,
         _ => _slots.Count == 1 && _slots[0].InLoadout ? _slots[0].FitRow : _slots[0].PlaneIndex,
     };
+
+    // The font the bands and the fit columns are measured in, or null before the theme has one.
+    private Font? MenuFont => _zones.GetThemeDefaultFont();
 
     // The stock-fit table, loaded on first use. A failed load leaves the rosters empty, which
     // shows as a loadout list of nothing but its reset row rather than a crash on the way to
@@ -428,13 +467,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         bg.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         root.AddChild(bg);
 
-        menu._center = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
-        menu._center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        root.AddChild(menu._center);
-
-        menu._body = new VBoxContainer();
-        menu._body.AddThemeConstantOverride("separation", 6);
-        menu._center.AddChild(menu._body);
+        // The three bands. The middle is the only one that expands, so the header sits on the top
+        // edge and the footer on the bottom edge whatever the middle holds.
+        menu._zones = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        menu._zones.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        menu._zones.AddThemeConstantOverride("separation", 0);
+        root.AddChild(menu._zones);
+        menu._header = Band(menu._zones);
+        menu._middle = Band(menu._zones);
+        menu._middle.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        menu._footer = Band(menu._zones);
 
         // The briefing's narration player. On the Master bus by default, which is where
         // --volume=/audio.volume already applies, so it needs no gain handling of its own.
@@ -806,6 +848,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         bool dirty = SyncDevices();
         dirty |= ScanJoins();
 
+        // Every metric on every one of the three layouts is a function of the window, and a resize
+        // or a resolution change arrives as no input at all, so the size itself is watched.
+        dirty |= GetViewport().GetVisibleRect().Size != _viewSize;
+
         // Before the poll, not after: the PLANENAME screen takes typed characters, and player 1's
         // letter aliases have to be dead for the frame that reads them (MenuInput.TextEntry).
         _slots[0].Input.TextEntry = NamePage() != null;
@@ -909,6 +955,39 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     private static Control Spacer(int height) => new() { CustomMinimumSize = new Vector2(0, height) };
+
+    // One of the three bands: a full-width row whose single content column is centred in it.
+    private static HBoxContainer Band(Node parent)
+    {
+        var band = new HBoxContainer
+        {
+            Alignment = BoxContainer.AlignmentMode.Center,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        parent.AddChild(band);
+        return band;
+    }
+
+    // A band's content column. Nothing in a band expands horizontally, so the column is exactly
+    // this wide unless a line of text is wider, which is what the description wraps against.
+    // ⚠ The separation scales with the rest; a fixed one is height the band metrics do not budget.
+    private static VBoxContainer Column(float width, float s)
+    {
+        var column = new VBoxContainer { CustomMinimumSize = new Vector2(width, 0f) };
+        column.AddThemeConstantOverride("separation", (int)(ZoneSeparation * s));
+        return column;
+    }
+
+    // Empties a band before its column is rebuilt. Removed as well as freed: a queued-free child
+    // is still a child for the rest of the frame, and would count twice towards the band's height.
+    private static void Clear(Node band)
+    {
+        foreach (var child in band.GetChildren())
+        {
+            band.RemoveChild(child);
+            child.QueueFree();
+        }
+    }
 
     // Whether a pad already belongs to a player: one of players 2–4, or the pad player 1
     // claimed on the Mode/Chapter screens (_p1Pad). Before that claim, player 1's
@@ -1303,10 +1382,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The list's two column widths, measured rather than guessed: the label column takes the
     // widest mount name present, the value column the widest entry EITHER roster can produce, so
     // a row keeps its width whatever it is stepped to. Falls back to em estimates with no theme
-    // font, which is the same guard LayoutScale uses.
+    // font, which is the same guard the band metrics use.
     private Vector2 FitColumns(List<FitRow> rows, int fontSize)
     {
-        var font = _body.GetThemeDefaultFont();
+        var font = MenuFont;
         if (font == null)
         {
             return new Vector2(fontSize * 7f, fontSize * 8f);
@@ -2295,6 +2374,8 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private void Rebuild()
     {
+        _viewSize = GetViewport().GetVisibleRect().Size;
+
         // A campaign screen is a composed board at authored pixel positions, not a row list, so it
         // takes the whole window and neither of the other two layouts draws behind it.
         bool board = _screen == Screen.Campaign && _campaign != null;
@@ -2303,7 +2384,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // SplitScreen.PaneRect, so you pick in the pane you will then fly in. Everything else (and
         // every single-player screen) keeps the centred layout untouched.
         bool split = !board && _screen == Screen.Plane && _slots.Count > 1;
-        _center.Visible = !split && !board;
+        _zones.Visible = !split && !board;
         _paneRoot.Visible = split;
         _boardRoot.Visible = board;
         _chipStrip.Visible = board && _slots.Count > 1;
@@ -2324,22 +2405,109 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        foreach (var c in _body.GetChildren())
-            c.QueueFree();
+        // The header and the footer keep the heights their own contents need and nothing else, so
+        // the rows in between are the only thing a screen can move.
+        var zones = Zones();
+        _header.CustomMinimumSize = new Vector2(0f, zones.Header);
+        _footer.CustomMinimumSize = new Vector2(0f, zones.Footer);
+        Clear(_header);
+        Clear(_middle);
+        Clear(_footer);
+        _header.AddChild(HeaderColumn(zones.Scale));
+        _middle.AddChild(MiddleColumn(zones.Scale));
+        _footer.AddChild(FooterColumn(zones.Scale));
+    }
 
-        float s = LayoutScale();
+    // The header band: the title, where in the menu the pilot is, and who is holding what. The same
+    // three lines on every centred screen, which is what makes the band's height a constant.
+    private Control HeaderColumn(float s)
+    {
+        var column = Column(ContentWidth * s, s);
+        column.AddChild(Spacer((int)(ZonePad * s)));
+        column.AddChild(Label("CRIMSON SKIES", (int)(TitleFont * s), TitleColor, HorizontalAlignment.Center));
+        column.AddChild(Label(Breadcrumb(), (int)(CrumbFont * s), CrumbColor, HorizontalAlignment.Center));
+        column.AddChild(JoinStrip(s));
+        return column;
+    }
+
+    // The middle band: what this screen is, the hangar's running total, the rows themselves with
+    // the art column beside them, and the two status slots the aircraft screen writes into.
+    private Control MiddleColumn(float s)
+    {
         // The hangar's art sits in a column of its own to the LEFT of the rows (E47b, the layout
-        // the original's paint screen uses), so the body is that much wider when it shows.
+        // the original's paint screen uses), so the band is that much wider when it shows.
         var hangarArt = PageArt();
-        _body.CustomMinimumSize = new Vector2((560f + (hangarArt != null ? HangarArtWidth : 0)) * s, 0f);
+        var column = Column((ContentWidth + (hangarArt != null ? HangarArtWidth : 0)) * s, s);
+        column.AddChild(Spacer((int)(ZonePad * s)));
+        column.AddChild(Label(Heading(), (int)(HeadingFont * s), HeadingColor, HorizontalAlignment.Center));
 
-        _body.AddChild(Label("CRIMSON SKIES", (int)(TitleFont * s), TitleColor, HorizontalAlignment.Center));
-        _body.AddChild(Label(Breadcrumb(), (int)(CrumbFont * s), CrumbColor, HorizontalAlignment.Center));
-        _body.AddChild(Spacer((int)(8 * s)));
-        _body.AddChild(JoinStrip(s));
-        _body.AddChild(Spacer((int)(8 * s)));
+        // The persistent price/weight line comes from HangarFlow.TotalsLine, error-coloured when
+        // over and empty where the focused row has no plane to price. Its slot is reserved on every
+        // screen, so gaining or losing a total never moves the rows under it.
+        var totals = _screen == Screen.Hangar ? _hangar : null;
+        column.AddChild(Reserved(totals?.TotalsLine ?? "", (int)(DetailFont * s),
+            totals is { TotalsOverweight: true } ? ErrorColor : DetailColor));
 
-        string heading = _screen switch
+        // The rows in a column of their own so the hangar's art can stand beside them.
+        var content = new VBoxContainer();
+        content.AddThemeConstantOverride("separation", (int)(ZoneSeparation * s));
+        content.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        // Every screen but the contents list draws its whole roster; that one is a 14-row window
+        // onto 19, so it draws a slice and Row keeps taking the ABSOLUTE index (which is what the
+        // cursor comparison and the row text both read).
+        int count = CurrentCount();
+        int first = _screen == Screen.Presets ? _presetTop : 0;
+        int last = _screen == Screen.Presets ? Math.Min(count, _presetTop + PresetWindow) : count;
+        for (int i = first; i < last; i++)
+            content.AddChild(Row(i, s));
+
+        // C22's art seam: a hangar page may hand the shell one decoded TGA with a caption
+        // (blueprint, icon, paint preview), plus a second one for the focused row (E48's decal
+        // tile). This block and HangarArtColumn are the whole rendering.
+        if (hangarArt != null)
+        {
+            var beside = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Begin };
+            beside.AddThemeConstantOverride("separation", (int)(14 * s));
+            beside.AddChild(HangarArtColumn(hangarArt, s));
+            beside.AddChild(content);
+            column.AddChild(beside);
+        }
+        else
+        {
+            column.AddChild(content);
+        }
+
+        // Both status slots are reserved rather than added when they have something to say: a
+        // wingman count or a lock that appears mid-screen would otherwise shift the band.
+        column.AddChild(Reserved(_screen == Screen.Plane ? WingmenLine() : "",
+            (int)(DetailFont * s), DetailColor));
+        column.AddChild(Reserved(SelectedLine(), (int)(DetailFont * s), RowLockedColor));
+        return column;
+    }
+
+    // The footer band: what the focused row is (or why the last press did nothing) and the presses
+    // that do something here. Its height is fixed, so the controls line stays on the same pixel.
+    private Control FooterColumn(float s)
+    {
+        var column = Column(ContentWidth * s, s);
+        column.AddChild(DetailBlock(s));
+        column.AddChild(Label(Footer(), (int)(FooterFont * s), FooterColor, HorizontalAlignment.Center));
+        column.AddChild(Spacer((int)(ZonePad * s)));
+        return column;
+    }
+
+    // The lock line the aircraft screen writes into its second status slot, or "". A lone pilot's
+    // lock is invisible in the centred layout otherwise, and an unacknowledged press on a screen
+    // that used to launch on it reads as a freeze rather than as a stage.
+    private string SelectedLine() =>
+        _screen == Screen.Plane && _slots.Count == 1 && _slots[0].Locked
+            ? $"✓  {_roster[_slots[0].PlaneIndex].Name} selected"
+            : "";
+
+    // What this screen is, the middle band's first line.
+    private string Heading()
+    {
+        return _screen switch
         {
             Screen.Mode => "SELECT MODE",
             Screen.Chapter => "SELECT MAP",
@@ -2359,81 +2527,6 @@ public sealed partial class LaunchMenu : CanvasLayer
             _ when _slots.Count == 1 && _slots[0].Locked => "AIRCRAFT SELECTED",
             _ => _slots.Count > 1 ? "SELECT AIRCRAFT — ALL PLAYERS" : "SELECT AIRCRAFT",
         };
-        _body.AddChild(Label(heading, (int)(HeadingFont * s), HeadingColor, HorizontalAlignment.Center));
-        _body.AddChild(Spacer((int)(6 * s)));
-
-        // The persistent price/weight line comes from
-        // HangarFlow.TotalsLine, error-coloured when over and empty where the focused row has no
-        // plane to price. This pair and its LayoutScale term are the whole rendering.
-        if (_screen == Screen.Hangar && _hangar is { } hangarFlow && hangarFlow.TotalsLine.Length > 0)
-        {
-            _body.AddChild(Label(hangarFlow.TotalsLine, (int)(DetailFont * s),
-                hangarFlow.TotalsOverweight ? ErrorColor : DetailColor, HorizontalAlignment.Center));
-            _body.AddChild(Spacer((int)(4 * s)));
-        }
-
-        // The rows and their detail line, in a column of their own so the hangar's art can stand
-        // beside them instead of under them.
-        var content = new VBoxContainer();
-        content.AddThemeConstantOverride("separation", 6);
-        content.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        // Every screen but the contents list draws its whole roster; that one is a 14-row window
-        // onto 19, so it draws a slice and Row keeps taking the ABSOLUTE index (which is what the
-        // cursor comparison and the row text both read).
-        int count = CurrentCount();
-        int first = _screen == Screen.Presets ? _presetTop : 0;
-        int last = _screen == Screen.Presets ? Math.Min(count, _presetTop + PresetWindow) : count;
-        for (int i = first; i < last; i++)
-            content.AddChild(Row(i, s));
-
-        content.AddChild(Spacer((int)(10 * s)));
-        content.AddChild(DetailBlock(s));
-
-        // C22's art seam: a hangar page may hand the shell one decoded TGA with a caption
-        // (blueprint, icon, paint preview), plus a second one for the focused row (E48's decal
-        // tile). This block and HangarArtControl are the whole rendering.
-        if (hangarArt != null)
-        {
-            var beside = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Begin };
-            beside.AddThemeConstantOverride("separation", (int)(14 * s));
-            beside.AddChild(HangarArtColumn(hangarArt, s));
-            beside.AddChild(content);
-            _body.AddChild(beside);
-        }
-        else
-        {
-            _body.AddChild(content);
-        }
-
-        // The flown-wingmen re-clamp (decision 8a) only matters once players can actually join —
-        // the Plane screen — and only under Instant Action with wingmen configured at all.
-        if (_screen == Screen.Plane)
-        {
-            string wingmen = WingmenLine();
-            if (wingmen.Length > 0)
-            {
-                _body.AddChild(Spacer((int)(4 * s)));
-                _body.AddChild(Label(wingmen, (int)(DetailFont * s), DetailColor, HorizontalAlignment.Center));
-            }
-
-            // The lock is otherwise invisible in the centred layout, and an unacknowledged press
-            // on a screen that used to launch on it reads as a freeze rather than as a stage.
-            if (_slots.Count == 1 && _slots[0].Locked)
-            {
-                _body.AddChild(Spacer((int)(4 * s)));
-                _body.AddChild(Label($"✓  {_roster[_slots[0].PlaneIndex].Name} selected",
-                    (int)(DetailFont * s), RowLockedColor, HorizontalAlignment.Center));
-            }
-        }
-
-        if (_error.Length > 0)
-        {
-            _body.AddChild(Spacer((int)(4 * s)));
-            _body.AddChild(Label(_error, (int)(ErrorFont * s), ErrorColor, HorizontalAlignment.Center));
-        }
-
-        _body.AddChild(Spacer((int)(16 * s)));
-        _body.AddChild(Label(Footer(), (int)(FooterFont * s), FooterColor, HorizontalAlignment.Center));
     }
 
     // One campaign screen as its composed board. The error line rides the detail slot, which is
@@ -2568,7 +2661,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         var slot = _slots[player];
         var color = SplitScreen.PlayerColor(player);
-        var font = _body.GetThemeDefaultFont();
+        var font = MenuFont;
 
         // Fit the roster + header + stats + status into the pane's height.
         float paneScale = s;
@@ -2623,58 +2716,50 @@ public sealed partial class LaunchMenu : CanvasLayer
         return box;
     }
 
-    // 720p metrics scaled up on taller viewports, then capped so the tallest screen (a
-    // four-player plane select) still fits the viewport instead of losing its footer. The
-    // estimate rounds generously, so single-player screens are unaffected.
-    private float LayoutScale()
+    // The three bands for the window being drawn into, measured at the 720p metrics and scaled
+    // together. Only the middle term depends on the screen: every slot in the other two is drawn
+    // whether or not it has anything to say, so the bands keep their height as the pilot moves.
+    private MenuZones Zones()
     {
         // CanvasLayer is a Node (not a CanvasItem), so read the size off the Viewport directly.
         float viewH = GetViewport().GetVisibleRect().Size.Y;
-        float s = Mathf.Max(1f, viewH / 720f);
-        var font = _body.GetThemeDefaultFont();
+        var font = MenuFont;
         if (font == null)
-            return s;
-        int rows = CurrentCount();
-        // Match Rebuild's conditional Instant Action row, or a wingman-heavy launch overflows 720p.
-        // It is two more VBox children (the spacer and the label itself), which the separation
-        // term below must also grow by, not just the row height sum.
-        bool wingmenLine = _screen == Screen.Plane && WingmenLine().Length > 0;
-        // The selected-aircraft line is a second conditional pair on the same screen, so it is
-        // counted the same way — a wingman-heavy locked launch adds both at once.
-        bool lockedLine = _screen == Screen.Plane && _slots.Count == 1 && _slots[0].Locked;
-        // The hangar totals line is a third row, on every hangar screen.
-        bool totalsLine = _screen == Screen.Hangar && _hangar is { } totalsFlow
-            && totalsFlow.TotalsLine.Length > 0;
-        int extraChildren = (wingmenLine ? 2 : 0) + (lockedLine ? 2 : 0) + (totalsLine ? 2 : 0);
-        // The hangar art column stands beside the rows, so it only adds
-        // height where it is taller than the rows it sits next to, not on top of them.
+        {
+            return MenuZones.For(viewH, 0f, 0f, 0f);
+        }
+
+        float rowsH = DrawnRowCount() * (font.GetHeight(RowFont) + ZoneSeparation);
+        // The hangar art column stands beside the rows, so it only adds height where it is taller
+        // than the rows it sits next to, not on top of them.
         float artH = PageArt() != null
-            ? Mathf.Max(0f, HangarArtHeight + HangarRowArtHeight + 2 * font.GetHeight(FooterFont) +
-                12 - rows * font.GetHeight(RowFont))
+            ? Mathf.Max(0f, HangarArtHeight + HangarRowArtHeight + (2 * font.GetHeight(FooterFont)) +
+                12 - rowsH)
             : 0f;
-        float refH =
-            font.GetHeight(TitleFont) + font.GetHeight(CrumbFont) + font.GetHeight(FooterFont) +
-            font.GetHeight(HeadingFont) + rows * font.GetHeight(RowFont) +
-            DetailLines(font) * font.GetHeight(DetailFont) + font.GetHeight(FooterFont) +
-            (wingmenLine ? font.GetHeight(DetailFont) + 4 : 0) +
-            (lockedLine ? font.GetHeight(DetailFont) + 4 : 0) +
-            artH +
-            (totalsLine ? font.GetHeight(DetailFont) + 4 : 0) +
-            (_error.Length > 0 ? font.GetHeight(ErrorFont) + 4 : 0) +
-            8 + 8 + 6 + 10 + 16 +          // the explicit spacers Rebuild adds
-            6 * (10 + rows + extraChildren); // the body VBox's separation between children
-        return Mathf.Min(s, viewH / refH);
+        float header = ZonePad + font.GetHeight(TitleFont) + font.GetHeight(CrumbFont) +
+            font.GetHeight(FooterFont) + (3 * ZoneSeparation);
+        float middle = ZonePad + font.GetHeight(HeadingFont) + (3 * font.GetHeight(DetailFont)) +
+            rowsH + artH + (5 * ZoneSeparation);
+        float footer = (DetailReserveLines * font.GetHeight(DetailFont)) +
+            font.GetHeight(FooterFont) + ZonePad + (2 * ZoneSeparation);
+        return MenuZones.For(viewH, header, middle, footer);
     }
 
-    // How many lines the detail label wraps to in the 560px content column (E45). Measured at the
-    // reference 720p metrics, which is the space LayoutScale itself budgets in.
-    private int DetailLines(Font font)
+    // How many rows the middle band actually draws. Only the contents list differs from the item
+    // count: it is a 14-row window onto 19, and budgeting for all 19 shrinks it for nothing.
+    private int DrawnRowCount() =>
+        _screen == Screen.Presets ? Math.Min(CurrentCount(), PresetWindow) : CurrentCount();
+
+    // One line at a font size, the height a reserved slot keeps whatever it holds.
+    private float LineHeight(int fontSize) => MenuFont?.GetHeight(fontSize) ?? 0f;
+
+    // A label whose slot is drawn whether or not it has anything to say, so what appears in it
+    // never moves the rows above or the controls below.
+    private Control Reserved(string text, int fontSize, Color color)
     {
-        string text = Detail(CurrentIndex);
-        if (text.Length == 0)
-            return 1;
-        float width = font.GetStringSize(text, HorizontalAlignment.Left, -1, DetailFont).X;
-        return Mathf.Max(1, Mathf.CeilToInt(width / 560f));
+        var label = Label(text, fontSize, color, HorizontalAlignment.Center);
+        label.CustomMinimumSize = new Vector2(0f, LineHeight(fontSize));
+        return label;
     }
 
     // The stock fit behind a roster row, or null when the table has no def flying that model.
@@ -2886,9 +2971,17 @@ public sealed partial class LaunchMenu : CanvasLayer
     // it, and every other screen's one-liner is unaffected.
     private Control DetailBlock(float s)
     {
-        var label = Label(Detail(CurrentIndex), (int)(DetailFont * s), DetailColor,
-            HorizontalAlignment.Center);
+        int size = (int)(DetailFont * s);
+        // A refusal takes the description's own slot, the way a campaign board's hint band takes
+        // it: it is the one line on the screen that says why the last press did nothing.
+        bool refused = _error.Length > 0;
+        var label = Label(refused ? _error : Detail(CurrentIndex), size,
+            refused ? ErrorColor : DetailColor, HorizontalAlignment.Center);
         label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        // Top-aligned in a slot of its own: a one-line description starts on the same pixel as a
+        // two-line one, and a longer one grows up into the band rather than moving the controls.
+        label.VerticalAlignment = VerticalAlignment.Top;
+        label.CustomMinimumSize = new Vector2(0f, DetailReserveLines * LineHeight(size));
         return label;
     }
 
