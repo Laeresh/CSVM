@@ -130,6 +130,7 @@
     "music-states": 0.245,
     "campaign-objectives": 0.023,
     "campaign-mission-end": 1.973,
+    "campaign-mission-cash": 0.91,
     "targeting-candidates": 0.451,
     "debug-kill-target": 0.408,
     "ranked-pool-carried-turret-dedup": 0.610,

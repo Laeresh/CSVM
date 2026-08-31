@@ -285,7 +285,7 @@ public class CampaignPreviousMissionsPageTests
     }
 
     private static MissionAttempt Attempt(int seq, int mask = 1) =>
-        new(seq, CompletedMask: mask, TimeMs: 40000, Shots: 10, Hits: 5, Money: 0,
+        new(seq, CompletedMask: mask, TimeMs: 40000, Shots: 10, Hits: 5,
             Airframe: 5, PlaneName: "Gypsy Magic");
 
     private static CampaignFlow OpenedOnPreviousMissions(CampaignProfileDef profile)

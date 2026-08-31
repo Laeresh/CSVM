@@ -797,10 +797,11 @@ public sealed class CampaignDirector
         var plane = _profile.SelectedPlane >= 0 && _profile.SelectedPlane < _profile.Planes.Count
             ? _profile.Planes[_profile.SelectedPlane]
             : null;
-        // Money is the hangar economy's reward table, 0 today. The objective bits are recorded
-        // whatever the outcome, and bit 0 is the win flag laid over them, never an objective of its
-        // own (docs/org/debrief.md). ⚠ Shots/Hits stay the seated pilot's alone
-        // (WireScoredShooter): a guest's gunnery never counts.
+        // The objective bits are recorded whatever the outcome, and bit 0 is the win flag laid over
+        // them, never an objective of its own (docs/org/debrief.md). No money is passed: what the
+        // mission pays is the reward table's, gated on what this profile already banked, so
+        // CampaignProgression works it out and reports it back. ⚠ Shots/Hits stay the seated
+        // pilot's alone (WireScoredShooter): a guest's gunnery never counts.
         var attempt = new MissionAttempt(
             _mission.Seq,
             outcome == MissionOutcome.Won
@@ -809,7 +810,6 @@ public sealed class CampaignDirector
             (int)(graph.Elapsed * 1000f),
             _world?.Shots ?? 0,
             _world?.Hits ?? 0,
-            0,
             plane?.Airframe ?? 0,
             plane?.Name ?? string.Empty,
             (int[])_kills.Clone(),

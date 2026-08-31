@@ -1944,7 +1944,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             for (int seq = 0; seq < AidMissionsFlown; seq++)
             {
                 CampaignProgression.Record(first, new MissionAttempt(
-                    seq, AidCompletedMask, 300_000 + (seq * 20_000), 400, 120, 0,
+                    seq, AidCompletedMask, 300_000 + (seq * 20_000), 400, 120,
                     first.Planes[0].Airframe, first.Planes[0].Name));
             }
         }

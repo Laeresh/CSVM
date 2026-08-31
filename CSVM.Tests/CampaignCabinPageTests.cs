@@ -122,7 +122,7 @@ public class CampaignCabinPageTests
     }
 
     private static MissionAttempt Attempt(int seq) =>
-        new(seq, CompletedMask: 1, TimeMs: 40000, Shots: 10, Hits: 5, Money: 0,
+        new(seq, CompletedMask: 1, TimeMs: 40000, Shots: 10, Hits: 5,
             Airframe: 5, PlaneName: "Gypsy Magic");
 
     private static CampaignFlow Opened(out string dir, CampaignProfileDef? profile = null)
