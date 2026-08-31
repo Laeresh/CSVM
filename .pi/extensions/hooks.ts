@@ -68,33 +68,20 @@ async function runPowerShellHook(cwd: string, event: any): Promise<HookResult> {
   const command = event.input.command;
   if (!command) return NOT_BLOCKED;
 
-  // Pass tool name and command to PowerShell via JSON
-  const inputJson = JSON.stringify({
-    tool_name: event.toolName,
-    tool_input: { command: command }
-  });
-
-  const psScript = `\$j = [Console]::In.ReadToEnd() | ConvertFrom-Json; \$c = \$j.tool_input.command; if (-not \$c) { exit 0 }; \$q = [char]39; if (\$j.tool_name -eq 'Bash' -and (\$c -match ('@' + \$q + '\\r?\\n')) -and (\$c -match ('(^|\\n)' + \$q + '@'))) { [Console]::Error.WriteLine('BLOCKED: PowerShell here-string (@' + \$q + ' ... ' + \$q + '@) in the Bash tool, which takes a heredoc. Bash treats the @ lines as literal text instead of failing, so the content lands corrupted (this has silently mangled commit messages). Use a heredoc: cmd <<' + \$q + 'EOF' + \$q + ' ... EOF. For a multi-line commit message prefer Write to a file, then: git commit -F <file>.'); exit 2 }; if (\$j.tool_name -eq 'PowerShell' -and ((\$c -match ('<<-?\\s*' + \$q + '?[A-Za-z_]')) -or \$c.Contains('/dev/null'))) { [Console]::Error.WriteLine('BLOCKED: bash syntax (heredoc or /dev/null) in the PowerShell tool. Use a here-string @' + \$q + ' ... ' + \$q + '@ with the closing delimiter at column 0, and \$null instead of /dev/null.'); exit 2 }; exit 0`;
+  // The tool name and command are baked into the script as literals rather than piped in as JSON.
+  // promisify(exec) has no `input` option - passing one is silently ignored, and the child then
+  // blocks on [Console]::In.ReadToEnd() until the timeout kills it, which made this hook a slow
+  // no-op rather than a guard.
+  const toolName = isToolCallEventType("bash", event) ? "Bash" : "PowerShell";
+  const psScript = `\$c = ${psLiteral(command)}; \$toolName = ${psLiteral(toolName)}; if (-not \$c) { exit 0 }; \$q = [char]39; if (\$toolName -eq 'Bash' -and (\$c -match ('@' + \$q + '\\r?\\n')) -and (\$c -match ('(^|\\n)' + \$q + '@'))) { [Console]::Error.WriteLine('BLOCKED: PowerShell here-string (@' + \$q + ' ... ' + \$q + '@) in the Bash tool, which takes a heredoc. Bash treats the @ lines as literal text instead of failing, so the content lands corrupted (this has silently mangled commit messages). Use a heredoc: cmd <<' + \$q + 'EOF' + \$q + ' ... EOF. For a multi-line commit message prefer Write to a file, then: git commit -F <file>.'); exit 2 }; if (\$toolName -eq 'PowerShell' -and ((\$c -match ('<<-?\\s*' + \$q + '?[A-Za-z_]')) -or \$c.Contains('/dev/null'))) { [Console]::Error.WriteLine('BLOCKED: bash syntax (heredoc or /dev/null) in the PowerShell tool. Use a here-string @' + \$q + ' ... ' + \$q + '@ with the closing delimiter at column 0, and \$null instead of /dev/null.'); exit 2 }; exit 0`;
 
   try {
-    const { stderr, exitCode } = await pExec(`powershell -Command ${escapePowerShellCommand(psScript)}`, {
-      cwd,
-      input: inputJson,
-      timeout: 15000
-    });
-
-    if (exitCode === 2) {
-      return {
-        blocked: true,
-        message: stderr || "Shell syntax check failed",
-        reason: "shell syntax error"
-      };
-    }
+    await pExecFile("powershell", ["-NoProfile", "-Command", psScript], { cwd, timeout: 15000 });
   } catch (error: any) {
     if (error.code === 2) {
       return {
         blocked: true,
-        message: error.message || "Shell syntax check failed",
+        message: error.stderr || error.message || "Shell syntax check failed",
         reason: "shell syntax error"
       };
     }
@@ -107,32 +94,15 @@ async function runPowerShellBashGuard(cwd: string, event: any): Promise<HookResu
   const command = event.input.command;
   if (!command) return NOT_BLOCKED;
 
-  const inputJson = JSON.stringify({
-    tool_name: "Bash",
-    tool_input: { command: command }
-  });
-
-  const psScript = `\$j = [Console]::In.ReadToEnd() | ConvertFrom-Json; \$c = \$j.tool_input.command; if (-not \$c) { exit 0 }; \$segments = \$c -split '&&|\\|\\||;|\\|' | ForEach-Object { \$_.Trim() } | Where-Object { \$_ }; \$other = \$segments | Where-Object { \$_ -notmatch '^(git|gh)\\b' }; if (-not \$other) { exit 0 }; [Console]::Error.WriteLine('Use Powershell instead of bash'); exit 2`;
+  const psScript = `\$c = ${psLiteral(command)}; if (-not \$c) { exit 0 }; \$segments = \$c -split '&&|\\|\\||;|\\|' | ForEach-Object { \$_.Trim() } | Where-Object { \$_ }; \$other = \$segments | Where-Object { \$_ -notmatch '^(git|gh)\\b' }; if (-not \$other) { exit 0 }; [Console]::Error.WriteLine('Use Powershell instead of bash'); exit 2`;
 
   try {
-    const { stderr, exitCode } = await pExec(`powershell -Command ${escapePowerShellCommand(psScript)}`, {
-      cwd,
-      input: inputJson,
-      timeout: 15000
-    });
-
-    if (exitCode === 2) {
-      return {
-        blocked: true,
-        message: stderr || "Use PowerShell instead of bash",
-        reason: "non-git bash command"
-      };
-    }
+    await pExecFile("powershell", ["-NoProfile", "-Command", psScript], { cwd, timeout: 15000 });
   } catch (error: any) {
     if (error.code === 2) {
       return {
         blocked: true,
-        message: error.message || "Use PowerShell instead of bash",
+        message: error.stderr || error.message || "Use PowerShell instead of bash",
         reason: "non-git bash command"
       };
     }
@@ -157,25 +127,19 @@ async function runPowerShellDotnetFormat(cwd: string, event: any): Promise<HookR
   const project = `${root}/CSVM/CSVM.csproj`;
 
   try {
-    const { stderr, exitCode } = await pExecFile(
+    // A nonzero exit REJECTS with error.code; the resolved value carries only stdout/stderr, so
+    // there is no exit code to test on the success path.
+    await pExecFile(
       "powershell",
       [
         "-NoProfile",
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        `if (-not (Test-Path -LiteralPath '${project}')) { exit 0 }; dotnet format '${project}' --verbosity quiet; $buildOutput = dotnet build '${project}' --verbosity quiet --nologo -t:Rebuild 2>&1; $remaining = $buildOutput | Select-String -Pattern 'SA\\d{4}' | Where-Object { $_.Line -notmatch 'SA0001' }; if ($remaining) { $remaining | ForEach-Object { [Console]::Error.WriteLine($_.Line) }; [Console]::Error.WriteLine('StyleCop warnings dotnet format could not auto-fix remain above (SA0001 excluded) - fix them by hand, then retry.'); exit 2 }; exit 0`
+        `if (-not (Test-Path -LiteralPath ${psLiteral(project)})) { exit 0 }; dotnet format ${psLiteral(project)} --verbosity quiet; $buildOutput = dotnet build ${psLiteral(project)} --verbosity quiet --nologo -t:Rebuild 2>&1; $remaining = $buildOutput | Select-String -Pattern 'SA\\d{4}' | Where-Object { $_.Line -notmatch 'SA0001' }; if ($remaining) { $remaining | ForEach-Object { [Console]::Error.WriteLine($_.Line) }; [Console]::Error.WriteLine('StyleCop warnings dotnet format could not auto-fix remain above (SA0001 excluded) - fix them by hand, then retry.'); exit 2 }; exit 0`
       ],
       { cwd, timeout: 300000 }
     );
-
-    if (exitCode === 2) {
-      return {
-        blocked: true,
-        message: stderr || "dotnet format/style check failed",
-        reason: "StyleCop warnings remain"
-      };
-    }
   } catch (error: any) {
     if (error.code === 2) {
       return {
@@ -200,20 +164,13 @@ async function runContentGate(cwd: string, event: any): Promise<HookResult> {
 
   try {
     // execFile, not exec: the command is passed as an argument vector, so nothing in it needs
-    // quoting and a commit message cannot break out into the shell.
-    const { stderr, exitCode } = await pExecFile(
+    // quoting and a commit message cannot break out into the shell. The gate takes -Command
+    // rather than reading stdin, because promisify(exec)/execFile cannot write to a child's stdin.
+    await pExecFile(
       "powershell",
       ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", gate, "-Command", command],
       { cwd, timeout: 300000 }
     );
-
-    if (exitCode === 2) {
-      return {
-        blocked: true,
-        message: stderr || "Commit content checks failed",
-        reason: "commit content checks failed"
-      };
-    }
   } catch (error: any) {
     if (error.code === 2) {
       return {
@@ -244,14 +201,16 @@ async function getCommandRoot(cwd: string, command: string): Promise<string | nu
 
 async function getGitRoot(cwd: string): Promise<string | null> {
   try {
-    const { stdout } = await pExec("git rev-parse --show-toplevel", { cwd, shell: "/bin/bash" });
+    // No shell override. This runs on Windows, where spawning "/bin/bash" fails ENOENT and made
+    // this helper return null every time - which silently disabled every hook built on it.
+    const { stdout } = await pExec("git rev-parse --show-toplevel", { cwd });
     return stdout.trim();
   } catch {
     return null;
   }
 }
 
-function escapePowerShellCommand(command: string): string {
-  // Escape single quotes and other special characters for PowerShell
-  return command.replace(/'/g, "''");
+// Embeds a value in a single-quoted PowerShell string literal.
+function psLiteral(value: string): string {
+  return "'" + value.replace(/'/g, "''") + "'";
 }
