@@ -3090,58 +3090,6 @@ usual.
   `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
   PERF-21.
 
-- `BL-648` `[Bug]` **A suite fails after enough suites have run before it in one engine process, so
-  a full `RunTests.ps1` can report a red the suite does not own.** *Two suites carry this now, on
-  the same signature: the gun fires and nothing lands.* **`ai-gunnery`** fails
-  `AiSuites.cs`'s assist control, `the same geometry flagged human is assisted onto the target
-  moved=0`, after exactly `puffer-wind, aim-assist, ordnance-end-conditions, ordnance-guidance,
-  turret-self-fire, c1-aa-guns, ai-spawn-jitter, ai-actor` in one process; it passes alone over five
-  runs with byte-identical dead-eye counts, passes on either half of that prefix and on any pair
-  from it, and growing the prefix one suite at a time flips it only at the eighth. It fails
-  identically on `main`, which is green in its own four-shard run only because its weighting puts
-  `ai-gunnery` in a different shard, so a branch that adds a suite inherits a red it did not cause.
-  **`world-turrets`** is the original instance. *Evidence:* the
-  failing assertion is `AiSuites.cs:744`, `…with rounds striking it moved=0` — the armed
-  `multiplayer1zep` rings acquire and fire (`ShotsFired > 0` passes on the line above) but the bait
-  plane's combined armour/health never moves. It is deterministic on the sequence, not random:
-  `.\RunTests.ps1 -Filter "suite:puffer-modes,suite:loadout-bind,suite:weapons-fire,suite:loadout-forrig,suite:warning-shot,suite:launch-velocity-decay,suite:disabling-hits,suite:ordnance-end-conditions,suite:ordnance-guidance,suite:air-to-air,suite:ai-plane-defs,suite:engine-note,suite:instant-action-end,suite:flight-roster-transaction,suite:world-turrets" -SkipUnits -SkipGoldens`
-  reproduces it every time, and the suite passes alone. **Accumulation, not one bad neighbour:**
-  splitting that prefix in half and running either half ahead of `world-turrets` passes, so no
-  single predecessor carries it and the mechanism needs the whole run-up. *Fix shape:* find the
-  process-wide state that survives a suite's world disposal and starves the rounds. The pool
-  candidate this entry used to lead with is not supported by the code: `Projectile.cs` carries no
-  mutable static, and each suite holds its own `ProjectilePool`, so there is no shared slot table to
-  exhaust. **The carrier is `Utils/Rng.cs`'s shared `Rng.Weapons` stream.** `Rng` is a static class
-  holding one generator per subsystem, seeded once per process: `Rng.Reset` has two call sites, both
-  session build (`Session/GameSession.cs`, `Session/Launcher.cs`), and no suite builds a session, so
-  a `--run-tests` run seeds the streams once in `Launcher._Ready` and never again. Every suite
-  completes inside that one `_Ready`, so each inherits whatever position its predecessors' draws
-  left, which is the shape of a dependence that needs a whole run-up rather than one neighbour. The
-  coupling is demonstrated rather than inferred: `Testing/OrdnanceSuites.cs` save/restores the
-  `Rng.Weapons` position around one burst and records why, that one extra burst there reads
-  `moved=0` in `ai-gunnery`. The failing assertion's own consumer is that stream,
-  `FlightController._aimRng`, the assist's 1° launch scatter. `Rng`'s summary states the rule this
-  breaks: only the draw order within a stream is significant, and that order is deterministic only
-  if every consumer runs its draws in the same sequence run to run. The fix is a per-suite rewind in
-  the harness, so a suite's result is a function of the suite. It must reseed the existing stream
-  objects in place rather than call `Rng.Reset`, whose `Streams.Clear()` leaves a captured reference
-  (`FlightController._aimRng`, `Projectile._rng`) drawing on an orphaned generator no later reset
-  can reach, and `TestContext` caches built worlds across suites, so such a reference outlives the
-  suite that made it. Instrument the stream position and the live-round count at the top of the
-  failing suite under both orders before changing anything: the round count is what separates a
-  scattered miss from starved rounds. *⚠ Traps:* this is not the shard balancer — the same sequence fails under a single-shard
-  run. Do not "fix" it by widening the damage assertion or by giving the suite its own shard: the
-  false red is the symptom, and whatever leaks would then leak silently into every later suite in
-  the same process. It is also order-fragile rather than fixed: adding a suite reshuffles the
-  weighted shards and can hide it (it went green when `anim-activation-prerequisite`'s weight
-  landed), so a clean full run is not evidence it is gone. Expect a per-suite reset to move other
-  suites' pinned numbers, since a value recorded while a neighbour's draws sat in the stream was
-  recorded off a position the reset removes; re-pin those against the reset harness rather than
-  loosening them. *Cross-refs:* `BL-584` (the other
-  harness-integrity item, a unit test that went red once), `analysis/engine-suite-weights.json`
-  (what decides the order), `Utils/Rng.cs`, `Testing/TestHarness.cs`,
-  `docs/plans/PLAN-campaign-coop.md` (which met two of `main`'s suites the same way).
-
 ## Misc
 
 - `BL-072` `[Feature]` **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`
