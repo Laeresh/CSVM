@@ -158,7 +158,9 @@ with `graphics.mode=enhanced` in the user config still produces zero golden move
 golden run the tripwire becomes a coin flip on whatever machine runs it. Do not land A1 without the
 isolation story.
 
-**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
+**Verified.** The complete `.\RunTests.ps1` on the Wave A tree (A1 + A2): 2792 units, 200 engine
+suites (errors clean), 18 goldens hash-identical, all passing in 169.1 s. During the item:
+`dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
 `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~GraphicsModeTests"` — 7
 passed, 0 failed. `$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -Suite clutter-determinism
 -SkipUnits -SkipGoldens` — engine stage PASS, 1 suite run (non-zero), engine errors clean. Three
@@ -199,8 +201,9 @@ movers.
 (`csky_instance_uniforms.gdshaderinc`); this item must not touch it. Do not reuse bit values
 already taken (2048 clutterFade, 4096 DebugClutterFlag).
 
-**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors,
-both before and after the edit. `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter
+**Verified.** The complete `.\RunTests.ps1` on the Wave A tree (A1 + A2): 2792 units, 200 engine
+suites (errors clean), 18 goldens hash-identical, all passing in 169.1 s. During the item:
+`dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors, both before and after the edit. `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter
 "FullyQualifiedName~GraphicsModeTests|FullyQualifiedName~UvClampTests"`: 13 passed, 0 failed.
 `$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -Suite clutter-determinism -SkipUnits -SkipGoldens`:
 engine stage PASS, 1 suite run (non-zero), engine errors clean.
