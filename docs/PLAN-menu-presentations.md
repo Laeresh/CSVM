@@ -593,7 +593,12 @@ the log records at debug level. The real switch and the sounds are exercised at 
 rollover sound on entering a plaque; Free Flight, a chapter, an airframe, FLY, then the pause
 board's Exit must re-enter Original's top level.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The merged plan tree with B13 landed passed the complete `.\RunTests.ps1` (2883 units,
+203 engine suites across 4 shards with `menu-original-tracer` among them, 18 goldens hash-identical,
+engine errors clean, 154.2s). The landed extractor was run against the user's live
+`extracted/rof` tree, which now carries `menu_layout.json` (archives up to date, nothing
+re-extracted). The pointer, the rollover and depressed frames, the sounds, the real switch and the
+real return from a flown session remain owed at the controls, as the Verify paragraph states.
 
 **⚠ Traps.** The 800x600 space is authored coordinates, not a fixed render target. Do not stretch
 wide or switch to integer-only scaling; `BoardFit` already records both rejected alternatives.
