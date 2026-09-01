@@ -470,7 +470,10 @@ take. The real return is exercised at the controls: `.\RunDev.ps1`, Free Flight,
 airframe, Select, FLY, then the pause board's Exit; the menu must re-enter on Mode with the chapter
 and airframe cursors where they were and nothing selected.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The merged plan tree with B12 landed passed the complete `.\RunTests.ps1` (2861 units,
+202 engine suites across 4 shards with `menu-host-tracer` among them, 18 goldens hash-identical,
+engine errors clean, 188.4s with another agent's build running beside it). The real return from a
+flown session remains owed at the controls, as the Verify paragraph states.
 
 **⚠ Traps.** Re-entry after flight is part of the tracer. A presentation that only works on cold
 startup has not proved the seam. The Plane screen lists `user://` custom planes, so a shot of it
