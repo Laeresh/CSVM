@@ -131,6 +131,15 @@ public sealed record SessionSpec
     public bool ForceMenu { get; private set; }
     public string MenuStartScreen { get; private set; } = "";
 
+    /// <summary><c>--presentation=</c>: a session-only menu presentation override, never persisted.
+    /// <see cref="Utils.PresentationResolution"/> ranks it above the saved request and below
+    /// <see cref="ForceBuiltInPresentation"/>. Null when the flag is absent.</summary>
+    public string? PresentationOverride { get; private set; }
+
+    /// <summary><c>--force-builtin</c>: the startup escape hatch that always resolves to the
+    /// Built-in presentation for this run, without touching the saved request.</summary>
+    public bool ForceBuiltInPresentation { get; private set; }
+
     /// <summary>Which mode-coercing probe (if any) drives this session. The three set a mode at
     /// parse time today; here they vote like anything else and this names the vote.</summary>
     public SessionProbe Probe =>
@@ -808,6 +817,8 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--anim-lod=")) { s.AnimLod = int.Parse(arg["--anim-lod=".Length..]); }
             else if (arg == "--menu") { s.ForceMenu = true; }
             else if (arg.StartsWith("--menu=")) { s.ForceMenu = true; s.MenuStartScreen = arg["--menu=".Length..]; }
+            else if (arg.StartsWith("--presentation=")) { s.PresentationOverride = arg["--presentation=".Length..]; }
+            else if (arg == "--force-builtin") { s.ForceBuiltInPresentation = true; }
             else if (arg == "--debug-dzpaths") { s.DebugDzPaths = true; }
             else if (arg == "--debug-ainets") { s.DebugAiNets ??= ""; }
             else if (arg.StartsWith("--debug-ainets=")) { s.DebugAiNets = arg["--debug-ainets=".Length..]; }

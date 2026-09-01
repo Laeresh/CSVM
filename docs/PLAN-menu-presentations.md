@@ -133,7 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☐ Inventory every in-scope menu journey and its original evidence
 2. ☐ Decode menu layouts during ROF extraction and document the format
-3. ☐ Add the global options store and requested/active presentation resolution
+3. ☑ Add the global options store and requested/active presentation resolution
 4. ☐ Define the presentation, feature, input, audio, launch and return contracts
 
 ### Wave B — Free Flight tracer
@@ -236,11 +236,24 @@ Built-in presentation to show.
 **Model recommendation.** medium — small persistence surface with important recovery semantics.
 
 **Verify.** Unit-test missing, valid, unknown-version/value, malformed and interrupted-write cases;
-test every precedence pair and requested/active separation. <TODO: settle exact store filename and
-write strategy from existing store conventions.>
+test every precedence pair and requested/active separation. Settled: `OptionsStore` follows
+`CampaignProfileStore`/`CustomPlaneStore`'s plain-System.IO-over-an-absolute-directory shape (so it
+unit-tests without an engine) and their read tolerance (missing/malformed reads as empty, an unknown
+version invalidates the whole file), but none of the three existing stores write atomically, so this
+store is the first to need it: `Save` writes a sibling `options.json.tmp` then renames it over
+`options.json` in one filesystem operation, single file rather than a per-item directory since there
+is exactly one options record. Covered by `CSVM.Tests/OptionsStoreTests.cs` (persistence) and
+`CSVM.Tests/PresentationResolutionTests.cs` (precedence and requested/active separation); ran
+`dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~OptionsStoreTests|FullyQualifiedName~PresentationResolutionTests|FullyQualifiedName~SessionSpecParserTests"`
+and `dotnet build CSVM/CSVM.sln`, both green.
 
 **⚠ Traps.** Options are global and never live in a campaign profile. A temporary extraction problem
 must not rewrite the saved request.
+
+**Verified.** <pending orchestrator run>
+Ran `dotnet build CSVM/CSVM.sln` and
+`dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~OptionsStoreTests|FullyQualifiedName~PresentationResolutionTests|FullyQualifiedName~SessionSpecParserTests"`,
+both green; the full `.\RunTests.ps1` landing gate is the orchestrator's to run.
 
 ## A4 ☐ Define the presentation, feature, input, audio, launch and return contracts
 

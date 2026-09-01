@@ -6548,6 +6548,20 @@ Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowW
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det` block — the same
 predicate drives both window hiding (scripted run) and focus request (interactive run).
 
+## src/Utils/OptionsStore.cs
+Process-wide, version-tolerant JSON persistence for `OptionsDef`, today just the requested menu
+presentation: one file, `user://options.json`, independent of `Session/CampaignProfileStore.cs`.
+Missing/malformed reads as empty, an unknown version invalidates the file, an unknown value drops
+only that field. `Save` writes a sibling temp file then renames it over the real one, the first
+store here to need an atomic write rather than a direct one.
+
+## src/Utils/PresentationResolution.cs
+The requested-versus-active menu presentation resolver: force-Built-in → CLI override → saved
+request → Built-in default, with the caller's availability check applied only after the request is
+picked. `Resolve` never rewrites what `Requested` would answer, so a fallback cannot alter
+`OptionsStore`'s saved value. Presentation names are plain strings; no presentation contract type
+lives here.
+
 ## src/Session/ExtractionStamp.cs
 Reads the provenance stamp `ExtractAssets.ps1`/`ExtractRof.ps1` leave at `extracted/VERSION.json`
 (unzbd version line + exe SHA-256 + fork commit, dates, schema integer) and compares the schema
