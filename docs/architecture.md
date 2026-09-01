@@ -553,8 +553,9 @@ contract, and `GetBiasShader` for how the model's `lighting`/`fog` flags select 
 instead of driving a uniform. The mesh, material and collider memos are per builder, since every
 override is baked into what they hold; the three SHADER memos are process-wide, because a generated
 text is a pure function of its key and Godot charges a compile for each fresh `Shader` a material
-takes (`docs/verification.md` PERF-22). Format/decode: docs/formats/gamez.md,
-docs/formats/world-structure.md, docs/formats/gotchas.md.
+takes (`docs/verification.md` PERF-22). Each of the three keys also carries `GraphicsMode.Enhanced`
+as its own bit, partitioning the memo without yet changing any generated text. Format/decode:
+docs/formats/gamez.md, docs/formats/world-structure.md, docs/formats/gotchas.md.
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame

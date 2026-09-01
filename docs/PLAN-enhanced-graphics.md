@@ -86,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Option plumbing
 
 1. ☑ `GraphicsMode` config key, launch-time resolution, golden-run isolation
-2. ☐ Thread the mode into `SceneBuilder` shader keys with byte-identical original output
+2. ☑ Thread the mode into `SceneBuilder` shader keys with byte-identical original output
 
 ### Wave B — Core lighting
 
@@ -174,7 +174,7 @@ on every golden shot, every `--det` run and the full `--run-tests` battery (all 
 `--det` in their stored/implied args), unless they also pass `--graphics=enhanced` explicitly. The
 test config.json and capture PNGs used for this check were removed afterward; none are committed.
 
-## A2 ☐ Thread the mode into `SceneBuilder` shader keys with byte-identical original output
+## A2 ☑ Thread the mode into `SceneBuilder` shader keys with byte-identical original output
 
 **Goal.** `GetBiasShader` (and the billboard/facade builders that will later diverge) carry an
 enhanced-mode bit in their memo keys, with the generated shader text in original mode provably
@@ -198,6 +198,31 @@ movers.
 **⚠ Traps.** The instance-uniform block's declaration order is a contract
 (`csky_instance_uniforms.gdshaderinc`); this item must not touch it. Do not reuse bit values
 already taken (2048 clutterFade, 4096 DebugClutterFlag).
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors,
+both before and after the edit. `dotnet test CSVM.Tests/CSVM.Tests.csproj --filter
+"FullyQualifiedName~GraphicsModeTests|FullyQualifiedName~UvClampTests"`: 13 passed, 0 failed.
+`$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -Suite clutter-determinism -SkipUnits -SkipGoldens`:
+engine stage PASS, 1 suite run (non-zero), engine errors clean.
+`.\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only): PASS, 18 shot(s) hash-identical, zero
+movers. `GetBiasShader` builds its text in a pure `StringBuilder`, but the memoised return value is
+a `Shader` (a Godot Resource), and constructing one outside the running engine crashes the
+CSVM.Tests host (confirmed empirically: `new Shader { Code = "..." }` throws
+`AccessViolationException` from `godotsharp_string_name_new_from_string` under `dotnet test`), so
+the pure-unit route from the approach note was not available and the proof ran in-engine instead.
+A temporary instrument (a static `SceneBuilder.DumpAllShaderKeysForVerification` enumerating every
+boolean/enum combination into `GetBiasShader`/`GetBillboardShader`/`GetCylindricalShader`, wired
+behind a `--scratch-dump-bias-shaders=<path>` flag in `Launcher.cs`) dumped every reachable key's
+generated `Shader.Code` to `.scratch/`, then was deleted before landing. Baseline: the three key
+computations with the new `GraphicsMode.Enhanced` bit removed, rebuilt, dumped via `--headless
+--det` to `.scratch/bias_before.txt` (12,971,808 bytes). After: the same dump with the bit
+restored, same flags, to `.scratch/bias_after.txt` (12,971,808 bytes). SHA-256 of the two files
+matched exactly (`fcc20683...46ca7f`), confirming byte-identical original-mode shader text before
+and after the key change. A third dump under `--graphics=enhanced` (`bias_enhanced.txt`) also
+hashed identical to `bias_after.txt`, confirming the new bit only partitions the memo today and
+emits no text difference in either mode, as the approach requires (B11 is where enhanced-mode text
+starts to diverge). All three dump files and their probe logs are untracked, git-ignored
+`.scratch/` output, and are not committed.
 
 # Wave B — Core lighting
 

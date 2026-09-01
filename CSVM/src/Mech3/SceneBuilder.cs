@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -1320,13 +1321,16 @@ void fragment() {
     // rather than driving a uniform on purpose: a lit, fogged surface then emits byte-for-byte
     // the shader text it always did, so honouring the flags cannot perturb the overwhelming
     // majority of the world through float rounding in a mix().
+    // Key bits: 1/2/4/8/16/32/64 the flags above, 128 !lit, 256 !fogged, 512/1024 edgeClamp,
+    // 2048 clutterFade, 4096 DebugClutterFlag, 8192 enhanced mode; next free bit 16384.
     private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
         bool clutterFade = false)
     {
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
-            | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (DebugClutterFlag ? 4096 : 0);
+            | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (DebugClutterFlag ? 4096 : 0)
+            | (GraphicsMode.Enhanced ? 8192 : 0);
         if (BiasShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -1490,12 +1494,14 @@ void fragment() {{");
         return mat;
     }
 
+    // Key bits taken: 1 blend, 2 scissor, 4 glow, 8 !lit, 16 !fogged, 32 clampUv, 64 enhanced
+    // mode. Next free bit is 128.
     private Shader GetBillboardShader(bool blend, bool scissor, bool glow, bool lit, bool fogged, bool clampUv)
     {
         // A glow variant already ignores csky_world_light, so `lit` cannot split its key.
         lit |= glow;
         int key = (blend ? 1 : 0) | (scissor ? 2 : 0) | (glow ? 4 : 0) | (lit ? 0 : 8) | (fogged ? 0 : 16)
-            | (clampUv ? 32 : 0);
+            | (clampUv ? 32 : 0) | (GraphicsMode.Enhanced ? 64 : 0);
         if (BillboardShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -1578,12 +1584,14 @@ void fragment() {
         return mat;
     }
 
+    // Key bits taken: 1 axis, 2 blend, 4 scissor, 8 glow, 16 !lit, 32 !fogged, 64 clampUv,
+    // 128 enhanced mode. Next free bit is 256.
     private Shader GetCylindricalShader(CylAxis axis, bool blend, bool scissor, bool glow, bool lit, bool fogged,
         bool clampUv)
     {
         lit |= glow; // a glow variant already ignores csky_world_light — same key
         int key = (axis == CylAxis.X ? 1 : 0) | (blend ? 2 : 0) | (scissor ? 4 : 0) | (glow ? 8 : 0)
-            | (lit ? 0 : 16) | (fogged ? 0 : 32) | (clampUv ? 64 : 0);
+            | (lit ? 0 : 16) | (fogged ? 0 : 32) | (clampUv ? 64 : 0) | (GraphicsMode.Enhanced ? 128 : 0);
         if (CylindricalShaders.TryGetValue(key, out var cached))
             return cached;
 
