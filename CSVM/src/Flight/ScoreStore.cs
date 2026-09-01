@@ -16,29 +16,19 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed class ScoreStore
 {
-    private const string StorePath = "user://stunt_scores.json";
+    private const string DefaultStorePath = "user://stunt_scores.json";
 
+    private readonly string _storePath;
     private readonly Godot.Collections.Dictionary _data;
 
-    private ScoreStore(Godot.Collections.Dictionary data) => _data = data;
+    private ScoreStore(string storePath, Godot.Collections.Dictionary data)
+    {
+        _storePath = storePath;
+        _data = data;
+    }
 
     /// <summary>Loads the store, or an empty one if the file is absent/unreadable/malformed.</summary>
-    public static ScoreStore Load()
-    {
-        if (FileAccess.FileExists(StorePath))
-        {
-            using var f = FileAccess.Open(StorePath, FileAccess.ModeFlags.Read);
-            if (f != null)
-            {
-                var parsed = Json.ParseString(f.GetAsText());
-                if (parsed.VariantType == Variant.Type.Dictionary)
-                    return new ScoreStore(parsed.AsGodotDictionary());
-            }
-            else
-                GD.PushWarning($"stunt scores: could not read {StorePath}: {FileAccess.GetOpenError()}");
-        }
-        return new ScoreStore(new Godot.Collections.Dictionary());
-    }
+    public static ScoreStore Load() => Load(DefaultStorePath);
 
     /// <summary>The stored best total, seconds, for this run key — or null if none is recorded yet.</summary>
     public float? GetBest(string key)
@@ -70,12 +60,32 @@ public sealed class ScoreStore
         return true;
     }
 
+    /// <summary>Loads a store at an alternate <paramref name="storePath"/>, for a suite that must
+    /// not touch the player's own <c>user://stunt_scores.json</c> — point it at a throwaway path
+    /// (e.g. under the suite's own scratch directory) instead.</summary>
+    internal static ScoreStore Load(string storePath)
+    {
+        if (FileAccess.FileExists(storePath))
+        {
+            using var f = FileAccess.Open(storePath, FileAccess.ModeFlags.Read);
+            if (f != null)
+            {
+                var parsed = Json.ParseString(f.GetAsText());
+                if (parsed.VariantType == Variant.Type.Dictionary)
+                    return new ScoreStore(storePath, parsed.AsGodotDictionary());
+            }
+            else
+                GD.PushWarning($"stunt scores: could not read {storePath}: {FileAccess.GetOpenError()}");
+        }
+        return new ScoreStore(storePath, new Godot.Collections.Dictionary());
+    }
+
     private void Save()
     {
-        using var f = FileAccess.Open(StorePath, FileAccess.ModeFlags.Write);
+        using var f = FileAccess.Open(_storePath, FileAccess.ModeFlags.Write);
         if (f == null)
         {
-            GD.PushWarning($"stunt scores: could not write {StorePath}: {FileAccess.GetOpenError()}");
+            GD.PushWarning($"stunt scores: could not write {_storePath}: {FileAccess.GetOpenError()}");
             return;
         }
         f.StoreString(Json.Stringify(_data, "  "));

@@ -2887,7 +2887,9 @@ active — `IaWrapupBoard` carries the splits there instead (`BL-358`).
 ## src/Flight/ScoreStore.cs
 Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
 `chapter/mission/plane` → `{best, date}`; `GetBest` / `RecordIfBest` (returns whether it was a
-new best — never worsens a record).
+new best — never worsens a record). The public `Load()` always opens the player's own file; an
+internal `Load(storePath)` overload exists only so a suite can point at a throwaway path instead
+(`instant-action-stunt-summary`) — never the player's own store.
 
 ## src/Flight/StuntRace.cs
 The internal `Remove` operation is compensation for an uncommitted roster build, including removal
@@ -5638,7 +5640,17 @@ the campaign's own loss rule shares; and the whole-window wrap-up board,
 its counters summed across every seat (`enemiesShotDown` filtered on `killer != null` — a bare
 terrain crash never reaches the take-hit body the original counts in — Shot % through
 `ProjectilePool.ScoredShooters`, zones read live at `MissionEnded` time, P1's stunt best recorded
-under the mission's own score key).
+under the mission's own score key). `BuildStuntSummary` (`BL-426`) is the record's own gate: it
+gets THIS run's own `AllComplete`, never the mission's win/loss flag, since a splitscreen mission
+ends once every pilot is done OR spent, so P1's own zone set can still be short when the mission
+itself ends on the other pilot going out of lives — each pilot's summary reads that pilot's own
+`StuntMission`, so the gate is per-pilot by construction. The stored `prevBest` is read before the
+gated record either way, so a run that does not qualify still shows the true stored best instead of
+nothing; reading it after the record would show a completing new-best run its own just-written time
+as "previous". A failed run's working default, pending the author's own judgement, is to show its
+elapsed total with no NEW BEST flag — the original's own behaviour here is not decoded, and whether
+an already-poisoned `user://stunt_scores.json` needs invalidating is a separate open question this
+item does not settle.
 `ForceDebugScoreboard()` is `--debug-scoreboard`'s single-fire force, attributed to P1:
 `dogfight_ace`/`dogfight_squadron` through `DebugForceCrash`; `stunt_flying` needs nothing,
 already forced by `HumanFlightAdapter`'s own `DebugCompleteStunt` wiring; `zeppelin_run` has no

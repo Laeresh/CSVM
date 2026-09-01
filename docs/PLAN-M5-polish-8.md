@@ -511,25 +511,24 @@ own engage is meant to shake at all is an open question recorded in this item, n
 Cross-refs: `BL-447` (also the AI's `snd_nitro` blip, and the decay lockout `_nitroDecayLeftS`
 stands in for), `docs/org/flightModel.md` "Nitro", the `nitro-boost-anchors` suite.
 
-## C23 ☐ `BL-426` A failed stunt run records nothing
+## C23 ☑ `BL-426` A failed stunt run records nothing
 
 **Goal.** Losing an Instant Action stunt run neither records a time nor announces NEW BEST; a
 completed run still records.
 
 **Evidence (confidence: traced; cites re-verified this session).** The wrap-up path is
-`InstantActionDirector.StuntSummary` (`Session/InstantActionDirector.cs:733-744`), which calls
-`store.RecordIfBest(key, run.Elapsed)` (`:742`) behind two guards and no third: the objective is
-`ZonesFlown`, and the pilot has a `Stunt` run at all. Neither asks whether the run was finished,
-so every end of a stunt mission records a time, a loss included, and a failed run wins the
+`InstantActionDirector.StuntSummary` (`Session/InstantActionDirector.cs:744-753`), which called
+`store.RecordIfBest(key, run.Elapsed)` behind two guards and no third: the objective is
+`ZonesFlown`, and the pilot has a `Stunt` run at all. Neither asked whether the run was finished,
+so every end of a stunt mission recorded a time, a loss included, and a failed run won the
 comparison almost every time because it ended early (`ScoreStore.RecordIfBest` takes any lower
-total). The write persists immediately to `user://stunt_scores.json`, so a bogus time becomes the
-record a later honest run is measured against and, being unbeatably short, can never be displaced
-by real flying. The fix's predicate already exists in the same file: the solo path is correct by
-construction (`StuntScoreboard.OnRunCompleted`, `StuntScoreboard.cs:58`, only runs on completion,
-using `StuntMission.AllComplete`, `:101`), and `pilot.Stunt is { AllComplete: true }` is already
-used at `InstantActionDirector.cs:721`. `prevBest` is read at `:741`, in the same method, before
-the record. (The entry's `StuntSummaryFor :761-764`, `GameSession.cs:3091-3092`,
-`StuntScoreboard.cs:156-160` and `:98` cites had all drifted; the mechanism is unchanged.)
+total). The write persisted immediately to `user://stunt_scores.json`, so a bogus time became the
+record a later honest run was measured against and, being unbeatably short, could never be
+displaced by real flying. The fix's predicate already existed in the same file: the solo path is
+correct by construction (`StuntScoreboard.OnRunCompleted`, `StuntScoreboard.cs:58`, only runs on
+completion, using `StuntMission.AllComplete`, `:101`), and `pilot.Stunt is { AllComplete: true }`
+is already used at `InstantActionDirector.cs:732`. `prevBest` was read before the record, in the
+same method.
 
 **Approach.** Gate the record per pilot on that pilot's run being complete, and fix the displayed
 previous-best alongside (trap (b)). Two calls belong to the author and go to D31: whether a
@@ -553,6 +552,23 @@ another not; the test belongs on the run, per pilot. (b) `prevBest` is read befo
 a fix that stops the write without touching the display would still show a stale figure. (c) The
 store is in `user://`, not the repo; decide the poisoned-file question explicitly rather than
 silently.
+
+**Verified.** <pending orchestrator run> `InstantActionDirector.StuntSummary` gates the record on
+`run.AllComplete` (this pilot's own `StuntMission`), never the mission's win/loss flag; `prevBest`
+stays read unconditionally, before the gated `RecordIfBest`, per trap (b). The gate and read-order
+are split into `internal static BuildStuntSummary(StuntMission, ScoreStore, string)` so a suite can
+drive them directly. `ScoreStore` gained an `internal Load(string storePath)` overload so a suite
+can point at a throwaway file rather than the player's own `user://stunt_scores.json`. Ran: `dotnet
+build CSVM/CSVM.sln` clean; `dotnet test CSVM.Tests/CSVM.Tests.csproj` 2785 passed; `.\RunTests.ps1
+-Suite instant-action-stunt-summary,instant-action,instant-action-end,instant-action-wrapup,
+instant-action-zeppelin,results-board-shell -SkipUnits -SkipGoldens` all 6 PASS (new suite
+`instant-action-stunt-summary` covers a lost run recording nothing over an empty store, a completed
+run recording and surviving a reload, a shorter-but-incomplete run leaving a real stored best byte-
+identical on disk, and the split splitscreen end via two independent `StuntMission`s); `dotnet
+format CSVM/CSVM.sln --verify-no-changes` clean; `.\CheckCommentCaps.ps1 -Summary` clean;
+`.\CheckEncoding.ps1` clean. The poisoned-`user://stunt_scores.json` question (trap (c)) is left
+open per the Approach, for the author/D31. The full `RunTests.ps1` landing gate is owed to the
+orchestrator.
 
 # Wave D — Closing sortie
 
