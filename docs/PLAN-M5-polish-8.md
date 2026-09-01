@@ -155,7 +155,7 @@ that drives this mission without hosting the intro's handoff reads a switched-of
 manufactures the very stall it is looking for. Cross-refs: `BL-565`,
 `docs/formats/objectives.md`, the graph half's closing commit (`git log --grep=BL-581`).
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total).
 - `dotnet build CSVM/CSVM.sln`: 0 warnings, 0 errors.
 - `dotnet test CSVM.Tests/CSVM.Tests.csproj`: all green.
 - `.\RunTests.ps1 -Suite campaign-cm09-docking -SkipUnits -SkipGoldens`: 1 passed, 0 failed,
@@ -228,7 +228,7 @@ closed while it was not (a PLAN-M5-polish-7 slot ruled out its candidate mechani
 the next sortie re-confirmed the symptom). Cross-refs:
 `docs/formats/anim-definitions/cutscenes.md`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total).
 
 Closed as disproved for both named faults, with the instrument the item asked for landed and no
 production code changed. The confirmed supersede rule is three rules, not one: a mission-scope
@@ -280,7 +280,7 @@ computed from the card's own extent, so a change there moves the framing the def
 The card is the original's geometry too, so the film is the check on whether the original
 occludes it before any depth behaviour changes.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total).
 
 `OriginalScreenshots/Videos/CM10.mkv` (3:58, 60 fps) was extracted with ffmpeg and read frame by
 frame from t=205s onward. The letterbox bars first appear at t≈234s as the aeroplane closes on
@@ -374,7 +374,7 @@ ground rules make a correct disproof the deliverable.
 `docs/formats/anim-definitions.md` and `docs/formats/anim-definitions/cutscenes.md`, and D31 carries
 the watch note that would overturn it.
 
-**Verified.** `<pending orchestrator run>` Decode only: `crimson.exe` in Ghidra
+**Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total). Decode only: `crimson.exe` in Ghidra
 (`FUN_004e9ee0`, `FUN_004ecbb0`, `FUN_004e8f40`, `FUN_004cca30`, `FUN_004ebfd0`, `FUN_004ee1a0`)
 plus the shipped `C1/cam_anim` hook definitions and `extracted/planes/nodes.json`. No code touched,
 so `CheckCommentCaps.ps1` has nothing to read; `CheckEncoding.ps1` covers the three edited documents.
@@ -438,7 +438,7 @@ through `Basis.Scale` on a degenerate basis does not return the applied scale on
 assertion compares the flattest axis. `--anim-lab --plane=` could not host a hook definition at all
 before this item, so anyone re-checking it in the lab on an older build sees a placeless play.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total).
 - `dotnet build CSVM/CSVM.sln`: 0 warnings, 0 errors. `dotnet format CSVM/CSVM.sln`, `.\CheckCommentCaps.ps1`, `.\CheckEncoding.ps1`: clean.
 - `dotnet test CSVM.Tests/CSVM.Tests.csproj`: 2791 passed.
 - `.\RunTests.ps1 -Filter landing -SkipUnits -SkipGoldens`: 11 of 11 pass, engine errors clean.
@@ -496,7 +496,7 @@ research; needs this settled first, and any TTK reading taken at a known `--diff
 `analysis/aim-assist-ttk/FINDINGS.md`'s census of this field is superseded by the script beside
 it, so quote the script.
 
-**Verified.** <pending orchestrator run> Reading confirmed against `docs/org/vehicleDamage.md`
+**Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total). Reading confirmed against `docs/org/vehicleDamage.md`
 ("Where the numbers come from at spawn", step 2): both slots are absolute whole-vehicle pool
 values, not fractions or divisors. `init_health` (block`+0x28`) writes the health-pool max
 outright when greater than zero; `armor` (block`+0x2c`) writes the armour-pool max outright when
@@ -564,7 +564,7 @@ it. A patrol boat's own gunnery runs through the AI mode machine (`BL-523`), so 
 by itself does not make a boat shoot; that boundary is deliberate. Cross-refs: `BL-523`,
 `docs/org/targeting.md`.
 
-**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` (0 warnings, 0 errors),
+**Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total). `dotnet build CSVM/CSVM.sln` (0 warnings, 0 errors),
 `dotnet test CSVM.Tests/CSVM.Tests.csproj` (2785 passed, after adding the new suite's measured
 weight to `analysis/engine-suite-weights.json`, which `SuiteShardsTests` requires), and
 `.\RunTests.ps1 -Suite <name> -SkipUnits -SkipGoldens` over the new `turret-vessel-targets` plus
@@ -648,7 +648,7 @@ same token `NODE_NEAR_GROUND`. All 473 shipped operands decode to round values; 
 only carrier of the eight positive ones and shows both directions in one chain (ground within 15 m
 below, or something within 32 m above, and only otherwise deploy the chute).
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total).
 `dotnet build CSVM/CSVM.sln` (0 warnings), `dotnet test CSVM.Tests/CSVM.Tests.csproj` (2791
 passed), `.\RunTests.ps1 -Filter zeppelin -SkipUnits -SkipGoldens` (13/13, including the new
 `zeppelin-breakup`), `-Filter anim`, `-Filter chute` and `-Filter motion` (5/5), and the goldens
@@ -700,7 +700,7 @@ term; it is gone, and PERF-22 records it. How OFTEN CM18 pays this is a separate
 limit" says the data does not establish that reading). It stays out of this slot. Cross-refs:
 `BL-434` (the per-viewport splitscreen cost the same measurement pass profiled).
 
-**Verified.** <pending orchestrator run> Landed the crash-rig half and stopped there, because the
+**Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total). Landed the crash-rig half and stopped there, because the
 rest cannot move without delaying the aeroplane's entry into the world.
 `WorldEffectsFactory.BeginFlightCrashRuntime` opens the same build `BuildFlightCrashRuntime` runs, as
 a `CrashRigBuild` a caller advances a step at a time; `AiFlightAssembler` hands it to a new
@@ -819,7 +819,7 @@ neutral unless the node it names is itself flagged. (e) A structure's team does 
 a boat shoot: a patrol boat's gunnery is the AI mode machine (`BL-523`). Cross-refs: `BL-523`,
 `BL-626`, `docs/org/targeting.md`.
 
-**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` (0 warnings, 0 errors),
+**Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total). `dotnet build CSVM/CSVM.sln` (0 warnings, 0 errors),
 `dotnet test CSVM.Tests/CSVM.Tests.csproj` (2791 passed, after adding the new suite's measured
 weight to `analysis/engine-suite-weights.json`), and
 `.\RunTests.ps1 -Suite <name> -SkipUnits -SkipGoldens` over the new `turret-structure-targets` plus
@@ -876,7 +876,7 @@ tuning) shares the tape but not this node; `docs/formats/hud.md`'s "Known uncert
 compass north unverified as world −Z, and a wrong axis there would move both readouts together
 rather than one.
 
-**Verified.** <pending orchestrator run> Bound the drum by `compass` first, `comp` second
+**Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total). Bound the drum by `compass` first, `comp` second
 (`extracted/planes/nodes.json` carries `compass` as the mesh-bearing node on all 11 player
 airframes and `comp` only as its non-mesh container, matching the trap's own binary-vs-data split).
 Carried `GaugeCluster.HeadingDeg` from `FlightHud.Draw` alongside the existing horizon feed, and
@@ -952,7 +952,7 @@ own engage is meant to shake at all is an open question recorded in this item, n
 Cross-refs: `BL-447` (also the AI's `snd_nitro` blip, and the decay lockout `_nitroDecayLeftS`
 stands in for), `docs/org/flightModel.md` "Nitro", the `nitro-boost-anchors` suite.
 
-**Verified.** <pending orchestrator run> Both halves are settled, one as a fix and one as a
+**Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total). Both halves are settled, one as a fix and one as a
 decode-confirmed disproof.
 
 *The smoke half landed, and the cause was not the rig.* A suite built the way a session builds a
@@ -1046,7 +1046,7 @@ a fix that stops the write without touching the display would still show a stale
 store is in `user://`, not the repo; decide the poisoned-file question explicitly rather than
 silently.
 
-**Verified.** <pending orchestrator run> `InstantActionDirector.StuntSummary` gates the record on
+**Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total). `InstantActionDirector.StuntSummary` gates the record on
 `run.AllComplete` (this pilot's own `StuntMission`), never the mission's win/loss flag; `prevBest`
 stays read unconditionally, before the gated `RecordIfBest`, per trap (b). The gate and read-order
 are split into `internal static BuildStuntSummary(StuntMission, ScoreStore, string)` so a suite can
