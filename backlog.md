@@ -2474,6 +2474,30 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   shot can move to a row and confirm on it. *Cross-refs:* the plane selection and ammo screens'
   open lists are unpinned by any golden until this exists.
 
+- `BL-663` `[Bug]` **The cockpit panel's compass drum never turns, so it reads north on every
+  heading.** *Evidence:* the authored `gauges` subtree carries a compass drum the original drives
+  as `FUN_004d1a30(node, 0, -heading, 0)` at `0049f8fe`
+  ([`docs/formats/hud.md`](docs/formats/hud.md), "Cockpit gauges"), and that call is decoded but
+  left unwired. `CockpitGauges` binds `hundreds`, `thousands`, `speed`, `nitro_boost`,
+  `nitro_charge`, `ggarrow`, `mgarrow` and `pfhorizon` (`Flight/CockpitGauges.cs:33`) and nothing
+  else, so the drum holds its authored pose for the whole flight and the panel reads north
+  wherever the aircraft points. The screen-space tape is not the fault: `CompassTape.HeadingDeg`
+  is fed every frame from the nose (`Flight/FlightController.cs:1810`, `Flight/FlightHud.cs:322`)
+  and the control repaints unconditionally in `_Process`. *Fix shape:* heading has to reach
+  `CockpitGauges.Apply`, which today takes only `GaugeCluster`; carrying it on the cluster keeps
+  the rule that the 3D panel and the screen-space dials read one already-computed state, after
+  which the drum takes its angle the way the altimeter needles take theirs. *⚠ Traps:* the node's
+  name in the DATA is `comp` while the binary's own lookup string is `compass`, so a bind by
+  either name alone misses on some airframes (the same split that forced `pfhorizon` over
+  `horizn`); and the needle writes are negated because a +Z node rotation is
+  counter-clockwise-positive, which the decoded `-heading` argument may already account for, so
+  the sign is one to confirm on the panel rather than to derive. *Playtest after fix:* fly a
+  circle in the cockpit view and watch the drum against the heading tape at the top of the
+  screen; the two show the same card and turn together, headings increasing to the left.
+  *Cross-refs:* `BL-113` (compass tape tuning) shares the tape but not this node;
+  [`docs/formats/hud.md`](docs/formats/hud.md)'s "Known uncertainty" still has compass north
+  unverified as world −Z, and a wrong axis there would move both readouts together rather than one.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
