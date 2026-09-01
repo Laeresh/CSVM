@@ -252,6 +252,22 @@ public class CampaignScrapbookPageTests
         Assert.EndsWith("01_02_a.PNG", flow.Page.Pictures[0].Art.Name);
     }
 
+    /// <summary>The book opens with the cursor already on RETURN TO CABIN: a mission-end scrapbook is
+    /// read rather than operated, so the row waiting under the cursor is the way out.</summary>
+    [Fact]
+    public void OpensWithTheCursorOnReturnToCabin()
+    {
+        string root = ScrapbookCompositionFixture.WriteBook(TestData.TempDir());
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        Assert.Equal(BoardButton.ReturnToCabin, flow.Page.Button(flow.Row).Button);
+
+        flow.Accept();
+        Assert.Equal(CampaignScreen.Cabin, flow.Screen);
+    }
+
     /// <summary>Turning a page leaves the cursor on the arrow that turned it, not on the row index
     /// that arrow used to hold: a spread-1 page drops the Replay row and both tabs above the arrows,
     /// which slides an unmoved cursor down onto RETURN TO CABIN.</summary>

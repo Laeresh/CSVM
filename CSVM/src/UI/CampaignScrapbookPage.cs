@@ -78,6 +78,11 @@ public sealed class CampaignScrapbookPage : CampaignPage
     /// <inheritdoc/>
     public override int RowCount => Rows().Count;
 
+    /// <summary>RETURN TO CABIN, the way out. The book is opened on the mission just flown and is
+    /// read rather than operated, so the row the cursor should already be on when the player is
+    /// done looking is the one that leaves.</summary>
+    public override int OpeningRow => Math.Max(0, RowOf(RowKind.ReturnToCabin));
+
     /// <summary>The page title, the unselected tab's label, and on spread 1 the results block's
     /// rows and the kill stamps' counts off the selected half; a spread-1 view of a mission with no
     /// recorded attempt shows the "Not yet flown" placeholder instead of a block.</summary>
