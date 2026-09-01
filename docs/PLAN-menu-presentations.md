@@ -364,7 +364,9 @@ PNGs rather than hashing their bytes), **SHOT-32** (a shot proves the frame it d
 is pinned by driving the real screens in the journey suite and the shots stand only for
 appearance).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The merged plan tree with B11 landed passed the complete `.\RunTests.ps1` (2832 units,
+201 engine suites across 4 shards with `menu-free-flight-journey` among them, 18 goldens
+hash-identical, engine errors clean, 157.7s).
 
 **⚠ Traps.** Do not repair existing mouse, focus or layout issues. Characterization pins current
 behaviour, including quirks not explicitly changed by this plan.
