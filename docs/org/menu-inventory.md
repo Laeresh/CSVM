@@ -44,7 +44,7 @@ own callbacks and economy are [`hangar.md`](hangar.md), the mission-end book
 - [Part 4: what the evidence does not cover](#part-4-what-the-evidence-does-not-cover)
   - [Owed captures](#owed-captures)
   - [Where Built-in and the original disagree](#where-built-in-and-the-original-disagree)
-- [What A2 must decode](#what-a2-must-decode)
+- [The decoded layout](#the-decoded-layout)
 
 ## Totals
 
@@ -59,8 +59,8 @@ own callbacks and economy are [`hangar.md`](hangar.md), the mission-end book
 | `LAYOUT.CSV` sections | **35** (`[GLOBALVARS]` + 34 screens, one per single-player script) |
 | `LAYOUT.CSV` widget rows | **636**, in **10** of the 11 documented widget types |
 | `LAYOUT.CSV` macro definitions | **186** (29 global, 157 per-section) |
-| Distinct art files `LAYOUT.CSV` names | **122** (120 present in the extraction, 2 absent) |
-| Distinct `IDS_*` symbols `LAYOUT.CSV` names | **152**, of which **148** resolve in `ui_strings.json` |
+| Distinct art files `LAYOUT.CSV` names | **124** (122 present in the extraction, 2 absent) |
+| Distinct `IDS_*` symbols `LAYOUT.CSV` names | **152**, of which **149** resolve to text |
 | UI sound files | **8** |
 | Original screens in this plan's scope | **27** of the 34 single-player screens |
 | Layout-stated navigation edges in the original | **46** |
@@ -351,20 +351,20 @@ and never used, so the shipped file authors no audio at all.
 | `Z` | slider | 4 | `DL` |
 | `W` | sound object | 0 | `SK` |
 
-⚠ **The comment block's declared field list does not reproduce the shipped `B` rows.** It gives
-`B,ArtPath,X,Y,Z,TabOrder,ResID,HelpID,ScriptToExe,…`, but the data puts `ResID` and `ScriptToExe`
-adjacent at indices 5 and 6 with no `TabOrder` between them:
-`FC_B_CHANGEPLANE=B,<V4>,128,<V2>,0,IDS_FC_B_CHANGEPLANE,PlaneSelection,0x1000,1,…` and
-`MM_B_CAMPAIGN=B,MM_B_Campaign.png,279,282,0,0,Campaign,0x1000,0,…`. `Campaign` cannot be a `ResID`
-and `IDS_FC_B_CHANGEPLANE` cannot be a `TabOrder`, so at least one of the two columns the comment
-names is not where it says. A2 must establish each type's field order from the rows, using the
-comment as a hypothesis.
+⚠ **The comment block's declared field lists do not reproduce the shipped rows, for any type.**
+No shipped row carries `HelpID`, `TabOrder`, `ScriptPointer` or `Group`; removing those four from
+the declared lists reproduces every row's field count in the file. The visible case is `B`, where
+`ResID` and `ScriptToExe` end up adjacent at indices 5 and 6
+(`MM_B_CAMPAIGN=B,MM_B_Campaign.png,279,282,0,0,Campaign,0x1000,0,…`). The established per-type
+orders are in [`formats/menu-layout.md`](../formats/menu-layout.md); this page does not restate
+them.
 
 ⚠ **Two substitution mechanisms, easily confused.** `<NAME>` is textual macro substitution,
 resolved against the section's own `V<n>` rows first and `[GLOBALVARS]`' `G<n>` rows second; it can
 expand to a number, an ARGB colour or a filename. `[@ScriptName@]` is a section header only and
 never appears inline. Cross-screen navigation uses the bare script name in the button's
-`ScriptToExe` field, not a bracketed macro.
+`ScriptToExe` field, not a bracketed macro. **Every macro token the shipped file uses resolves**,
+including the five [`campaign-board.md`](campaign-board.md) measured off screenshots as unresolved.
 
 ⚠ **A widget key a script creates need not have a layout row.** `MAINMENU.SCRIPT` creates
 `mm_t_title` and fills it from `uiData` 2152, and `[@MainMenu@]` has no `MM_T_TITLE` row: the text
@@ -502,18 +502,19 @@ audio contract and D33's cue work start from nothing rather than from a rewiring
 For E42. **Required** means the screen cannot be drawn or read without it; **optional** means the
 screen degrades locally and stays usable.
 
-⚠ **The manifest cannot be generated from `LAYOUT.CSV` alone.** The layout names 122 distinct art
+⚠ **The manifest cannot be generated from `LAYOUT.CSV` alone.** The layout names 124 distinct art
 files; the archive ships 681 PNG, 143 TGA, 107 JPG and 25 TIF. The rest are named by scripts
-(`ACTIVEPOINTERZ.PNG`, `PASSIVEPOINTERZ.PNG`, `ZOOMPOINTER.PNG`, `ARIAL8.TGA`) or built at runtime
-by string concatenation (`"assets\graphics\pc_p_hangar" + <airframe> + ".jpg"`,
-`PX_<n>_BLUEPRINT.TGA`, `"assets\graphics\scrapbook\" + <name>`, and the per-pattern `.BM` sets).
-A2's decoded artifact has to carry the script-named and runtime-named art too, or E42 will validate
-a manifest that misses most of what a screen actually loads.
+(`ACTIVEPOINTERZ.PNG`, `PASSIVEPOINTERZ.PNG`, `ARIAL8.TGA`) or built at runtime by string
+concatenation (`"assets\graphics\pc_p_hangar" + <airframe> + ".jpg"`,
+`"assets\graphics\scrapbook\" + <name>`, and the per-pattern `.BM` sets). `menu_layout.json`
+carries both halves, complete names and the fragments a runtime name is assembled from, which is
+what E42 validates against. `ZOOMPOINTER.PNG` and `PX_<n>_BLUEPRINT.TGA` appear in neither half:
+see the closing section.
 
 | Class | Files | Required or optional | Notes |
 |---|---|---|---|
 | `LAYOUT.CSV` | 1 | **required** for every Original screen | absent means no geometry at all |
-| `ui_strings.json` + `RESOURCE.H` | 2 | **required** | 152 symbols referenced, 148 resolve; `IDS_GN_1P/2P/3P` are dead layout references and `IDS_IA_CONTINUED` is a symbol-join gap, not a missing string |
+| `ui_strings.json` + `RESOURCE.H` | 2 | **required** | 152 symbols referenced, 149 resolve; `IDS_GN_1P/2P/3P` are dead layout references |
 | `SCRAPBOOK.CSV` | 1 | **required** for ScrapBook and ScrapbookZoom, optional elsewhere | 461 rows; the book's extent is the file's extent |
 | screen backgrounds (`MM_`, `PF_`, `GO_`, `AP_`, `VP_`, `CP_`, `KB_`, `IA_`, `CM_`, `PC_`, `FC_`, `PS_`, `OL_`, `SB_`, `PX_`, `MB_`) | 16 families | **required** per screen | a screen with no backdrop is not a degraded screen |
 | button strips | 119 `B` rows over ~60 PNGs | **required** per screen | four stacked frames, disabled / normal / rollover / depressed; the words are painted in, so the state is entirely which frame draws |
@@ -578,38 +579,30 @@ Each of these is a divergence a reader could mistake for a decode, so each is na
   (`BL-654`), where the original's layout gives every button a rollover and a depressed colour and
   its listboxes frame the row under the pointer.
 
-## What A2 must decode
+## The decoded layout
 
-The fields the decoded menu-layout artifact has to cover, in the order they bite.
+`ExtractRof.ps1` emits `extracted/rof/menu_layout.json`: the 34 sections bound to their scripts,
+both macro mechanisms resolved, every type's field order, the 46 `ScriptToExe` edges, the button
+colour tail and frame counts, the `ResID` → `RESOURCE.H` → string join with the symbol kept beside
+the text, each screen's script-created keys, the art the scripts name outside the layout,
+`SCRAPBOOK.CSV`, and the patch overlay's precedence.
+[`formats/menu-layout.md`](../formats/menu-layout.md) is the description of record for all of it,
+including what stays ambiguous. Four readings this page carried before that decode were wrong and
+are corrected above and here:
 
-1. **The section list and its 1:1 binding to a script name.** 34 sections; the header's indentation
-   is cosmetic and must not be read as nesting.
-2. **The two macro mechanisms**, resolved before any field is interpreted: `V<n>` per section
-   beating `G<n>` file-wide, with `<NAME>` expanding to numbers, ARGB colours or filenames.
-3. **Per-type field order, established from the rows rather than from the comment block**, for all
-   ten used types. `B` is the one already known to disagree with the comment.
-4. **`ScriptToExe`, `ScriptPri` and `EndScript`** on every `B` row: this is 46 of the navigation
-   edges and no script mentions them. Observed `ScriptPri` values are `0x1000`, `0x1020` and
-   `0x1fff`.
-5. **The four-colour button set** at the tail of a `B` row, in the disabled / normal / rollover /
-   depressed order the plaque strips are stacked in.
-6. **`ResID` as a symbol**, joined through `RESOURCE.H` to a numeric id and then to
-   `ui_strings.json`. `!` in that field means the script supplies the string at runtime; empty means
-   the same. Keep the symbol, not just the resolved text, so a missing string is diagnosable.
-7. **`NUMFRAMES` on a `P` row** and the implicit four-frame (eight for a check or radio) division of
-   a `B` row's art.
-8. **The `D` and `L` rows' `TotalDisplayed`**, which is a visible-row window and not an item count
-   (`ia_d_planep` and `ia_tl_contents` are the two rows where the two differ).
-9. **Unresolved authoring macros.** The shipped file leaves `<GX>`, `<Y>`, `<V2>`, `<V3>`, `<V4>`
-   and their siblings in place on several rows; `campaign-board.md` records the five already
-   resolved by template-matching a reference screenshot, and the decode should emit the raw token
-   rather than a guess when it cannot resolve one.
-10. **Widget keys with no layout row**, `mm_t_title` being the known case: the artifact should carry
-    the script's own key list beside the layout's, so the mismatch is visible.
-11. **The art referenced outside `LAYOUT.CSV`**: the three cursors, the two fonts, the eight wavs,
-    and the runtime-built names for hangar photos, blueprints, scrapbook art and paint masks. Part 3
-    says why E42 needs these in the same artifact.
-12. **`SCRAPBOOK.CSV`'s quoted comma-bearing field**, if the same parser serves both files.
-13. **The patch overlay's precedence, which the extraction does not encode.** `_crimptch/` shadows
-    the base tree and carries exactly one member, `ASSETS/SCRIPTS/AIRFRAME.SCRIPT`; nothing in the
-    output says the patch wins. A2 has to state the rule and apply it.
+- **No macro in the shipped file is unresolved.** `<GX>`, `<Y>`, `<V2>`, `<V3>` and `<V4>` are
+  ordinary per-section `V<n>` definitions, and their values agree with
+  [`campaign-board.md`](campaign-board.md)'s screenshot measurements to within a pixel.
+- **`ScriptPri` takes `0x1000`, `0x1020` and `0x1100`.** There is no `0x1fff` anywhere in the file;
+  `0x1100` is exactly the seven `PlaneConstruction` tab-bar edges.
+- **149 of the 152 `IDS_*` symbols resolve**, not 148. `RESOURCE.H` aliases three ids to two
+  symbols each and `ui_strings.json` keeps only one symbol per id, so a join through that field
+  loses `IDS_IA_CONTINUED`; joining through `RESOURCE.H` resolves it. The three that genuinely do
+  not resolve are `IDS_GN_1P/2P/3P`, which `RESOURCE.H` does not define.
+- **The layout names 124 art files, not 122.** The two the earlier count missed are the volume
+  slider's own `PF_B_SliderSlot.png` and `PF_B_Slider.png` on the four `Z` rows.
+
+⚠ **`ZOOMPOINTER.PNG` and `FONT.TGA` are named by neither the layout nor any script.** Part 3 lists
+them among the script-named assets; the scripts name `ACTIVEPOINTERZ.PNG`, `PASSIVEPOINTERZ.PNG`
+and `ARIAL8.TGA` only. Both files ship, so something names them, but it is not the shipped data:
+E42 must treat them as chosen by us until a reader is found.

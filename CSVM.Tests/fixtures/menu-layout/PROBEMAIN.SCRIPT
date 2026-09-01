@@ -1,0 +1,26 @@
+main
+{
+gui_create
+{
+sound AA = "assets\\sounds\\" "probeclick.wav"
+pane AB = "assets\\graphics\\" "probepointer.png"
+object BA = @ctl@ZJ
+BA.YC = "pr_background"
+initialize(BA)
+object BB = @ctl@PE
+BB.YC = "pr_t_title"
+initialize(BB)
+object BC = @ctl@PE
+BC.YC = "pr_t_runtime"
+callback($$UB$$, 2152, BC.BC)
+initialize(BC)
+object BD = @ctl@BE
+BD.YC = "pr_b_start"
+initialize(BD)
+}
+gui_mailbox
+{
+loadscript("assets\\scripts\\" "probeoptions.script")
+$$AC$$ = "assets\\graphics\\pr_p_photo" $$AD$$ ".jpg"
+}
+}

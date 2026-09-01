@@ -20,6 +20,11 @@
         _crimptch\ASSETS\...       every member of crimptch.rof (the patch overlay,
                                    which overrides the base archive at the same path)
         ui_strings.json            the joined string table
+        menu_layout.json           the decoded menu layout: LAYOUT.CSV, SCRAPBOOK.CSV,
+                                   the GUI scripts' widget keys and the patch precedence,
+                                   with macros resolved and strings joined. Decoded by
+                                   ExtractRof.MenuLayout.cs beside this script; see
+                                   docs\formats\menu-layout.md
         <name>.png                 next to each custom .BM: its greyscale shading map
         <name>_mask.png            next to each custom .BM: the paint-region masks,
                                    R = paint slot 1, G = slot 2, B = slot 3
@@ -40,7 +45,7 @@
     Output root. Default: extracted\rof next to this script.
 
 .PARAMETER Raw
-    Write archive members only: skip the .BM decoding and the string table.
+    Write archive members only: skip the .BM decoding, the string table and the menu layout.
 
 .PARAMETER Force
     Re-extract even when the output is already newer than the source archive.
@@ -51,7 +56,7 @@
 
 .EXAMPLE
     .\ExtractRof.ps1 -Raw
-    Just unpack the archives, no PNG decoding and no string table.
+    Just unpack the archives, no PNG decoding, no string table and no menu layout.
 #>
 
 [CmdletBinding()]
@@ -305,6 +310,10 @@ public static class CsRof
 }
 '@
 
+# The menu-layout decoder is a file rather than a here-string because CSVM.Tests compiles the
+# same source and drives it against hand-authored fixtures; two copies would drift.
+Add-Type -Path (Join-Path $RepoRoot "ExtractRof.MenuLayout.cs")
+
 # ---------------------------------------------------------------------------
 
 $rofs = @(
@@ -391,6 +400,31 @@ if (-not $Raw) {
         $jsonPath = Join-Path $Dest "ui_strings.json"
         $rows | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $jsonPath -Encoding UTF8
         Write-Host "       ui_strings.json ($($rows.Count) rows)"
+    }
+
+    # ---- menu layout ------------------------------------------------------
+    # Runs after the string table so every IDS_ symbol a widget names can be joined to its text.
+    # langui.dll is read first and wins a duplicate id, matching the order the game loads them in.
+    if (Test-Path (Join-Path $Dest "ASSETS\LAYOUT.CSV")) {
+        $strings = New-Object 'System.Collections.Generic.Dictionary[int,string]'
+        foreach ($r in $rows) {
+            if (-not $strings.ContainsKey([int]$r.id)) { $strings[[int]$r.id] = [string]$r.text }
+        }
+        $menu = [CSVM.Extraction.MenuLayoutDecoder]::Run($Dest, $strings)
+        $census = @{}
+        foreach ($c in $menu.Counts) { $census[$c.Name] = $c.Value }
+        Write-Host "  ->   menu_layout.json (schema $($menu.Schema))" -ForegroundColor Green
+        Write-Host ("       {0} screens, {1} widgets, {2} macros, {3} nav edges" -f `
+            $census["screens"], $census["widgets"], $census["macros"], $census["navigationEdges"])
+        Write-Host ("       {0} art refs ({1} absent), {2} string symbols ({3} resolved), {4} scrapbook rows" -f `
+            $census["artReferences"], $census["artMissing"], $census["stringSymbols"], `
+            $census["stringSymbolsResolved"], $census["scrapbookEntries"])
+        if ($census["macrosUnresolved"] -gt 0 -or $census["warnings"] -gt 0) {
+            Write-Host ("       {0} unresolved macros, {1} warnings (both listed in the file)" -f `
+                $census["macrosUnresolved"], $census["warnings"]) -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "  SKIP menu_layout.json (ASSETS\LAYOUT.CSV not extracted)" -ForegroundColor Yellow
     }
 }
 

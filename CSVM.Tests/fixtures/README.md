@@ -27,3 +27,4 @@ Byte-level fixtures (WAV/ADPCM) are not files at all: they are assembled field b
 | `ia/ia.zrd.json` | `instant-action.md` | the full `InstantActionDef` record, the `num_enemies` clamp to 6, a bare `groupN, null` wave |
 | `ia-minimal/ia.zrd.json` | `instant-action.md` | every optional key's built-in default, and the `dogfight_ace` wingmen/wave zero-forcing rule |
 | `ia-cli.json` | `instant-action.md` | the `--ia=` plain-JSON-object shape (not the zrdr flat-alternating one), a JSON-`null` wave |
+| `menu-layout/` | `menu-layout.md` | the sectioned-CSV grammar, `V<n>` beating `G<n>`, an unresolvable macro, every widget type's field order, the `ResID` → header → text join, the button colour tail and frame counts, the quoted scrapbook rectangle, a stray line and an unknown type |

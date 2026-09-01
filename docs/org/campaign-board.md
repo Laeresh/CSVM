@@ -78,12 +78,16 @@ Three sources, and a reader should know which one is under any given number.
   than one 30 px slot would be, so a fixed pitch draws them over each other (`BL-490`). How tall an
   entry drew is a font metric, which is why `BoardNote` carries the widget and the renderer
   measures it.
-- **Measured off the reference screenshots**, for the handful of rows the shipped layout leaves as
-  unresolved authoring macros. Each was found by matching the button's own bitmap against the
-  screenshot at every offset and taking the best fit; the X the match returned agreed with the
-  layout row's own X in every case, which is what makes the Y trustworthy.
+- **Measured off the reference screenshots and confirmed against the layout's own per-section
+  definitions**, for the handful of rows whose values reach the layout through `<V<n>>`-style
+  macros. Each was found by matching the button's own bitmap against the screenshot at every
+  offset and taking the best fit; the X the match returned agreed with the layout row's own X in
+  every case, which is what makes the Y trustworthy. The macros are defined in the file
+  (`[@FlightCheck@]` gives `GX,553`, `V2,132`, `V3,350`, `V4,FC_B_PaperButton.Png`;
+  `[@Campaign@]` gives `Y,547`), and the decoded values agree with the measurements to within a
+  pixel, so the two methods cross-validate (`docs/formats/menu-layout.md`).
 
-| Macro | Screen | Resolved | How |
+| Macro | Screen | Measured | How |
 |---|---|---|---|
 | `<GX>` | flight check, ammo selection | `y = 553` | matched `FC_B_ReturnToBriefing.png` at `x = 341` (layout's own X) |
 | `<Y>` | profile | `y = 547` | matched `CM_B_DeletePlayer.png` at `x = 193` |

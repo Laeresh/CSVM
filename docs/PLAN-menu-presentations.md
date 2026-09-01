@@ -83,11 +83,11 @@ canvas is a coordinate system, not a fixed output resolution.
 
 ## What the data actually ships
 
-`ExtractRof.ps1` currently unpacks `crimson.rof` and its `crimptch.rof` overlay into
-`extracted/rof/`, emits `ui_strings.json`, and additively decodes custom `.BM` images. Its own header
-records 846 archive members: 588 already-common PNG/JPG/TGA/TIF files and 184 custom `.BM` files.
-The archives also contain GUI scripts and `LAYOUT.CSV`, but extraction does not yet emit a structured
-menu-layout artifact (`ExtractRof.ps1:1-33`; `docs/tooling.md:94-114`).
+`ExtractRof.ps1` unpacks `crimson.rof` and its `crimptch.rof` overlay into `extracted/rof/`, emits
+`ui_strings.json`, additively decodes custom `.BM` images, and emits the decoded
+`menu_layout.json`. Its own header records 846 archive members: 588 already-common PNG/JPG/TGA/TIF
+files and 184 custom `.BM` files. The GUI scripts and `LAYOUT.CSV` are also in the archives
+(`ExtractRof.ps1`; `docs/tooling.md`; `docs/formats/menu-layout.md`).
 
 Campaign composition already proves the intended display rule. `BoardFit` maps the original's
 800x600 coordinate space uniformly into any viewport, centres it and letterboxes the remainder;
@@ -111,8 +111,8 @@ screens and **22** multiplayer screens), and `LAYOUT.CSV`'s **35** sections are 
 one per single-player script, one to one, so **the 22 multiplayer screens have no authored layout at
 all** and decoding `LAYOUT.CSV` reaches 34 screens, not 56. Those sections hold **636** widget rows
 in 10 of the 11 documented types (`W`, the sound object, is declared and never used), **186** macro
-definitions, **122** distinct art files (120 present, `CrimFlag.MPG` and `Final.MPG` absent) and
-**152** `IDS_*` symbols of which 148 resolve. **46** navigation edges are stated by the layout's own
+definitions, **124** distinct art files (122 present, `CrimFlag.MPG` and `Final.MPG` absent) and
+**152** `IDS_*` symbols of which 149 resolve. **46** navigation edges are stated by the layout's own
 `ScriptToExe` column and by no script. Menu audio is **8** wav files bound in scripts, none of which
 Built-in plays. Of the 34 single-player screens **27** are in scope; Preferences, Game Options,
 Audio, Video, Controls and Keys have no Built-in counterpart, and the original's top level has six
@@ -147,7 +147,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Evidence and contracts
 
 1. ☑ Inventory every in-scope menu journey and its original evidence
-2. ☐ Decode menu layouts during ROF extraction and document the format
+2. ☑ Decode menu layouts during ROF extraction and document the format
 3. ☑ Add the global options store and requested/active presentation resolution
 4. ☑ Define the presentation, feature, input, audio, launch and return contracts
 
@@ -217,7 +217,8 @@ the screen census; 11 of the 12 `Screen` members carry an aid and `WaveEdit` car
 inventory states rather than hides. The original half is a parse of
 `extracted/rof/ASSETS/LAYOUT.CSV` (35 sections, 636 widget rows in 10 types, 186 macro definitions,
 122 distinct art references of which 120 resolve on disk, 152 `IDS_*` symbols of which 148 resolve
-in `ui_strings.json`, 46 `ScriptToExe` edges) cross-checked against the 61 script names in
+in `ui_strings.json`, 46 `ScriptToExe` edges; A2's decoder corrects the hand count to 124 art
+references with 122 present and 149 resolving symbols, see `docs/formats/menu-layout.md`) cross-checked against the 61 script names in
 `extracted/rof/ASSETS/SCRIPTS/`, which gives the 34-to-34 section/script correspondence and the 22
 multiplayer scripts with no section. `docs/verification.md` rules cited: **SRC-4** (one description
 of record, so the inventory points at `formats/campaign-screens.md`, `instant-action.md` and
@@ -233,7 +234,7 @@ hash-identical, 131.6s).
 **⚠ Traps.** A filename or rectangle proves composition, not interaction. Existing campaign
 fidelity does not prove non-campaign coverage.
 
-## A2 ☐ Decode menu layouts during ROF extraction and document the format
+## A2 ☑ Decode menu layouts during ROF extraction and document the format
 
 **Goal.** `ExtractRof.ps1` emits a stable, structured decoded menu-layout artifact that runtime can
 read without interpreting original formats or executable behaviour.
@@ -249,11 +250,29 @@ schema when old trees become invalid, and document the decoded source and output
 
 **Model recommendation.** high — format work, compatibility and legal boundaries meet here.
 
-**Verify.** <TODO after A1: exact extractor fixture command and real-tree census>; run extraction to
-`./.scratch/<descriptive-menu-layout-path>` and print that workspace-relative path.
+**Verify.** Fixture tests:
+`dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~MenuLayoutDecoderTests"`
+(22 tests: 21 over the hand-authored `CSVM.Tests/fixtures/menu-layout/` set, plus one
+`[ExtractedDataFact]` census of the player's own tree). Real-tree extraction:
+`.\ExtractRof.ps1 -Source <install>\GOSDATA\ASSETS -Dest .\.scratch\menu-layout-extract`, whose
+census line is the artifact's own `counts` block.
+
+Settled: the decoder lives in `ExtractRof.MenuLayout.cs` at the repo root, `Add-Type`d from disk by
+`ExtractRof.ps1` and `<Compile Include>`d by `CSVM.Tests`, so the shipped decode and the fixture
+tests are one implementation; it therefore stays inside the C# 5 subset PowerShell 5.1's `Add-Type`
+accepts, and writes its JSON by hand. `packaging/Extract.ps1` is unchanged.
+
+**The extraction schema is deliberately not bumped, and the bump is owed to B13/D32.**
+`ExtractionStamp.Schema`'s own rule is "bump whenever a *reader* change invalidates old
+extractions". A2 adds an output and no reader, so an old tree is not yet invalid. The first item
+that requires `menu_layout.json` at runtime must bump `$StampSchema` in `ExtractAssets.ps1` and
+`ExtractRof.ps1` and `ExtractionStamp.Schema` in one commit, so a pre-A2 tree is reported stale
+rather than read as empty. `docs/formats/menu-layout.md` carries the same statement.
 
 **⚠ Traps.** Do not decode executable behaviour at runtime. `packaging/Extract.ps1` stays a dispatcher;
 all extraction logic remains in `ExtractRof.ps1` or code it directly owns.
+
+**Verified.** <pending orchestrator run>
 
 ## A3 ☑ Add the global options store and requested/active presentation resolution
 
