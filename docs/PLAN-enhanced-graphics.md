@@ -470,7 +470,8 @@ overlay were already `ShadowCastingSetting.Off`, and both billboard shader gener
 that was already there. The world meshes and the aircraft keep the default `On` and are the only
 casters.
 
-**Verified.** <pending orchestrator run> During the item, in the item's worktree with
+**Verified.** The complete `.\RunTests.ps1` on the merged B13 + B14 tree: 2796 units, 200 engine
+suites (errors clean), 18 goldens hash-identical, all passing in 167.7 s. During the item, in the item's worktree with
 `$env:CSVM_DATA_ROOT="Z:\CSVM"`: `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
 `.\RunTests.ps1 -Suite fog-state -SkipUnits -SkipGoldens`: engine PASS, 1 suite run of 200, engine
 errors clean, 0 unexpected lines. `.\RunTests.ps1 -Suite sun-orientation -SkipUnits -SkipGoldens`:
@@ -561,7 +562,9 @@ anim-definitions.md's "Point lights"); every other chapter's lights sit behind `
 combat/destruction effects a freecam bootstrap never reaches, so a night-city chapter like C5
 commits zero lights at boot and is the wrong place to look for the omni footprint.
 
-**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
+**Verified.** The complete `.\RunTests.ps1` on the merged B13 + B14 tree: 2796 units, 200 engine
+suites (errors clean), 18 goldens hash-identical, all passing in 167.7 s. During the item:
+`dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
 `dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build`: 2796 passed, 0 failed (WorldLights reaches
 live `Node`s, so it has no headless unit coverage, per the repo's own rule for `src/Testing/`).
 `$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -Suite world-lights-nearest-viewer -SkipUnits
