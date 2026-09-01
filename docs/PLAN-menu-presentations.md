@@ -134,7 +134,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☐ Inventory every in-scope menu journey and its original evidence
 2. ☐ Decode menu layouts during ROF extraction and document the format
 3. ☑ Add the global options store and requested/active presentation resolution
-4. ☐ Define the presentation, feature, input, audio, launch and return contracts
+4. ☑ Define the presentation, feature, input, audio, launch and return contracts
 
 ### Wave B — Free Flight tracer
 
@@ -274,7 +274,20 @@ from shared features onto Built-in or Original types.
 
 **Verify.** Compile minimal fake feature and presentation fixtures, prove two different screen graphs
 can drive the same operation, and prove presentation types are absent from shared model assemblies or
-namespaces. <TODO: choose the enforceable dependency test after the file/assembly boundary is known.>
+namespaces. The boundary is namespaces inside the one engine assembly: shared contracts and features
+live in `CSVM.UI.Menu` exactly (folder `CSVM/src/UI/Menu/`), presentations in sub-namespaces
+(`CSVM.UI.Menu.BuiltIn`, `.Original`). The dependency test is `MenuNamespaceDependencyTests` over
+compiled metadata: `AssemblyDependencyScan` (System.Reflection.Metadata, no assembly load) walks
+every `CSVM.UI.Menu` type's base/interfaces/signatures/locals plus method-body IL tokens and fails
+on any reference to `Godot.*` or to `CSVM.UI.*` outside `CSVM.UI.Menu`; scanner self-tests prove it
+sees signature-level and body-only references and that an empty subject fails rather than passing.
+
+**Verified.** <pending orchestrator run> Contracts, fixtures and tests landed engine-free:
+`dotnet build CSVM/CSVM.sln` (0 warnings, 0 errors) and
+`dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build` (2798 passed, 0 failed, 0 skipped), including
+the 13 new `MenuSeamContractTests` + `MenuNamespaceDependencyTests`, which drive one
+`FakeSortieFeature` to the same `LaunchExit` through a three-screen cursor wizard and a one-screen
+pointer page, and reject presentation/engine references from `CSVM.UI.Menu`.
 
 **⚠ Traps.** Do not create a universal row/button/picture schema. “Presentation” includes navigation,
 interaction, animation and cue selection; drawing alone is not the boundary.

@@ -232,6 +232,16 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 `--debug-*` twin so a finding can be reproduced headlessly — see `docs/cli.md`.
 
 - `src/UI/MenuInput.cs` — one player's menu input source: keyboard flag + a `Pads` binding, edge/auto-repeat `Poll(dt)`, plus the typed characters and pad-only cursor axes a text field needs.
+- `src/UI/Menu/PresentationId.cs` — the identity a menu presentation registers under and Options persist: a non-empty ordinal token; `built-in` and `original` are the shipped ones.
+- `src/UI/Menu/IMenuPresentation.cs` — one menu presentation's lifecycle: activate at a mapped return destination, tick over the host's seats, deactivate and be discarded.
+- `src/UI/Menu/PresentationRegistry.cs` — presentation registration: one factory per id, a fresh instance per activation, an unknown id answered by fallback rather than a throw.
+- `src/UI/Menu/IMenuHost.cs` — what the menu host lends the active presentation: shared features, shared audio, per-seat input sources, and the one typed exit.
+- `src/UI/Menu/IMenuFeature.cs` — the shared-feature contract: typed state and semantic operations per feature; `Discard()` drops transient setup on a presentation switch.
+- `src/UI/Menu/MenuFeatureSet.cs` — the host-owned feature registry, fetched by concrete type; `DiscardTransient()` is everything a presentation switch discards.
+- `src/UI/Menu/MenuCommands.cs` — per-seat semantic menu commands plus `IMenuInputSource`, the device-neutral seam keyboard, mouse and pad feed and a later HOTAS/HOSAS source plugs into.
+- `src/UI/Menu/IMenuAudio.cs` — the shared menu audio contract: presentations request cues and narration; the service owns lookup, playback, volume and session handoff.
+- `src/UI/Menu/MenuExit.cs` — the one typed menu exit `Launcher` consumes: `LaunchExit`, `CampaignMissionExit`, `QuitExit`; presentations never build sessions.
+- `src/UI/Menu/MenuReturnDestination.cs` — semantic return destinations (top level, cabin, debrief) that each presentation maps into its own screen graph.
 - `src/UI/BoardMenu.cs` — a board's cursor and item list, engine-free, so the selection rules test off engine.
 - `src/UI/BoardMenuItem.cs` — the rows a board menu can offer: Resume, Restart, Exit.
 - `src/UI/BoardMenuView.cs` — draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
@@ -6679,3 +6689,78 @@ The only adapter over Godot's `DirectSpaceState`, implementing `IWorldQuery`. Re
 node's `World3D` at each call rather than caching it, since the node may be bound before it joins
 the tree. `Sweep` holds the airframe's whole per-part cast/rest-info dance, including the 0.05 m
 nudge past the first overlap (`GetRestInfo` can come back empty exactly at the unsafe fraction).
+
+## src/UI/Menu/PresentationId.cs
+The identity a menu presentation registers under and Options persist: a value token wrapping a
+non-empty string, compared ordinally, with `BuiltIn` (`built-in`) and `Original` (`original`) as
+the shipped identities. The options store keeps the persisted value as a validated string and
+resolves it against `PresentationRegistry.Registered`; an unknown token falls back rather than
+throwing. Off-engine coverage: `CSVM.Tests/MenuSeamContractTests.cs`.
+
+## src/UI/Menu/IMenuPresentation.cs
+One menu presentation: a screen graph plus its navigation, interaction, animation and cue
+selection over the shared features. `Activate(host, destination)` shows it at whatever screen of
+its own graph the semantic destination maps to, `Tick` drives it over the host's seats, and
+`Deactivate` tears it down for good; the host creates a fresh instance per activation, so a
+switch discards transient presentation state by construction and always lands on
+`MenuReturnDestination.TopLevel`. Consumed from B12 of `docs/PLAN-menu-presentations.md` onward.
+
+## src/UI/Menu/PresentationRegistry.cs
+Where presentations register: one factory per `PresentationId`, filled once at startup, duplicate
+registration refused. `TryCreate` hands out a fresh instance and answers an unknown id with
+false, so a stale persisted token degrades to the Built-in fallback instead of a throw.
+Availability (the Original presentation's asset manifest) is decided before asking here; the
+registry only says what exists in the build.
+
+## src/UI/Menu/IMenuHost.cs
+What the process-lifetime menu host lends the active presentation: `Features`
+(`MenuFeatureSet`), `Audio` (`IMenuAudio`), `Seats` (one `IMenuInputSource` each, a live list the
+join flow grows), and `Exit(MenuExit)`, the only way out. The host owns all four across
+presentation switches; a presentation borrows them between `Activate` and `Deactivate` and keeps
+no reference past that.
+
+## src/UI/Menu/IMenuFeature.cs
+The contract every shared menu feature implements. A feature is typed state plus semantic
+operations for one area of play (configuration, validation, persistence, player setup, launch),
+exposed as its own concrete members rather than a universal row/button/picture schema, so each
+presentation decides how the operations are offered. `Discard()` drops unfinished setup when the
+active presentation changes; persisted data survives.
+
+## src/UI/Menu/MenuFeatureSet.cs
+The host-owned registry of shared features, fetched by concrete type (`Get<T>`/`TryGet<T>`), one
+instance outliving every presentation switch. `DiscardTransient()` calls every feature's
+`Discard` and is the whole of what a switch discards, so anything a feature keeps past it is by
+definition persisted data.
+
+## src/UI/Menu/MenuCommands.cs
+The device-neutral input seam: `MenuCommands` is one frame of one seat's semantic commands
+(auto-repeated cursor steps, edge presses, typed text, an optional window-pixel `MenuPointer`),
+and `IMenuInputSource` is the per-seat producer (`Poll`/`Prime`/`CapturingText`). A source is not
+synonymous with a pad: keyboard-plus-unclaimed-pads, one claimed pad, a mouse or a future
+HOTAS/HOSAS binding all sit behind the same contract, and a presentation never reads a device.
+`MenuInput` stays the Built-in shell's raw poller until B12 adapts it onto this seam.
+
+## src/UI/Menu/IMenuAudio.cs
+The shared menu audio contract: a presentation requests a `MenuCue` by semantic name and starts
+or stops narration at moments it owns; the service owns resolution, playback, volume and the
+handoff into a launching session. `LaunchMenu`'s existing music/narration code stays where it is
+until B12 puts the host implementation over it.
+
+## src/UI/Menu/MenuExit.cs
+The one typed menu exit, handed to `IMenuHost.Exit` and consumed by `Launcher`: `LaunchExit`
+(chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`),
+`CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices) and `QuitExit`. A
+custom plane arrives as its resolved `CustomPlaneDef`, never a store name, so the consumer reads
+no store. Presentations never construct sessions; E43 migrates `LaunchMenu`'s two callbacks onto
+this.
+
+## src/UI/Menu/MenuReturnDestination.cs
+Where the menu stands when it comes back, said semantically: `TopLevel`, `CabinReturn(profile)`,
+`DebriefReturn(profile, missionSeq)`. The host names the destination and the active presentation
+maps it into its own graph at `Activate`, so no presentation-specific screen id crosses the seam.
+The dependency direction for this whole folder: types in the `CSVM.UI.Menu` namespace reference
+no `Godot` type and no `CSVM.UI` type outside that exact namespace, enforced by
+`CSVM.Tests/MenuNamespaceDependencyTests.cs` over compiled metadata (signatures and method-body
+IL alike, via `AssemblyDependencyScan`); presentations live in sub-namespaces
+(`CSVM.UI.Menu.BuiltIn`, `.Original`) and may depend on anything. `ComposedBoard` and the other
+board types stay presentation-side.
