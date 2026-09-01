@@ -30,12 +30,12 @@ public class OriginalShellTests
 
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
         Assert.Equal(
-            new[] { OriginalShell.FreeFlightKey, "MM_B_CAMPAIGN", "MM_B_INSTANTACTION", "MM_B_MULTIPLAYER", "MM_B_PREFERENCES", "MM_B_CREDITS", "MM_B_QUIT" },
+            new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey, "MM_B_CAMPAIGN", "MM_B_INSTANTACTION", "MM_B_MULTIPLAYER", "MM_B_PREFERENCES", "MM_B_CREDITS", "MM_B_QUIT" },
             shell.Rows.Select(r => r.Key));
         Assert.Equal(OriginalShell.FreeFlightKey, shell.FocusedKey);
         // The decoded rows with no remake destination yet are disabled; Preferences (the Options
         // door) and Quit react.
-        Assert.Equal(new[] { true, false, false, false, true, false, true }, shell.Rows.Select(r => r.Enabled));
+        Assert.Equal(new[] { true, true, false, false, false, true, false, true }, shell.Rows.Select(r => r.Enabled));
         // A decoded button's rectangle is its authored corner and its measured strip's frame.
         var quit = shell.Rows.Single(r => r.Key == "MM_B_QUIT");
         Assert.Equal((280f, 530f, 240f, 50f), (quit.X, quit.Y, quit.Width, quit.Height));
@@ -58,7 +58,7 @@ public class OriginalShellTests
         step = shell.Step(Pointer(290f, 290f));
         Assert.Equal("MM_B_QUIT", shell.FocusedKey);
         Assert.Empty(step.Cues);
-        Assert.Equal(1, shell.Hover);
+        Assert.Equal(2, shell.Hover);
     }
 
     [Fact]
@@ -83,6 +83,8 @@ public class OriginalShellTests
     {
         var shell = Shell(out _);
 
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.DogfightKey, shell.FocusedKey);
         shell.Step(Down);
         Assert.Equal("MM_B_PREFERENCES", shell.FocusedKey);
         shell.Step(Down);
@@ -110,7 +112,7 @@ public class OriginalShellTests
 
         shell.Step(Right);
         Assert.Equal(1, shell.Rows[shell.Focus].Column);
-        Assert.Equal("player_balmoral", shell.FocusedKey);
+        Assert.Equal(OriginalShell.AirframeKey(2), shell.FocusedKey);
         shell.Step(Accept);
         Assert.Equal("player_balmoral", shell.PickedAirframe);
         Assert.True(shell.Rows.Single(r => r.Key == OriginalShell.FlyKey).Enabled);
@@ -163,6 +165,7 @@ public class OriginalShellTests
 
         shell.Step(Down);
         shell.Step(Down);
+        shell.Step(Down);
         Assert.Equal("MM_B_QUIT", shell.FocusedKey);
         Assert.IsType<QuitExit>(shell.Step(Accept).Exit);
     }
@@ -185,13 +188,14 @@ public class OriginalShellTests
         Assert.Null(shell.PickedAirframe);
         Assert.Equal("C1B", shell.PickedChapter);
         shell.Step(Accept);
-        Assert.Equal("player_balmoral", shell.FocusedKey);
+        Assert.Equal(OriginalShell.AirframeKey(2), shell.FocusedKey);
     }
 
     [Fact]
     public void TheOptionsScreenTogglesThePresentationAndAppliesItAsASwitchExit()
     {
         var shell = Shell(out _);
+        shell.Step(Down);
         shell.Step(Down);
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.Options, shell.Screen);
@@ -257,21 +261,26 @@ public class OriginalShellTests
     {
         var layout = MenuLayout.Parse(
             "{\"schema\":1,\"widgetTypes\":[],\"globals\":[],\"screens\":[{\"section\":\"MainMenu\",\"script\":\"\",\"widgets\":[]}],\"navigation\":[],\"externalAssets\":[]}");
-        var shell = new OriginalShell(layout, new FreeFlightFeature(), _ => null);
+        var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(), _ => null);
 
         var rows = shell.Rows;
-        Assert.Equal(OriginalShell.FreeFlightKey, Assert.Single(rows).Key);
+        Assert.Equal(new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey }, rows.Select(r => r.Key));
         var board = shell.Compose();
         Assert.Empty(board.Plaques);
         Assert.Contains(board.Lines, l => l.Text == "FREE FLIGHT");
+        Assert.Contains(board.Lines, l => l.Text == "DOGFIGHT");
         Assert.Contains(board.Fills, f => f.Border);
         Assert.Equal(new MenuLayoutColor(0xFF, 0xFF, 0xFF, 0xFF), shell.Inks.LabelNormal);
     }
 
+    // Seat 0 is a scripted source; the roster is the eleven stock airframes with no customs.
     private static OriginalShell Shell(out FreeFlightFeature free)
     {
         free = new FreeFlightFeature();
-        return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), free, Measure);
+        var setup = new PlayerSetupFeature();
+        setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()));
+        setup.Join(new ScriptedMenuSeat());
+        return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), free, setup, Measure);
     }
 
     // The fixture's strips: every button strip 240x200 (four 50-pixel frames), the paper plaque

@@ -52,9 +52,11 @@ internal static class MenuOriginalSuites
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
             ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true }));
-        registry.Register(PresentationId.Original, () => new OriginalPresentation(ctx.Host, ctx.DataRoot, layout, string.Empty));
+        registry.Register(PresentationId.Original, () => new OriginalPresentation(
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }));
         var host = new MenuHost(registry, audio, exits.Add);
         host.Features.Add(new FreeFlightFeature());
+        host.Features.Add(new PlayerSetupFeature());
         host.AddSeat(seat);
         try
         {
@@ -94,7 +96,7 @@ internal static class MenuOriginalSuites
             $"a cold start opens on the top level ({shell?.Screen})");
         ctx.Check(shell?.FocusedKey == OriginalShell.FreeFlightKey,
             $"with the Free Flight door focused ({shell?.FocusedKey})");
-        ctx.Check(shell?.Rows.Count == 7, $"the top level is the six decoded rows plus the door ({shell?.Rows.Count})");
+        ctx.Check(shell?.Rows.Count == 8, $"the top level is the six decoded rows plus the two doors ({shell?.Rows.Count})");
         ctx.Check(Godot.Input.MouseMode == Godot.Input.MouseModeEnum.Hidden,
             $"the OS pointer is hidden while Original draws its own ({Godot.Input.MouseMode})");
         return shell;

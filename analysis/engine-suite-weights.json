@@ -197,6 +197,8 @@
     "menu-free-flight-journey": 0.1,
     "menu-host-tracer": 0.1,
     "menu-original-tracer": 0.2,
+    "menu-player-setup-journey": 0.1,
+    "menu-player-setup-seats": 0.2,
     "perf-hud-layout": 0.009,
     "campaign-briefing-note": 0.161,
     "campaign-capture-group": 5.66,

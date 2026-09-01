@@ -3,15 +3,18 @@ using System.Collections.Generic;
 
 namespace CSVM.UI.Menu.Original;
 
-/// <summary>The Original presentation's screens. The top level is decoded; the other two are
+/// <summary>The Original presentation's screens. The top level is decoded; the others are
 /// remake-only screens composed in the decoded chrome's conventions.</summary>
 public enum OriginalScreen
 {
-    /// <summary>The main menu: the decoded <c>[@MainMenu@]</c> rows plus the Free Flight door.</summary>
+    /// <summary>The main menu: the decoded <c>[@MainMenu@]</c> rows plus the Free Flight and Dogfight doors.</summary>
     TopLevel,
 
-    /// <summary>The remake-only Free Flight screen: a chapter list, an airframe list, BACK and FLY.</summary>
+    /// <summary>The remake-only Free Flight screen: a chapter list, the aircraft list, the seats, BACK and FLY.</summary>
     FreeFlight,
+
+    /// <summary>The remake-only Dogfight screen: the Free Flight screen's shape over the Dogfight gate.</summary>
+    Dogfight,
 
     /// <summary>The remake-only minimal Options screen: the presentation chooser.</summary>
     Options,
@@ -31,10 +34,11 @@ public enum OriginalRowKind
 }
 
 /// <summary>One interactive element of a screen in authored 800x600 pixels: what it is, where it
-/// is, whether it reacts, and which column it belongs to for the seat's cursor.</summary>
+/// is, whether it reacts, which column it belongs to for the seat's cursor, and whether it is on
+/// screen (a list row outside its window keeps its place for the keyboard, unseen and unhit).</summary>
 public sealed record OriginalRow(
     string Key, string Label, OriginalRowKind Kind, float X, float Y, float Width, float Height,
-    bool Enabled, int Column, BoardArt? Art)
+    bool Enabled, int Column, BoardArt? Art, bool Visible = true)
 {
     /// <summary>Whether an authored point lies on the row.</summary>
     public bool Contains(float x, float y) => x >= X && x < X + Width && y >= Y && y < Y + Height;
@@ -52,14 +56,14 @@ public sealed record OriginalInks(
 
 /// <summary>
 /// The Original presentation's screen graph, engine-free: the decoded top level with the
-/// remake-only Free Flight door, the Free Flight screen and the minimal Options screen, driven by
-/// one seat's semantic commands and composed into a <see cref="ComposedBoard"/> in the authored
-/// 800x600 space. The pointer arrives already mapped into that space; hovering a live row moves
-/// the focus onto it, so keyboard, pad and pointer share one cursor. Every rectangle and art name
-/// comes from the layout; the art's pixel size, which the layout does not carry, comes from the
-/// measurer the presentation injects.
+/// remake-only Free Flight and Dogfight doors, the two sortie screens over the shared player
+/// setup, and the minimal Options screen, driven by each seat's semantic commands and composed
+/// into a <see cref="ComposedBoard"/> in the authored 800x600 space. Seat 0's pointer arrives
+/// already mapped into that space; hovering a live row moves the focus onto it, so keyboard, pad
+/// and pointer share one cursor. Every rectangle and art name comes from the layout; the art's
+/// pixel size, which the layout does not carry, comes from the measurer the presentation injects.
 /// </summary>
-public sealed class OriginalShell
+public sealed partial class OriginalShell
 {
     /// <summary>The Free Flight door's key on the top level.</summary>
     public const string FreeFlightKey = "FREEFLIGHT";
@@ -111,13 +115,14 @@ public sealed class OriginalShell
 
     private readonly MenuLayout _layout;
     private readonly FreeFlightFeature _free;
+    private readonly PlayerSetupFeature _setup;
     private readonly Func<string, (int Width, int Height)?> _measure;
+    private readonly Func<PlayerSeat, IReadOnlyList<int>> _flightDevices;
     private readonly IReadOnlyList<OriginalChapter> _chapters;
-    private readonly IReadOnlyList<OriginalAirframe> _airframes;
     private readonly BoardArt? _plaque;
     private readonly BoardArt _activePointer;
     private readonly BoardArt _passivePointer;
-    private readonly int[] _focus = new int[3];
+    private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
     private readonly Dictionary<string, (int Width, int Height)?> _sizes = new(StringComparer.OrdinalIgnoreCase);
 
     private OriginalScreen _screen;
@@ -125,24 +130,27 @@ public sealed class OriginalShell
     private int _pressed = -1;
     private (float X, float Y)? _pointer;
     private int _pickedChapter = -1;
-    private int _pickedAirframe = -1;
     private string _choice = PresentationId.Original.Value;
 
-    /// <summary>A shell over <paramref name="layout"/> and the shared Free Flight feature.
-    /// <paramref name="measure"/> answers an art name with its strip's pixel size, or null when
-    /// the file is not there; the rosters default to <see cref="OriginalRosters"/>.</summary>
+    /// <summary>A shell over <paramref name="layout"/>, the shared Free Flight feature and the
+    /// shared player setup. <paramref name="measure"/> answers an art name with its strip's pixel
+    /// size, or null when the file is not there; <paramref name="flightDevices"/> answers a seat
+    /// with the devices its launch binds (none when omitted); the chapters default to
+    /// <see cref="OriginalRosters"/>.</summary>
     public OriginalShell(
         MenuLayout layout,
         FreeFlightFeature free,
+        PlayerSetupFeature setup,
         Func<string, (int Width, int Height)?> measure,
-        IReadOnlyList<OriginalChapter>? chapters = null,
-        IReadOnlyList<OriginalAirframe>? airframes = null)
+        Func<PlayerSeat, IReadOnlyList<int>>? flightDevices = null,
+        IReadOnlyList<OriginalChapter>? chapters = null)
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _free = free ?? throw new ArgumentNullException(nameof(free));
+        _setup = setup ?? throw new ArgumentNullException(nameof(setup));
         _measure = measure ?? throw new ArgumentNullException(nameof(measure));
+        _flightDevices = flightDevices ?? (_ => Array.Empty<int>());
         _chapters = chapters ?? OriginalRosters.Chapters;
-        _airframes = airframes ?? OriginalRosters.Airframes;
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
         Inks = ReadInks(layout, plaqueRow);
@@ -183,9 +191,6 @@ public sealed class OriginalShell
     /// <summary>The picked chapter's code, or null.</summary>
     public string? PickedChapter => _pickedChapter >= 0 ? _chapters[_pickedChapter].Code : null;
 
-    /// <summary>The picked airframe's node, or null.</summary>
-    public string? PickedAirframe => _pickedAirframe >= 0 ? _airframes[_pickedAirframe].Node : null;
-
     /// <summary>The presentation the Options screen would apply.</summary>
     public string PresentationChoice => _choice;
 
@@ -193,11 +198,11 @@ public sealed class OriginalShell
     public (float X, float Y)? Pointer => _pointer;
 
     /// <summary>Stands the shell on its top level, the landing point of every return and of a
-    /// cold start: the list cursors stay where they were, the airframe pick is dropped so a
-    /// return from flight cannot fly again on a stale pick.</summary>
+    /// cold start: the list cursors stay where they were, every seat's pick goes back to browsing
+    /// so a return from flight cannot fly again on a stale pick.</summary>
     public void ReturnToTopLevel()
     {
-        _pickedAirframe = -1;
+        _setup.ResetPicks(fits: true);
         Open(OriginalScreen.TopLevel);
     }
 
@@ -303,12 +308,8 @@ public sealed class OriginalShell
         switch (_screen)
         {
             case OriginalScreen.FreeFlight:
-                lines.Add(new BoardLine("FREE FLIGHT", LeftColumnX, ListTop - 44f, 0f, HeadingFont, BoardInk.Heading));
-                lines.Add(new BoardLine("MAP", LeftColumnX, ListTop - 20f, 0f, RowFont, BoardInk.Detail));
-                lines.Add(new BoardLine("AIRCRAFT", RightColumnX, ListTop - 20f, 0f, RowFont, BoardInk.Detail));
-                lines.Add(new BoardLine(
-                    "Up / Down  Choose       Left / Right  Column       Enter / A / Click  Pick       Esc / B  Back",
-                    0f, FooterY, BoardFit.AuthoredWidth, FooterFont, BoardInk.Detail, -1, false, BoardJustify.Center));
+            case OriginalScreen.Dogfight:
+                ComposeSortie(rows, lines);
                 break;
             case OriginalScreen.Options:
                 lines.Add(new BoardLine("OPTIONS", OptionsX, OptionsTop - 44f, 0f, HeadingFont, BoardInk.Heading));
@@ -321,6 +322,11 @@ public sealed class OriginalShell
         for (int i = 0; i < rows.Count; i++)
         {
             var row = rows[i];
+            if (!row.Visible)
+            {
+                continue;
+            }
+
             bool focused = i == focus;
             bool pressed = i == _pressed;
             switch (row.Kind)
@@ -402,7 +408,7 @@ public sealed class OriginalShell
         // Later rows draw over earlier ones, so the last hit wins.
         for (int i = rows.Count - 1; i >= 0; i--)
         {
-            if (rows[i].Contains(x, y))
+            if (rows[i].Visible && rows[i].Contains(x, y))
             {
                 return i;
             }
@@ -508,10 +514,6 @@ public sealed class OriginalShell
         return -1;
     }
 
-    private bool IsPicked(OriginalRow row) =>
-        (row.Column == 0 && _pickedChapter >= 0 && row.Key == _chapters[_pickedChapter].Code)
-        || (row.Column == 1 && _pickedAirframe >= 0 && row.Key == _airframes[_pickedAirframe].Node);
-
     private MenuExit? Activate(OriginalRow row, List<string> cues)
     {
         if (row.Kind != OriginalRowKind.ListRow)
@@ -527,6 +529,9 @@ public sealed class OriginalShell
                     case FreeFlightKey:
                         Open(OriginalScreen.FreeFlight);
                         break;
+                    case DogfightKey:
+                        Open(OriginalScreen.Dogfight);
+                        break;
                     case "MM_B_PREFERENCES":
                         Open(OriginalScreen.Options);
                         break;
@@ -536,7 +541,8 @@ public sealed class OriginalShell
 
                 break;
             case OriginalScreen.FreeFlight:
-                return ActivateFreeFlight(row);
+            case OriginalScreen.Dogfight:
+                return ActivateSortie(row);
             case OriginalScreen.Options:
                 switch (row.Key)
                 {
@@ -558,56 +564,18 @@ public sealed class OriginalShell
         return null;
     }
 
-    private MenuExit? ActivateFreeFlight(OriginalRow row)
-    {
-        switch (row.Key)
-        {
-            case BackKey:
-                Open(OriginalScreen.TopLevel);
-                return null;
-            case FlyKey:
-                if (_pickedChapter < 0 || _pickedAirframe < 0)
-                {
-                    return null;
-                }
-
-                _free.SelectChapter(_chapters[_pickedChapter].Code);
-                return _free.BuildExit(new[]
-                {
-                    new MenuSeatChoice(_airframes[_pickedAirframe].Node, Array.Empty<int>()),
-                });
-        }
-
-        if (row.Column == 0)
-        {
-            for (int i = 0; i < _chapters.Count; i++)
-            {
-                if (_chapters[i].Code == row.Key)
-                {
-                    _pickedChapter = i;
-                    _free.SelectChapter(row.Key);
-                }
-            }
-        }
-        else
-        {
-            for (int i = 0; i < _airframes.Count; i++)
-            {
-                if (_airframes[i].Node == row.Key)
-                {
-                    _pickedAirframe = i;
-                }
-            }
-        }
-
-        return null;
-    }
-
+    // Back on a sortie screen first undoes seat 0's own pick, a stage at a time; browsing, it
+    // leaves the screen.
     private MenuExit? Back()
     {
         if (_screen == OriginalScreen.TopLevel)
         {
             return new QuitExit();
+        }
+
+        if (IsSortie && Seat0 is { } seat && _setup.Back(seat) != SeatBack.Browsing)
+        {
+            return null;
         }
 
         Open(OriginalScreen.TopLevel);
@@ -621,6 +589,7 @@ public sealed class OriginalShell
         {
             case OriginalScreen.TopLevel:
                 rows.Add(TextButton(FreeFlightKey, "FREE FLIGHT", DoorX, DoorY, true, 0));
+                rows.Add(TextButton(DogfightKey, "DOGFIGHT", DoorX, DogfightDoorY, true, 0));
                 var main = _layout.Screen(OriginalAvailability.MainMenuSection);
                 foreach (string key in TopLevelButtons)
                 {
@@ -632,22 +601,8 @@ public sealed class OriginalShell
 
                 break;
             case OriginalScreen.FreeFlight:
-                for (int i = 0; i < _chapters.Count; i++)
-                {
-                    rows.Add(new OriginalRow(_chapters[i].Code, _chapters[i].Label, OriginalRowKind.ListRow,
-                        LeftColumnX, ListTop + (i * RowPitch), ListWidth, RowHeight, true, 0, null));
-                }
-
-                rows.Add(TextButton(BackKey, "BACK", LeftColumnX, PlaqueY, true, 0));
-                for (int i = 0; i < _airframes.Count; i++)
-                {
-                    rows.Add(new OriginalRow(_airframes[i].Node, _airframes[i].Name, OriginalRowKind.ListRow,
-                        RightColumnX, ListTop + (i * RowPitch), ListWidth, RowHeight, true, 1, null));
-                }
-
-                var flySize = PlaqueSize();
-                rows.Add(TextButton(FlyKey, "FLY", RightColumnX + ListWidth - flySize.Width, PlaqueY,
-                    _pickedChapter >= 0 && _pickedAirframe >= 0, 1));
+            case OriginalScreen.Dogfight:
+                SortieRows(rows);
                 break;
             case OriginalScreen.Options:
                 string choice = _choice == PresentationId.Original.Value ? "MENU: ORIGINAL" : "MENU: BUILT-IN";

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using CSVM.Flight;
 using CSVM.Utils;
 using Godot;
 
@@ -9,16 +10,20 @@ namespace CSVM.UI.Menu.Original;
 /// <summary>
 /// The Original presentation: <see cref="OriginalShell"/> drawn through a <see cref="ComposedBoardView"/>
 /// on the board layer, registered under <see cref="PresentationId.Original"/>. <see cref="Activate"/>
-/// builds the layer on the first call and stands the shell on the destination's screen on every
-/// call; <see cref="Tick"/> polls the host's first seat, maps its pointer from window pixels into
-/// the authored space through <see cref="BoardFit"/>, steps the shell, requests its cues and hands
-/// its exit to the host. The OS pointer is hidden while the presentation is on screen, since the
-/// shell draws the original's own. Every screen scales as one 4:3 board; nothing here stretches.
+/// builds the layer on the first call, refreshes the shared roster from the saved-plane store and
+/// stands the shell on the destination's screen on every call; <see cref="Tick"/> keeps the pad
+/// roster in step, scans the join gesture on the sortie screens, polls every seat, maps a
+/// pointer from window pixels into the authored space through <see cref="BoardFit"/>, steps the
+/// shell per seat, requests its cues and hands its exit to the host. The OS pointer is hidden
+/// while the presentation is on screen, since the shell draws the original's own.
 /// </summary>
 public sealed class OriginalPresentation : IMenuPresentation
 {
     /// <summary>The aid value that opens the Free Flight screen.</summary>
     public const string FreeFlightAid = "free-flight";
+
+    /// <summary>The aid value that opens the Dogfight screen.</summary>
+    public const string DogfightAid = "dogfight";
 
     /// <summary>The aid value that opens the Options screen.</summary>
     public const string OptionsAid = "options";
@@ -27,23 +32,31 @@ public sealed class OriginalPresentation : IMenuPresentation
     private readonly string _dataRoot;
     private readonly MenuLayout _layout;
     private readonly string _aid;
+    private readonly MenuInput _player1;
     private readonly Dictionary<string, (int Width, int Height)?> _sizes = new(StringComparer.OrdinalIgnoreCase);
+    private int _debugJoin;
     private CanvasLayer? _layer;
     private ComposedBoardView? _view;
     private OriginalShell? _shell;
+    private MenuSeatDevices? _devices;
     private IMenuHost? _host;
     private BoardPalette _palette = BoardPalette.Chalk;
     private bool _shown;
+    private bool _joiningOpen;
 
     /// <summary>A presentation drawing under <paramref name="parent"/> over the art beneath
     /// <paramref name="dataRoot"/>, composed from <paramref name="layout"/>, opening on
-    /// <paramref name="aid"/> (an Original <c>--menu=</c> value or "") at every top-level show.</summary>
-    public OriginalPresentation(Node parent, string dataRoot, MenuLayout layout, string aid)
+    /// <paramref name="aid"/> (an Original <c>--menu=</c> value or "") at every top-level show,
+    /// binding pads over seat 0's poller <paramref name="player1"/>, and seating
+    /// <paramref name="debugJoin"/> device-less players once, the screenshot aid.</summary>
+    public OriginalPresentation(Node parent, string dataRoot, MenuLayout layout, string aid, MenuInput player1, int debugJoin = 0)
     {
         _parent = parent ?? throw new ArgumentNullException(nameof(parent));
         _dataRoot = dataRoot ?? throw new ArgumentNullException(nameof(dataRoot));
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _aid = aid ?? string.Empty;
+        _player1 = player1 ?? throw new ArgumentNullException(nameof(player1));
+        _debugJoin = debugJoin;
     }
 
     public PresentationId Id => PresentationId.Original;
@@ -64,13 +77,28 @@ public sealed class OriginalPresentation : IMenuPresentation
         LabelActivate: ToColor(inks.LabelDepressed),
         Hint: ToColor(inks.Disabled));
 
+    /// <summary>The roster both presentations pick from: the eleven stock airframes, then the
+    /// saved customs, each flying its airframe's stock node.</summary>
+    public static IReadOnlyList<MenuAircraft> Roster(IReadOnlyList<CustomPlaneDef> customs)
+    {
+        var stock = new List<(string Name, string Node)>(OriginalRosters.Airframes.Count);
+        foreach (var airframe in OriginalRosters.Airframes)
+        {
+            stock.Add((airframe.Name, airframe.Node));
+        }
+
+        return PlayerSetupFeature.BuildRoster(stock, customs, PlanePickerRoster.AirframeNode);
+    }
+
     public void Activate(IMenuHost host, MenuReturnDestination destination)
     {
         ArgumentNullException.ThrowIfNull(host);
         _host = host;
+        var setup = host.Features.Get<PlayerSetupFeature>();
         if (_shell == null)
         {
-            _shell = new OriginalShell(_layout, host.Features.Get<FreeFlightFeature>(), Measure);
+            _devices = new MenuSeatDevices(_player1, setup);
+            _shell = new OriginalShell(_layout, host.Features.Get<FreeFlightFeature>(), setup, Measure, _devices.FlightPads);
             _palette = PaletteFor(_shell.Inks);
         }
 
@@ -80,6 +108,14 @@ public sealed class OriginalPresentation : IMenuPresentation
             _view = ComposedBoardView.Build(_dataRoot);
             _layer.AddChild(_view);
             _parent.AddChild(_layer);
+        }
+
+        // Re-read on every show, so a plane saved in the hangar or by another presentation is
+        // offered without a restart; cursors past a shrunk roster come back onto it.
+        setup.SetRoster(Roster(CustomPlaneStore.UserPlanes().List()));
+        foreach (var seat in setup.Seats)
+        {
+            seat.Cursor = Math.Clamp(seat.Cursor, 0, Math.Max(0, setup.Roster.Count - 1));
         }
 
         _shell.ReturnToTopLevel();
@@ -96,17 +132,24 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case FreeFlightAid:
                     _shell.Open(OriginalScreen.FreeFlight);
                     break;
+                case DogfightAid:
+                    _shell.Open(OriginalScreen.Dogfight);
+                    break;
                 case OptionsAid:
                     _shell.Open(OriginalScreen.Options);
                     break;
             }
         }
 
-        if (host.Seats.Count > 0)
+        DebugJoin(setup);
+        foreach (var seat in host.Seats)
         {
-            host.Seats[0].Prime();
+            seat.Prime();
         }
 
+        _devices!.Sync();
+        _devices.PrimeJoins();
+        _joiningOpen = JoiningOpen();
         _layer.Visible = true;
         _shown = true;
         Input.MouseMode = Input.MouseModeEnum.Hidden;
@@ -115,39 +158,58 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     public void Tick(float dt)
     {
-        if (!_shown || _shell == null || _host == null || _host.Seats.Count == 0 || _view == null)
+        if (!_shown || _shell == null || _host == null || _devices == null || _host.Seats.Count == 0 || _view == null)
         {
             return;
         }
 
-        var commands = _host.Seats[0].Poll(dt);
-        if (commands.Pointer is { } pointer)
+        bool changed = _devices.Sync();
+        bool joining = JoiningOpen();
+        if (joining && !_joiningOpen)
         {
-            var size = _view.GetViewportRect().Size;
-            var fit = BoardFit.For(size.X, size.Y);
-            commands = commands with
+            _devices.PrimeJoins();
+        }
+
+        _joiningOpen = joining;
+        if (joining)
+        {
+            changed |= _devices.ScanJoins();
+        }
+
+        var size = _view.GetViewportRect().Size;
+        var fit = BoardFit.For(size.X, size.Y);
+        // The seat list is live and a Back can shorten it mid-loop, so the count is re-read.
+        for (int i = 0; i < _host.Seats.Count; i++)
+        {
+            var commands = _host.Seats[i].Poll(dt);
+            if (commands.Pointer is { } pointer)
             {
-                Pointer = pointer with
+                commands = commands with
                 {
-                    X = (pointer.X - fit.OriginX) / fit.Scale,
-                    Y = (pointer.Y - fit.OriginY) / fit.Scale,
-                },
-            };
+                    Pointer = pointer with
+                    {
+                        X = (pointer.X - fit.OriginX) / fit.Scale,
+                        Y = (pointer.Y - fit.OriginY) / fit.Scale,
+                    },
+                };
+            }
+
+            var step = _shell.StepSeat(i, commands);
+            foreach (string cue in step.Cues)
+            {
+                _host.Audio.Cue(new MenuCue(cue));
+            }
+
+            if (step.Exit != null)
+            {
+                _host.Exit(step.Exit);
+                return;
+            }
+
+            changed |= step.Changed;
         }
 
-        var step = _shell.Step(commands);
-        foreach (string cue in step.Cues)
-        {
-            _host.Audio.Cue(new MenuCue(cue));
-        }
-
-        if (step.Exit != null)
-        {
-            _host.Exit(step.Exit);
-            return;
-        }
-
-        if (step.Changed)
+        if (changed)
         {
             Redraw();
         }
@@ -180,6 +242,36 @@ public sealed class OriginalPresentation : IMenuPresentation
     }
 
     private static Color ToColor(MenuLayoutColor c) => new(c.R / 255f, c.G / 255f, c.B / 255f, 1f);
+
+    // Joining is open on the two sortie screens, where a seat has an aircraft column to pick from.
+    private bool JoiningOpen() => _shell is { Screen: OriginalScreen.FreeFlight or OriginalScreen.Dogfight };
+
+    // --debug-join=N, once: N device-less seats with distinct cursors, the last one selected, so
+    // the seat strip and the aircraft tags can be shot with one controller.
+    private void DebugJoin(PlayerSetupFeature setup)
+    {
+        int extra = _debugJoin;
+        _debugJoin = 0;
+        for (int i = 0; i < extra; i++)
+        {
+            var seat = setup.Join(new MenuIdleSource());
+            if (seat == null)
+            {
+                break;
+            }
+
+            seat.Cursor = (i + 1) % Math.Max(1, OriginalRosters.Airframes.Count);
+            if (i == extra - 1)
+            {
+                setup.Select(seat);
+            }
+        }
+
+        if (extra > 0)
+        {
+            Log.Info("ui", $"original presentation: --debug-join seated {setup.Seats.Count} players (the added ones have no device)");
+        }
+    }
 
     private void Redraw()
     {

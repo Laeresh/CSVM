@@ -4,6 +4,7 @@ using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
 using CSVM.UI.Menu;
+using CSVM.UI.Menu.BuiltIn;
 using CSVM.Utils;
 using Godot;
 
@@ -213,11 +214,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     private static readonly Color RowLockedColor = new(0.55f, 0.95f, 0.62f);
 
     private readonly Dictionary<string, PlaneStats?> _stats = new();
-    // The joined players, player 1 first. Never empty once ShowMenu has run.
+    // This screen's view of the shared setup's seats, player 1 first, one wrapper per seat with
+    // the poller behind it and its last frame; SyncSlots keeps it in step with the feature.
     private readonly List<Slot> _slots = new();
-    // Previous-frame Start state of every connected pad, for edge-detecting the join gesture on
-    // pads that have no player (and therefore no MenuInput) yet.
-    private readonly Dictionary<int, bool> _joinPrev = new();
+    private int _slotsRevision = -1;
     // Steps 3-4's wizard wave slots: 0 enemies = unconfigured — the wizard's own "starts
     // empty" divergence from the original's always-four dropdowns, decision 1.
     private readonly WaveSlot[] _waves = new WaveSlot[4];
@@ -225,9 +225,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     // state and launch rule, its audio service plays the narration, and every exit goes to it.
     private IMenuHost _host = null!;
     private FreeFlightFeature _free = null!;
-    // The raw poller behind the host's first seat, player 1's for the pad bookkeeping (claiming,
-    // hotplug) that still lives here; the commands themselves are read through the seat.
+    // The shared player setup: the seats, their picks and the launch gate live there; this screen
+    // offers them and draws them.
+    private PlayerSetupFeature _setup = null!;
+    // The raw poller behind the host's first seat, player 1's, and the pad bookkeeping over it
+    // (claiming, joining, hotplug); the commands themselves are read through the seats.
     private MenuInput _player1 = null!;
+    private MenuSeatDevices _devices = null!;
 
     private string _zrdrPath = "";
     private string _dataRoot = "";
@@ -305,9 +309,6 @@ public sealed partial class LaunchMenu : CanvasLayer
     // the file). Null until then; a failed load leaves UiStrings.Empty here.
     private UiStrings? _uiStrings;
     private string _error = "";
-    // The pad player 1 claimed by driving the Mode/Chapter screens with it (−1 = none yet, i.e.
-    // player 1 is on the keyboard and every connected pad is still free to join).
-    private int _p1Pad = -1;
     // The join strip as last drawn — _Process redraws when the live roster changes (hotplug).
     private string _stripText = "";
     // --menu=campaign-guestcheck: which guest's flight check the aid asked for, applied by
@@ -473,10 +474,13 @@ public sealed partial class LaunchMenu : CanvasLayer
             _dataRoot = dataRoot,
             _host = host,
             _free = host.Features.Get<FreeFlightFeature>(),
+            _setup = host.Features.Get<PlayerSetupFeature>(),
             _player1 = player1,
             Layer = HudLayers.Board,
             Visible = false,
         };
+        menu._devices = new MenuSeatDevices(player1, menu._setup);
+        menu._setup.SetRoster(MenuRoster(Array.Empty<CustomPlaneDef>()));
 
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
@@ -705,28 +709,25 @@ public sealed partial class LaunchMenu : CanvasLayer
         OpenHangarAid(startScreen);
         OpenCampaignAid(startScreen);
         Visible = true;
-        if (_slots.Count == 0)
-            _slots.Add(new Slot(_player1));
+        // A host with no seat yet gets player 1's poller as seat 0, so there is a player to drive.
+        if (_setup.Seats.Count == 0)
+            _setup.Join(new BuiltInSeat(_player1));
+        SyncSlots();
+        // Every stage of the pick, not just the lock: a slot left Confirmed would satisfy the
+        // launch gate on the first frame back from flight and fly again without a press.
+        _setup.ResetPicks(fits: true);
         foreach (var slot in _slots)
-        {
-            // Every stage of the pick, not just the lock: a slot left Confirmed would satisfy the
-            // launch gate on the first frame back from flight and fly again without a press.
-            slot.Locked = false;
-            slot.Confirmed = false;
-            slot.InLoadout = false;
-            slot.Fit.ResetToStock();
             slot.Input.Prime();
-        }
         // A pane's own fit only exists once that slot has selected an airframe, so the aid makes
-        // that press for the reader — after the reset loop above, which would undo it.
+        // that press for the reader — after the reset above, which would undo it.
         if (startScreen is "loadout" or "selected")
         {
-            _slots[0].Locked = true;
-            _slots[0].InLoadout = startScreen == "loadout";
-            _slots[0].FitRow = 0;
+            _setup.Select(_slots[0].Seat);
+            if (startScreen == "loadout")
+                _setup.OpenLoadout(_slots[0].Seat);
         }
-        SyncDevices();
-        PrimeJoins();
+        _devices.Sync();
+        _devices.PrimeJoins();
         Rebuild();
     }
 
@@ -739,6 +740,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <see cref="ShowMenu"/> to have run, so there is a player 1 to drive.</summary>
     public bool Drive(MenuCommands frame)
     {
+        SyncSlots();
+        // Player 1's frame alone: the other seats read idle, not whatever their last poll held.
+        for (int i = 1; i < _slots.Count; i++)
+            _slots[i].Frame = MenuCommands.None;
         Apply(frame);
         bool dirty;
         try
@@ -800,14 +805,18 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// never act (no keyboard, no pad), so the shot is deterministic.</summary>
     public void DebugJoin(int extraPlayers)
     {
-        for (int i = 0; i < extraPlayers && _slots.Count < SplitScreen.MaxPlayers; i++)
-            _slots.Add(new Slot
-            {
-                PlaneIndex = (i + 1) % Planes.Length,
-                // Lock the last one so a screenshot shows both panel states (locked border lit
-                // vs still choosing) side by side.
-                Locked = i == extraPlayers - 1,
-            });
+        for (int i = 0; i < extraPlayers && _setup.Seats.Count < SplitScreen.MaxPlayers; i++)
+        {
+            var seat = _setup.Join(new MenuIdleSource());
+            if (seat == null)
+                break;
+            seat.Cursor = (i + 1) % Planes.Length;
+            // Lock the last one so a screenshot shows both panel states (locked border lit
+            // vs still choosing) side by side.
+            if (i == extraPlayers - 1)
+                _setup.Select(seat);
+        }
+        SyncSlots();
         GD.Print($"launchscreen: --debug-join → {_slots.Count} players (the added ones have no device)");
         // --menu=campaign-guestcheck's own walk, which needs the players this call just added: the
         // aid ran inside ShowMenu, before anybody had joined.
@@ -893,21 +902,22 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         // Device bookkeeping first: a pad that vanished must not still be driving a cursor, and a
         // pad that appeared should be joinable (or become P1's, if P1 has none).
-        bool dirty = SyncDevices();
+        bool dirty = _devices.Sync();
         dirty |= ScanJoins();
+        SyncSlots();
 
         // Every metric on every one of the three layouts is a function of the window, and a resize
         // or a resolution change arrives as no input at all, so the size itself is watched.
         dirty |= GetViewport().GetVisibleRect().Size != _viewSize;
 
-        // Player 1's commands come through the host's first seat; the other seats are polled here
-        // until the shared player setup owns them. Text capture is set before the poll: the
-        // PLANENAME screen's letter aliases must be dead for the frame that reads them.
+        // Player 1's commands come through the host's first seat and are applied onto its poller;
+        // every other seat's frame is read from its own source. Text capture is set before the
+        // poll: the PLANENAME screen's letter aliases must be dead for the frame that reads them.
         var seat = _host.Seats[0];
         seat.CapturingText = NamePage() != null;
         Apply(seat.Poll((float)delta));
         for (int i = 1; i < _slots.Count; i++)
-            _slots[i].Input.Poll((float)delta);
+            _slots[i].Frame = _slots[i].Seat.Source.Poll((float)delta);
         dirty |= HandleInput();
         // After the input, so a press that opened or left the briefing is already reflected: the
         // reveal is a clock the page cannot own, and the narration is a node the page cannot hold.
@@ -1059,9 +1069,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
     }
 
-    // Player 1's frame of semantic commands onto the poller HandleInput reads. Join is not
-    // applied: joining is a per-pad scan (ScanJoins), not a seat's command, until the shared
-    // player setup owns the seats.
+    // Player 1's frame of semantic commands onto the poller HandleInput reads, and onto its slot.
+    // Join is not applied: joining is a per-pad scan (ScanJoins), not a seat's command.
     private void Apply(MenuCommands frame)
     {
         var p1 = _slots[0].Input;
@@ -1071,142 +1080,54 @@ public sealed partial class LaunchMenu : CanvasLayer
         p1.Back = frame.Back;
         p1.Loadout = frame.Loadout;
         p1.Presets = frame.Contents;
+        _slots[0].Frame = frame;
     }
 
-    // Whether a pad already belongs to a player: one of players 2–4, or the pad player 1
-    // claimed on the Mode/Chapter screens (_p1Pad). Before that claim, player 1's
-    // pads are only borrowed — it reads every free device, so any of them can still join.
-    private bool IsClaimed(int pad)
-    {
-        if (pad == _p1Pad)
-            return true;
-        for (int i = 1; i < _slots.Count; i++)
-            if (_slots[i].Input.Pad == pad)
-                return true;
-        return false;
-    }
-
-    // Reconciles the joined players with the live pad roster: drops a player whose pad
-    // disconnected, then hands player 1 every unclaimed pad. That last part is the
-    // important one — player 1 reading the whole leftover roster rather than `pads[0]` is
-    // what keeps the phantom-device fix alive (see MenuInput.Pads), and
-    // it falls out for free that a pad joining as its own player leaves player 1's set and
-    // rejoins it on un-join. Returns true when anything changed (the strip needs redrawing).
-    private bool SyncDevices()
-    {
-        var connected = Pads.Connected();
-        bool dirty = false;
-        for (int i = _slots.Count - 1; i >= 1; i--)
-        {
-            int pad = _slots[i].Input.Pad;
-            if (pad >= 0 && !connected.Contains(pad))
-            {
-                GD.Print($"launchscreen: P{i + 1}'s pad {pad} disconnected — player left");
-                _slots.RemoveAt(i);
-                dirty = true;
-            }
-        }
-        if (_p1Pad >= 0 && !connected.Contains(_p1Pad))
-        {
-            GD.Print($"launchscreen: P1's pad {_p1Pad} disconnected — back to keyboard + any free pad");
-            _p1Pad = -1;
-            dirty = true;
-        }
-        // Once player 1 has claimed a pad it reads only that one; until then it borrows every
-        // device nobody else has, which is what keeps the any-pad phantom-device policy.
-        var free = new List<int>(connected.Count);
-        if (_p1Pad >= 0)
-        {
-            free.Add(_p1Pad);
-        }
-        else
-        {
-            foreach (int pad in connected)
-                if (!IsClaimed(pad))
-                    free.Add(pad);
-        }
-        var p1 = _slots[0].Input;
-        // The launchscreen always binds an explicit set here; null (every connected pad) is the
-        // in-session reading, which this screen never uses.
-        var bound = p1.Pads ?? Array.Empty<int>();
-        if (free.Count != bound.Length)
-        {
-            p1.Pads = free.ToArray();
-            p1.Prime(); // a button still held on a pad that just changed hands is not a press
-            dirty = true;
-        }
-        else
-        {
-            for (int i = 0; i < free.Count; i++)
-                if (free[i] != bound[i])
-                {
-                    p1.Pads = free.ToArray();
-                    p1.Prime();
-                    dirty = true;
-                    break;
-                }
-        }
-        return dirty;
-    }
-
-    // Seeds the per-pad join edges from the current state, so a Start held while the
-    // menu appears does not immediately join a player.
-    private void PrimeJoins()
-    {
-        _joinPrev.Clear();
-        foreach (int pad in Pads.Connected())
-            _joinPrev[pad] = MenuInput.JoinPressed(pad);
-    }
-
-    // Start on an unclaimed pad joins a new player on the Plane or Campaign screen.
-    // The same ordering rule, player 1 claiming a pad first, keeps the gesture unambiguous on both.
-    // A campaign join closes at the seated player's FLY MISSION.
+    // Start on an unclaimed pad joins a new player on the Plane or Campaign screen; the scan
+    // itself is the device bookkeeping's. A campaign join closes at the seated player's FLY MISSION.
     private bool ScanJoins()
     {
-        bool dirty = false;
         if (_screen != Screen.Plane && _screen != Screen.Campaign)
             return false;
         // The seated player's FLY MISSION opens the first guest's check instead of leaving, so
         // the field's own lock closes joining.
         if (_campaign is { Field.Locked: true })
             return false;
-        foreach (int pad in Pads.Connected())
-        {
-            bool pressed = MenuInput.JoinPressed(pad);
-            _joinPrev.TryGetValue(pad, out bool prev);
-            _joinPrev[pad] = pressed;
-            if (!pressed || prev || IsClaimed(pad) || _slots.Count >= SplitScreen.MaxPlayers)
-                continue;
-            var slot = new Slot();
-            slot.Input.Pads = new[] { pad };
-            slot.Input.Prime();
-            _slots.Add(slot);
-            GD.Print($"launchscreen: P{_slots.Count} joined on pad {pad} \"{Input.GetJoyName(pad)}\"");
-            dirty = true;
-        }
-        return dirty;
+        return _devices.ScanJoins();
     }
 
-    // Pins player 1 to whichever pad it is actually steering the Mode/Chapter screens
-    // with ("logging in" that controller). Called only from those screens, so by the time the
-    // aircraft list appears player 1's device is settled and every other pad is unambiguously a
-    // joiner. Player 1 driving with the keyboard claims nothing — then all pads stay free, which
-    // is exactly the keyboard-versus-controllers setup.
-    private bool ClaimP1Pad()
+    // Joining opens on the screen being entered, so a Start held on the way in must not fire.
+    private void PrimeJoins() => _devices.PrimeJoins();
+
+    // Keeps the slot wrappers in step with the feature's seats: one per seat, seat 0 over player
+    // 1's poller, a pad seat over the poller behind its source, a device-less seat over an idle one.
+    private void SyncSlots()
     {
-        int pad = _slots[0].Input.LastActivePad;
-        if (_p1Pad >= 0 || pad < 0)
-            return false;
-        _p1Pad = pad;
-        GD.Print($"launchscreen: P1 claimed pad {pad} \"{Input.GetJoyName(pad)}\" " +
-                 "(other pads join at aircraft select)");
-        return true;
+        var seats = _setup.Seats;
+        if (_slotsRevision == _setup.Revision && _slots.Count == seats.Count)
+            return;
+        var kept = new Dictionary<PlayerSeat, Slot>(_slots.Count);
+        foreach (var slot in _slots)
+            kept[slot.Seat] = slot;
+        _slots.Clear();
+        for (int i = 0; i < seats.Count; i++)
+        {
+            if (!kept.TryGetValue(seats[i], out var slot))
+                slot = new Slot(seats[i], i == 0 ? _player1 : InputBehind(seats[i].Source));
+            _slots.Add(slot);
+        }
+        _slotsRevision = _setup.Revision;
     }
+
+    private static MenuInput InputBehind(IMenuInputSource source) =>
+        source is BuiltInSeat seat ? seat.Input : new MenuInput();
 
     private void Unjoin(int index)
     {
-        GD.Print($"launchscreen: P{index + 1} left (pad {_slots[index].Input.Pad})");
+        GD.Print($"launchscreen: P{index + 1} left (pad {MenuSeatDevices.PadOf(_slots[index].Seat.Source)})");
+        _setup.Unjoin(_slots[index].Seat);
         _slots.RemoveAt(index);
+        _slotsRevision = _setup.Revision;
     }
 
     // --- navigation ---
@@ -1220,7 +1141,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (_screen != Screen.Plane)
         {
             var p1 = _slots[0].Input;
-            dirty |= ClaimP1Pad();
+            dirty |= _devices.ClaimP1Pad();
             if (_screen == Screen.Hangar)
             {
                 return HandleHangarInput(p1) || dirty;
@@ -1304,7 +1225,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             // Everyone else can only drop out from here.
             for (int i = _slots.Count - 1; i >= 1; i--)
             {
-                if (!_slots[i].Input.Back)
+                if (!_slots[i].Frame.Back)
                     continue;
                 Unjoin(i);
                 dirty = true;
@@ -1312,11 +1233,13 @@ public sealed partial class LaunchMenu : CanvasLayer
             return dirty;
         }
 
-        // Plane screen: all joined players pick simultaneously, each with their own cursor.
+        // Plane screen: all joined players pick simultaneously, each with their own cursor; the
+        // stages themselves move through the shared setup.
         for (int i = _slots.Count - 1; i >= 0; i--)
         {
             var slot = _slots[i];
-            var input = slot.Input;
+            var seat = slot.Seat;
+            var input = slot.Frame;
 
             // A pane inside its loadout reads nothing else, so one player arming cannot pull
             // anybody else out of browsing and cannot launch while somebody is still in there.
@@ -1326,17 +1249,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                 continue;
             }
 
-            if (input.Move != 0 && !slot.Locked)
+            if (input.MoveY != 0 && !slot.Locked)
             {
-                int was = slot.PlaneIndex;
-                slot.PlaneIndex = Wrap(slot.PlaneIndex + input.Move, i == 0 ? PlaneRowCount : _roster.Count);
-                if (slot.PlaneIndex != was)
-                {
-                    // Pylon count and gun slots are per-airframe, so a fit built for one has
-                    // nowhere to live on another. Keyed to the airframe changing, never to
-                    // unlocking: backing out to re-read the stats line must not cost the fit.
-                    slot.Fit.ResetToStock();
-                }
+                // Browse resets the fit when the airframe changes and only then: backing out to
+                // re-read the stats line must not cost the fit.
+                _setup.Browse(seat, Wrap(slot.PlaneIndex + input.MoveY, i == 0 ? PlaneRowCount : _roster.Count));
                 dirty = true;
             }
             // The hangar row is a door, not an aircraft: it never locks, so nothing downstream
@@ -1349,8 +1266,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
             if (input.Loadout && slot.Locked && !slot.Confirmed)
             {
-                slot.InLoadout = true;
-                slot.FitRow = 0;
+                _setup.OpenLoadout(seat);
                 dirty = true;
             }
             else if (input.Accept && !slot.Confirmed)
@@ -1359,44 +1275,28 @@ public sealed partial class LaunchMenu : CanvasLayer
                 // everybody has. Unconditional — a pilot with no interest in weapons taps twice
                 // and flies the stock fit, which is the old behaviour plus one press.
                 if (slot.Locked)
-                {
-                    slot.Confirmed = true;
-                }
+                    _setup.Confirm(seat);
                 else
-                {
-                    slot.Locked = true;
-                }
+                    _setup.Select(seat);
                 _error = "";
                 dirty = true;
             }
             else if (input.Back)
             {
-                if (slot.Confirmed)
+                if (_setup.Back(seat) == SeatBack.Browsing)
                 {
-                    slot.Confirmed = false;
-                }
-                else if (slot.Locked)
-                {
-                    slot.Locked = false;
-                }
-                else if (i == 0)
-                {
-                    // Player 1 backing out returns everyone to whichever screen fed the Plane
-                    // screen this time, mirroring the forward skip of Waves/Wingmen for
-                    // Instant Action's ace duel.
-                    _screen = _mode != MenuMode.Stunt ? Screen.Chapter
-                        : CurrentMissionTypes[_missionTypeIndex].Key == "dogfight_ace" ? Screen.MissionType
-                        : Screen.Wingmen;
-                    foreach (var s in _slots)
+                    if (i == 0)
                     {
-                        s.Locked = false;
-                        s.Confirmed = false;
-                        s.InLoadout = false;
+                        // Player 1 backing out returns everyone to whichever screen fed the Plane
+                        // screen this time, mirroring the forward skip of Waves/Wingmen for
+                        // Instant Action's ace duel.
+                        _screen = _mode != MenuMode.Stunt ? Screen.Chapter
+                            : CurrentMissionTypes[_missionTypeIndex].Key == "dogfight_ace" ? Screen.MissionType
+                            : Screen.Wingmen;
+                        _setup.ResetPicks(fits: false);
+                        return true;
                     }
-                    return true;
-                }
-                else
-                {
+
                     Unjoin(i);
                 }
                 dirty = true;
@@ -1418,13 +1318,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     // away a fit somebody was only stepping back from. Reset to stock is the revert we keep.
     private bool HandleFitInput(Slot slot)
     {
-        var input = slot.Input;
+        var input = slot.Frame;
         var def = StockFitFor(slot.PlaneIndex);
         var rows = FitRowsFor(def, slot.Fit);
         bool dirty = false;
-        if (input.Move != 0)
+        if (input.MoveY != 0)
         {
-            slot.FitRow = Wrap(slot.FitRow + input.Move, rows.Count);
+            slot.FitRow = Wrap(slot.FitRow + input.MoveY, rows.Count);
             dirty = true;
         }
 
@@ -1444,7 +1344,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         if (input.Back || input.Loadout)
         {
-            slot.InLoadout = false;
+            _setup.CloseLoadout(slot.Seat);
             dirty = true;
         }
         return dirty;
@@ -2287,10 +2187,16 @@ public sealed partial class LaunchMenu : CanvasLayer
     // _roster.Count, which PlaneRowCount - 1 still admits.
     private void RefreshRoster()
     {
-        _roster = PlanePickerRoster.Build(Planes, CustomPlaneStore.UserPlanes().List());
+        var customs = CustomPlaneStore.UserPlanes().List();
+        _roster = PlanePickerRoster.Build(Planes, customs);
+        _setup.SetRoster(MenuRoster(customs));
         foreach (var slot in _slots)
             slot.PlaneIndex = Math.Min(slot.PlaneIndex, PlaneRowCount - 1);
     }
+
+    // The same roster as the shared setup's rows, so both presentations pick from one list.
+    private static IReadOnlyList<MenuAircraft> MenuRoster(IReadOnlyList<CustomPlaneDef> customs) =>
+        PlayerSetupFeature.BuildRoster(Planes, customs, PlanePickerRoster.AirframeNode);
 
     // The stock display name behind a roster row: the row's own name for a stock pick, the
     // airframe's stock aircraft for a custom, for consumers that speak ia.json's vocabulary.
@@ -2395,26 +2301,13 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
     }
 
-    // The launch gate reads CONFIRMED, the second stage, not the lock. That is what leaves a
-    // window between selecting an airframe and flying it for the loadout to be opened in;
-    // locking used to launch on the same frame the last slot locked.
-    private bool AllConfirmed() => _slots.Count > 0 && ConfirmedCount() == _slots.Count;
-
-    private int ConfirmedCount()
-    {
-        int confirmed = 0;
-        foreach (var slot in _slots)
-            if (slot.Confirmed)
-                confirmed++;
-        return confirmed;
-    }
-
-    // Whether the Plane screen's launch gesture is live right now. A lone Dogfight pilot
-    // stays on this screen with JoinHint naming what it is waiting for. Free Flight's gate is
-    // its feature's; the other modes keep the static rule until their own features exist.
+    // Whether the Plane screen's launch gesture is live right now. The gate reads CONFIRMED, the
+    // second stage, which leaves a window between selecting an airframe and flying it for the
+    // loadout to be opened in. A lone Dogfight pilot stays on this screen with JoinHint naming
+    // what it is waiting for. Free Flight's gate adds its chapter to the setup's seat rule.
     private bool CanLaunch() => _mode == MenuMode.Free
-        ? _free.CanLaunch(_slots.Count, ConfirmedCount())
-        : CanLaunch(_mode, AllConfirmed(), _slots.Count);
+        ? _free.CanLaunch(_setup.Seats.Count, _setup.ConfirmedCount)
+        : _setup.CanLaunch(_mode);
 
     // Every non-campaign launch leaves as one LaunchExit through the host. Free Flight's is the
     // feature's own; Instant Action and Dogfight build theirs here until their features exist.
@@ -2457,33 +2350,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         _host.Exit(new LaunchExit(chapter, seats, _mode, iaDef));
     }
 
-    // Every joined seat's pick as the typed seat choice: the roster row's node, the pads the seat
-    // joined on, its fit edits (null for stock) and, for a custom row, the store's def. ⚠ A custom
-    // pick launches as its airframe's stock node; the def rides along for the session build.
-    private List<MenuSeatChoice> SeatChoices()
-    {
-        var seats = new List<MenuSeatChoice>(_slots.Count);
-        CustomPlaneStore? store = null;
-        foreach (var slot in _slots)
-        {
-            var pick = _roster[slot.PlaneIndex];
-            CustomPlaneDef? custom = null;
-            if (pick.CustomName is { } name)
-            {
-                store ??= CustomPlaneStore.UserPlanes();
-                custom = store.Load(name);
-                if (custom == null)
-                {
-                    GD.PushWarning($"custom plane '{name}' could not be loaded, flying the stock {pick.Node}");
-                }
-            }
-
-            seats.Add(new MenuSeatChoice(pick.Node, slot.Input.Pads ?? Array.Empty<int>(),
-                slot.Fit.IsStock ? null : slot.Fit, custom));
-        }
-
-        return seats;
-    }
+    // Every joined seat's pick as the typed seat choice, built by the setup: the roster row's
+    // node, the pads the seat joined on (the device bookkeeping's answer), its fit edits (null for
+    // stock) and, for a custom row, the def the roster was read with. ⚠ A custom pick launches as
+    // its airframe's stock node; the def rides along for the session build.
+    private IReadOnlyList<MenuSeatChoice> SeatChoices() => _setup.Choices(_devices.FlightPads);
 
     // --- rendering ---
 
@@ -3448,35 +3319,43 @@ public sealed partial class LaunchMenu : CanvasLayer
         public int SkillIndex;
     }
 
-    // One joined player: their device binding, their cursor in the plane list, and
-    // whether they have locked their pick. Player 1's poller is the host's first seat's.
+    // This screen's view of one joined seat: the shared seat (cursor, stages, fit), the poller
+    // behind it (the device label, the campaign's guest check) and its last frame of commands.
     private sealed class Slot
     {
+        public readonly PlayerSeat Seat;
         public readonly MenuInput Input;
+        public MenuCommands Frame = MenuCommands.None;
+
+        public Slot(PlayerSeat seat, MenuInput input)
+        {
+            Seat = seat;
+            Input = input;
+        }
 
         // Starts at Planes's index 0 — the Autogyro under the 3700 order, matching gui_continue's
         // own no-custom-planes selection rather than being positional by accident.
-        public int PlaneIndex;
+        public int PlaneIndex
+        {
+            get => Seat.Cursor;
+            set => Seat.Cursor = value;
+        }
 
-        // Browsing → Locked → Confirmed. The second stage exists so there IS a moment to open the
-        // loadout from: locking used to launch on the same frame the last slot locked.
-        public bool Locked;
-        public bool Confirmed;
+        // Browsing → Locked → Confirmed, moved only through the setup's operations.
+        public bool Locked => Seat.Locked;
 
-        // This pane is showing its loadout list instead of the roster. Per slot, so one player
+        public bool Confirmed => Seat.Confirmed;
+
+        // This pane is showing its loadout list instead of the roster. Per seat, so one player
         // arming cannot pull anybody else out of browsing.
-        public bool InLoadout;
-        public int FitRow;
-        public LoadoutChoice Fit = new();
+        public bool InLoadout => Seat.InLoadout;
 
-        public Slot()
-            : this(new MenuInput())
+        public int FitRow
         {
+            get => Seat.FitRow;
+            set => Seat.FitRow = value;
         }
 
-        public Slot(MenuInput input)
-        {
-            Input = input;
-        }
+        public LoadoutChoice Fit => Seat.Fit;
     }
 }

@@ -243,10 +243,14 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/MenuExit.cs` — the one typed menu exit `Launcher` consumes: `LaunchExit`, `CampaignMissionExit`, `QuitExit`, `PresentationSwitchExit`; presentations never build sessions.
 - `src/UI/Menu/MenuReturnDestination.cs` — semantic return destinations (top level, cabin, debrief) that each presentation maps into its own screen graph.
 - `src/UI/Menu/MenuLayout.cs` — the runtime reader of `extracted/rof/menu_layout.json`: screens, widgets with typed field access through the artifact's own kind table, navigation edges, script-named assets; engine-free.
-- `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph, engine-free: the decoded top level plus the Free Flight door, the Free Flight and Options screens, pointer hit-testing, column focus, cues, exits and the composed board.
-- `src/UI/Menu/Original/OriginalPresentation.cs` — the Original presentation node: the shell drawn through `ComposedBoardView` on the board layer, the pointer mapped through `BoardFit`, the OS pointer hidden while shown.
+- `src/UI/Menu/PlayerSetupFeature.cs` — the shared player setup: seats claimed by input-source identity, the aircraft roster (`MenuAircraft`), each seat's cursor, two-stage pick and fit, the launch gate per mode, the `MenuSeatChoice` list; device-neutral and engine-free.
+- `src/UI/Menu/MenuIdleSource.cs` — a seat's input source with no device behind it, "no device", idle every frame; what the screenshot aid seats extra players over.
+- `src/UI/MenuSeatDevices.cs` — the pad side of the shared player setup for any presentation: seat 0's claimed pad, the join gesture per pad, hotplug, and the flight binding a seat's source carries.
+- `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph, engine-free: the decoded top level plus the Free Flight and Dogfight doors, the two sortie screens over the shared player setup, the Options screen, pointer hit-testing, column focus, cues, exits and the composed board.
+- `src/UI/Menu/Original/OriginalSeats.cs` — the shell's sortie screens (a `partial`): the aircraft window over the shared roster, every seat's cursor tagged on it, the seat strip, the hint, FLY as seat 0's confirmation and the launch, later seats' own frames.
+- `src/UI/Menu/Original/OriginalPresentation.cs` — the Original presentation node: the shell drawn through `ComposedBoardView` on the board layer, every seat polled, the pointer mapped through `BoardFit`, pad joins scanned on the sortie screens, the OS pointer hidden while shown.
 - `src/UI/Menu/Original/OriginalAvailability.cs` — the minimal Original availability check: the layout reads, `[MainMenu]` is there, its art is on disk; a reason, or the loaded layout.
-- `src/UI/Menu/Original/OriginalRosters.cs` — the Free Flight screen's two rosters: chapter labels over the shared roster and the eleven stock airframes resolved through the Instant Action decode.
+- `src/UI/Menu/Original/OriginalRosters.cs` — the sortie screens' chapter labels over the shared roster, and the eleven stock airframes resolved through the Instant Action decode, the stock half of the shared aircraft roster.
 - `src/UI/Menu/Original/OriginalCues.cs` — the two cue names Original asks for: a button rollover and a button click.
 - `src/UI/Menu/Original/PointerSeat.cs` — seat 0 with the mouse as its `MenuPointer`, the click a press edge; device reads injected, so engine-free.
 - `src/Session/MenuCueTable.cs` — the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
@@ -255,7 +259,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BoardMenuView.cs` — draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
-- `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session (Free Flight through `src/UI/Menu/FreeFlightFeature.cs`, the first shared feature); also the hangar's two doors, the campaign's one (`OpenCampaignCabin`) and its mission-end debrief (`OpenCampaignScrapbook`, both re-reading the profile from the store), the Options door (the menu presentation chooser) and the renderer both flows draw through.
+- `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, the seats, joins and picks offered over `src/UI/Menu/PlayerSetupFeature.cs`, then the typed launch exit (Free Flight through `src/UI/Menu/FreeFlightFeature.cs`, the first shared feature); also the hangar's two doors, the campaign's one (`OpenCampaignCabin`) and its mission-end debrief (`OpenCampaignScrapbook`, both re-reading the profile from the store), the Options door (the menu presentation chooser) and the renderer both flows draw through.
 - `src/UI/MenuZones.cs` — how the launchscreen divides a window: a fixed header band, a fixed footer band, the selection list in what is left, and the one scale all three share. Engine-free.
 - `src/UI/InstantActionPresets.cs` — the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
 - `src/UI/PlanePickerRoster.cs` — the one roster every human plane picker draws: 11 stock airframes then the store's saved customs, each custom carrying its store name and its airframe's stock node (D32's launch seam); engine-free build/lookup rules.
@@ -4008,28 +4012,43 @@ a real menu; `CSVM.Tests/MenuZonesTests.cs` holds the division rule itself.
 
 The launchscreen is the Built-in presentation's screen graph and stands on the menu host
 (`src/UI/Menu/MenuHost.cs`), which `Build(zrdrPath, dataRoot, host, player1)` takes: it reads the
-`FreeFlightFeature` out of the host's feature set, player 1's commands out of the host's first
-seat, plays narration through the host's audio service and leaves only through `IMenuHost.Exit`.
-It has no callbacks. `player1` is the raw `MenuInput` behind that first seat, handed over
-separately because the pad bookkeeping (claiming on Mode/Chapter, joining, hotplug in
-`SyncDevices`) still binds devices here: the seat carries commands, the poller carries the
-binding, and both are the same object. `_Process` is the frame: device sync and join scan, then
-`host.Seats[0].Poll` applied onto player 1's poller (`Apply`), the other seats polled directly
-until the shared player setup owns them, `HandleInput`, the campaign audio tick and the repaint.
-The Built-in presentation switches the node's own process callback off and calls `_Process` from
-its `Tick`, which is also how the frame-driving suites run it. `Drive(MenuCommands)` applies one
-frame of player 1's semantic commands and handles it, for the scripted journey suites.
+`FreeFlightFeature` and the `PlayerSetupFeature` out of the host's feature set, player 1's
+commands out of the host's first seat, plays narration through the host's audio service and
+leaves only through `IMenuHost.Exit`. It has no callbacks. `player1` is the raw `MenuInput`
+behind that first seat, handed over separately because the pad bookkeeping (claiming on
+Mode/Chapter, joining, hotplug) binds devices through `MenuSeatDevices` over it: the seat carries
+commands, the poller carries the binding, and both are the same object. The seats themselves are
+the setup feature's; `_slots` is this screen's view of them (`SyncSlots`, keyed by the feature's
+`Revision`), one wrapper per seat holding the poller behind it (seat 0's `player1`, a pad seat's
+own, an idle one for a device-less seat) and its last `MenuCommands` frame. `_Process` is the
+frame: `MenuSeatDevices.Sync`, the join scan (open on the Plane and Campaign screens only, closed
+by the campaign field's lock), `SyncSlots`, then `host.Seats[0].Poll` applied onto player 1's
+poller and slot (`Apply`), every other seat's `Source.Poll` into its slot's frame, `HandleInput`,
+the campaign audio tick and the repaint. The Built-in presentation switches the node's own
+process callback off and calls `_Process` from its `Tick`, which is also how the frame-driving
+suites run it. `Drive(MenuCommands)` applies one frame of player 1's semantic commands with every
+other seat idle and handles it, for the scripted journey suites; a suite drives a later seat by
+joining a scripted source through the feature and running `_Process`.
 
 `FreeFlightFeature` (`src/UI/Menu/FreeFlightFeature.cs`) owns the chapter roster it offers, the
 picked chapter, the launch gate and the typed `LaunchExit`. The Chapter screen's Accept under Free
 Flight hands it the cursor's code; `--menu=plane`, `selected` and `loadout` skip that Accept, so
-`ShowMenu` hands it over for them. `CanLaunch()` asks the feature's gate in Free mode and keeps the
-static `CanLaunch(mode, allLocked, joined)` rule for the other modes. `FireLaunch` builds one
-`MenuSeatChoice` per joined seat (`SeatChoices`: the roster row's node, the seat's pads, its fit
-edits or null for stock, and a custom row's def read from the store, with a warning when the file
-is gone) and hands the host one `LaunchExit`: the feature's own in Free mode, one built here with
-the wizard's `InstantActionDef` for Instant Action and the chapter for Dogfight, until those modes
-have features of their own. The cabin's FLY MISSION (`FlyCampaignMission`) leaves the same way as
+`ShowMenu` hands it over for them. The Plane screen's every stage moves through the setup
+feature: `Browse` on a cursor step (player 1's wraps over the roster plus the hangar door row,
+which the feature lets a cursor park on and refuses to select), `Select` then `Confirm` on Accept,
+`Back` a stage at a time (browsing, player 1's Back leaves for the feeding screen with
+`ResetPicks(fits: false)`; a guest's unjoins), `OpenLoadout`/`CloseLoadout` for a pane's Ammo
+Selection list; `ShowMenu` is `ResetPicks(fits: true)` plus `Select` (and `OpenLoadout`) for the
+`selected`/`loadout` aids; `DebugJoin` joins `MenuIdleSource`s. `CanLaunch()` asks the Free
+Flight gate in Free mode (its chapter plus the setup's seat count and confirmations) and the
+setup's `CanLaunch(mode)` otherwise, which is the static `CanLaunch(mode, allLocked, joined)`
+rule kept for the tests. `FireLaunch` takes the setup's `Choices(MenuSeatDevices.FlightPads)`,
+one `MenuSeatChoice` per seat (the roster row's node, the pads the seat's source is bound to, its
+fit edits or null for stock, and a custom row's def as the roster was read), and hands the host one
+`LaunchExit`: the feature's own in Free mode, one built here with the wizard's `InstantActionDef`
+for Instant Action and the chapter for Dogfight, until those modes have features of their own.
+`RefreshRoster` sets the setup's roster (`PlayerSetupFeature.BuildRoster` over `Planes` and the
+store's customs) beside this screen's own `PickerPlane` list, so a saved plane appears in both. The cabin's FLY MISSION (`FlyCampaignMission`) leaves the same way as
 a `CampaignMissionExit` (profile, story position, one seat choice per joined human with its stock
 node, joined pads, stored fit and hangar build). Back on the Mode screen leaves as a `QuitExit`.
 The Mode screen's last row is the Options door (`OptionsRow`, `--menu=options`): a two-row screen
@@ -4039,9 +4058,10 @@ the choice; the launcher persists it and restarts the menu. The stepper opens on
 request, read from `OptionsStore`, so it shows back what was asked for rather than what is active.
 This door is the one Built-in change the presentation work makes; every other Built-in screen,
 control, payload, aid and return keeps its behaviour.
-The Chapter screen, the aircraft screen, joining and locking stay here: they are shared with the
-other modes, and the feature never reads them. `Chapters` is this screen's row text zipped over
-`MenuChapters`, the shared roster. The `Shown*` read-outs (`ShownScreen`, `ShownHeading`,
+The Chapter screen and the aircraft screen's drawing (the split panes, the join strip with each
+seat's `MenuInput.DeviceLabel`, the lock colours, `JoinHint`'s texts, the same-frame order of the
+per-seat loop) stay here; the seats, their stages and the gate are the setup feature's. `Chapters`
+is this screen's row text zipped over `MenuChapters`, the shared roster. The `Shown*` read-outs (`ShownScreen`, `ShownHeading`,
 `ShownBreadcrumb`, `ShownFooter`, `ShownDetail`, `ShownJoinHint`, `ShownRow`, `ShownRowCount`,
 `ShownRowText`) say what the screen draws. `menu-free-flight-journey`
 (`src/Testing/MenuJourneySuites.cs`) drives the real menu through them from Mode to the typed
@@ -4049,7 +4069,13 @@ exit, back out at every step, through a return and the `--menu=` aids, and pins 
 present behaviour with its quirks: the chapter, airframe and mode cursors survive Back and a return
 from flight while the selection does not, a bare launch's return lands on Mode, an aid re-enters
 under whatever mode was last picked, a selected airframe's cursor does not move, and the launch
-fires only when every joined seat has confirmed. `menu-host-tracer` (`src/Testing/MenuHostSuites.cs`)
+fires only when every joined seat has confirmed. `menu-player-setup-journey`
+(`src/Testing/MenuPlayerSetupSuites.cs`) pins the seats the same way: one to four seats through
+`DebugJoin`, the two-stage pick with Back at every stage, the split heading, player 1's Back
+unselecting everyone, the Dogfight gate with its hint, the four-seat maximum, the aids under two
+seats and a return keeping the seats; `menu-player-setup-seats` (same file) joins scripted
+sources through the feature and drives them through `_Process` in Built-in and through the host's
+`Tick` in Original. `menu-host-tracer` (`src/Testing/MenuHostSuites.cs`)
 runs the same journey through a real `MenuHost` with the Built-in presentation registered: frames
 through the host's seat, the exit through the host's sink with the presentation hidden, and a
 top-level re-show that re-enters with the state the journey suite pins. Suites that stand a bare
@@ -4502,7 +4528,11 @@ menu's is. Serves both the launchscreen and the in-flight board menus.
 `MoveX` (Left/Right) is `Move`'s horizontal twin, added
 so an Instant Action wizard screen can carry a vertical list cursor and a horizontal stepper at
 once without either read starving the other: MissionType's lives, WaveEdit's four fields and
-Wingmen's count/aircraft all read it — every other screen ignores it.
+Wingmen's count/aircraft all read it — every other screen ignores it. In the menu a `MenuInput` is
+the device half of a seat: `BuiltInSeat` wraps one into an `IMenuInputSource` (seat 0 over the
+keyboard plus the unclaimed pads; a joined pad over a one-pad poller), and `MenuSeatDevices`
+binds `Pads` and reads `Pad`, `LastActivePad` and `JoinPressed`. Nothing in the shared player setup
+reads it; a seat's pad is this poller's own detail.
 `Typed` (the letters, digits and spaces pressed this frame, upper case under Shift) and `Erase`
 serve a screen with a text field; they are polled and edge-detected per key like everything else
 here, not read off an input event, so text and navigation share one clock. `PadMove`/`PadMoveX` are
@@ -6814,14 +6844,19 @@ registry only says what exists in the build.
 ## src/UI/Menu/IMenuHost.cs
 What the process-lifetime menu host lends the active presentation: `Features`
 (`MenuFeatureSet`), `Audio` (`IMenuAudio`), `Seats` (one `IMenuInputSource` each, a live list the
-join flow grows), and `Exit(MenuExit)`, the only way out. The host owns all four across
+join flow grows: the `PlayerSetupFeature`'s `Sources` once that feature is registered), and
+`Exit(MenuExit)`, the only way out. The host owns all four across
 presentation switches; a presentation borrows them between `Activate` and `Deactivate` and keeps
 no reference past that. The implementation is `MenuHost` below.
 
 ## src/UI/Menu/MenuHost.cs
 The process-lifetime host, engine-free: `Launcher` owns one. Constructed over a
 `PresentationRegistry`, an `IMenuAudio` and an exit sink; the owner adds features (`Features.Add`)
-and seats (`AddSeat`/`RemoveSeat`). `Select(forceBuiltIn, cliOverride, savedRequest)` settles
+and seats (`AddSeat`/`RemoveSeat`). With a `PlayerSetupFeature` registered, `Seats` is that
+feature's live source list and `AddSeat` joins through it (a refused join throws: every seat
+taken, or the source already seated), so the feature must be added before seat 0 and a join made
+anywhere shows in `Seats`; without one the host keeps its own list, which is what the seam
+fixtures use. `Select(forceBuiltIn, cliOverride, savedRequest)` settles
 `Selected` through `PresentationResolution.Resolve` with registration plus the owner's
 `Availability` delegate as availability (a registered presentation whose assets are missing answers
 with a reason, which is appended to the fallback reason), keeps the pre-availability `Requested`
@@ -6846,11 +6881,12 @@ frame; `Hide` is `HideMenu`; `Deactivate` removes and frees the node. `Menu` exp
 launchscreen for what is still Built-in's alone (the launcher's debug aids and failed-build note).
 
 ## src/UI/Menu/BuiltIn/BuiltInSeat.cs
-Seat 0's `IMenuInputSource` for Built-in: wraps one `MenuInput` (keyboard plus every unclaimed
-pad), polls it and translates the result into a `MenuCommands` frame (`Move`/`MoveX` to
-`MoveY`/`MoveX`, `Start` to `Join`, `Presets` to `Contents`, `TextEntry` to `CapturingText`). The
-same `MenuInput` is handed to `LaunchMenu`, whose pad bookkeeping still binds the devices behind
-the seat; the seat itself carries only commands.
+A pad-side `IMenuInputSource`: wraps one `MenuInput`, polls it and translates the result into a
+`MenuCommands` frame (`Move`/`MoveX` to `MoveY`/`MoveX`, `Start` to `Join`, `Presets` to
+`Contents`, `TextEntry` to `CapturingText`). Seat 0's wraps the keyboard plus every unclaimed pad
+(the same `MenuInput` is handed to `LaunchMenu` and `MenuSeatDevices`, which bind the devices
+behind the seat); a seat a pad joined on wraps a poller bound to that one pad, which is how
+`MenuSeatDevices.PadOf` reads the pad back. The seat itself carries only commands.
 
 ## src/Session/MenuAudioService.cs
 The host's `IMenuAudio` over the process's playback: the music channel, the sound archive and the
@@ -6886,9 +6922,10 @@ The device-neutral input seam: `MenuCommands` is one frame of one seat's semanti
 and `IMenuInputSource` is the per-seat producer (`Poll`/`Prime`/`CapturingText`). A source is not
 synonymous with a pad: keyboard-plus-unclaimed-pads, one claimed pad, a mouse or a future
 HOTAS/HOSAS binding all sit behind the same contract, and a presentation never reads a device.
-`MenuInput` stays the Built-in shell's raw poller; `BuiltInSeat` adapts it onto this seam for
-seat 0, and the other seats are still the launchscreen's own until the shared player setup owns
-them.
+`MenuInput` stays the raw pad-side poller; `BuiltInSeat` adapts it onto this seam for seat 0 and
+for every seat a pad joins on, `PointerSeat` adds the mouse, `MenuIdleSource` stands for a seat
+with no device, and the seats themselves are the `PlayerSetupFeature`'s, claimed by source
+identity.
 
 ## src/UI/Menu/IMenuAudio.cs
 The shared menu audio contract: a presentation requests a `MenuCue` by semantic name and starts
@@ -6928,45 +6965,75 @@ fixtures, plus the install's own census under `[ExtractedDataFact]`.
 
 ## src/UI/Menu/Original/OriginalShell.cs
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over
-`MenuLayout`, the shared `FreeFlightFeature` and an injected art measurer (the layout carries no
-pixel sizes; the presentation reads them off the strips). Three screens (`OriginalScreen`): the
-top level, composed from `[MainMenu]`'s `MM_LOGO` and `BFRAME` panes and its six `B` rows at their
-authored corners with their four-frame strips (disabled, normal, rollover, depressed) plus the
-remake-only Free Flight door, a text button in the paper-plaque convention beside the frame; the
-remake-only Free Flight screen (the chapter list, the airframe list, BACK and FLY); and the
-remake-only minimal Options screen (the presentation toggle, APPLY, BACK), which the Preferences
-row opens until the decoded Preferences screens exist. Rows the remake has no destination for
-yet (Campaign, Instant Action, Multiplayer, Credits) draw frame 0 and take no input. The text
-button convention is read off `FlightCheck.FC_B_CHANGEPLANE` (its paper strip and its four label
-colours); the list and heading inks are the file-wide `DISABLED`/`ACTIVE` colours (`Inks`).
-`Step(MenuCommands)` applies one seat's frame: a pointer (already in authored pixels) over a live
-row takes the focus and, on a button, cues `menu.rollover` once; a click on a live row activates
-it; `MoveY` walks the enabled rows of the focused column with wrap, `MoveX` crosses to the nearest
-row of the next column; `Accept` activates the focused row (a button cues `menu.click`); `Back`
-leaves a sub-screen for the top level and quits from the top level. Activation on the Free Flight
-screen picks a chapter (handing it to the feature) or an airframe, FLY (enabled once both are
-picked) leaves as the feature's `LaunchExit` for seat 0, and the Options screen's APPLY leaves as a
-`PresentationSwitchExit`. `Compose()` is the screen as a `ComposedBoard` with the pointer as the
-last overlay (the active pointer bitmap over a live row, the passive one elsewhere), and
-`ReturnToTopLevel` (every return and cold start) keeps the list cursors and drops the airframe
-pick. Not decoded, so recorded as remake-only design: the door's placement, the Free Flight and
-Options screens, keyboard and pad focus (the original is pointer-driven), list rows taking focus
-under the pointer without a cue, and the pointer's hotspot at its top-left. Off-engine coverage:
-`CSVM.Tests/OriginalShellTests.cs` over the invented `fixtures/menu-layout-original` layout.
+`MenuLayout`, the shared `FreeFlightFeature` and `PlayerSetupFeature`, an injected art measurer
+(the layout carries no pixel sizes; the presentation reads them off the strips) and an injected
+flight-devices answer for the seat choices. Four screens (`OriginalScreen`): the top level,
+composed from `[MainMenu]`'s `MM_LOGO` and `BFRAME` panes and its six `B` rows at their authored
+corners with their four-frame strips (disabled, normal, rollover, depressed) plus the remake-only
+Free Flight and Dogfight doors, text buttons in the paper-plaque convention beside the frame; the
+two remake-only sortie screens, Free Flight and Dogfight (`OriginalSeats.cs`, the `partial`'s
+other half); and the remake-only minimal Options screen (the presentation toggle, APPLY, BACK),
+which the Preferences row opens until the decoded Preferences screens exist. Rows the remake has
+no destination for yet (Campaign, Instant Action, Multiplayer, Credits) draw frame 0 and take no
+input. The text button convention is read off `FlightCheck.FC_B_CHANGEPLANE` (its paper strip and
+its four label colours); the list and heading inks are the file-wide `DISABLED`/`ACTIVE` colours
+(`Inks`). `Step(MenuCommands)` applies seat 0's frame: a pointer (already in authored pixels) over
+a live, visible row takes the focus and, on a button, cues `menu.rollover` once; a click on a live
+row activates it; `MoveY` walks the enabled rows of the focused column with wrap (visible or not),
+`MoveX` crosses to the nearest row of the next column; `Accept` activates the focused row (a
+button cues `menu.click`); `Back` on a sortie screen first undoes seat 0's pick a stage at a
+time, then leaves for the top level, and quits from the top level. `StepSeat(index, frame)` is
+a later seat's frame. The Options screen's APPLY leaves as a `PresentationSwitchExit`.
+`Compose()` is the screen as a `ComposedBoard` with the pointer as the last overlay (the active
+pointer bitmap over a live row, the passive one elsewhere), skipping rows outside their window;
+`ReturnToTopLevel` (every return and cold start) keeps the list cursors and resets every seat's
+pick through the setup. Not decoded, so recorded as remake-only design: the doors' placement, the
+sortie and Options screens, keyboard and pad focus (the original is pointer-driven), list rows
+taking focus under the pointer without a cue, and the pointer's hotspot at its top-left.
+Off-engine coverage: `CSVM.Tests/OriginalShellTests.cs` and `OriginalSeatsTests.cs` over the
+invented `fixtures/menu-layout-original` layout.
+
+## src/UI/Menu/Original/OriginalSeats.cs
+The shell's two sortie screens over the shared player setup, the other half of the `partial`.
+Rows: the chapter column (`OriginalRosters.Chapters`, all eight for both modes) and BACK in
+column 0; in column 1 the aircraft column, keyed `AIRFRAME:<index>` over the setup's roster (the
+stock airframes, then the saved customs), and FLY. The aircraft column is a window of
+`AirframeWindow` (11) rows: every row keeps its place in the column for the keyboard, rows outside
+the window are `Visible == false` (undrawn, unhit), and the window slides so the focused row is
+inside it, with scroll marks over and under it. Seat 0 picks a chapter (`PickedChapter` for Free
+Flight, handed to the feature; `PickedDogfightChapter` for Dogfight, the shell's own since Dogfight
+has no feature) and an aircraft (`Browse` then `Select`; another row re-picks, the same row again
+changes nothing). A later seat's frame (`StepSeat`) walks its own cursor over the roster with
+wrap, `Select`s then `Confirm`s on Accept, and on Back undoes a stage or, browsing, unjoins (from
+any screen, as a guest may). FLY is enabled once a chapter is picked, seat 0 has selected, every
+later seat has confirmed and the mode's minimum of seats is met (two for Dogfight); pressing it
+confirms seat 0 and leaves as the Free Flight feature's `LaunchExit` or, for Dogfight, the setup's
+`BuildExit(chapter, Versus)`, each seat's choice carrying the devices the injected answer names.
+Composed beside the rows: the heading, MAP/AIRCRAFT, the seat strip under the chapters (tag,
+`DeviceLabel`, choosing / the aircraft / READY), each later seat's tag at the right edge of its
+row (one tick selected, two confirmed), the hint between BACK and FLY naming what is waited for,
+and the controls line. Remake-only by design; the original ships no split-screen Dogfight and no
+join gesture.
 
 ## src/UI/Menu/Original/OriginalPresentation.cs
 The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the
 board layer holding one `ComposedBoardView`, so every screen scales as the campaign boards do (one
-uniform 4:3 fit, centred, letterboxed, nearest-sampled). `Activate` builds the shell on the first
-call, stands it on the top level on every call (a `CabinReturn` or `DebriefReturn` also lands
-there, with a logged note, until Original has campaign screens), applies the `--menu=` aid on a
-top-level show (`free-flight`, `options`), primes seat 0 and hides the OS pointer, since the shell
-draws the original's own. `Tick` polls the host's first seat, maps its window-pixel pointer into
-the authored space through the view's own `BoardFit`, steps the shell, requests its cues through
-the host's audio and hands its exit to the host. `Hide` takes the layer off screen and restores the
-OS pointer; `Deactivate` frees it. `PaletteFor(inks)` is the shell's inks as a `BoardPalette`.
-In-engine coverage: `menu-original-tracer` (`src/Testing/MenuOriginalSuites.cs`) over the install's
-own layout.
+uniform 4:3 fit, centred, letterboxed, nearest-sampled). Constructed with seat 0's `MenuInput`
+(for `MenuSeatDevices`) and the `--debug-join` count. `Activate` builds the shell and the device
+bookkeeping on the first call, refreshes the setup's roster from the saved-plane store on every
+call (`Roster(customs)`: `OriginalRosters.Airframes` then the customs through the setup's roster
+rule, cursors clamped onto it), stands the shell on the top level (a `CabinReturn` or
+`DebriefReturn` also lands there, with a logged note, until Original has campaign screens),
+applies the `--menu=` aid on a top-level show (`free-flight`, `dogfight`, `options`), seats the
+debug players once (device-less, the last one selected), primes every seat, syncs the pads and
+hides the OS pointer, since the shell draws the original's own. `Tick` syncs the pad roster, scans
+the join gesture while a sortie screen is up (priming the edges on entering one), polls every
+seat of the host's live list, maps a window-pixel pointer into the authored space through the
+view's own `BoardFit`, steps the shell per seat, requests its cues through the host's audio and
+hands its exit to the host. `Hide` takes the layer off screen and restores the OS pointer;
+`Deactivate` frees it. `PaletteFor(inks)` is the shell's inks as a `BoardPalette`. In-engine
+coverage: `menu-original-tracer` (`src/Testing/MenuOriginalSuites.cs`) and the Original half of
+`menu-player-setup-seats` over the install's own layout.
 
 ## src/UI/Menu/Original/OriginalAvailability.cs
 The minimal availability check Original makes before it can be selected, standing in for the full
@@ -6982,7 +7049,8 @@ mouse as the frame's `MenuPointer` in window pixels, `Pressed` while the left bu
 `Clicked` on the press edge; `Prime` reads the button so a click held through a screen change is
 not a fresh click. The two device reads are injected delegates, so the seat is engine-free and
 `Launcher` supplies the viewport's mouse position and `Input.IsMouseButtonPressed`. Built-in
-ignores the pointer; Original maps it into its authored space.
+ignores the pointer; Original maps it into its authored space. Later seats are pads and carry no
+pointer; a source that wants one wraps itself the same way.
 
 ## src/UI/Menu/MenuReturnDestination.cs
 Where the menu stands when it comes back, said semantically: `TopLevel`, `CabinReturn(profile)`,
@@ -7013,8 +7081,49 @@ outside the roster throwing), `Refusal`/`CanLaunch(joinedSeats, confirmedSeats)`
 picked, at least one seat, every seat confirmed; a lone seat launches), `BuildExit(seats)` (the
 typed `LaunchExit` with mode Free and no Instant Action def, refusing a closed gate or a seat with
 no plane) and `Discard` (drops the pick). Free Flight is the remake's own mode, so nothing here is
-decoded; the rules are the launchscreen's, moved. The seats are still the presentation's: the
-feature takes confirmed `MenuSeatChoice`s and never reads a roster, a lock or a store. Owned by
-the `MenuHost`'s feature set and read out of it by `LaunchMenu` (see its entry). Off-engine coverage:
-`CSVM.Tests/FreeFlightFeatureTests.cs`, which checks the gate against
-`LaunchMenu.CanLaunch(MenuMode.Free, ...)` case by case.
+decoded; the rules are the launchscreen's, moved. The seats are the `PlayerSetupFeature`'s: this
+feature takes the confirmed `MenuSeatChoice`s that feature builds and never reads a roster, a lock
+or a store. Owned by the `MenuHost`'s feature set and read out of it by `LaunchMenu` and
+`OriginalShell`. Off-engine coverage: `CSVM.Tests/FreeFlightFeatureTests.cs`, which checks the
+gate against `LaunchMenu.CanLaunch(MenuMode.Free, ...)` case by case.
+
+## src/UI/Menu/PlayerSetupFeature.cs
+Player setup as a shared `IMenuFeature`, device-neutral and engine-free. `Seats` are
+`PlayerSeat`s in join order, each bound to the `IMenuInputSource` that claimed it (`Join(source)`:
+null when the four seats, `MaxSeats`, are taken or the source already holds one, since a claim is
+one source, one seat, settled in arrival order; `Unjoin` never removes seat 0 and is a no-op on a
+seat already gone; `Sources` is the live source list the host lends as `Seats`; `Revision` bumps
+on every join and unjoin). `Roster` is the `MenuAircraft` list every seat picks from, set by the
+presentation (`SetRoster`) and built by the shared rule `BuildRoster(stock, customs,
+nodeOfAirframe)`: the stock rows in their given order, then one row per saved custom flying its
+airframe's stock node with the def on the row. Per seat: `Cursor` (a presentation may park it past
+the roster for a row of its own; `Select` refuses such a cursor and `Choices` throws on it),
+`Browse` (refused while selected; a moved cursor resets the fit), the two stages `Select` and
+`Confirm`, `Back` one stage down (`SeatBack.Unconfirmed`, `Unselected`, or `Browsing` for the
+presentation to decide), `OpenLoadout`/`CloseLoadout` (a selected, unconfirmed seat only;
+`Confirm` closes it), `ResetPicks(fits)`. The gate: `MinimumSeats(mode)` (two for Dogfight),
+`Refusal(mode)`/`CanLaunch(mode)` (every seat confirmed, the minimum met), matching the
+launchscreen's static rule. `Choices(flightDevices)` is one `MenuSeatChoice` per seat (node, the
+devices the presentation's answer names for the seat, fit or null, custom def); `BuildExit(chapter,
+mode, flightDevices)` is the typed exit for a mode with no feature of its own (Dogfight).
+`Discard` drops every seat but the first and every stage of its pick, cursor included. Nothing
+here reads a pad: a seat's devices are its source's detail, read on the presentation side by
+`MenuSeatDevices`. `MenuIdleSource` (`src/UI/Menu/MenuIdleSource.cs`) is the "no device" source
+the screenshot aid seats extra players over. Off-engine coverage:
+`CSVM.Tests/PlayerSetupFeatureTests.cs`, including the same-frame races (two claims, a lock and
+an unjoin, a confirm from a source that has left) and the host lending the seat list; in-engine,
+`menu-player-setup-journey` and `menu-player-setup-seats`.
+
+## src/UI/MenuSeatDevices.cs
+The pad side of the shared player setup, for any presentation, over seat 0's `MenuInput` and the
+feature. `P1Pad` is the pad seat 0 claimed by steering a screen with it (`ClaimP1Pad`, from
+`LastActivePad`; the keyboard claims nothing). `Sync` reconciles the seats with `Pads.Connected`:
+a seat whose pad vanished is unjoined, a vanished claimed pad frees seat 0, and seat 0's poller is
+bound to its claimed pad or to every unclaimed one (never `pads[0]`: phantom devices occupy the
+early slots), primed when the set changes. `PrimeJoins` seeds the per-pad Start edges;
+`ScanJoins` joins a `BuiltInSeat` over a one-pad poller for each unclaimed pad whose Start is a
+fresh edge while a seat is free (the caller decides on which screens joining is open: Built-in's
+Plane and Campaign screens, Original's two sortie screens). `PadOf(source)` reads a joined seat's
+pad back off its `BuiltInSeat`; `FlightPads(seat)` is the binding a launch carries (seat 0's
+poller's set, a pad seat's one device, nothing for a device-less seat), the answer both
+presentations hand the feature's `Choices`.

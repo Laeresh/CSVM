@@ -14,8 +14,8 @@ public readonly record struct OriginalAirframe(string Name, string Node);
 /// The two rosters the Original Free Flight screen lists. The chapters are the shared
 /// <see cref="MenuChapters"/> roster with a short label per code; the airframes are the eleven
 /// stock names in the string table's own order, resolved to nodes through the Instant Action
-/// decode so the name-to-node map has one home. Custom planes are not offered here yet; the
-/// shared player setup owns that roster later.
+/// decode so the name-to-node map has one home. The saved custom planes are appended by
+/// <see cref="OriginalPresentation.Roster"/> through the shared player setup's roster rule.
 /// </summary>
 public static class OriginalRosters
 {

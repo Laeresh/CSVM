@@ -979,9 +979,9 @@ public partial class Launcher : Node3D
         }
     }
 
-    // The menu host: both presentations registered under their ids, the shared Free Flight
-    // feature, the first seat (keyboard plus every unclaimed pad behind the launchscreen's own
-    // poller, the mouse as its pointer), the audio service over the process's music, archive and
+    // The menu host: both presentations registered under their ids, the shared Free Flight and
+    // player-setup features, the first seat (keyboard plus every unclaimed pad behind the
+    // launchscreen's own poller, the mouse as its pointer), the audio service over the process's music, archive and
     // the rof tree's menu sounds, and OnMenuExit as the sink. The active presentation is settled
     // through PresentationResolution: the force flag, --presentation=, then the saved request;
     // availability is registration plus, for Original, OriginalAvailable below.
@@ -996,10 +996,13 @@ public partial class Launcher : Node3D
         registry.Register(PresentationId.BuiltIn,
             () => new BuiltInPresentation(this, _zrdrPath, _dataRoot, _cli.MenuStartScreen, builtInSeat.Input));
         registry.Register(PresentationId.Original,
-            () => new OriginalPresentation(this, _dataRoot, _originalLayout!, _cli.MenuStartScreen));
+            () => new OriginalPresentation(this, _dataRoot, _originalLayout!, _cli.MenuStartScreen, builtInSeat.Input, _spec.DebugJoin));
         var host = new MenuHost(registry, _menuAudio, OnMenuExit);
         host.Availability = OriginalAvailable;
         host.Features.Add(new FreeFlightFeature());
+        // Before the seat: the host lends the setup feature's seat list once the feature is in,
+        // so seat 0 has to be joined through it.
+        host.Features.Add(new PlayerSetupFeature());
         host.AddSeat(seat);
         string? saved = OptionsStore.UserOptions().Load().MenuPresentation;
         string? reason = host.Select(_spec.ForceBuiltInPresentation, _spec.PresentationOverride, saved);

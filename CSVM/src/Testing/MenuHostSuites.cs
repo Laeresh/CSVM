@@ -39,6 +39,7 @@ internal static class MenuHostSuites
             ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true }));
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
         host.Features.Add(new FreeFlightFeature());
+        host.Features.Add(new PlayerSetupFeature());
         host.AddSeat(seat);
         BuiltInPresentation? built = null;
         try

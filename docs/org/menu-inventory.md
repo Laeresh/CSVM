@@ -242,7 +242,7 @@ problem, and none of them is visible to a census of the three enums.
 | # | State | Owner | What changes |
 |---|---|---|---|
 | 1 | split-pane aircraft select | `LaunchMenu` | one panel per joined player instead of the centred column |
-| 2 | a pane's Ammo Selection list | `Slot.InLoadout` | that seat reads nothing else, and nobody can launch while one is open |
+| 2 | a pane's Ammo Selection list | `PlayerSeat.InLoadout` (the shared player setup) | that seat reads nothing else, and nobody can launch while one is open |
 | 3 | the hangar's defaults ask | `HangarFlow.DefaultsAsk` | the Airframe screen becomes a two-row question |
 | 4 | the hangar's removal list | `HangarPlaneSelectionPage._removing` | the plane list becomes a Delete / Sell list plus Cancel |
 | 5 | the roster's delete confirm | `CampaignRosterPage._confirming` | the whole screen becomes two rows |
@@ -439,7 +439,9 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 | Original screen | Built-in counterpart | Layout | Script decoded | Capture | Interaction evidence |
 |---|---|---|---|---|---|
 | MainMenu | Mode | 9 rows | this page | **none** | composition only; script text gives the six buttons and their targets, nothing about rollover, music or the flag movie. **Built as Original's top level** from the two panes and the six `B` rows with their four-frame strips; rows with no remake destination yet draw the disabled frame, Quit and Preferences (the Options door) react, and the movie's place is black |
-| (none: remake-only) | Free Flight, Chapter, Plane | none | none | none | **Original's Free Flight door and screen, of our design under Decision 11.** The door is a text button in the `FC_B_CHANGEPLANE` paper-plaque convention beside the button frame, level with Campaign; the screen is the logo over two text lists (the shared chapter roster and the eleven stock airframes) with BACK and FLY plaques. Nothing on it is decoded |
+| (none: remake-only) | Free Flight, Chapter, Plane | none | none | none | **Original's Free Flight door and screen, of our design under Decision 11.** The door is a text button in the `FC_B_CHANGEPLANE` paper-plaque convention beside the button frame, level with Campaign; the screen is the logo over two text lists (the shared chapter roster and the shared aircraft roster, the eleven stock airframes then the saved custom planes in an eleven-row window) with BACK and FLY plaques, a seat strip under the chapters and each later seat's tag on its aircraft row. Nothing on it is decoded |
+| (none: remake-only) | Dogfight, Chapter, Plane | none | none | none | **Original's Dogfight door and screen, of our design under Decision 11.** The door sits under the Free Flight door in the same plaque convention; the screen is the Free Flight screen's shape over the Dogfight gate (a second seat must join and confirm before FLY stands). The original's Multiplayer is network play and ships no split-screen Dogfight, so nothing here is decoded |
+| (none: remake-only) | the join strip and per-seat picks | none | none | none | **Original's join flow, of our design.** Start on an unclaimed pad joins a seat on either sortie screen (the same gesture and pad bookkeeping as Built-in's, through `MenuSeatDevices`); the joined pad walks its own cursor on the aircraft column, selects and confirms with A, and leaves with B while browsing; seat 0's mouse, keyboard or pad picks the map and the aircraft and presses FLY, which is its own confirmation. The original has no join gesture |
 | (none: remake-only) | Options | none | none | none | **Original's minimal Options screen**, opened by the Preferences row until the decoded Preferences screens exist: the presentation toggle, APPLY, BACK, in the same plaque convention |
 | Preferences | (none; Options is E41's addition) | 14 rows | no | **none** | layout only |
 | GameOptions | (none) | 13 rows | no | **none** | layout only; `BL-570` wants the difficulty row |
@@ -567,6 +569,12 @@ Each of these is a divergence a reader could mistake for a decode, so each is na
   remake-only rule under Decision 11 stands: Original's top level carries a Free Flight door and a
   Free Flight screen of our design, composed in the decoded chrome's conventions (the paper-plaque
   text button, the four state colours, the logo) and marked remake-only in the screen census above.
+- **Original Dogfight and its join flow have no original screen behind them either.** The
+  original's Multiplayer branch is network play (the 22 multiplayer scripts, none with a layout),
+  and no script or layout row describes a second local player joining. The same remake-only rule
+  gives Original a Dogfight door under the Free Flight door, a Dogfight screen in the Free Flight
+  screen's shape, and Built-in's own join gesture (Start on a free pad) with the seats, picks and
+  gate shared through the player-setup feature; all marked remake-only in the census above.
 
 ### What the Original presentation implements from the data, and what the captures must confirm
 

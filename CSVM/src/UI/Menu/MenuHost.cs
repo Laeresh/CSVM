@@ -31,7 +31,10 @@ public sealed class MenuHost : IMenuHost
 
     public IMenuAudio Audio { get; }
 
-    public IReadOnlyList<IMenuInputSource> Seats => _seats;
+    /// <summary>The seats: the player-setup feature's sources when that feature is registered,
+    /// so a join anywhere grows this list; the host's own list otherwise.</summary>
+    public IReadOnlyList<IMenuInputSource> Seats =>
+        Features.TryGet<PlayerSetupFeature>(out var setup) ? setup.Sources : _seats;
 
     /// <summary>The presentation <see cref="Show"/> activates, settled by <see cref="Select"/>;
     /// Built-in until then.</summary>
@@ -53,11 +56,40 @@ public sealed class MenuHost : IMenuHost
     /// default says every registered presentation is available.</summary>
     public Func<PresentationId, string?> Availability { get; set; } = _ => null;
 
-    /// <summary>Adds a seat's input source. Seat 0 first; the list is live for presentations.</summary>
-    public void AddSeat(IMenuInputSource seat) => _seats.Add(seat ?? throw new ArgumentNullException(nameof(seat)));
+    /// <summary>Adds a seat's input source, joining it through the player-setup feature when one
+    /// is registered. Seat 0 first; the list is live for presentations. A refused join (every seat
+    /// taken, the source already seated) is a wiring error and throws.</summary>
+    public void AddSeat(IMenuInputSource seat)
+    {
+        ArgumentNullException.ThrowIfNull(seat);
+        if (Features.TryGet<PlayerSetupFeature>(out var setup))
+        {
+            if (setup.Join(seat) == null)
+            {
+                throw new InvalidOperationException("The player setup refused the seat: every seat is taken or the source is already seated.");
+            }
+
+            return;
+        }
+
+        _seats.Add(seat);
+    }
 
     /// <summary>Removes a seat, the un-join. Removing a seat the list lacks is a no-op.</summary>
-    public void RemoveSeat(IMenuInputSource seat) => _seats.Remove(seat);
+    public void RemoveSeat(IMenuInputSource seat)
+    {
+        if (Features.TryGet<PlayerSetupFeature>(out var setup))
+        {
+            if (setup.SeatOf(seat) is { } joined)
+            {
+                setup.Unjoin(joined);
+            }
+
+            return;
+        }
+
+        _seats.Remove(seat);
+    }
 
     /// <summary>Settles <see cref="Selected"/> from the force flag, the CLI override and the saved
     /// request, availability being registration plus <see cref="Availability"/>; returns the

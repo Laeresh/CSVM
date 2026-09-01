@@ -160,7 +160,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Setup features
 
 21. ☐ Extract Instant Action into a typed shared feature
-22. ☐ Extract shared player setup and deliver Dogfight in both presentations
+22. ☑ Extract shared player setup and deliver Dogfight in both presentations
 23. ☐ Separate hangar features from composition and deliver its Original screens
 
 ### Wave D — Campaign convergence
@@ -638,7 +638,7 @@ both presentation graphs, and launch representative ace, squadron, stunt and zep
 **⚠ Traps.** Shared feature state does not imply a shared wizard. Preserve the ace skip in Built-in;
 Original follows its own evidenced navigation.
 
-## C22 ☐ Extract shared player setup and deliver Dogfight in both presentations
+## C22 ☑ Extract shared player setup and deliver Dogfight in both presentations
 
 **Goal.** One device-neutral player-setup feature owns seats, device claims, aircraft choices and
 locks; Built-in remains unchanged and Original offers equivalent complete setup.
@@ -662,12 +662,106 @@ join flow, the per-seat pointer mapping and the roster with customs are C22's to
 
 **Model recommendation.** high — multiplayer device ownership and same-frame input races are fragile.
 
-**Verify.** Engine-free claim/lock race tests, 1–4 player scripted paths, per-device ownership, Back
-and force-switch cleanup; at-the-controls pad and mouse pass. <TODO: hardware-dependent cases and
-exact engine aid commands.>
+**Verify.** Characterization first, on the pre-extraction code: the engine suite
+`menu-player-setup-journey` (`CSVM/src/Testing/MenuPlayerSetupSuites.cs`) drives a real
+`LaunchMenu` through `Drive` with one to four seats (`DebugJoin` adds the device-less ones) and
+pins a lone seat's two-stage pick with Back at every stage and the launch it ends in, a second seat
+splitting the screen and holding the gate until it confirms, player 1's Back unselecting everyone,
+the Dogfight gate waiting with `(Dogfight needs a fight — P2: press START to join)`, the four-seat
+maximum, the `selected`/`loadout` aids under two seats and a return keeping the seats; it passed
+green before the extraction and unchanged after it.
+
+The landed shape: `PlayerSetupFeature` (`CSVM/src/UI/Menu/PlayerSetupFeature.cs`, engine-free,
+in the host's feature set) owns the seats as `PlayerSeat`s claimed by `IMenuInputSource` identity
+(`Join`/`Unjoin`/`IsClaimed`/`SeatOf`, four seats, seat 0 never leaving), the shared aircraft
+roster (`MenuAircraft`, `BuildRoster(stock, customs, nodeOfAirframe)`: the stock rows then the
+saved customs with their defs), each seat's cursor, `Browse`, the two stages `Select`/`Confirm`,
+`Back` a stage at a time, `OpenLoadout`/`CloseLoadout`, `ResetPicks`, the gate per mode
+(`MinimumSeats`, `Refusal`, `CanLaunch`), `Choices(flightDevices)` as the `MenuSeatChoice` list
+and `BuildExit(chapter, mode, flightDevices)` for Dogfight; `Discard` drops every seat but the
+first. It reads no pad: the devices behind a seat are asked of the presentation. `MenuIdleSource`
+is the "no device" source the aids seat. `MenuSeatDevices` (`CSVM/src/UI/MenuSeatDevices.cs`,
+engine-side) is the pad bookkeeping both presentations share: seat 0's claimed pad, `Sync`
+(hotplug), `PrimeJoins`/`ScanJoins` (Start on an unclaimed pad joins a `BuiltInSeat` over a
+one-pad poller), `FlightPads` (the binding a launch carries). `MenuHost.Seats` lends the feature's
+live source list once the feature is registered, and `AddSeat` joins through it, so the feature
+goes in before seat 0 (`Launcher.BuildMenuHost`). Built-in: `LaunchMenu` keeps `_slots` as a view
+over the feature's seats (`Slot` wraps a `PlayerSeat`, the poller behind it and its last frame;
+`SyncSlots` keyed by the feature's `Revision`); every stage on the Plane screen, `ShowMenu`'s
+reset and aids, `DebugJoin`, the guest unjoin, the gate and `SeatChoices` go through the feature
+and `MenuSeatDevices`; the split-pane layout, join strip, lock colours, hint texts and the
+per-seat loop order are untouched, and `FireLaunch`'s Instant Action branch is untouched. Original:
+`OriginalShell` is `partial`, its sortie screens in `CSVM/src/UI/Menu/Original/OriginalSeats.cs`:
+a Dogfight door under the Free Flight door and a Dogfight screen in the Free Flight screen's shape
+(remake-only under Decision 11, recorded in `docs/org/menu-inventory.md`); the aircraft column is
+the shared roster with the customs in an eleven-row window that follows the focus (rows outside it
+`Visible == false`, undrawn and unhit); each later seat's cursor is tagged on its row and listed in
+a seat strip; FLY is seat 0's confirmation and the launch, enabled once a chapter and an aircraft
+are picked, every later seat has confirmed and Dogfight's second seat has joined, leaving through
+`FreeFlightFeature.BuildExit` or the setup's `BuildExit(chapter, Versus)`; a later seat's frame
+(`StepSeat`) walks, selects, confirms and unjoins; `OriginalPresentation` polls every host seat,
+maps any pointer through `BoardFit`, scans pad joins on the sortie screens, refreshes the roster
+from the store on every `Activate`, and takes seat 0's `MenuInput` and the `--debug-join` count.
+Original's aids gain `dogfight`; `--debug-join` seats device-less players there too (`docs/cli.md`,
+two bullets reworded, no flag added, the flag index untouched).
+
+Checked: `dotnet build CSVM/CSVM.sln`, the whole `dotnet test` (2917, of which 18 are
+`PlayerSetupFeatureTests`: claims by identity, the four-seat cap, the stages and Back, browsing
+and the fit, the loadout list, the gate against `LaunchMenu.CanLaunch` case by case, the choices
+and exit, the roster rule against `PlanePickerRoster.Build` row for row, the same-frame races (two
+claims in arrival order, a lock and an unjoin in either order, a confirm from a source that has
+left), `Discard` and the host lending the seat list; 9 are `OriginalSeatsTests` over the fixture
+layout: the Dogfight door and gate, a second seat walking, selecting and confirming with its tag,
+FLY for both modes, Back undoing seat 0's pick first, a guest's Back, the re-pick by click, the
+window over a roster with seven customs and the hint at each stage; `MenuNamespaceDependencyTests`
+green with the feature and the idle source in the shared namespace), then
+`.\RunTests.ps1 -Suite "menu-player-setup-journey,menu-player-setup-seats,menu-free-flight-journey,menu-host-tracer,menu-original-tracer,menu-zone-layout,menu-screenshot-key,campaign-briefing-repaint" -SkipUnits -SkipGoldens`
+(8 suites, 8 passed, engine errors clean), `.\CheckCommentCaps.ps1 -Summary` and
+`.\CheckEncoding.ps1`. `menu-player-setup-seats` joins scripted sources through the feature: in
+Built-in a second seat picks and confirms through `_Process`, Free Flight and Dogfight launch for
+both seats, a return keeps the seats, a guest's Back unjoins, four seats close the join and a fifth
+and a repeat claim are refused, a lock and an unjoin land on one frame, `Deactivate` leaves one
+seat; in Original the Dogfight door, FLY disabled with its hint, a joined seat's walk through the
+presentation's `Tick`, both launches for two seats, a guest's Back on the top level, `Deactivate`.
+Mechanical edits to existing suites: `MenuSuiteHost.Bare`, `menu-host-tracer` and
+`menu-original-tracer` register the `PlayerSetupFeature` before the seat, the tracer hands
+`OriginalPresentation` a `MenuInput` and counts eight top-level rows; `menu-free-flight-journey`
+and the characterization suite are unchanged. `OriginalShellTests` edits are mechanical: the
+Dogfight door in the row lists and focus walks, aircraft rows keyed `AIRFRAME:<index>`, the
+constructor's setup argument. Shots: rebuilt, then `.\RunProbe.ps1 --menu=<aid> --screenshot=<abs path>`
+for `plane`, `selected`, `loadout`, `plane --debug-join=2` and `plane --debug-join=4` before any
+edit into `.scratch\c22-before\` and after the extraction into `.scratch\c22-after\`, compared by
+decoded 32bpp pixels (SHA-256 over the rows): all five identical over the same `user://` store,
+no custom plane appeared mid-run, so no rebaseline was needed. Original shots through a sized
+launcher (`--resolution WxH` ahead of the `--`) with
+`--presentation=original --menu=free-flight --debug-join=1`, `--menu=dogfight` and
+`--menu=dogfight --debug-join=1` at 1024x768 and 1920x1080, plus the top level with both doors at
+1024x768, into `.scratch\c22-shots\`. What a pose cannot show: the pointer sits off the board, the
+join gesture and pad hotplug happen between frames, a device-less seat reads "no device" where a
+pad would read `pad <n>`, and the window shows eleven of this store's eighteen rows with the scroll
+mark standing for the rest; behaviour is pinned by the driven suites. `docs/verification.md` rules
+that bit: **METHOD-6** (which binary each side used: the before shots from this worktree built at
+the plan branch's tip before any edit, the after shots from this tree), **METHOD-3** (the store
+was checked for a mid-run custom plane before trusting the identical result), **SHOT-6** (decoded
+pixels, never PNG bytes), **SHOT-9**/**SHOT-10** (windowed probes on the hidden desktop, absolute
+paths, files checked present), **SHOT-32** (a shot proves the frame it drew), **SRC-7** (no script
+or layout row describes a local join or a split-screen Dogfight, so both are recorded as
+remake-only, not decoded).
+
+What this did not prove: no real pad was connected on the probe rig, so the claim by steering,
+the Start join, hotplug and a two-pad launch's binding are exercised only through scripted
+sources and the device-less aid; the mouse over Original's seat strip and aircraft tags is not
+driven by a suite; and the harness cannot fly and return a two-seat launch. The hardware pass is
+owed at the controls: `.\RunDev.ps1`, a pad pressing Start on Built-in's aircraft screen and on
+Original's Free Flight and Dogfight screens, the joined pad walking, selecting and confirming,
+Back unjoining it, FLY launching two seats with each pad flying its own pane, and a pad
+unplugged mid-setup leaving its seat.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** A menu input source is not synonymous with a pad. Presentation-specific join gestures
-must converge on one shared roster and launch gate.
+must converge on one shared roster and launch gate. The Plane screen lists `user://` custom
+planes, so a shot of it is only comparable against a baseline taken over the same store.
 
 ## C23 ☐ Separate hangar features from composition and deliver its Original screens
 
@@ -681,6 +775,15 @@ Original compose and navigate them independently.
 **Approach.** Characterize all nine screens, cancel residue, edit/delete and commit. Split typed
 hangar feature state/operations from Built-in page composition without changing store semantics.
 Bind Original screens to decoded layouts and reuse shared visual components where faithful.
+
+Handoff from C22: the aircraft roster both presentations pick from is
+`PlayerSetupFeature.Roster`, set through `SetRoster` with `PlayerSetupFeature.BuildRoster(stock,
+customs, PlanePickerRoster.AirframeNode)`; Built-in refreshes it in `RefreshRoster` (on `ShowMenu`
+and `CloseHangar`), Original in `OriginalPresentation.Activate` from the store, so an Original
+hangar exit that saves a plane must call `SetRoster` again for the new row to appear without a
+return to the top level. `OriginalShell` is `partial` (`OriginalSeats.cs` holds the sortie
+screens); a hangar screen is another `OriginalScreen` member with its own `BuildRows`, `Activate`
+and `Compose` branches, and `_focus` is sized from the enum.
 
 **Model recommendation.** high — wide feature surface with persistence and dynamic preview art.
 

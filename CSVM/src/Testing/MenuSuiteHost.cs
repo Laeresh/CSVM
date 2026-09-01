@@ -5,8 +5,8 @@ using CSVM.UI.Menu.BuiltIn;
 
 namespace CSVM.Testing;
 
-/// <summary>The menu host a suite stands a <see cref="LaunchMenu"/> on: the Free Flight feature,
-/// one Built-in seat over a real poller (which reads nothing in a scripted run), a silent audio
+/// <summary>The menu host a suite stands a <see cref="LaunchMenu"/> on: the Free Flight and
+/// player-setup features, one Built-in seat over a real poller (which reads nothing in a scripted run), a silent audio
 /// service, and a sink that records every exit. The suites that drive the launchscreen directly
 /// build through <see cref="Menu"/>; the host tracer registers the presentation itself.</summary>
 internal static class MenuSuiteHost
@@ -16,6 +16,7 @@ internal static class MenuSuiteHost
     {
         var host = new MenuHost(new PresentationRegistry(), new SilentMenuAudio(), exits.Add);
         host.Features.Add(new FreeFlightFeature());
+        host.Features.Add(new PlayerSetupFeature());
         seat = new BuiltInSeat(new MenuInput { Keyboard = true });
         host.AddSeat(seat);
         return host;
