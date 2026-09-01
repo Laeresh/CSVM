@@ -451,6 +451,11 @@ public partial class Launcher : Node3D
             RenderingServer.GlobalShaderParameterType.Float, clutterFadeScaleSq);
         string clutterFarFade = Utils.EffectsLevel.ClutterFarFadeEnabled() ? "true" : "false";
         Log.Info("world", $"clutter fade: {Utils.EffectsLevel.FadeKey}={clutterFarFade} {Utils.EffectsLevel.Key}={Config.GetString(Utils.EffectsLevel.Key, Utils.EffectsLevel.Default)} scale_sq={clutterFadeScaleSq}");
+        // Resolved after the --det block above, so a user config's graphics.mode is dropped by
+        // ClearOverrides the same way EffectsLevel's is; --graphics= bypasses Config outright and
+        // survives it. One resolution point read by every later scene builder.
+        bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode);
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={(graphicsEnhanced ? "enhanced" : "original")}");
         // The animated world's LIGHT_STATE point lights. Defaults to an empty set, so a session
         // with no lit animations renders exactly as it did before they existed.
         WorldLights.RegisterGlobals();

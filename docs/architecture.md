@@ -6543,6 +6543,20 @@ the shader multiplies it into the squared camera distance, so no stamp reaches i
 clutter draws out to the fog instead of ending at the authored metres. Both keys and the resolved
 scale are on the `[world] clutter fade:` launch line.
 
+## src/Utils/GraphicsMode.cs
+The opt-in enhanced-lighting mode's config key, `graphics.mode` (`original`/`enhanced`, default
+`original`), resolved once by `Launcher._Ready` beside `EffectsLevel` into the single boolean
+`GraphicsMode.Enhanced` every later scene builder reads, rather than each reader querying `Config`
+itself — a future options-store layer (the menu plan's process-wide settings file) is the intended
+future source of the user-facing value, and this indirection is what lets that land without
+touching the readers. `--graphics=original|enhanced` (`docs/cli.md`) beats the config key outright,
+including under `--det`: `--det`'s `Config.ClearOverrides` (`Launcher.cs`) drops a `graphics.mode`
+config override the same way it drops `EffectsLevel`'s, since the resolution runs after that block,
+while an explicit `--graphics=` is carried on `SessionSpec` and never touches `Config`, so it
+survives `--det` and is the mechanism a golden or a deterministic capture uses to pin the mode on
+purpose. An unknown word on either source warns and falls back to `original`. Announced on the
+`[world] graphics mode:` launch line beside the clutter-fade line.
+
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det` block — the same

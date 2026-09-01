@@ -85,7 +85,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Option plumbing
 
-1. ☐ `GraphicsMode` config key, launch-time resolution, golden-run isolation
+1. ☑ `GraphicsMode` config key, launch-time resolution, golden-run isolation
 2. ☐ Thread the mode into `SceneBuilder` shader keys with byte-identical original output
 
 ### Wave B — Core lighting
@@ -121,7 +121,7 @@ worktrees.
 
 # Wave A — Option plumbing
 
-## A1 ☐ `GraphicsMode` config key, launch-time resolution, golden-run isolation
+## A1 ☑ `GraphicsMode` config key, launch-time resolution, golden-run isolation
 
 **Goal.** A `graphics.mode` config key (`original` | `enhanced`, default `original`) exists, is
 resolved once at launch, is logged at startup, and cannot leak from a user config into a golden or
@@ -135,10 +135,19 @@ by the launcher (`CSVM/src/Session/Launcher.cs:447-453`), unknown words warned a
 **Approach.** New `CSVM/src/Utils/GraphicsMode.cs` static class mirroring `EffectsLevel`: `Key =
 "graphics.mode"`, `Default = "original"`, a `TryParse` for the two words, a resolved boolean the
 scene builders read. Warm it in `Config`, log it in `Launcher._Ready` beside the clutter-fade line.
-`<TODO: establish how Config layers user config vs CLI, and whether golden/`--det` runs read the
-user config file; if they do, either pin `--graphics=original` in every golden's stored args or
-have `--det` force the default unless a CLI flag overrides it. The isolation mechanism is part of
-this item's landing.>`
+`Config` layers a `res://config.json` override under every in-code default (`Config.GetString`
+etc.), and `Launcher._Ready` already drops every loaded override outright when `--det` is in
+effect (`Config.ClearOverrides`, `Launcher.cs`'s `--det` block), before `EffectsLevel` or
+`GraphicsMode` ever resolves — a golden shot's stored args and `--run-tests` both carry `--det`
+(`analysis/goldens/README.md`, `RunTests.ps1`'s engine/golden stages), so `graphics.mode` from a
+user's `config.json` is isolated for free by resolving it after that block, the same way
+`EffectsLevel` already is. `GraphicsMode.Resolve` additionally takes an explicit `--graphics=`
+override (`SessionSpec.GraphicsMode`) that bypasses `Config` outright and so survives `--det`,
+which is what lets a golden or a deterministic capture ask for the enhanced path on purpose (D32's
+optional enhanced goldens will use it). The menu plan's process-wide options store
+(`docs/PLAN-menu-presentations.md`, branch `menu-presentations`) is the intended future source of
+this key's user-facing value; `GraphicsMode.Enhanced` is the one resolved value every reader
+consults, so that layer can be slotted in later without touching them.
 
 **Model recommendation.** medium, low effort — mechanical plumbing on a clear template.
 
@@ -148,6 +157,22 @@ with `graphics.mode=enhanced` in the user config still produces zero golden move
 **⚠ Traps.** The goldens compare md5 over raw pixels with no tolerance; if a user config can tilt a
 golden run the tripwire becomes a coin flip on whatever machine runs it. Do not land A1 without the
 isolation story.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
+`dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~GraphicsModeTests"` — 7
+passed, 0 failed. `$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -Suite clutter-determinism
+-SkipUnits -SkipGoldens` — engine stage PASS, 1 suite run (non-zero), engine errors clean. Three
+scripted `RunGame.ps1` captures (freecam C1, `--det --mute --frames=5 --screenshot=...`), read back
+from `.scratch/logs/`: with no config override, `--det` alone logs
+`[world] graphics mode: graphics.mode=original`; with `--graphics=enhanced` added, the same `--det`
+run logs `graphics.mode=enhanced` (the CLI override surviving `--det`); with a `res://config.json`
+carrying `graphics.mode: enhanced`, a `--det` run logs `config=defaults dropped_overrides=1
+via=--det` followed by `graphics.mode=original` (the override dropped), while the same config under
+`--no-det` logs `graphics.mode=enhanced` (a normal flight honours it). So: a user with
+`graphics.mode=enhanced` in their config sees the enhanced value on a normal flight, and `original`
+on every golden shot, every `--det` run and the full `--run-tests` battery (all of which carry
+`--det` in their stored/implied args), unless they also pass `--graphics=enhanced` explicitly. The
+test config.json and capture PNGs used for this check were removed afterward; none are committed.
 
 ## A2 ☐ Thread the mode into `SceneBuilder` shader keys with byte-identical original output
 
