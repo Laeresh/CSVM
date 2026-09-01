@@ -62,6 +62,25 @@ public partial class Launcher : Node3D
     // -80 dB is inaudible, which is the whole point of `--volume=0`.
     private const float MasterVolumeFloor = 0.0001f;
 
+    // TUNE, and the FALLBACK only: a flown mission overwrites this per zone from its own pushed-out
+    // fog far (WeatherRig.ApplyEnhancedLighting), so shadows end where that zone's haze does. This
+    // value is what a session with no weather.json gets, and it sits in the middle of the pushed
+    // range the shipped zones resolve to.
+    private const float EnhancedShadowMaxDistance = 6000f;
+
+    // TUNE, judged at the controls, and the pair trades against each other: lower values put
+    // dithered acne over every terrain triangle at C1's 25° sun, higher ones dissolve a hangar's
+    // shadow along with it. These keep the building and aircraft silhouettes with no acne left.
+    private const float EnhancedShadowBias = 0.05f;
+    private const float EnhancedShadowNormalBias = 1.25f;
+
+    // TUNE. Fractions of the distance above, tighter than Godot's 0.1/0.2/0.5 because the shadows
+    // a player reads are the aircraft's own and the buildings it passes, all inside the first few
+    // hundred metres; the outer cascades only have to carry a skyline into the haze.
+    private const float EnhancedShadowSplit1 = 0.06f;
+    private const float EnhancedShadowSplit2 = 0.17f;
+    private const float EnhancedShadowSplit3 = 0.42f;
+
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
     // exists — the same empty list the pre-split root held after a teardown.
     private static readonly List<PlayerRig> NoRigs = new();
@@ -914,11 +933,14 @@ public partial class Launcher : Node3D
             // per zone-apply (WeatherRig.ApplyZone).
             RotationDegrees = new Vector3(-45, 150, 0),
             LightEnergy = 1.6f,
-            // Off: the world is built fullbright and unshaded, so the only thing a shadow pass
-            // reaches is one aircraft shadowing another — a non-original effect the original's
-            // own projected-blob shadow does not have either.
+            // Off in the faithful path: the world is built fullbright and unshaded, so the only
+            // thing a shadow pass reaches is one aircraft shadowing another, and the original's own
+            // projected-blob shadow is not a shadow map either. Enhanced mode turns it on below.
             ShadowEnabled = false,
         };
+        // Enhanced mode alone: a lit world has surfaces a shadow pass can land on.
+        if (GraphicsMode.Enhanced)
+            EnableSunShadows(_sun);
         AddChild(_sun);
 
         _env = new Godot.Environment
@@ -929,6 +951,22 @@ public partial class Launcher : Node3D
             AmbientLightEnergy = 0.9f,
         };
         AddChild(new WorldEnvironment { Environment = _env });
+    }
+
+    // Every setting here is TUNE: nothing in the original authors a shadow map, so there is no
+    // decoded magnitude to match. Four splits because the useful range spans an aircraft's own
+    // shadow a few metres below it and a skyline several kilometres out.
+    private void EnableSunShadows(DirectionalLight3D sun)
+    {
+        sun.ShadowEnabled = true;
+        sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits;
+        sun.DirectionalShadowMaxDistance = EnhancedShadowMaxDistance;
+        sun.DirectionalShadowSplit1 = EnhancedShadowSplit1;
+        sun.DirectionalShadowSplit2 = EnhancedShadowSplit2;
+        sun.DirectionalShadowSplit3 = EnhancedShadowSplit3;
+        sun.DirectionalShadowBlendSplits = true;
+        sun.ShadowBias = EnhancedShadowBias;
+        sun.ShadowNormalBias = EnhancedShadowNormalBias;
     }
 
     // Shows the launchscreen (building it on first use) and wiring its Launch/Quit

@@ -5500,6 +5500,14 @@ own flush interval to write down what it already has queued.
 Measured render time is enabled once in `_Ready` (`ViewportSetMeasureRenderTime`) rather than per
 frame from `ReportPerf`, because the hitch record needs the CPU/GPU split on every run, not only a
 `--perf` one.
+`SetupLighting` keeps `_sun.ShadowEnabled = false` in the faithful path and calls `EnableSunShadows`
+in enhanced graphics mode only: PSSM 4 splits, blended, splits 0.06/0.17/0.42, bias 0.05 and normal
+bias 1.25 (TUNE, the pair judged against acne at C1's 25 degree sun and against peter-panning of the
+biased road decals), and a `DirectionalShadowMaxDistance` that is a FALLBACK: a flown mission
+overwrites it per zone from that zone's pushed-out fog far (`WeatherRig`). The world meshes and the
+aircraft are the only casters; every other population is already `ShadowCastingSetting.Off` or
+declares `shadows_disabled` in its shader. The front-culled world needs no `DoubleSided` casting:
+the source's visible side is Godot's back face, which is the face the sun sees.
 Vsync resolves at the same `_Ready` site as the shader clock / `--perf` tick: `display.vsync`
 config key (default true) or `--no-vsync`, the flag always beating the key.
 The config read is unconditional even when the flag already decided, so the key still registers
@@ -6524,6 +6532,16 @@ mode `ApplyZone` also drives the real sun and the Environment ambient from the z
 `SUNLIGHT_DIFFUSE`/`AMBIENT` and their colours (`EnhancedEnergies`, pinned by
 `CSVM.Tests/SunlightEnergyTests.cs`), and neutralises `csky_world_light` to 1.0 so the fullbright
 dimming does not land twice; original mode's path is unchanged.
+Enhanced mode also pushes the fog out. `FogRangeFor` scales a zone's authored near/far by
+`EnhancedFogRangeScale` (2.0, TUNE) and is identity in original mode; both fog-range writers
+(`ApplyZone` and `ApplyFogState`) go through it, so a FOG_STATE edge cannot snap the haze back to
+the authored distance mid-flight. The same scaled far then drives the one session sun's
+`DirectionalShadowMaxDistance`, so shadows end where that zone's haze does rather than at a line in
+clear air. Nothing else scales: the whiteout and cloud band read CLOUD_COVER altitudes, the zone
+gate is a `zone_id` cull mask with no distance in it, `WorldLights` fades on its own 900/1500 m
+pair, the skydome is fitted from the camera's far plane, and `ZoneWeather.ClipFar` is parsed and
+logged but reaches no consumer (the camera far plane is `Launcher`'s fixed 40000 m, past every
+pushed fog far).
 
 ## src/Session/LensFlareRig.cs
 The sun's lens flare: four screen-space sprites strung along the sun→screen-centre vector at

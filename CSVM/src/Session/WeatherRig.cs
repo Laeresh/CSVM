@@ -28,6 +28,14 @@ public sealed class WeatherRig
     private const float SunEnergyPerDiffuse = 1.07f;
     private const float AmbientEnergyPerAuthored = 1.8f;
 
+    // ⚠ TUNE, judged at the controls, and enhanced mode ONLY. Shadowed ground reads badly through
+    // the authored haze: a cast shadow needs contrast to be seen at all, and the zones put full fog
+    // close enough that half of every shadow is already grey. Pushing near and far out together
+    // keeps the ramp's shape (and so the horizon's look) while giving the shadowed range clear air
+    // to live in. The faithful path keeps the authored ranges exactly, per the prohibition in
+    // ApplyZone.
+    private const float EnhancedFogRangeScale = 2f;
+
     // ⚠ TUNE, and the FALLBACK only — a mission that authors CLOUD_COVER colours overrides it
     // (WeatherState.WhiteoutColor). It holds because the three reachable-band chapters that author
     // nothing measure right at this value: the original's C1 in-cloud interior reads 248 against
@@ -161,6 +169,13 @@ public sealed class WeatherRig
     public static (float Sun, float Ambient) EnhancedEnergies(WeatherState.ZoneWeather fog)
         => (fog.SunDiffuse * SunEnergyPerDiffuse, fog.SunAmbient * AmbientEnergyPerAuthored);
 
+    /// <summary>The fog range as written: the authored pair in the faithful path, pushed out by
+    /// <c>EnhancedFogRangeScale</c> in enhanced mode so shadowed ground is not already grey. Pure
+    /// and identity in original mode, which is what keeps that path byte-for-byte the authored
+    /// one.</summary>
+    public static Vector2 FogRangeFor(Vector2 authored)
+        => GraphicsMode.Enhanced ? authored * EnhancedFogRangeScale : authored;
+
     /// <summary>Loads the mission's weather.json and resolves the rendered zone, builds the
     /// per-rig domes via <paramref name="buildDomes"/> (needs the resolved zone), then applies
     /// fog + whiteout + precipitation, in that order. ⚠ Do not reorder: each step depends on the
@@ -197,7 +212,9 @@ public sealed class WeatherRig
             WriteFogColor(new Vector3(linear.R, linear.G, linear.B));
         }
         if (fog.Range is { } range && !_spec.NoFog)
-            WriteFogRange(range);
+            // Through the same push the zone's range takes, or crossing a FOG_STATE edge in
+            // enhanced mode would snap the haze back to the authored distance mid-flight.
+            WriteFogRange(FogRangeFor(range));
         if (fog.Altitude is { } altitude)
             WriteFogAltitude(altitude);
         GD.Print($"weather: FOG_STATE '{fog.Name}' over zone '{_activeZone}': "
@@ -419,7 +436,8 @@ public sealed class WeatherRig
             return string.Empty;
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
         return $"; enhanced sun energy {sunEnergy:0.00} (diffuse {fog.SunDiffuse:0.##}), "
-               + $"ambient energy {ambientEnergy:0.00} (ambient {fog.SunAmbient:0.##})";
+               + $"ambient energy {ambientEnergy:0.00} (ambient {fog.SunAmbient:0.##}), "
+               + $"shadows to {FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).Y:0} m";
     }
 
     // "zone2 0 meshes, zone1 3 meshes" — the evidence the pick was made on, not just its result.
@@ -637,12 +655,12 @@ public sealed class WeatherRig
         // space, so convert here. See docs/org/weather.md for the 176-gray measurement.
         var fogLinear = fog.FogColor.SrgbToLinear();
         WriteFogColor(new Vector3(fogLinear.R, fogLinear.G, fogLinear.B));
-        // ⚠ Do not scale the authored fog ranges. VIEWING_RANGE ships FOG_SCALE 1.0 at HIGH in
-        // every chapter, and no screenshot residual licenses re-opening it — see
-        // docs/org/weather.md.
+        // ⚠ Do not scale the authored fog ranges in the FAITHFUL path: VIEWING_RANGE ships
+        // FOG_SCALE 1.0 at HIGH in every chapter and no screenshot residual licenses re-opening it
+        // (docs/org/weather.md). FogRangeFor is identity there; only enhanced mode pushes them out.
         var fogRange = _spec.NoFog
             ? new Vector2(1e8f, 1e9f)   // out of reach; --no-fog writes the range, not the unused csky_fog_on toggle
-            : new Vector2(fog.FogNear, fog.FogFar);
+            : FogRangeFor(new Vector2(fog.FogNear, fog.FogFar));
         WriteFogRange(fogRange);
         // FOG_ALTITUDE: the fog cylinder's vertical extent — full fog below FogLow, fading to
         // none at FogHigh (FRAGMENT altitude, settled in C2 at the controls of the original —
@@ -668,6 +686,11 @@ public sealed class WeatherRig
     private void ApplyEnhancedLighting(WeatherState.ZoneWeather fog)
     {
         RenderingServer.GlobalShaderParameterSet("csky_world_light", 1f);
+        // Shadows end where this zone's haze does, never at a line in clear air. Taken off the
+        // AUTHORED far through the same push, not off the written range, so --no-fog (which parks
+        // that range at 1e8) still gets a usable distance; no weather.json keeps the fallback.
+        if (fog.FogFar > 0f)
+            _sun.DirectionalShadowMaxDistance = FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).Y;
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
         _sun.LightEnergy = sunEnergy;
         _sun.LightColor = fog.SunColorDiffuse;

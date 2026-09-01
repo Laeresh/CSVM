@@ -92,7 +92,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Lit world shader variant (drop `unshaded`, matte material, keep the gamma modulate)
 12. ☑ Authored SUNLIGHT drives the sun and ambient in enhanced mode
-13. ☐ Sun shadow maps
+13. ☑ Sun shadow maps
 14. ☑ LIGHT_STATE point lights as real OmniLight3D nodes
 15. ☐ Enhanced settings reach the cockpit interior pass and every splitscreen pane
 
@@ -411,7 +411,7 @@ The log lines confirm the resolved energies reach the light. Enhanced C1B/IA1:
 print `enhanced sun energy 1.61 (diffuse 1.5), ambient energy 0.90 (ambient 0.5)`; the same runs in
 original mode print the line without the suffix.
 
-## B13 ☐ Sun shadow maps
+## B13 ☑ Sun shadow maps
 
 **Goal.** In enhanced mode the sun casts shadow maps: buildings and terrain self-shadow, and the
 player's aircraft casts a real moving shadow on the ground.
@@ -428,6 +428,12 @@ moon/stars must not cast (`WorldBuilder.BuildHorizon` already disables shadows t
 `CSVM/src/Mech3/WorldBuilder.cs:483-508`); check whether front-culled world meshes need
 `ShadowCastingSetting.DoubleSided` to appear in the light pass at all.
 
+**The fog push is the user's decision, taken after seeing the first captures**: shadowed ground
+read badly through the authored haze, so enhanced mode scales each zone's authored fog near/far
+outward by `WeatherRig.EnhancedFogRangeScale` (2.0) and the sun's `DirectionalShadowMaxDistance` is
+then set from that scaled far, per zone. The faithful path keeps the authored ranges exactly, so
+the prohibition in `ApplyZone` and `docs/org/weather.md`'s FOG_SCALE finding are untouched.
+
 **Model recommendation.** high — shadow acne vs peter-panning tuning across eight very different
 chapters, plus two known geometric oddities.
 
@@ -438,8 +444,80 @@ match sun orientation; no acne shimmer at grazing angles. Original-mode goldens 
 **⚠ Traps.** The depth-bias vertex scale runs in the light pass too, nudging casters toward the
 *light's* camera; at 2e-4 per level it should be negligible, but confirm no peter-panning on biased
 decals before blaming Godot's own bias knobs. BL-331 (the decoded 32x32 projected blob shadow)
-remains the original-mode item and must not be closed or cannibalised by this one. `<TODO:
-re-verify BL-331 still open.>`
+remains the original-mode item and must not be closed or cannibalised by this one. BL-331 is open
+in `backlog.md` under Damage & destruction, fully decoded in `docs/org/shadows.md`, and asks for a
+projected 32x32 silhouette quad along `SHADOW_ANGLES` in the FAITHFUL path; its own note already
+records that Godot shadow mapping cannot be that mechanism. This item adds a shadow map to the
+enhanced path only and leaves every word of BL-331 standing.
+
+**As landed.** `Launcher.SetupLighting` calls `EnableSunShadows` in enhanced mode only: PSSM 4
+splits, blended, splits 0.06 / 0.17 / 0.42, `ShadowBias` 0.05, `ShadowNormalBias` 1.25, and
+`DirectionalShadowMaxDistance` 6000 as the fallback a session with no weather.json gets. A flown
+mission overwrites that distance per zone: `WeatherRig.ApplyEnhancedLighting` sets it from the
+zone's authored fog far through `WeatherRig.FogRangeFor`, the same pure helper `ApplyZone` and
+`ApplyFogState` write the fog range through, so shadows always end where that zone's haze does
+(C2 4800 m, C5 4500 m, C1 and C2B 8000 m, C3 and C4 9000 m, C1B 9400 m). `FogRangeFor` is identity
+in original mode. Of the fog range's consumers only the `csky_fog_range` global is scaled: the
+whiteout and cloud band are driven by CLOUD_COVER altitudes, the zone gate is a `zone_id` cull-mask
+gate with no distance in it, `WorldLights`' fade is its own 900/1500 m pair, the skydome is fitted
+from `_camera.Far`, and `ZoneWeather.ClipFar` is parsed and logged but reaches nothing (the camera
+far plane is `Launcher`'s fixed 40000 m, already past every pushed fog far), so nothing needed
+extending. The caster audit found the tree already almost right: clutter, precipitation, fog-volume
+clutter, the map-edge extender, projectiles, effect emitters, point-sprite lights and every debug
+overlay were already `ShadowCastingSetting.Off`, and both billboard shader generators declare
+`shadows_disabled`, so cloud sprites and glow flares cannot cast at all. `WorldBuilder` adds
+`DisableShadows` on the cloud deck and the placed cloud clusters, beside the dome/moon/stars call
+that was already there. The world meshes and the aircraft keep the default `On` and are the only
+casters.
+
+**Verified.** <pending orchestrator run> During the item, in the item's worktree with
+`$env:CSVM_DATA_ROOT="Z:\CSVM"`: `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
+`.\RunTests.ps1 -Suite fog-state -SkipUnits -SkipGoldens`: engine PASS, 1 suite run of 200, engine
+errors clean, 0 unexpected lines. `.\RunTests.ps1 -Suite sun-orientation -SkipUnits -SkipGoldens`:
+engine PASS, 1 suite run of 200, engine errors clean. `.\RunTests.ps1 -SkipUnits -SkipEngine`
+(goldens only): PASS, 18 shot(s) hash-identical, zero movers, on an RTX 5080.
+
+The 8-chapter `--freecam` sweep (`--det --mute --frames=15 --screenshot=` per chapter, both modes)
+reported zero engine error lines in all 16 runs and identical gamez-node, mesh-instance, uv-clamped
+and edge-clamped counts between the modes for C1, C1B, C1C, C2, C2B, C3, C4 and C5.
+
+`DoubleSided` casting is NOT needed, and the control proves it rather than assuming it: the same C1
+airfield frame rendered with the world meshes' default `CastShadow` and with
+`ShadowCastingSetting.DoubleSided` differs in 1 pixel of 921,600, by 1 unit. The `cull_front` world
+already presents the sun the face it needs, because the source's visible side is Godot's back face.
+The instrument was an environment-gated line in `SceneBuilder`, deleted before finishing.
+
+At the captures the shadows read right. C1's 25 degree sun puts a hard cliff shadow across the
+water at the `c1-waterfall` golden pose that original mode does not have, with no dithered acne
+anywhere on the terrain at that grazing angle, which is what the 0.05 / 1.25 bias pair was chosen
+for. Road markings and runway decals sit flat on the C1 apron and the C2 plaza in every capture, so
+the depth-bias VERTEX scale running in the light pass costs nothing visible and Godot's own bias
+knobs were left where they are. Buildings cast onto the ground: the C1 hangar's shadow lies on the
+concrete apron in enhanced mode and not in original. The aircraft casts a real moving shadow,
+caught at three sim frames of one C3 low pass. A shadows-on / shadows-off pair at the same C2 pose
+isolates the whole shadow contribution to 3.7% of the frame with a peak darkening of 152 (summed
+RGB), which is the honest size of the effect under a 65 degree sun.
+
+The fog push at 2.0 was judged against the alternatives at the horizon in C1 and C4: it doubles the
+clear air without changing the ramp's shape, and no chapter shows an unhazed cut or the map edge at
+the new far (C2 4800 m is the shortest and its far hills still fade). Montages under
+`.scratch/b13/`: `M1_c2_buildings`, `M2_c1_building_shadows`, `M3_doublesided_control`,
+`M4_c1_acne`, `M5_aircraft_shadow`, `M6_c1_fog_push`, `M7_c1_fog_shadow_boundary`,
+`M8_c4_fog_push`, `M9_c4_fog_shadow_boundary`.
+
+Perf, C5 (heaviest) through `RunProbe` with `--freecam --perf --det --mute --frames=600`, three
+runs per configuration, mean over the eight steady windows past sim frame 180. `frame_ms` is 8.33
+in every run (the 120 fps cap), so the frame budget is untouched and `gpu_ms` is the number that
+moves: original 1.504 / 1.536 / 1.505 (mean 1.515), enhanced without the shadow pass 1.559 / 1.559
+/ 1.560 (mean 1.559), enhanced with it 1.631 / 1.631 / 1.630 (mean 1.631). The shadow pass costs
+0.072 ms of GPU time, 4.6%; the whole enhanced mode costs 0.116 ms, 7.7%. `render_cpu_ms` goes 1.13
+to 1.31.
+
+B15 must copy onto the cockpit overlay's sun clone (`CockpitOverlay.cs:114-146`) everything
+`EnableSunShadows` writes plus the per-zone distance: `ShadowEnabled`, `DirectionalShadowMode`,
+the three splits, `DirectionalShadowBlendSplits`, `ShadowBias`, `ShadowNormalBias`, and
+`DirectionalShadowMaxDistance` re-resolved from the zone the way `ApplyEnhancedLighting` does. The
+overlay's own camera is `Far = 100`, so its useful distance is nothing like the world pass's.
 
 ## B14 ☑ LIGHT_STATE point lights as real OmniLight3D nodes
 
