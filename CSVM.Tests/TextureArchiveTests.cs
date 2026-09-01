@@ -51,6 +51,20 @@ public class TextureArchiveTests
     }
 
     [Fact]
+    public void AnUndrawnTextureIsOnlyUndrawnWhereTheArchiveCannotResolveIt()
+    {
+        // C3's skydome names cloud1/cloud2 and C3 ships neither, so its two cards draw nothing.
+        // ⚠ The name alone must never be enough: the seven chapters that DO ship the pair keep
+        // drawing it, and this archive stands in for one that has no copy.
+        using var archive = new TextureArchive(TestData.TempDir());
+        Assert.True(archive.IsAbsentAndUndrawn("cloud1.tif"));
+        Assert.True(archive.IsAbsentAndUndrawn("cloud2"));
+        // Absent, but a name the original draws a neutral card for rather than nothing.
+        Assert.False(archive.IsAbsentAndUndrawn("pir_spinner.tif"));
+        Assert.False(archive.IsAbsentAndUndrawn("probe_plain"));
+    }
+
+    [Fact]
     public void AnArchiveOverAnEmptyDirectoryHasNoMissesYet()
     {
         using var archive = new TextureArchive(TestData.TempDir());

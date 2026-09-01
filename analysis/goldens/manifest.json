@@ -134,7 +134,7 @@
     {
       "name": "campaign-intro-fill",
       "frame": 120,
-      "hash": "35ab85759769231cc41bc469302ae965",
+      "hash": "a8ebd3dc189a5aad2677b4c2b1b55b45",
       "exercises": "A campaign mission's intro cutscene fills the whole window at four human players: one pane at the full rect, letterbox bars, the rest hidden with no gutter; frame-sensitive 3.89%.",
       "args": ["--campaign=csvm-golden:0", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     }

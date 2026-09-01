@@ -650,6 +650,16 @@ public sealed class TextureArchive : IDisposable
         "barngrill",   // C5 only
     };
 
+    // Absent from the retail data like the set above, but drawn as NOTHING rather than as a
+    // neutral card: the original shows empty sky where these are referenced. Kept a separate set
+    // because the two answers differ where it matters — a gray card is right where the original
+    // drew something blank, and wrong where it drew nothing at all. See docs/org/textures.md.
+    private static readonly HashSet<string> AbsentAndUndrawn = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "cloud1", // C3's skydome names both, and C3 alone of the eight chapters ships neither
+        "cloud2",
+    };
+
     // The coastline sheets: the waterline where a land tile meets water, authored as a wide
     // feathered alpha ramp. Their dry-land half is solid, which carries the whole-sheet
     // opaque/ink ratio above the cutout threshold even though the waterline itself is
@@ -764,6 +774,14 @@ public sealed class TextureArchive : IDisposable
     public static bool IsKnownAbsent(string materialTextureName) =>
         KnownAbsentFromGameData.Contains(Path.GetFileNameWithoutExtension(materialTextureName));
 
+    /// <summary>True when the name is one the original draws nothing for (see AbsentAndUndrawn)
+    /// AND this archive cannot resolve it, so the caller drops the polygon instead of surfacing it.
+    /// ⚠ Both halves are required: the chapters that DO ship the texture must keep drawing it, so
+    /// this is a per-archive question and not a name test.</summary>
+    public bool IsAbsentAndUndrawn(string materialTextureName) =>
+        AbsentAndUndrawn.Contains(Path.GetFileNameWithoutExtension(materialTextureName))
+        && Find(materialTextureName) == null;
+
     public ImageTexture? Find(string materialTextureName)
     {
         var baseName = Path.GetFileNameWithoutExtension(materialTextureName);
@@ -781,7 +799,11 @@ public sealed class TextureArchive : IDisposable
         {
             // Report each distinct miss once. Log.Warn is a plain line — GD.PushWarning would
             // print a full managed stack trace per call in Godot .NET, burying real errors.
-            if (IsKnownAbsent(materialTextureName))
+            if (AbsentAndUndrawn.Contains(baseName))
+            {
+                Log.Warn("world", $"texture absent from game data texture={materialTextureName} — polygons undrawn");
+            }
+            else if (IsKnownAbsent(materialTextureName))
             {
                 Log.Warn("world", $"texture absent from game data texture={materialTextureName} — gray fallback");
             }

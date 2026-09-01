@@ -521,6 +521,12 @@ solidifies partial alpha above it, so only essentially-binary ink scissors faith
 dry-land half outvotes the feathered ramp that is the point of the texture.
 `Build` is the one construction path — decode, classify, drop-in, mip chain — and `Find` caches
 its result; `BuildMipped` hands the same Image to `--dump-mips` un-cached.
+Two sets name the textures the retail data itself lacks, and they differ in what gets drawn:
+`KnownAbsentFromGameData` (`pir_spinner`, `barngrill`) takes a neutral gray card, while
+`AbsentAndUndrawn` (`cloud1`, `cloud2`, C3's skydome) drops the polygon in `SceneBuilder.BuildMesh`.
+Anything on neither list stays loud (debug magenta plus a not-found line), since it is likelier our
+own name resolution failing. ⚠ `IsAbsentAndUndrawn` also requires the lookup to fail, so the seven
+chapters that do ship `cloud1`/`cloud2` keep drawing them — see docs/org/textures.md.
 
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree → MeshInstance3D builder: triangulation, material/mesh

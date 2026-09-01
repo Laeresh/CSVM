@@ -1406,51 +1406,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `depth_draw_never` and no sort is a **separate delta** from the blend rule, and it is the one that
   actually produces dark-over-fire. Fixing blend alone will not close the reported symptom.
 
-- `BL-326` `[Bug]` **C3's skydome draws a magenta rectangle below the camera: its gamez names
-  `cloud1`/`cloud2`, the two textures C3 is the only chapter not to ship.** Seen at the controls
-  by the user 2026-08-09 and confirmed by them to be on **`main`**, then reproduced and traced
-  2026-08-09. Not aircraft-related — the "moves relative to the plane" reading is the giveaway
-  that it is **camera-anchored**, not plane-attached.
-  *The chain, all confirmed:*
-  - Node **`g1155`**, `model_index` 492, `zone_id` 1, parent 3236 — the `zone1` group under the
-    gamez `horizon` node, i.e. the **camera-anchored skydome**. It is the immediate **sibling of
-    the `sun` node** (model 491) that `BL-165` anchors the lens flare to.
-  - Model 492's polygons carry materials **270** and **271** → `texture_index` 266/267 →
-    **`cloud1.tif`** and **`cloud2.tif`**.
-  - Those two names are referenced by C3's `gamez/textures.json` and are **absent from every one
-    of C3's archive folders** (`texture`, `rtexture2/4/6/8/12`). Census across the install: C1,
-    C1B, C1C, C2, C2B, C4 and C5 each ship **12** copies of the pair; **C3 ships 0**.
-  - Unresolved ⇒ `SceneBuilder`'s debug **magenta** (which `TextureArchive.DefaultOverride`,
-    `TextureArchive.cs:51-54`, deliberately shares with `--tex-override`).
-  *Reproduce:* `--freecam --chapter=C3 --no-fog "--pos=0,1500,0" "--direction=0,-1,0.05"` —
-  straight down — gives **2886 magenta px**, a 76×38 rectangle at (602,352), RGB (190,60,196).
-  ⚠ **You must look down.** A level chase-cam flight (`--fly --chapter=C3 --plane=player_bhawk
-  --frames=90`, 2861 ft) renders **zero** magenta pixels. That negative control is why this
-  reads as intermittent at the controls.
-  ⚠ **The fix is a real decision, not a one-liner — do not just add the names to
-  `KnownAbsentFromGameData`.** That set (`TextureArchive.cs:679-683`, currently `pir_spinner` and
-  C5's `barngrill`) means "the retail data genuinely lacks this, render a neutral fallback instead
-  of debug magenta". It would silence the magenta, but the two candidate readings differ in what
-  the player should see and the data does not settle which:
-  - **(a) A genuine per-chapter data gap.** C3's authors dropped the textures; the original
-    engine drew nothing, or something blank, in that slot. Then `KnownAbsent` (or suppressing
-    the node) is right.
-  - **(b) The original resolved them from a shared pool.** Every *other* chapter ships the pair,
-    so a global/cross-chapter texture lookup in the original would have found `cloud1` and drawn
-    a real cloud. Then `KnownAbsent` hides a missing cloud behind a blank card, and the fix is a
-    cross-chapter fallback.
-  Distinguishing them is what settles it: (b) predicts a visible cloud below the camera in C3 in
-  the original, (a) predicts nothing there. **Needs an original-game A/B** — fly C3, look down,
-  and say whether a cloud card is present.
-  ⚠ **Traps.** (a) `--tex-override`/`--tex-census` paint magenta *by design* — rule the flags out
-  before reading the colour as a fault. (b) `gfly02/03/04.tif` are also referenced-but-absent in
-  C3 and are a **red herring**: no material uses them (dead registrations), so they draw nothing.
-  (c) `pock1.tif`, `snow16x16.tif`, `default` and `pir_spinner.tif` are referenced-but-absent in
-  **every** chapter — the baseline, not a C3 fault. (d) This node is the sun's sibling in the dome
-  subtree, so anything that suppresses it must not catch the `sun` node with it — that node is the
-  lens flare's anchor (`BL-165`, closed; `analysis/bl-165-lens-flare/FINDINGS.md`,
-  `CSVM/src/Session/LensFlareRig.cs`).
-
 - `BL-035` `[Feature]` **Animation event kinds that need weapons or cutscenes — `CALLBACK`, `OBJECT_CYCLE_TEXTURE`,
   one-shot `SOUND`** (triaged 2026-07-22, the last of `docs/plans/PLAN-anim-rendering-followups.md`
   item 2 after `OBJECT_MOTION` landed). All three still dispatch at bootstrap, so the counts in

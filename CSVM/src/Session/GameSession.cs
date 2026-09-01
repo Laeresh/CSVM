@@ -1376,6 +1376,10 @@ public partial class GameSession : Node3D
         if (builder.OverlayPassSurfaceCount > 0 || builder.OverlayPassDeclinedCount > 0)
             GD.Print($"overlay passes: {builder.OverlayPassSurfaceCount} surface(s) built, "
                      + $"{builder.OverlayPassDeclinedCount} polygon(s) declined");
+        // C3's skydome cloud cards, and nothing else in the install: the tripwire if the
+        // absent-and-undrawn rule ever reaches a chapter that ships the texture.
+        if (builder.UndrawnPolygonCount > 0)
+            GD.Print($"undrawn polygons: {builder.UndrawnPolygonCount} dropped (texture absent from game data)");
         state.What = $"chapter {_spec.Chapter} world";
 
         // The animation debugger (--anim-lab): the lab node owns the clock and the

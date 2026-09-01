@@ -344,6 +344,12 @@ void fragment() {
 
     public int OverlayPassDeclinedCount { get; private set; }
 
+    /// <summary>Polygons dropped because their material names a texture the retail data lacks and
+    /// the original draws nothing for (<see cref="TextureArchive.IsAbsentAndUndrawn"/>). Expected
+    /// 2 for a C3 world build (the skydome's two cloud cards) and 0 everywhere else, which is what
+    /// makes this the tripwire if the rule ever starts eating a chapter that ships the texture.</summary>
+    public int UndrawnPolygonCount { get; private set; }
+
     /// <summary>Polygons this builder built that carry the <c>no_clutter</c> flag (raw bit
     /// <c>0x800</c>), and those that do not. Counted per BUILT MODEL, not per placement: a model
     /// instanced a hundred times is one mesh build and counts once, which is the granularity the
@@ -931,6 +937,11 @@ void fragment() {
         int overlayLevels = 0;
         foreach (var poly in mesh.Polygons)
         {
+            if (DrawsNothing(poly.MaterialIndex))
+            {
+                UndrawnPolygonCount++;
+                continue;
+            }
             bool doubleSided = forceDoubleSided || !_cullBackfaces || poly.ShowBackface;
             var key = (poly.MaterialIndex, poly.Priority, poly.NoClutter, doubleSided, 0);
             if (!groupIndex.TryGetValue(key, out int gi))
@@ -966,6 +977,14 @@ void fragment() {
             {
                 if (poly.OverlayPasses == null || poly.OverlayPasses.Count < pass)
                     continue;
+                // The base polygon is gone, so its overlays have nothing to sit on; an overlay
+                // naming an undrawn texture goes the same way.
+                if (DrawsNothing(poly.MaterialIndex)
+                    || DrawsNothing(poly.OverlayPasses[pass - 1].MaterialIndex))
+                {
+                    UndrawnPolygonCount++;
+                    continue;
+                }
                 bool doubleSided = forceDoubleSided || !_cullBackfaces || poly.ShowBackface;
                 var key = (poly.OverlayPasses[pass - 1].MaterialIndex, poly.Priority, poly.NoClutter, doubleSided, pass);
                 if (!groupIndex.TryGetValue(key, out int gi))
@@ -994,6 +1013,11 @@ void fragment() {
             UnlitModelCount++;
         if (!fogged)
             UnfoggedModelCount++;
+
+        // Every polygon was undrawn: no surface to commit, and a surface-less ArrayMesh would still
+        // cost an instance. Same answer as an empty mesh.
+        if (groups.Count == 0)
+            return null;
 
         var arrayMesh = new ArrayMesh();
         for (int rank = 0; rank < groups.Count; rank++)
@@ -1044,6 +1068,16 @@ void fragment() {
         _scrollOverrides != null && _scrollOverrides.TryGetValue(meshIndex, out var rate)
             ? rate
             : mesh.TextureScroll;
+
+    // A polygon the original draws nothing at all for: its material names a texture the retail data
+    // lacks AND this chapter's archive cannot resolve it. Dropped before grouping, so no surface,
+    // no material and no fallback card is built for it. ⚠ The resolve half lives in
+    // TextureArchive.IsAbsentAndUndrawn and is what keeps the seven chapters that DO ship cloud1/
+    // cloud2 drawing them; a name-only test here would strip their skydomes too.
+    private bool DrawsNothing(int materialIndex) =>
+        materialIndex >= 0 && materialIndex < _gamez.Materials.Count
+        && _gamez.Materials[materialIndex].TextureName is { } texName
+        && _textures.IsAbsentAndUndrawn(texName);
 
     // True if any of the mesh's polygons is skinned with a billboard (cloud-sprite) texture.
     private bool UsesBillboardTexture(GameZMesh mesh)

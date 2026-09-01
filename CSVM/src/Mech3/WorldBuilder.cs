@@ -104,6 +104,10 @@ public sealed class WorldBuilder
     public int OverlayPassSurfaceCount => _scene.OverlayPassSurfaceCount;
     public int OverlayPassDeclinedCount => _scene.OverlayPassDeclinedCount;
 
+    /// <summary>Polygons drawn as nothing for want of a texture the retail data lacks — see
+    /// <see cref="SceneBuilder.UndrawnPolygonCount"/>.</summary>
+    public int UndrawnPolygonCount => _scene.UndrawnPolygonCount;
+
     /// <summary>The overcast deck as a separate node so the caller can make it follow the
     /// player (see GameSession): the opaque overcast sheet tracks the plane and flips
     /// above/below at the cloud band, as in the original. A child of the world root at its

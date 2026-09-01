@@ -27,6 +27,14 @@ bottom rather than hidden.
 | `FUN_00530900` | `fread`s the gamez texture directory: `count` records of `0x2c` bytes |
 | `FUN_00530a10` | Texture lookup by name over that directory |
 | `FUN_00531cb0` | Loads one record: `record[0] = FUN_00531b60(record+0x0c /* name */, 0)` |
+| `FUN_00531800` | Binds by name: the lookup above, else a new slot queued for deferred load |
+| `FUN_005318a0` | Allocates a registry slot, reusing a free one before growing the array |
+| `FUN_005309d0` | Queues a slot index onto the pending-load list |
+| `FUN_00531d80` | Flushes that queue (`FUN_00531e50` is the level-init caller) |
+| `FUN_00531b60` | The load: the archive walk, one retry, then the loose-file loaders |
+| `FUN_00531900` | Walks every loaded texture source looking for one name |
+| `FUN_004c59a0` | Per-polygon bind by texture ID, and the "using default" fallback |
+| `FUN_00463f40` | Level init: opens `textures.zrd`, loads the `COMMON` set, sets the search path |
 | `FUN_005a4210` | Immediate quad path: sets `SRCBLEND`/`DESTBLEND` from the render flags |
 | `FUN_005a6160` | Deferred transparent-list flush: sorts, then sets `DESTBLEND` per polygon |
 | `FUN_005a5fa0` | The transparent-list sort itself |
@@ -191,7 +199,59 @@ in exactly two things, and **neither of them is blend**.
 The ramp-less white and the `(1 − ageFrac)` alpha envelope are written earlier, by `FUN_0054e6e0`
 itself; the ramp-less entry then re-applies white on top.
 
-## Suggested extractor changes
+## Name resolution: one global registry, no chapter scoping
+
+The engine keeps a single flat texture registry, the array at `DAT_0072c17c`: stride `0x2c`, live
+count in `DAT_0072c178`, a hard cap of `0x1000` entries, the name at entry `+0x0c` and an in-use
+field at entry `+0x20`. `FUN_00530a10` is a linear name scan over it, and it has no notion of which
+chapter contributed an entry. **There is no per-chapter texture scope, so there is also nothing to
+fall back from**: a name resolves if any loaded source supplied it and fails if none did.
+
+Level init (`FUN_00463f40`) fills that registry from three places. It opens `textures.zrd`, loads
+the `COMMON` set at a detail level derived from a driver query (falling back to a `DEFAULT` set),
+and sets a loose-file search path of `..\data\common\textures;..\data\common\effects\textures`,
+which is a dev-only location absent from a retail install.
+
+A miss does not fail immediately. `FUN_00531800` allocates a slot (`FUN_005318a0`), copies the name
+in, marks it state 2 and queues the index (`FUN_005309d0`, onto the 20-entry pending list at
+`DAT_00758204` counted by `DAT_0075822c`). `FUN_00531d80` flushes the queue, and level init calls it
+twice through `FUN_00531e50`, once after the texture-load stage and once after `effects.zrd`. Each
+queued slot then goes to `FUN_00531cb0`, which resolves in this order:
+
+1. `FUN_00531b60`, which calls `FUN_00531900` (a walk over every loaded texture source), retries
+   once with `DAT_00758234` toggled, then tries the two loose-file loaders `FUN_00534cf0` and
+   `FUN_00534060`.
+2. An optional secondary resolver at `DAT_00758250`. ⚠ **Never installed in retail**: its only
+   cross-reference in the binary is the read in `FUN_00531cb0` itself, so the pointer is null and
+   the branch is dead.
+3. The terminal fallback, `&DAT_006351f0`.
+
+### `DEFAULT_TEXTURE`, the built-in fallback image
+
+`DAT_006351f0` is a static image descriptor compiled into the executable: `08 00 08 00` at `+0x04`
+is its 8x8 size, and `+0x10` points at 128 bytes of 16-bit pixels at `0x00635170`. Its registry
+entry is `PTR_DAT_00635230`, carrying the name `DEFAULT_TEXTURE` at the usual `+0x0c`. The pixels
+are a red/green checkerboard, `0xF800` and `0x03E0` in alternating pairs.
+
+The per-polygon binding site is `FUN_004c59a0` (`gg_load`, line `0x27b`). It scans the model's
+texture table for the polygon's texture ID, and on no match, or when the bind returns zero, it logs
+`Failed to find texture ID (%d) using default` and binds the texture literally named `default`. No
+archive in the install ships that name either, so it lands on the same checkerboard.
+
+### What that means for a referenced-but-absent texture
+
+The install ships `cloud1`/`cloud2` in seven of the eight chapters' `texture.zbd`. C3 ships neither,
+although its skydome (node `g1155`, model 492) names both on two of its 25 polygons. No root-level
+archive supplies them: `rimage.zbd`, the shared image pool, has neither, and the only occurrences
+outside a chapter archive are three copies of a puffer definition in `zrdr.zbd` listing
+`TEXTURES cloud1 cloud2 smoke101 …`, which references the names rather than supplying pixels.
+
+⚠ **The decode and the screen disagree here, and the screen wins.** The chain above says C3's two
+cloud polygons should draw the red/green checkerboard. At the controls the original shows nothing
+below the aircraft in C3, so something upstream of the bind is dropping those polygons and the
+fallback never reaches the screen. The route by which that happens is not decoded. What is settled
+is the part that matters for the remake: **there is no shared pool the names could have come from**,
+so a cross-chapter lookup would be inventing engine behaviour that does not exist.
 
 The field is currently read as `stretch: u16` and spelled as an enum, which loses the bit structure
 and hides the additive flag behind an `Unk` name. Suggested:
@@ -217,6 +277,14 @@ the additive bit is not in our pipeline at all. `Puffer.Create` decides blend wi
 `ramp OR diesDark ⇒ Mix, else Additive`, which is wrong in both directions against the rule above:
 it draws a ramp-less unflagged sprite additively where the engine mixes, and mixes a flagged sprite
 that has a ramp where the engine adds. See `BL-335`.
+
+`TextureArchive` carries two absent-name sets rather than one, because the retail data lacks
+textures for two different reasons. `KnownAbsentFromGameData` (`pir_spinner`, `barngrill`) draws a
+neutral gray card; `AbsentAndUndrawn` (`cloud1`, `cloud2`) drops the polygon, which is what C3's
+skydome needs. ⚠ Membership of the second set is not enough on its own: `IsAbsentAndUndrawn` also
+requires the lookup to fail, so the seven chapters that do ship the pair keep drawing it.
+`SceneBuilder.UndrawnPolygonCount` reports 2 for a C3 world build and 0 for every other chapter,
+which is the tripwire if that ever stops being true.
 
 ⚠ The one case that prompted the trace comes out right by accident. `fire_n_smoke` dies on
 `fire_f06`, which is unflagged and therefore alpha-mixed in the original; our darkness rule reaches
