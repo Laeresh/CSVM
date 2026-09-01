@@ -504,6 +504,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Weapons & combat
 
+- `BL-667` `[Bug]` **The zeppelin cannons' own scan still reads the aircraft half of the
+  VehicleList.** *Evidence:* `ZeppelinRuntime.Cannons.cs` fills its candidate set with
+  `ProjectilePool.CollectAircraft`, while the decoded turret picker (`FUN_0041f9c0`,
+  `docs/org/targeting.md` "What a turret's candidate set holds") walks the whole `VehicleList`,
+  hulls included; `TurretController` was widened to `CollectVehicleList` and the cannons were not.
+  *Fix shape:* the same one-call swap, with a suite placing a hostile hull under a zeppelin cannon
+  and no aircraft in the scene. *⚠ Traps:* the turret and ordnance pools of the picker stay
+  unscanned on purpose; do not widen further here. *Cross-refs:* `PLAN-M5-polish-8.md` B12,
+  `turret-vessel-targets` (the pattern suite).
+
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
   (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research
   risk:** the pickup entities have not been located, and they may be mission-scripted rather
@@ -2353,6 +2363,27 @@ usual.
   the audio half of (b)), `BL-389` (splitscreen weapon mix, same playtest family).
 
 ## Missions, modes & campaign
+
+- `BL-665` `[Bug]` **A woken roster block is re-placed at its authored pose, not where the script
+  left it.** *Evidence:* `CampaignDirector.BuildRoster` stores `spawn.Position` in `_rosterPlans`
+  while placing the rig at a world node of the block's name where one exists, and
+  `World.WakeupEnemies` re-places a woken block at the stored authored pose. A mission whose script
+  animates a deactivated block into place before waking it would have it jump back on the wake. No
+  shipped C1/M04 block has a world node, so the path is latent there; other missions have not been
+  censused. *Fix shape:* store the placed pose (or re-read the node) at the wake rather than the
+  plan's authored one. *⚠ Traps:* a block placed by pose and never animated must land exactly where
+  it does today. *Cross-refs:* `PLAN-M5-polish-8.md` A1, whose `campaign-cm09-docking` suite drives
+  the wake.
+
+- `BL-666` `[Bug]` **A zeppelin killed by gasbags alone leaves CM09 with no loss and no docking.**
+  *Evidence:* the survivor-count kill (fewer than four of six gasbags) hides `piratezep` without
+  losing six engines, so the 26/27/41 loss chain never fires, while OBJECTIVE40 (gated on the hull
+  through `TICK_DEPENDS_ON_OBJ`) retires and 42 stays gated off. The mission then ends in neither
+  direction. *Fix shape:* decide from the original whether a gasbag kill is meant to reach the loss
+  chain or the docking, then route the hull's death through that path. *⚠ Traps:* the gate rule in
+  `docs/formats/objectives.md` ("a gate whose own condition reads true is a chain that stops for
+  good") is the mechanism; do not touch the graph. *Cross-refs:* `PLAN-M5-polish-8.md` A1, `BL-440`
+  (the breakup the same kill plays).
 
 - `BL-501` `[Feature]` **Nothing exercises avoid-crash probing between aircraft flying one net in
   formation.** *Evidence:* flagged by G77, which fixed the branch draw that split CM02's three
