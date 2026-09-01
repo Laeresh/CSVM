@@ -68,6 +68,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ❌ `BL-628` A docking cutscene's opening shot plays one hook swing, hooks parked at build
 3. ☑ `BL-631` The letterbox bars draw over everything the episode flies past
 4. ❌ Hook arms drawn full-size before their scale motion starts
+5. ☑ Hook animation matches the original's CM02 docking on film
 
 ### Wave B — Combat and AI
 
@@ -355,6 +356,12 @@ every mission's first docking opens on a full-length arm that then collapses and
 docking after a retract in the same mission does not. The original's data and runtime produce that
 same first-docking window.
 
+⚠ **Superseded by A5 in its conclusion, not in its decode.** The runtime reading above is right and
+still stands. What it misses is that a pose written by another definition's `RESET_STATE` is what the
+node holds through that second: `<x>_hook_retract`'s `RESET_STATE` parks the arms collapsed at
+mission load, which is why the original's film shows no full-length arm. Read A5 before acting on the
+"no CSVM change" below.
+
 **Approach.** No CSVM change. `FromToMotion.Create` is called from
 `PoseChannel.HandleMotionFromTo` when the event is handled, which `SequenceRunner` gates on the
 authored `start`, and the first `Tick` writes `from` advanced by one frame. That is the original's
@@ -380,6 +387,70 @@ the archive check first, because the window is invisible on any docking that fol
 which the stepper stores and the gate block treats like 0 without clearing), but no shipped hook
 definition loops. Cross-refs: A2 (`git log --grep=BL-628`),
 `docs/formats/anim-definitions/cutscenes.md`.
+
+## A5 ☑ Hook animation matches the original's CM02 docking on film
+
+**Goal.** The docking hook plays the swing the original plays, judged frame by frame against
+`OriginalScreenshots/Videos/CM02.mkv`, which is CM02 (`C3/M05`) closing on the Klondike.
+
+**Evidence (confidence: traced to data and to code, with the film as the ground truth).** A2 and A4
+disproved their own hypotheses correctly but both stopped one definition short. What parks a docking
+hook's ARMS is neither the aircraft archive's inactive bit (which parks only the group) nor an
+`<x>_hook_startup` (never called in a player docking): it is the matching
+`<x>_hook_retract`'s own `RESET_STATE`, which bootstrap pass 1 applies to every loaded definition.
+`pirate_hook_retract` parks `l_arm3` and `r_arm3` at rotation `(0, 0, 0)` and scale `(1, 0, 0)`,
+exactly the pose `pirate_hook_extend`'s scale motion starts from, and switches the group, both doors
+and both arms off.
+
+The film agrees to the frame. `hooked_to_klondike` calls `letterbox`, reparents `camera1` and calls
+`player_extend_hook` in one dispatch, so the cutscene's opening shot starts on the extend's t=0. The
+cut is at t≈276.15 s of the recording; the arms are invisible above the mount from there until
+t≈277.15 s, grow smoothly to full length between t≈277.15 s and t≈278.15 s, and are on their
+two-second outward rotate when the shot cuts to the zeppelin's underside at t≈278.5 s. That is the
+definition read literally: doors 0 to 0.75 s, arm scale 1 to 2 s, arm rotate 2 to 4 s.
+
+CSVM did not park the arms, because `AircraftStage.StageFlown` indexes the flown airframe through
+`AnimRuntime.IndexRebasedStage`, which deliberately runs no RESET_STATE pass so that a chapter
+definition anchoring on a generic airframe node name cannot re-pose a live aeroplane. The arms
+therefore held the archive's own `(1, 1, 1)`, the extend's `state` sequence switched them on at full
+length, and the scale motion collapsed them a second later and grew them back. That is one hook
+swing too many on screen, which is what the sortie reported.
+
+**Approach.** Park the hook the way the data parks it, scoped so nothing else on the airframe is
+touched: `AnimRuntime.ParkDockingHook` applies the RESET_STATE of every definition anchored on a
+`PlaneBuilder.IsDockingHook` group inside the built model, and `StageFlown` calls it after the
+rebased index.
+
+**Model recommendation.** High: the diagnosis needed the film, the data and the runtime together,
+and the fix reopens a deliberately narrowed RESET_STATE rule in one scoped place.
+
+**Verify.** `landings-hookup-airframe` now reads, per airframe, the scales the airframe's own retract
+RESET_STATE authors and asserts each arm is drawn at that collapsed pose when its extend starts.
+Then D31 at the controls: any docking's opening shot, hooks folded away for a second, one growth,
+one swing out.
+
+**⚠ Traps.** The general RESET_STATE pass must stay off a rebased aircraft; only the hook group's own
+definitions may re-pose one. An airframe whose retract poses no scale legitimately keeps the archive
+pose for that second (`bal_hook_retract` names only the two rotations, so the Balmoral's `l_arm1` and
+`r_arm1` sit at `(1, 1, 1)` against a `from` of `(1, 1, 0.5)`), so a blanket "the arms are collapsed"
+assertion is wrong and the check is per-airframe against that airframe's own data. A pose read back
+through `Basis.Scale` on a degenerate basis does not return the applied scale on every axis, so the
+assertion compares the flattest axis. `--anim-lab --plane=` could not host a hook definition at all
+before this item, so anyone re-checking it in the lab on an older build sees a placeless play.
+
+**Verified.** <pending orchestrator run>
+- `dotnet build CSVM/CSVM.sln`: 0 warnings, 0 errors. `dotnet format CSVM/CSVM.sln`, `.\CheckCommentCaps.ps1`, `.\CheckEncoding.ps1`: clean.
+- `dotnet test CSVM.Tests/CSVM.Tests.csproj`: 2791 passed.
+- `.\RunTests.ps1 -Filter landing -SkipUnits -SkipGoldens`: 11 of 11 pass, engine errors clean.
+- `.\RunTests.ps1 -Filter cutscene -SkipUnits -SkipGoldens`: 6 of 6 pass.
+- `.\RunTests.ps1 -Filter campaign -SkipUnits -SkipGoldens`: 43 of 43 pass.
+- `.\RunTests.ps1 -SkipUnits -SkipEngine`: 18 shots hash-identical, no golden moved.
+- The new check is able to fail: with `ParkDockingHook` stubbed out the arms read `(1, 1, 1)` against
+  an authored `(1, 0, 0)` and `landings-hookup-airframe` fails.
+- The film was read at 60 fps out of `CM02.mkv` from t=272 s, and CSVM was captured at 1/60 s per
+  frame through `.\RunProbe.ps1 --anim-lab --chapter=C3 --plane=player_pfighter
+  --play-anim=pirate_hook_extend --screenshot=<path> --frames=1 --shots=280`, before and after.
+- Owed to the full battery: `.\RunTests.ps1` complete has not run in this worktree.
 
 # Wave B — Combat and AI
 

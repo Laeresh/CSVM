@@ -357,8 +357,9 @@ the cursor waits with it. There is no run list a pending event could be posed fr
 ⚠ **Nothing else writes the node's pose while a gated motion waits.** `OBJECT_ACTIVE_STATE` (slot
 6, `FUN_004e8f40`) calls `gwNodeSetActive` (`FUN_004cca30`, named by its own error string), which
 only toggles bit `0x4` of `node+0x24`. So a definition that switches a node on at t=0 and starts a
-collapsed-`from` scale motion at t=1 draws that node at the scale its archive authors for the whole
-second, in the original as much as in the remake; the docking hooks are the worked example in
+collapsed-`from` scale motion at t=1 draws that node for the whole second at whatever posed it last,
+which is normally another definition's `RESET_STATE` rather than the archive's own pose; the docking
+hooks are the worked example in
 [`anim-definitions/cutscenes.md`](anim-definitions/cutscenes.md).
 
 A `LOOP` rewind is the one re-entry that does not rewrite `from`. `FUN_004ebfd0` calls the sequence

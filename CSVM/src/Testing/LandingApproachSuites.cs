@@ -770,6 +770,22 @@ internal static class LandingApproachSuites
             report.AppendLine($"at switch-on '{node}': scale {at}, its motion starts from {from}");
         }
 
+        // The opening shot draws the arms for a whole second before their scale motion starts, so
+        // an arm still at the archive's full length here is drawn extended and then collapses when
+        // the motion reaches it, which reads as a second swing.
+        var parkedAt = ParkedScales(world, branchAnim);
+        foreach (var (node, _, at) in atSwitchOn)
+        {
+            if (!parkedAt.TryGetValue(node, out var authored))
+            {
+                continue;
+            }
+
+            report.AppendLine($"parked '{node}': authored {authored}, drawn {at}");
+            ctx.Check(CollapsedLike(at, authored),
+                $"'{node}' is drawn at the collapsed pose its airframe's retract definition parks it at, {authored}, rather than the aircraft archive's own full length");
+        }
+
         // One call site playing three times and three call sites playing once are different
         // faults. The shared fork's count says nothing about the branch, which is what moves the
         // arms: the fork is authored once per archive and does play once whatever the branch does.
@@ -1581,6 +1597,47 @@ internal static class LandingApproachSuites
 
         return string.Empty;
     }
+
+    // The scales the airframe's own retract definition parks its arms at: every ObjectScaleState in
+    // the RESET_STATE of the definition rooted on the same hook group as the extend. An airframe
+    // whose retract poses no scale (the Balmoral) contributes nothing, which is the data.
+    private static Dictionary<string, Vector3> ParkedScales(TestWorld world, string extendAnim)
+    {
+        var parked = new Dictionary<string, Vector3>(StringComparer.OrdinalIgnoreCase);
+        string group = HookGroupOf(world, extendAnim);
+        if (group.Length == 0)
+        {
+            return parked;
+        }
+
+        foreach (var def in world.Runtime.ProgramDefs)
+        {
+            if (def.ResetState == null
+                || !string.Equals(def.Name, group, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var ev in def.ResetState.Events)
+            {
+                if (ev.Kind == "ObjectScaleState" && ev.Data.Str("name") is { } name)
+                {
+                    parked[name] = ev.Data.Vec3("state");
+                }
+            }
+        }
+
+        return parked;
+    }
+
+    // A pose is parked when its most collapsed axis is as flat as the authored one. The arm's live
+    // basis is read back through a scale decomposition and its non-collapsed axes do not survive
+    // that round trip on a degenerate basis, so the flattest axis is the honest comparison; the
+    // runtime's own non-singular clamp is why the authored zero reads a hair above it.
+    private static bool CollapsedLike(Vector3 at, Vector3 authored) =>
+        Math.Abs(MinAxis(at) - MinAxis(authored)) < 0.05f;
+
+    private static float MinAxis(Vector3 v) => Math.Min(v.X, Math.Min(v.Y, v.Z));
 
     // What each of a hook definition's scaled movers is drawn at when that definition starts. The
     // arms are switched on by its state sequence and only scaled by a motion its control sequence

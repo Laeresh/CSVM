@@ -1472,9 +1472,9 @@ public partial class GameSession : Node3D
         _worldRoot!.AddChild(labCam);
         _spectator = labCam;
 
-        // Optional stage prop: --plane= parks that aircraft at the mission spawn
-        // point. No FlightController — in the Fortune Hunters livery like every other
-        // aircraft (--paint= picks another, --paint=none the bare shipped skins).
+        // Optional stage prop: --plane= parks that aircraft at the mission spawn point, in the
+        // Fortune Hunters livery and with no FlightController. It carries its docking-hook group
+        // and is indexed, or a hook definition resolves nothing and plays placeless.
         if (_spec.PlaneNames.Count > 0)
         {
             long mark = StartupProfile.Mark();
@@ -1484,7 +1484,7 @@ public partial class GameSession : Node3D
             var parkedBuilder = new PlaneBuilder(planesGamez, state.Textures,
                 scheme: _liveryResolver.SchemeFor(0, state.ZrdrPath, _liveryResolver.NewPaintRng(),
                     _liveryResolver.PatternsForPlane(planesGamez, _spec.PlaneName)),
-                patterns: _liveryResolver.Patterns);
+                patterns: _liveryResolver.Patterns, dockingHook: true);
             var parked = parkedBuilder.Build(_spec.PlaneName);
             StartupProfile.Record("plane", mark);
             state.MeshInstances += parkedBuilder.MeshInstanceCount;
@@ -1494,6 +1494,9 @@ public partial class GameSession : Node3D
             {
                 parked.LookAtFromPosition(spawnPos, spawnLook, Vector3.Up);
             }
+            // Indexed the way the effect stage is, since the bootstrap indexed the world before
+            // this prop existed; the RESET_STATE tail is what parks its hook arms.
+            session.Runtime.IndexStage(parked);
             state.What += $" + parked '{_spec.PlaneName}'";
             // The parked prop hangs beside the world content, outside the selection/node-lab walk,
             // so register it as an extra pick root or neither a click nor the lab tree reaches it.

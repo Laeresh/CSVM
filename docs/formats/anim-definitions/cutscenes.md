@@ -593,30 +593,39 @@ player's hook is the aircraft archive's own inactive bit on the `<x>_hook` group
 airframes ship that bit clear, so the seven authoring no startup are parked exactly like the four
 that do.
 
-⚠ **The arms are switched on a second before they are scaled, in the original too.** Each extend
-definition activates its group and arm nodes in its `state` sequence at t=0 while its `control`
-sequence starts the arms' own scale motion one second later, and that motion's `from` is a collapsed
-scale (`pirate_hook_extend` takes `l_arm3` and `r_arm3` from `(1, 0, 0)`, `bal_hook_extend` takes
-`l_arm1` and `r_arm1` from `(1, 1, 0.5)`). For that second the arm is drawn at the model's own full
-length, so a shot opening on the aeroplane sees the hook as already out before it visibly extends.
-The original does the same, and the decode is in
-[`../anim-definitions.md`](../anim-definitions.md) under "A `from` pose is written on the event's
-first dispatched tick": the sequence stepper holds its cursor on a start-gated event and calls no
-handler until the gate opens, the `OBJECT_MOTION_FROM_TO` handler writes `from` on its first
-dispatched tick, and `OBJECT_ACTIVE_STATE` writes no pose at all. The second is visible only on the
-first extend after a load, because `<x>_hook_retract` ends the arms on exactly the pose the matching
-extend starts from (`pirate_hook_retract` takes `l_arm3` and `r_arm3` to `(1, 0, 0)`) while the
-aircraft archive authors `l_arm3` at scale `(1, 1, 1)` under the `pirate_hook` group it ships
-inactive. Nothing in a chapter's compiled set calls a retract or a startup at mission load, so every
-mission's first docking opens on the full-length arm.
+⚠ **What parks a hook's ARMS is `<x>_hook_retract`'s `RESET_STATE`, not the group's inactive bit.**
+Each extend definition activates its group and arm nodes in its `state` sequence at t=0 while its
+`control` sequence starts the arms' own scale motion one second later, and that motion's `from` is a
+collapsed scale (`pirate_hook_extend` takes `l_arm3` and `r_arm3` from `(1, 0, 0)`, `bal_hook_extend`
+takes `l_arm1` and `r_arm1` from `(1, 1, 0.5)`). Nothing writes a pose in that second: the sequence
+stepper holds its cursor on a start-gated event and calls no handler until the gate opens, the
+`OBJECT_MOTION_FROM_TO` handler writes `from` on its first dispatched tick, and
+`OBJECT_ACTIVE_STATE` writes no pose at all ([`../anim-definitions.md`](../anim-definitions.md), "A
+`from` pose is written on the event's first dispatched tick"). The arm therefore holds whatever posed
+it last, and what posed it is the matching retract's `RESET_STATE`, which bootstrap pass 1 applies to
+every loaded definition: `pirate_hook_retract` parks `l_arm3` and `r_arm3` at rotation `(0, 0, 0)`
+and scale `(1, 0, 0)`, the pose its extend starts from, and switches the group, both doors and both
+arms off. The aircraft archive's own `(1, 1, 1)` on those nodes is not what a docking shows.
+`OriginalScreenshots/Videos/CM02.mkv` is the check: over the docking cutscene's opening shot the arms
+are invisible above the mount for a second, grow over the next second, and only then swing out on the
+two-second rotate.
+
+An airframe whose retract poses no scale keeps the archive's pose for that second and does open its
+motion with a step. `bal_hook_retract` names only the two rotations, so the Balmoral's `l_arm1` and
+`r_arm1` sit at `(1, 1, 1)` against a `from` of `(1, 1, 0.5)`. That is the data, and it is a small
+squash rather than a collapse.
 
 **All three therefore need the flown aeroplane's own subtree in the animation runtime's node
 table.** CSVM indexes it there when the flight rigs are built, and again after an airframe swap,
 rebased onto the chapter's cross-archive base the same way the staged intro aircraft are
 (`AircraftStage.StageFlown`); the docking-hook group is built for a human rig and parked at its
-archive-authored inactive bit (`Mech3/PlaneBuilder.cs`). ⚠ The airframe node's own visibility is
-that ACTIVE bit, so the flight rig writes its presence one node higher, on the shake pivot: an
-aircraft a cutscene holds `Inert` while posing it must not read as "no airframe at all".
+archive-authored inactive bit (`Mech3/PlaneBuilder.cs`). ⚠ That rebased index deliberately runs no
+general `RESET_STATE` pass, since a chapter definition anchoring on a generic airframe node name must
+not re-pose a live aeroplane, so `StageFlown` applies the one scoped pass the arms need through
+`AnimRuntime.ParkDockingHook`: the `RESET_STATE` of every definition anchored on a `*_hook` group
+inside that model. ⚠ The airframe node's own visibility is that ACTIVE bit, so the flight rig writes
+its presence one node higher, on the shake pivot: an aircraft a cutscene holds `Inert` while posing
+it must not read as "no airframe at all".
 
 #### Limits and readings
 

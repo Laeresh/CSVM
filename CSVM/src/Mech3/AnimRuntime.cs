@@ -1150,6 +1150,32 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _resolver.ClearFindCache();
     }
 
+    /// <summary>Parks a flown airframe's docking hook where the airframe's own
+    /// <c>&lt;x&gt;_hook_retract</c> RESET_STATE puts it, scoped to definitions anchored on a
+    /// <see cref="PlaneBuilder.IsDockingHook"/> group inside this model since the general pass
+    /// deliberately does not run over a rebased aircraft (<see cref="IndexRebasedStage"/>).
+    /// ⚠ Without it the extend switches a full-length arm on and collapses it a second later.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md. Returns the definitions applied.</summary>
+    public int ParkDockingHook(Node3D planeModel)
+    {
+        ArgumentNullException.ThrowIfNull(planeModel);
+        int applied = 0;
+        foreach (var def in _program.Defs)
+        {
+            if (def.ResetState == null)
+                continue;
+            foreach (var a in Anchors(def))
+            {
+                if (a == null || !planeModel.IsAncestorOf(a)
+                    || !PlaneBuilder.IsDockingHook(NameOf(a)))
+                    continue;
+                ApplyInstant(def.ResetState.Events, def, a);
+                applied++;
+            }
+        }
+        return applied;
+    }
+
     /// <summary>Makes one live aircraft answer for the gamez LIBRARY-ROOT vehicle node it was
     /// spawned from, by that node's name and compiled index. A chapter's own copy of a vehicle is
     /// never placed, so a definition written against it addresses a name with nothing behind it.
