@@ -86,6 +86,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
+- `BL-668` `[Bug]` **A downed zeppelin's wreck sinks 400 m under the sea and four gasbags fall
+  through the water.** *Evidence:* the `zeppelin-breakup` suite's artifact records the wreck at
+  rest at y = −411 with the water surface at y = 0, and gasbags 1 to 4 falling about 1228 m
+  through the water while 5 and 6 land on it after 4 to 5 m. That is `MotionRuntime`'s contact and
+  bounce handling of a large untimed gravity body, independent of the `NodeUndercover` gate that
+  now lets the breakup play. *Fix shape:* find why the contact tier reads the water for two
+  gasbags and not the other four, and what stops the hull. *⚠ Traps:* `floatdown`'s descent is not
+  ended by the `StopSequence` (`docs/org/sequences.md`); the contact tier is what ends it, so a fix
+  belongs there, not in the sequence runner. *Cross-refs:* `PLAN-M5-polish-8.md` B13, `BL-440`
+  (closed), `docs/architecture.md`'s `ZeppelinRuntime.cs` entry.
+
 - `BL-060` `[Feature]` **Improve on the original crash — the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
   User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the
   faithful data-driven crash, so it was preserved on that branch rather than deleted. **The A/B playtest
