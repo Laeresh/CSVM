@@ -419,6 +419,18 @@ loss. What the engine renders was decodable from the authored constants + oscill
   get their first `_Process` in the frame they were activated and now all 21 get it one frame later,
   which is that shot's whole 1.15 % of moved pixels (GOLD-6).
 
+- **PERF-25** — **Deferring a block off a hitching frame moves its cost, it does not remove it, so
+  the frame it lands on has to be measured too — and a block whose own size is authored by data has
+  to be split along that data's grain before it fits any budget.** Measured on CM18's two
+  `cargozep1` launches, paired A/B under `--det` at 1P and 4P with two kept launches a side: taking
+  the crash rig off the launch frame put the whole rig on one later frame, where its 40 to 130 ms
+  tripped the detector on a frame that had been quiet. Splitting that rig along its own joints, one
+  authored `effect_pools.json` pool slot a step, took the template stage from one 35 ms frame to a
+  dozen frames of about 3 ms and none of them trips. What is left is the single term with no seam of
+  its own, `AnimRuntime.PrewarmEmitters` (194 emitters, 15 to 103 ms in one call): a phase that
+  cannot be split does not become cheaper by being deferred, and a deferral plan should name that
+  phase before it starts rather than discover it at the measurement.
+
 ## LOG — logs, error censuses, and exit codes
 
 - **LOG-1** — **An empty report may mean the mode did not build the feature.**

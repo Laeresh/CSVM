@@ -490,6 +490,9 @@ public partial class FlightController : Node3D
     // wingtip flares come back without these two snapshots. Bound with the rest of the crash rig.
     private IReadOnlyList<(Node3D Node, Transform3D RestPose)>? _crashRestPoses;
     private IReadOnlyList<(Node3D Node, bool Visible)>? _crashPlaneVisibility;
+    private AnimRuntime? _crashRuntime;          // the bound rig; reached through CrashRuntime, which forces the build below
+    private Node3D? _crashAnchor;                // the rig's `player` anchor, bound with it
+    private Action? _pendingCrashRig;            // a rig armed but not built yet; see ArmPendingCrashRig
     private IWorldQuery? _worldQuery;             // the sweep/ray seam; bound in Bind, lazy for bare test rigs
     private AircraftContactResolver? _contacts;   // the contact rules; lazy, over the same seam
     private IFlightInputSource? _inputSource;     // which stick flies this aircraft; bound in Bind, lazy for bare test rigs
@@ -618,18 +621,44 @@ public partial class FlightController : Node3D
     /// def the struck surface selects; see this module's entry in docs/architecture.md. Bound by
     /// <c>WorldEffectsFactory</c> through <see cref="BindCrashRig"/> for every flown plane; null
     /// only when the crash program/scene were unavailable, and the plane then just hides.</summary>
-    public AnimRuntime? CrashRuntime { get; private set; }
+    public AnimRuntime? CrashRuntime
+    {
+        get
+        {
+            EnsureCrashRig();
+            return _crashRuntime;
+        }
+    }
 
     /// <summary>The node the crash definition anchors to (its <c>player</c> anim-root) — passed to
     /// <see cref="AnimRuntime.Play"/> on a crash. Bound with <see cref="CrashRuntime"/>.</summary>
-    public Node3D? CrashAnchor { get; private set; }
+    public Node3D? CrashAnchor
+    {
+        get
+        {
+            EnsureCrashRig();
+            return _crashAnchor;
+        }
+    }
+
+    /// <summary>Whether this aircraft's crash rig has been armed but not yet built — a spawn that
+    /// handed the build to a frame-budgeted pump. Observation only: every reader of the rig itself
+    /// forces the build, so nothing outside the pump has to ask.</summary>
+    public bool CrashRigPending => _pendingCrashRig != null;
 
     /// <summary>The crash-def vector the struck surface id indexes — the original's own selection
     /// mechanism (see <see cref="SurfaceDefTable"/>). Built from the bound crash program, so it
     /// knows which slots name a def this install actually ships. The selection is
     /// <see cref="AircraftLifecycle"/>'s, which holds the table; null when no crash rig was
     /// built, and the plane then just hides on a crash.</summary>
-    public SurfaceDefTable? CrashDefs => _lifecycle.CrashDefs;
+    public SurfaceDefTable? CrashDefs
+    {
+        get
+        {
+            EnsureCrashRig();
+            return _lifecycle.CrashDefs;
+        }
+    }
 
     /// <summary>The def the last <see cref="Crash"/> selected off <see cref="CrashDefs"/> —
     /// <c>player_crash_*</c> on a human rig, <c>ai_crash_*</c> on an AI plane, null before any
@@ -969,11 +998,14 @@ public partial class FlightController : Node3D
         _pilotHud.Reset();   // damage-dial blink timers cleared, no impact line pending
         Visuals?.Reset();    // torn panels off, healthy twins back, smoke trail cleared
         RefillWeapons();     // full ammo, dry warnings re-armed, any live tracers cleared
-        if (CrashRuntime != null)
+        // ⚠ The field, not the forcing property: a rig that is still armed has never played
+        // anything, so there is nothing here to undo, and asking for it would build the whole rig
+        // on the frame an aeroplane is placed — which is the frame the deferral exists to spare.
+        if (_crashRuntime != null)
         {
             // Hard-stop the played def, re-hide the wreck (its RESET_STATE), and re-home the flung
             // pieces below (no reset event re-poses them; without this respawn leaves just the prop).
-            CrashRuntime.ResetToBaseState();
+            _crashRuntime.ResetToBaseState();
             if (_crashRestPoses != null)
                 foreach (var (node, rest) in _crashRestPoses)
                 {
@@ -998,7 +1030,7 @@ public partial class FlightController : Node3D
         Fuel.Capacity = Stats?.FuelCapacity ?? 0f;
         Fuel.Fill();
         // First setup precedes adapter construction, so the adapter replays startprops after attachment.
-        CrashRuntime?.Play("startprops", PlaneModel, applyReset: false);
+        _crashRuntime?.Play("startprops", PlaneModel, applyReset: false);
         // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → the spawn
         // throttle) must never itself read as a slam.
         ThrottleSmoke?.Reset(_throttle);
@@ -1019,6 +1051,27 @@ public partial class FlightController : Node3D
     /// <see cref="AircraftLifecycle.ArmSpawnTimers"/>'s.</summary>
     public void ArmSpawnTimers(bool carrierDrop = false) => _lifecycle.ArmSpawnTimers(carrierDrop);
 
+    /// <summary>Hands this aircraft a crash rig that is not built yet, to be completed by the
+    /// caller's pump or by the first reader of the rig, whichever comes first. Null disarms it.
+    /// ⚠ The delegate must be the whole remaining build: a reader gets no second chance, and an
+    /// aeroplane whose damage model is reachable while its rig is not would take a kill with no
+    /// wreck (docs/org/vehicleDamage.md).</summary>
+    public void ArmPendingCrashRig(Action? finish) => _pendingCrashRig = finish;
+
+    /// <summary>Builds an armed crash rig now, if one is still pending. Called by every accessor of
+    /// the rig and at the head of both damage intakes and the ground contact, so an aircraft is
+    /// never shot at, crashed or destroyed in a state where its rig cannot be reached. Clears the
+    /// arming BEFORE running the build, because the build itself reads those accessors.</summary>
+    public void EnsureCrashRig()
+    {
+        if (_pendingCrashRig is not { } finish)
+        {
+            return;
+        }
+        _pendingCrashRig = null;
+        finish();
+    }
+
     /// <summary>Binds this plane's crash rig: the runtime the crash and destroy defs play on, the
     /// def vector the struck surface indexes, the anchor they play against, and the two snapshots a
     /// respawn restores. One call rather than six assignments, so a rig cannot be half-bound.</summary>
@@ -1026,8 +1079,8 @@ public partial class FlightController : Node3D
         IReadOnlyList<(Node3D Node, Transform3D RestPose)>? restPoses,
         IReadOnlyList<(Node3D Node, bool Visible)>? planeVisibility)
     {
-        CrashRuntime = runtime;
-        CrashAnchor = anchor;
+        _crashRuntime = runtime;
+        _crashAnchor = anchor;
         _lifecycle.CrashDefs = defs;
         _crashRestPoses = restPoses;
         _crashPlaneVisibility = planeVisibility;
@@ -1298,6 +1351,9 @@ public partial class FlightController : Node3D
     {
         if (!InPlay)
             return;
+        // An armed rig is built before the first round lands, not on the kill: the damage stages
+        // this hit may cross play out of it, and its wreck is what the hull becomes.
+        EnsureCrashRig();
         // The attacker queue (FUN_004b9770): whoever just shot this pilot goes to the END of the
         // queue `Next Enemy/Objective` walks backwards. The gate is a shooter on a DIFFERENT,
         // non-zero team, so a friendly-fire round records nothing.
@@ -1405,6 +1461,7 @@ public partial class FlightController : Node3D
     {
         if (!InPlay || Damage == null)
             return;
+        EnsureCrashRig();
         var pose = new Transform3D(_model.Attitude, _model.Position);
         string dataPart = PlaneDamage.MapStruckPart("center", pose.AffineInverse() * impact);
         var state = Damage.Apply(dataPart, healthDamage, armorDamage);
@@ -2565,6 +2622,9 @@ public partial class FlightController : Node3D
     /// <see cref="CrashDefs"/> slot, which is where that family belongs.</summary>
     private void Crash(Vector3 impact, string hitName, string part, Node? hitBody, int? killer = null)
     {
+        // A ground contact can be the first thing that ever happens to an aeroplane, so the rig is
+        // forced here too rather than only on the damage intakes.
+        EnsureCrashRig();
         // The original's selection: index by the struck material's surface id, falling back to
         // slot 0 (player_crash_default) for most of the ground (id 0 is ~98% of every chapter).
         int? surfaceId = SurfaceIdOf(hitBody);

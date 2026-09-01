@@ -74,7 +74,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ `BL-557` Roster `init_health`/`armor` overrides reach the named aces' spawns
 12. ☑ `BL-626` Turrets acquire the candidate classes the original's turret picker holds
 13. ☑ `BL-440` A downed zeppelin plays its authored breakup (`NodeUndercover` made real)
-14. ☐ `BL-641` Introducing one AI aircraft mid-flight stays under the hitch threshold
+14. ◐ `BL-641` Introducing one AI aircraft mid-flight stays under the hitch threshold
 
 ### Wave C — Cockpit and flight feel
 
@@ -584,7 +584,7 @@ comparison `.\RunTests.ps1 -SkipUnits -SkipEngine` with `CSVM_DATA_ROOT=Z:\CSVM`
 all hash-identical, no golden moved. That is structural rather than lucky: the probe answers false
 with no `ContactMask` wired, and no golden or lab wires one.
 
-## B14 ☐ `BL-641` The AI-spawn hitch reaches the threshold
+## B14 ◐ `BL-641` The AI-spawn hitch reaches the threshold
 
 **Goal.** Introducing one AI aircraft mid-flight no longer trips the hitch monitor: CM18
 (C4/M03)'s generator launches stay under each frame's printed threshold.
@@ -598,7 +598,12 @@ under `--det`'s 1/60 s step), each building a `Cargo_params` Black Swan through
 remains is genuine per-aircraft construction, attributed by stopwatch inside the `ai_spawn`
 scope: about 50 ms crash rig (template staging, the wreck subtree, and 194 to 198 pre-warmed
 emitters at about 19 ms), 22 ms `FlightController.Bind` (prop, wing-light and control-surface
-animators, collider), 10 ms model build, 5 ms loadout, turrets and damage visuals.
+animators, collider), 10 ms model build, 5 ms loadout, turrets and damage visuals. Re-attributed on
+the current tree, where the same terms read higher and the pre-warm is what dominates the rig: 43 to
+126 ms crash rig (22 to 88 ms of it the emitter pre-warm over 194 emitters, about 35 ms the template
+stage), 29 to 31 ms `Bind`, 20 to 62 ms model build (the higher figure is the first launch, which
+also pays the livery-pattern load), 7 ms `startprops`, 4 to 9 ms engine audio, and about 11 ms across
+loadout, turrets, damage visuals, `Setup` and the world-root add.
 
 **Approach.** The crash rig is the only block not needed for the aircraft to be observable
 (`_worldRoot.AddChild(controller)` already runs before it), so build it a frame or more later
@@ -622,6 +627,64 @@ term; it is gone, and PERF-22 records it. How OFTEN CM18 pays this is a separate
 `max_active` 10 unasked; `docs/formats/mission-entities/enemy-generators.md` "Capacity rule and
 limit" says the data does not establish that reading). It stays out of this slot. Cross-refs:
 `BL-434` (the per-viewport splitscreen cost the same measurement pass profiled).
+
+**Verified.** <pending orchestrator run> Landed the crash-rig half and stopped there, because the
+rest cannot move without delaying the aeroplane's entry into the world.
+`WorldEffectsFactory.BeginFlightCrashRuntime` opens the same build `BuildFlightCrashRuntime` runs, as
+a `CrashRigBuild` a caller advances a step at a time; `AiFlightAssembler` hands it to a new
+`CrashRigQueue` that `GameSession._Process` pumps once a frame through
+`FlightRoster.PumpDeferredCrashRigs`, and `FlightController.ArmPendingCrashRig`/`EnsureCrashRig`
+build it in place for any reader of `CrashRuntime`, `CrashAnchor` or `CrashDefs` and at the head of
+`TakeProjectileHit`, `TakeCollisionHit` and `Crash`, so no aeroplane is ever shot at, flown into the
+ground or destroyed while its rig is out of reach. The crash RNG stream is drawn at the request
+rather than at the bind, so a deferred rig's seed follows introduction order and not pump order; the
+queue drains strictly head-first for the same reason. The steps follow the build's own joints, and
+the template stage is split one authored `effect_pools.json` pool slot at a time, since a phase whose
+size is data-driven does not fit a frame budget as one block.
+
+⚠ The deferral is armed by the first pump, not by construction, so the aeroplanes a session builds
+BEFORE its first frame keep their rigs built in place. That rule is not tidiness: deferring them
+moved `c1-targeting-hud` and `c1-ai-wreck`, the two `--ai=` goldens, and with it in place all 18 are
+hash-identical again. There is no frame to spare during a build, and those aircraft are what the
+first drawn frame shows.
+
+Paired A/B under `--det` at 1P and 4P, two kept launches a side, the before side being this tree with
+the queue handed to the assembler as `null` and rebuilt `--no-incremental`, each frame against its
+own printed threshold:
+
+      1P  frame 241: 249.8 / 170.9 ms  ->  131.1 / 132.0 ms   (threshold 40.0)
+      1P  frame 482: 176.1 / 174.9 ms  ->   72.6 /  67.8 ms   (threshold 40.0)
+      4P  frame 241: 169.2 / 175.0 ms  ->  133.7 / 140.8 ms   (threshold 40.0)
+      4P  frame 482: 105.7 / 147.2 ms  ->   69.2 /  68.8 ms   (threshold 40.0)
+
+`ai_spawn` attribution falls from 215.7/142.0 to 99.9/100.9 at 1P frame 241, from 160.9/159.5 to
+52.4/49.1 at 1P frame 482, from 141.1/145.8 to 103.9/110.0 at 4P frame 241 and from 90.8/124.7 to
+51.3/49.4 at 4P frame 482. Both launches still trip, so the item is ◐.
+
+What remains, precisely. The launch frame still carries the model build and `FlightController.Bind`,
+about 50 to 90 ms together, and neither can move behind the frame that puts the aeroplane in the
+world without the aeroplane arriving late, which is the observable-behaviour constraint this slot was
+given. The deferred frames are quiet except the emitter pre-warm, one `AnimRuntime.PrewarmEmitters`
+call over 194 emitters costing 15 to 103 ms with no seam of its own; splitting it needs
+`AnimRuntime.cs`, which A2/B13 own, and its `material_create` term (194 `ShaderMaterial` +
+`MultiMesh` builds in `Effects/EmitterRenderer.cs`) is the PERF-22-shaped follow-up. Reaching the
+threshold outright wants the assembly built AHEAD of the launch rather than after it, off the
+generator's own authored cycle, which is a change to `AiGeneratorRuntime`'s launch declaration and
+to spawn-index allocation, not to this file set.
+
+Ran `dotnet build CSVM/CSVM.sln` (clean, StyleCop included), `dotnet format CSVM/CSVM.sln`,
+`.\CheckCommentCaps.ps1` and `.\CheckEncoding.ps1` (both clean), `dotnet test
+CSVM.Tests/CSVM.Tests.csproj` (2791 passed, after adding the new suite's weight to
+`analysis/engine-suite-weights.json`, which `SuiteShardsTests` requires), the whole engine tier
+(`.\RunTests.ps1 -SkipUnits -SkipGoldens`, 201 of 201 passing) and the goldens
+(`-SkipUnits -SkipEngine`, 18 of 18 hash-identical, manifest unmodified). The catalog gains one
+suite, 200 to 201: `ai-crash-rig-deferral`. Two suites needed a forcing call where they read
+rig-owned state straight off a fresh spawn (`ai-damage-stages` reads the sink phase 2 wires,
+`ai-wreck-fall`'s control arm nulls `DestroyDef`). ⚠ The new suite has to free both aeroplanes it
+spawns: suites share one host node, and leaving one under it takes the node name a later suite's own
+spawn wants, which Godot then renames out from under that suite's identity checks. That is what
+`roster-spawn-names` and `flight-roster-transaction` failed on until the `finally` freed them, and it
+only ever showed in a shared run.
 
 # Wave C — Cockpit and flight feel
 

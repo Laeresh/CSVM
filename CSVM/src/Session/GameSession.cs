@@ -689,6 +689,10 @@ public partial class GameSession : Node3D
         }
         // The startup line goes out on the frame that proves the first one was drawn.
         _startup?.Frame();
+        // One step of one deferred crash rig. A mid-flight AI introduction leaves its rig unbuilt
+        // so the launch frame carries only what puts the aeroplane in the world; this is where the
+        // rest of it lands, on the frames after.
+        _flightRoster?.PumpDeferredCrashRigs();
         // Entities switched off as unplaced but since moved off the world origin are put back: a
         // motion starting is the proof a definition owns them. ⚠ Do not defer this once instead of
         // polling, and keep it on wall time: an OnCall definition can start its motion at any time.

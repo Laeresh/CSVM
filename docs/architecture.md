@@ -3614,7 +3614,13 @@ its `player` marker in and draws the model there, then hands back the pose the a
 the staging began, or the one `ResumeAt` re-placed it at (`Session/CutsceneController.cs`).
 `BindCrashRig` takes the
 crash runtime, the def table, the anchor and the two respawn snapshots in one call, so the rig
-cannot be half-bound and only `CrashRuntime`/`CrashAnchor` stay readable as properties. The DEATH family (`CRASH into`, `midair aspect`, every
+cannot be half-bound and only `CrashRuntime`/`CrashAnchor` stay readable as properties.
+Those two and `CrashDefs` also FORCE a rig that is armed but not built: `ArmPendingCrashRig` hands
+this aeroplane the rest of a stepped build (`Session/CrashRigQueue.cs`) and `EnsureCrashRig` runs it,
+which is what `TakeProjectileHit`, `TakeCollisionHit` and `Crash` call at their head so nothing is
+shot at, flown into the ground or destroyed while its rig is out of reach. ⚠ Respawn reads the
+backing field instead: a still-armed rig has played nothing, so there is nothing there to undo, and
+asking would build the whole rig on the frame an aeroplane is placed. The DEATH family (`CRASH into`, `midair aspect`, every
 `vehicle health exhausted`, `graze`, `embedded in terrain`, `AI ram`, `impact`) routes through
 `Log.Info("flight", …)`, so a play session's file sink carries how each aircraft died; the
 per-round weapon breadcrumbs around them are a different family and still `GD.Print`. The
@@ -6377,6 +6383,10 @@ unconsumed. The aggregate owns the live
 human/AI membership views, fans target-source updates to present and future members, and drops its
 non-node bindings in `ClearMembership`; the session subtree remains the aircraft node owner.
 `HumanFlightAdapter` and `AiFlightAssembler` are the two private assembly implementations.
+`SpawnAi` returns before the aeroplane's crash rig exists: the roster owns a `CrashRigQueue` and the
+session pumps it one step a frame through `PumpDeferredCrashRigs`. ⚠ A caller that configures
+rig-owned state (`DestroyDef` is the one that bites) between the spawn and the build has to force it
+first with `FlightController.EnsureCrashRig`, or the build writes over what it set.
 `SwapPlayerAirframe` is the third commit path, a mission putting one player into a different
 airframe mid-flight (callback codes 965 to 967): it removes the outgoing aircraft and re-runs the
 human assembler on the named airframe with the pose, heading, throttle and speed that aircraft
@@ -6414,10 +6424,27 @@ aircraft/archive resources, live world services, and human-session bindings. The
 the roster from accepting all of `SessionSpec` or exposing either internal assembler while making
 required dependencies explicit at the production seam.
 
+## src/Session/CrashRigQueue.cs
+The session's queue of crash rigs whose aeroplane is already flying. A mid-flight AI introduction is
+the one aircraft build that happens on a frame the player is watching, and the crash rig is the only
+block of it the aeroplane does not need in order to be in the world, so `AiFlightAssembler` opens the
+rig (`WorldEffectsFactory.BeginFlightCrashRuntime`) and hands it here instead of building it. `Pump`,
+called once a frame from `GameSession._Process` through `FlightRoster.PumpDeferredCrashRigs`,
+advances the head build by one step; `Defer` arms the aeroplane itself
+(`FlightController.ArmPendingCrashRig`) so any reader of the rig, and both damage intakes and the
+ground contact, build it in place first. ⚠ Strictly one build at a time, head first: the seed is
+already drawn at the request, but the emitter and node counts a run reports would otherwise depend on
+frame timing. `Drop` is the rollback path (a controller being freed keeps no queued rig) and
+`Discard` the membership clear's. Measured effect and what remains: `docs/verification.md` PERF-25.
+
 ## src/Session/AiFlightAssembler.cs
 The roster's private AI assembly path. It prepares authored/fallback pilot skills and maneuvers,
 builds the model, controller, livery, loadout/ordnance, damage visuals and optional crash runtime,
-then places the finished node. `Assemble` chains `PlaneStats.WithRosterDurability(spawn.InitHealth,
+then places the finished node. The crash runtime is OPENED rather than built: the block is handed to
+`CrashRigQueue` where the caller supplied one, so the launch frame carries the model, controller,
+loadout, turrets, damage visuals and placement only, and `startprops` plays from the queue's
+completion hook. With no queue the assembler finishes the rig in place, which is what every
+off-frame caller wants. `Assemble` chains `PlaneStats.WithRosterDurability(spawn.InitHealth,
 spawn.Armor)` ahead of `WithEnemyDurability`/`WithAiSpawnJitter`, the engine's own order
 (docs/org/vehicleDamage.md), so a named ace's authored hull is what the scale and the jitter land
 on. It also resolves the def's authored `title` into
@@ -6486,7 +6513,18 @@ copy — see `AnimRuntime`'s pool paragraphs for the mechanism and the `damage-t
 for the regression shape. The stage has **two** sources: the chapter gamez, then the planes gamez
 for a root it has none of, which is the only place the destroy def's parachute (`chuteman`) lives;
 both spawners pass it, and its own builder is cached here for the session.
-After the bind, `BuildFlightCrashRuntime` pre-warms the rig's emitters
+`BuildFlightCrashRuntime` is the one-call form of `BeginFlightCrashRuntime`, which opens the same
+build as a `CrashRigBuild` handle a caller advances with `Step()` or runs out with `Finish()`. The
+phases are the build's own joints: prepare (def table, destroy def, crash root, root-name
+derivation), one authored pool slot each through `StageCrashSlot`, the wreck subtree, the runtime
+bind, and the emitter pre-warm. A mid-flight AI introduction takes the stepped form so the launch
+frame carries only what puts the aeroplane in the world (`CrashRigQueue`, `BL-641`); every other
+caller takes the one-call form. Two rules the split imposes: the crash RNG stream is drawn in
+`BeginFlightCrashRuntime`, at the request rather than at the bind, so a deferred rig's seed follows
+the order its aeroplanes were introduced and not the order the pumps finish; and `WireDamageStages`
+is handed the runtime rather than reading `FlightController.CrashRuntime`, because that property
+forces the very build it is part of.
+After the bind, the build pre-warms the rig's emitters
 (`AnimRuntime.PrewarmEmitters` with the plane model and the crash root as the call-site anchors),
 recorded as the `emitters` startup phase and logged per rig, so a crash or a damage stage finds its
 puffers and materials built and trips no `effect_pool_miss`. Measured on the Bloodhawk in C1: 217

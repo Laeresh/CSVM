@@ -119,6 +119,7 @@
     "nitro-boost-anchors": 0.4,
     "emitter-prewarm": 0.638,
     "ai-crash-defs": 0.990,
+    "ai-crash-rig-deferral": 1.400,
     "ai-wreck-fall": 2.385,
     "player-destroy-choreography": 4.560,
     "hostile-marker-hud": 0.650,
