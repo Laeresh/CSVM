@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using CSVM.Mech3;
 using CSVM.UI;
 using CSVM.UI.Menu;
 
@@ -7,10 +6,10 @@ namespace CSVM.Testing;
 
 /// <summary>
 /// Built-in's Free Flight journey, characterized. A real <see cref="LaunchMenu"/> is driven from
-/// the Mode screen through Chapter and Aircraft to the launch callback, backed out of at every
-/// step, re-entered the way a return from flight re-enters it, and opened through the aids the
-/// screens carry. Every check pins what the screens do today, quirks included, so a change behind
-/// them can be told from a change of behaviour.
+/// the Mode screen through Chapter and Aircraft to the typed exit, backed out of at every step,
+/// re-entered the way a return from flight re-enters it, and opened through the aids the screens
+/// carry. Every check pins what the screens do today, quirks included, so a change behind them
+/// can be told from a change of behaviour.
 /// </summary>
 internal static class MenuJourneySuites
 {
@@ -22,18 +21,18 @@ internal static class MenuJourneySuites
 
     [Suite("menu-free-flight-journey",
         "Built-in's Free Flight journey pinned end to end: a real LaunchMenu is driven Mode to "
-        + "Chapter to Aircraft to the launch callback and back out at every step, the payload is "
+        + "Chapter to Aircraft to the typed launch exit and back out at every step, the payload is "
         + "read, a return from flight re-enters it, the --menu= aids open their screens, and a "
         + "second seat holds the gate; every check is what the screens do today")]
     internal static void MenuFreeFlightJourney(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot);
+        var exits = new List<MenuExit>();
+        var host = MenuSuiteHost.Bare(exits, out var seat);
+        var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, host, seat.Input);
         ctx.Host.AddChild(menu);
-        var launches = new List<Launched>();
-        var quits = new List<int>();
-        menu.Launch = (chapter, seats, mode, ia) => launches.Add(new Launched(chapter, seats, mode, ia));
-        menu.Quit = () => quits.Add(quits.Count);
+        var launches = new Exits<LaunchExit>(exits);
+        var quits = new Exits<QuitExit>(exits);
         try
         {
             TopLevel(ctx, menu);
@@ -97,7 +96,7 @@ internal static class MenuJourneySuites
         Is(ctx, "the pick for the launch below", "New York — IA: Manhattan", menu.ShownRowText);
     }
 
-    private static void AircraftScreen(TestContext ctx, LaunchMenu menu, List<Launched> launches)
+    private static void AircraftScreen(TestContext ctx, LaunchMenu menu, Exits<LaunchExit> launches)
     {
         menu.Drive(Accept);
         Is(ctx, "Accept on a chapter opens the Aircraft screen", "Plane", menu.ShownScreen);
@@ -139,7 +138,7 @@ internal static class MenuJourneySuites
             $"and the airframe cursor survives that trip too ({menu.ShownScreen}, {menu.ShownRowText})");
     }
 
-    private static void Launch(TestContext ctx, LaunchMenu menu, List<Launched> launches)
+    private static void Launch(TestContext ctx, LaunchMenu menu, Exits<LaunchExit> launches)
     {
         menu.Drive(Accept);
         menu.Drive(Accept);
@@ -152,18 +151,18 @@ internal static class MenuJourneySuites
         var launch = launches[0];
         Is(ctx, "the launch carries the picked chapter's code", "C5", launch.Chapter);
         ctx.Check(launch.Mode == MenuMode.Free, $"in mode Free ({launch.Mode})");
-        ctx.Check(launch.Ia == null, $"with no Instant Action def");
+        ctx.Check(launch.InstantAction == null, $"with no Instant Action def");
         ctx.Check(launch.Seats.Count == 1, $"for the one joined seat ({launch.Seats.Count})");
         var seat = launch.Seats[0];
         Is(ctx, "flying the selected airframe's node", "player_balmoral", seat.PlaneNode);
         ctx.Check(seat.Fit == null, $"with the stock fit (null), since the list was left untouched");
-        ctx.Check(seat.CustomPlane == null, $"and no custom plane behind a stock pick");
-        ctx.Check(seat.Pads.Length == 0, $"and no pad bound to a keyboard seat ({seat.Pads.Length})");
+        ctx.Check(seat.Custom == null, $"and no custom plane behind a stock pick");
+        ctx.Check(seat.Pads.Count == 0, $"and no pad bound to a keyboard seat ({seat.Pads.Count})");
         ctx.Check(menu.ShownScreen == "Plane" && menu.Visible,
             $"the menu keeps its state and stays for the host to hide, so a failed build can come back ({menu.ShownScreen})");
     }
 
-    private static void Return(TestContext ctx, LaunchMenu menu, List<Launched> launches)
+    private static void Return(TestContext ctx, LaunchMenu menu, Exits<LaunchExit> launches)
     {
         menu.HideMenu();
         menu.ShowMenu();
@@ -210,7 +209,7 @@ internal static class MenuJourneySuites
         Is(ctx, "picking Free Flight again puts the Chapter screen back under it", "Free Flight  ›  Map  ›  Aircraft", menu.ShownBreadcrumb);
     }
 
-    private static void Quit(TestContext ctx, LaunchMenu menu, List<int> quits)
+    private static void Quit(TestContext ctx, LaunchMenu menu, Exits<QuitExit> quits)
     {
         menu.ShowMenu();
         menu.Drive(Back);
@@ -218,7 +217,7 @@ internal static class MenuJourneySuites
         ctx.Check(menu.ShownScreen == "Mode", $"and leaves the screen standing for the host ({menu.ShownScreen})");
     }
 
-    private static void SecondSeat(TestContext ctx, LaunchMenu menu, List<Launched> launches)
+    private static void SecondSeat(TestContext ctx, LaunchMenu menu, Exits<LaunchExit> launches)
     {
         menu.DebugJoin(1);
         menu.ShowMenu();
@@ -238,6 +237,49 @@ internal static class MenuJourneySuites
         ctx.Check(actual.Contains(expected, System.StringComparison.Ordinal),
             $"{what}: expected '{expected}' in '{actual}'");
 
-    private sealed record Launched(
-        string Chapter, IReadOnlyList<LaunchMenu.PlayerChoice> Seats, MenuMode Mode, InstantActionDef? Ia);
+    // The exits of one kind among everything the host's sink recorded, read live.
+    private sealed class Exits<T>
+        where T : MenuExit
+    {
+        private readonly List<MenuExit> _all;
+
+        public Exits(List<MenuExit> all)
+        {
+            _all = all;
+        }
+
+        public int Count
+        {
+            get
+            {
+                int n = 0;
+                foreach (var exit in _all)
+                {
+                    if (exit is T)
+                    {
+                        n++;
+                    }
+                }
+
+                return n;
+            }
+        }
+
+        public T this[int index]
+        {
+            get
+            {
+                int seen = 0;
+                foreach (var exit in _all)
+                {
+                    if (exit is T match && seen++ == index)
+                    {
+                        return match;
+                    }
+                }
+
+                throw new System.ArgumentOutOfRangeException(nameof(index));
+            }
+        }
+    }
 }

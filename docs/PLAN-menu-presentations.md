@@ -154,7 +154,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Free Flight tracer
 
 11. ☑ Characterize Built-in and extract the Free Flight feature
-12. ☐ Run Built-in Free Flight through the presentation boundary
+12. ☑ Run Built-in Free Flight through the presentation boundary
 13. ☐ Deliver Original Free Flight, switching and recovery
 
 ### Wave C — Setup features
@@ -393,7 +393,7 @@ hash-identical, engine errors clean, 157.7s).
 **⚠ Traps.** Do not repair existing mouse, focus or layout issues. Characterization pins current
 behaviour, including quirks not explicitly changed by this plan.
 
-## B12 ☐ Run Built-in Free Flight through the presentation boundary
+## B12 ☑ Run Built-in Free Flight through the presentation boundary
 
 **Goal.** Built-in becomes a registered presentation and completes the Free Flight tracer through
 the new host with no intended visual or behavioural change.
@@ -416,11 +416,65 @@ behind it. `--menu=plane`, `selected` and `loadout` hand the feature the cursor'
 
 **Model recommendation.** high — lifecycle and return regressions can strand every menu path.
 
-**Verify.** Repeat B11’s comparisons, exercise return from a real Free Flight session, and run all
-existing menu/campaign capture suites. <TODO: exact targeted engine suite names.>
+**Verify.** The landed shape: `MenuHost` (`CSVM/src/UI/Menu/MenuHost.cs`) is the process-lifetime
+host `Launcher` owns, holding the `MenuFeatureSet` (with the `FreeFlightFeature`), the audio
+service (`CSVM/src/Session/MenuAudioService.cs` over the music channel, the sound archive and the
+narration player), the first seat (`BuiltInSeat` over the launchscreen's `MenuInput`) and the exit
+sink (`Launcher.OnMenuExit`); `BuiltInPresentation` (`CSVM/src/UI/Menu/BuiltIn/`) is registered
+under `PresentationId.BuiltIn` and stands `LaunchMenu` up in `Activate`, hides it in `Hide`, frees
+it in `Deactivate`; `MenuHost.Select` resolves through `PresentationResolution.Resolve` with
+`--force-builtin`, `--presentation=` and the saved `OptionsStore` request, registration as
+availability, an unknown or blank request falling back to Built-in with the reason logged;
+`LaunchMenu` has no callbacks, every launch (Free, Instant Action, Dogfight, campaign) and the quit
+leave as a typed exit through `IMenuHost.Exit`; the return from flight is
+`Launcher.ReturnToMenu(MenuReturnDestination)` (`TopLevel` from the boards' Exit and a failed
+build, `DebriefReturn` from a campaign mission's end), mapped by Built-in onto its screens with the
+`--menu=` aid still applied on every top-level show. One contract addition: `IMenuPresentation.Hide`,
+because a flight is not a switch and a fresh instance per return would lose the cursors B11 pins.
+
+Checked: `dotnet build CSVM/CSVM.sln`, then the whole `dotnet test` (2839, of which 7 are the new
+`MenuHostTests` over the seam fixtures and the seam scan `MenuNamespaceDependencyTests` is among
+them), then `.\RunTests.ps1 -Suite "menu-free-flight-journey,menu-host-tracer,menu-zone-layout,menu-screenshot-key,campaign-briefing-repaint" -SkipUnits -SkipGoldens`
+(5 suites, 5 passed) and `.\RunTests.ps1 -Filter "campaign,hangar" -SkipUnits -SkipGoldens` (44
+suites, 44 passed, engine errors clean), `.\CheckCommentCaps.ps1 -Summary` and
+`.\CheckEncoding.ps1`. `menu-free-flight-journey` is green with one mechanical edit: it stands its
+`LaunchMenu` on a bare `MenuHost` whose sink records exits and reads `LaunchExit`/`QuitExit`
+instead of the removed `Launch`/`Quit` callbacks; every check is otherwise as B11 wrote it. The new
+`menu-host-tracer` (`CSVM/src/Testing/MenuHostSuites.cs`) is the tracer through the boundary: a
+real `MenuHost` with the Built-in presentation registered, `Show(TopLevel)`, every press a frame
+through the host's first seat (`host.Tick`), the launch arriving at the sink as one `LaunchExit`
+with the presentation hidden, a frame while hidden reaching nothing, then `Show(TopLevel)` again
+on the same instance re-entering with the state B11 pins for a return (Mode, chapter cursor on New
+York, airframe cursor on Balmoral, selection dropped, nothing relaunched), and `Deactivate`
+freeing the launchscreen. It also pins the selection rule at the host: an unknown request falls
+back with a reason and keeps the request, the force flag beats a CLI override. Shots: rebuilt, then
+`.\RunProbe.ps1 --menu=<aid> --screenshot=<abs path>` for `mode`, `chapter`, `plane` and `selected`
+into `.scratch\b12-after\`, compared by decoded 32bpp pixels (SHA-256 over the rows) against B11's
+`.scratch\b11-after\`: `mode` and `chapter` identical; `plane` and `selected` differed by one roster
+row, a custom plane (`Crooked Vulture`) saved to `user://` after B11's shots, so the baseline was
+re-measured near the changed run (METHOD-3) by shooting the same two aids from B11's own still-built
+binary in its worktree against today's store, and against that baseline all four are identical.
+`docs/verification.md` rules that bit: **METHOD-3** (the first plane/selected difference was the
+store moving under the baseline, not the change), **METHOD-6** (the rebaseline names which binary
+each side used: B11's worktree build against B12's), **SHOT-6** (decoded pixels, never PNG bytes,
+whose sizes differed for an encoder reason as well), **SHOT-9**/**SHOT-10** (windowed probes on the
+hidden desktop, absolute paths, files checked present), **SHOT-32** (a shot proves the frame it
+drew; behaviour is pinned by the driven suites, the shots stand for appearance only).
+
+What this did not prove: the harness runs a suite synchronously inside `_Ready`, before any
+session builds, so no engine suite can let `Launcher` build a real Free Flight session and return
+from it. `menu-host-tracer` proves the host's exit and re-show against the real launchscreen; the
+launcher's side of it (`OnMenuExit` to `BeginLaunch`, the boards' Exit to
+`ReturnToMenu(TopLevel)`) is the same code path the campaign debrief and the failed-build return
+take. The real return is exercised at the controls: `.\RunDev.ps1`, Free Flight, a chapter, an
+airframe, Select, FLY, then the pause board's Exit; the menu must re-enter on Mode with the chapter
+and airframe cursors where they were and nothing selected.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Re-entry after flight is part of the tracer. A presentation that only works on cold
-startup has not proved the seam.
+startup has not proved the seam. The Plane screen lists `user://` custom planes, so a shot of it
+is only comparable against a baseline taken over the same store.
 
 ## B13 ☐ Deliver Original Free Flight, switching and recovery
 
@@ -439,6 +493,23 @@ inventory marks that screen remake-only rather than evidenced.
 Implement pointer hit-testing/rollover and equivalent semantic navigation. Add the minimal Built-in
 Options route and Original chooser, discard unfinished setup on switch, and restart at the target
 presentation’s top level. Keep Original CLI-only.
+
+Handoff from B12, what Original plugs into: registration is one more
+`registry.Register(PresentationId.Original, () => new OriginalPresentation(...))` beside Built-in's
+in `Launcher.BuildMenuHost`, and availability (the asset manifest) has to enter `MenuHost.Select`'s
+availability answer, which today is registration alone. The host lends `Features`
+(`Get<FreeFlightFeature>()`), `Audio` (`MenuAudioService`: `BeginNarration`/`EndNarration` are
+live, `Cue` only logs since no cue table exists yet) and `Seats`, whose seat 0 is a `BuiltInSeat`
+polling the keyboard and every unclaimed pad with no pointer; a mouse-first presentation needs a
+seat that reports `MenuPointer`, and the join flow's later seats are still `LaunchMenu`'s own
+`_slots` until C22. A switch is `host.Deactivate()` (frees the active presentation, discards
+transient feature state), `host.Select(...)` and `host.Show(MenuReturnDestination.TopLevel)`;
+the Options route that triggers it saves through `OptionsStore` and re-selects. Return mapping is
+each presentation's `Activate(host, destination)` switch over `TopLevelReturn`, `CabinReturn` and
+`DebriefReturn`; `Launcher` never names a screen, but `--menu=` is still applied by Built-in on
+every top-level show (Decision 26), so an Original aid needs its own value under
+`--presentation=original`. `Launcher.BuiltInMenu` is the one type-tested door onto the
+launchscreen (debug aids, the failed-build note) and must stay null-safe when Original is active.
 
 **Model recommendation.** high — first complete alternative presentation and first pointer path.
 

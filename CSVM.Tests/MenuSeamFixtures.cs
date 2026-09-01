@@ -100,6 +100,8 @@ internal sealed class FakeWizardPresentation : IMenuPresentation
 
     public string Screen { get; private set; } = string.Empty;
 
+    public int Hides { get; private set; }
+
     public void Activate(IMenuHost host, MenuReturnDestination destination)
     {
         _host = host;
@@ -107,6 +109,8 @@ internal sealed class FakeWizardPresentation : IMenuPresentation
         Screen = destination is DebriefReturn ? "wizard-debrief" : "wizard-chapter";
         _cursor = 0;
     }
+
+    public void Hide() => Hides++;
 
     public void Tick(float dt)
     {
@@ -182,6 +186,10 @@ internal sealed class FakePointerPresentation : IMenuPresentation
         _host = host;
         _feature = host.Features.Get<FakeSortieFeature>();
         Screen = destination is DebriefReturn ? "page-results" : "page";
+    }
+
+    public void Hide()
+    {
     }
 
     public void Tick(float dt)

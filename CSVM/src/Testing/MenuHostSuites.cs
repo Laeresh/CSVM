@@ -1,0 +1,182 @@
+using System.Collections.Generic;
+using CSVM.UI;
+using CSVM.UI.Menu;
+using CSVM.UI.Menu.BuiltIn;
+
+namespace CSVM.Testing;
+
+/// <summary>
+/// The Free Flight tracer through the presentation boundary: a real <see cref="MenuHost"/> with
+/// the Built-in presentation registered under its id, shown at the top level, ticked with frames
+/// whose player-1 commands arrive through the host's first seat, and left through the typed exit
+/// the host hands its sink. The host then hides the presentation and, as the launcher does after
+/// a flight, shows it again at the top level; the screens must re-enter with the state
+/// <c>menu-free-flight-journey</c> pins for a return. A presentation that only works on a cold
+/// start has not proved the seam.
+/// </summary>
+internal static class MenuHostSuites
+{
+    private const float Dt = 1f / 60f;
+
+    private static readonly MenuCommands Accept = new() { Accept = true };
+    private static readonly MenuCommands Up = new() { MoveY = -1 };
+    private static readonly MenuCommands Down = new() { MoveY = 1 };
+
+    [Suite("menu-host-tracer",
+        "Built-in Free Flight through the presentation boundary: the Built-in presentation is "
+        + "registered and shown by a real MenuHost, player 1's commands arrive through the "
+        + "host's first seat frame by frame, the launch leaves as a LaunchExit through the host's "
+        + "sink with the presentation hidden, an unknown requested presentation falls back to "
+        + "Built-in with a reason, and a top-level return re-enters the screens with the chapter "
+        + "and airframe cursors kept and the selection dropped")]
+    internal static void MenuHostTracer(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var exits = new List<MenuExit>();
+        var seat = new ScriptedSeat();
+        var registry = new PresentationRegistry();
+        registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
+            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true }));
+        var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
+        host.Features.Add(new FreeFlightFeature());
+        host.AddSeat(seat);
+        BuiltInPresentation? built = null;
+        try
+        {
+            Selection(ctx, host);
+            var menu = ColdStart(ctx, host, out built);
+            if (menu == null)
+            {
+                return;
+            }
+
+            Fly(ctx, host, seat, menu, exits);
+            Return(ctx, host, menu, exits);
+        }
+        finally
+        {
+            host.Deactivate();
+        }
+
+        ctx.Check(built?.Menu == null, $"Deactivate tears the launchscreen down");
+        ctx.Check(host.Active == null && !host.Shown, $"and the host holds no presentation afterwards");
+    }
+
+    // Resolution over the registry: an unknown request falls back with a reason rather than
+    // crashing, the force flag beats a request, and Built-in alone resolves silently.
+    private static void Selection(TestContext ctx, MenuHost host)
+    {
+        string? reason = host.Select(forceBuiltIn: false, cliOverride: "no-such-presentation", savedRequest: null);
+        ctx.Check(host.Selected == PresentationId.BuiltIn && reason != null,
+            $"an unknown requested presentation falls back to Built-in with a reason ({reason})");
+        ctx.Check(host.Requested == new PresentationId("no-such-presentation"),
+            $"while the request itself is kept for Options to show back ({host.Requested})");
+        reason = host.Select(forceBuiltIn: true, cliOverride: "original", savedRequest: null);
+        ctx.Check(host.Selected == PresentationId.BuiltIn && reason != null,
+            $"the force flag resolves to Built-in over a CLI override ({reason})");
+        reason = host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: null);
+        ctx.Check(host.Selected == PresentationId.BuiltIn && reason == null,
+            $"and with nothing asked for Built-in is the silent default");
+    }
+
+    private static LaunchMenu? ColdStart(TestContext ctx, MenuHost host, out BuiltInPresentation? built)
+    {
+        host.Show(MenuReturnDestination.TopLevel);
+        built = host.Active as BuiltInPresentation;
+        ctx.Check(host.Shown && built != null,
+            $"Show activates a fresh Built-in presentation from the registry ({host.Active?.Id})");
+        var menu = built?.Menu;
+        ctx.Check(menu is { Visible: true },
+            $"and the presentation stood the launchscreen up under the host's parent, visible");
+        if (menu == null)
+        {
+            return null;
+        }
+
+        ctx.Check(menu.ShownScreen == "Mode" && menu.ShownRowText == "Free Flight",
+            $"a cold start opens on the Mode screen with the cursor on Free Flight ({menu.ShownScreen}, {menu.ShownRowText})");
+        return menu;
+    }
+
+    // Mode, Chapter (New York), Aircraft (Balmoral), select, confirm: every press a frame through
+    // the host's seat, none through the launchscreen's own Drive.
+    private static void Fly(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu, List<MenuExit> exits)
+    {
+        Press(host, seat, Accept);
+        ctx.Check(menu.ShownScreen == "Chapter",
+            $"a frame through the host's seat drives the screens: Accept opens the Chapter screen ({menu.ShownScreen})");
+        Press(host, seat, Up);
+        ctx.Check(menu.ShownRowText == "New York — IA: Manhattan",
+            $"Up wraps the chapter cursor onto the last row ({menu.ShownRowText})");
+        Press(host, seat, Accept);
+        Press(host, seat, Down);
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownScreen == "Plane" && menu.ShownRowText == "Balmoral",
+            $"the Aircraft screen, two rows down ({menu.ShownScreen}, {menu.ShownRowText})");
+        Press(host, seat, Accept);
+        ctx.Check(exits.Count == 0 && menu.ShownHeading == "AIRCRAFT SELECTED",
+            $"the first Accept selects and nothing has left yet ({exits.Count}, {menu.ShownHeading})");
+        Press(host, seat, Accept);
+        ctx.Check(exits.Count == 1 && exits[0] is LaunchExit,
+            $"the second Accept leaves through the host as one LaunchExit ({exits.Count})");
+        if (exits.Count == 1 && exits[0] is LaunchExit launch)
+        {
+            ctx.Check(launch.Chapter == "C5" && launch.Mode == MenuMode.Free && launch.InstantAction == null,
+                $"carrying the picked chapter, mode Free and no Instant Action def ({launch.Chapter}, {launch.Mode})");
+            ctx.Check(launch.Seats.Count == 1 && launch.Seats[0].PlaneNode == "player_balmoral",
+                $"and the one seat's airframe ({launch.Seats.Count}, {launch.Seats[0].PlaneNode})");
+        }
+
+        ctx.Check(!host.Shown && !menu.Visible,
+            $"the host hid the presentation on the exit, so the launcher can build (shown={host.Shown}, visible={menu.Visible})");
+        seat.Enqueue(Accept);
+        host.Tick(Dt);
+        ctx.Check(exits.Count == 1, $"a frame while hidden reaches nothing, so nothing relaunches ({exits.Count})");
+        seat.Clear();
+    }
+
+    // The launcher's return from flight: the same instance shown again at the top level.
+    private static void Return(TestContext ctx, MenuHost host, LaunchMenu menu, List<MenuExit> exits)
+    {
+        var before = host.Active;
+        host.Show(MenuReturnDestination.TopLevel);
+        ctx.Check(ReferenceEquals(before, host.Active) && host.Shown && menu.Visible,
+            $"a return shows the same presentation instance again, not a fresh one (shown={host.Shown}, visible={menu.Visible})");
+        ctx.Check(menu.ShownScreen == "Mode" && menu.ShownRow == 0,
+            $"a bare launch's return re-enters on the Mode screen ({menu.ShownScreen}, row {menu.ShownRow})");
+        menu.Drive(Accept);
+        ctx.Check(menu.ShownScreen == "Chapter" && menu.ShownRowText == "New York — IA: Manhattan",
+            $"the chapter cursor survives the flight ({menu.ShownRowText})");
+        menu.Drive(Accept);
+        ctx.Check(menu.ShownHeading == "SELECT AIRCRAFT" && menu.ShownRowText == "Balmoral",
+            $"the airframe cursor survives it and the selection does not ({menu.ShownHeading}, {menu.ShownRowText})");
+        ctx.Check(exits.Count == 1, $"and nothing relaunched on the way back in ({exits.Count})");
+    }
+
+    private static void Press(MenuHost host, ScriptedSeat seat, MenuCommands frame)
+    {
+        seat.Enqueue(frame);
+        host.Tick(Dt);
+    }
+
+    // Seat 0 fed from a queue of frames; an empty queue reads idle. What the host's seam carries
+    // is the frame, so the devices behind a seat are nobody's business here.
+    private sealed class ScriptedSeat : IMenuInputSource
+    {
+        private readonly Queue<MenuCommands> _frames = new();
+
+        public string DeviceLabel => "scripted";
+
+        public bool CapturingText { get; set; }
+
+        public void Enqueue(MenuCommands frame) => _frames.Enqueue(frame);
+
+        public void Clear() => _frames.Clear();
+
+        public MenuCommands Poll(float dt) => _frames.Count > 0 ? _frames.Dequeue() : MenuCommands.None;
+
+        public void Prime()
+        {
+        }
+    }
+}

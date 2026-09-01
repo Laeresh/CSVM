@@ -16,8 +16,10 @@ namespace CSVM.UI;
 /// see <see cref="CanLaunch"/>. Input is polled per player through <see cref="MenuInput"/> rather
 /// than Godot's input map, since the join flow needs a named device. More than one player splits
 /// the Plane screen into <see cref="SplitScreen.PaneRect"/> panes. Re-entrant on return from
-/// flight; see <see cref="ShowMenu"/>. Module map: docs/architecture.md. Wizard decode:
-/// docs/formats/instant-action.md.
+/// flight; see <see cref="ShowMenu"/>. The Built-in presentation's screen graph: player 1's
+/// commands arrive through the host's first seat, every launch and the quit leave through
+/// <see cref="IMenuHost.Exit"/>, and narration plays through the host's audio service. Module
+/// map: docs/architecture.md. Wizard decode: docs/formats/instant-action.md.
 /// </summary>
 public sealed partial class LaunchMenu : CanvasLayer
 {
@@ -30,34 +32,6 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// door. The campaign is not a <see cref="MenuMode"/>: it owns its screens through
     /// <see cref="CampaignFlow"/> and only launches a mission from inside them.</summary>
     public const string CampaignRow = "Campaign";
-
-    /// <summary>Fired when every joined player has locked a plane: (chapter code, one choice per
-    /// player in player order, the picked mode, and — Instant Action only, else null — the
-    /// wizard's own built <c>InstantActionDef</c>). The host hides the menu and builds the
-    /// session.</summary>
-    public Action<string, IReadOnlyList<PlayerChoice>, MenuMode, InstantActionDef?>? Launch;
-
-    /// <summary>Fired when the campaign cabin's flight check presses FLY MISSION: the host derives
-    /// a campaign session spec from it and builds. Separate from <see cref="Launch"/> because a
-    /// story mission names a profile and a story position, not a chapter and a plane list.</summary>
-    public Action<CampaignLaunch>? LaunchCampaign;
-
-    /// <summary>Fired when the player backs out of the Mode screen — the host quits.</summary>
-    public Action? Quit;
-
-    /// <summary>The process's music channel, or null when the host built none. The board enters
-    /// <see cref="MusicState.Menu"/> on every screen it shows, which is a no-op for the track
-    /// already playing. The briefing is the one screen that also ducks it, so the narration is not
-    /// read over a full-level splash track.</summary>
-    public MusicPlayer? Music;
-
-    /// <summary>The draw the music channel's own weighted picks come from, the host's.</summary>
-    public Random MusicRng = new();
-
-    /// <summary>Resolves a WAV file name into a stream, the host's process-lifetime archive. The
-    /// briefing's narration is the one thing this board plays itself: it is a menu, so no session
-    /// audio path owns it.</summary>
-    public Func<string, bool, AudioStreamWav?>? Sounds;
 
     // Base metrics at 720p, scaled up on taller viewports (like StuntScoreboard). All TUNE.
     private const int TitleFont = 40;
@@ -242,9 +216,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     // Steps 3-4's wizard wave slots: 0 enemies = unconfigured — the wizard's own "starts
     // empty" divergence from the original's always-four dropdowns, decision 1.
     private readonly WaveSlot[] _waves = new WaveSlot[4];
-    // Free Flight's own state and launch rule: the Chapter screen hands it the pick, and a Free
-    // launch leaves through its typed exit. Owned here until a menu host owns the feature set.
-    private readonly FreeFlightFeature _free = new();
+    // The menu host: its first seat is player 1's commands, its feature set holds Free Flight's
+    // state and launch rule, its audio service plays the narration, and every exit goes to it.
+    private IMenuHost _host = null!;
+    private FreeFlightFeature _free = null!;
+    // The raw poller behind the host's first seat, player 1's for the pad bookkeeping (claiming,
+    // hotplug) that still lives here; the commands themselves are read through the seat.
+    private MenuInput _player1 = null!;
 
     private string _zrdrPath = "";
     private string _dataRoot = "";
@@ -293,10 +271,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     // OpenHangar, so cancelling always lands back where the pilot pressed.
     private HangarFlow? _hangar;
     private Screen _hangarReturn = Screen.Mode;
-    // The briefing narration, the one sound this board owns: an AudioStreamPlayer of its own on
-    // the Master bus, restarted whenever the page's NarrationStarts moves and stopped the moment
-    // the briefing stops being the screen showing (the plan's C23 wiring contract).
-    private AudioStreamPlayer _narration = null!;
+    // The page's narration count as last acted on: the host's audio service is asked to begin the
+    // narration whenever it moves and to end it the moment the briefing stops showing.
     private int _narrationStarts;
     // Whether the briefing's reveal was running on the previous frame, which is what buys the one
     // repaint after it finishes: the frame that lands the last tween is the frame that stops
@@ -375,10 +351,6 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>The hangar flow while one is open, or null. Read-only, for the same reason
     /// <see cref="Campaign"/> is: its screens are driven through it, not around it.</summary>
     public HangarFlow? Hangar => _hangar;
-
-    /// <summary>The Free Flight feature this screen drives: the Chapter screen's Accept hands it
-    /// the pick, and a Free launch is its <see cref="LaunchExit"/> adapted onto <see cref="Launch"/>.</summary>
-    public FreeFlightFeature FreeFlight => _free;
 
     /// <summary>The composed board currently on screen, or null when no campaign screen is up.
     /// This is what the pilot is looking at, so a check that the screen keeps up with a running
@@ -478,11 +450,23 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>Builds the (hidden) launchscreen. <paramref name="zrdrPath"/> is the shared zrdr
     /// extraction the plane stats come from; <paramref name="dataRoot"/> is where <c>extracted/</c>
     /// lives, needed to load an Instant Action environment's own <c>ia.zrd.json</c> once one is
-    /// confirmed. Add it to the tree, wire <see cref="Launch"/> / <see cref="Quit"/>, then
-    /// <see cref="ShowMenu"/>.</summary>
-    public static LaunchMenu Build(string zrdrPath, string dataRoot)
+    /// confirmed. <paramref name="host"/> must already hold a <see cref="FreeFlightFeature"/> and,
+    /// before the first frame, a first seat; <paramref name="player1"/> is the poller behind that
+    /// seat. Add it to the tree, then <see cref="ShowMenu"/>.</summary>
+    public static LaunchMenu Build(string zrdrPath, string dataRoot, IMenuHost host, MenuInput player1)
     {
-        var menu = new LaunchMenu { _zrdrPath = zrdrPath, _dataRoot = dataRoot, Layer = HudLayers.Board, Visible = false };
+        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(player1);
+        var menu = new LaunchMenu
+        {
+            _zrdrPath = zrdrPath,
+            _dataRoot = dataRoot,
+            _host = host,
+            _free = host.Features.Get<FreeFlightFeature>(),
+            _player1 = player1,
+            Layer = HudLayers.Board,
+            Visible = false,
+        };
 
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
@@ -503,11 +487,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         menu._middle = Band(menu._zones);
         menu._middle.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         menu._footer = Band(menu._zones);
-
-        // The briefing's narration player. On the Master bus by default, which is where
-        // --volume=/audio.volume already applies, so it needs no gain handling of its own.
-        menu._narration = new AudioStreamPlayer { Name = "briefing_narration" };
-        menu.AddChild(menu._narration);
 
         // The splitscreen plane select lives alongside the centred layout; exactly one is visible.
         menu._paneRoot = new Control { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
@@ -711,7 +690,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         OpenCampaignAid(startScreen);
         Visible = true;
         if (_slots.Count == 0)
-            _slots.Add(new Slot { Input = { Keyboard = true } });
+            _slots.Add(new Slot(_player1));
         foreach (var slot in _slots)
         {
             // Every stage of the pick, not just the lock: a slot left Confirmed would satisfy the
@@ -744,13 +723,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <see cref="ShowMenu"/> to have run, so there is a player 1 to drive.</summary>
     public bool Drive(MenuCommands frame)
     {
-        var p1 = _slots[0].Input;
-        p1.Move = frame.MoveY;
-        p1.MoveX = frame.MoveX;
-        p1.Accept = frame.Accept;
-        p1.Back = frame.Back;
-        p1.Loadout = frame.Loadout;
-        p1.Presets = frame.Contents;
+        Apply(frame);
         bool dirty;
         try
         {
@@ -759,8 +732,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         finally
         {
             // Edges, so the next real poll starts from an idle frame rather than a press.
-            p1.Move = p1.MoveX = 0;
-            p1.Accept = p1.Back = p1.Loadout = p1.Presets = false;
+            Apply(MenuCommands.None);
         }
 
         if (dirty && Visible)
@@ -780,7 +752,6 @@ public sealed partial class LaunchMenu : CanvasLayer
             flow.SelectProfile(profile);
         }
 
-        Music?.Enter(MusicState.Menu, MusicRng);
         Rebuild();
     }
 
@@ -797,7 +768,6 @@ public sealed partial class LaunchMenu : CanvasLayer
             flow.OpenScrapbook(seq);
         }
 
-        Music?.Enter(MusicState.Menu, MusicRng);
         Rebuild();
     }
 
@@ -914,11 +884,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         // or a resolution change arrives as no input at all, so the size itself is watched.
         dirty |= GetViewport().GetVisibleRect().Size != _viewSize;
 
-        // Before the poll, not after: the PLANENAME screen takes typed characters, and player 1's
-        // letter aliases have to be dead for the frame that reads them (MenuInput.TextEntry).
-        _slots[0].Input.TextEntry = NamePage() != null;
-        foreach (var slot in _slots)
-            slot.Input.Poll((float)delta);
+        // Player 1's commands come through the host's first seat; the other seats are polled here
+        // until the shared player setup owns them. Text capture is set before the poll: the
+        // PLANENAME screen's letter aliases must be dead for the frame that reads them.
+        var seat = _host.Seats[0];
+        seat.CapturingText = NamePage() != null;
+        Apply(seat.Poll((float)delta));
+        for (int i = 1; i < _slots.Count; i++)
+            _slots[i].Input.Poll((float)delta);
         dirty |= HandleInput();
         // After the input, so a press that opened or left the briefing is already reflected: the
         // reveal is a clock the page cannot own, and the narration is a node the page cannot hold.
@@ -1068,6 +1041,20 @@ public sealed partial class LaunchMenu : CanvasLayer
             band.RemoveChild(child);
             child.QueueFree();
         }
+    }
+
+    // Player 1's frame of semantic commands onto the poller HandleInput reads. Join is not
+    // applied: joining is a per-pad scan (ScanJoins), not a seat's command, until the shared
+    // player setup owns the seats.
+    private void Apply(MenuCommands frame)
+    {
+        var p1 = _slots[0].Input;
+        p1.Move = frame.MoveY;
+        p1.MoveX = frame.MoveX;
+        p1.Accept = frame.Accept;
+        p1.Back = frame.Back;
+        p1.Loadout = frame.Loadout;
+        p1.Presets = frame.Contents;
     }
 
     // Whether a pad already belongs to a player: one of players 2–4, or the pad player 1
@@ -1280,7 +1267,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             else if (p1.Back || (p1.Loadout && _screen == Screen.WingmanLoadout))
             {
                 if (_screen == Screen.Mode)
-                    Quit?.Invoke();
+                    _host.Exit(new QuitExit());
                 else
                     _screen = _screen switch
                     {
@@ -1402,7 +1389,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (CanLaunch())
         {
             FireLaunch();
-            return false; // the host has hidden us and is building
+            return false; // the host took the exit, hid us and is building
         }
         return dirty;
     }
@@ -2159,14 +2146,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         _error = "";
     }
 
-    // FLY MISSION: the profile is saved, the board's score stops and the host builds a campaign
-    // session for this profile and story position. Every joined human's aircraft goes with it —
-    // its stock node, its hangar build where it has one, and the ammunition and ordnance the ammo
-    // screen, or a guest's own flight check, stored. The wingman's own binding is
-    // resolved by CampaignDirector, which has the profile open anyway.
+    // FLY MISSION: the profile is saved and the host is handed a campaign mission exit for this
+    // profile and story position. Every joined human's aircraft goes with it as a seat choice:
+    // its stock node, the pads it joined on, the ammunition and ordnance the ammo screen (or a
+    // guest's own flight check) stored, and its hangar build where it has one. The wingman's own
+    // binding is resolved by CampaignDirector, which has the profile open anyway.
     private void FlyCampaignMission(CampaignFlow flow)
     {
-        if (flow.Profile is not { } profile || LaunchCampaign == null)
+        if (flow.Profile is not { } profile)
         {
             flow.Resume();
             return;
@@ -2174,34 +2161,30 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         flow.Store.Save(profile);
         int players = _slots.Count;
-        var planeNodes = new string[players];
-        var customs = new CustomPlaneDef?[players];
-        var fits = new LoadoutChoice?[players];
-        var pads = new int[players][];
+        var seats = new List<MenuSeatChoice>(players);
         string seatedName = "";
         for (int player = 0; player < players; player++)
         {
             var plane = flow.Field.Plane(player) ?? new OwnedPlane();
-            // The device this seat joined on, carried the way MenuChoices carries a free-flight
-            // one: the cabin's join flow is the only place that binding exists, and the host
-            // cannot re-derive it from the connected roster (see CampaignLaunch.Pads).
-            pads[player] = _slots[player].Input.Pads ?? Array.Empty<int>();
-            planeNodes[player] = PlanePickerRoster.AirframeNode(plane.Airframe);
             // A reward aircraft with no file in the build store falls back to its own award
             // template: the grant writes one, and this is what carries a profile granted before it
             // did. Per entry, since a guest may pick a granted aircraft from the seated profile too.
-            customs[player] = CustomPlaneStore.UserPlanes().Load(plane.Name)
-                               ?? CampaignProgression.BuildForOwned(plane);
-            fits[player] = CampaignLoadout.For(plane, Fits);
+            var custom = CustomPlaneStore.UserPlanes().Load(plane.Name)
+                         ?? CampaignProgression.BuildForOwned(plane);
+            // The pads are the device this seat joined on: the cabin's join flow is the only place
+            // that binding exists, and the consumer cannot re-derive it from the connected roster.
+            seats.Add(new MenuSeatChoice(
+                PlanePickerRoster.AirframeNode(plane.Airframe),
+                _slots[player].Input.Pads ?? Array.Empty<int>(),
+                CampaignLoadout.For(plane, Fits),
+                custom));
             if (player == 0)
             {
                 seatedName = plane.Name;
             }
         }
 
-        var launch = new CampaignLaunch(profile.Name, flow.MissionSeq, planeNodes, customs, fits, pads);
         StopNarration();
-        Music?.Stop();
         _campaign = null;
         _screen = Screen.Mode;
         _error = "";
@@ -2211,7 +2194,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             GD.Print($"launchscreen: campaign P{player + 1} flying \"{flow.Field.Plane(player)?.Name}\"");
         }
 
-        LaunchCampaign(launch);
+        _host.Exit(new CampaignMissionExit(profile.Name, flow.MissionSeq, seats));
     }
 
     // The briefing's clock and its narration, the two things its page cannot own: a page holds no
@@ -2225,18 +2208,13 @@ public sealed partial class LaunchMenu : CanvasLayer
             return false;
         }
 
-        // Held for the whole stay rather than per line: the gaps between lines are short, and a
-        // duck that lifted in them would pump the splash track under the narration.
-        if (Music != null)
-        {
-            Music.Ducked = true;
-        }
-
         page.Advance(delta);
         if (page.NarrationStarts != _narrationStarts)
         {
             _narrationStarts = page.NarrationStarts;
-            PlayNarration(page.NarrationWav);
+            // The service ducks the music from here until EndNarration, the whole stay: the gaps
+            // between lines are short, and a duck that lifted in them would pump the splash track.
+            _host.Audio.BeginNarration(page.NarrationWav);
         }
 
         // ⚠ Do not turn this back into a did-it-change test over page properties. A reveal fades,
@@ -2248,40 +2226,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         return repaint;
     }
 
-    // Starts (or restarts) the narration. A missing stream is silence, not a refusal: the wav is
-    // one file of an extraction the rest of the screen already tolerates the absence of.
-    private void PlayNarration(string wav)
-    {
-        _narration.Stop();
-        _narration.Stream = wav.Length > 0 ? Sounds?.Invoke(wav, false) : null;
-        if (_narration.Stream != null)
-        {
-            _narration.Play();
-        }
-
-        // Through the sink, not GD.Print: a scripted run at --volume=0 has no sound to hear, and
-        // this line is what says the narration started at all.
-        string got = _narration.Stream != null ? "yes" : "no";
-        Utils.Log.Info("sound", $"briefing narration start={_narrationStarts} wav={wav} stream={got}");
-    }
-
-    // Lifts the music duck too: every door out of the briefing comes through here, including the
-    // launch, which hides the board and so stops TickCampaignAudio from running again.
+    // Ends the narration, which lifts the music duck too: every door out of the briefing comes
+    // through here, including the launch, which hides the board and so stops TickCampaignAudio
+    // from running again.
     private void StopNarration()
     {
         _narrationStarts = 0;
         _briefingRunning = false;
-        if (Music != null)
-        {
-            Music.Ducked = false;
-        }
-
-        if (_narration is { Playing: true })
-        {
-            _narration.Stop();
-        }
-
-        _narration.Stream = null;
+        _host.Audio.EndNarration();
     }
 
     // Re-reads the saved-plane store into the picker roster and keeps every cursor inside the
@@ -2418,26 +2370,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         ? _free.CanLaunch(_slots.Count, ConfirmedCount())
         : CanLaunch(_mode, AllConfirmed(), _slots.Count);
 
+    // Every non-campaign launch leaves as one LaunchExit through the host. Free Flight's is the
+    // feature's own; Instant Action and Dogfight build theirs here until their features exist.
+    // Our state is left as-is either way, so a failed build can send us back with ShowMenu.
     private void FireLaunch()
     {
+        var seats = SeatChoices();
         if (_mode == MenuMode.Free)
         {
-            // Leave our state as-is so a failed build can send us back with ShowMenu.
-            Dispatch(_free.BuildExit(SeatChoices()));
+            _host.Exit(_free.BuildExit(seats));
             return;
-        }
-
-        var choices = new List<PlayerChoice>(_slots.Count);
-        foreach (var slot in _slots)
-        {
-            // ⚠ A custom pick launches as its airframe's STOCK node today, its store name
-            // riding along in CustomPlane for D32 to read where the session is built (the
-            // seam PlayerChoice's own doc names).
-            var pick = _roster[slot.PlaneIndex];
-            choices.Add(new PlayerChoice(pick.Node,
-                slot.Input.Pads ?? Array.Empty<int>(),
-                slot.Fit.IsStock ? null : slot.Fit,
-                pick.CustomName));
         }
 
         string chapter;
@@ -2465,8 +2407,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             chapter = CurrentChapters[_chapterIndex].Code;
         }
-        // Leave our state as-is so a failed build can send us back with ShowMenu.
-        Launch?.Invoke(chapter, choices, _mode, iaDef);
+
+        _host.Exit(new LaunchExit(chapter, seats, _mode, iaDef));
     }
 
     // Every joined seat's pick as the typed seat choice: the roster row's node, the pads the seat
@@ -2495,20 +2437,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         return seats;
-    }
-
-    // The typed exit onto the host's launch callback, which is what the host consumes until it
-    // takes the exit itself. A custom def rides back as its store name, the callback's own shape.
-    private void Dispatch(LaunchExit exit)
-    {
-        var choices = new List<PlayerChoice>(exit.Seats.Count);
-        foreach (var seat in exit.Seats)
-        {
-            int[] pads = seat.Pads as int[] ?? new List<int>(seat.Pads).ToArray();
-            choices.Add(new PlayerChoice(seat.PlaneNode, pads, seat.Fit, seat.Custom?.Name));
-        }
-
-        Launch?.Invoke(exit.Chapter, choices, exit.Mode, exit.InstantAction);
     }
 
     // --- rendering ---
@@ -3427,36 +3355,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         return s;
     }
 
-    /// <summary>One player's confirmed selection: the plane node to build and the gamepad(s) that
-    /// fly it. A joined player has exactly one; player 1 (who also has the keyboard) carries every
-    /// pad nobody claimed, so a lone controller still flies it and phantom devices stay harmless.</summary>
-    /// <summary><paramref name="Fit"/> is this pane's own Ammo Selection edits, or null for the
-    /// airframe's stock fit. Per pane, because the roster above it is.</summary>
-    /// <summary><paramref name="CustomPlane"/> is the picked custom plane's store name, or null
-    /// for a stock pick. ⚠ Nothing reads it yet, so a custom pick flies as
-    /// <paramref name="PlaneNode"/>, its airframe's stock plane. <c>Launcher.StartSessionFromMenu</c>
-    /// loads the def from <c>CustomPlaneStore</c> and
-    /// builds it into the spawned aircraft.</summary>
-    public readonly record struct PlayerChoice(
-        string PlaneNode, int[] Pads, LoadoutChoice? Fit = null, string? CustomPlane = null);
-
-    /// <summary>What the cabin's FLY MISSION hands the host: the profile and the
-    /// <c>cm_sequence</c> story position the session is for, plus one entry per joined human, in
-    /// player order, for the four things binding a seat needs — its stock node, its hangar
-    /// build (null for a profile starter or a reward aircraft, neither of which is hangar-built),
-    /// the ammunition and ordnance its flight check stored, and the pads that seat claimed in the
-    /// join flow. Entry 0 is the seated pilot's, exactly as a solo launch always built it; entries
-    /// 1 and up are guests, session-scoped records that never touch the profile store. The player
-    /// count is the list length, so it cannot drift from the entries. The wingman is NOT here:
-    /// <c>CampaignDirector</c> resolves its binding from the same profile it already opens.
-    /// ⚠ <see cref="Pads"/> is not derivable later: the roster split the host falls back to
-    /// without it gives seat 1 every pad no other seat claimed, so a two-seat cabin launched off
-    /// one pad and the keyboard flew both seats from the same devices.</summary>
-    public readonly record struct CampaignLaunch(
-        string Profile, int Seq, IReadOnlyList<string> PlaneNodes,
-        IReadOnlyList<CustomPlaneDef?> Customs, IReadOnlyList<LoadoutChoice?> Fits,
-        IReadOnlyList<int[]> Pads);
-
     // One editable line of a loadout list. Key is the gun slot (1-4) or the physical pylon
     // number (1-8) — slot identity, the same key LoadoutChoice uses, never a row index.
     private readonly record struct FitRow(FitRowKind Kind, int Key, string Label, string Value);
@@ -3478,10 +3376,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // One joined player: their device binding, their cursor in the plane list, and
-    // whether they have locked their pick.
+    // whether they have locked their pick. Player 1's poller is the host's first seat's.
     private sealed class Slot
     {
-        public readonly MenuInput Input = new();
+        public readonly MenuInput Input;
 
         // Starts at Planes's index 0 — the Autogyro under the 3700 order, matching gui_continue's
         // own no-custom-planes selection rather than being positional by accident.
@@ -3497,5 +3395,15 @@ public sealed partial class LaunchMenu : CanvasLayer
         public bool InLoadout;
         public int FitRow;
         public LoadoutChoice Fit = new();
+
+        public Slot()
+            : this(new MenuInput())
+        {
+        }
+
+        public Slot(MenuInput input)
+        {
+            Input = input;
+        }
     }
 }

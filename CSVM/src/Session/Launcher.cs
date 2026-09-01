@@ -4,6 +4,8 @@ using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.UI;
+using CSVM.UI.Menu;
+using CSVM.UI.Menu.BuiltIn;
 using CSVM.Utils;
 using Godot;
 
@@ -125,7 +127,11 @@ public partial class Launcher : Node3D
     // GameSession node, freed again by ReturnToMenu or RestartSession. The camera, lights and
     // global shader params live on `this` and persist across sessions.
     private GameSession? _session; // the current session node (null at the launchscreen)
-    private LaunchMenu? _menu;     // the in-game launchscreen (shown on a no-content-arg launch)
+    // The process-lifetime menu host and its audio service, built on the first show of the menu
+    // (a no-content-arg launch): the host owns the shared features, the first seat and the active
+    // presentation, and hands every typed exit to OnMenuExit.
+    private MenuHost? _menuHost;
+    private MenuAudioService? _menuAudio;
     private bool _menuDriven;      // launched into the menu → Esc from flight returns here, not quit
     // The score, and the archive it streams from. Both are process-lifetime, unlike the
     // build-scoped SessionArchives.Sounds: one channel has to survive a mission launch, or the
@@ -203,6 +209,11 @@ public partial class Launcher : Node3D
     // `--run-tests`, the live session's (published as GameClock.Current by its
     // build, nulled by its teardown) otherwise, null at the launchscreen.
     private GameClock? ClockNow => _clock ?? GameClock.Current;
+
+    // The launchscreen while the Built-in presentation is the active one, else null: the door for
+    // what is still Built-in's alone (the debug aids, the failed-build note). Every other reading
+    // of the menu goes through the host.
+    private LaunchMenu? BuiltInMenu => (_menuHost?.Active as BuiltInPresentation)?.Menu;
 
     public override void _Ready()
     {
@@ -577,7 +588,7 @@ public partial class Launcher : Node3D
         if (_spec.ShowsMenu)
         {
             _menuDriven = true;
-            ShowLaunchMenu();
+            ShowMenu(MenuReturnDestination.TopLevel);
             return;
         }
         LaunchSession();
@@ -613,8 +624,8 @@ public partial class Launcher : Node3D
     {
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
         {
-            // While the launchscreen is up it owns Esc (back / quit from the Mode screen).
-            if (_menu is { Visible: true })
+            // While the menu is up it owns Esc (back / quit from the Mode screen).
+            if (_menuHost is { Shown: true })
                 return;
             // ⚠ Esc no longer leaves a live flight; it opens the pause board, whose Exit item does.
             // FlightController polls it as a pause toggle, so nothing is done here.
@@ -708,7 +719,7 @@ public partial class Launcher : Node3D
         _music?.Tick((float)delta, _musicRng);
 
         _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
-            _session?.Plane, _menu is { Visible: true });
+            _session?.Plane, _menuHost is { Shown: true });
         _gltfExporter.Tick(_session?.Plane, GetTree(), _spec);
 
         // A campaign mission that ended during the session's own step: free it and reopen the
@@ -722,6 +733,10 @@ public partial class Launcher : Node3D
         // Last in the frame, where the build used to happen anyway: the launchscreen and the boards
         // are children, so they process AFTER this node, and a build they asked for landed here.
         RunOwedLaunch();
+        // After everything above, which is where the launchscreen's own process callback ran when
+        // it was a child ticking itself: the capture director reads the menu as it stood before
+        // this frame's presses, as it always did.
+        _menuHost?.Tick((float)delta);
     }
 
     // The process's one music channel and the archive it streams from. Everything here is
@@ -798,8 +813,8 @@ public partial class Launcher : Node3D
         {
             return; // a CLI launch leaves the log to tell the story, as it always did
         }
-        ReturnToMenu();
-        _menu!.ShowError($"Could not load {_spec.Chapter} / {string.Join(", ", _spec.PlaneNames)} — see the log.");
+        ReturnToMenu(MenuReturnDestination.TopLevel);
+        BuiltInMenu?.ShowError($"Could not load {_spec.Chapter} / {string.Join(", ", _spec.PlaneNames)} — see the log.");
     }
 
     // Shows the load screen and owes a build from the next frame. Every interactive path in (the
@@ -926,24 +941,12 @@ public partial class Launcher : Node3D
         AddChild(new WorldEnvironment { Environment = _env });
     }
 
-    // Shows the launchscreen (building it on first use) and wiring its Launch/Quit
-    // callbacks. Re-shown by ReturnToMenu after Esc-from-flight.
-    private void ShowLaunchMenu()
+    // Shows the menu at a semantic destination, building the host on first use. Re-shown by
+    // ReturnToMenu after Esc-from-flight and by OpenDebrief after a campaign mission.
+    private void ShowMenu(MenuReturnDestination destination)
     {
-        if (_menu == null)
-        {
-            _menu = LaunchMenu.Build(_zrdrPath, _dataRoot);
-            _menu.Launch = StartSessionFromMenu;
-            _menu.LaunchCampaign = StartCampaignFromMenu;
-            _menu.Quit = () => GetTree().Quit();
-            // The board's own two audio needs, both over the process-lifetime channel and archive:
-            // the score it enters on every screen, and the briefing narration it plays itself.
-            _menu.Music = _music;
-            _menu.MusicRng = _musicRng;
-            _menu.Sounds = (wav, looped) => _musicArchive?.Find(wav, looped, warn: false);
-            AddChild(_menu);
-        }
-        _menu.ShowMenu(_spec.MenuStartScreen);
+        _menuHost ??= BuildMenuHost();
+        _menuHost.Show(destination);
         // The load screen is up for two frames during a build and torn down before anything
         // renders, so a shot of it needs a door of its own that leaves it standing.
         if (_spec.MenuStartScreen is "loadboard" or "loadboard-campaign")
@@ -954,96 +957,136 @@ public partial class Launcher : Node3D
         // Safe on every entry: a cue for the track already playing is a no-op, which is exactly
         // what the original's own mail(11004) does (docs/org/music.md).
         _music?.Enter(MusicState.Menu, _musicRng);
-        // --debug-join=N: synthesize N extra device-less players so the splitscreen aircraft
-        // select can be screenshot on a one-controller machine (they can never act, so the
-        // shot is deterministic; the last one starts locked to show both panel states).
+        // The launchscreen's own screenshot aids, one-shot: a return to the menu keeps whoever
+        // really joined. Built-in's alone, so they reach it through the presentation's door.
+        if (BuiltInMenu is { } menu)
+        {
+            ApplyMenuDebugAids(menu);
+        }
+    }
+
+    // The menu host: the Built-in presentation registered under its id, the shared Free Flight
+    // feature, the first seat (keyboard plus every unclaimed pad, the launchscreen's own poller
+    // behind it), the audio service over the process's music and archive, and OnMenuExit as the
+    // sink. The active presentation is settled here through PresentationResolution: the force
+    // flag, then --presentation=, then the saved request, availability being registration.
+    private MenuHost BuildMenuHost()
+    {
+        _menuAudio = new MenuAudioService(_music, wav => _musicArchive?.Find(wav, false, warn: false));
+        AddChild(_menuAudio);
+        var seat = new BuiltInSeat(new MenuInput { Keyboard = true });
+        var registry = new PresentationRegistry();
+        registry.Register(PresentationId.BuiltIn,
+            () => new BuiltInPresentation(this, _zrdrPath, _dataRoot, _cli.MenuStartScreen, seat.Input));
+        var host = new MenuHost(registry, _menuAudio, OnMenuExit);
+        host.Features.Add(new FreeFlightFeature());
+        host.AddSeat(seat);
+        string? saved = OptionsStore.UserOptions().Load().MenuPresentation;
+        string? reason = host.Select(_spec.ForceBuiltInPresentation, _spec.PresentationOverride, saved);
+        string why = reason == null ? "" : $" reason={reason}";
+        Log.Info("ui", $"menu presentation active={host.Selected} requested={host.Requested}{why}");
+        return host;
+    }
+
+    // --debug-join=N synthesizes N extra device-less players so the splitscreen aircraft select
+    // can be screenshot on a one-controller machine; --debug-waves=/--debug-wingmen=/--debug-preset=
+    // are the same aid for the Instant Action wizard's screens. The preset goes last, so it
+    // overwrites the two before it: a preset fills the wave and wingman fields itself.
+    private void ApplyMenuDebugAids(LaunchMenu menu)
+    {
         if (_pendingJoin > 0)
         {
-            _menu.DebugJoin(_pendingJoin);
-            _pendingJoin = 0; // one-shot: a return to the menu keeps whoever really joined
+            menu.DebugJoin(_pendingJoin);
+            _pendingJoin = 0;
         }
-        // --debug-waves=/--debug-wingmen=: the same screenshot aid for the Instant Action wizard's
-        // own screens.
         if (_pendingWaves > 0)
         {
-            _menu.DebugWaves(_pendingWaves);
+            menu.DebugWaves(_pendingWaves);
             _pendingWaves = 0;
         }
         if (_pendingWingmen > 0)
         {
-            _menu.DebugWingmen(_pendingWingmen);
+            menu.DebugWingmen(_pendingWingmen);
             _pendingWingmen = 0;
         }
-        // Last, so it overwrites the two above rather than being half-overwritten by them: a
-        // preset fills the wave and wingman fields itself and asking for both is a contradiction.
         if (_pendingPreset >= 0)
         {
-            _menu.DebugPreset(_pendingPreset);
+            menu.DebugPreset(_pendingPreset);
             _pendingPreset = -1;
         }
     }
 
-    // The launchscreen's players locked their picks: derive this session's spec, bind pads,
-    // start the session. A build failure returns to the menu with a note instead of a blank
-    // screen.
+    // The host's exit sink: the one place a menu leaves through. The host has already hidden the
+    // presentation, with its state kept so a failed build can show it again where it stood.
+    private void OnMenuExit(MenuExit exit)
+    {
+        switch (exit)
+        {
+            case LaunchExit launch:
+                StartSessionFromMenu(launch);
+                break;
+            case CampaignMissionExit mission:
+                StartCampaignFromMenu(mission);
+                break;
+            case QuitExit:
+                GetTree().Quit();
+                break;
+        }
+    }
+
+    // A non-campaign launch: derive this session's spec, bind pads, start the session. A build
+    // failure returns to the menu with a note instead of a blank screen.
     // ⚠ Derive the spec from _cli, never the outgoing _spec, so nothing the last session
     // settled leaks into this one. Pads are the deliberate exception: they come from the join
     // flow, not args, so they stay session state rather than a spec field.
-    private void StartSessionFromMenu(string chapter, IReadOnlyList<LaunchMenu.PlayerChoice> players,
-        MenuMode mode, InstantActionDef? iaDef)
+    private void StartSessionFromMenu(LaunchExit launch)
     {
-        var planes = new List<string>(players.Count);
-        var pads = new List<int[]>(players.Count);
-        // The fits ride alongside the planes rather than inside them: FromMenu writes each
-        // menu-settable field explicitly, so a chosen loadout has to be handed over here or it
-        // would be dropped exactly like any other field left out of that factory.
-        var fits = new List<Flight.LoadoutChoice?>(players.Count);
-        // A custom pick reaches the session as its def, loaded here: the menu carries only the
-        // store name (PlanePickerRoster), and PlaneNode is the airframe's stock node, so without
-        // this read a custom plane would fly as the stock aircraft it is built on.
-        var customs = new List<Flight.CustomPlaneDef?>(players.Count);
-        Flight.CustomPlaneStore? store = null;
-        Flight.StockLoadouts? stock = null;
-        foreach (var p in players)
-        {
-            planes.Add(p.PlaneNode);
-            pads.Add(p.Pads);
-            Flight.CustomPlaneDef? custom = null;
-            if (p.CustomPlane is { } customName)
-            {
-                store ??= Flight.CustomPlaneStore.UserPlanes();
-                custom = store.Load(customName);
-                if (custom == null)
-                {
-                    // The file went away (or turned unreadable) between the picker's listing and
-                    // the launch. Flying the stock airframe is the honest fallback: PlaneNode is
-                    // already that aircraft, so the session builds rather than refusing.
-                    GD.PushWarning($"custom plane '{customName}' could not be loaded, " +
-                                   $"flying the stock {p.PlaneNode}");
-                }
-            }
-
-            customs.Add(custom);
-            // A plane the campaign exported flies with the ammunition and ordnance EXPORT wrote
-            // into it. A fit set on the loadout screen is this sortie's own explicit pick and
-            // stands instead of the stored one.
-            fits.Add(p.Fit ?? (custom is { HasLoadout: true }
-                ? CampaignLoadout.For(custom, stock ??= Flight.StockLoadouts.Load())
-                : null));
-        }
-        _spec = SessionSpec.FromMenu(_cli, chapter, planes, mode, iaDef, fits, customs);
+        var (planes, pads, fits, customs) = Unpack(launch.Seats);
+        _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.
+        StepSortieSeed();
+        BindMenuPads(pads);
+        BeginLaunch();
+    }
+
+    // The seat choices as the four parallel lists the spec factories take. The fits ride
+    // alongside the planes rather than inside them: FromMenu writes each menu-settable field
+    // explicitly, so a chosen loadout has to be handed over or it would be dropped. A plane the
+    // campaign exported flies with the ammunition and ordnance EXPORT wrote into it; a fit set on
+    // the loadout screen is this sortie's own explicit pick and stands instead of the stored one.
+    private (List<string> Planes, List<int[]> Pads, List<Flight.LoadoutChoice?> Fits,
+        List<Flight.CustomPlaneDef?> Customs) Unpack(IReadOnlyList<MenuSeatChoice> seats)
+    {
+        var planes = new List<string>(seats.Count);
+        var pads = new List<int[]>(seats.Count);
+        var fits = new List<Flight.LoadoutChoice?>(seats.Count);
+        var customs = new List<Flight.CustomPlaneDef?>(seats.Count);
+        Flight.StockLoadouts? stock = null;
+        foreach (var seat in seats)
+        {
+            planes.Add(seat.PlaneNode);
+            pads.Add(seat.Pads as int[] ?? new List<int>(seat.Pads).ToArray());
+            customs.Add(seat.Custom);
+            fits.Add(seat.Fit ?? (seat.Custom is { HasLoadout: true } custom
+                ? CampaignLoadout.For(custom, stock ??= Flight.StockLoadouts.Load())
+                : null));
+        }
+
+        return (planes, pads, fits, customs);
+    }
+
+    // Steps the master so flying again is a new mission rather than a replay. A pinned run holds
+    // still, which is what keeps the goldens and the perf harnesses reproducible.
+    private void StepSortieSeed()
+    {
         if (!_spec.SeedPinned)
         {
             _sortie++;
             _masterSeed = Rng.SortieSeed(_processSeed, _sortie);
         }
         LogMasterSeed();
-        BindMenuPads(pads);
-        _menu!.HideMenu();
-        BeginLaunch();
     }
 
     // Honour the join flow's device binding rather than re-deriving it from the connected roster:
@@ -1072,30 +1115,24 @@ public partial class Launcher : Node3D
     // NOT named here — CampaignDirector.ResolveSpec reads them out of cm_sequence in the session's
     // constructor, so one place resolves a story position whether it came from a cabin or a
     // --campaign= command line.
-    private void StartCampaignFromMenu(LaunchMenu.CampaignLaunch launch)
+    private void StartCampaignFromMenu(CampaignMissionExit mission)
     {
-        _spec = SessionSpec.FromCampaign(_cli, launch.Profile, launch.Seq, launch.PlaneNodes,
-            launch.Pads.Count, launch.Fits, launch.Customs);
-        if (!_spec.SeedPinned)
-        {
-            _sortie++;
-            _masterSeed = Rng.SortieSeed(_processSeed, _sortie);
-        }
-        LogMasterSeed();
-        BindMenuPads(launch.Pads);
-        _menu!.HideMenu();
+        var (planes, pads, fits, customs) = Unpack(mission.Seats);
+        _spec = SessionSpec.FromCampaign(_cli, mission.Profile, mission.MissionSeq, planes,
+            pads.Count, fits, customs);
+        StepSortieSeed();
+        BindMenuPads(pads);
         BeginLaunch();
     }
 
-    // A flown campaign mission is over: free the world and open the scrapbook on the mission just
-    // flown, cabin on its far side, on a flow seated on the profile the director just wrote.
+    // A flown campaign mission is over: free the world and reopen the menu on the debrief for the
+    // mission just flown, which Built-in maps onto the scrapbook with the cabin on its far side.
     // Reached from the session's MissionEnded by way of _pendingDebrief, one frame later, carrying
     // the result the mission ended with.
     private void OpenDebrief(string profile, CampaignMissionResult result)
     {
         GD.Print($"campaign: {result.Outcome} — arrived at the debrief with '{profile}'");
-        ReturnToMenu();
-        _menu!.OpenCampaignScrapbook(profile, result.Attempt.Seq);
+        ReturnToMenu(new DebriefReturn(profile, result.Attempt.Seq));
     }
 
     // The mission boards' Restart (Instant Action and campaign): free this session and build a
@@ -1112,12 +1149,7 @@ public partial class Launcher : Node3D
             _session.QueueFree();
             _session = null;
         }
-        if (!_spec.SeedPinned)
-        {
-            _sortie++;
-            _masterSeed = Rng.SortieSeed(_processSeed, _sortie);
-        }
-        LogMasterSeed();
+        StepSortieSeed();
         GD.Print($"restart: rebuilding {_spec.Chapter} / {_spec.ModeName} from the same settings");
         BeginLaunch();
     }
@@ -1137,19 +1169,19 @@ public partial class Launcher : Node3D
     {
         if (_menuDriven && _session is { InSession: true })
         {
-            ReturnToMenu();
+            ReturnToMenu(MenuReturnDestination.TopLevel);
             return;
         }
         GetTree().Quit();
     }
 
-    // Frees the current session node and shows the launchscreen again — the in-process rebuild
-    // path for the boards' Exit item and for failed builds. The whole session subtree hangs under
-    // the node, so `QueueFree` tears it down; the non-child duties (the published clock, the world
-    // lights, the session texture archive, the main-camera restore) run in the node's
-    // `_Notification` on `NotificationExitTree`. The camera, lights and shader globals persist
-    // on `this`.
-    private void ReturnToMenu()
+    // Frees the current session node and shows the menu again at a semantic destination — the
+    // in-process rebuild path for the boards' Exit item, for failed builds and for the debrief.
+    // The whole session subtree hangs under the node, so `QueueFree` tears it down; the non-child
+    // duties (the published clock, the world lights, the session texture archive, the main-camera
+    // restore) run in the node's `_Notification` on `NotificationExitTree`. The camera, lights and
+    // shader globals persist on `this`.
+    private void ReturnToMenu(MenuReturnDestination destination)
     {
         if (_session != null)
         {
@@ -1163,7 +1195,7 @@ public partial class Launcher : Node3D
         PerfSample.Reset();
         PhysicsTickCost.Reset();
         _perfHud.Rearm();
-        ShowLaunchMenu();
+        ShowMenu(destination);
     }
 
     // Settles the master output gain: --volume= if given, else audio.volume, else silent.

@@ -1,0 +1,79 @@
+using System;
+using Godot;
+
+namespace CSVM.UI.Menu.BuiltIn;
+
+/// <summary>
+/// The Built-in presentation: the existing launchscreen, <see cref="LaunchMenu"/>, registered
+/// under <see cref="PresentationId.BuiltIn"/>. <see cref="Activate"/> builds the menu under the
+/// given parent on the first call and shows it on every call, mapping the semantic destination
+/// onto the launchscreen's own screens; <see cref="Hide"/> takes it off screen with its cursors
+/// intact; <see cref="Deactivate"/> frees it. The menu's frame runs from <see cref="Tick"/>, so
+/// its own process callback is switched off. The <c>--menu=</c> aid is Built-in's alone and is
+/// applied on every top-level show, as the launchscreen always did.
+/// </summary>
+public sealed class BuiltInPresentation : IMenuPresentation
+{
+    private readonly Node _parent;
+    private readonly string _zrdrPath;
+    private readonly string _dataRoot;
+    private readonly string _aid;
+    private readonly MenuInput _player1;
+    private LaunchMenu? _menu;
+
+    /// <summary>A presentation that builds its menu under <paramref name="parent"/>, opening on
+    /// <paramref name="aid"/> (a <c>--menu=</c> value or "") and binding seat 0's devices through
+    /// <paramref name="player1"/>, the poller behind the host's first seat.</summary>
+    public BuiltInPresentation(Node parent, string zrdrPath, string dataRoot, string aid, MenuInput player1)
+    {
+        _parent = parent ?? throw new ArgumentNullException(nameof(parent));
+        _zrdrPath = zrdrPath;
+        _dataRoot = dataRoot;
+        _aid = aid ?? string.Empty;
+        _player1 = player1 ?? throw new ArgumentNullException(nameof(player1));
+    }
+
+    public PresentationId Id => PresentationId.BuiltIn;
+
+    /// <summary>The launchscreen while built. The owner's door for what is still Built-in's
+    /// alone: the debug aids, the load-screen aid and the failed-build note.</summary>
+    public LaunchMenu? Menu => _menu;
+
+    public void Activate(IMenuHost host, MenuReturnDestination destination)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        if (_menu == null)
+        {
+            _menu = LaunchMenu.Build(_zrdrPath, _dataRoot, host, _player1);
+            _menu.SetProcess(false);
+            _parent.AddChild(_menu);
+        }
+
+        _menu.ShowMenu(_aid);
+        switch (destination)
+        {
+            case CabinReturn cabin:
+                _menu.OpenCampaignCabin(cabin.Profile);
+                break;
+            case DebriefReturn debrief:
+                _menu.OpenCampaignScrapbook(debrief.Profile, debrief.MissionSeq);
+                break;
+        }
+    }
+
+    public void Tick(float dt) => _menu?._Process(dt);
+
+    public void Hide() => _menu?.HideMenu();
+
+    public void Deactivate()
+    {
+        if (_menu == null)
+        {
+            return;
+        }
+
+        _parent.RemoveChild(_menu);
+        _menu.QueueFree();
+        _menu = null;
+    }
+}

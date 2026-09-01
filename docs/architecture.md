@@ -3998,29 +3998,51 @@ watches the viewport size as well as the input, since a resize or a resolution c
 press at all. `menu-zone-layout` walks the paint screen row by row and then resizes a viewport under
 a real menu; `CSVM.Tests/MenuZonesTests.cs` holds the division rule itself.
 
-Free Flight is the one mode routed through a shared feature. `FreeFlightFeature`
-(`src/UI/Menu/FreeFlightFeature.cs`) owns the chapter roster it offers, the picked chapter, the
-launch gate and the typed `LaunchExit`. The Chapter screen's Accept under Free Flight hands it the
-cursor's code; `--menu=plane`, `selected` and `loadout` skip that Accept, so `ShowMenu` hands it
-over for them. `CanLaunch()` asks the feature's gate in Free mode and keeps the static
-`CanLaunch(mode, allLocked, joined)` rule for the other modes. `FireLaunch` in Free mode builds one
+The launchscreen is the Built-in presentation's screen graph and stands on the menu host
+(`src/UI/Menu/MenuHost.cs`), which `Build(zrdrPath, dataRoot, host, player1)` takes: it reads the
+`FreeFlightFeature` out of the host's feature set, player 1's commands out of the host's first
+seat, plays narration through the host's audio service and leaves only through `IMenuHost.Exit`.
+It has no callbacks. `player1` is the raw `MenuInput` behind that first seat, handed over
+separately because the pad bookkeeping (claiming on Mode/Chapter, joining, hotplug in
+`SyncDevices`) still binds devices here: the seat carries commands, the poller carries the
+binding, and both are the same object. `_Process` is the frame: device sync and join scan, then
+`host.Seats[0].Poll` applied onto player 1's poller (`Apply`), the other seats polled directly
+until the shared player setup owns them, `HandleInput`, the campaign audio tick and the repaint.
+The Built-in presentation switches the node's own process callback off and calls `_Process` from
+its `Tick`, which is also how the frame-driving suites run it. `Drive(MenuCommands)` applies one
+frame of player 1's semantic commands and handles it, for the scripted journey suites.
+
+`FreeFlightFeature` (`src/UI/Menu/FreeFlightFeature.cs`) owns the chapter roster it offers, the
+picked chapter, the launch gate and the typed `LaunchExit`. The Chapter screen's Accept under Free
+Flight hands it the cursor's code; `--menu=plane`, `selected` and `loadout` skip that Accept, so
+`ShowMenu` hands it over for them. `CanLaunch()` asks the feature's gate in Free mode and keeps the
+static `CanLaunch(mode, allLocked, joined)` rule for the other modes. `FireLaunch` builds one
 `MenuSeatChoice` per joined seat (`SeatChoices`: the roster row's node, the seat's pads, its fit
-edits or null for stock, and a custom row's def read from the store, with the same warning the
-host prints when the file is gone) and adapts the feature's `LaunchExit` onto the existing
-`Launch` callback (`Dispatch`, the def riding back as its store name), so the host sees the
-payload it always saw. Instant Action, Dogfight, campaign and hangar keep their old paths. The
-Chapter screen, the aircraft screen, joining and locking stay here: they are shared with the other
-modes, and the feature never reads them. `Chapters` is this screen's row text zipped over
-`MenuChapters`, the shared roster. `Drive(MenuCommands)` applies one frame of player 1's semantic
-commands in place of a device poll, and the `Shown*` read-outs (`ShownScreen`, `ShownHeading`,
+edits or null for stock, and a custom row's def read from the store, with a warning when the file
+is gone) and hands the host one `LaunchExit`: the feature's own in Free mode, one built here with
+the wizard's `InstantActionDef` for Instant Action and the chapter for Dogfight, until those modes
+have features of their own. The cabin's FLY MISSION (`FlyCampaignMission`) leaves the same way as
+a `CampaignMissionExit` (profile, story position, one seat choice per joined human with its stock
+node, joined pads, stored fit and hangar build). Back on the Mode screen leaves as a `QuitExit`.
+The Chapter screen, the aircraft screen, joining and locking stay here: they are shared with the
+other modes, and the feature never reads them. `Chapters` is this screen's row text zipped over
+`MenuChapters`, the shared roster. The `Shown*` read-outs (`ShownScreen`, `ShownHeading`,
 `ShownBreadcrumb`, `ShownFooter`, `ShownDetail`, `ShownJoinHint`, `ShownRow`, `ShownRowCount`,
 `ShownRowText`) say what the screen draws. `menu-free-flight-journey`
-(`src/Testing/MenuJourneySuites.cs`) drives the real menu through them from Mode to the launch
-callback, back out at every step, through a return and the `--menu=` aids, and pins Built-in's
+(`src/Testing/MenuJourneySuites.cs`) drives the real menu through them from Mode to the typed
+exit, back out at every step, through a return and the `--menu=` aids, and pins Built-in's
 present behaviour with its quirks: the chapter, airframe and mode cursors survive Back and a return
 from flight while the selection does not, a bare launch's return lands on Mode, an aid re-enters
 under whatever mode was last picked, a selected airframe's cursor does not move, and the launch
-fires only when every joined seat has confirmed.
+fires only when every joined seat has confirmed. `menu-host-tracer` (`src/Testing/MenuHostSuites.cs`)
+runs the same journey through a real `MenuHost` with the Built-in presentation registered: frames
+through the host's seat, the exit through the host's sink with the presentation hidden, and a
+top-level re-show that re-enters with the state the journey suite pins. Suites that stand a bare
+launchscreen build it through `MenuSuiteHost` (`src/Testing/MenuSuiteHost.cs`).
+
+The briefing's narration is no longer a node here: `TickCampaignAudio` asks the host's audio
+service to begin the narration whenever the page's `NarrationStarts` moves and to end it the
+moment the briefing stops showing; the service owns the player and the music duck.
 
 ## src/UI/MenuZones.cs
 How the launchscreen's three bands divide a window: the two fixed heights, the middle taking the
@@ -5465,22 +5487,46 @@ The default root is export-aware: editor (and editor-run builds) → the repo ch
 (`res://`'s parent — `GlobalizePath("res://")` maps to disk only there), exported build → the
 exe's own directory; `CSVM_DATA_ROOT`/`--data-root=` override either.
 `LaunchSession()` instantiates a `GameSession` per
-launch; `ReturnToMenu` `QueueFree`s it; a menu launch derives its spec via
-`SessionSpec.FromMenu(_cli, …)`, never from the outgoing spec. `ExitSession` is the boards' Exit
-item, handed down through `LauncherContext`: back to the launchscreen when the process launched
-into it, out of the game otherwise. The routing Esc used to do — Esc now opens the pause board
-instead, so leaving a flight is reachable from a pad, and this one rule lives here rather than
-being restated per board.
-`StartCampaignFromMenu` is the cabin's own launch, deriving its spec via
-`SessionSpec.FromCampaign(_cli, ...)` from the profile and story position the campaign flow
-settled. It names no chapter and no mission: `CampaignDirector.ResolveSpec` reads those out of
-`cm_sequence` in the session's constructor, so one place resolves a story position whether it came
-from a cabin or a `--campaign=` command line. Its return leg is `ReturnToCabin`, handed down
-through `LauncherContext` and non-null only in a menu-driven process: a campaign mission's end
-queues the profile name alongside its `CampaignMissionResult` (B12), and the next `_Process` frees
-the session and reopens the launchscreen on that profile's cabin with the result in hand. Queued
-rather than acted on directly, because the mission ends inside the session's own physics step,
-which is no place to free it.
+launch; `ReturnToMenu(destination)` `QueueFree`s it and shows the menu again; a menu launch
+derives its spec via `SessionSpec.FromMenu(_cli, …)`, never from the outgoing spec. `ExitSession`
+is the boards' Exit item, handed down through `LauncherContext`: back to the menu at its top level
+when the process launched into it, out of the game otherwise. The routing Esc used to do — Esc now
+opens the pause board instead, so leaving a flight is reachable from a pad, and this one rule lives
+here rather than being restated per board.
+
+The menu is owned as a `MenuHost` (`src/UI/Menu/MenuHost.cs`), built by `BuildMenuHost` on the
+first show and kept for the life of the process: a `PresentationRegistry` with the Built-in
+presentation registered under `PresentationId.BuiltIn` (its factory closes over this node as the
+parent, the data paths, the `--menu=` aid from `_cli` and the first seat's poller), the shared
+`FreeFlightFeature`, the first seat (a `BuiltInSeat` over a keyboard-plus-unclaimed-pads
+`MenuInput`), the `MenuAudioService` over the process's music channel and sound archive, and
+`OnMenuExit` as the sink. The active presentation is settled once there through `MenuHost.Select`
+(`PresentationResolution.Resolve` with `--force-builtin`, `--presentation=` and the saved
+`OptionsStore` request, availability being registration) and logged as one `ui` line with the
+requested and active ids and the fallback reason; an unknown or blank request falls back to
+Built-in rather than crashing. `ShowMenu(destination)` shows the host at a semantic
+`MenuReturnDestination`, then does what is the owner's: the `loadboard` aids, the menu music cue,
+and the one-shot `--debug-join=`/`--debug-waves=`/`--debug-wingmen=`/`--debug-preset=` aids
+through `BuiltInMenu`, the one door onto the launchscreen (`Active as BuiltInPresentation`), also
+used for the failed-build note. Esc ownership and the capture director's menu flag read
+`MenuHost.Shown`, never a node's visibility. `_Process` ticks the host last, after `RunOwedLaunch`,
+which is where the launchscreen's own process callback ran when it ticked itself as a child.
+
+`OnMenuExit` is the one way out of the menu: a `LaunchExit` becomes `StartSessionFromMenu`
+(`FromMenu` over the chapter, the mode, the wizard's def and the seat choices unpacked into the
+four parallel lists the factory takes, a campaign-exported custom plane's stored fit standing in
+where a seat set none), a `CampaignMissionExit` becomes `StartCampaignFromMenu` (`FromCampaign`
+over the profile and story position; it names no chapter and no mission, since
+`CampaignDirector.ResolveSpec` reads those out of `cm_sequence` in the session's constructor, so
+one place resolves a story position whether it came from a cabin or a `--campaign=` command line),
+and a `QuitExit` quits the tree. The host has already hidden the presentation when the sink runs,
+with its screens kept so a failed build can show it again where it stood. The campaign's return
+leg is `ReturnToCabin`, handed down through `LauncherContext` and non-null only in a menu-driven
+process: a campaign mission's end queues the profile name alongside its `CampaignMissionResult`,
+and the next `_Process` frees the session and shows the menu at a `DebriefReturn(profile, seq)`,
+which Built-in maps onto the scrapbook with the cabin on its far side. Queued rather than acted on
+directly, because the mission ends inside the session's own physics step, which is no place to
+free it.
 The music channel is built here too, once per process and after every early-quit probe, over a
 `SoundArchive` of its own rather than the build-scoped `SessionArchives.Sounds`: one channel has to
 outlive a mission launch, or the cabin track would restart every time the player left a board. It
@@ -6725,9 +6771,12 @@ throwing. Off-engine coverage: `CSVM.Tests/MenuSeamContractTests.cs`.
 One menu presentation: a screen graph plus its navigation, interaction, animation and cue
 selection over the shared features. `Activate(host, destination)` shows it at whatever screen of
 its own graph the semantic destination maps to, `Tick` drives it over the host's seats, and
-`Deactivate` tears it down for good; the host creates a fresh instance per activation, so a
-switch discards transient presentation state by construction and always lands on
-`MenuReturnDestination.TopLevel`. Consumed from B12 of `docs/PLAN-menu-presentations.md` onward.
+`Hide` takes it off screen after the host consumed its exit with its state kept, and
+`Deactivate` tears it down for good. A flight is not a switch: the host re-calls `Activate` on the
+same instance with the return's destination, so cursors survive a flight. The host creates a
+fresh instance per switch, so a switch discards transient presentation state by construction and
+always lands on `MenuReturnDestination.TopLevel`. The Built-in presentation is
+`src/UI/Menu/BuiltIn/BuiltInPresentation.cs`; the host is `src/UI/Menu/MenuHost.cs`.
 
 ## src/UI/Menu/PresentationRegistry.cs
 Where presentations register: one factory per `PresentationId`, filled once at startup, duplicate
@@ -6741,7 +6790,48 @@ What the process-lifetime menu host lends the active presentation: `Features`
 (`MenuFeatureSet`), `Audio` (`IMenuAudio`), `Seats` (one `IMenuInputSource` each, a live list the
 join flow grows), and `Exit(MenuExit)`, the only way out. The host owns all four across
 presentation switches; a presentation borrows them between `Activate` and `Deactivate` and keeps
-no reference past that.
+no reference past that. The implementation is `MenuHost` below.
+
+## src/UI/Menu/MenuHost.cs
+The process-lifetime host, engine-free: `Launcher` owns one. Constructed over a
+`PresentationRegistry`, an `IMenuAudio` and an exit sink; the owner adds features (`Features.Add`)
+and seats (`AddSeat`/`RemoveSeat`). `Select(forceBuiltIn, cliOverride, savedRequest)` settles
+`Selected` through `PresentationResolution.Resolve` with registration as availability, keeps the
+pre-availability `Requested` for Options to show back, returns the fallback reason or null, reads a
+blank or unknown request as unavailable rather than throwing, and throws only when the resolved id
+(Built-in) is not registered, a wiring error. `Show(destination)` creates a fresh instance of
+`Selected` on the first call and re-activates the same instance on every later one, so a return
+from flight lands on the screens as they were left; `Tick` runs the presentation only while
+`Shown`; `Exit` clears `Shown`, hides the presentation and hands the exit to the sink;
+`Deactivate` ends the instance and calls `Features.DiscardTransient`, the first half of a switch.
+`Shown` is what the owner reads for "the menu is up". Off-engine coverage:
+`CSVM.Tests/MenuHostTests.cs` over the seam fixtures; in-engine, `menu-host-tracer`.
+
+## src/UI/Menu/BuiltIn/BuiltInPresentation.cs
+The Built-in presentation (`CSVM.UI.Menu.BuiltIn`): `LaunchMenu` registered under
+`PresentationId.BuiltIn`. Constructed with the parent node, the data paths, the `--menu=` aid and
+the raw `MenuInput` behind the host's first seat. `Activate` builds the launchscreen under the
+parent on the first call (switching its own process callback off) and calls `ShowMenu(aid)` on
+every call, then maps the destination: `TopLevelReturn` is the aid's screen, `CabinReturn` opens
+the profile's cabin, `DebriefReturn` the scrapbook on the flown mission. `Tick` runs the menu's
+frame; `Hide` is `HideMenu`; `Deactivate` removes and frees the node. `Menu` exposes the
+launchscreen for what is still Built-in's alone (the launcher's debug aids and failed-build note).
+
+## src/UI/Menu/BuiltIn/BuiltInSeat.cs
+Seat 0's `IMenuInputSource` for Built-in: wraps one `MenuInput` (keyboard plus every unclaimed
+pad), polls it and translates the result into a `MenuCommands` frame (`Move`/`MoveX` to
+`MoveY`/`MoveX`, `Start` to `Join`, `Presets` to `Contents`, `TextEntry` to `CapturingText`). The
+same `MenuInput` is handed to `LaunchMenu`, whose pad bookkeeping still binds the devices behind
+the seat; the seat itself carries only commands.
+
+## src/Session/MenuAudioService.cs
+The host's `IMenuAudio` over the process's playback: the music channel, the sound archive and the
+briefing narration player (an `AudioStreamPlayer` child on the Master bus, formerly the
+launchscreen's own). `BeginNarration(wav)` ducks the music, restarts the player on the resolved
+stream (a missing one is silence, logged as `stream=no`) and counts the start for the log;
+`EndNarration` lifts the duck and stops the player, idempotent since the launchscreen calls it
+every frame the briefing is not showing. `Cue` records the ask at debug level: Built-in requests
+no cues and no menu cue table exists yet.
 
 ## src/UI/Menu/IMenuFeature.cs
 The contract every shared menu feature implements. A feature is typed state plus semantic
@@ -6762,21 +6852,24 @@ The device-neutral input seam: `MenuCommands` is one frame of one seat's semanti
 and `IMenuInputSource` is the per-seat producer (`Poll`/`Prime`/`CapturingText`). A source is not
 synonymous with a pad: keyboard-plus-unclaimed-pads, one claimed pad, a mouse or a future
 HOTAS/HOSAS binding all sit behind the same contract, and a presentation never reads a device.
-`MenuInput` stays the Built-in shell's raw poller until B12 adapts it onto this seam.
+`MenuInput` stays the Built-in shell's raw poller; `BuiltInSeat` adapts it onto this seam for
+seat 0, and the other seats are still the launchscreen's own until the shared player setup owns
+them.
 
 ## src/UI/Menu/IMenuAudio.cs
 The shared menu audio contract: a presentation requests a `MenuCue` by semantic name and starts
 or stops narration at moments it owns; the service owns resolution, playback, volume and the
-handoff into a launching session. `LaunchMenu`'s existing music/narration code stays where it is
-until B12 puts the host implementation over it.
+handoff into a launching session. The host implementation is `MenuAudioService`
+(`src/Session/MenuAudioService.cs`); Built-in's one call site is the briefing narration.
 
 ## src/UI/Menu/MenuExit.cs
 The one typed menu exit, handed to `IMenuHost.Exit` and consumed by `Launcher`: `LaunchExit`
 (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices) and `QuitExit`. A
 custom plane arrives as its resolved `CustomPlaneDef`, never a store name, so the consumer reads
-no store. Presentations never construct sessions; E43 migrates `LaunchMenu`'s two callbacks onto
-this.
+no store. Presentations never construct sessions. `LaunchMenu` produces all three and
+`Launcher.OnMenuExit` consumes them; the return side still carries the `--menu=` aid on every
+top-level show until the semantic destinations replace it.
 
 ## src/UI/Menu/MenuReturnDestination.cs
 Where the menu stands when it comes back, said semantically: `TopLevel`, `CabinReturn(profile)`,
@@ -6808,7 +6901,7 @@ picked, at least one seat, every seat confirmed; a lone seat launches), `BuildEx
 typed `LaunchExit` with mode Free and no Instant Action def, refusing a closed gate or a seat with
 no plane) and `Discard` (drops the pick). Free Flight is the remake's own mode, so nothing here is
 decoded; the rules are the launchscreen's, moved. The seats are still the presentation's: the
-feature takes confirmed `MenuSeatChoice`s and never reads a roster, a lock or a store. Consumed by
-`LaunchMenu` (see its entry) until the presentation host owns the feature set. Off-engine coverage:
+feature takes confirmed `MenuSeatChoice`s and never reads a roster, a lock or a store. Owned by
+the `MenuHost`'s feature set and read out of it by `LaunchMenu` (see its entry). Off-engine coverage:
 `CSVM.Tests/FreeFlightFeatureTests.cs`, which checks the gate against
 `LaunchMenu.CanLaunch(MenuMode.Free, ...)` case by case.
