@@ -67,6 +67,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☐ `BL-581` CM09 completes to the docking once the tower is down and every aircraft is killed
 2. ❌ `BL-628` A docking cutscene's opening shot plays one hook swing, hooks parked at build
 3. ☐ `BL-631` The letterbox bars draw over everything the episode flies past
+4. ❌ Hook arms drawn full-size before their scale motion starts
 
 ### Wave B — Combat and AI
 
@@ -77,9 +78,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Cockpit and flight feel
 
-21. ☐ `BL-663` The cockpit panel's compass drum turns with heading
+21. ☑ `BL-663` The cockpit panel's compass drum turns with heading
 22. ☐ `BL-546` Nitro engage: reconcile the green suite with the smoke-free sortie, then settle the prop swap by decode
-23. ☐ `BL-426` A failed stunt run records nothing and announces no best
+23. ☑ `BL-426` A failed stunt run records nothing and announces no best
 
 ### Wave D — Closing sortie
 
@@ -250,6 +251,72 @@ cutscene golden exists, so the check is the full suite plus the sortie).
 computed from the card's own extent, so a change there moves the framing the definition authored.
 The card is the original's geometry too, so the film is the check on whether the original
 occludes it before any depth behaviour changes.
+
+## A4 ❌ Hook arms drawn full-size before their scale motion starts
+
+**Goal.** Settle whether the second in which a docking hook's arm draws at full length, before its
+`OBJECT_MOTION_FROM_TO` scale motion collapses and grows it, is a CSVM behaviour or the original's.
+A2 found this window to be the only measurable match to the sortie report of a repeated hook swing,
+and left when the original applies a scheduled motion's `from` pose undecoded.
+
+**Evidence (confidence: traced to code for the runtime rule, traced to data for the poses).** The
+original applies the `from` pose at the event's own start time, which is candidate (B), CSVM's
+current behaviour. Three functions settle it.
+
+- `FUN_004e9ee0` is `OBJECT_MOTION_FROM_TO`, dispatch slot 11 of the 47-slot table at
+  `DAT_00727de0` (`FUN_004ee1a0` populates it; slot 10 is `OBJECT_MOTION`'s known `FUN_004e8fa0`).
+  It writes the `from` pose only when the sequence run state at `run+0x20` is zero, which is its
+  first dispatched tick, and integrates one frame of the authored `*_delta` in the same call. The
+  channel flag word at `event+0xc` is `0x1` translate, `0x2` rotate, `0x4` scale, `0x8` morph; the
+  `to` pose is snapped on the call where `run+0x28` reaches `RUN_TIME` at `event+0x8c`.
+- `FUN_004ecbb0`, the sequence stepper, is a cursor and not a scheduler. Between events it reads the
+  next event's start-time mode at `event+1` and value at `event+8` and compares it against the
+  animation instance clock (`inst+0xb0`), the sequence clock (`run+0x24`) or the per-event clock
+  (`run+0x28`). Until the gate opens it returns without dispatching anything, and the events behind
+  the cursor wait with it. `pirate_hook_extend`'s `control` gives `CALL_SEQUENCE scale_larm3` a
+  `start {offset Event, time 1.0}`, so the `scale_larm3` sequence does not exist as a run until one
+  second in, and its `from` of `(1, 0, 0)` cannot reach `l_arm3` before then. Candidate (A) is
+  disproved: there is no run list a pending event could be posed from ahead of time.
+- Candidate (C) is disproved on both of its named routes. `OBJECT_ACTIVE_STATE` is slot 6,
+  `FUN_004e8f40`, which calls `gwNodeSetActive` (`FUN_004cca30`, named by its own error string) and
+  that function only toggles bit `0x4` of `node+0x24`; it writes no pose. `pirate_hook_extend`'s
+  `reset_state` is empty and its `auto_reset_node_states` is false, so the definition establishes no
+  base pose either.
+
+What the node holds during that second is therefore the aircraft archive's own pose, and
+`extracted/planes/nodes.json` authors `l_arm3` at scale `(1, 1, 1)` under a `pirate_hook` group the
+archive ships inactive. The authored parked pose of the arm is the collapsed scale instead:
+`pirate_hook_retract` takes `l_arm3` and `r_arm3` to exactly the `(1, 0, 0)` its extend starts from.
+Nothing in a chapter's compiled set calls a retract or an `<x>_hook_startup` at mission load, so
+every mission's first docking opens on a full-length arm that then collapses and grows, and every
+docking after a retract in the same mission does not. The original's data and runtime produce that
+same first-docking window.
+
+**Approach.** No CSVM change. `FromToMotion.Create` is called from
+`PoseChannel.HandleMotionFromTo` when the event is handled, which `SequenceRunner` gates on the
+authored `start`, and the first `Tick` writes `from` advanced by one frame. That is the original's
+order of operations. A change here would be a deliberate divergence from the data, and this plan's
+ground rules make a correct disproof the deliverable.
+
+**Model recommendation.** High, for the decode; nothing to implement.
+
+**Verify.** No code changed, so no suite run is owed. The reading is recorded in
+`docs/formats/anim-definitions.md` and `docs/formats/anim-definitions/cutscenes.md`, and D31 carries
+the watch note that would overturn it.
+
+**Verified.** `<pending orchestrator run>` Decode only: `crimson.exe` in Ghidra
+(`FUN_004e9ee0`, `FUN_004ecbb0`, `FUN_004e8f40`, `FUN_004cca30`, `FUN_004ebfd0`, `FUN_004ee1a0`)
+plus the shipped `C1/cam_anim` hook definitions and `extracted/planes/nodes.json`. No code touched,
+so `CheckCommentCaps.ps1` has nothing to read; `CheckEncoding.ps1` covers the three edited documents.
+
+**⚠ Traps.** Do not "fix" this by posing the node at the definition's start: that writes a pose the
+data does not author and would break every other gated `FROM_TO`, whose `from` is meant to be picked
+up at its own start time. Do not read the one-second window as the reported repeated swing without
+the archive check first, because the window is invisible on any docking that follows a retract. A
+`LOOP` rewind is the one re-entry that does not rewrite `from` (`FUN_004ebfd0` returns state 4,
+which the stepper stores and the gate block treats like 0 without clearing), but no shipped hook
+definition loops. Cross-refs: A2 (`git log --grep=BL-628`),
+`docs/formats/anim-definitions/cutscenes.md`.
 
 # Wave B — Combat and AI
 
@@ -654,6 +721,15 @@ without a felt hitch on the generator launches; C21 a circle flown in cockpit vi
 tape; C22 an engage showing exhaust smoke, and the prop-swap verdict as decoded; C23 a deliberate
 failed run then a completed one, plus the two author calls (failed-run time display, poisoned
 `stunt_scores.json` invalidation).
+
+**A4's watch note, for the opening shot of a mission's FIRST docking.** The decode says the
+original opens on a full-length hook arm for one second, then the arm snaps to its collapsed scale
+and grows back over the next second. If that is what the shot shows, the reading holds and the
+remaining half of the reported repeated swing is somewhere else. If instead the arm is collapsed
+from the moment the hook appears and only grows, the original parks it by a route the decode did not
+find, and A4 reopens: the candidates then are a pose write on the aircraft archive's own load path
+or a retract called at mission setup, not the animation runtime. Judge a mission's first docking
+only, because any docking after a retract in the same mission cannot show the difference.
 
 **Approach.** One session, mission order where missions are involved; the session reads the
 sortie logs beside the author's reports, lands same-day corrections that are unambiguous, and

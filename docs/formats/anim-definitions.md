@@ -337,6 +337,36 @@ and yachts (up to `sailboat1`'s 300 s leg held 180° from rest). Seeded from res
 `black_car1` (one ROTSTATE 180° then a single 16 s translate-only loop) drives its whole
 route exactly sideways.
 
+### A `from` pose is written on the event's first dispatched tick, never earlier
+
+Decoded from `crimson.exe`. `OBJECT_MOTION_FROM_TO` is dispatch slot 11 (`FUN_004e9ee0`) of the
+47-slot table at `DAT_00727de0` that `FUN_004ee1a0` populates, the slot after `OBJECT_MOTION`'s
+`FUN_004e8fa0`. Its channel flag word is at `event+0xc`: `0x1` translate, `0x2` rotate, `0x4` scale,
+`0x8` morph. The handler writes the `from` pose only on its first call, guarded by the sequence run
+state at `run+0x20` being zero, and in that same call it also integrates one frame of the authored
+`*_delta` rate. The `to` pose is snapped on the call where the per-event clock at `run+0x28` reaches
+`RUN_TIME` (`event+0x8c`), which is the call that reports the event finished.
+
+That first call lands at the event's own start time, because the sequence stepper (`FUN_004ecbb0`)
+is a cursor rather than a scheduler. Between events it reads the next event's start-time mode at
+`event+1` and value at `event+8`, comparing against the animation instance clock (`inst+0xb0`,
+mode 1), the sequence clock (`run+0x24`, mode 2) or the per-event clock (`run+0x28`, mode 3). Until
+the gate opens it returns without dispatching, so the handler does not run and every event behind
+the cursor waits with it. There is no run list a pending event could be posed from ahead of time.
+
+⚠ **Nothing else writes the node's pose while a gated motion waits.** `OBJECT_ACTIVE_STATE` (slot
+6, `FUN_004e8f40`) calls `gwNodeSetActive` (`FUN_004cca30`, named by its own error string), which
+only toggles bit `0x4` of `node+0x24`. So a definition that switches a node on at t=0 and starts a
+collapsed-`from` scale motion at t=1 draws that node at the scale its archive authors for the whole
+second, in the original as much as in the remake; the docking hooks are the worked example in
+[`anim-definitions/cutscenes.md`](anim-definitions/cutscenes.md).
+
+A `LOOP` rewind is the one re-entry that does not rewrite `from`. `FUN_004ebfd0` calls the sequence
+reset `FUN_004ebfa0` and returns state 4, which the stepper stores at `run+0x20`, and the gate block
+treats 4 like 0 without clearing it. The next dispatch therefore sees a non-zero run state, so a
+`FROM_TO` event re-entered by a loop tweens from wherever the node currently stands. No shipped hook
+definition loops, so nothing in the landing path depends on this.
+
 ### `*_delta` is the same channel's RATE, not a second motion
 
 Decoded from an install-wide census of all 16,114 compiled anim files
