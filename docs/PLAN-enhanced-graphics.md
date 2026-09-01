@@ -91,7 +91,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Core lighting
 
 11. ☑ Lit world shader variant (drop `unshaded`, matte material, keep the gamma modulate)
-12. ☐ Authored SUNLIGHT drives the sun and ambient in enhanced mode
+12. ☑ Authored SUNLIGHT drives the sun and ambient in enhanced mode
 13. ☐ Sun shadow maps
 14. ☐ LIGHT_STATE point lights as real OmniLight3D nodes
 15. ☐ Enhanced settings reach the cockpit interior pass and every splitscreen pane
@@ -307,7 +307,7 @@ baked vertex colour and the real sun are darkening the same surface twice, which
 flatten-vertex-colour-toward-luminance TUNE the traps above name. It is NOT implemented here: the
 calibration it would be judged against does not exist until B12 lands.
 
-## B12 ☐ Authored SUNLIGHT drives the sun and ambient
+## B12 ☑ Authored SUNLIGHT drives the sun and ambient
 
 **Goal.** In enhanced mode the DirectionalLight3D's energy and the Environment's ambient come from
 the mission's authored SUNLIGHT values, so night missions are genuinely dark and the aircraft stops
@@ -319,13 +319,34 @@ SUNLIGHT block: it collapses the dimming to `csky_world_light` in gamma space
 (`WeatherRig.cs:626`). The launcher hardcodes LightEnergy 1.6 / ambient 0.9
 (`CSVM/src/Session/Launcher.cs:905-924`); missions author diffuse 0.4-2.0 and ambient 0.15-0.6
 (BL-332's record). The *what* is settled; the mapping from authored units to Godot energies is
-TUNE. `<TODO: confirm the exact authored field names available inside ApplyZone and whether both
-diffuse and ambient reach it today or need plumbing from the zone data.>`
+TUNE. Of the authored block, only two values reach `ApplyZone`: `ZoneWeather.WorldLight`, which is
+already the collapse `clamp(SUNLIGHT_AMBIENT + SUNLIGHT_DIFFUSE * 0.46, 0.15, 1)`
+(`Weather.WorldLightFactor`), and `ZoneWeather.SunOrientation`. `SUNLIGHT_DIFFUSE` and
+`SUNLIGHT_AMBIENT` are read inside that collapse and discarded, and the two colour keys
+`SUNLIGHT_COLOR_DIFFUSE`/`SUNLIGHT_COLOR_AMBIENT` are never read at all, so all four need plumbing
+onto the `ZoneWeather` record before a real light can be driven from them. The colours are worth
+carrying: 34 of the install's 106 `ZONE*` blocks author one away from white, C4 among them (warm sun
+`[1.0, 0.8, 0.7]`, cold ambient `[0.7, 0.9, 1.0]`).
 
 **Approach.** Branch in `ApplyZone`: enhanced mode writes `sun.LightEnergy` from authored diffuse,
 `env.AmbientLightEnergy` from authored ambient, and sets `csky_world_light` to 1.0; original mode
 is untouched. The gamma-vs-linear conversion for each value is judged against the original's
 overall scene brightness at the controls.
+
+**As landed.** `Weather.ZoneWeather` gains `SunDiffuse`, `SunAmbient`, `SunColorDiffuse` and
+`SunColorAmbient`, parsed beside the untouched `WorldLight` collapse. `WeatherRig` takes the
+session `Environment` as a fifth optional constructor argument (`GameSession` passes `_env`) and,
+in enhanced mode only, `ApplyZone` calls `ApplyEnhancedLighting`: it rewrites `csky_world_light`
+to 1.0, sets `sun.LightEnergy`/`sun.LightColor` and switches the Environment's ambient source from
+`Sky` to `Color` so the authored ambient colour and energy are the ones that render. The mapping
+is the pure `WeatherRig.EnhancedEnergies`, two TUNE factors anchored on the install's modal day
+zone (`SUNLIGHT_DIFFUSE` 1.5, `SUNLIGHT_AMBIENT` 0.5: the modal pair, authored by 34 of the 106
+`ZONE*` blocks, with the 1.5 diffuse alone in 54 of them)
+landing on the 1.6 and 0.9 the launcher hardcodes: `SunEnergyPerDiffuse` 1.07 and
+`AmbientEnergyPerAuthored` 1.8. A day mission therefore keeps the level it already had, and the
+data alone carries C1B's night zone (0.6 / 0.15) to 0.64 / 0.27. The resolved pair prints on both
+zone log lines. Original mode reaches none of it: `GraphicsMode.Enhanced` gates the whole call and
+the faithful writes above it are unchanged.
 
 **Model recommendation.** high — small diff, but the calibration judgement spans every chapter.
 
@@ -333,10 +354,60 @@ overall scene brightness at the controls.
 shots, not goldens): night reads dark with a moon-strength key light. Day chapters read comparable
 in overall level to original mode. Original-mode goldens zero movers.
 
-**⚠ Traps.** BL-332 is the *faithful-mode* fix for the same hardcoded values and stays open; this
-item must not be presented as closing it. Splitscreen wears rig 0's zone for the one sun
-(`WeatherRig.cs:626` comment); enhanced inherits that limitation knowingly.
-`<TODO: re-verify BL-332 still open.>`
+**⚠ Traps.** BL-332 is the *faithful-mode* fix for the same hardcoded values and stays open, and
+this item does not close it: it is open in `backlog.md` under Damage & destruction's lighting
+group, it asks for the same two constants in the *original* path, and its own note holds back the
+`Sky`-versus-`Color` ambient-source question as a separate rendering-design decision, which the
+enhanced arm answers only for itself. Splitscreen wears rig 0's zone for the one sun
+(`ApplyZone`'s comment on the rotation write); enhanced inherits that limitation knowingly. The
+Environment ambient source moves from `Sky` to `Color` in enhanced mode, because a sky-sourced
+ambient reads the placeholder procedural sky and would ignore both authored values.
+
+**Verified.** <pending orchestrator run> During the item, in the item's worktree with
+`$env:CSVM_DATA_ROOT="Z:\CSVM"`: `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
+`dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter
+"FullyQualifiedName~SunlightEnergyTests"`: 4 passed, 0 failed.
+`.\RunTests.ps1 -SkipEngine -SkipGoldens`: units PASS, 2796 passed of 2796.
+`.\RunTests.ps1 -Suite fog-state -SkipUnits -SkipGoldens`: engine PASS, 1 suite run, engine errors
+clean; `.\RunTests.ps1 -Suite sun-orientation -SkipUnits -SkipGoldens`: engine PASS, 1 suite run,
+engine errors clean. `.\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only): PASS, 18 shot(s)
+hash-identical, zero movers.
+
+Sixteen captures through `.\RunProbe.ps1` (the repo's rule for a scripted `--screenshot` launch),
+eight at the `c1b-night-sea` / `c5-city-night` / `c4-snow` / `c1-waterfall` golden camera args as
+manual `--freecam` shots and eight as `--fly --plane=player_bhawk` shots from the same poses, each
+in both modes, under `.scratch/b12/`. Mean frame luminance (0-255, every second pixel), and for the
+flight shots the mean over the aircraft's red-livery pixels in the plane box (x 430-860, y
+425-520), which isolates the only lit surface in the frame:
+
+| Shot | frame, original | frame, enhanced | livery, original | livery, enhanced |
+|---|---|---|---|---|
+| c1b-night-sea, freecam | 29.51 | 52.04 | no aircraft | no aircraft |
+| c5-city-night, freecam | 11.42 | 11.43 | no aircraft | no aircraft |
+| c4-snow day, freecam | 128.88 | 128.88 | no aircraft | no aircraft |
+| c1-waterfall day, freecam | 73.69 | 83.24 | no aircraft | no aircraft |
+| c1b-night-sea, flight | 24.28 | 47.05 | 82.91 | 60.69 |
+| c5-city-night, flight | 14.91 | 15.11 | 96.15 | 102.64 |
+| c4-snow day, flight | 119.18 | 119.19 | 69.51 | 69.75 |
+| c1-waterfall day, flight | 63.61 | 73.05 | 58.79 | 60.84 |
+
+⚠ **The frame columns do not yet show the item working, and cannot in this tree.** Without B11 the
+world is still `unshaded`, so a frame's level is the fullbright world's, and enhanced mode's
+`csky_world_light = 1.0` removes the per-mission dimming without a sun replacing it: C1B's night
+frame gets *brighter* (29.5 → 52.0), and C1's day frame likewise (73.7 → 83.2), by exactly the
+dimming those zones authored (world light 0.43 and 0.80). C4 and C5 do not move because their
+authored world light already clamps at 1.00. The livery columns are what this tree can show, and
+they carry the item: the aircraft in C1B's night mission dims 27% (82.9 → 60.7) while the same
+aircraft in C4's day mission is unchanged (69.5 → 69.8), which is the anchor holding. C5 is the
+instructive non-mover: it is a night *scene* whose zone authors a day-level `SUNLIGHT` (1.5 / 0.5,
+its darkness coming from `FOG_COLOR` and the art), so nothing in the data asks for a dimmer light
+there and none is invented.
+
+The log lines confirm the resolved energies reach the light. Enhanced C1B/IA1:
+`weather [zone1]: … world light 0.43; sun -65° pitch / 90° yaw; … ; enhanced sun energy 0.64
+(diffuse 0.6), ambient energy 0.27 (ambient 0.15)`; enhanced C4/IA1 zone2 and C5/IA1 zone1 both
+print `enhanced sun energy 1.61 (diffuse 1.5), ambient energy 0.90 (ambient 0.5)`; the same runs in
+original mode print the line without the suffix.
 
 ## B13 ☐ Sun shadow maps
 

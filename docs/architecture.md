@@ -3029,7 +3029,8 @@ because the mission's waves, ace and zeppelin cannot be put back in place.
 `WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone
 `ZoneWeather` records holding fog (`FOG_COLOR`/`FOG_RANGES`/`FOG_ALTITUDE`), `SUNLIGHT_*` →
 `WorldLight` (`SunIncidence` 0.46 / `MinWorldLight` 0.15, TUNE) and `SUNLIGHT_ORIENTATION` →
-`SunOrientation`, plus the `CLOUD_COVER` whiteout band (`WhiteoutAmount` trapezoid), `WIND`, and
+`SunOrientation`, the same block's uncollapsed `SunDiffuse`/`SunAmbient` and their two colours
+(what the enhanced lighting drives a real sun from), plus the `CLOUD_COVER` whiteout band (`WhiteoutAmount` trapezoid), `WIND`, and
 precipitation → `PrecipData`. Schema + colours + zone names: weather.md.
 **The original's weather/sky/fog/light runtime is written up in [org/weather.md](org/weather.md)** —
 the camera weather state machine, the `zone_id` visibility gate, the zone apply's edge trigger, the
@@ -6514,7 +6515,11 @@ written its zone): it writes only the fields the event carries onto the same fog
 next zone edge writes the zone back over it, the original's last-writer order. `FogGlobals` mirrors
 the last writes, since the renderer refuses to read a global back outside the editor. Proven by
 `CSVM.Tests/FogZoneStateTests.cs`, `DeckRegimeTests.cs`, `FlatColorTests.cs`,
-`FogVolumeWhiteoutTests.cs`, `BandFlickerTests.cs` and the `fog-state` suite.
+`FogVolumeWhiteoutTests.cs`, `BandFlickerTests.cs` and the `fog-state` suite. In enhanced graphics
+mode `ApplyZone` also drives the real sun and the Environment ambient from the zone's uncollapsed
+`SUNLIGHT_DIFFUSE`/`AMBIENT` and their colours (`EnhancedEnergies`, pinned by
+`CSVM.Tests/SunlightEnergyTests.cs`), and neutralises `csky_world_light` to 1.0 so the fullbright
+dimming does not land twice; original mode's path is unchanged.
 
 ## src/Session/LensFlareRig.cs
 The sun's lens flare: four screen-space sprites strung along the sun→screen-centre vector at

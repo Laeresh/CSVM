@@ -22,13 +22,21 @@ public sealed class WeatherState
     private const float SunIncidence = 0.46f;
     private const float MinWorldLight = 0.15f;
 
+    // The fallback for a zone that authors no SUNLIGHT_DIFFUSE/AMBIENT: the install's modal day
+    // pair, which the enhanced lighting maps back onto the launcher's own hardcoded energies. It
+    // differs on purpose from WorldLightFactor's 1/0, which are the faithful collapse's defaults
+    // and must not move. All 53 shipped weather.json author both keys, so neither fires today.
+    private const float DefaultDiffuse = 1.5f;
+    private const float DefaultAmbient = 0.5f;
+
     // SunIncidence/MinWorldLight are a TUNE for the world-brightness scalar the original derives
     // from its per-zone SUNLIGHT_AMBIENT/DIFFUSE; see docs/org/weather.md for the calibration.
     // The sun bearing here is the LAUNCHER's own hand-picked value, not the binary's straight-down
     // default: it only has to make the plane model read in a mission with no weather.json. A
     // mission that has one never reaches this; its zone's authored bearing wins.
     private static readonly ZoneWeather NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f, 1e8f, 1e9f, 1e9f, 1f,
-        new Vector3(Mathf.DegToRad(-45f), Mathf.DegToRad(150f), 0f));
+        new Vector3(Mathf.DegToRad(-45f), Mathf.DegToRad(150f), 0f),
+        DefaultDiffuse, DefaultAmbient, Colors.White, Colors.White);
 
     private readonly Dictionary<string, ZoneWeather> _zones = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _zoneNames = new(); // file order — ResolveZone's fallback order
@@ -140,7 +148,11 @@ public sealed class WeatherState
                         : (NoFog.FogNear, NoFog.FogFar);
                 float clip = z.List("CLIP_RANGES") is { Count: >= 2 } cr && cr[1] is float c ? c : NoFog.ClipFar;
                 w._zones[zone] = new ZoneWeather(color, near, far, low, high, clip,
-                    WorldLightFactor(z), SunOrientationOf(z));
+                    WorldLightFactor(z), SunOrientationOf(z),
+                    SunlightScalar(z, "SUNLIGHT_DIFFUSE", DefaultDiffuse),
+                    SunlightScalar(z, "SUNLIGHT_AMBIENT", DefaultAmbient),
+                    ParseColor(z.List("SUNLIGHT_COLOR_DIFFUSE")) ?? Colors.White,
+                    ParseColor(z.List("SUNLIGHT_COLOR_AMBIENT")) ?? Colors.White);
                 var zf = w._zones[zone];
                 // The fields, not the record: a composite ToString() would escape Log's invariant
                 // formatting. Sun bearing logged in DEGREES, as the file authors it.
@@ -278,6 +290,11 @@ public sealed class WeatherState
         return Mathf.Clamp(ambient + diffuse * SunIncidence, MinWorldLight, 1f);
     }
 
+    // One SUNLIGHT_* scalar carried through uncollapsed, for the lighting that drives a real sun
+    // from it rather than the fullbright brightness scalar WorldLightFactor folds it into.
+    private static float SunlightScalar(ZrdrDict zone, string key, float fallback)
+        => zone.List(key) is { Count: >= 1 } list && list[0] is float v ? v : fallback;
+
     // The zone's `SUNLIGHT_ORIENTATION` as Godot euler RADIANS, ready to assign
     // straight to a DirectionalLight3D's `Rotation` — see
     // ZoneWeather.SunOrientation for why no axis conversion is needed. The data is
@@ -402,13 +419,13 @@ public sealed class WeatherState
             AlphaGradient: Vec2After(inner, "ALPHA_GRADIENT"));
     }
 
-    /// <summary>One day/night zone's weather: distance fog, world-brightness scalar, and sun
-    /// bearing, written together in one call by the original's zone-apply (docs/formats/weather.md).
-    /// Fog is a vertical cylinder with a linear near/far ramp and a <c>FOG_ALTITUDE</c> fade.
+    /// <summary>One day/night zone's weather: distance fog, the world-brightness scalar with the
+    /// uncollapsed SUNLIGHT pair and colours beside it, and the sun bearing, written together in
+    /// one call by the original's zone-apply (docs/formats/weather.md).
     /// <see cref="SunOrientation"/> is Godot euler RADIANS, assignable straight to a
     /// <see cref="DirectionalLight3D"/>'s <c>Rotation</c>. ⚠ It is the shading direction, not the
     /// gamez <c>sun</c> billboard's position; the two disagree in C3 by 90 degrees.</summary>
-    public readonly record struct ZoneWeather(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight, Vector3 SunOrientation);
+    public readonly record struct ZoneWeather(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight, Vector3 SunOrientation, float SunDiffuse, float SunAmbient, Color SunColorDiffuse, Color SunColorAmbient);
 
     /// <summary>The mission's precipitation, from the bare-scalar block at the end of
     /// weather.json. Only some missions carry one; C1/C5 IA1 have none. Consumed by
