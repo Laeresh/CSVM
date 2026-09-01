@@ -64,7 +64,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Campaign flow
 
-1. ☐ `BL-581` CM09 completes to the docking once the tower is down and every aircraft is killed
+1. ❌ `BL-581` CM09 completes to the docking once the tower is down and every aircraft is killed
 2. ❌ `BL-628` A docking cutscene's opening shot plays one hook swing, hooks parked at build
 3. ☑ `BL-631` The letterbox bars draw over everything the episode flies past
 4. ❌ Hook arms drawn full-size before their scale motion starts
@@ -105,37 +105,63 @@ last. Contention rules for parallel worktrees:
 
 # Wave A — Campaign flow
 
-## A1 ☐ `BL-581` CM09 completes to the docking
+## A1 ❌ `BL-581` CM09 completes to the docking
 
 **Goal.** CM09 (C1/M04) goes on to the docking once the radio tower is down and every aircraft is
 killed, instead of holding forever.
 
-**Evidence (confidence: traced for the graph half; the stalling world read is a lead).** The
-objective graph is proven correct and needs no change: driven headless on the shipped script, the
-tower-down route reaches 20 (the Paladin Blake squad wake) 90 s after 19 wakes, 30 wakes 42, and
-42/43/44 nap 31 (the docking) once groups 1, 2 and 5 read empty; a nap landing on a
-`TICK_DEPENDS_ON_OBJ`-gated objective is held and resumed as the original does
-(`FUN_0046a490`/`FUN_0046b160`, `docs/formats/objectives.md`). What stalls is on the world side:
-`DEDG` never reading group 1 (or 2/5) empty through `GroupLiveCount`, or `WAKEUP_ENEMIES` not
-putting the parked `blakebloodhawk_1\2\3\8` into play. The sortie log carries every transition as
-`[campaign] objective N woke|napped|completed|killed` lines (`Session/CampaignDirector.cs:759`).
+**Evidence (confidence: traced to code, both halves now).** The objective graph was already proven
+correct and needs no change. The world half is now proven correct too, and the item's two named
+leads are wrong: driven over C1/M04's own built world from the mission start to the docking,
+`GroupLiveCount` reads groups 1, 2 and 5 exactly as `DEDG` needs, and `WAKEUP_ENEMIES` puts the
+parked `blakebloodhawk_1/2/3/8` and the group-2 squad `blakebloodhawk_9..13` into play with the
+team, group and patrol net they were built with. The chain closes: 23 (a Promised Land broadside
+death) naps 24, 24 wakes the group-2 squad and 28, wiping that squad to two completes 28 and wakes
+29, 29 releases the nap 19 is holding, 20 wakes the Paladin Blake squad, and with the hull down
+and the three groups emptied 42/43/44 complete and nap 31, the docking, in with `pzhookpoint` on
+the objective target list.
 
-**Approach.** Diagnose from the log lines of a CM09 flight: if `objective 28 completed` never
-appears, group 2 never read at most two; if `objective 42 completed` never appears after 20 woke,
-group 1 never read empty. Fix the world read the log names, nothing in the graph.
+The one mechanism that produces the reported stall is the `TICK_DEPENDS_ON_OBJ 29` gate reading a
+`piratezep` hull that is switched off. OBJECTIVE29 is `INACTIVE1 [piratezep]`, so it completes on
+the tick it wakes if the hull is inactive, and 18 and 19 are then gated off for good, which is
+exactly "the Paladin Blake squad never arrived". The mission's own intro switches that hull off for
+its last shot (`playerthruclouds`) and switches it back on in the `RESET_STATE` that
+`CutsceneController`'s handoff runs; a run with the intro but no handoff reproduces the stall
+frame for frame. The shipped build does run that handoff (`cutscene: 'mission_intro_animation' ran
+its authored RESET_STATE at the handoff`, at t=53.2 s), so the fault is not there either.
 
-**Model recommendation.** High: the deliverable is a diagnosis of one of two named world-side
-mechanisms, then a targeted fix in campaign/world code.
+**Outcome.** Disproved as filed. Nothing on the world side needed a change, and the mission runs to
+the docking in the current build. What is left is a flight question for D31: OBJECTIVE28 needs
+three of the five `M4ZepAttack` bloodhawks down before Blake's squad arrives, and a player who has
+cleared everything they met can be short of that with the tower down and no docking in sight. The
+sortie log settles it in one line: `objective 28 completed` present means the chain moved.
 
-**Verify.** A CM09 run whose log shows the full chain (28 completed, 42 completed after 20 woke,
-31 napped then resumed) and a mission end that reaches the docking; then the full `RunTests.ps1`.
-`<TODO: whether the win condition (tower down plus every aircraft killed) is reachable in a
-scripted headless run, and the exact launch command; if it is not, the confirmation moves to D31>`
+**Landed.** `CSVM/src/Testing/CampaignDockingSuites.cs`, the `campaign-cm09-docking` engine suite,
+which drives the whole chain over the mission's own built world and is the regression for it.
+
+**Verify.** Reachable headless, and cheaper as a suite than as a flight:
+`.\RunTests.ps1 -Suite campaign-cm09-docking -SkipUnits -SkipGoldens`. A live sortie is
+`.\RunProbe.ps1 -TimeoutSec 900 --campaign=<throwaway profile>:8 --screenshot=<path>
+--frames=4200`, whose `[campaign] objective N ...` lines land in `.scratch/logs/fly-*.log`; the
+intro holds the graph for the first 53.2 s, so the frame count has to cover that before anything
+scripted happens. Only a profile at the store's current version loads, and the win condition
+itself needs a pilot, so the judgement stays with D31.
 
 **⚠ Traps.** The Defend marker clearing (`OBJECTIVE25`) is correct. `BL-563` is a separate,
-already-landed fix. The graph needs no change; re-deriving it is the recorded wasted hour.
-Cross-refs: `BL-565`, `docs/formats/objectives.md`, the graph half's closing commit
-(`git log --grep=BL-581`).
+already-landed fix. The graph needs no change; re-deriving it is the recorded wasted hour. A suite
+that drives this mission without hosting the intro's handoff reads a switched-off hull and
+manufactures the very stall it is looking for. Cross-refs: `BL-565`,
+`docs/formats/objectives.md`, the graph half's closing commit (`git log --grep=BL-581`).
+
+**Verified.** <pending orchestrator run>
+- `dotnet build CSVM/CSVM.sln`: 0 warnings, 0 errors.
+- `dotnet test CSVM.Tests/CSVM.Tests.csproj`: all green.
+- `.\RunTests.ps1 -Suite campaign-cm09-docking -SkipUnits -SkipGoldens`: 1 passed, 0 failed,
+  engine errors clean, suite count 1 of 201.
+- `.\RunProbe.ps1 --campaign=<throwaway copy>:8 --frames=4200`: the sortie log's `[campaign]`
+  lines and `cutscene: … ran its authored RESET_STATE at the handoff`; the profile copy was
+  deleted afterwards.
+- `.\CheckCommentCaps.ps1`: clean.
 
 ## A2 ❌ `BL-628` One hook swing per docking
 
