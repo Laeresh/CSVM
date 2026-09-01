@@ -486,6 +486,15 @@ still resolve and activate it later.
 Carries the node's `zone_id` as `ZoneId` (default −1 when the field is absent, i.e. ungated) — the
 original's per-node visibility zone, honoured per node by `SceneBuilder` and per camera by
 `Mech3/ZoneGate.cs`.
+Carries the node's `field040` as `MissionTargetWord` (absent from the JSON when zero), the word the
+original reads a mission structure's flag and team out of: bit 31 flags it (`IsMissionStructure`),
+bit 22 marks a gasbag (`IsGasbagStructure`), and bits 0-21 are eleven two-bit ownership slots, one
+per mission of the chapter, so the team needs the mission number — `MissionStructureTeam(mission)`
+reads one slot, `MissionSlotOf` turns a mission folder name into that 1-based number, and
+`WorldObjectTeam` resolves a node the way the engine's factory does, taking the nearest ancestor's
+slot where the node itself authors none. `SceneBuilder` stamps the answer on the flagged nodes and
+`DestructibleRegistry` puts it on the pool (docs/org/targeting.md "What a mission structure's team
+is").
 Carries the World node's partition grid twice: `PartitionNodes` is the flat distinct set every
 placement walk uses, and `PartitionCellNodes` (with the grid origin and cell size read off the first
 cell's own bounds) keeps the per-cell membership an area query needs (see `WorldPartitionGrid`).
@@ -544,6 +553,13 @@ present (water/buildings/untagged, each polygon's own texture deciding), each al
 collider-bearing node registers with `WorldCollision`, which owns its `Disabled` flag from then
 on. A `GameZ.IsMarkerGizmo` mesh draws nothing but its Node3D is still built, since animations
 attach puffers and sounds to those nodes by name.
+A node the scene data flags as a mission structure carries `MissionStructureTeamMeta` (and
+`MissionStructureGasbagMeta` where it is a gasbag), the channel `DestructibleRegistry` reads a
+pool's team through, since the registry meets a pool as a Node3D with no gamez node to ask. The
+team is resolved HERE because a node authors one owner per mission of the chapter and only the
+build knows which mission it is: `MissionSlot` carries that number in, `WorldSession` sets it from
+the mission folder through `WorldBuilder.MissionSlot`, and a node authoring no owner for this
+mission is stamped with none.
 A surface's colour is `vertex colour × material` (the original's baked-lighting modulate), except
 where `GameZ.VertexColorsRestateMaterialColor` detects the two are the same authored value
 (mostly skydome skirts — docs/formats/weather.md). `DebugClutterFlag` (`--debug-clutterflag`)
@@ -1448,11 +1464,17 @@ Regression: the `campaign-balloon-death` suite. Schema: docs/formats/destructibl
 `Instance.Reseed(max)` re-seeds a pool from a mission record — the F18 zeppelin zones, where
 `zeppelins.json` hp beats the def's own `HEALTH` — and refuses once damaged, so a late wire-up
 cannot heal a fight in progress. `Instance.Team`, `Instance.Owner` and `Instance.Dormant` are what a mission
-record can put on a pool: an owning side where the data names one (`ZeppelinRuntime` is the only
-writer of either today, and a pool with no team is neutral, so nobody's target), the name of the
+record can put on a pool: an owning side where the data names one (a pool with no team is neutral,
+so nobody's target), the name of the
 entity the pool is a PART of (a zeppelin's zones carry their hull's name, which is the only thing a
 `rating_biases` pattern naming the airship can match), and "registered but not in the world yet",
 which `AimCandidateSet.AddStructures` refuses outright.
+Two writers author a team. `ZeppelinRuntime` fans a mission record's own over an airship, and
+`Register` reads one off the pool's damage node where `SceneBuilder` stamped it, which is how a
+pool standing on a mission-structure node becomes a candidate with a side rather than scenery: in
+C1/M05 that puts the Red Cross hospital ship on the player's side and the mission's zeppelin zones
+on the enemy's, from the same field (`MissionStructureTeamOf`, `Instance.Gasbag`,
+docs/org/targeting.md "What a mission structure's team is"; `turret-structure-targets` suite).
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM→PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies —
@@ -1740,10 +1762,11 @@ ticked by `Session/TurretEmplacementRuntime`). Per tick: the nearest hostile ent
 `VehicleList` inside `DETECTION_RANGE`, read through `ProjectilePool.CollectVehicleList`, so an
 AI ground or sea vehicle is a candidate beside an aircraft the way the decoded picker holds both
 (docs/org/targeting.md "What a turret's candidate set holds"; `turret-vessel-targets` suite). A
-ship reaches it as the vessel it is, never registered as aircraft. The picker's other three pools
-(turrets, `+0x8d` mission structures, tracked ordnance) are decoded but unscanned, and a structure
-could not be admitted anyway while every CSVM structure candidate is
-`AimAssist.NeutralTeam`. Team gate through `AimAssist.Hostile`; carried = host's
+ship reaches it as the vessel it is, never registered as aircraft. Then the mission structures,
+through `ProjectilePool.CollectMissionStructures`, walked after the vehicles against the same
+running best with a tie going to them and a gasbag dropped, which is the decoded pass order
+(`turret-structure-targets` suite). The picker's other two pools (turrets, tracked ordnance) are
+decoded but unscanned. Team gate through `AimAssist.Hostile`; carried = host's
 `FlightController.Team`, emplacement = the authored/default `TurretDef.TeamId` with no conversion,
 since one integer space covers aircraft and emplacements alike, until `SetTeam` fans a zeppelin
 record's own team over the guns standing on that hull),
@@ -2089,6 +2112,8 @@ already use, so the assist cannot drift onto a second list. `CollectVehicleList`
 the first of those lists, aircraft plus the `SurfaceVehicles` runtime's hulls, for a scan that
 wants the engine's `VehicleList` rather than its aircraft half; `GameSession` wires the runtime in
 beside the world emplacements, and a build with no hulls leaves it null.
+`CollectMissionStructures` is the third of those lists, the session's `DestructibleRegistry` wired
+in the same way, so a gunner reaches the structure pool through the pool it already holds.
 `PlayShotSound` is the turret gunners'
 launch bark through the pool's own one-shot pool. `DefaultVelocity` (500 m/s, the
 launch speed for a def with no `VELOCITY`) is shared with the scan so the lead is solved for the
@@ -5761,7 +5786,10 @@ name, because C3/M01's village node stands at the world origin. A site on a worl
 original publishes for a mission structure (`docs/org/targeting.md`); its own position is only the
 fallback for a node that draws nothing. C1/M05's balloon groups stand on the water with the balloon
 16 m above them and C2's `sghangar` stands at the world origin, so the node's position is not the
-site. A site is keyed by
+site. A site carries the team of the node it stands on where that node is a mission structure, and
+neutral otherwise, which is the original's own split: a record naming a flagged node keeps that
+object's team, and a record that has to build its own builds it neutral. Almost every site is the
+second case, since a group is flagged on a child. A site is keyed by
 `ObjectiveTarget.Key`, and `ResolveTarget` walks a path one name at a time with `FindNodes` scoped
 to the node before, so `piratezep/rock_zeppelin` is the hull's own child and a bare name is the
 first global match; `targets.zrd` is looked up by the whole key first (a path-authored entry

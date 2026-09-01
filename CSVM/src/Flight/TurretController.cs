@@ -618,18 +618,19 @@ public sealed class TurretController
         return (parentBasis * restBasis).Orthonormalized();
     }
 
-    // The nearest live hostile entry of the engine's VehicleList inside DETECTION_RANGE, the
-    // shared target-picker's minimise-a-score structure with distance as the score. The own plane
-    // (carried) and teammates are gated out by the same team rule the aim assist runs.
-    // ⚠ Not the aircraft half of that list: the decoded picker walks the whole pool, which holds
-    // AI ground and sea vehicles too. A hull is a candidate as the vessel it is, and must never
-    // reach one by being registered as aircraft (docs/org/targeting.md).
+    // The nearest live hostile entry of the engine's VehicleList and mission-structure pools inside
+    // DETECTION_RANGE, the shared target-picker's minimise-a-score structure with distance as the
+    // score. The own plane (carried) and teammates are gated out by the aim assist's team rule.
+    // ⚠ Not the aircraft half of the vehicle list: the decoded picker walks the whole pool, which
+    // holds AI ground and sea vehicles too. A hull is a candidate as the vessel it is, and must
+    // never reach one by being registered as aircraft (docs/org/targeting.md).
     private bool AcquireTarget(out Vector3 pos, out Vector3 vel)
     {
         pos = default;
         vel = default;
         _scan.Clear();
         _pool.CollectVehicleList(_scan);
+        _pool.CollectMissionStructures(_scan);
         var here = WorldPosition;
         float best = float.MaxValue;
         foreach (var c in _scan.Vehicles)
@@ -651,6 +652,27 @@ public sealed class TurretController
             pos = c.Position;
             vel = c.Velocity;
         }
+
+        // Walked after the vehicles against the same running best, ties going to it, which is the
+        // decoded pass order. A gasbag is the one class this pass drops. A structure is marked
+        // where it stands and never leads, so its velocity is zero.
+        foreach (var c in _scan.Structures)
+        {
+            if (!c.Live || !AimAssist.Hostile(_team, c.Team)
+                || c.Source is Mech3.DestructibleRegistry.Instance { Gasbag: true })
+            {
+                continue;
+            }
+            float d = here.DistanceTo(c.Position);
+            if (d > Def.DetectionRange || d > best)
+            {
+                continue;
+            }
+            best = d;
+            pos = c.Position;
+            vel = Vector3.Zero;
+        }
+
         return best < float.MaxValue;
     }
 

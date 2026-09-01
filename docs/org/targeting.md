@@ -269,6 +269,94 @@ A turret's `SetTeam` override (`FUN_004acb70`) clears its current target pointer
 the team actually changes (`0x004acb90`), so a retargeted turret drops a now-friendly lock rather
 than keeping it.
 
+### What a mission structure's team is
+
+**A mission structure's team is written on the scene node, not in `targets.zrd` and not as a
+default.** `FUN_004a2e00`'s first pass reads the flagged node's own word at `node+0x28`, shifts it
+by `(2 * DAT_0071c0a0 - 2) & 0x1f` (the shift is computed once at `0x004a2e18`…`0x004a2e1f` and
+applied at `0x004a2e41`…`0x004a2e4b`), masks two bits, and hands that raw integer to the identity
+constructor `FUN_00453740` at `0x004a2e50`. The result is the 4th argument of the object
+constructor `FUN_004a2570` at `0x004a2ea5`, which writes it to `+0x8` like every other team.
+
+**`DAT_0071c0a0` is the mission's own number inside its chapter, 1-based.** It and
+`DAT_0071c09c` (the chapter, also 1-based) are fields of the session object at `0x0071b480`, at
+`+0xc20` and `+0xc1c`, which is why an xref search on the absolute address finds only reads: every
+write goes through the object's base register. `FUN_004636a0` initialises both to `-1`
+(`0x00463765`, `0x0046376b`) and `FUN_004638f0` sets them together (`0x00463907`, `0x0046390d`),
+reached from the profile path through `FUN_0041a880`. Their ranges are readable straight off the
+two name lookups: `FUN_004639d0` switches the chapter over cases 1-8 into the strings at
+`0x00625a70` (`c1`, `c1b`, `c1c`, `c2`, `c2b`, `c3`, `c4`, `c5`), and `FUN_00463a50` switches the
+mission over cases 1-5 into `0x00625a90` (`m01`…`m05`), or `mp1`…`mp5` and `ia1` for the other two
+modes at `+0x700`. `FUN_0046b490` bounds them at 9 and 10 and formats the save name
+`%s\Mission_%1d_%02d` from the pair.
+
+> So the shift `2 * mission - 2` selects **the current mission's own two-bit slot**: `m01` reads
+> bits 0-1, `m05` reads bits 8-9, and the eleven slots below bit 22 are one owner per mission of
+> the chapter. The value is a team id directly, through the identity constructor: `0` neutral,
+> `1` the player's side (`FUN_004830c0`), `2` and `3` the enemy indices (`FUN_0045c260` mints
+> `index + 2`, so `2` is enemy 0, which is also what a turret defaults to at `0x004a9a99`).
+
+**A slot of `0` means "this node names no owner", not "neutral by decision".** `FUN_004a32f0`, the
+team resolution the world-object factory `FUN_004a3360` uses at `0x004a3493`, walks the node and
+then its ancestors through `**(node+0x58)`, takes the first non-zero slot it finds, and only falls
+through to `FUN_004a3f80` (neutral) when no ancestor authors one either. So a part inherits the
+group it hangs under. ⚠ The mission-structure constructor itself does **not** walk: `FUN_004a2e00`
+reads the flagged node's own slot and hands it over raw, so a flagged node authoring nothing for
+this mission is built neutral.
+
+The word is the node record's own field at file offset 40 (mech3ax `unk040`, the extraction's
+`field040`), the dword after the flags word at 36 that carries `ACTIVE` and `INTERSECT_SURFACE`.
+The name-driven authoring is `FUN_004a29a0`, which `FUN_004a2af0` registers as the scene reader's
+per-node hook (`FUN_004c5b80` at `0x004a2af5`) beside the `MStructList` pool itself. It reads a
+node name of the form `xyz_<letter><digit>`: `name[3]` must be `_`, `toupper(name[4])` indexes the
+byte table at `0x004a2ad0` into the jump table at `0x004a2ab0`, and `name[5]`'s digit picks a
+two-bit slot at shift `2 * digit - 2`, with `+` at `name[6]` filling that slot and every higher
+one.
+
+| Letter | Case | Effect |
+|---|---|---|
+| `A` | `0x004a29e4` | fill `0x55555555`, so every named slot reads `1`, the player's side |
+| `E` | `0x004a29eb` | fill `0xAAAAAAAA`, so every named slot reads `2`, enemy index 0 |
+| `O` | `0x004a29e0` | fill `0`, so every named slot reads unowned |
+| `T` | `0x004a2a72` | set bit 31: this node is a mission structure |
+| `V` | `0x004a2a7f` | set bit 30 |
+| `G` | `0x004a2a8c` | set bit 22, the gasbag flag |
+| `D` | `0x004a2a99` | set bit `22 + name[5]`, one of the five sibling flags |
+| any other | `0x004a2aab` | nothing |
+
+⚠ **The slot writes cannot touch the flags, and the flag writes cannot touch a slot.** The routine
+saves the word on entry and, at `0x004a2a5e`…`0x004a2a6a`, restores bits 22-26, 30 and 31 from that
+saved copy over whatever the slot write produced, clearing bit 29. So the eleven slots occupy bits
+0-21 and everything above them is flags. Bits 27 and 28 are the only crossover: an `A`/`E` fill
+runs into them and they survive the mask, which is why an ally fill reads back as `0x10155555`
+rather than `0x00155555`.
+
+**The census over the eight shipped chapters: 1196 flagged nodes, and each authors the same owner
+in every one of its slots**, so no mission of a chapter sees a different set of sides from another.
+Per chapter the split runs from 25 to 51 on the player's side, 42 to 148 on the enemy's, and 28 to
+69 unowned. The flagged nodes are the state children inside a group (`healthy`, `gunback`,
+`panels`, `healthy_part`, `tank`, `g7`, `part1`), which is where a group becomes a target:
+
+- `world1/redcross/shipshape/healthy`, C1's Red Cross hospital ship, is `0x90155555`, **the
+  player's side in every slot**, so an enemy gun is hostile to it and the player's own is not.
+- `local_xyz/goose_engines/g_engineN/healthy_part`, C2's Spruce Goose, is the same word.
+- `policeN/healthy/l1/g7` and a zeppelin's `rock_zeppelin/gasbagN/*/healthy` are `0x882AAAAA`, the
+  enemy side in every slot.
+- Every node authoring nothing at all (`0x80000000`, `0x80400000`) is a zeppelin `panels` or
+  `gunback`, and a zeppelin's own record team is fanned over those parts anyway.
+
+⚠ **The picker's 4th argument is what keeps a player-team turret off the pool in C2/M05.** With
+`DAT_00629c20` cleared there, a turret on the player's team stops seeing mission structures at all,
+while every other gun in every other mission keeps them.
+
+**`targets.zrd` authors no team.** `FUN_004a3a60` reads `description`, `other_target`, `objective`,
+`category_label`, `help_label`, `stickiness`, `colored_background`, `background_color`,
+`ladder_pickup`, `fixed` and `nodes`, and nothing else. A record whose node is already a mission
+structure finds that object in the shared registry (`FUN_004a2850` at `0x004a2f80`) and only stamps
+`+0x4c`/`+0x4d` onto it, keeping its team; a record that has to build its own object builds it
+**neutral** through `FUN_004a3f80` at `0x004a2fb8`, and that object never gets `+0x8d`. So an
+objective site standing on an ordinary node is neutral in the original too.
+
 ### Zeppelins carry a record override, not a second space
 
 A zeppelin's `+0xE0` (with flag byte `+0xDC`) is the mission record's team override, parsed by
@@ -291,16 +379,17 @@ registry (`0x004a3385`), the turret registry (`0x004a33cc`) and the combat-objec
 
 Its team comes from `FUN_004a32f0` (called at `0x004a3493`): walk the node, then its ancestors via
 `**(node+0x58)`, and at each one extract a **two-bit field** from `node+0x28` at bit offset
-`(2 * DAT_0071c0a0 - 2) & 0x1f`. The first non-zero value found is the team id directly. If every
-ancestor yields zero, it falls through to `FUN_004a3f80` and the object is **neutral**. Two writers
-of that packed field are `OR [EAX+0x28],0x40000000` at `0x0048490c` and `OR [EDI+0x28],0x10000000`
-at `0x004807ef`, both setting a slot to value 1 (ally).
+`(2 * DAT_0071c0a0 - 2) & 0x1f`, the slot belonging to the mission being flown ("What a mission
+structure's team is" above). The first non-zero value found is the team id directly. If every
+ancestor yields zero, it falls through to `FUN_004a3f80` and the object is **neutral**. Two runtime
+writers `OR` into this word, `0x40000000` at `0x0048490c` and `0x10000000` at `0x004807ef`, but
+both set bits above the eleven slots, so neither changes any object's team.
 
 So hostility toward a world object is decided by team number like everything else, and an
 unauthored one is untargetable because it is neutral, not because it sits outside the pools.
 
-⚠ **The ownership field is two bits wide**, so a scene node can only ever author `0`–`3`. That is a
-bound on *this* field, not on the space: the stored id at `+0x8` is a full integer, and an
+⚠ **An ownership slot is two bits wide**, so a scene node can only ever author `0`–`3` per mission.
+That is a bound on *this* field, not on the space: the stored id at `+0x8` is a full integer, and an
 `aiv.zrd` team is a raw integer read verbatim. What it corroborates is that the ids in play are
 small and that no banding scheme exists anywhere.
 
@@ -653,9 +742,10 @@ element draws the triangle, and how it is rotated, is unresolved.
 | Team space | one space for everything: `0` neutral, `1` ally, enemy index `N` = `N + 2`, stored at `+0x8` on every combat object | the same space; an authored id is the runtime id |
 | Hostility test | one predicate over raw ids: differ, and neither is `0` | `AimAssist.Hostile`, asked by both the gun assist and the turret gunner rather than restated at each gate |
 | A turret's candidate set | all four pools (the table above): the whole `VehicleList`, every turret, the `+0x8d` mission structures, and tracked ordnance | `TurretController.AcquireTarget` walks the whole `VehicleList` through `ProjectilePool.CollectVehicleList`, so a hostile hull is a candidate beside the aircraft. The other three pools are not scanned yet |
-| A turret against a structure | admitted through `MStructList`, and hostile when the structure's team differs | unreachable: every channel that could offer one (`AimCandidateSet.AddStructures`, `ObjectiveSites.Collect`) hands out `AimAssist.NeutralTeam`, which the shared predicate refuses on both sides. A teamed mission-structure candidate has no source, which is why a gun near CM10's hospital ship or CM12's Spruce Goose still finds nothing to shoot at |
+| A turret against a structure | admitted through `MStructList`, and hostile when the structure's team differs | `TurretController.AcquireTarget` walks the structure pool after the vehicles against the same running best, through `ProjectilePool.CollectMissionStructures`, and drops a gasbag as the decoded pass does |
+| A mission structure's team | the node's own ownership slot for the mission being flown, inherited from the parent chain where it authors none | the same: `SceneBuilder` resolves the slot for the built mission (`GameZ.WorldObjectTeam`, `SceneBuilder.MissionSlot`) and stamps it, and `DestructibleRegistry.Register` reads it onto the pool, so C1/M05's hospital ship is the player's and a zeppelin's zones are the enemy's |
 | Splitscreen pilots | no per-pilot ladder exists | a remake-only rule: pilot 0 is the player's side, further pilots land in `AimAssist.VersusTeamBand` so a `--vs` player cannot inherit the id the no-`TEAM` emplacements default to |
-| World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | the same: `AimCandidateSet.AddStructures` falls a pool with no authored team through to `AimAssist.NeutralTeam`. Only a zeppelin record authors one, and the two-bit ownership field has no authored writer at all (both `crimson.exe` writers are runtime `OR`s at `0x0048490c` and `0x004807ef`) |
+| World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | the same: `AimCandidateSet.AddStructures` falls a pool with no authored team through to `AimAssist.NeutralTeam`. Two sources author one, a zeppelin record and the flagged node a pool stands on |
 | Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | not selectable |
 | Cycle order | objectives first, then ahead / behind / left / right, nearest inside each sector | not applicable |
 | "Nearest" | head of that order, not a global nearest | not applicable |

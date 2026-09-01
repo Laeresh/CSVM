@@ -460,6 +460,11 @@ public sealed partial class ProjectilePool : Node3D
     /// aircraft roster and nothing else.</summary>
     public Session.SurfaceVehicleRuntime? SurfaceVehicles { get; set; }
 
+    /// <summary>The session's destructibles, CSVM's stand-in for the engine's mission-structure
+    /// pool, so a scan that wants that pool asks here rather than carrying its own reference.
+    /// Null in a build with no world (the weapon lab, the suite labs).</summary>
+    public Mech3.DestructibleRegistry? Structures { get; set; }
+
     /// <summary>The aircraft each round's swept step is measured against for the near-miss cue
     /// one per flight rig. Empty in every build that has no player aircraft (the weapon
     /// lab, the dump probes), which costs the scan nothing.</summary>
@@ -788,6 +793,18 @@ public sealed partial class ProjectilePool : Node3D
     {
         CollectAircraft(into);
         SurfaceVehicles?.CollectVehicles(into);
+    }
+
+    /// <summary>Appends the engine's third candidate pool, the mission structures, where the
+    /// session has any. The pool is offered whole and the team gate on the far side decides: a
+    /// structure the data leaves unowned is neutral and nobody's target, exactly as it reaches the
+    /// player's own scan (docs/org/targeting.md "What a turret's candidate set holds").</summary>
+    public void CollectMissionStructures(AimCandidateSet into)
+    {
+        if (Structures != null)
+        {
+            into.AddStructures(Structures);
+        }
     }
 
     /// <summary>Appends every registered aircraft's carried turrets and every world emplacement to

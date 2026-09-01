@@ -64,6 +64,29 @@ public sealed class GameZ
     public List<GameZMesh> Meshes { get; } = new();
     public List<GameZMaterial> Materials { get; } = new();
 
+    /// <summary>The mission's own number inside its chapter, which is what indexes a node's
+    /// ownership slots: the digits ending the mission folder name (<c>m05</c>, <c>mp3</c>,
+    /// <c>ia1</c>), 1-based as the original's own table is. Falls back to the first mission for a
+    /// build that names no mission, which is where the shipped data authors the same owner in
+    /// every slot anyway.</summary>
+    public static int MissionSlotOf(string? missionFolder)
+    {
+        int digits = 0, seen = 0;
+        for (int i = (missionFolder ?? string.Empty).Length - 1; i >= 0 && seen < 2; i--)
+        {
+            char c = missionFolder![i];
+            if (c < '0' || c > '9')
+            {
+                break;
+            }
+
+            digits += (c - '0') * (seen == 0 ? 1 : 10);
+            seen++;
+        }
+
+        return digits >= 1 && digits <= GameZNode.MissionSlots ? digits : 1;
+    }
+
     /// <summary>Loads from a mech3ax output ZIP, or from a directory of the same JSON files.</summary>
     public static GameZ Load(string path)
     {
@@ -163,6 +186,28 @@ public sealed class GameZ
     {
         EnsurePlaced();
         return node.Kind == "Object3d" && node.Active && !_placed!.Contains(node.Index);
+    }
+
+    /// <summary>The team a node carries in the numbered mission: its own ownership slot, or the
+    /// nearest ancestor's where it authors none, or neutral where no ancestor does either. The
+    /// engine's own resolution for a world object, so a part inherits the group it hangs under.
+    /// ⚠ The mission-structure constructor itself reads the flagged node's OWN slot with no walk;
+    /// see docs/org/targeting.md, "What a mission structure's team is".</summary>
+    public int WorldObjectTeam(GameZNode node, int mission)
+    {
+        EnsureParentMap();
+        for (int i = node.Index; i >= 0; i = _parent![i])
+        {
+            // Slot 0 is "this node names no owner", which is what makes the walk continue; it is
+            // also the neutral team id, which is what the walk ends on.
+            int team = Nodes[i].MissionStructureTeam(mission);
+            if (team != 0)
+            {
+                return team;
+            }
+        }
+
+        return 0;
     }
 
     /// <summary>The world-space transform of a node, accumulated up its parent chain (the
@@ -327,6 +372,9 @@ public sealed class GameZ
             // zone_id: -1 (absent too) means always draw. See ZoneGate and docs/formats/gamez.md.
             if (header.TryGetProperty("zone_id", out var zn) && zn.ValueKind == JsonValueKind.Number)
                 node.ZoneId = zn.GetInt32();
+            // The mission-target word. Serialized only where non-zero, so absent = no flags.
+            if (header.TryGetProperty("field040", out var mt) && mt.ValueKind == JsonValueKind.Number)
+                node.MissionTargetWord = mt.GetUInt32();
             // ⚠ Flat list positions, never the node's own "index" field (1-based, duplicated).
             // See docs/formats/gamez.md and GameZNode.Index's warning.
             if ((header.TryGetProperty("child_indices", out var kids)
@@ -610,6 +658,10 @@ public sealed class GameZ
 
 public sealed class GameZNode
 {
+    /// <summary>How many missions of a chapter the ownership slots cover. Bits 22 and up are
+    /// flags, so the eleven slots below them are the whole space a node can author.</summary>
+    public const int MissionSlots = 11;
+
     public string Kind = "";   // "Object3d", "Lod", "World", "Display", "Window", "Camera", "Light"
     public string Name = "";
     public int MeshIndex = -1;
@@ -628,6 +680,11 @@ public sealed class GameZNode
     /// and 1/2/3 are the per-state buckets (docs/formats/gamez.md, docs/formats/weather.md's deck
     /// census). Absent in a legacy extraction, which defaults to -1 = ungated.</summary>
     public int ZoneId = -1;
+    /// <summary>The node's mission-target word (<c>field040</c>, absent from the JSON when zero).
+    /// Bit 31 marks the node as a mission structure, bit 22 marks a gasbag, and bits 0-21 hold
+    /// eleven two-bit ownership slots, one per mission of the chapter, which is where the team
+    /// comes from. Decoded in docs/org/targeting.md, "What a mission structure's team is".</summary>
+    public uint MissionTargetWord;
     // Flat position in nodes.json. The file is a depth-first serialization of the tree,
     // so this is the original engine's draw order — the cross-node tie-break for
     // coplanar surfaces of equal polygon priority (later node draws on top).
@@ -652,6 +709,22 @@ public sealed class GameZNode
     public int PartitionCols, PartitionRows;
 
     public List<int> Children { get; } = new(); // indices into GameZ.Nodes (list positions, not node_index)
+
+    /// <summary>Whether this node is one of the engine's mission structures.</summary>
+    public bool IsMissionStructure => (MissionTargetWord & 0x80000000u) != 0;
+
+    /// <summary>Whether the structure is a gasbag, which a turret's candidate pass excludes while
+    /// the player's own selection still admits it.</summary>
+    public bool IsGasbagStructure => (MissionTargetWord & 0x00400000u) != 0;
+
+    /// <summary>The team the engine gives this node as a mission structure in the numbered mission
+    /// of its chapter: the two-bit ownership slot at bit <c>2 * mission - 2</c>, read as a team id
+    /// in the one team space (0 neutral, 1 the player's side, 2 and 3 the enemy indices). Zero
+    /// where the node authors no owner for that mission, and on any unflagged node.</summary>
+    public int MissionStructureTeam(int mission) =>
+        mission < 1 || mission > MissionSlots
+            ? 0
+            : (int)((MissionTargetWord >> ((2 * mission) - 2)) & 3u);
 }
 
 public sealed class GameZMesh

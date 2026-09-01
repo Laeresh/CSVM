@@ -75,6 +75,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ `BL-626` Turrets acquire the candidate classes the original's turret picker holds
 13. ☑ `BL-440` A downed zeppelin plays its authored breakup (`NodeUndercover` made real)
 14. ◐ `BL-641` Introducing one AI aircraft mid-flight stays under the hitch threshold
+15. ☑ `BL-664` Mission structures carry a team, so hostile guns engage the targets.zrd ships
 
 ### Wave C — Cockpit and flight feel
 
@@ -686,6 +687,86 @@ spawn wants, which Godot then renames out from under that suite's identity check
 `roster-spawn-names` and `flight-roster-transaction` failed on until the `finally` freed them, and it
 only ever showed in a shared run.
 
+## B15 ☑ `BL-664` Mission structures carry a team
+
+**Goal.** A mission structure is a candidate a gun can be hostile to: a turret with a flagged
+structure in range and no aircraft acquires it, and one on the structure's own side does not.
+B12 found this necessary, since CM10's hospital ship and CM12's Spruce Goose are structures and no
+CSVM channel could offer one as anything but neutral.
+
+**Evidence (confidence: traced to code, and the rule is read off the shipped scene data).**
+`AimCandidateSet.AddStructures` and `ObjectiveSites.Collect` both stamped `AimAssist.NeutralTeam`,
+and the shared predicate refuses a neutral on either side, so no gun could engage a structure at
+any range. The original writes the team on the scene node: `FUN_004a2e00`'s pass over the flagged
+target-node list reads two bits out of the node's own word at `node+0x28`, at shift
+`(2 * DAT_0071c0a0 - 2) & 0x1f`, and hands them to the identity team constructor `FUN_00453740`
+(`0x004a2e41`…`0x004a2e50`). `DAT_0071c0a0` is **the mission's own number inside its chapter,
+1-based**: it and the chapter at `DAT_0071c09c` are fields of the session object at `0x0071b480`
+(`+0xc20` and `+0xc1c`), written through its base register by `FUN_004638f0` (`0x00463907`,
+`0x0046390d`) off the profile path and initialised to `-1` by `FUN_004636a0`, which is why an xref
+search on the absolute address sees only reads. `FUN_004639d0` maps the chapter over cases 1-8 to
+`c1`…`c5` and `FUN_00463a50` the mission over cases 1-5 to `m01`…`m05`, so the shift picks the
+mission's own two-bit ownership slot out of the eleven the word carries below bit 22. The slot is a
+team id directly: 0 unowned, 1 the player's side, 2 and 3 the enemy indices, which is exactly what
+the name parser's `A`/`E`/`O` fills write (`0x55555555`, `0xAAAAAAAA`, `0`). A slot of 0 means
+"names no owner", and `FUN_004a32f0` resolves that by walking the parent chain and falling through
+to neutral only when no ancestor authors one either. Census over the eight chapters: 1196 flagged
+nodes, each authoring the same owner in all of its slots; 25-51 per chapter on the player's side,
+42-148 on the enemy's, 28-69 unowned, and every unowned one is a zeppelin `panels`/`gunback` whose
+pool takes the airship record's team anyway. **CM10's hospital ship (`shipshape/healthy`,
+`0x90155555`) and CM12's Spruce Goose (`goose_engines/g_engineN/healthy_part`) are on the player's
+side**, so a hostile gun is hostile to them and the player's own guns are not, which is the
+reported behaviour. `targets.zrd` authors no team at all (`FUN_004a3a60`'s key list), and a record
+that has to build its own object builds it neutral (`FUN_004a3f80` at `0x004a2fb8`), which is why
+an objective site on an ordinary node stays neutral here too. The full reading is
+`docs/org/targeting.md`, "What a mission structure's team is".
+
+**Approach.** Carry the node's word through the build: `GameZ` reads `field040` and decodes a slot
+per mission (`MissionStructureTeam`, `WorldObjectTeam` for the parent-chain fall-through,
+`MissionSlotOf` for the mission number), `WorldSession` hands the built mission down through
+`WorldBuilder.MissionSlot` to `SceneBuilder`, which stamps the resolved team and the gasbag bit on
+the flagged nodes, and `DestructibleRegistry.Register` reads them off the pool's own damage node,
+which is where a pool becomes the structure rather than scenery.
+`AimCandidateSet.AddStructures` then teams the candidate through the field it already reads.
+`TurretController.AcquireTarget` walks the structure pool after the vehicles against the same
+running best, through a new `ProjectilePool.CollectMissionStructures` beside `CollectVehicleList`.
+
+**Model recommendation.** High: the decode decides the rule, and a wrong team changes which side
+every gun in the game shoots at.
+
+**Verify.** The new `turret-structure-targets` suite over C1/M05, plus the turret, targeting,
+objective-site and destructible suites; the full `RunTests.ps1`. At the controls, D31.
+
+**⚠ Traps.** (a) The team is per mission, so it cannot be resolved where the mission is unknown:
+an xref search on `DAT_0071c0a0`'s absolute address sees only reads and invites the conclusion that
+the slot is fixed, which reverses every structure's side. The writes go through the session
+object's base register at `0x0071b480`. (b) The flag lives in `field040`, not in the `flags` word
+beside it; the extraction emits `field040` only where non-zero. (c) A gasbag is dropped by the
+turret pass alone, and stays a candidate everywhere else. (d) The player's own selection is
+unchanged: `TargetPool` never walks `AimCandidateSet.Structures`, and an objective site keeps
+neutral unless the node it names is itself flagged. (e) A structure's team does not by itself make
+a boat shoot: a patrol boat's gunnery is the AI mode machine (`BL-523`). Cross-refs: `BL-523`,
+`BL-626`, `docs/org/targeting.md`.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` (0 warnings, 0 errors),
+`dotnet test CSVM.Tests/CSVM.Tests.csproj` (2791 passed, after adding the new suite's measured
+weight to `analysis/engine-suite-weights.json`), and
+`.\RunTests.ps1 -Suite <name> -SkipUnits -SkipGoldens` over the new `turret-structure-targets` plus
+`turret-vessel-targets`, `carried-turrets`, `world-turrets`, `mission-off-turrets`,
+`turret-self-fire`, `campaign-surface-vehicles`, `targeting-candidates`,
+`ranked-pool-carried-turret-dedup`, `destructible-census`, `campaign-zeppelin-wakeup`,
+`campaign-objectives`, `campaign-objective-markers`, `campaign-objective-target-path`,
+`campaign-objective-labels` and `campaign-objectives-hud`: 16 of 16 pass, engine errors clean. The
+new suite pins the slot arithmetic with no world (the ship's word reads the player's side in
+mission 5, a zeppelin zone's reads the enemy's, and a word authoring one mission alone reads
+unowned in every other), then reads C1/M05's registry (33 owned pools carrying ids 1 AND 2, the
+hospital ship among them on the player's side), locks the ship from a hand-placed enemy emplacement
+67 m away with no aircraft and no hulls built, and shows a gun on the ship's own side is offered it
+by nobody.
+◐ The C2/M05 exception is deferred, not represented: the decoded gate is
+`DAT_00629c20 != 0 || turretTeam != playerTeam`, which switches the structure pool off for
+player-team turrets in that one mission, and the collector has no mission context to read.
+
 # Wave C — Cockpit and flight feel
 
 ## C21 ☑ `BL-663` The compass drum turns
@@ -923,7 +1004,13 @@ by item: A1 CM09 flown to the docking if the headless run could not prove it; A2
 docking, opening shot alone, one hook swing from a parked start; A3 CM10's docking, the walkway
 crossing the frame under intact bars; B11 optionally the feel of a named-ace fight at a known
 `--difficulty=`; B12 a gun with a hostile hull in range, since the hospital ship and the Goose are
-mission structures no CSVM channel can offer as hostile and the flight would only re-observe that;
+mission structures no CSVM channel could offer as hostile before B15 and the flight would only
+re-observe that; B15 CM10's lifeboat and balloon guns against the hospital ship and CM12's patrol
+boats against the Goose, against `OriginalScreenshots/Videos/CM10.mkv`, where patrol boats attack
+the hospital ship shortly after the start. The decode puts both ships on the player's side, so an
+enemy gun should now engage them and nothing of the player's own should. A turret does fire; a
+patrol boat's own gunnery is the AI mode machine (`BL-523`), so a boat that closes on the ship
+without shooting is that item, not this one;
 B13 an Instant Action `zeppelin_run`, torpedo
 the hull, watch the pitch-over, six gasbag drops with splashes, and the gondola; B14 CM18 flown
 without a felt hitch on the generator launches; C21 a circle flown in cockpit view, drum against

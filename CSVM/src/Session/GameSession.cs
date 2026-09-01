@@ -2032,6 +2032,9 @@ public partial class GameSession : Node3D
         // are the rest of the engine's VehicleList. A turret gunner sees this pool and nothing
         // else, so without it a gun's candidate list is the aircraft half of the pool alone.
         projectiles.SurfaceVehicles = surfaceVehicleRuntime;
+        // The same reasoning for the third pool: a gun standing beside a hostile mission structure
+        // has nothing else to see it through.
+        projectiles.Structures = state.WorldRuntime?.Destructibles;
         var worldBindings = new FlightWorldBindings
         {
             Ambience = _ambience,
