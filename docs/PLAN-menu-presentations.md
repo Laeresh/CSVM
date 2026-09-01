@@ -102,8 +102,23 @@ joining, campaign and hangar hosting, audio, rebuilding, Godot controls and laun
 (`CSVM/src/UI/LaunchMenu.cs:21-45`, `799-841`, `1054-2105`, `2248-3168`). There is no general player
 options store today; profiles, custom planes and scores each have their own persistence.
 
-<TODO: A1 census every in-scope screen, transition, authored layout/script source, required asset,
-optional asset, audio cue and evidence gap. Do not infer full Original coverage from archive counts.>
+A1's census is [`docs/org/menu-inventory.md`](org/menu-inventory.md), and the archive counts above
+are not coverage. Built-in hosts **28** player-visible screens (10 launchscreen, 9 hangar, 9
+campaign), **9** sub-states that are not screen enum members, and **110** transitions; **32**
+`--menu=` values are accepted against **31** documented, and `Screen.WaveEdit` is the one screen no
+aid can open. `crimson.rof` ships **61** GUI scripts (5 infrastructure, **34** single-player
+screens and **22** multiplayer screens), and `LAYOUT.CSV`'s **35** sections are `[GLOBALVARS]` plus
+one per single-player script, one to one, so **the 22 multiplayer screens have no authored layout at
+all** and decoding `LAYOUT.CSV` reaches 34 screens, not 56. Those sections hold **636** widget rows
+in 10 of the 11 documented types (`W`, the sound object, is declared and never used), **186** macro
+definitions, **122** distinct art files (120 present, `CrimFlag.MPG` and `Final.MPG` absent) and
+**152** `IDS_*` symbols of which 148 resolve. **46** navigation edges are stated by the layout's own
+`ScriptToExe` column and by no script. Menu audio is **8** wav files bound in scripts, none of which
+Built-in plays. Of the 34 single-player screens **27** are in scope; Preferences, Game Options,
+Audio, Video, Controls and Keys have no Built-in counterpart, and the original's top level has six
+rows of which **Free Flight, Dogfight, a chapter list and a top-level hangar door are none**. Those
+four are ours. Five owed captures (`CAP-49` to `CAP-53`) cover the main menu, the Instant Action
+setup screen, Preferences, menu audio and pointer behaviour, and the plane-construction tab bar.
 
 ## Ground rules
 
@@ -131,7 +146,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Evidence and contracts
 
-1. ☐ Inventory every in-scope menu journey and its original evidence
+1. ☑ Inventory every in-scope menu journey and its original evidence
 2. ☐ Decode menu layouts during ROF extraction and document the format
 3. ☑ Add the global options store and requested/active presentation resolution
 4. ☑ Define the presentation, feature, input, audio, launch and return contracts
@@ -176,7 +191,7 @@ only normal-availability gate.
 
 # Wave A — Evidence and contracts
 
-## A1 ☐ Inventory every in-scope menu journey and its original evidence
+## A1 ☑ Inventory every in-scope menu journey and its original evidence
 
 **Goal.** Produce the authoritative screen/transition inventory for Built-in and Original, including
 the source of layout, interaction and audio evidence and every fact still requiring a capture.
@@ -192,8 +207,26 @@ inventory must classify required versus optional assets for E42.
 
 **Model recommendation.** high — this is cross-source reverse-engineering and scope control.
 
-**Verify.** <TODO: exact inventory validator or review query>; manually show that every current
-`--menu=` aid and every `LaunchMenu` screen enum appears exactly once in the inventory.
+**Verify.** The inventory is documentation, so the check is a census read back against its sources
+rather than a suite. Performed: `SessionSpec.cs`'s `--menu=` parse compared against
+`LaunchMenu.ShowMenu`, `OpenHangarAid`, `OpenCampaignAid` and `Launcher.ShowLaunchMenu`, giving 32
+values accepted, each appearing exactly once in the inventory's aid table, against 31 in `docs/cli.md`
+(`name` is accepted and undocumented, a `cli.md` edit this item did not make). All 12
+`LaunchMenu.Screen`, all 9 `HangarScreen` and all 9 `CampaignScreen` members appear exactly once in
+the screen census; 11 of the 12 `Screen` members carry an aid and `WaveEdit` carries none, which the
+inventory states rather than hides. The original half is a parse of
+`extracted/rof/ASSETS/LAYOUT.CSV` (35 sections, 636 widget rows in 10 types, 186 macro definitions,
+122 distinct art references of which 120 resolve on disk, 152 `IDS_*` symbols of which 148 resolve
+in `ui_strings.json`, 46 `ScriptToExe` edges) cross-checked against the 61 script names in
+`extracted/rof/ASSETS/SCRIPTS/`, which gives the 34-to-34 section/script correspondence and the 22
+multiplayer scripts with no section. `docs/verification.md` rules cited: **SRC-4** (one description
+of record, so the inventory points at `formats/campaign-screens.md`, `instant-action.md` and
+`rof.md` rather than restating them), **SRC-7** (a key the data authors is not a feature until a
+reader is found, so the unused `W` sound-object row type and the dead `IDS_GN_1P/2P/3P` references
+are recorded as such), and **SHOT-32** (a shot of an animated screen proves the frame it drew,
+which is why `CAP-49`'s flag movie and `CAP-52`'s audio are filmed rather than screenshot).
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** A filename or rectangle proves composition, not interaction. Existing campaign
 fidelity does not prove non-campaign coverage.
