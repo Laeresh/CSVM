@@ -1334,6 +1334,12 @@ void fragment() {
         if (BiasShaders.TryGetValue(key, out var cached))
             return cached;
 
+        // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
+        // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
+        // fullbright arm, so `fullbright` rather than `!shaded` selects the terms that arm owns.
+        bool worldLit = GraphicsMode.Enhanced && !shaded && lit;
+        bool fullbright = !shaded && !worldLit;
+
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("shader_type spatial;");
         // Sidedness: the source's visible side is the CCW loop, which is Godot's BACK face, so
@@ -1341,7 +1347,7 @@ void fragment() {
         sb.Append(doubleSided
             ? "render_mode skip_vertex_transform, cull_disabled"
             : "render_mode skip_vertex_transform, cull_front");
-        if (!shaded)
+        if (fullbright)
             sb.Append(", unshaded");
         sb.AppendLine(";");
         sb.AppendLine("uniform float depth_bias = 0.0;");
@@ -1358,7 +1364,7 @@ void fragment() {
             sb.AppendLine(ClutterFadeInclude);
             sb.AppendLine("varying flat float v_clutter_alpha;");
         }
-        if (!shaded)
+        if (fullbright)
             sb.AppendLine(LightsInclude); // LIGHT_STATE spill — fullbright passes only
         if (textured)
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the air,
@@ -1381,15 +1387,15 @@ void fragment() {
             sb.AppendLine("uniform vec2 uv_edge_inset = vec2(0.0);");
         if (!textured)
             sb.AppendLine("uniform vec4 albedo_color : source_color = vec4(1.0);");
-        // Fullbright world only: the original's DX7 pipeline multiplied texture × baked vertex
-        // colour in GAMMA space, so linearising the vertex colour first reproduces that product
+        // Both world arms: the original's DX7 pipeline multiplied texture × baked vertex colour in
+        // GAMMA space, so linearising the vertex colour first reproduces that product
         // (docs/formats/gotchas.md). A linear multiply washes out every baked-dark corner.
         if (!shaded)
             sb.AppendLine(SrgbInclude);
-        // ⚠ Keep NORMAL pre-negated on the shaded path. Every visible aircraft fragment is
-        // back-facing under cull_front and Godot negates NORMAL there, so without this every
-        // upward-facing surface shades as though lit from underneath (docs/formats/gotchas.md).
-        string normalSign = shaded ? "-" : "";
+        // ⚠ Keep NORMAL pre-negated on every lit path. Every visible fragment is back-facing under
+        // cull_front and Godot negates NORMAL there, so without this every upward-facing surface
+        // shades as though lit from underneath (docs/formats/gotchas.md).
+        string normalSign = shaded || worldLit ? "-" : "";
         // Past its far fade an instance collapses to its origin and costs no fragments; inside the
         // ramp the fragment stage dithers it out.
         string clutterVertex = clutterFade
@@ -1433,9 +1439,9 @@ void fragment() {{");
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
         // Per-mission SUNLIGHT dimming (world/deck/clutter), skipped for a model authored
-        // `lighting: false`. The shaded aircraft path never applies csky_world_light at all, so the
-        // flag has nothing to gate there.
-        if (!shaded && lit)
+        // `lighting: false`. Neither lit arm applies it: a real sun carries that energy there, and
+        // a scalar on ALBEDO would dim the surface a second time.
+        if (fullbright && lit)
             sb.AppendLine("    ALBEDO *= csky_world_light;");
         if (shaded)
         {
@@ -1443,15 +1449,23 @@ void fragment() {{");
             sb.AppendLine("    METALLIC = 0.0;");
             sb.AppendLine("    SPECULAR = 0.5;");
         }
+        else if (worldLit)
+        {
+            // Matte: the source authors no gloss for terrain or building walls, so any specular
+            // sheen here is invented, and it reads as wet plastic as the sun swings past.
+            sb.AppendLine("    ROUGHNESS = 1.0;");
+            sb.AppendLine("    METALLIC = 0.0;");
+            sb.AppendLine("    SPECULAR = 0.0;");
+        }
         // Distance fog, cylindrical: VERTEX is the view-space position here under
         // skip_vertex_transform, and INV_VIEW_MATRIX lifts it back to world. The fullbright path
         // needs that world position for the light spill, so an unfogged world surface computes it.
-        if (fogged || !shaded)
+        if (fogged || fullbright)
             sb.AppendLine("    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;");
         // Point lights go in before the fog mix and are not scaled by csky_world_light: a lamp does
         // not dim at night. ⚠ Keep the braces — unguarded this lands in the SHADED shader too,
         // where light_n does not exist and every aircraft falls back to Godot's default material.
-        if (!shaded)
+        if (fullbright)
         {
             // The world's normals reach here flipped for the same reason the aircraft's do: its
             // single-sided polygons render with cull_front, so every visible fragment is

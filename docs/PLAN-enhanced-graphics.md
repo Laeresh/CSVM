@@ -90,7 +90,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Core lighting
 
-11. ☐ Lit world shader variant (drop `unshaded`, matte material, keep the gamma modulate)
+11. ☑ Lit world shader variant (drop `unshaded`, matte material, keep the gamma modulate)
 12. ☐ Authored SUNLIGHT drives the sun and ambient in enhanced mode
 13. ☐ Sun shadow maps
 14. ☐ LIGHT_STATE point lights as real OmniLight3D nodes
@@ -229,7 +229,7 @@ starts to diverge). All three dump files and their probe logs are untracked, git
 
 # Wave B — Core lighting
 
-## B11 ☐ Lit world shader variant
+## B11 ☑ Lit world shader variant
 
 **Goal.** In enhanced mode, world geometry shades under Godot's lights using the decoded vertex
 normals: `unshaded` is dropped, a matte material responds to sun/ambient/omnis, and the baked
@@ -262,7 +262,50 @@ colour toward its luminance — that is a TUNE judged at the controls, not a fac
 logic exists because cull_front makes every visible fragment back-facing; getting it wrong lights
 the world from underneath. BL-613 decodes that the original exempts alpha-textured surfaces from
 the sun term in the *faithful* path; do not let this item's changes leak into that question.
-`<TODO: re-verify BL-613 and BL-322 still open before landing.>`
+BL-613 and BL-322 are both open in `backlog.md`, and this item touches neither: the enhanced arm
+keys on the model-level `lighting` bit alone (`docs/org/vertexLighting.md`'s first test), leaving
+the per-texture alpha exemption BL-613 is about, and BL-322's C5 facade brightness, exactly as they
+are in the faithful path.
+
+**Verified.** <pending orchestrator run>
+
+`dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
+`$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -Suite plane-shader-reuse -SkipUnits -SkipGoldens`:
+engine stage PASS, 1 suite run of 200 (non-zero), engine errors clean, 0 unexpected lines.
+`$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only): PASS, 18
+shot(s) hash-identical, zero movers.
+
+Original-mode byte identity was proved with A2's method rebuilt as a throwaway: a static enumerator
+inside `SceneBuilder`'s constructor, armed by a `CSVM_SCRATCH_SHADER_DUMP` environment variable so
+no file outside this item's ownership was touched, walking every reachable key of all three
+generators (`GetBiasShader` over `DebugClutterFlag` x shaded x textured x blend x scissor x
+doubleSided x scroll x clampUv x lit x fogged x 4 edgeClamp values x clutterFade, plus every
+billboard and both cylindrical axes) and writing each key's generated `Shader.Code` to a file. The
+baseline came from the committed tree BEFORE the edit; no stash was used. Runs were
+`.\RunProbe.ps1 --freecam --chapter=C1 [--graphics=enhanced] --det --mute --frames=5
+--screenshot=...`. `dump_orig_before.txt` and `dump_orig_after.txt` are both 12,672,544 bytes and
+SHA-256 `42DCA26A4BEB01E7AE259199288B481A82A325C508E64B281D7A3DB82462A3D1`, identical, so original
+mode's shader text did not move. `dump_enh_after.txt` is 12,255,776 bytes, SHA-256
+`A5EC0AE3E490883E5CC46D0079F4A46683B65920CBB8B10BC9C879CDA62F7717`, which differs, so the
+instrument was seen able to fail. The instrument was deleted before finishing and the dumps are
+untracked `.scratch/` output.
+
+The 8-chapter enhanced `--freecam` sweep (`--det --mute --frames=15 --screenshot=` per chapter, run
+in both modes) reported zero engine error lines everywhere and identical gamez-node, mesh-instance,
+uv-clamped and edge-clamped counts in both modes for all of C1, C1B, C1C, C2, C2B, C3, C4 and C5.
+The first C1 enhanced run was killed at the 300 s probe timeout after writing its screenshot; a
+re-run of the same command exited 0 in 7.1 s, which is the shared-hidden-desktop flake
+`docs/verification.md` LOG-19 describes.
+
+At the captures the world reads as genuinely lit and the normal sign is right: with C2's sun 65
+degrees above the horizon, roofs and ground take the light while walls fall into shade, which is
+the opposite of what an inverted normal produces. Two things are brighter than the original and are
+left for the items that own them. Day chapters wash out, distant terrain most of all, because the
+launcher's hardcoded LightEnergy 1.6 / ambient 0.9 now reaches geometry that used to ignore it and
+nothing tonemaps the result; B12 and C22 own that. Shaded walls read dark enough to suggest the
+baked vertex colour and the real sun are darkening the same surface twice, which is exactly the
+flatten-vertex-colour-toward-luminance TUNE the traps above name. It is NOT implemented here: the
+calibration it would be judged against does not exist until B12 lands.
 
 ## B12 ☐ Authored SUNLIGHT drives the sun and ambient
 
