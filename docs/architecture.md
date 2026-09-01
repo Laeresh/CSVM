@@ -247,7 +247,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BoardMenuView.cs` — draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
-- `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session; also the hangar's two doors, the campaign's one (`OpenCampaignCabin`) and its mission-end debrief (`OpenCampaignScrapbook`, both re-reading the profile from the store), and the renderer both flows draw through.
+- `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session (Free Flight through `src/UI/Menu/FreeFlightFeature.cs`, the first shared feature); also the hangar's two doors, the campaign's one (`OpenCampaignCabin`) and its mission-end debrief (`OpenCampaignScrapbook`, both re-reading the profile from the store), and the renderer both flows draw through.
 - `src/UI/MenuZones.cs` — how the launchscreen divides a window: a fixed header band, a fixed footer band, the selection list in what is left, and the one scale all three share. Engine-free.
 - `src/UI/InstantActionPresets.cs` — the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
 - `src/UI/PlanePickerRoster.cs` — the one roster every human plane picker draws: 11 stock airframes then the store's saved customs, each custom carrying its store name and its airframe's stock node (D32's launch seam); engine-free build/lookup rules.
@@ -3998,6 +3998,30 @@ watches the viewport size as well as the input, since a resize or a resolution c
 press at all. `menu-zone-layout` walks the paint screen row by row and then resizes a viewport under
 a real menu; `CSVM.Tests/MenuZonesTests.cs` holds the division rule itself.
 
+Free Flight is the one mode routed through a shared feature. `FreeFlightFeature`
+(`src/UI/Menu/FreeFlightFeature.cs`) owns the chapter roster it offers, the picked chapter, the
+launch gate and the typed `LaunchExit`. The Chapter screen's Accept under Free Flight hands it the
+cursor's code; `--menu=plane`, `selected` and `loadout` skip that Accept, so `ShowMenu` hands it
+over for them. `CanLaunch()` asks the feature's gate in Free mode and keeps the static
+`CanLaunch(mode, allLocked, joined)` rule for the other modes. `FireLaunch` in Free mode builds one
+`MenuSeatChoice` per joined seat (`SeatChoices`: the roster row's node, the seat's pads, its fit
+edits or null for stock, and a custom row's def read from the store, with the same warning the
+host prints when the file is gone) and adapts the feature's `LaunchExit` onto the existing
+`Launch` callback (`Dispatch`, the def riding back as its store name), so the host sees the
+payload it always saw. Instant Action, Dogfight, campaign and hangar keep their old paths. The
+Chapter screen, the aircraft screen, joining and locking stay here: they are shared with the other
+modes, and the feature never reads them. `Chapters` is this screen's row text zipped over
+`MenuChapters`, the shared roster. `Drive(MenuCommands)` applies one frame of player 1's semantic
+commands in place of a device poll, and the `Shown*` read-outs (`ShownScreen`, `ShownHeading`,
+`ShownBreadcrumb`, `ShownFooter`, `ShownDetail`, `ShownJoinHint`, `ShownRow`, `ShownRowCount`,
+`ShownRowText`) say what the screen draws. `menu-free-flight-journey`
+(`src/Testing/MenuJourneySuites.cs`) drives the real menu through them from Mode to the launch
+callback, back out at every step, through a return and the `--menu=` aids, and pins Built-in's
+present behaviour with its quirks: the chapter, airframe and mode cursors survive Back and a return
+from flight while the selection does not, a bare launch's return lands on Mode, an aid re-enters
+under whatever mode was last picked, a selected airframe's cursor does not move, and the launch
+fires only when every joined seat has confirmed.
+
 ## src/UI/MenuZones.cs
 How the launchscreen's three bands divide a window: the two fixed heights, the middle taking the
 slack, and the one scale all three share, capped so the tallest screen still fits instead of losing
@@ -6764,3 +6788,27 @@ no `Godot` type and no `CSVM.UI` type outside that exact namespace, enforced by
 IL alike, via `AssemblyDependencyScan`); presentations live in sub-namespaces
 (`CSVM.UI.Menu.BuiltIn`, `.Original`) and may depend on anything. `ComposedBoard` and the other
 board types stay presentation-side.
+
+## src/UI/Menu/MenuChapters.cs
+The shared chapter roster: the eight chapter worlds as `MenuChapter(Code, DangerZones)` in code
+order (C1, C1B, C1C, C2, C2B, C3, C4, C5), `For(mode)` (Stunt Flying only the six with Danger
+Zones, every other mode all eight), `Find` and `DangerZonesFor`. The codes are separate terrain
+databases, not lighting variants (`docs/formats/spawns.md`); the flag says whether the chapter's
+`ia.json` ships a `dzones` list, which is why Stunt Flying withholds the other two. Shared so that
+`LaunchMenu`'s Chapter screen, the Free Flight feature and the coming Instant Action feature read
+one roster; `LaunchMenu.Chapters` is this screen's row text zipped over it. Off-engine coverage:
+`CSVM.Tests/FreeFlightFeatureTests.cs`, which also checks the roster against
+`LaunchMenu.ChapterCodesFor` for all three modes.
+
+## src/UI/Menu/FreeFlightFeature.cs
+Free Flight as a shared `IMenuFeature`, the first feature cut out of `LaunchMenu`: `Chapters`
+(the roster it offers, all eight), `Chapter` (the pick, null until `SelectChapter(code)`, a code
+outside the roster throwing), `Refusal`/`CanLaunch(joinedSeats, confirmedSeats)` (a chapter
+picked, at least one seat, every seat confirmed; a lone seat launches), `BuildExit(seats)` (the
+typed `LaunchExit` with mode Free and no Instant Action def, refusing a closed gate or a seat with
+no plane) and `Discard` (drops the pick). Free Flight is the remake's own mode, so nothing here is
+decoded; the rules are the launchscreen's, moved. The seats are still the presentation's: the
+feature takes confirmed `MenuSeatChoice`s and never reads a roster, a lock or a store. Consumed by
+`LaunchMenu` (see its entry) until the presentation host owns the feature set. Off-engine coverage:
+`CSVM.Tests/FreeFlightFeatureTests.cs`, which checks the gate against
+`LaunchMenu.CanLaunch(MenuMode.Free, ...)` case by case.

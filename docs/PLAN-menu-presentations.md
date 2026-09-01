@@ -153,7 +153,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Free Flight tracer
 
-11. ☐ Characterize Built-in and extract the Free Flight feature
+11. ☑ Characterize Built-in and extract the Free Flight feature
 12. ☐ Run Built-in Free Flight through the presentation boundary
 13. ☐ Deliver Original Free Flight, switching and recovery
 
@@ -330,7 +330,7 @@ interaction, animation and cue selection; drawing alone is not the boundary.
 
 # Wave B — Free Flight tracer
 
-## B11 ☐ Characterize Built-in and extract the Free Flight feature
+## B11 ☑ Characterize Built-in and extract the Free Flight feature
 
 **Goal.** Capture Built-in’s present Free Flight behaviour, then move its selections and validation
 into an engine-free typed feature without changing any observable journey.
@@ -345,8 +345,26 @@ the typed launch request; leave Instant Action, Dogfight, campaign and hangar on
 
 **Model recommendation.** high — this tracer must cut a safe seam through a large stateful class.
 
-**Verify.** Run the focused unit tests plus before/after Built-in screenshots and the scripted
-top-level → launch → return journey. <TODO: exact existing/new suite names and `--menu=` aid values.>
+**Verify.** Characterization first, on the pre-extraction code: the new engine suite
+`menu-free-flight-journey` (`CSVM/src/Testing/MenuJourneySuites.cs`) drives a real `LaunchMenu`
+through `LaunchMenu.Drive(MenuCommands)` and reads the `Shown*` read-outs, Mode → Chapter → Plane
+→ the `Launch` callback, Back at every step, `HideMenu`/`ShowMenu` as a return from flight, the
+aids `--menu=chapter`, `plane`, `selected` and `loadout`, Quit from Mode, and a second seat
+holding the gate; it passed green before the extraction and unchanged after it. Then the
+extraction: `dotnet build CSVM/CSVM.sln`, then
+`dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter "FullyQualifiedName~FreeFlightFeatureTests|FullyQualifiedName~MenuNamespaceDependencyTests|FullyQualifiedName~MenuSeamContractTests|FullyQualifiedName~SessionSpecMenuTests|FullyQualifiedName~LaunchMenuWizardTests|FullyQualifiedName~SuiteCatalogTests"`
+(81 tests, the seam scan among them), the whole `dotnet test` (2832), and
+`.\RunTests.ps1 -Suite "menu-free-flight-journey,menu-zone-layout,menu-screenshot-key,campaign-briefing-repaint" -SkipUnits -SkipGoldens`
+(4 suites). Before/after shots through `.\RunProbe.ps1 --menu=<aid> --screenshot=<abs path>` for
+`mode`, `chapter`, `plane` and `selected`, rebuilt between, compared by decoded pixels (SHA-256
+over the 32bpp rows), all four identical. `docs/verification.md` rules that bit: **SHOT-9** (the
+probes run windowed on the hidden desktop, never `--headless`), **SHOT-10** (absolute output paths,
+the directory created first, every file checked present), **SHOT-6** (the comparison decodes the
+PNGs rather than hashing their bytes), **SHOT-32** (a shot proves the frame it drew, so behaviour
+is pinned by driving the real screens in the journey suite and the shots stand only for
+appearance).
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not repair existing mouse, focus or layout issues. Characterization pins current
 behaviour, including quirks not explicitly changed by this plan.
@@ -362,6 +380,15 @@ characterized feature and A4 its contract.
 **Approach.** Split the process-lifetime menu host from Built-in controls and screen graph. Route
 semantic commands, audio service calls, typed exit and semantic return through the host. Keep all
 other current flows operational through temporary adapters rather than rewriting them early.
+
+Handoff from B11: `LaunchMenu` constructs its own `FreeFlightFeature` (`_free`, exposed as
+`LaunchMenu.FreeFlight`) and adapts the feature's `LaunchExit` back onto the old `Launch`
+callback in `Dispatch`; the host takes over both, owning the feature in its `MenuFeatureSet` and
+consuming the `LaunchExit` itself, after which `Dispatch` and the Free branch of `FireLaunch` go.
+`LaunchMenu.Drive(MenuCommands)` already takes A4's frame shape for player 1, so the Built-in
+presentation's `Tick` can feed it from the host's seats; `MenuInput` still polls the devices
+behind it. `--menu=plane`, `selected` and `loadout` hand the feature the cursor's chapter from
+`ShowMenu`, because they skip the Chapter Accept; a host-side aid path has to keep that handover.
 
 **Model recommendation.** high — lifecycle and return regressions can strand every menu path.
 

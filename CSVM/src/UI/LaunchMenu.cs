@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.UI.Menu;
 using CSVM.Utils;
 using Godot;
 
@@ -164,21 +165,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         (Mech3.InstantAction.MissionTypeLabel("zeppelin_run"), "zeppelin_run"),
     };
 
-    // The eight chapter worlds (mirrors RunDev.ps1's roster). The lettered codes are separate
-    // terrain databases, not lighting variants — docs/formats/spawns.md. DangerZones marks the
-    // chapters whose ia.json has a dzones list; ChaptersFor hides the others from Stunt Flying,
-    // and a stunt run forced onto them via CLI falls back to free flight (StuntMission).
-    private static readonly (string Name, string Code, bool DangerZones)[] Chapters =
-    {
-        ("Sea Haven (night) — IA: an airfield", "C1", true),
-        ("The ocean — Sea Haven variant", "C1B", true),
-        ("Sea Haven variant C — no IA, campaign/MP only", "C1C", false),
-        ("Hollywood — IA: a movie studio", "C2", true),
-        ("The clouds — Hollywood variant", "C2B", false),
-        ("Hawaii (islands)", "C3", true),
-        ("Rocky Mountains — IA: Sky Haven", "C4", true),
-        ("New York — IA: Manhattan", "C5", true),
-    };
+    // The eight chapter worlds: this screen's row text over the shared roster (MenuChapters owns
+    // the codes, their order and the Danger Zones flag). ChaptersFor hides the flag-less chapters
+    // from Stunt Flying, and a stunt run forced onto them via CLI falls back to free flight
+    // (StuntMission).
+    private static readonly (string Name, string Code, bool DangerZones)[] Chapters = BuildChapters();
 
     // The player-flyable roster in the langui 3700 dropdown order (docs/formats/instant-action.md
     // "Option strings"), which the original stores an aircraft as an index INTO — so this order is
@@ -251,6 +242,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // Steps 3-4's wizard wave slots: 0 enemies = unconfigured — the wizard's own "starts
     // empty" divergence from the original's always-four dropdowns, decision 1.
     private readonly WaveSlot[] _waves = new WaveSlot[4];
+    // Free Flight's own state and launch rule: the Chapter screen hands it the pick, and a Free
+    // launch leaves through its typed exit. Owned here until a menu host owns the feature set.
+    private readonly FreeFlightFeature _free = new();
 
     private string _zrdrPath = "";
     private string _dataRoot = "";
@@ -382,6 +376,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <see cref="Campaign"/> is: its screens are driven through it, not around it.</summary>
     public HangarFlow? Hangar => _hangar;
 
+    /// <summary>The Free Flight feature this screen drives: the Chapter screen's Accept hands it
+    /// the pick, and a Free launch is its <see cref="LaunchExit"/> adapted onto <see cref="Launch"/>.</summary>
+    public FreeFlightFeature FreeFlight => _free;
+
     /// <summary>The composed board currently on screen, or null when no campaign screen is up.
     /// This is what the pilot is looking at, so a check that the screen keeps up with a running
     /// briefing reveal compares it against a board freshly composed from the page.</summary>
@@ -397,6 +395,34 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     /// <summary>The footer band, the fixed one at the bottom.</summary>
     public Control FooterBand => _footer;
+
+    /// <summary>The screen showing, by its own name (Mode, Chapter, Plane, ...). A journey check
+    /// reads where a press landed without knowing how the screen is drawn.</summary>
+    public string ShownScreen => _screen.ToString();
+
+    /// <summary>The middle band's heading as the screen draws it right now.</summary>
+    public string ShownHeading => Heading();
+
+    /// <summary>The header band's breadcrumb as the screen draws it right now.</summary>
+    public string ShownBreadcrumb => Breadcrumb();
+
+    /// <summary>The footer's controls line as the screen draws it right now.</summary>
+    public string ShownFooter => Footer();
+
+    /// <summary>The focused row's description, or the refusal standing in its slot.</summary>
+    public string ShownDetail => _error.Length > 0 ? _error : Detail(CurrentIndex);
+
+    /// <summary>The hint beside the join strip, which names where joining opens.</summary>
+    public string ShownJoinHint => JoinHint();
+
+    /// <summary>Player 1's cursor row on the screen showing.</summary>
+    public int ShownRow => CurrentIndex;
+
+    /// <summary>How many rows the screen showing has.</summary>
+    public int ShownRowCount => CurrentCount();
+
+    /// <summary>The text drawn on player 1's cursor row.</summary>
+    public string ShownRowText => RowText(CurrentIndex);
 
     // The chapter roster the picked mode offers — the Chapter screen and everything
     // downstream (breadcrumb, launch) index into this, never the full list. Free Flight/Dogfight
@@ -666,6 +692,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             _waveListIndex = _waves.Length;
         }
+        // Opening straight onto the aircraft screen skips the Chapter Accept that hands Free
+        // Flight its pick, so the cursor's chapter is handed over here instead.
+        if (_screen == Screen.Plane && _mode == MenuMode.Free)
+        {
+            _free.SelectChapter(CurrentChapters[_chapterIndex].Code);
+        }
         _error = "";
         // A flow never survives a trip through flight: it holds an unsaved scratch plane, and
         // resuming one after a session would be editing something nobody remembers starting.
@@ -705,6 +737,36 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     /// <summary>Hide the menu (the host is about to build a session).</summary>
     public void HideMenu() => Visible = false;
+
+    /// <summary>Applies one frame of player 1's semantic commands in place of a device poll, then
+    /// redraws if anything changed. The scripted journey suites drive the real screens through
+    /// this, and the frame shape is the one a menu input source hands a presentation. Needs
+    /// <see cref="ShowMenu"/> to have run, so there is a player 1 to drive.</summary>
+    public bool Drive(MenuCommands frame)
+    {
+        var p1 = _slots[0].Input;
+        p1.Move = frame.MoveY;
+        p1.MoveX = frame.MoveX;
+        p1.Accept = frame.Accept;
+        p1.Back = frame.Back;
+        p1.Loadout = frame.Loadout;
+        p1.Presets = frame.Contents;
+        bool dirty;
+        try
+        {
+            dirty = HandleInput();
+        }
+        finally
+        {
+            // Edges, so the next real poll starts from an idle frame rather than a press.
+            p1.Move = p1.MoveX = 0;
+            p1.Accept = p1.Back = p1.Loadout = p1.Presets = false;
+        }
+
+        if (dirty && Visible)
+            Rebuild();
+        return dirty;
+    }
 
     /// <summary>Opens the campaign on the named profile's cabin, the screen a flown mission
     /// returns to. The profile is re-read from the store, so what the mission just recorded (a
@@ -925,18 +987,37 @@ public sealed partial class LaunchMenu : CanvasLayer
     private static (string Label, string Key)[] MissionTypeRowsFor(string chapterCode) =>
         DangerZonesFor(chapterCode) ? MissionTypes : Array.FindAll(MissionTypes, m => m.Key != "stunt_flying");
 
-    // Whether a chapter's `ia.json` ships `dzones` — looked up from Chapters
-    // by code so the Environment/MissionType screens and the plain Chapter screen cannot read two
-    // different answers for the same chapter. Chapters is the eight-row table; every Environment
-    // row's code is one of the seven that carry a DangerZones entry there (C1C, the omitted
-    // chapter, is the only one that would not be).
-    private static bool DangerZonesFor(string chapterCode)
+    // Whether a chapter's `ia.json` ships `dzones`, read off the shared roster so the
+    // Environment/MissionType screens and the plain Chapter screen cannot read two different
+    // answers for the same chapter.
+    private static bool DangerZonesFor(string chapterCode) => MenuChapters.DangerZonesFor(chapterCode);
+
+    // This screen's row text per chapter code, zipped over the shared roster so the codes, their
+    // order and the Danger Zones flags have exactly one home.
+    private static (string Name, string Code, bool DangerZones)[] BuildChapters()
     {
-        foreach (var c in Chapters)
-            if (c.Code == chapterCode)
-                return c.DangerZones;
-        return false;
+        var rows = new (string Name, string Code, bool DangerZones)[MenuChapters.All.Count];
+        for (int i = 0; i < rows.Length; i++)
+        {
+            var chapter = MenuChapters.All[i];
+            rows[i] = (ChapterRowText(chapter.Code), chapter.Code, chapter.DangerZones);
+        }
+
+        return rows;
     }
+
+    private static string ChapterRowText(string code) => code switch
+    {
+        "C1" => "Sea Haven (night) — IA: an airfield",
+        "C1B" => "The ocean — Sea Haven variant",
+        "C1C" => "Sea Haven variant C — no IA, campaign/MP only",
+        "C2" => "Hollywood — IA: a movie studio",
+        "C2B" => "The clouds — Hollywood variant",
+        "C3" => "Hawaii (islands)",
+        "C4" => "Rocky Mountains — IA: Sky Haven",
+        "C5" => "New York — IA: Manhattan",
+        _ => code,
+    };
 
     private static int Mph(PlaneStats s) => Mathf.RoundToInt(s.FdSpeed * 2.23694f);
 
@@ -1564,6 +1645,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                 }
                 break;
             case Screen.Chapter:
+                if (_mode == MenuMode.Free)
+                {
+                    _free.SelectChapter(CurrentChapters[_chapterIndex].Code);
+                }
+
                 _screen = Screen.Plane;
                 PrimeJoins(); // joining opens here — a Start held on the way in must not fire
                 break;
@@ -2314,20 +2400,33 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The launch gate reads CONFIRMED, the second stage, not the lock. That is what leaves a
     // window between selecting an airframe and flying it for the loadout to be opened in;
     // locking used to launch on the same frame the last slot locked.
-    private bool AllConfirmed()
+    private bool AllConfirmed() => _slots.Count > 0 && ConfirmedCount() == _slots.Count;
+
+    private int ConfirmedCount()
     {
+        int confirmed = 0;
         foreach (var slot in _slots)
-            if (!slot.Confirmed)
-                return false;
-        return _slots.Count > 0;
+            if (slot.Confirmed)
+                confirmed++;
+        return confirmed;
     }
 
     // Whether the Plane screen's launch gesture is live right now. A lone Dogfight pilot
-    // stays on this screen with JoinHint naming what it is waiting for.
-    private bool CanLaunch() => CanLaunch(_mode, AllConfirmed(), _slots.Count);
+    // stays on this screen with JoinHint naming what it is waiting for. Free Flight's gate is
+    // its feature's; the other modes keep the static rule until their own features exist.
+    private bool CanLaunch() => _mode == MenuMode.Free
+        ? _free.CanLaunch(_slots.Count, ConfirmedCount())
+        : CanLaunch(_mode, AllConfirmed(), _slots.Count);
 
     private void FireLaunch()
     {
+        if (_mode == MenuMode.Free)
+        {
+            // Leave our state as-is so a failed build can send us back with ShowMenu.
+            Dispatch(_free.BuildExit(SeatChoices()));
+            return;
+        }
+
         var choices = new List<PlayerChoice>(_slots.Count);
         foreach (var slot in _slots)
         {
@@ -2368,6 +2467,48 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
         // Leave our state as-is so a failed build can send us back with ShowMenu.
         Launch?.Invoke(chapter, choices, _mode, iaDef);
+    }
+
+    // Every joined seat's pick as the typed seat choice: the roster row's node, the pads the seat
+    // joined on, its fit edits (null for stock) and, for a custom row, the store's def. ⚠ A custom
+    // pick launches as its airframe's stock node; the def rides along for the session build.
+    private List<MenuSeatChoice> SeatChoices()
+    {
+        var seats = new List<MenuSeatChoice>(_slots.Count);
+        CustomPlaneStore? store = null;
+        foreach (var slot in _slots)
+        {
+            var pick = _roster[slot.PlaneIndex];
+            CustomPlaneDef? custom = null;
+            if (pick.CustomName is { } name)
+            {
+                store ??= CustomPlaneStore.UserPlanes();
+                custom = store.Load(name);
+                if (custom == null)
+                {
+                    GD.PushWarning($"custom plane '{name}' could not be loaded, flying the stock {pick.Node}");
+                }
+            }
+
+            seats.Add(new MenuSeatChoice(pick.Node, slot.Input.Pads ?? Array.Empty<int>(),
+                slot.Fit.IsStock ? null : slot.Fit, custom));
+        }
+
+        return seats;
+    }
+
+    // The typed exit onto the host's launch callback, which is what the host consumes until it
+    // takes the exit itself. A custom def rides back as its store name, the callback's own shape.
+    private void Dispatch(LaunchExit exit)
+    {
+        var choices = new List<PlayerChoice>(exit.Seats.Count);
+        foreach (var seat in exit.Seats)
+        {
+            int[] pads = seat.Pads as int[] ?? new List<int>(seat.Pads).ToArray();
+            choices.Add(new PlayerChoice(seat.PlaneNode, pads, seat.Fit, seat.Custom?.Name));
+        }
+
+        Launch?.Invoke(exit.Chapter, choices, exit.Mode, exit.InstantAction);
     }
 
     // --- rendering ---
@@ -2903,7 +3044,24 @@ public sealed partial class LaunchMenu : CanvasLayer
                 focused ? RowFocusColor : RowColor, focused);
         }
 
-        string text = _screen switch
+        string text = RowText(index);
+        bool sel = index == CurrentIndex;
+        // A locked single-player pick recolours its row, because the centred layout has no
+        // per-pane status line to carry the state the way the splitscreen panes do.
+        bool locked = _screen == Screen.Plane && _slots.Count == 1 && _slots[0].Locked;
+        var colour = sel ? locked ? RowLockedColor : RowFocusColor : RowColor;
+        return CursorRow.Build(text, (int)(RowFont * s), colour, sel);
+    }
+
+    // The text on one row of the screen showing; a fit list's row reads as its mount label.
+    private string RowText(int index)
+    {
+        if (CentredFitRows() is { } fitRows)
+        {
+            return fitRows[index].Label;
+        }
+
+        return _screen switch
         {
             Screen.Mode => index < Modes.Length ? Modes[index].Label
                 : index == Modes.Length ? CampaignRow : HangarRow,
@@ -2918,12 +3076,6 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Wingmen => WingmenFieldRowText(index),
             _ => index < _roster.Count ? _roster[index].Name : HangarRow,
         };
-        bool sel = index == CurrentIndex;
-        // A locked single-player pick recolours its row, because the centred layout has no
-        // per-pane status line to carry the state the way the splitscreen panes do.
-        bool locked = _screen == Screen.Plane && _slots.Count == 1 && _slots[0].Locked;
-        var colour = sel ? locked ? RowLockedColor : RowFocusColor : RowColor;
-        return CursorRow.Build(text, (int)(RowFont * s), colour, sel);
     }
 
     // One Waves-screen row: an unconfigured slot reads "empty" (decision 1's own "starts
