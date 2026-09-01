@@ -184,6 +184,13 @@ public partial class FlightController : Node3D
     /// gun trigger: a suite's twin for the auto-land button, with no live key or pad to press.</summary>
     public bool AutoLand;
 
+    /// <summary>Holds the nitro command down, the way <see cref="AutoLand"/> holds the auto-land
+    /// button: a suite's twin for the N key, so a rig built the way a session builds one can reach
+    /// the engage edge through the production step instead of calling the animation runtime itself.
+    /// A held command is what the original's own arm reads, so holding it is not a shortcut past
+    /// the state machine.</summary>
+    public bool AutoNitro;
+
     /// <summary>Whether <see cref="LandingApproachRuntime"/>'s auto row currently passes for this
     /// aircraft, fed once a frame by the session that owns the trigger. Drives the HUD prompt.</summary>
     public bool AutoLandOffered;
@@ -2008,7 +2015,7 @@ public partial class FlightController : Node3D
 
     // N / gamepad X — the nitro command (the original's MSG_CMD_NITROUS "Use Nitro-Booster").
     // A level read: the command arm engages on pressed-or-held and ignores it otherwise.
-    private bool NitroPressed() => KeyDown(Key.N) || PadPressed(JoyButton.X);
+    private bool NitroPressed() => AutoNitro || KeyDown(Key.N) || PadPressed(JoyButton.X);
 
     // The nitro lifecycle for this step, in the original's order: the command arm (human key,
     // or the AI's nitro-flagged maneuver), then the tank, then the edges the flag produced.
@@ -2016,6 +2023,9 @@ public partial class FlightController : Node3D
     private void AdvanceNitro(float dt)
     {
         bool engineOut = _model.EngineDead;
+        // The step opens by clearing last step's edges, so the arms below can raise this step's
+        // and the reads at the bottom still see them.
+        Nitro.BeginStep();
         if (IsHumanPiloted)
             Nitro.HumanCommand(NitroPressed(), engineOut, dt);
         else if (Pilot?.Machine?.Executor is { Maneuver.Nitro: true })

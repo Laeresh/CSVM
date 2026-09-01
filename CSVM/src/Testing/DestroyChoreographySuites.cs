@@ -881,6 +881,123 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // The same engage on the rig a SESSION builds, which is a different rig: the production factory
+    // stages the effect templates and the wreck under a crash root, pre-warms every puffer before
+    // anything plays, and the edge arrives through the flight step rather than a direct Play. A
+    // replica rig cannot see a defect that only the staged neighbours or the pre-warm can cause,
+    // which is why this arm exists beside the one above.
+    [Suite("nitro-boost-flown-rig",
+        "a nitro engage on the rig WorldEffectsFactory builds for a session, reached through FlightController's own step with the command held: the boost engages, nitro_boost anchors on the flown airframe rather than a staged neighbour, and its nitropuffN exhaust puffers are emitting on the aircraft's own exhaust nodes")]
+    internal static void NitroBoostFlownRig(TestContext ctx)
+    {
+        const string model = "player_warhawk";
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            FlightController? player = null;
+            try
+            {
+                var factory = new Session.WorldEffectsFactory(
+                    SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
+                var spawn = new Vector3(0f, 500f, 0f);
+                var stats = PlaneStats.Load(ctx.ZrdrPath, model);
+                var builder = new PlaneBuilder(planesGamez, textures);
+                var planeModel = builder.Build(model);
+                player = new FlightController
+                {
+                    PlaneModel = planeModel,
+                    Collider = PlaneCollider.Build(planeModel),
+                    PlayerIndex = 0,
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                    Damage = PlaneDamage.For(stats),
+                };
+                player.AddChild(planeModel);
+                player.Setup(new FlightModel(stats), null, new CamParams(), spawn, spawn + Vector3.Forward);
+                ctx.Host.AddChild(player);
+                factory.BuildFlightCrashRuntime(player, builder, model, world.Gamez,
+                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                    planesGamez: planesGamez);
+                if (player.CrashRuntime is not { } rig)
+                {
+                    ctx.Check(false, $"{model}: the session rig built a crash runtime");
+                    return;
+                }
+                rig.ManualAdvance = true;
+
+                // The injector is the hangar pick's bit; without it the command arm refuses and the
+                // engage edge this suite is about never exists.
+                const float Dt = 1f / 60f;
+                player.Nitro.Installed = true;
+                player.AutoNitro = true;
+                int engagedAt = -1, firstEmit = -1, lastEmit = -1;
+                string midCensus = "none";
+                bool onOwnExhaust = false;
+                const int Frames = 180;
+                for (int i = 0; i < Frames; i++)
+                {
+                    player.SimStep(Dt);
+                    if (player.Nitro.EngagedThisTick && engagedAt < 0)
+                        engagedAt = i;
+                    rig.Advance(Dt);
+                    var rows = rig.Emitters.Census
+                        .Where(r => r.Name.StartsWith("nitropuff", System.StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                    if (rows.Any(r => r.Emitting))
+                    {
+                        if (firstEmit < 0)
+                            firstEmit = i;
+                        lastEmit = i;
+                    }
+                    if (i == 30)
+                    {
+                        midCensus = rows.Count == 0 ? "none" : string.Join(", ",
+                            rows.Select(r => $"{r.Name}@{r.Host} emitting={r.Emitting} live={r.LiveParticles}"));
+                        onOwnExhaust = rows.Any(r => r.Emitting && r.HostNode != null
+                                                     && planeModel.IsAncestorOf(r.HostNode));
+                    }
+                }
+                ctx.Note($"engaged at frame {engagedAt}, exhaust puffers emitting frames {firstEmit}..{lastEmit} of {Frames}; at frame 30 [{midCensus}]");
+
+                ctx.Check(player.Nitro.Boosting && player.Nitro.BoostAnimAlive,
+                    $"{model}: the held command engaged the boost through the flight step boosting={player.Nitro.Boosting} animAlive={player.Nitro.BoostAnimAlive}");
+                // The edge, not the flag: the boost animation, the shake and the loop sound all hang
+                // off this one read, and a step that clears it before the read cancels all three
+                // while the boost itself still accelerates the aircraft.
+                ctx.Check(engagedAt == 0,
+                    $"{model}: the engage EDGE reached the step's own reader on the engaging frame engagedAt={engagedAt}");
+
+                // Where the def landed. Its authored NAME resolves nothing on an airframe, so the
+                // anchor must be the plane model the call site passes; a staged template root
+                // answering that name instead would put the whole sequence on a neighbour.
+                var anchors = rig.AnchorsOf(world.Session.Program.ByAnimName("nitro_boost")[0]);
+                string anchorNames = anchors.Count == 0 ? "-"
+                    : string.Join(",", anchors.Select(a => a == null ? "null" : AnimRuntime.NameOf(a)));
+                ctx.Check(anchors.Count == 0,
+                    $"{model}: nitro_boost's NAME resolves nothing in the session rig, so the call site's plane model is its anchor [{anchorNames}]");
+
+                ctx.Check(firstEmit == 0,
+                    $"{model}: the exhaust puffers start emitting on the engage frame firstEmit={firstEmit}");
+                ctx.Check(onOwnExhaust,
+                    $"{model}: …on the aircraft's own exhaust nodes, not a staged neighbour's [{midCensus}]");
+                // The burst is one second long because the def says so: each PUFFER_STATE 1 is paired
+                // with its own INACTIVE at ANIMATION_OFFSET 1, alongside the 1.0 s opacity ramps. A
+                // burst that outlives that is a stop this runtime dropped, not a longer boost.
+                ctx.Check(lastEmit is >= 55 and <= 65,
+                    $"{model}: …and stop at the def's own ANIMATION_OFFSET 1 stop, one second in lastEmit={lastEmit}");
+            }
+            finally
+            {
+                player?.Free();
+                textures.Dispose();
+            }
+        });
+    }
+
     // The pre-warm's contract on a replica rig: after Bind and PrewarmEmitters nothing emits, a
     // crash and a panel tear reach the factory for no emitter, the claims count as built, and
     // respawn keeps the emitters so the next crash builds nothing either.

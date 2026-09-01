@@ -3324,18 +3324,28 @@ maneuver. Both refuse an engine-out aircraft and a re-engage while the boost or 
 is alive; the boost animation lives at least 1 s after an engage. `Installed` is the injector
 (the hangar's nitrous engine ids 3-5, or the roster block's `nitro` slot); `EngagedThisTick` and
 `ReleasedThisTick` are the edges `FlightController.AdvanceNitro` turns into the shake kick, the
-`nitro_boost`/`nitro_decay` defs and the `snd_nitro` loop. `AdvanceNitro` plays them with
+`nitro_boost`/`nitro_decay` defs and the `snd_nitro` loop.
+⚠ **The edges are cleared by `BeginStep` at the top of the step and nowhere later.** The original
+carries no edges at all: the play, the player shake and the force-feedback effect run inside
+`SetNitro` itself, so these two flags stand in for that single call and have to survive from the
+arm that raises one to the reader at the end of the same step. The tank update (`Advance`) runs
+after the command arm, as the original's per-vehicle update runs after its input handler, and
+clearing them there deleted every engage: the boost still accelerated the aircraft, while its
+animation, its shake and its loop sound were all cancelled before anything read them. The release
+edge survived that, being raised by the tank update's own cutoff, which is why the decay half
+looked healthy. `AdvanceNitro` plays the defs with
 `AnimRuntime.Play(name, PlaneModel, applyReset: false)`, the same fallback-anchor shape
 `startprops`/`stopprops` already use: the defs' own anchor NAME (`warhawk`, `plane_props.zrd`)
 never resolves inside a per-plane crash rig's index, so `PlayWithin` (no fallback) silently played
-neither. That fix's visible effect is only the `nitropuffN` exhaust puffers at `exhaust1..4`,
-which every flyable `player_*` model carries; the disc swap (`nitropropN`) stays inert on any
-flyable aircraft, since no `player_*` model's own built subtree carries that geometry, though
-`extracted/planes/nodes.json` declares 34 `nitropropN` nodes under both a bare-named root and a
-`player_*` root per aircraft. Whether the original ever showed the swap on a flyable aircraft, or
-only ran it against the bare root, is open (`BL-546`). Regression: `nitro-boost-anchors`
-(exhaust half only). Every constant is censused by `FlightConstantInventoryTests`;
-`NitroSystemTests` pins the lifecycle and the force couplings.
+neither. What an engage shows is the `nitropuffN` exhaust puffers at `exhaust1..4` and the
+`prop1..3` fade, both authored to last one second; the disc swap (`nitropropN`) shows on no flyable
+aircraft, and the decode says it never did, because the original resolves a `LOCAL_NODES_ONLY`
+definition's names strictly inside the calling vehicle's own node subtree with no global tier
+(`org/flightModel.md`, "Nitro"), and the discs ship only on the separate bare-named library root.
+Regressions: `nitro-boost-anchors` (the call shape on a replica rig) and `nitro-boost-flown-rig`
+(the engage edge and the emitting puffers on the rig `WorldEffectsFactory` builds for a session,
+reached through `FlightController`'s own step). Every constant is censused by
+`FlightConstantInventoryTests`; `NitroSystemTests` pins the lifecycle and the force couplings.
 
 ## src/Flight/PathFollower.cs
 The engine's SECOND movement law, and the exclusive alternative to `FlightModel`: the dispatcher

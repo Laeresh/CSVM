@@ -117,6 +117,7 @@
     "ai-damage-stages": 1.087,
     "crash-rig-anchors": 0.659,
     "nitro-boost-anchors": 0.4,
+    "nitro-boost-flown-rig": 0.7,
     "emitter-prewarm": 0.638,
     "ai-crash-defs": 0.990,
     "ai-crash-rig-deferral": 1.400,

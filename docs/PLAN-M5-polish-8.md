@@ -79,7 +79,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Cockpit and flight feel
 
 21. ☑ `BL-663` The cockpit panel's compass drum turns with heading
-22. ☐ `BL-546` Nitro engage: reconcile the green suite with the smoke-free sortie, then settle the prop swap by decode
+22. ☑ `BL-546` Nitro engage: reconcile the green suite with the smoke-free sortie, then settle the prop swap by decode
 23. ☑ `BL-426` A failed stunt run records nothing and announces no best
 
 ### Wave D — Closing sortie
@@ -743,7 +743,7 @@ suite or test count changed, so `SuiteCatalogTests` needs no edit. Owed to D31: 
 watching the drum against the heading tape, which is the check that would catch a wrong world axis
 for north (the "Known uncertainty" entry) rather than a wrong sign on this rotation.
 
-## C22 ☐ `BL-546` Nitro: the smoke contradiction, then the prop swap by decode
+## C22 ☑ `BL-546` Nitro: the smoke contradiction, then the prop swap by decode
 
 **Goal.** A nitro engage shows the exhaust smoke the data authors in a real flown session, and
 the prop-swap half is settled either as a fix or as a decode-confirmed disproof.
@@ -756,10 +756,14 @@ has no fallback for a NAME that fails to resolve; `AdvanceNitro` now uses the
 `Play(name, PlaneModel, applyReset: false)` fallback the working `startprops`/`stopprops` call
 site uses, and the `nitro-boost-anchors` suite (builds the real `player_warhawk` rig, plays
 `nitro_boost` through the production call shape, asserts the puffer sustains) is green.
-⚠ A sortie on the merged build contradicts that half: an engage flown at the controls shows no
-exhaust smoke at all, so the suite is green while the effect it guards is invisible in a real
-session. The suite builds its own `player_warhawk` rig, so the difference between that rig and a
-flown aircraft's is the first place to look.
+⚠ A sortie on the merged build contradicted that half: an engage flown at the controls showed no
+exhaust smoke at all, so the suite was green while the effect it guards was invisible in a real
+session. The difference was not the rig at all but the call the rig never received:
+`NitroSystem.Advance` cleared `EngagedThisTick`/`ReleasedThisTick` at its top, and
+`FlightController.AdvanceNitro` runs the command arm, then `Advance`, then reads the edges, so the
+engage edge was always wiped before its only reader saw it. The suite reached the runtime directly
+and never crossed that seam. The release edge survived, being raised by `Advance`'s own cutoff,
+which is why only the engage half was invisible.
 
 The prop swap (`OBJECT_ACTIVE_STATE`/`OBJECT_OPACITY_FROM_TO nitropropN`, `spin_nitrorotorN`,
 `snd_nitrostart AT_NODE nitroprop1`) is still not visible, and the open question is why:
@@ -795,6 +799,58 @@ on the engage: `BL-447`'s ledger edge there is the AI's `medium_aishake`, so whe
 own engage is meant to shake at all is an open question recorded in this item, not that one.
 Cross-refs: `BL-447` (also the AI's `snd_nitro` blip, and the decay lockout `_nitroDecayLeftS`
 stands in for), `docs/org/flightModel.md` "Nitro", the `nitro-boost-anchors` suite.
+
+**Verified.** <pending orchestrator run> Both halves are settled, one as a fix and one as a
+decode-confirmed disproof.
+
+*The smoke half landed, and the cause was not the rig.* A suite built the way a session builds a
+rig (`WorldEffectsFactory.BuildFlightCrashRuntime`, the real templates, the wreck and the emitter
+pre-warm) and driven through `FlightController`'s own step reproduced the sortie exactly: the boost
+engaged and accelerated, and no puffer ever emitted. The instrumented run said why in one line, the
+engage edge never reaching its reader. `NitroSystem.Advance` cleared both tick edges at its top,
+and `AdvanceNitro` runs the command arm, then `Advance`, then reads the edges, so
+`EngagedThisTick` was false at every read the shipped build ever took. That cancelled all three
+things hanging off it at once: the `nitro_boost` play, the player's shake kick and the `snd_nitro`
+loop. The release edge was unaffected, since `Advance`'s own cutoff raises it after the clear,
+which is why the decay half always looked healthy and why the earlier call-shape fix appeared to
+work. The clear now lives in `NitroSystem.BeginStep`, called at the top of `AdvanceNitro` and
+nowhere later, and `Advance` leaves the edges alone. Two `NitroSystemTests` cases had pinned the
+broken contract in so many words ("the edge clears with the tank update of the same tick"), and are
+replaced by one that pins the contract the consumer needs. On the flown rig the engage now reaches
+the play on its own frame and all four `nitropuffN` emitters run on the aircraft's own
+`exhaust1..4` with live particles, for the one second the definition authors (each
+`PUFFER_STATE … ACTIVE` is paired with its own `INACTIVE` at `ANIMATION_OFFSET 1`, beside the 1.0 s
+opacity ramps and the original's 1.0 s minimum animation life at `def+0x188`).
+
+*The prop-swap half is a disproof, decoded.* `FUN_004b2110`'s play at `0x4b21a0` is
+`FUN_004edda0(def [+0x280], [obj+0xc], 0, 0, 0)`, the vehicle's own scene node and nothing wider.
+The anchor NAME is resolved once at load (`FUN_004efaf0` at `0x51e15a`, stored at `def+0x6c`, and
+on a miss the loader warns and falls back to the definition's own root at `0x51e1af`); a clone
+either adopts the caller's node when the template's anchor is its own root (`FUN_00520910` at
+`0x520a2e`) or searches THAT node's subtree for the NAME (`FUN_004efa70` at `0x520a5a`), with a
+miss killing the instance. Per-event target names run `FUN_004efaf0`'s cascade: the anchor subtree,
+the bound node's subtree, two instance-local tables, and a global by-name lookup
+(`FUN_004d0280(7, name)`) that is reached ONLY when the caller passes zero for local-nodes-only.
+That argument is the `LOCAL_NODES_ONLY` bit `0x200000` in the definition's flag word `+0x9c` (set
+at `0x51f0ec`, shifted down by 21 and pushed at `0x51e14b`–`0x51e157`), and `nitro_boost` /
+`nitro_decay` are authored `LOCAL_NODES_ONLY`. So reading A holds: resolution is per vehicle, the
+global tier is closed for these two defs by the data itself, and the `nitropropN` discs on the bare
+library root were unreachable from a flyable airframe in the original too. No code was written for
+this half; the rule and its addresses are recorded in `docs/org/flightModel.md` "Nitro".
+
+*The sortie's "no shake on engage" is answered rather than left open.* The decode already had the
+player arm (`0x4b21b7`–`0x4b21ce`: for `DAT_0071c298` only, shake block 6 with the nitro magnitude,
+and the AI's `medium_aishake` self-gates to non-players inside `FUN_00473430`), so the player's own
+engage does shake in the original. The reason none was felt is the same deleted edge, since
+`Shake?.NitroEngaged()` sits in the same block as the play. Whether the kick reads right at the
+controls is a judgement, and belongs to D31.
+
+Ran: `dotnet build CSVM/CSVM.sln` clean; `dotnet test CSVM.Tests/CSVM.Tests.csproj` 2791 passed;
+`.\RunTests.ps1 -Suite "nitro-boost-flown-rig,nitro-boost-anchors,crash-rig-anchors,emitter-prewarm,
+generator-roster-params,ai-actor,air-to-air,player-destroy-choreography" -SkipUnits -SkipGoldens`
+all 8 PASS, engine errors clean. Goldens were not run: no resolution tier was added, and the change
+sits behind an engage edge no golden shot holds. The full `RunTests.ps1` landing gate is owed to
+the orchestrator.
 
 ## C23 ☑ `BL-426` A failed stunt run records nothing
 
