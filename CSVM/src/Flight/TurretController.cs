@@ -26,7 +26,7 @@ public enum TurretGate
 /// <summary>One <c>ai.zrd</c> turret gunner (docs/formats/turrets.md): the same tracking loop for
 /// a carried turret riding an aircraft (<see cref="BuildCarried"/>) and a world emplacement placed
 /// at the entry's <c>NODES</c> patterns (<see cref="BuildEmplacements"/>). Per sim tick it acquires
-/// the nearest hostile aircraft inside <c>DETECTION_RANGE</c>, solves a constant-velocity intercept
+/// the nearest hostile vehicle inside <c>DETECTION_RANGE</c>, solves a constant-velocity intercept
 /// (<see cref="AimAssist.TryIntercept"/>), clamps the solution to the authored arcs, slews the
 /// barrel, writes the pose onto the <c>PARTS</c> nodes, and fires through the shared
 /// <see cref="ProjectilePool"/> — hit resolution is geometric, with <c>INACCURACY</c> as a scatter
@@ -50,7 +50,7 @@ public sealed class TurretController
     private readonly IWorldQuery? _worldQuery; // the carried case's line-of-sight seam; null on an emplacement
     private readonly ProjectilePool _pool;
     private readonly RandomNumberGenerator _rng;
-    private readonly AimCandidateSet _scan = new(); // reused per tick, aircraft list only
+    private readonly AimCandidateSet _scan = new(); // reused per tick; the whole VehicleList
     private readonly Transform3D _yawRest;
     private readonly Transform3D _pitchRest;
     private readonly Node3D? _healthyNode; // emplacement kill switch; null on a carried turret
@@ -618,15 +618,18 @@ public sealed class TurretController
         return (parentBasis * restBasis).Orthonormalized();
     }
 
-    // The nearest live hostile aircraft inside DETECTION_RANGE — the shared target-picker's
-    // minimise-a-score structure with distance as the score. The own plane (carried) and
-    // teammates are gated out by the same team rule the aim assist runs.
+    // The nearest live hostile entry of the engine's VehicleList inside DETECTION_RANGE, the
+    // shared target-picker's minimise-a-score structure with distance as the score. The own plane
+    // (carried) and teammates are gated out by the same team rule the aim assist runs.
+    // ⚠ Not the aircraft half of that list: the decoded picker walks the whole pool, which holds
+    // AI ground and sea vehicles too. A hull is a candidate as the vessel it is, and must never
+    // reach one by being registered as aircraft (docs/org/targeting.md).
     private bool AcquireTarget(out Vector3 pos, out Vector3 vel)
     {
         pos = default;
         vel = default;
         _scan.Clear();
-        _pool.CollectAircraft(_scan);
+        _pool.CollectVehicleList(_scan);
         var here = WorldPosition;
         float best = float.MaxValue;
         foreach (var c in _scan.Vehicles)

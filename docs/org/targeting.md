@@ -227,8 +227,43 @@ calls the picker at `0x004aaf9b`, and stores the result to `turret+0x210` at `0x
 Predicate call sites inside the picker are `0x0041fb9e` (devirtualised straight to `FUN_004a5b90`),
 `0x0041fc68` and `0x004228a0`.
 
-So a turret compares its own raw `+0x8` against an aircraft's raw `+0x8`, with no remap on either
+So a turret compares its own raw `+0x8` against a candidate's raw `+0x8`, with no remap on either
 side, through the same predicate the player HUD's scan uses.
+
+### What a turret's candidate set holds
+
+`FUN_0041f9c0`'s four passes, in the order it takes them, all against one running best cost so a
+later pool wins only by scoring lower (ties to the later pool):
+
+| Pass | Pool | Admitted |
+|---|---|---|
+| 1 | `VehicleList` (`DAT_0071dabc`) | **every entry, unconditionally.** The list holds aircraft AND AI ground/sea vehicles (see [`aim-assist.md`](aim-assist.md) "The four lists"), so a boat or a ship is a turret candidate exactly as an aeroplane is. The cost carries a per-entry bias from `entity+0x340` |
+| 2 | Turrets (`DAT_0071d914`) | every entry, unconditionally |
+| 3 | `MStructList` (`DAT_0071d33c`…`0x0071d340`) | only when the picker's 4th argument is set, and then only entries whose `+0x8d` is non-zero and whose `+0x65` gasbag flag is clear (the 3rd argument would admit gasbags; the turret passes `0`) |
+| 4 | Live fused ordnance (`DAT_0064f78c`) | entries whose `+0x6c` tracking byte is set. A winner here returns immediately |
+
+Every candidate passes `FUN_00422890` first: the hostility virtual `+0x34` against the query's
+team, and then, when the query's `+0x14` byte is set, a rejection of any candidate whose Y sits
+below the shooter's. That byte comes from the turret's own `+0x1e8`, so a gun can be authored to
+refuse anything beneath it.
+
+**The picker's 4th argument, the one that switches the structure pool on, is
+`DAT_00629c20 != 0 || turretTeam != playerTeam`** (`0x004aaf71`). `DAT_00629c20` is set to `1` at
+every mission load (`0x00475784`) and cleared again only when the loaded mission is **C2/M05**
+(`0x004757be`, after string compares against `"c2"` at `0x00627c20` and `"m05"` at `0x00627c24`).
+So mission structures are in every turret's set in every other mission, and in C2/M05 only for
+turrets that are not on the player's team.
+
+`+0x8d` is written `1` at `0x004a2ec9`, in `FUN_004a2e00`'s first pass over the flagged
+target-node list `DAT_0071d35c`…`0x0071d360`. `FUN_004a2be0` fills that list, after parsing
+`targets.zrd` into the record list, with every scene node carrying bit 31 of `node+0x28`. An
+object that a `targets.zrd` record creates without such a node never gets `+0x8d` and is therefore
+not a turret candidate, though it stays selectable on the player's Non-Aircraft cycle.
+
+⚠ **Ships and vessels are in the turret's set, and they are there as vehicles.** They ride
+`VehicleList`, the pool the picker walks first and never gates. Nothing in the path promotes a
+hull to an aircraft or reads an airframe field off one, so a port that reaches the same behaviour
+by registering a ship as an aircraft has ported the wrong mechanism.
 
 A turret's `SetTeam` override (`FUN_004acb70`) clears its current target pointer `+0x210` whenever
 the team actually changes (`0x004acb90`), so a retargeted turret drops a now-friendly lock rather
@@ -617,6 +652,8 @@ element draws the triangle, and how it is rotated, is unresolved.
 | Classes | Enemy / Ally / Non-Aircraft, plus an Objective companion flag | none; a single team gate |
 | Team space | one space for everything: `0` neutral, `1` ally, enemy index `N` = `N + 2`, stored at `+0x8` on every combat object | the same space; an authored id is the runtime id |
 | Hostility test | one predicate over raw ids: differ, and neither is `0` | `AimAssist.Hostile`, asked by both the gun assist and the turret gunner rather than restated at each gate |
+| A turret's candidate set | all four pools (the table above): the whole `VehicleList`, every turret, the `+0x8d` mission structures, and tracked ordnance | `TurretController.AcquireTarget` walks the whole `VehicleList` through `ProjectilePool.CollectVehicleList`, so a hostile hull is a candidate beside the aircraft. The other three pools are not scanned yet |
+| A turret against a structure | admitted through `MStructList`, and hostile when the structure's team differs | unreachable: every channel that could offer one (`AimCandidateSet.AddStructures`, `ObjectiveSites.Collect`) hands out `AimAssist.NeutralTeam`, which the shared predicate refuses on both sides. A teamed mission-structure candidate has no source, which is why a gun near CM10's hospital ship or CM12's Spruce Goose still finds nothing to shoot at |
 | Splitscreen pilots | no per-pilot ladder exists | a remake-only rule: pilot 0 is the player's side, further pilots land in `AimAssist.VersusTeamBand` so a `--vs` player cannot inherit the id the no-`TEAM` emplacements default to |
 | World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | the same: `AimCandidateSet.AddStructures` falls a pool with no authored team through to `AimAssist.NeutralTeam`. Only a zeppelin record authors one, and the two-bit ownership field has no authored writer at all (both `crimson.exe` writers are runtime `OR`s at `0x0048490c` and `0x004807ef`) |
 | Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | not selectable |

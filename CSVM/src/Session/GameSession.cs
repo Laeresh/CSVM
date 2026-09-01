@@ -2024,6 +2024,10 @@ public partial class GameSession : Node3D
         // generator spawn sites: those cache-check the same field, so this only moves WHEN the
         // runtime is first built, not whether it is built twice.
         var surfaceVehicleRuntime = EnsureSurfaceVehicles(state);
+        // The pool holds the session's live rosters (aircraft, world emplacements), and the hulls
+        // are the rest of the engine's VehicleList. A turret gunner sees this pool and nothing
+        // else, so without it a gun's candidate list is the aircraft half of the pool alone.
+        projectiles.SurfaceVehicles = surfaceVehicleRuntime;
         var worldBindings = new FlightWorldBindings
         {
             Ambience = _ambience,

@@ -71,7 +71,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Combat and AI
 
 11. ☑ `BL-557` Roster `init_health`/`armor` overrides reach the named aces' spawns
-12. ☐ `BL-626` Turrets acquire the candidate classes the original's turret picker holds
+12. ☑ `BL-626` Turrets acquire the candidate classes the original's turret picker holds
 13. ☐ `BL-440` A downed zeppelin plays its authored breakup (`NodeUndercover` made real)
 14. ☐ `BL-641` Introducing one AI aircraft mid-flight stays under the hitch threshold
 
@@ -312,7 +312,7 @@ positive `init_health`, 20 of those also author a non-negative `armor` between 9
 `armor 0`; 18 enabled non-player blocks carry no slot 66 at all), matching the Evidence above with
 no drift.
 
-## B12 ☐ `BL-626` Turrets acquire the original's candidate classes
+## B12 ☑ `BL-626` Turrets acquire the original's candidate classes
 
 **Goal.** Boat, balloon and emplacement guns fire at the targets the original fires at, ships
 included: CM10's patrol boats and lifeboat guns engage the hospital ship, CM12's patrol boats
@@ -324,19 +324,31 @@ lifeboats a downed attack balloon drops reach the water, drive their nets and sh
 while the Red Cross hospital ship sits in front of them; in CM12 (C2/M01) the `eshipg31`
 generator's patrol boats never attack the Spruce Goose they are launched against.
 `TurretController.AcquireTarget` takes the nearest live hostile **aircraft** inside
-`DETECTION_RANGE` (`Flight/TurretController.cs:624`), and the scan set it fills is an aircraft
-list (`:53`), so a vessel is not a candidate at any range and no later gate in the tick can
+`DETECTION_RANGE` (`Flight/TurretController.cs:628`), and the scan set it fills was an aircraft
+list (`:53`), so a vessel was not a candidate at any range and no later gate in the tick could
 rescue it. The mission data expects otherwise: CM10 authors twelve `patrolboat_1..12` blocks in
 `aiv.zrd` at `y = 0` and nine `bbtur` balloon turrets, and each `lifesaverNM` carries its own
 gun. The original's behaviour is on film in `OriginalScreenshots/CM10.mkv`, where patrol boats
 attack the hospital ship shortly after the start.
+⚠ Corrected by the decode: the two named victims are not vehicles. CM10's Red Cross ship is a
+world node (`shipshape`, animated by `redcross_ship.zrd`) with no `aiv.zrd` block and no
+`targets.zrd` entry, and CM12's Spruce Goose is the `sprucegoose` world node carried by
+`goosepath.zrd` and named by `targets.zrd`. Both are mission structures in the original's third
+pool, not `VehicleList` entries, so widening the vehicle scan does not by itself reach either.
 
 **Approach.** Settle from the decode which candidate classes the original's turret picker holds
 (`docs/org/targeting.md` is the starting point; the aim assist already keeps a vehicle list
 beside its aircraft list, `docs/org/aim-assist.md` "The four lists", so the classes exist to draw
 on), then widen the acquisition to match. Scope this slot to turret acquisition only.
-`<TODO: the decompiled function carrying the original's turret candidate scan is not yet named;
-finding it is the decode step>`
+The turret candidate scan is **`FUN_0041f9c0`**, the shared range-gated picker, reached from the
+turret gun update `FUN_004aabb0` at `0x004aaf9b` over a query `FUN_00422850` builds at
+`0x004aaf5c`. It walks four pools against one running best cost: `VehicleList` (`DAT_0071dabc`,
+every entry, unconditionally, and the list holds AI ground and sea vehicles beside the aircraft),
+the turret list (`DAT_0071d914`, every entry), `MStructList` (`DAT_0071d33c`, gated on the
+picker's 4th argument and then on each entry's `+0x8d` with gasbags excluded), and live fused
+ordnance (`DAT_0064f78c`). The full reading, including the C2/M05 special case behind that 4th
+argument and where `+0x8d` is written, is `docs/org/targeting.md` "What a turret's candidate set
+holds".
 
 **Model recommendation.** High: the decode step decides the fix, and a wrong class list changes
 combat balance across missions.
@@ -350,6 +362,24 @@ settled and its candidates already carrying each hull's velocity; nothing here s
 it. A patrol boat's own gunnery runs through the AI mode machine (`BL-523`), so a turret-side fix
 by itself does not make a boat shoot; that boundary is deliberate. Cross-refs: `BL-523`,
 `docs/org/targeting.md`.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` (0 warnings, 0 errors),
+`dotnet test CSVM.Tests/CSVM.Tests.csproj` (2785 passed, after adding the new suite's measured
+weight to `analysis/engine-suite-weights.json`, which `SuiteShardsTests` requires), and
+`.\RunTests.ps1 -Suite <name> -SkipUnits -SkipGoldens` over the new `turret-vessel-targets` plus
+`carried-turrets`, `world-turrets`, `mission-off-turrets`, `turret-self-fire`,
+`campaign-surface-vehicles`, `targeting-candidates` and `ranked-pool-carried-turret-dedup`: 8 of 8
+pass, engine errors clean. The new suite builds C1B/M03's four woken patrol boats with the
+mission's nine aircraft blocks left unbuilt, so the pool's `VehicleList` is the four hulls alone,
+and a hand-placed emplacement on the player's team 84 m away locks the nearest hull to within a
+millimetre; the same gun moved onto the hulls' team acquires nothing.
+⚠ Landed as a partial. The scan now holds the whole `VehicleList`, which is the pool the decode
+shows ships and boats ride. The two symptoms in the Evidence are not cleared: both name mission
+structures, and no CSVM channel can offer one as hostile, since
+`AimCandidateSet.AddStructures` and `ObjectiveSites.Collect` both stamp `AimAssist.NeutralTeam`
+and the shared predicate refuses a neutral on either side. A teamed mission-structure candidate
+source is the missing piece, and it is not turret-side. The picker's turret and ordnance pools are
+decoded and still unscanned.
 
 ## B13 ☐ `BL-440` The zeppelin breakup plays
 
@@ -616,8 +646,9 @@ finding becomes a fix, a follow-up `BL`, or a recorded verdict.
 by item: A1 CM09 flown to the docking if the headless run could not prove it; A2 any campaign
 docking, opening shot alone, one hook swing from a parked start; A3 CM10's docking, the walkway
 crossing the frame under intact bars; B11 optionally the feel of a named-ace fight at a known
-`--difficulty=`; B12 CM10 (dropped lifeboat, hospital ship in frame) and CM12 (the Goose passing
-the boats) against `OriginalScreenshots/CM10.mkv`; B13 an Instant Action `zeppelin_run`, torpedo
+`--difficulty=`; B12 a gun with a hostile hull in range, since the hospital ship and the Goose are
+mission structures no CSVM channel can offer as hostile and the flight would only re-observe that;
+B13 an Instant Action `zeppelin_run`, torpedo
 the hull, watch the pitch-over, six gasbag drops with splashes, and the gondola; B14 CM18 flown
 without a felt hitch on the generator launches; C21 a circle flown in cockpit view, drum against
 tape; C22 an engage showing exhaust smoke, and the prop-swap verdict as decoded; C23 a deliberate

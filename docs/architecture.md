@@ -1726,8 +1726,14 @@ One `ai.zrd` turret gunner, both families: carried (`BuildCarried`, per host fro
 the vehicle def's `thirdp` `TurretMount`s × `TurretDefs` × the built plane model, ticked from
 `FlightController.SimStep`) and world emplacement (`BuildEmplacements`, per matched `NODES`
 pattern node via `AnimRuntime.FindNodes` with multi-segment paths scoped to the prior match,
-ticked by `Session/TurretEmplacementRuntime`). Per tick: nearest hostile aircraft inside
-`DETECTION_RANGE` (team gate through `AimAssist.Hostile`; carried = host's
+ticked by `Session/TurretEmplacementRuntime`). Per tick: the nearest hostile entry of the whole
+`VehicleList` inside `DETECTION_RANGE`, read through `ProjectilePool.CollectVehicleList`, so an
+AI ground or sea vehicle is a candidate beside an aircraft the way the decoded picker holds both
+(docs/org/targeting.md "What a turret's candidate set holds"; `turret-vessel-targets` suite). A
+ship reaches it as the vessel it is, never registered as aircraft. The picker's other three pools
+(turrets, `+0x8d` mission structures, tracked ordnance) are decoded but unscanned, and a structure
+could not be admitted anyway while every CSVM structure candidate is
+`AimAssist.NeutralTeam`. Team gate through `AimAssist.Hostile`; carried = host's
 `FlightController.Team`, emplacement = the authored/default `TurretDef.TeamId` with no conversion,
 since one integer space covers aircraft and emplacements alike, until `SetTeam` fans a zeppelin
 record's own team over the guns standing on that hull),
@@ -1747,8 +1753,9 @@ hands the constructor (a `GodotWorldQuery` over the host); `_host` itself stays 
 gives (`WorldVelocity`, `InPlay`, `PlayerIndex`). An emplacement has no host and no `IWorldQuery`
 either, so it keeps its own `WorldRayBlocked` twin, deliberately left alone: a gunner mounted on
 world geometry needs its own section excluded from the ray, which a carried gunner never does.
-Format and decode: [formats/turrets.md](formats/turrets.md). Proven by the `carried-turrets` and
-`world-turrets` suites, `TurretDefsTests` and `TurretLineOfSightTests`.
+Format and decode: [formats/turrets.md](formats/turrets.md). Proven by the `carried-turrets`,
+`world-turrets` and `turret-vessel-targets` suites, `TurretDefsTests` and
+`TurretLineOfSightTests`.
 
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math (an `internal` class — nothing else may call it):
@@ -2068,7 +2075,11 @@ candidate lists off this pool's own state: the live rounds the engine wraps (a F
 with a fuse longer than `AimAssist.MinFuseDistance` **or** `TARGETABLE`, `FUN_00441830`'s two
 independent reasons), the registered aircraft, and each
 registered aircraft's carried turret gunners — the same roster the hit ray and the fuse
-already use, so the assist cannot drift onto a second list. `PlayShotSound` is the turret gunners'
+already use, so the assist cannot drift onto a second list. `CollectVehicleList` is the whole of
+the first of those lists, aircraft plus the `SurfaceVehicles` runtime's hulls, for a scan that
+wants the engine's `VehicleList` rather than its aircraft half; `GameSession` wires the runtime in
+beside the world emplacements, and a build with no hulls leaves it null.
+`PlayShotSound` is the turret gunners'
 launch bark through the pool's own one-shot pool. `DefaultVelocity` (500 m/s, the
 launch speed for a def with no `VELOCITY`) is shared with the scan so the lead is solved for the
 speed the round actually leaves at.
