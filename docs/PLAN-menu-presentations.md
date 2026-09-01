@@ -272,7 +272,10 @@ rather than read as empty. `docs/formats/menu-layout.md` carries the same statem
 **⚠ Traps.** Do not decode executable behaviour at runtime. `packaging/Extract.ps1` stays a dispatcher;
 all extraction logic remains in `ExtractRof.ps1` or code it directly owns.
 
-**Verified.** <pending orchestrator run>
+**Verified.** No `CSVM/` source changed, so the landing gate is the unit stage: the merged plan tree
+passed `.\RunTests.ps1 -SkipEngine -SkipGoldens` (2854 units, the 22 decoder tests among them, one
+of which is the census over the player's real tree). The orchestrator confirmed the three census
+corrections against `LAYOUT.CSV` and `RESOURCE.H` directly before merging.
 
 ## A3 ☑ Add the global options store and requested/active presentation resolution
 
