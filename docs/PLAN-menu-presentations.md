@@ -226,7 +226,9 @@ reader is found, so the unused `W` sound-object row type and the dead `IDS_GN_1P
 are recorded as such), and **SHOT-32** (a shot of an animated screen proves the frame it drew,
 which is why `CAP-49`'s flag movie and `CAP-52`'s audio are filmed rather than screenshot).
 
-**Verified.** <pending orchestrator run>
+**Verified.** Docs-only item; the census cross-checks above are its verification. The merged Wave A
+tree passed the complete `.\RunTests.ps1` (2816 units, 200 engine suites, 18 goldens
+hash-identical, 131.6s).
 
 **⚠ Traps.** A filename or rectangle proves composition, not interaction. Existing campaign
 fidelity does not prove non-campaign coverage.
@@ -253,7 +255,7 @@ schema when old trees become invalid, and document the decoded source and output
 **⚠ Traps.** Do not decode executable behaviour at runtime. `packaging/Extract.ps1` stays a dispatcher;
 all extraction logic remains in `ExtractRof.ps1` or code it directly owns.
 
-## A3 ☐ Add the global options store and requested/active presentation resolution
+## A3 ☑ Add the global options store and requested/active presentation resolution
 
 **Goal.** Persist process-wide Options, resolve requested versus active presentation with the fixed
 precedence, and recover safely from missing or malformed state.
@@ -283,12 +285,13 @@ and `dotnet build CSVM/CSVM.sln`, both green.
 **⚠ Traps.** Options are global and never live in a campaign profile. A temporary extraction problem
 must not rewrite the saved request.
 
-**Verified.** <pending orchestrator run>
-Ran `dotnet build CSVM/CSVM.sln` and
-`dotnet test CSVM.Tests/CSVM.Tests.csproj --filter "FullyQualifiedName~OptionsStoreTests|FullyQualifiedName~PresentationResolutionTests|FullyQualifiedName~SessionSpecParserTests"`,
-both green; the full `.\RunTests.ps1` landing gate is the orchestrator's to run.
+**Verified.** `dotnet build CSVM/CSVM.sln` and the focused
+`OptionsStoreTests`/`PresentationResolutionTests`/`SessionSpecParserTests` filter ran green during
+the item; the orchestrator re-measured the 150/150 flag census independently and ran the complete
+`.\RunTests.ps1` on the merged Wave A tree: 2816 units, 200 engine suites, 18 goldens
+hash-identical, all passing in 131.6s.
 
-## A4 ☐ Define the presentation, feature, input, audio, launch and return contracts
+## A4 ☑ Define the presentation, feature, input, audio, launch and return contracts
 
 **Goal.** Establish small typed boundaries that allow different screen graphs without allowing
 presentations to own game configuration or session construction.
@@ -315,12 +318,12 @@ every `CSVM.UI.Menu` type's base/interfaces/signatures/locals plus method-body I
 on any reference to `Godot.*` or to `CSVM.UI.*` outside `CSVM.UI.Menu`; scanner self-tests prove it
 sees signature-level and body-only references and that an empty subject fails rather than passing.
 
-**Verified.** <pending orchestrator run> Contracts, fixtures and tests landed engine-free:
-`dotnet build CSVM/CSVM.sln` (0 warnings, 0 errors) and
-`dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build` (2798 passed, 0 failed, 0 skipped), including
-the 13 new `MenuSeamContractTests` + `MenuNamespaceDependencyTests`, which drive one
-`FakeSortieFeature` to the same `LaunchExit` through a three-screen cursor wizard and a one-screen
-pointer page, and reject presentation/engine references from `CSVM.UI.Menu`.
+**Verified.** Contracts, fixtures and tests landed engine-free: the 13 new
+`MenuSeamContractTests` + `MenuNamespaceDependencyTests` drive one `FakeSortieFeature` to the same
+`LaunchExit` through a three-screen cursor wizard and a one-screen pointer page, and reject
+presentation/engine references from `CSVM.UI.Menu`. The orchestrator ran the complete
+`.\RunTests.ps1` on the merged Wave A tree: 2816 units, 200 engine suites, 18 goldens
+hash-identical, all passing in 131.6s.
 
 **⚠ Traps.** Do not create a universal row/button/picture schema. “Presentation” includes navigation,
 interaction, animation and cue selection; drawing alone is not the boundary.
