@@ -70,7 +70,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Combat and AI
 
-11. ☐ `BL-557` Roster `init_health`/`armor` overrides reach the named aces' spawns
+11. ☑ `BL-557` Roster `init_health`/`armor` overrides reach the named aces' spawns
 12. ☐ `BL-626` Turrets acquire the candidate classes the original's turret picker holds
 13. ☐ `BL-440` A downed zeppelin plays its authored breakup (`NodeUndercover` made real)
 14. ☐ `BL-641` Introducing one AI aircraft mid-flight stays under the hitch threshold
@@ -218,7 +218,7 @@ occludes it before any depth behaviour changes.
 
 # Wave B — Combat and AI
 
-## B11 ☐ `BL-557` Roster durability overrides applied
+## B11 ☑ `BL-557` Roster durability overrides applied
 
 **Goal.** The mission roster's `init_health` and `armor` overrides reach the named aces' spawns,
 so `hafury_1`-`_6`, `hkfirebrand_9`, the Black Hat Brigands and the rest fight at their authored
@@ -259,6 +259,23 @@ hard. Cross-refs: `Flight/Difficulty` (the scale this lands in front of), `BL-56
 research; needs this settled first, and any TTK reading taken at a known `--difficulty=`);
 `analysis/aim-assist-ttk/FINDINGS.md`'s census of this field is superseded by the script beside
 it, so quote the script.
+
+**Verified.** <pending orchestrator run> Reading confirmed against `docs/org/vehicleDamage.md`
+("Where the numbers come from at spawn", step 2): both slots are absolute whole-vehicle pool
+values, not fractions or divisors. `init_health` (block`+0x28`) writes the health-pool max
+outright when greater than zero; `armor` (block`+0x2c`) writes the armour-pool max outright when
+zero or greater. Neither scales an existing pool or divides incoming damage; both stand in for
+`PlaneStats.VehicleHealth`/`VehicleArmor` exactly where the airframe def's own `health`/`armor`
+keys would otherwise land, ahead of the difficulty scale and the per-spawn jitter that then
+multiply whatever they leave behind. Implemented as `PlaneStats.WithRosterDurability`, chained
+before `WithEnemyDurability` in `AiFlightAssembler.Assemble`. Ran: `dotnet build CSVM/CSVM.sln`
+(clean); `dotnet test CSVM.Tests/CSVM.Tests.csproj` (2791 passed, 0 failed, including the 6 new
+`RosterDurabilityOverrideTests`); `dotnet format CSVM/CSVM.sln --verify-no-changes` (clean);
+`.\CheckCommentCaps.ps1` (all blocks within cap); `analysis/aim-assist-ttk/Census-RosterDurability.ps1`
+re-run against `Z:\CSVM\extracted` (414 blocks/53 files; 25 enabled non-player blocks author a
+positive `init_health`, 20 of those also author a non-negative `armor` between 90 and 132; 0 author
+`armor 0`; 18 enabled non-player blocks carry no slot 66 at all), matching the Evidence above with
+no drift.
 
 ## B12 ☐ `BL-626` Turrets acquire the original's candidate classes
 

@@ -65,9 +65,11 @@ internal sealed class AiFlightAssembler
     {
         var baseStats = _aircraft.AiStatsFor(spawn.PlaneName, spawn.AiDef);
         PreparePilot(spawn, baseStats);
-        // The engine's spawn order: the difficulty scale lands on the authored pools and the
-        // per-spawn jitter on the scaled ones, never the reverse (docs/org/vehicleDamage.md).
+        // The engine's spawn order: the roster's own override lands first, then the difficulty
+        // scale, then the per-spawn jitter on the scaled pools, never any step out of that order
+        // (docs/org/vehicleDamage.md).
         var stats = baseStats
+            .WithRosterDurability(spawn.InitHealth, spawn.Armor)
             .WithEnemyDurability(Difficulty.FactorForSpawn(spawn.Team, spawn.Difficulty, _policy.Difficulty))
             .WithAiSpawnJitter(Rng.NewSystemRandom(Rng.Spawn, index, 0));
         // The name the targeting readout prints, resolved here because this is where the string

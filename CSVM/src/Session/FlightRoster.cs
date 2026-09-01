@@ -20,15 +20,15 @@ public readonly record struct FlightRosterBuild(int MeshInstances, string Summar
 /// <c>NodeName</c> is the identity the spawned node takes, and a caller that has an authored one
 /// must pass it: <c>primary_target</c> and <c>rating_biases</c> are written against the roster
 /// block's own name, so a spawn left on the fallback <c>ai{n}_{plane}</c> can match neither
-/// (BL-401).
-/// <c>PilotName</c> is the block's slot-20 key, the readout's name (docs/org/targeting.md).</summary>
+/// (BL-401). <c>PilotName</c> is the block's slot-20 key, the readout's name (docs/org/targeting.md).
+/// <c>InitHealth</c>/<c>Armor</c> override the hull pools pre-difficulty-scale (docs/org/vehicleDamage.md).</summary>
 public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector3 LookAt, AiPilot Pilot,
     PaintScheme? Scheme = null, int? Team = null, bool Inert = false, bool ShippedSkins = false,
     string? AiDef = null, LoadoutChoice? Fit = null, int? AttackRating = null, bool Nitro = false,
     AiSkillVector? RosterSkills = null, string? NodeName = null, string? PilotName = null,
     // Overrides the session difficulty for this one spawn, which is all an Instant Action wave's
     // skill is (Flight.Difficulty); null takes the session's.
-    int? Difficulty = null);
+    int? Difficulty = null, float? InitHealth = null, float? Armor = null);
 
 /// <summary>The session's aircraft set: builds the human field in deterministic player order and
 /// introduces AI aircraft later for missions, waves, and generators. The roster is the assembly

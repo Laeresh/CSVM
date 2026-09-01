@@ -849,10 +849,12 @@ The AI pilot-skill constants (docs/formats/ai-rosters.md): player.json's
 slot 6; `RosterRatingBiases`: slot 33 as `AiRatingBias` — wildcard `Matches`, shipped pairs,
 a third element accepted and preserved raw, never acted on; the spawn-facing `Roster*` readers for
 slots 0–5, 20, 21, 31, 32, 40 and 65, every one defensive over a short block; `RosterAce`: slot 67,
-the debrief's kill-crediting flag) and the thin
-per-mission roster loader (`LoadRoster`), plus the positional-header join that exposes disabled
+the debrief's kill-crediting flag; `RosterInitHealth`: slot 7, null unless authored > 0;
+`RosterArmor`: slot 66, null unless authored >= 0 or the block is too short to carry it) and the
+thin per-mission roster loader (`LoadRoster`), plus the positional-header join that exposes disabled
 generator parameter blocks (`LoadGeneratorRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
-slot 6/33 census goldens in `AiTargetRankingTests`; the spawn slots in `CampaignRosterPlanTests`.
+slot 6/33 census goldens in `AiTargetRankingTests`; the spawn slots in `CampaignRosterPlanTests`;
+the two durability gates and the absent-slot case in `RosterDurabilityOverrideTests`.
 
 ## src/Mech3/AiVolumes.cs
 `AiVolume` (radius, upper, lower) and `AiVolumeSet` (activation, attack, return): the one shape
@@ -2788,7 +2790,10 @@ Two flavours of one airframe: `Load` resolves everything down the player chain, 
   `AiFlightAssembler` resolves it into `AiTitle` for the targeting readout.
   `VehicleMode` carries the def chain's own `mode` key, and `WithAiSpawnJitter` is gated on it: the
   original jitters the `jet` and `heli` classes only, so the `mode wingman` family flies its authored
-  dynamics (`docs/org/flightModel.md`, "The per-spawn jitter").
+  dynamics (`docs/org/flightModel.md`, "The per-spawn jitter"). `WithRosterDurability` applies the
+  roster block's own `init_health`/`armor` override (aiv slots 7/66) to `VehicleHealth`/
+  `VehicleArmor` before `WithEnemyDurability`; both arguments arrive already gated, so null always
+  means unset, never an authored zero (`docs/org/vehicleDamage.md`).
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a
@@ -5937,9 +5942,11 @@ the launch is counted. C1/M04's `eairg32` (`Eairg32_params` against a label tabl
 `Earig32_params`) is the shipped case; the data stays as shipped. `ApplyPlan` is the after-the-spawn half of a
 plan (volumes under the floor, signature maneuvers, the gunner's rating biases and its assignment),
 shared by the campaign placement and the generator launch so the two cannot drift; ⚠ it leaves an
-escorting block's `primary_target` alone, because there it names a leader and not a target.
-Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`; the placement half
-is the `campaign-roster` suite, the generator half the `generator-roster-params` suite.
+escorting block's `primary_target` alone, because there it names a leader and not a target. A
+plan's `InitHealth`/`Armor` (`AiSkills.RosterInitHealth`/`RosterArmor`, aiv slots 7/66) travel
+through `SpawnFor` onto the `AiSpawn` record; `AiFlightAssembler.Assemble` is what applies them.
+Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs` and `RosterDurabilityOverrideTests.cs`; the
+placement half is the `campaign-roster` suite, the generator half the `generator-roster-params` suite.
 
 ## src/Session/ScriptedPathVehicles.cs
 One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored
@@ -6359,7 +6366,10 @@ required dependencies explicit at the production seam.
 ## src/Session/AiFlightAssembler.cs
 The roster's private AI assembly path. It prepares authored/fallback pilot skills and maneuvers,
 builds the model, controller, livery, loadout/ordnance, damage visuals and optional crash runtime,
-then places the finished node. It also resolves the def's authored `title` into
+then places the finished node. `Assemble` chains `PlaneStats.WithRosterDurability(spawn.InitHealth,
+spawn.Armor)` ahead of `WithEnemyDurability`/`WithAiSpawnJitter`, the engine's own order
+(docs/org/vehicleDamage.md), so a named ace's authored hull is what the scale and the jitter land
+on. It also resolves the def's authored `title` into
 `PlaneStats.AiTitle` (the militia name the targeting readout prints), because this is where the
 loaded def and the session's string table meet. `FlightController.Scheme`/`ShippedSkins`/`Painter`
 record this build's paint resolution and its own painter, read back by an airframe swap carrying a
