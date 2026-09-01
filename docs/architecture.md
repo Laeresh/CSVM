@@ -974,7 +974,11 @@ uniform is session-global (a lit light is lit for every pane), but `Commit`'s 90
 its `MaxActive`-slot significance rank both answer to the NEAREST of every viewer position handed
 in, not one camera — a light beside player 4 stays lit even with player 1 far away (`BL-366`;
 `AnimRuntime.LightViewerPositions`, fed from `GameSession`'s `ViewerSet`). One position (single
-player) uses the single-viewer distance rule exactly.
+player) uses the single-viewer distance rule exactly. Given a parent `Node3D` (`WorldSession`
+passes its world root) and enhanced mode, the same `Commit` also mirrors `_pending[0..n)` onto a
+pooled `OmniLight3D` per committed light (position, `OmniRange` from range max, colour and energy
+from the already-faded linear colour), so the lit world and the aircraft receive the light for
+real; original mode passes no parent and spawns nothing.
 
 ## src/Pads.cs
 Single source of truth for gamepads — every reader goes through it, never `Input.GetConnectedJoypads()`.

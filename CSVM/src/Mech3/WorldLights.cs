@@ -1,15 +1,18 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
 
 /// <summary>
 /// Packs the animated world's <c>LIGHT_STATE</c> point lights into a data texture the fullbright
-/// world shader reads as spill onto nearby geometry — the flare itself is separate gamez geometry
-/// <see cref="SceneBuilder"/> already draws.
-/// ⚠ Not real <see cref="OmniLight3D"/> nodes: the world renders unshaded, so a dynamic light
-/// contributes nothing to it (docs/formats/gotchas.md's fullbright entry).
+/// world shader reads as spill onto nearby geometry (the flare itself is separate gamez geometry
+/// <see cref="SceneBuilder"/> already draws). In original mode that spill is the only consumer:
+/// the world renders unshaded, so a real <see cref="OmniLight3D"/> would contribute nothing to it
+/// (docs/formats/gotchas.md's fullbright entry). Given a parent in enhanced mode, this also
+/// mirrors the same committed set onto a pool of real omnis, so the lit world and the aircraft
+/// pick up the light for real.
 /// </summary>
 public sealed class WorldLights : IDisposable
 {
@@ -34,12 +37,38 @@ public sealed class WorldLights : IDisposable
     // 4 floats per texel, 2 texels per light.
     private const int FloatsPerLight = 8;
 
+    // TUNE: multiplies the committed colour's peak channel into OmniLight3D.LightEnergy. The
+    // shader spill has no calibrated energy scale to copy (it is an ad-hoc ALBEDO add, not a
+    // physical unit), so this is anchored at the controls against a beacon lighting the fuselage
+    // without blowing it out.
+    private const float OmniEnergyScale = 4.0f;
+
+    // TUNE: Godot's default omni falloff exponent, kept explicit rather than left implicit so a
+    // future retune has one named place to change; judged against the decoded range-based fade
+    // reading comparably soft at the controls.
+    private const float OmniAttenuationTune = 1.0f;
+
     private readonly List<Entry> _pending = new();
     private readonly byte[] _buffer = new byte[MaxActive * FloatsPerLight * sizeof(float)];
     private readonly List<Vector3> _committedPositions = new();
+    private readonly List<OmniLight3D> _omniPool = new();
+
+    // Non-null only in enhanced mode with a parent given; null keeps original mode's spill path
+    // the only consumer and creates not one node, per the mode's zero-footprint contract.
+    private readonly Node3D? _omniParent;
+
     private ImageTexture? _texture;
     private int _lastCount = -1;
     private int _loggedSubmitted = -1;
+
+    /// <summary>Enhanced mode only: mirrors the same committed set onto real
+    /// <see cref="OmniLight3D"/> nodes under <paramref name="parent"/>, so the lit world and the
+    /// aircraft are lit for real. Original mode ignores <paramref name="parent"/> and spawns
+    /// nothing, leaving the data-texture spill path exactly as it was.</summary>
+    public WorldLights(Node3D? parent = null)
+    {
+        _omniParent = GraphicsMode.Enhanced ? parent : null;
+    }
 
     /// <summary>Highest simultaneous count seen — reported so the MaxActive bound can be
     /// checked against real data rather than assumed.</summary>
@@ -113,6 +142,9 @@ public sealed class WorldLights : IDisposable
         for (int i = 0; i < n; i++)
             _committedPositions.Add(_pending[i].Pos);
 
+        if (_omniParent != null)
+            UpdateOmnis(n);
+
         if (n == 0)
         {
             // Nothing lit: leave the texture alone and zero the count, which short-circuits the
@@ -151,18 +183,24 @@ public sealed class WorldLights : IDisposable
 
     /// <summary>--debug-anim: report the submitted/live counts when they change. This is how a
     /// headless run shows whether the <see cref="MaxActive"/> bound is actually binding (i.e.
-    /// whether any light near the camera is being dropped) rather than assuming it isn't.</summary>
+    /// whether any light near the camera is being dropped) rather than assuming it isn't. In
+    /// enhanced mode the same count is also the number of live <see cref="OmniLight3D"/> nodes,
+    /// since <see cref="UpdateOmnis"/> drives one per committed light off this exact <c>n</c>.
+    /// </summary>
     public void LogOnce()
     {
         if (_lastCount == _loggedSubmitted)
             return;
         _loggedSubmitted = _lastCount;
         GD.Print($"anim/debug: world lights {_lastCount} rendered of {LiveCount} live"
-                 + (_pending.Count > MaxActive ? $" (budget {MaxActive}; the rest are past the distance fade)" : ""));
+                 + (_pending.Count > MaxActive ? $" (budget {MaxActive}; the rest are past the distance fade)" : "")
+                 + (_omniParent != null ? $" (enhanced: {_lastCount} omni)" : ""));
     }
 
     /// <summary>Drops the world's lights — called when a session is torn down, so the next
-    /// world does not inherit the previous one's spill for a frame.</summary>
+    /// world does not inherit the previous one's spill for a frame. Also frees every spawned
+    /// omni: the harness shares one host across suites, so a leaked named node would break the
+    /// next suite's spawn.</summary>
     public void Dispose()
     {
         _pending.Clear();
@@ -170,18 +208,56 @@ public sealed class WorldLights : IDisposable
         RenderingServer.GlobalShaderParameterSet(CountParam, 0);
         _lastCount = 0;
         _texture = null;
+        foreach (var omni in _omniPool)
+            omni.Free();
+        _omniPool.Clear();
     }
 
-    // Angular size of the light's pool, scaled by its (already fade-applied) intensity — the
+    // Enhanced mode: mirrors _pending[0..n) onto a pool of real OmniLight3D nodes, growing the
+    // pool lazily up to MaxActive and hiding the rest rather than freeing/respawning every frame.
+    // Position, range and colour all come from the same Entry the texture packs, including the
+    // distance fade already folded into Color by Faded(), so an omni dims and vanishes exactly
+    // when its texel does rather than popping.
+    private void UpdateOmnis(int n)
+    {
+        while (_omniPool.Count < n)
+        {
+            var omni = new OmniLight3D { ShadowEnabled = false, OmniAttenuation = OmniAttenuationTune };
+            _omniParent!.AddChild(omni);
+            _omniPool.Add(omni);
+        }
+        for (int i = 0; i < _omniPool.Count; i++)
+        {
+            var omni = _omniPool[i];
+            if (i >= n)
+            {
+                omni.Visible = false;
+                continue;
+            }
+            var e = _pending[i];
+            float peak = Mathf.Max(e.Color.R, Mathf.Max(e.Color.G, e.Color.B));
+            omni.GlobalPosition = e.Pos;
+            omni.OmniRange = e.Max;
+            omni.LightColor = peak > 0f ? new Color(e.Color.R / peak, e.Color.G / peak, e.Color.B / peak) : Colors.White;
+            omni.LightEnergy = OmniEnergyScale * peak;
+            omni.Visible = true;
+        }
+    }
+
+    // Kept beside Commit and UpdateOmnis, the two instance methods that call them, rather than
+    // hoisted above every instance member for SA1204's sake (same local-suppression precedent as
+    // CameraController.FirstPersonPose).
+#pragma warning disable SA1204
+    // Angular size of the light's pool, scaled by its (already fade-applied) intensity, the
     // cheapest honest proxy for "how much of this frame does it change". Distance is to the
     // nearest viewer, matching Commit's own fade rule.
     private static float Significance(Entry e, IReadOnlyList<Vector3> viewerPositions) =>
         e.Max / Mathf.Max(NearestDistance(e.Pos, viewerPositions), 1f)
         * Mathf.Max(e.Color.R, Mathf.Max(e.Color.G, e.Color.B));
 
-    // The closest of every live viewer — never the average or the first — so the fade and the
-    // budget both answer to whichever pane is actually near, the same per-pane rule B11 applies
-    // to the puffer fade. Empty (no viewers) reads as "infinitely far", fading everything out.
+    // The closest of every live viewer, never the average or the first, so the fade and the
+    // budget both answer to whichever pane is actually near, the same per-pane rule the puffer
+    // fade also applies. Empty (no viewers) reads as "infinitely far", fading everything out.
     private static float NearestDistance(Vector3 pos, IReadOnlyList<Vector3> viewerPositions)
     {
         float best = float.MaxValue;
@@ -193,6 +269,7 @@ public sealed class WorldLights : IDisposable
         }
         return best;
     }
+#pragma warning restore SA1204
 
     private void Write(int offset, float value) =>
         BitConverter.TryWriteBytes(_buffer.AsSpan(offset, sizeof(float)), value);

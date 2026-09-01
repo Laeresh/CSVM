@@ -227,8 +227,10 @@ public sealed class WorldSession
             s.MissionCutsceneAnims = MissionCutscenes.AnimNames(o.MissionZrdrPath);
             s.LandingCutsceneAnims = CutsceneAnimsOf(animProgram, s.Landings, s.MissionCutsceneAnims);
         }
-        // Puffer factory retirement: see Options.TexturesOutliveBuild.
-        var lights = new WorldLights();
+        // Puffer factory retirement: see Options.TexturesOutliveBuild. root is the caller's
+        // eventual scene-tree parent for the whole world subtree, so any enhanced-mode omnis
+        // WorldLights spawns under it inherit the same lifetime as everything else here.
+        var lights = new WorldLights(root);
         s.Lights = lights;
         // Sealed template stage: the ambient world pools/stages nothing hidden — its templates ARE
         // the world's own nodes. See Options.PlacesCalledTemplates for the one exception.

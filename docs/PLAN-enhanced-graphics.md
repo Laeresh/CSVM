@@ -93,7 +93,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Lit world shader variant (drop `unshaded`, matte material, keep the gamma modulate)
 12. ☑ Authored SUNLIGHT drives the sun and ambient in enhanced mode
 13. ☐ Sun shadow maps
-14. ☐ LIGHT_STATE point lights as real OmniLight3D nodes
+14. ☑ LIGHT_STATE point lights as real OmniLight3D nodes
 15. ☐ Enhanced settings reach the cockpit interior pass and every splitscreen pane
 
 ### Wave C — Post stack
@@ -441,7 +441,7 @@ decals before blaming Godot's own bias knobs. BL-331 (the decoded 32x32 projecte
 remains the original-mode item and must not be closed or cannibalised by this one. `<TODO:
 re-verify BL-331 still open.>`
 
-## B14 ☐ LIGHT_STATE point lights as real OmniLight3D nodes
+## B14 ☑ LIGHT_STATE point lights as real OmniLight3D nodes
 
 **Goal.** In enhanced mode the world's animated point lights are real OmniLight3D nodes, so
 beacons and city lights illuminate the aircraft and the shadowed world, replacing the
@@ -450,14 +450,26 @@ fullbright-only shader spill.
 **Evidence (confidence: direction-sound).** LIGHT_STATE lights currently render as a 2xN data
 texture consumed by an additive spill on fullbright passes only
 (`shaders/csky_lights.gdshaderinc`; `CSVM/src/Mech3/WorldLights.cs:60-65`), measured at 0.26 ms
-whole-viewport with 16 lights. Forward+ clusters dozens of omnis trivially. `<TODO: confirm what
-the data texture carries per light (position, colour, range?) and where WorldLights gets its
-animated on/off state, so the omnis inherit the same animation.>`
+whole-viewport with 16 lights. Forward+ clusters dozens of omnis trivially. The data texture packs
+two texels per light: position (xyz) and range max (w) in the first, linear colour (rgb, already
+distance-faded) and range min (a) in the second (`WorldLights.Commit`'s pack loop). The animated
+on/off state, position and colour all come from `LightChannel.Tick` (`CSVM/src/Mech3/Anim/
+LightChannel.cs`), which applies `LIGHT_STATE`/`LIGHT_ANIMATION` events onto a per-name `AnimLight`
+record and, once a frame, calls `Begin`/`Add`/`Commit` on the same `WorldLights` instance the
+texture reads from; an inactive or zero-range light is simply not submitted that frame.
+`WorldLights.Commit` itself owns the 900-1500 m nearest-viewer fade and the `MaxActive` (16)
+significance-rank budget, both already keyed to the same submitted set. Because the enhanced arm
+of B11's lit-world shader is not the `fullbright` path, it never calls `csky_light_spill` at all,
+so double-counting was already structurally impossible before this item; no shader edit was
+needed.
 
-**Approach.** Enhanced mode: WorldLights spawns an OmniLight3D per light (range and colour from
-the decoded fields, energy TUNE), keeps driving on/off through the same state updates, and the
-enhanced shader variant omits the spill term to avoid double-counting. Original mode keeps the
-spill untouched.
+**Approach.** Enhanced mode: `WorldLights` takes an optional `Node3D` parent (`WorldSession` passes
+the world root it already builds), and gates spawning on `GraphicsMode.Enhanced` internally, so
+original mode passes the same constructor and creates nothing. The same `Commit` that packs the
+texture also mirrors `_pending[0..n)` onto a pool of `OmniLight3D` nodes bounded at `MaxActive`,
+reusing hidden nodes rather than freeing and respawning every frame, driven off the identical
+distance-faded `Entry` the texture reads (so an omni dims and vanishes exactly when its texel
+does, never popping). `Dispose` frees every pooled omni.
 
 **Model recommendation.** medium — bounded feature with a working data source.
 
@@ -466,7 +478,46 @@ the aircraft picks up light passing a beacon. Light count in the scene equals LI
 
 **⚠ Traps.** Do not delete the spill path: original mode is its only consumer but it is the
 decoded behaviour. Omni shadows stay off (16 shadowed omnis is a frame-time cliff and the original
-has no equivalent).
+has no equivalent). Only C1 has `OnStartup` `LIGHT_STATE` definitions (docs/formats/
+anim-definitions.md's "Point lights"); every other chapter's lights sit behind `ON_CALL`
+combat/destruction effects a freecam bootstrap never reaches, so a night-city chapter like C5
+commits zero lights at boot and is the wrong place to look for the omni footprint.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
+`dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build`: 2796 passed, 0 failed (WorldLights reaches
+live `Node`s, so it has no headless unit coverage, per the repo's own rule for `src/Testing/`).
+`$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -Suite world-lights-nearest-viewer -SkipUnits
+-SkipGoldens`: engine PASS, 1 suite run, engine errors clean, in both an unmodified launch
+(original mode) and a `--graphics=enhanced` `RunProbe.ps1` launch of the same suite (enhanced
+mode); the suite was extended with a same-instance assertion that a parented `WorldLights` spawns
+one `OmniLight3D` per committed light in enhanced mode and zero in original mode, and that
+`Dispose` frees them, and it passed in both launches. `.\RunTests.ps1 -SkipUnits -SkipEngine`
+(goldens only): PASS, 18 shot(s) hash-identical, zero movers.
+
+An 8-chapter `--freecam --det --mute --frames=15` sweep, run in both modes, reported exit 0 and
+identical gamez-node/mesh-instance counts for every chapter with no error or exception lines
+beyond a pre-existing texture-fallback warning.
+
+Light count: a C1/IA1 freecam and flight launch under `--debug-anim` prints `anim/debug: world
+lights 15 rendered of 53 live` in original mode and `anim/debug: world lights 15 rendered of 53
+live (enhanced: 15 omni)` in enhanced mode, the same 15 in both, confirming the committed count and
+the spawned omni count match. C5's equivalent `--debug-anim` capture prints `world lights 0
+rendered of 0 live` in both modes, consistent with the chapter carrying no `OnStartup` lights (see
+the trap above); the c5-city-night golden's hash is unaffected either way.
+
+Captures under `.scratch/b14/`, composed into side-by-side montages with a local copy of B11's
+`montage.ps1`: `montage_freecam_c1.png` (C1/IA1 default freecam spawn, original vs enhanced, whole
+world materially different under B11's lit shading, both reporting the same 15/15 lights);
+`montage_dock.png` (a freecam close to `docklight1`/`docklight2` at `(-6324,10,-3299)`, spill
+footprint beside the real-omni result); `montage_beacon.png` (the aircraft passing directly under
+`docklight1`, cropped to the cockpit/spine region under the light: mean luma over that region rises
+from 57.1 in original mode to 65.9 in enhanced, the fuselage visibly warmer and brighter in the
+crop). All capture PNGs and the montage script are untracked `.scratch/` output, not committed.
+
+Perf: `RunProbe.ps1 --freecam --chapter=C1 --no-det --mute --no-vsync --perf` for 60 s each side,
+steady-state (post warm-up) `[perf] window` lines: original `gpu_ms` 0.22-0.27, `render_cpu_ms`
+0.63-0.90; enhanced `gpu_ms` 0.28-0.32, `render_cpu_ms` 0.90-1.06 (15 real omnis over Forward+ cost
+roughly 0.05 ms GPU time), in line with the item's evidence that the mechanism is cheap either way.
 
 ## B15 ☐ Enhanced settings reach the cockpit pass and every splitscreen pane
 
