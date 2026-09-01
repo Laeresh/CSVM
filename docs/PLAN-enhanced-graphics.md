@@ -267,7 +267,8 @@ keys on the model-level `lighting` bit alone (`docs/org/vertexLighting.md`'s fir
 the per-texture alpha exemption BL-613 is about, and BL-322's C5 facade brightness, exactly as they
 are in the faithful path.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged B11 + B12 tree: 2796 units, 200 engine
+suites (errors clean), 18 goldens hash-identical, all passing in 150.0 s.
 
 `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
 `$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -Suite plane-shader-reuse -SkipUnits -SkipGoldens`:
@@ -363,7 +364,8 @@ enhanced arm answers only for itself. Splitscreen wears rig 0's zone for the one
 Environment ambient source moves from `Sky` to `Color` in enhanced mode, because a sky-sourced
 ambient reads the placeholder procedural sky and would ignore both authored values.
 
-**Verified.** <pending orchestrator run> During the item, in the item's worktree with
+**Verified.** The complete `.\RunTests.ps1` on the merged B11 + B12 tree: 2796 units, 200 engine
+suites (errors clean), 18 goldens hash-identical, all passing in 150.0 s. During the item, in the item's worktree with
 `$env:CSVM_DATA_ROOT="Z:\CSVM"`: `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
 `dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter
 "FullyQualifiedName~SunlightEnergyTests"`: 4 passed, 0 failed.
