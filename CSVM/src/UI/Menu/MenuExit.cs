@@ -17,8 +17,9 @@ public sealed record MenuSeatChoice(
 /// <summary>
 /// The one typed way any presentation leaves the menu, handed to <see cref="IMenuHost.Exit"/> and
 /// consumed by <c>Launcher</c>. A presentation names what it wants (<see cref="LaunchExit"/>,
-/// <see cref="CampaignMissionExit"/>, <see cref="QuitExit"/>) and never constructs a session,
-/// hides itself or reads the launch machinery. The hierarchy is closed: only these three exist.
+/// <see cref="CampaignMissionExit"/>, <see cref="QuitExit"/>, <see cref="PresentationSwitchExit"/>)
+/// and never constructs a session, hides itself or reads the launch machinery. The hierarchy is
+/// closed: only these four exist.
 /// </summary>
 public abstract record MenuExit
 {
@@ -29,6 +30,11 @@ public abstract record MenuExit
 
 /// <summary>The player backed out of the top level: the host quits the process.</summary>
 public sealed record QuitExit : MenuExit;
+
+/// <summary>The player applied a presentation choice in Options: the consumer persists the
+/// request, ends the active presentation, re-selects, and shows the selected presentation at its
+/// top level. Unfinished setup is discarded on the way; the choice is the only thing carried.</summary>
+public sealed record PresentationSwitchExit(PresentationId Requested) : MenuExit;
 
 /// <summary>A non-campaign launch: the chapter, one <see cref="MenuSeatChoice"/> per joined seat
 /// in seat order, the picked <see cref="MenuMode"/>, and, for Instant Action only, the wizard's

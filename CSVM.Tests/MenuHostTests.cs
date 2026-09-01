@@ -38,6 +38,26 @@ public class MenuHostTests
         Assert.Equal(wizard, host.Requested);
     }
 
+    /// <summary>Availability beyond registration: a registered presentation whose assets are
+    /// missing falls back with the availability reason appended, and the request is kept.</summary>
+    [Fact]
+    public void ARegisteredButUnavailableRequestFallsBackWithTheAvailabilityReasonAndKeepsTheRequest()
+    {
+        var host = Host(out _, out _);
+        host.Availability = id => id.Value == "fake-wizard" ? "its layout is missing" : null;
+
+        string? reason = host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: "fake-wizard");
+
+        Assert.Equal(PresentationId.BuiltIn, host.Selected);
+        Assert.Equal(new PresentationId("fake-wizard"), host.Requested);
+        Assert.NotNull(reason);
+        Assert.Contains("its layout is missing", reason);
+
+        host.Availability = _ => null;
+        Assert.Null(host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: "fake-wizard"));
+        Assert.Equal(new PresentationId("fake-wizard"), host.Selected);
+    }
+
     /// <summary>A blank token cannot be a <see cref="PresentationId"/>, so it must read as an
     /// unavailable request rather than throw at a persisted or typed value.</summary>
     [Fact]

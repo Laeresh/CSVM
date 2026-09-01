@@ -438,7 +438,9 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 
 | Original screen | Built-in counterpart | Layout | Script decoded | Capture | Interaction evidence |
 |---|---|---|---|---|---|
-| MainMenu | Mode | 9 rows | this page | **none** | composition only; script text gives the six buttons and their targets, nothing about rollover, music or the flag movie |
+| MainMenu | Mode | 9 rows | this page | **none** | composition only; script text gives the six buttons and their targets, nothing about rollover, music or the flag movie. **Built as Original's top level** from the two panes and the six `B` rows with their four-frame strips; rows with no remake destination yet draw the disabled frame, Quit and Preferences (the Options door) react, and the movie's place is black |
+| (none: remake-only) | Free Flight, Chapter, Plane | none | none | none | **Original's Free Flight door and screen, of our design under Decision 11.** The door is a text button in the `FC_B_CHANGEPLANE` paper-plaque convention beside the button frame, level with Campaign; the screen is the logo over two text lists (the shared chapter roster and the eleven stock airframes) with BACK and FLY plaques. Nothing on it is decoded |
+| (none: remake-only) | Options | none | none | none | **Original's minimal Options screen**, opened by the Preferences row until the decoded Preferences screens exist: the presentation toggle, APPLY, BACK, in the same plaque convention |
 | Preferences | (none; Options is E41's addition) | 14 rows | no | **none** | layout only |
 | GameOptions | (none) | 13 rows | no | **none** | layout only; `BL-570` wants the difficulty row |
 | Audio | (none) | 19 rows | no | **none** | layout only; three preview loops are script-bound; `BL-455` |
@@ -560,10 +562,29 @@ Each of these is a divergence a reader could mistake for a decode, so each is na
   Custom Plane. Free Flight is entirely ours; Dogfight is splitscreen where the original's
   equivalent is network multiplayer; the hangar's top-level door is ours, since the original reaches
   plane construction from the Instant Action screen's BUILD button and from the cabin.
-- **B13's tracer, "Original Free Flight", has no original screen behind it.** There is no
-  free-flight script, no free-flight art, and no free-flight entry in the Instant Action mission-type
-  dropdown. The B13 journey either becomes a remake-only rule under Decision 11 or the tracer moves
-  to a journey the original authors.
+- **Original Free Flight has no original screen behind it.** There is no free-flight script, no
+  free-flight art, and no free-flight entry in the Instant Action mission-type dropdown. The
+  remake-only rule under Decision 11 stands: Original's top level carries a Free Flight door and a
+  Free Flight screen of our design, composed in the decoded chrome's conventions (the paper-plaque
+  text button, the four state colours, the logo) and marked remake-only in the screen census above.
+
+### What the Original presentation implements from the data, and what the captures must confirm
+
+The main menu's interaction is built from what the layout itself evidences: a `B` row's four
+stacked frames imply a rollover state under the pointer and a depressed state while pressed, so
+the plaque under the pointer draws frame 2 and draws frame 3 while the button is held; the two
+pointer bitmaps the globals script names are drawn as the pointer, the active one over a live
+button and the passive one elsewhere; the two wavs the control library binds play on a rollover
+and on a press. Everything else is remake-only until filmed. `CAP-49` must confirm, for the top
+level: whether the movie (absent from the extraction) loops behind the buttons and what replaces
+it, whether the rollover frame appears on entering the plaque or on a delay, whether a press fires
+on the button-down or on the release, whether a disabled button ever draws, where `mm_t_title`
+sits, and whether any keyboard or pad focus exists at all (Original's keyboard and pad focus is a
+remake equivalence, not a decode). `CAP-52` must confirm, for the pointer and audio: which sound
+plays on a rollover and which on a press, whether a disabled button makes either, whether list rows
+make a rollover sound (Original plays none on a list row), which pointer bitmap shows over a
+button, over a list and over nothing, and where each bitmap's hotspot is (Original draws the
+bitmap's top-left at the pointer).
 - **Built-in's Chapter screen is ours.** The original picks a map through Instant Action's
   environment dropdown; there is no standalone chapter list.
 - **The original's plane construction is a tab bar; Built-in's is a linear nine-screen walk.**

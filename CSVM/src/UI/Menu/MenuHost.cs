@@ -48,6 +48,11 @@ public sealed class MenuHost : IMenuHost
     /// <see cref="Exit"/>. What the owner reads instead of any presentation's own node.</summary>
     public bool Shown { get; private set; }
 
+    /// <summary>The availability answer beyond registration: why a registered presentation cannot
+    /// run this time (its assets are missing), or null when it can. Built-in is never asked. The
+    /// default says every registered presentation is available.</summary>
+    public Func<PresentationId, string?> Availability { get; set; } = _ => null;
+
     /// <summary>Adds a seat's input source. Seat 0 first; the list is live for presentations.</summary>
     public void AddSeat(IMenuInputSource seat) => _seats.Add(seat ?? throw new ArgumentNullException(nameof(seat)));
 
@@ -55,13 +60,21 @@ public sealed class MenuHost : IMenuHost
     public void RemoveSeat(IMenuInputSource seat) => _seats.Remove(seat);
 
     /// <summary>Settles <see cref="Selected"/> from the force flag, the CLI override and the saved
-    /// request, availability being registration; returns the reason when the selection differs
-    /// from the request, else null. An unknown request falls back to Built-in rather than
-    /// throwing at a persisted value; Built-in itself being unregistered is a wiring error.</summary>
+    /// request, availability being registration plus <see cref="Availability"/>; returns the
+    /// reason when the selection differs from the request, else null. An unknown or unavailable
+    /// request falls back to Built-in rather than throwing at a persisted value; Built-in itself
+    /// being unregistered is a wiring error.</summary>
     public string? Select(bool forceBuiltIn, string? cliOverride, string? savedRequest)
     {
+        string? unavailable = null;
         var (active, reason) = PresentationResolution.Resolve(
-            forceBuiltIn, cliOverride, savedRequest, IsRegistered);
+            forceBuiltIn, cliOverride, savedRequest,
+            id => IsRegistered(id) && (unavailable = Availability(new PresentationId(id))) == null);
+        if (reason != null && unavailable != null)
+        {
+            reason = $"{reason}: {unavailable}";
+        }
+
         var selected = new PresentationId(active);
         if (!_registry.IsRegistered(selected))
         {

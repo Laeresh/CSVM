@@ -58,8 +58,11 @@ internal static class MenuJourneySuites
         Is(ctx, "its heading", "SELECT MODE", menu.ShownHeading);
         Is(ctx, "its breadcrumb", "Mode  ›  Map  ›  Aircraft", menu.ShownBreadcrumb);
         Is(ctx, "the cursor stands on the first row", "Free Flight", menu.ShownRowText);
-        ctx.Check(menu.ShownRowCount == 5,
-            $"the Mode screen has five rows, the three modes and the two doors ({menu.ShownRowCount})");
+        ctx.Check(menu.ShownRowCount == 6,
+            $"the Mode screen has six rows, the three modes and the three doors ({menu.ShownRowCount})");
+        menu.Drive(Up);
+        Is(ctx, "the last row is the Options door", LaunchMenu.OptionsRow, menu.ShownRowText);
+        menu.Drive(Down);
         Is(ctx, "Free Flight's description", "Explore the map freely — no objectives, no clock.", menu.ShownDetail);
         Has(ctx, "the top level's Back is Quit", "Esc / B  Quit", menu.ShownFooter);
         Is(ctx, "joining is not open here", "(other players join at aircraft select)", menu.ShownJoinHint);

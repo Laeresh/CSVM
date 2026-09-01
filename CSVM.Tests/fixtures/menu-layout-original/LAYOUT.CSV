@@ -1,0 +1,23 @@
+;Probe layout for the Original presentation's shell, hand-authored from docs/formats/menu-layout.md.
+;Invented geometry and invented art names; only the widget KEYS are the ones the shell reads.
+;ID=B,ArtPath,X,Y,Z,ResID,ScriptToExe,ScriptPri,EndScript,Left,Top,Right,Bottom,Style,Checked,[colours]
+
+[GLOBALVARS]
+G1=DISABLED,0xFFBCBCBC
+G2=ACTIVE,0xFFFFFFFF
+G3=ROLLOVER,0xFFFFFFFF
+G4=DEPRESSED,0xFF000000
+
+[@MainMenu@]
+MM_LOGO=P,PM_Logo.png,100,10,0,1,0,1,0
+BFRAME=P,PM_Frame.png,250,250,0,1,0,1,0
+MM_B_CAMPAIGN=B,PM_B_Campaign.png,280,280,0,0,Campaign,0x1000,0,,,,,,
+MM_B_INSTANTACTION=B,PM_B_InstantAction.png,280,330,0,0,InstantAction,0x1000,1,,,,,,
+MM_B_MULTIPLAYER=B,PM_B_MultiPlayer.png,280,380,0,0,MultiPlayerMain,0x1000,1,,,,,,
+MM_B_PREFERENCES=B,PM_B_Preferences.png,280,430,0,0,Preferences,0x1020,0,,,,,,
+MM_B_CREDITS=B,PM_B_Credits.png,280,480,0,0,Credits,0x1000,1,,,,,,
+MM_B_QUIT=B,PM_B_Quit.png,280,530,0,0,,0x1000,0,,,,,,
+
+[@FlightCheck@]
+V1=PLAQUE,PM_B_Paper.png
+FC_B_CHANGEPLANE=B,<PLAQUE>,120,130,0,IDS_PM_CHANGEPLANE,PlaneSelection,0x1000,1,,,,,,,0xFF767676,0xFF133D77,0xFF374D6B,0xFF000000

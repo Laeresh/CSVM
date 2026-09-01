@@ -155,7 +155,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Characterize Built-in and extract the Free Flight feature
 12. ☑ Run Built-in Free Flight through the presentation boundary
-13. ☐ Deliver Original Free Flight, switching and recovery
+13. ☑ Deliver Original Free Flight, switching and recovery
 
 ### Wave C — Setup features
 
@@ -479,7 +479,7 @@ flown session remains owed at the controls, as the Verify paragraph states.
 startup has not proved the seam. The Plane screen lists `user://` custom planes, so a shot of it
 is only comparable against a baseline taken over the same store.
 
-## B13 ☐ Deliver Original Free Flight, switching and recovery
+## B13 ☑ Deliver Original Free Flight, switching and recovery
 
 **Goal.** Original completes Free Flight with its own decoded screen graph, 4:3 presentation,
 mouse/keyboard/pad interaction, audio cues, live switching and force-Built-in recovery.
@@ -516,12 +516,91 @@ launchscreen (debug aids, the failed-build note) and must stay null-safe when Or
 
 **Model recommendation.** high — first complete alternative presentation and first pointer path.
 
-**Verify.** Compare at 4:3, wide and tall resolutions; test every input family, switching from each
-Free Flight step, saved request, CLI override and force-Built-in recovery. <TODO from A1: reference
-captures and exact original interaction sequence.>
+**Verify.** The landed shape: `MenuLayout` (`CSVM/src/UI/Menu/MenuLayout.cs`) is the engine-free
+runtime reader of `menu_layout.json`, typed through the artifact's own kind table, and its first
+consumer, so the extraction stamp is schema 2 (`$StampSchema` in `ExtractRof.ps1` and
+`ExtractAssets.ps1`, `ExtractionStamp.Schema`, all in this commit). `OriginalShell`
+(`CSVM/src/UI/Menu/Original/`) is the engine-free screen graph: the decoded top level (the two
+panes and six `B` rows at authored corners, four-frame strips, the rows with no remake destination
+drawing frame 0) plus the remake-only Free Flight door, Free Flight screen and minimal Options
+screen, composed in the `FC_B_CHANGEPLANE` paper-plaque convention with the file-wide state
+colours; `OriginalPresentation` draws it through `ComposedBoardView` on one `BoardFit` and maps
+seat 0's pointer into the authored space; `PointerSeat` wraps the Built-in seat with the mouse;
+`OriginalAvailability` is the minimal manifest (layout file, `[MainMenu]`, its art) and enters
+`MenuHost.Select` through the new `Availability` delegate, a failure selecting Built-in with the
+reason and leaving the saved request alone. Switching is a fourth typed exit,
+`PresentationSwitchExit`, produced by Built-in's new Options door (the Mode screen's sixth row,
+`--menu=options`, the one Built-in change) and by Original's Options screen, consumed by
+`Launcher.SwitchPresentation` one frame later: save through `OptionsStore`, `Deactivate`
+(discarding transient feature state), re-select from the saved request with the force flag still
+winning and any `--presentation=` override dropped, `Show(TopLevel)`. Cues resolve through
+`MenuCueTable` to `MOUSEOVER.WAV` and `MOUSECLICK.WAV` under the rof tree, played by
+`MenuAudioService`. Original's `--menu=` aids are `free-flight` and `options` under
+`--presentation=original` (`docs/cli.md`, flag index unchanged at 150).
+
+Checked: `dotnet build CSVM/CSVM.sln`, the whole `dotnet test` (2883, of which 7 are
+`MenuLayoutReaderTests` over the artifact the decoder emits from the probe fixtures plus the
+install's census, 13 `OriginalShellTests` over the invented `fixtures/menu-layout-original`
+layout covering pointer hit-testing and rollover, the disabled rows, keyboard focus by column, the
+picks and the launch, list rows under the pointer, Back and Quit, the return, the Options toggle
+and its switch exit, the composed frames and the pointer overlay, the inks, and a layout with no
+plaque row; 2 `MenuCueTableTests` for the cue names and the pointer seat's click edge; one new
+`MenuHostTests` case for the availability delegate; `MenuNamespaceDependencyTests` green with the
+reader in the shared namespace and Original under it), then
+`.\RunTests.ps1 -Suite "menu-original-tracer,menu-host-tracer,menu-free-flight-journey,menu-zone-layout,menu-screenshot-key,campaign-briefing-repaint" -SkipUnits -SkipGoldens`
+(6 suites, 6 passed, engine errors clean), `.\CheckCommentCaps.ps1 -Summary` and
+`.\CheckEncoding.ps1`. `menu-original-tracer` (`CSVM/src/Testing/MenuOriginalSuites.cs`) is the
+tracer over the install's own layout: `--presentation=original` selects Original, `Show(TopLevel)`
+lands on the door with the OS pointer hidden, a pointer frame in window pixels over Quit takes
+focus and cues one rollover while one over the disabled Campaign plaque does neither, a click on
+the door opens Free Flight, keyboard frames pick Hollywood and the Bloodhawk and Up wraps onto FLY,
+whose Accept leaves as one `LaunchExit` with the presentation hidden, the return re-enters the top
+level with the airframe pick dropped and a debrief return maps there too, `Deactivate` from
+mid-setup discards the feature's pick and the saved request re-selects Built-in on its Mode screen
+(six rows), Built-in's Options route emits a `PresentationSwitchExit` through the host, the saved
+request re-selects a fresh Original, the force flag beats an Original override keeping the request,
+and a data root with no layout selects Built-in with a reason naming `menu_layout.json` and the
+request kept. `menu-free-flight-journey` has one edit: the Mode screen's row count is six and the
+last row is the Options door. Shots: rebuilt, then Godot launched on the hidden desktop with
+`--resolution WxH` ahead of the `--` (RunProbe.ps1 puts every argument after it, so a sized probe
+needs its own launcher) and `--presentation=original --menu[=free-flight|options] --screenshot=`
+into `.scratch\b13-shots\`: the top level at 800x600, 1024x768, 1280x720, 1920x1080 and 600x750,
+the Free Flight screen at 800x600, 1280x720, 1920x1080 and 600x750, the Options screen at 1024x768,
+Built-in's Mode and Options screens at 1280x720. B12's four Built-in aids (`mode`, `chapter`,
+`plane`, `selected`) were re-shot at 1280x720 and compared by decoded 32bpp pixels (SHA-256 over
+the rows) against `mp-b12\.scratch\b12-after\`: `chapter` identical; `mode` differs in rows
+415 to 437 only, the added Options row (948 pixels); `plane` and `selected` differed across the
+list because a custom plane (`Accipiter Annie`) was saved to `user://` after B12's shots, so the
+baseline was re-measured near the changed run (METHOD-3) by shooting both aids from B12's own
+still-built binary in its worktree against today's store, against which both are identical.
+`docs/verification.md` rules that bit: **METHOD-3** (the store moved under the baseline again),
+**METHOD-6** (which binary each side used is named: B12's worktree build, unchanged since its
+commit, against B13's), **SHOT-6** (decoded pixels, never PNG bytes), **SHOT-9**/**SHOT-10**
+(windowed probes on the hidden desktop, absolute paths, files checked present), **SHOT-32** (a shot
+proves the frame it drew; the pointer sits wherever the probe's mouse was, off the board in these
+runs, and the rollover, depressed and cue behaviour is pinned by the driven suites, not the shots),
+**SRC-7** (the four-frame strips and the two script-bound wavs are the evidence for rollover and
+press; keyboard focus, the door's placement, list-row focus and the pointer hotspot are recorded as
+remake-only until CAP-49 and CAP-52 are filmed, in `docs/org/menu-inventory.md`).
+
+What this did not prove: the harness runs a suite before any session builds, so no engine suite
+lets `Launcher` fly an Original launch and return, nor perform the frame-deferred
+`SwitchPresentation`; both are the same `OnMenuExit`/`ShowMenu` path the campaign debrief and
+the failed-build return take, and the switch's three host calls are what the tracer performs by
+hand. Sound is not heard by a suite: the cue table resolves and the service loads the wavs, which
+the log records at debug level. The real switch and the sounds are exercised at the controls:
+`.\RunDev.ps1`, Options, Original, Apply; the top level must appear with the pointer drawn and a
+rollover sound on entering a plaque; Free Flight, a chapter, an airframe, FLY, then the pause
+board's Exit must re-enter Original's top level.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** The 800x600 space is authored coordinates, not a fixed render target. Do not stretch
 wide or switch to integer-only scaling; `BoardFit` already records both rejected alternatives.
+The Plane screen lists `user://` custom planes, so a shot of it is only comparable against a
+baseline taken over the same store. The layout carries no art sizes: a widget's hit rectangle is
+its strip measured and divided by `frames`, so a missing strip has a fallback rectangle and no
+picture.
 
 # Wave C — Setup features
 
@@ -537,6 +616,13 @@ ace; `LaunchMenu` contains decoded environments, mission types, militias, waves 
 **Approach.** Characterize presets, validation, Back paths, lives, wave editing, wingmen and launch
 payload. Extract renderer-neutral setup state and operations; adapt Built-in unchanged, then bind
 Original’s evidenced screens to the same feature.
+
+Handoff from B13: Original's top level draws `MM_B_INSTANTACTION` in its disabled frame and
+ignores it (`OriginalShell.BuildRows`, the `enabled` argument of `Button`); C21 enables the row
+and gives it a screen. The shell keys every screen's rows by the layout's widget keys, composes
+through `ComposedBoard` and reads its plaque convention off `FlightCheck.FC_B_CHANGEPLANE`; an
+Original Instant Action screen is another `OriginalScreen` member with its own `BuildRows` and
+`Activate` branch, and its rows' sizes come from the injected art measurer, not the layout.
 
 **Model recommendation.** high — dense decoded rules and many dependent fields.
 
@@ -560,6 +646,14 @@ and future HOTAS/HOSAS compatibility were settled in the grilling.
 **Approach.** Characterize join/unjoin/lock and launch gates, extract semantic per-seat commands and
 player setup, then adapt keyboard, mouse and current pads. Preserve Built-in split-pane selection;
 build Original’s graph and presentation from A1 evidence. Do not implement HOTAS/HOSAS bindings.
+
+Handoff from B13: seat 0 is a `PointerSeat` (`CSVM/src/UI/Menu/Original/PointerSeat.cs`) over the
+`BuiltInSeat`, adding the mouse as `MenuPointer`; `Launcher.BuildMenuHost` keeps the inner
+`BuiltInSeat` for the launchscreen's pad bookkeeping. Original polls `host.Seats[0]` only and
+launches one `MenuSeatChoice` with no pads (`OriginalShell.ActivateFreeFlight`); its airframe list
+is the eleven stock nodes from `OriginalRosters`, with no custom planes and no join strip. The
+join flow, the per-seat pointer mapping and the roster with customs are C22's to add on the same
+`OriginalScreen.FreeFlight` rows.
 
 **Model recommendation.** high — multiplayer device ownership and same-frame input races are fragile.
 

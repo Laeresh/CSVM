@@ -240,14 +240,22 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/MenuFeatureSet.cs` — the host-owned feature registry, fetched by concrete type; `DiscardTransient()` is everything a presentation switch discards.
 - `src/UI/Menu/MenuCommands.cs` — per-seat semantic menu commands plus `IMenuInputSource`, the device-neutral seam keyboard, mouse and pad feed and a later HOTAS/HOSAS source plugs into.
 - `src/UI/Menu/IMenuAudio.cs` — the shared menu audio contract: presentations request cues and narration; the service owns lookup, playback, volume and session handoff.
-- `src/UI/Menu/MenuExit.cs` — the one typed menu exit `Launcher` consumes: `LaunchExit`, `CampaignMissionExit`, `QuitExit`; presentations never build sessions.
+- `src/UI/Menu/MenuExit.cs` — the one typed menu exit `Launcher` consumes: `LaunchExit`, `CampaignMissionExit`, `QuitExit`, `PresentationSwitchExit`; presentations never build sessions.
 - `src/UI/Menu/MenuReturnDestination.cs` — semantic return destinations (top level, cabin, debrief) that each presentation maps into its own screen graph.
+- `src/UI/Menu/MenuLayout.cs` — the runtime reader of `extracted/rof/menu_layout.json`: screens, widgets with typed field access through the artifact's own kind table, navigation edges, script-named assets; engine-free.
+- `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph, engine-free: the decoded top level plus the Free Flight door, the Free Flight and Options screens, pointer hit-testing, column focus, cues, exits and the composed board.
+- `src/UI/Menu/Original/OriginalPresentation.cs` — the Original presentation node: the shell drawn through `ComposedBoardView` on the board layer, the pointer mapped through `BoardFit`, the OS pointer hidden while shown.
+- `src/UI/Menu/Original/OriginalAvailability.cs` — the minimal Original availability check: the layout reads, `[MainMenu]` is there, its art is on disk; a reason, or the loaded layout.
+- `src/UI/Menu/Original/OriginalRosters.cs` — the Free Flight screen's two rosters: chapter labels over the shared roster and the eleven stock airframes resolved through the Instant Action decode.
+- `src/UI/Menu/Original/OriginalCues.cs` — the two cue names Original asks for: a button rollover and a button click.
+- `src/UI/Menu/Original/PointerSeat.cs` — seat 0 with the mouse as its `MenuPointer`, the click a press edge; device reads injected, so engine-free.
+- `src/Session/MenuCueTable.cs` — the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
 - `src/UI/BoardMenu.cs` — a board's cursor and item list, engine-free, so the selection rules test off engine.
 - `src/UI/BoardMenuItem.cs` — the rows a board menu can offer: Resume, Restart, Exit.
 - `src/UI/BoardMenuView.cs` — draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
-- `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session (Free Flight through `src/UI/Menu/FreeFlightFeature.cs`, the first shared feature); also the hangar's two doors, the campaign's one (`OpenCampaignCabin`) and its mission-end debrief (`OpenCampaignScrapbook`, both re-reading the profile from the store), and the renderer both flows draw through.
+- `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session (Free Flight through `src/UI/Menu/FreeFlightFeature.cs`, the first shared feature); also the hangar's two doors, the campaign's one (`OpenCampaignCabin`) and its mission-end debrief (`OpenCampaignScrapbook`, both re-reading the profile from the store), the Options door (the menu presentation chooser) and the renderer both flows draw through.
 - `src/UI/MenuZones.cs` — how the launchscreen divides a window: a fixed header band, a fixed footer band, the selection list in what is left, and the one scale all three share. Engine-free.
 - `src/UI/InstantActionPresets.cs` — the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
 - `src/UI/PlanePickerRoster.cs` — the one roster every human plane picker draws: 11 stock airframes then the store's saved customs, each custom carrying its store name and its airframe's stock node (D32's launch seam); engine-free build/lookup rules.
@@ -4024,6 +4032,13 @@ the wizard's `InstantActionDef` for Instant Action and the chapter for Dogfight,
 have features of their own. The cabin's FLY MISSION (`FlyCampaignMission`) leaves the same way as
 a `CampaignMissionExit` (profile, story position, one seat choice per joined human with its stock
 node, joined pads, stored fit and hangar build). Back on the Mode screen leaves as a `QuitExit`.
+The Mode screen's last row is the Options door (`OptionsRow`, `--menu=options`): a two-row screen
+whose first row steps the menu presentation between Built-in and Original (Left/Right or Accept)
+and whose second row, "Apply and restart the menu", leaves as a `PresentationSwitchExit` carrying
+the choice; the launcher persists it and restarts the menu. The stepper opens on the saved
+request, read from `OptionsStore`, so it shows back what was asked for rather than what is active.
+This door is the one Built-in change the presentation work makes; every other Built-in screen,
+control, payload, aid and return keeps its behaviour.
 The Chapter screen, the aircraft screen, joining and locking stay here: they are shared with the
 other modes, and the feature never reads them. `Chapters` is this screen's row text zipped over
 `MenuChapters`, the shared roster. The `Shown*` read-outs (`ShownScreen`, `ShownHeading`,
@@ -5497,14 +5512,23 @@ here rather than being restated per board.
 The menu is owned as a `MenuHost` (`src/UI/Menu/MenuHost.cs`), built by `BuildMenuHost` on the
 first show and kept for the life of the process: a `PresentationRegistry` with the Built-in
 presentation registered under `PresentationId.BuiltIn` (its factory closes over this node as the
-parent, the data paths, the `--menu=` aid from `_cli` and the first seat's poller), the shared
-`FreeFlightFeature`, the first seat (a `BuiltInSeat` over a keyboard-plus-unclaimed-pads
-`MenuInput`), the `MenuAudioService` over the process's music channel and sound archive, and
-`OnMenuExit` as the sink. The active presentation is settled once there through `MenuHost.Select`
+parent, the data paths, the `--menu=` aid from `_cli` and the first seat's poller) and the Original
+presentation under `PresentationId.Original` (over the layout the availability check loaded and
+the same `--menu=` aid, read as Original's own values), the shared `FreeFlightFeature`, the first
+seat (a `PointerSeat` over a `BuiltInSeat` over a keyboard-plus-unclaimed-pads `MenuInput`, the
+viewport's mouse position and the left button as the pointer), the `MenuAudioService` over the
+process's music channel, sound archive and the rof tree's `ASSETS/SOUNDS`, and `OnMenuExit` as
+the sink. The active presentation is settled once there through `MenuHost.Select`
 (`PresentationResolution.Resolve` with `--force-builtin`, `--presentation=` and the saved
-`OptionsStore` request, availability being registration) and logged as one `ui` line with the
-requested and active ids and the fallback reason; an unknown or blank request falls back to
-Built-in rather than crashing. `ShowMenu(destination)` shows the host at a semantic
+`OptionsStore` request; availability is registration plus `OriginalAvailable`, which loads the
+decoded layout through `OriginalAvailability` and keeps it for the factory) and logged as one `ui`
+line with the requested and active ids and the fallback reason; an unknown, blank or unavailable
+request falls back to Built-in rather than crashing, and a fallback never rewrites the saved
+request. A `PresentationSwitchExit` is acted on one frame later (`_pendingSwitch`, the exit
+arrives inside the presentation's own tick): `SwitchPresentation` saves the request through
+`OptionsStore`, calls `Deactivate` (freeing the presentation and discarding transient feature
+state), re-selects with the saved request in place of any `--presentation=` override (the force
+flag still wins) and shows the top level. `ShowMenu(destination)` shows the host at a semantic
 `MenuReturnDestination`, then does what is the owner's: the `loadboard` aids, the menu music cue,
 and the one-shot `--debug-join=`/`--debug-waves=`/`--debug-wingmen=`/`--debug-preset=` aids
 through `BuiltInMenu`, the one door onto the launchscreen (`Active as BuiltInPresentation`), also
@@ -6648,6 +6672,8 @@ Reads the provenance stamp `ExtractAssets.ps1`/`ExtractRof.ps1` leave at `extrac
 against its `Schema` const in `Launcher._Ready`, right after the base paths settle. At most ONE
 warning line per boot — stale schema, missing file, or unreadable — each naming the fix (re-run
 the extraction scripts). Warn, never block: the dev tree holds valid extractions predating the stamp.
+Schema 2 is the first the menu layout reader (`src/UI/Menu/MenuLayout.cs`) requires: a tree
+extracted before `menu_layout.json` existed is reported stale rather than read as an empty menu.
 
 ## src/Flight/CollisionLayers.cs
 The named physics collision layers — world (layer 1, the engine default every pre-existing
@@ -6796,10 +6822,12 @@ no reference past that. The implementation is `MenuHost` below.
 The process-lifetime host, engine-free: `Launcher` owns one. Constructed over a
 `PresentationRegistry`, an `IMenuAudio` and an exit sink; the owner adds features (`Features.Add`)
 and seats (`AddSeat`/`RemoveSeat`). `Select(forceBuiltIn, cliOverride, savedRequest)` settles
-`Selected` through `PresentationResolution.Resolve` with registration as availability, keeps the
-pre-availability `Requested` for Options to show back, returns the fallback reason or null, reads a
-blank or unknown request as unavailable rather than throwing, and throws only when the resolved id
-(Built-in) is not registered, a wiring error. `Show(destination)` creates a fresh instance of
+`Selected` through `PresentationResolution.Resolve` with registration plus the owner's
+`Availability` delegate as availability (a registered presentation whose assets are missing answers
+with a reason, which is appended to the fallback reason), keeps the pre-availability `Requested`
+for Options to show back, returns the fallback reason or null, reads a blank or unknown request as
+unavailable rather than throwing, and throws only when the resolved id (Built-in) is not
+registered, a wiring error. `Show(destination)` creates a fresh instance of
 `Selected` on the first call and re-activates the same instance on every later one, so a return
 from flight lands on the screens as they were left; `Tick` runs the presentation only while
 `Shown`; `Exit` clears `Shown`, hides the presentation and hands the exit to the sink;
@@ -6830,8 +6858,14 @@ briefing narration player (an `AudioStreamPlayer` child on the Master bus, forme
 launchscreen's own). `BeginNarration(wav)` ducks the music, restarts the player on the resolved
 stream (a missing one is silence, logged as `stream=no`) and counts the start for the log;
 `EndNarration` lifts the duck and stops the player, idempotent since the launchscreen calls it
-every frame the briefing is not showing. `Cue` records the ask at debug level: Built-in requests
-no cues and no menu cue table exists yet.
+every frame the briefing is not showing. `Cue` resolves the name through `MenuCueTable`
+(`src/Session/MenuCueTable.cs`: `menu.rollover` to `MOUSEOVER.WAV`, `menu.click` to
+`MOUSECLICK.WAV`, `menu.text` and `menu.text-error` to the two edit-box wavs, the four files the
+original's globals script binds) to a file under the cue directory the constructor was given (the
+rof tree's `ASSETS/SOUNDS`), decodes it once through `WavFile` into an `AudioStreamWav` and replays
+it from the start on a second `AudioStreamPlayer`; a name the table lacks, a missing directory or
+file, or a failed decode is logged once and cached as silence. Built-in requests no cues; Original
+requests the first two.
 
 ## src/UI/Menu/IMenuFeature.cs
 The contract every shared menu feature implements. A feature is typed state plus semantic
@@ -6865,11 +6899,90 @@ handoff into a launching session. The host implementation is `MenuAudioService`
 ## src/UI/Menu/MenuExit.cs
 The one typed menu exit, handed to `IMenuHost.Exit` and consumed by `Launcher`: `LaunchExit`
 (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`),
-`CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices) and `QuitExit`. A
-custom plane arrives as its resolved `CustomPlaneDef`, never a store name, so the consumer reads
-no store. Presentations never construct sessions. `LaunchMenu` produces all three and
-`Launcher.OnMenuExit` consumes them; the return side still carries the `--menu=` aid on every
-top-level show until the semantic destinations replace it.
+`CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
+`PresentationSwitchExit` (the `PresentationId` an Options screen applied; the consumer persists
+it, ends the active presentation and shows the selected one at its top level). A custom plane
+arrives as its resolved `CustomPlaneDef`, never a store name, so the consumer reads no store.
+Presentations never construct sessions. `LaunchMenu` produces the first three and the switch,
+`OriginalShell` the launch, the quit and the switch, and `Launcher.OnMenuExit` consumes them all;
+the return side still carries the `--menu=` aid on every top-level show until the semantic
+destinations replace it.
+
+## src/UI/Menu/MenuLayout.cs
+The runtime reader of `extracted/rof/menu_layout.json`, the decoded menu layout `ExtractRof.ps1`
+emits (`docs/formats/menu-layout.md`), engine-free in the shared namespace. `TryLoad(path, out
+reason)` answers a missing or unreadable file with null and a reason, never an empty layout;
+`Parse(json)` builds the typed model: `WidgetTypes` (the artifact's own per-type field table with
+each field's `kind`), `Globals` (the file-wide macros, `Global`/`GlobalColor` by name), `Screens`
+(`Screen(section)`, case-insensitive), each with its `Widgets` (`Widget(key)`, case-insensitive
+since the scripts lowercase the layout's capitals), `Navigation` (the `ScriptToExe` edges),
+`ExternalAssets` (script-named files and fragments with `Present`) and `MissingArt`. A
+`MenuLayoutWidget` keeps every field's resolved string (`Field`), the raw macro token where one was
+substituted (`Authored`), the decoder's derived readings (`Art`, `ResIdSymbol`, `ResId`, `Text`,
+`TextSource`, `NavigateTo`, `Frames`) and typed accessors (`TryInt`/`Int`, `Bool`, `TryColor`)
+that consult the type table's kind and refuse a field of another kind, so the reader carries no
+field table of its own. `PathUnder(dataRoot)` is where the artifact sits. The reader is the first
+consumer of the artifact, which is why the extraction stamp is schema 2. Off-engine coverage:
+`CSVM.Tests/MenuLayoutReaderTests.cs`, which reads the artifact the decoder emits from the probe
+fixtures, plus the install's own census under `[ExtractedDataFact]`.
+
+## src/UI/Menu/Original/OriginalShell.cs
+The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over
+`MenuLayout`, the shared `FreeFlightFeature` and an injected art measurer (the layout carries no
+pixel sizes; the presentation reads them off the strips). Three screens (`OriginalScreen`): the
+top level, composed from `[MainMenu]`'s `MM_LOGO` and `BFRAME` panes and its six `B` rows at their
+authored corners with their four-frame strips (disabled, normal, rollover, depressed) plus the
+remake-only Free Flight door, a text button in the paper-plaque convention beside the frame; the
+remake-only Free Flight screen (the chapter list, the airframe list, BACK and FLY); and the
+remake-only minimal Options screen (the presentation toggle, APPLY, BACK), which the Preferences
+row opens until the decoded Preferences screens exist. Rows the remake has no destination for
+yet (Campaign, Instant Action, Multiplayer, Credits) draw frame 0 and take no input. The text
+button convention is read off `FlightCheck.FC_B_CHANGEPLANE` (its paper strip and its four label
+colours); the list and heading inks are the file-wide `DISABLED`/`ACTIVE` colours (`Inks`).
+`Step(MenuCommands)` applies one seat's frame: a pointer (already in authored pixels) over a live
+row takes the focus and, on a button, cues `menu.rollover` once; a click on a live row activates
+it; `MoveY` walks the enabled rows of the focused column with wrap, `MoveX` crosses to the nearest
+row of the next column; `Accept` activates the focused row (a button cues `menu.click`); `Back`
+leaves a sub-screen for the top level and quits from the top level. Activation on the Free Flight
+screen picks a chapter (handing it to the feature) or an airframe, FLY (enabled once both are
+picked) leaves as the feature's `LaunchExit` for seat 0, and the Options screen's APPLY leaves as a
+`PresentationSwitchExit`. `Compose()` is the screen as a `ComposedBoard` with the pointer as the
+last overlay (the active pointer bitmap over a live row, the passive one elsewhere), and
+`ReturnToTopLevel` (every return and cold start) keeps the list cursors and drops the airframe
+pick. Not decoded, so recorded as remake-only design: the door's placement, the Free Flight and
+Options screens, keyboard and pad focus (the original is pointer-driven), list rows taking focus
+under the pointer without a cue, and the pointer's hotspot at its top-left. Off-engine coverage:
+`CSVM.Tests/OriginalShellTests.cs` over the invented `fixtures/menu-layout-original` layout.
+
+## src/UI/Menu/Original/OriginalPresentation.cs
+The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the
+board layer holding one `ComposedBoardView`, so every screen scales as the campaign boards do (one
+uniform 4:3 fit, centred, letterboxed, nearest-sampled). `Activate` builds the shell on the first
+call, stands it on the top level on every call (a `CabinReturn` or `DebriefReturn` also lands
+there, with a logged note, until Original has campaign screens), applies the `--menu=` aid on a
+top-level show (`free-flight`, `options`), primes seat 0 and hides the OS pointer, since the shell
+draws the original's own. `Tick` polls the host's first seat, maps its window-pixel pointer into
+the authored space through the view's own `BoardFit`, steps the shell, requests its cues through
+the host's audio and hands its exit to the host. `Hide` takes the layer off screen and restores the
+OS pointer; `Deactivate` frees it. `PaletteFor(inks)` is the shell's inks as a `BoardPalette`.
+In-engine coverage: `menu-original-tracer` (`src/Testing/MenuOriginalSuites.cs`) over the install's
+own layout.
+
+## src/UI/Menu/Original/OriginalAvailability.cs
+The minimal availability check Original makes before it can be selected, standing in for the full
+required/optional manifest: `Load(dataRoot, out reason)` reads the layout through `MenuLayout`,
+requires a `[MainMenu]` section with its two panes and six buttons, and requires every art file
+those rows name under `extracted/rof/ASSETS/GRAPHICS`. Returns the loaded layout when Original can
+run, else null and the first reason, which the host appends to its fallback reason. The Free
+Flight screen's own art (the paper plaque, the pointers) degrades rather than blocks.
+
+## src/UI/Menu/Original/PointerSeat.cs
+Seat 0 with a pointer: wraps the seat that polls the keyboard and the unclaimed pads and adds the
+mouse as the frame's `MenuPointer` in window pixels, `Pressed` while the left button is down and
+`Clicked` on the press edge; `Prime` reads the button so a click held through a screen change is
+not a fresh click. The two device reads are injected delegates, so the seat is engine-free and
+`Launcher` supplies the viewport's mouse position and `Input.IsMouseButtonPressed`. Built-in
+ignores the pointer; Original maps it into its authored space.
 
 ## src/UI/Menu/MenuReturnDestination.cs
 Where the menu stands when it comes back, said semantically: `TopLevel`, `CabinReturn(profile)`,

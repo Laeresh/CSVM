@@ -443,7 +443,7 @@ if ($skipped -gt 0) { Write-Host "  up to date:      $skipped archive(s); pass -
 # and ExtractionStamp.Schema, in the same commit as any reader change that invalidates
 # old extractions.
 if ($StampDestKnown) {
-    $StampSchema = 1
+    $StampSchema = 2
     $stampPath = Join-Path (Split-Path $Dest -Parent) "VERSION.json"
     $stamp = [ordered]@{}
     if (Test-Path $stampPath) {

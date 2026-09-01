@@ -19,7 +19,7 @@ public static class ExtractionStamp
     /// automation: bump it — together with <c>$StampSchema</c> in ExtractAssets.ps1 AND
     /// ExtractRof.ps1, in the same commit — whenever a reader change invalidates old
     /// extractions.</summary>
-    public const int Schema = 1;
+    public const int Schema = 2;
 
     /// <summary>Compares the stamp under <paramref name="dataRoot"/> against
     /// <see cref="Schema"/> and logs AT MOST one warning line — stale schema, missing file,

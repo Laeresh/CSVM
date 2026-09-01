@@ -33,6 +33,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <see cref="CampaignFlow"/> and only launches a mission from inside them.</summary>
     public const string CampaignRow = "Campaign";
 
+    /// <summary>The row that opens the Options screen, the last on the Mode screen. Options hold
+    /// the one process-wide choice so far, the menu presentation, and every presentation exposes
+    /// them so a player can always get back to Built-in.</summary>
+    public const string OptionsRow = "Options";
+
     // Base metrics at 720p, scaled up on taller viewports (like StuntScoreboard). All TUNE.
     private const int TitleFont = 40;
     private const int HeadingFont = 20;
@@ -228,6 +233,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string _dataRoot = "";
     private Screen _screen = Screen.Mode;
     private int _modeIndex, _chapterIndex;
+    // The Options screen's cursor and the presentation its first row would apply, seeded from the
+    // saved request when the screen opens so it shows back what was asked for, not what is active.
+    private int _optionsIndex;
+    private string _presentationChoice = PresentationId.BuiltIn.Value;
     // Instant Action wizard state, steps 1-2: the picked environment
     // row, the picked mission type row within CurrentMissionTypes, and the lives stepper beside it
     // (decision 18).
@@ -333,7 +342,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // frame, and a confirm that changes nothing on screen reads as a dead button on a pad.
     private int _pressFrames;
 
-    private enum Screen { Mode, Chapter, Presets, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout, Hangar, Campaign }
+    private enum Screen { Mode, Chapter, Presets, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout, Hangar, Campaign, Options }
 
     // What a fit row edits. The reset row carries no slot of its own and is the only one Accept
     // does anything on, since every other row is a live stepper.
@@ -422,6 +431,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.WingmanLoadout => _wingmanFitRow,
         Screen.Hangar => _hangar?.Row ?? 0,
         Screen.Campaign => _campaign?.Row ?? 0,
+        Screen.Options => _optionsIndex,
         _ => _slots.Count == 1 && _slots[0].InLoadout ? _slots[0].FitRow : _slots[0].PlaneIndex,
     };
 
@@ -641,8 +651,14 @@ public sealed partial class LaunchMenu : CanvasLayer
             "wingmen" => Screen.Wingmen,
             "plane" or "loadout" or "selected" => Screen.Plane,
             "wingmanloadout" => Screen.WingmanLoadout,
+            "options" => Screen.Options,
             _ => Screen.Mode,
         };
+        if (_screen == Screen.Options)
+        {
+            OpenOptions();
+        }
+
         // Environment/MissionType/Waves/Wingmen only exist under Instant Action — force it so a
         // --menu= opening straight onto one of them (a screenshot aid) renders the right
         // roster/filter rather than whatever _mode was last left at.
@@ -1232,6 +1248,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                     case Screen.WaveEdit: _waveFieldIndex = Wrap(_waveFieldIndex + p1.Move, n); break;
                     case Screen.Wingmen: _wingmenFieldIndex = Wrap(_wingmenFieldIndex + p1.Move, n); break;
                     case Screen.WingmanLoadout: _wingmanFitRow = Wrap(_wingmanFitRow + p1.Move, n); break;
+                    case Screen.Options: _optionsIndex = Wrap(_optionsIndex + p1.Move, n); break;
                 }
                 dirty = true;
             }
@@ -1497,6 +1514,15 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         switch (_screen)
         {
+            case Screen.Options:
+                // The presentation row is a two-way stepper; the apply row has nothing to step.
+                if (_optionsIndex == 0)
+                {
+                    TogglePresentationChoice();
+                    return true;
+                }
+
+                return false;
             case Screen.MissionType:
                 // The lives stepper rides the same screen as the mission choice (decision 18),
                 // so it never competes with the vertical list cursor above.
@@ -1570,12 +1596,32 @@ public sealed partial class LaunchMenu : CanvasLayer
                     }
                 }
                 break;
+            case Screen.Options:
+                if (_optionsIndex == 0)
+                {
+                    TogglePresentationChoice();
+                }
+                else
+                {
+                    // The launcher persists the request and restarts the menu; the screen stays
+                    // standing for the host to hide.
+                    _host.Exit(new PresentationSwitchExit(new PresentationId(_presentationChoice)));
+                }
+
+                break;
             case Screen.Mode:
-                // The two trailing rows are the campaign's and the hangar's top-level doors, past
-                // the three modes.
+                // The three trailing rows are the campaign's, the hangar's and Options' top-level
+                // doors, past the three modes.
                 if (_modeIndex == Modes.Length)
                 {
                     OpenCampaign();
+                    break;
+                }
+
+                if (_modeIndex == Modes.Length + 2)
+                {
+                    _screen = Screen.Options;
+                    OpenOptions();
                     break;
                 }
 
@@ -2573,6 +2619,22 @@ public sealed partial class LaunchMenu : CanvasLayer
             ? $"✓  {_roster[_slots[0].PlaneIndex].Name} selected"
             : "";
 
+    // Opens the Options screen on the saved request, so the stepper shows back what the player
+    // asked for even when availability made Built-in the active presentation.
+    private void OpenOptions()
+    {
+        _optionsIndex = 0;
+        _presentationChoice = OptionsStore.UserOptions().Load().MenuPresentation ?? PresentationId.BuiltIn.Value;
+    }
+
+    private void TogglePresentationChoice() =>
+        _presentationChoice = _presentationChoice == PresentationId.Original.Value
+            ? PresentationId.BuiltIn.Value
+            : PresentationId.Original.Value;
+
+    private string PresentationChoiceLabel() =>
+        _presentationChoice == PresentationId.Original.Value ? "Original" : "Built-in";
+
     // What this screen is, the middle band's first line.
     private string Heading()
     {
@@ -2591,6 +2653,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.WingmanLoadout => $"WINGMEN — AMMO SELECTION  ({Planes[_wingmanPlaneIndex].Name})",
             Screen.Hangar => _hangar?.Page.Title ?? HangarRow,
             Screen.Campaign => _campaign?.Page.Title ?? CampaignRow,
+            Screen.Options => "OPTIONS",
             _ when _slots.Count == 1 && _slots[0].InLoadout =>
                 $"AMMO SELECTION  ({_roster[_slots[0].PlaneIndex].Name})",
             _ when _slots.Count == 1 && _slots[0].Locked => "AIRCRAFT SELECTED",
@@ -2947,9 +3010,10 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private int CurrentCount() => _screen switch
     {
-        Screen.Mode => Modes.Length + 2, // + the trailing campaign and hangar rows
+        Screen.Mode => Modes.Length + 3, // + the trailing campaign, hangar and options rows
         Screen.Hangar => _hangar?.Page.RowCount ?? 1,
         Screen.Campaign => _campaign?.Page.RowCount ?? 1,
+        Screen.Options => 2, // the presentation stepper and the apply row
         Screen.Chapter => CurrentChapters.Length,
         Screen.Presets => InstantActionPresets.All.Count,
         Screen.Environment => Environments.Length,
@@ -2992,9 +3056,13 @@ public sealed partial class LaunchMenu : CanvasLayer
         return _screen switch
         {
             Screen.Mode => index < Modes.Length ? Modes[index].Label
-                : index == Modes.Length ? CampaignRow : HangarRow,
+                : index == Modes.Length ? CampaignRow
+                : index == Modes.Length + 1 ? HangarRow : OptionsRow,
             Screen.Hangar => _hangar?.Page.RowText(index) ?? "",
             Screen.Campaign => _campaign?.Page.RowText(index) ?? "",
+            Screen.Options => index == 0
+                ? $"Menu presentation: {PresentationChoiceLabel()}"
+                : "Apply and restart the menu",
             Screen.Chapter => CurrentChapters[index].Name,
             Screen.Presets => InstantActionPresets.All[index].Name,
             Screen.Environment => Environments[index].Name,
@@ -3223,7 +3291,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         string nav = _screen switch
         {
             Screen.MissionType => "↑↓  Choose mission       ←→  Lives",
-            Screen.WaveEdit or Screen.Wingmen => "↑↓  Choose field       ←→  Change",
+            Screen.WaveEdit or Screen.Wingmen or Screen.Options => "↑↓  Choose field       ←→  Change",
             _ => "↑↓  Navigate",
         };
         // The loadout is an unbound face button, so it is invisible unless the footer says so.
@@ -3252,6 +3320,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Mode => "Mode  ›  Map  ›  Aircraft",
             Screen.Hangar => $"{HangarRow}  ›  {_hangar?.Page.Title}",
             Screen.Campaign => $"{CampaignRow}  ›  {_campaign?.Page.Title}",
+            Screen.Options => OptionsRow,
             Screen.Chapter => $"{mode}  ›  Map  ›  Aircraft",
             Screen.Presets => $"{mode}  ›  Table of Contents",
             Screen.Environment => $"{mode}{PresetCrumb()}  ›  Environment  ›  Mission  ›  Aircraft",
@@ -3276,9 +3345,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         Screen.Mode => focus < Modes.Length ? Modes[focus].Detail
             : focus == Modes.Length ? "Fly the story: pick a player, then the cabin."
-            : "Build a plane in the hangar and fly it.",
+            : focus == Modes.Length + 1 ? "Build a plane in the hangar and fly it."
+            : "Choose which menu presentation draws the menus.",
         Screen.Hangar => _hangar?.Page.Detail(focus) ?? "",
         Screen.Campaign => _campaign?.Page.Detail(focus) ?? "",
+        Screen.Options => focus == 0
+            ? "Built-in needs no extracted menu art; Original draws the original's own screens from it."
+            : "Saves the choice and restarts the menu at its top level; unfinished setup is discarded.",
         Screen.Presets => PresetDetail(focus),
         Screen.Chapter => $"Region {CurrentChapters[focus].Code}",
         Screen.Environment => $"Region {Environments[focus].Code}",

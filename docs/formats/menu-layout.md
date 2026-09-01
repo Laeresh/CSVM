@@ -8,7 +8,9 @@ script of the same name is the behaviour half ([rof.md](rof.md), and
 
 `ExtractRof.ps1` decodes it during extraction and writes `extracted/rof/menu_layout.json`. Runtime
 reads that file and never parses `LAYOUT.CSV` itself. The decoder is
-`ExtractRof.MenuLayout.cs` beside the script, compiled by both the extractor and `CSVM.Tests`.
+`ExtractRof.MenuLayout.cs` beside the script, compiled by both the extractor and `CSVM.Tests`; the
+runtime reader is `CSVM/src/UI/Menu/MenuLayout.cs`, whose entry in `docs/architecture.md` says
+what it exposes.
 
 ## Contents
 
@@ -203,7 +205,8 @@ base one. Nothing in the extracted tree states that, so the decode does: `menu_l
 
 ### The emitted artifact
 
-`extracted/rof/menu_layout.json`, schema 1, about 430 KB. Top-level keys:
+`extracted/rof/menu_layout.json`, artifact schema 1 (the extraction stamp's schema is a separate
+integer, see below), about 430 KB. Top-level keys:
 
 | Key | Holds |
 |---|---|
@@ -288,11 +291,20 @@ per-section `V<n>` definitions (`[@FlightCheck@]` gives `GX,553`, `V2,132`, `V3,
 `V4,FC_B_PaperButton.Png`; `[@Campaign@]` gives `Y,547`), and the file's values agree with the
 screenshot measurements to within a pixel, which is a useful cross-check of both.
 
-**The extraction stamp is not bumped by this decode, and the bump is owed.**
-`menu_layout.json` is a new output, and adding one does not invalidate an existing extraction
-until a reader requires it. The first reader of this artifact must bump `$StampSchema` in
-`ExtractAssets.ps1` and `ExtractRof.ps1` and `ExtractionStamp.Schema` in the same commit, so a
-tree extracted before this decode is reported as stale rather than read as empty.
+**The extraction stamp is schema 2 because runtime reads this artifact.** Adding an output does
+not invalidate an existing extraction until a reader requires it; the runtime reader
+(`CSVM/src/UI/Menu/MenuLayout.cs`) does, so `$StampSchema` in `ExtractAssets.ps1` and
+`ExtractRof.ps1` and `ExtractionStamp.Schema` moved to 2 together, and a tree extracted before this
+decode is reported as stale at boot rather than read as an empty menu. The reader itself treats a
+missing or unreadable file as a reason to fall back, never as a layout with no screens.
+
+**Reader-side notes.** The reader keeps values as strings and types them on demand through
+`widgetTypes[].fields[].kind`, so a field is only ever read as the kind the artifact declares; a
+`B` row with no colour tail simply has no `ColorActive` field. Keys are matched
+case-insensitively, since scripts lowercase the keys the layout writes in capitals. The pointer
+bitmaps are taken from `externalAssets` (the globals script names them), not from any layout row.
+An art file's pixel size is not in the artifact; a consumer that needs a widget's rectangle
+measures the strip and divides its height by `frames`.
 
 **Interaction is not decoded here.** A rectangle, a frame count and a colour prove composition.
 What a press does, what a rollover changes and what is disabled when come from the scripts, the

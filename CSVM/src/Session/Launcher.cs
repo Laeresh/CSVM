@@ -6,6 +6,7 @@ using CSVM.Mech3.Anim;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
+using CSVM.UI.Menu.Original;
 using CSVM.Utils;
 using Godot;
 
@@ -132,6 +133,12 @@ public partial class Launcher : Node3D
     // presentation, and hands every typed exit to OnMenuExit.
     private MenuHost? _menuHost;
     private MenuAudioService? _menuAudio;
+    // The decoded menu layout the Original presentation composes from, loaded once by the
+    // availability check and handed to every Original instance the registry creates.
+    private MenuLayout? _originalLayout;
+    // A presentation switch the Options route asked for, acted on at the top of the next frame:
+    // the exit arrives inside the active presentation's own tick, which is no place to free it.
+    private PresentationId? _pendingSwitch;
     private bool _menuDriven;      // launched into the menu → Esc from flight returns here, not quit
     // The score, and the archive it streams from. Both are process-lifetime, unlike the
     // build-scoped SessionArchives.Sounds: one channel has to survive a mission launch, or the
@@ -730,6 +737,13 @@ public partial class Launcher : Node3D
             OpenDebrief(debrief.Profile, debrief.Result);
         }
 
+        // A presentation switch from Options, one frame after the exit that asked for it.
+        if (_pendingSwitch is { } requested)
+        {
+            _pendingSwitch = null;
+            SwitchPresentation(requested);
+        }
+
         // Last in the frame, where the build used to happen anyway: the launchscreen and the boards
         // are children, so they process AFTER this node, and a build they asked for landed here.
         RunOwedLaunch();
@@ -965,20 +979,26 @@ public partial class Launcher : Node3D
         }
     }
 
-    // The menu host: the Built-in presentation registered under its id, the shared Free Flight
-    // feature, the first seat (keyboard plus every unclaimed pad, the launchscreen's own poller
-    // behind it), the audio service over the process's music and archive, and OnMenuExit as the
-    // sink. The active presentation is settled here through PresentationResolution: the force
-    // flag, then --presentation=, then the saved request, availability being registration.
+    // The menu host: both presentations registered under their ids, the shared Free Flight
+    // feature, the first seat (keyboard plus every unclaimed pad behind the launchscreen's own
+    // poller, the mouse as its pointer), the audio service over the process's music, archive and
+    // the rof tree's menu sounds, and OnMenuExit as the sink. The active presentation is settled
+    // through PresentationResolution: the force flag, --presentation=, then the saved request;
+    // availability is registration plus, for Original, OriginalAvailable below.
     private MenuHost BuildMenuHost()
     {
-        _menuAudio = new MenuAudioService(_music, wav => _musicArchive?.Find(wav, false, warn: false));
+        _menuAudio = new MenuAudioService(_music, wav => _musicArchive?.Find(wav, false, warn: false),
+            Path.Combine(_rofPath, "ASSETS", "SOUNDS"));
         AddChild(_menuAudio);
-        var seat = new BuiltInSeat(new MenuInput { Keyboard = true });
+        var builtInSeat = new BuiltInSeat(new MenuInput { Keyboard = true });
+        var seat = new PointerSeat(builtInSeat, MousePosition, () => Input.IsMouseButtonPressed(MouseButton.Left));
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.BuiltIn,
-            () => new BuiltInPresentation(this, _zrdrPath, _dataRoot, _cli.MenuStartScreen, seat.Input));
+            () => new BuiltInPresentation(this, _zrdrPath, _dataRoot, _cli.MenuStartScreen, builtInSeat.Input));
+        registry.Register(PresentationId.Original,
+            () => new OriginalPresentation(this, _dataRoot, _originalLayout!, _cli.MenuStartScreen));
         var host = new MenuHost(registry, _menuAudio, OnMenuExit);
+        host.Availability = OriginalAvailable;
         host.Features.Add(new FreeFlightFeature());
         host.AddSeat(seat);
         string? saved = OptionsStore.UserOptions().Load().MenuPresentation;
@@ -986,6 +1006,55 @@ public partial class Launcher : Node3D
         string why = reason == null ? "" : $" reason={reason}";
         Log.Info("ui", $"menu presentation active={host.Selected} requested={host.Requested}{why}");
         return host;
+    }
+
+    // The host's availability answer: Original needs the decoded layout and the main menu's art;
+    // the layout it loads is kept for the presentation itself. Every other id is available once
+    // registered.
+    private string? OriginalAvailable(PresentationId id)
+    {
+        if (id != PresentationId.Original)
+        {
+            return null;
+        }
+
+        if (_originalLayout != null)
+        {
+            return null;
+        }
+
+        _originalLayout = OriginalAvailability.Load(_dataRoot, out var reason);
+        return _originalLayout != null ? null : reason;
+    }
+
+    // The mouse in window pixels, the pointer half of seat 0: the viewport's last known position,
+    // which the Original presentation maps into its authored space.
+    private (float X, float Y)? MousePosition()
+    {
+        var at = GetViewport().GetMousePosition();
+        return (at.X, at.Y);
+    }
+
+    // The Options route's switch: persist the request, end the active presentation (discarding
+    // every feature's transient state), re-select with the saved request in place of any
+    // session override, and show the selected presentation at its top level. The force flag
+    // still wins, since it is the recovery path.
+    private void SwitchPresentation(PresentationId requested)
+    {
+        if (_menuHost == null)
+        {
+            return;
+        }
+
+        var store = OptionsStore.UserOptions();
+        var options = store.Load();
+        options.MenuPresentation = requested.Value;
+        store.Save(options);
+        _menuHost.Deactivate();
+        string? reason = _menuHost.Select(_spec.ForceBuiltInPresentation, null, requested.Value);
+        string why = reason == null ? "" : $" reason={reason}";
+        Log.Info("ui", $"menu presentation switch requested={requested} active={_menuHost.Selected}{why}");
+        ShowMenu(MenuReturnDestination.TopLevel);
     }
 
     // --debug-join=N synthesizes N extra device-less players so the splitscreen aircraft select
@@ -1030,6 +1099,9 @@ public partial class Launcher : Node3D
                 break;
             case QuitExit:
                 GetTree().Quit();
+                break;
+            case PresentationSwitchExit switchExit:
+                _pendingSwitch = switchExit.Requested;
                 break;
         }
     }
