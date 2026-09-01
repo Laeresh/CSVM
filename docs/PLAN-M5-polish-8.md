@@ -386,19 +386,20 @@ limit" says the data does not establish that reading). It stays out of this slot
 
 # Wave C — Cockpit and flight feel
 
-## C21 ☐ `BL-663` The compass drum turns
+## C21 ☑ `BL-663` The compass drum turns
 
 **Goal.** The 3D cockpit panel's compass drum turns with the aircraft's heading and agrees with
 the screen-space heading tape.
 
 **Evidence (confidence: traced).** The authored `gauges` subtree carries a compass drum the
 original drives as `FUN_004d1a30(node, 0, -heading, 0)` at `0049f8fe` (`docs/formats/hud.md`,
-"Cockpit gauges"), and that call is decoded but left unwired. `CockpitGauges` binds `hundreds`,
-`thousands`, `speed`, `nitro_boost`, `nitro_charge`, `ggarrow`, `mgarrow` and `pfhorizon`
-(`Flight/CockpitGauges.cs:33`) and nothing else, so the drum holds its authored pose for the
-whole flight. The screen-space tape is not the fault: `CompassTape.HeadingDeg` is fed every frame
-from the nose (`Flight/FlightController.cs:1810`, `Flight/FlightHud.cs:322`) and the control
-repaints unconditionally in `_Process`.
+"Cockpit gauges"); `GaugeCluster.HeadingDeg` now carries the same value `CompassTape` reads, and
+`CockpitGauges` binds it onto the drum (found by the binary's own name, `compass`, falling back to
+the data's own container name, `comp`) alongside `hundreds`, `thousands`, `speed`, `nitro_boost`,
+`nitro_charge`, `ggarrow`, `mgarrow` and `pfhorizon` (`Flight/CockpitGauges.cs`). The screen-space
+tape was never at fault: `CompassTape.HeadingDeg` is fed every frame from the nose
+(`Flight/FlightController.cs:1810`, `Flight/FlightHud.cs:322`) and the control repaints
+unconditionally in `_Process`.
 
 **Approach.** Heading has to reach `CockpitGauges.Apply`, which today takes only `GaugeCluster`;
 carry it on the cluster, keeping the rule that the 3D panel and the screen-space dials read one
@@ -420,6 +421,25 @@ sign is one to confirm on the panel rather than to derive. Cross-refs: `BL-113` 
 tuning) shares the tape but not this node; `docs/formats/hud.md`'s "Known uncertainty" still has
 compass north unverified as world −Z, and a wrong axis there would move both readouts together
 rather than one.
+
+**Verified.** <pending orchestrator run> Bound the drum by `compass` first, `comp` second
+(`extracted/planes/nodes.json` carries `compass` as the mesh-bearing node on all 11 player
+airframes and `comp` only as its non-mesh container, matching the trap's own binary-vs-data split).
+Carried `GaugeCluster.HeadingDeg` from `FlightHud.Draw` alongside the existing horizon feed, and
+turn the drum about its own Y axis by `-HeadingDeg` taken directly, the same "engine's own value,
+not a re-derived screen angle" rule `pfhorizon` already follows, rather than through the
+needle/altimeter path's extra negation. Settled the sign by reasoning rather than a probe: a card
+that stays fixed to true north while its parent (the cockpit, riding the plane) yaws needs exactly
+a `-heading` rotation in the parent's own frame to cancel that yaw and hold its world orientation,
+which is the same physical behaviour `CompassTape` already documents as "headings increase to the
+left". Extended `cockpit-interior`'s `DrivenPanel` (`WorldAndToolSuites.cs`) with a driven-heading
+block pinning the drum's basis at 0° and at 40°, checking the authored translation is untouched and
+a second write replaces rather than accumulates the angle. Ran `dotnet build CSVM/CSVM.sln`
+(clean), `dotnet test CSVM.Tests/CSVM.Tests.csproj` (2785 passed), and
+`.\RunTests.ps1 -Suite cockpit-interior -SkipUnits -SkipGoldens` (PASS, engine errors clean). No
+suite or test count changed, so `SuiteCatalogTests` needs no edit. Owed to D31: an eyes-on flight
+watching the drum against the heading tape, which is the check that would catch a wrong world axis
+for north (the "Known uncertainty" entry) rather than a wrong sign on this rotation.
 
 ## C22 ☐ `BL-546` Nitro: the smoke contradiction, then the prop swap by decode
 

@@ -3886,7 +3886,9 @@ is the one dial whose bezel centre and radius are read from the tree rather than
 geometry extracted from the plane's own gauges subtree
 (structure/scales/quirks: docs/formats/hud.md); polys draw by data priority, rest rotations
 ignored; PartFraction binds flight or the lab; dial centres are bottom-anchored (FromBottom) so
-panes keep them on screen. `DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (`BL-085`/`BL-173`) is
+panes keep them on screen. `HeadingDeg` carries the nose heading `CompassTape` also reads (`BL-663`);
+the cluster draws no screen-space compass itself, but `CockpitGauges` reads the same field to turn
+the authored 3D panel's compass drum, so the tape and the drum never compute the heading twice. `DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (`BL-085`/`BL-173`) is
 the damage-dial band function — `frac` is `PartFraction`'s COMBINED armor+health value (both bound
 sources, flight and the lab, feed that scale; nothing here computes it),
 `yellowAt`/`orangeAt`/`redAt` are mined per-part from the data's own `*_damage_green/yellow/red`

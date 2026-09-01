@@ -396,6 +396,35 @@ internal static class WorldAndToolSuites
                 ctx.Check(horizon.Transform.Origin.IsEqualApprox(horizonRest.Value.Origin),
                     $"pfhorizon's authored translation is untouched");
             }
+
+            // The compass drum: found by the binary's own name first, the data's "comp"
+            // second (docs/formats/hud.md), then turned about Y by the engine's own -heading
+            // argument, unnegated a second time.
+            var compass = FindNamed(interior, "compass") ?? FindNamed(interior, "comp");
+            ctx.Check(compass != null, $"the interior carries the compass drum, by either name");
+            if (compass != null)
+            {
+                var compassRest = compass.Transform;
+                cluster.HeadingDeg = 0f;
+                panel.Apply(cluster);
+                ctx.Check(compass.Transform.Basis.IsEqualApprox(compassRest.Basis),
+                    $"a zero heading leaves the drum at its authored basis");
+
+                float heading = 40f;
+                cluster.HeadingDeg = heading;
+                panel.Apply(cluster);
+                var want = new Basis(Vector3.Up, -Mathf.DegToRad(heading)).Scaled(compassRest.Basis.Scale);
+                ctx.Check(compass.Transform.Basis.IsEqualApprox(want),
+                    $"the drum takes -heading about Y heading={heading:0.###} deg");
+                ctx.Check(compass.Transform.Origin.IsEqualApprox(compassRest.Origin),
+                    $"the drum's authored translation is untouched");
+
+                // A second write replaces the angle rather than accumulating onto it, the same
+                // shape the needle and horizon writes already guard.
+                panel.Apply(cluster);
+                ctx.Check(compass.Transform.Basis.IsEqualApprox(want),
+                    $"a second frame at the same heading writes the same absolute angle");
+            }
         }
         finally
         {
