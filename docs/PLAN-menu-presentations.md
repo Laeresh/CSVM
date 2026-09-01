@@ -377,7 +377,12 @@ startup has not proved the seam.
 mouse/keyboard/pad interaction, audio cues, live switching and force-Built-in recovery.
 
 **Evidence (confidence: lead-only).** `BoardFit` and current campaign boards prove the desired
-scaling/rendering pattern, but A1/A2 must establish the non-campaign screen data.
+scaling/rendering pattern, but A1/A2 must establish the non-campaign screen data. A1 established
+that the original's top level has no Free Flight row and the archive ships no free-flight screen,
+script or art (`docs/org/menu-inventory.md`); the user accepted an explicit remake-only rule under
+Decision 11: **Original's top level gains a Free Flight row and screen of our design**, composed
+from the decoded main-menu chrome and widget conventions once CAP-49 establishes them, and the
+inventory marks that screen remake-only rather than evidenced.
 
 **Approach.** Build the Original shell over decoded layouts and the shared Free Flight feature.
 Implement pointer hit-testing/rollover and equivalent semantic navigation. Add the minimal Built-in
