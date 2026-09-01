@@ -1,0 +1,552 @@
+# M5 Polish Run 8
+
+**ACTIVE PLAN** (written 2026-09-01). It sits in `docs/`, which by this repo's convention makes it
+a live plan; PROJECT_CONTEXT.md's "Current status" names the active plan when more than one is
+present. Move it to `docs/plans/` with a `COMPLETE` banner, and add its row to
+[`plans.md`](plans/plans.md), when every item lands.
+
+Ten player-visible defects in the delivered M1 to M5 game, selected from `backlog.md` on
+2026-09-01 by the criteria the author approved that day: open, unblocked `[Bug]` items a player
+meets in normal play first, with small high-value `[Tuning]`/`[Feature]` fills, excluding
+everything `[Blocked]`, `[Owed-playtest]`, `[Research]`, menu-screen territory, and items
+presupposing a future milestone. **Each of the ten was re-verified still-open on 2026-09-01**
+against the record (`git log --oneline --all --grep=BL-nnn`), the current `backlog.md` entry,
+`docs/PLAN-menu-presentations.md`, the worktree/branch list, and the cited code; where a cite had
+drifted, the corrected `file:line` is in the item's Evidence below. The scheduled entries were
+moved out of `backlog.md` into this plan in the same change that created it.
+
+This plan runs beside the active [`PLAN-menu-presentations.md`](PLAN-menu-presentations.md) (Wave
+A) and deliberately touches nothing that plan owns: no `LaunchMenu`, no menu screens, no campaign
+board chrome. Two clusters were left in the backlog on their own recorded grounds: the
+AI-mode-machine group (`BL-523`, `BL-550`, `BL-565`, `BL-566`), which three prior polish runs
+each declined to split because it deserves its own run, and `BL-603`, whose first step is flying
+the original game itself. First alternates if an item here dies early: `BL-618`, `BL-389`,
+`BL-635`, `BL-656`.
+
+## Milestone goal
+
+- The campaign no longer softlocks CM09 on its met win condition, and every docking cutscene
+  opens with one correct hook swing under intact letterbox bars.
+- The cockpit panel's compass turns with the aircraft, nitro shows what the data authors, and a
+  failed stunt run can no longer poison the persisted best time.
+- Named campaign aces carry their authored durability, turrets acquire what the original's turrets
+  acquire, a downed zeppelin plays its authored breakup, and a mid-flight AI spawn no longer
+  hitches the frame.
+- A closing sortie judges at the controls every landed item whose acceptance needs eyes.
+
+**No menu work and no AI-mode-machine work.** Everything hosted by `LaunchMenu` belongs to
+`PLAN-menu-presentations`; the `BL-523`/`BL-550`/`BL-565`/`BL-566` cluster stays whole for a
+dedicated run.
+
+## Ground rules
+
+- **Original-game data drives everything.** Read the reader/compiled JSON before writing a handler;
+  never guess a value. Inventing content is the trap this project falls into most often.
+- **Evidence is a lead to verify, not a finding to implement.** Confirm every claim against the
+  data/code before building on it; **a correct disproof that lands no code is a success here**, not a
+  failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
+  TUNE / lead-only).
+- **`PROJECT_CONTEXT.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
+  landed item; a landed item gets its record in the landing commit's message (`docs/HISTORY.md` is
+  frozen — never append) and is **deleted** from
+  `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
+- **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
+  rule that bites per item.
+- **Verify against a full 8-chapter `--freecam --chapter=<X>` regression** (zero errors, same
+  mesh/node counts unless the change is meant to add coverage) plus a targeted capture at the
+  location the report came from.
+- **Read the module's entry in `docs/architecture.md` before modifying it.** Dead ends are recorded
+  there precisely so they are not re-chased.
+
+## Checklist
+
+Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items land.**
+
+### Wave A — Campaign flow
+
+1. ☐ `BL-581` CM09 completes to the docking once the tower is down and every aircraft is killed
+2. ☐ `BL-628` A docking cutscene's opening shot plays one hook swing, hooks parked at build
+3. ☐ `BL-631` The letterbox bars draw over everything the episode flies past
+
+### Wave B — Combat and AI
+
+11. ☐ `BL-557` Roster `init_health`/`armor` overrides reach the named aces' spawns
+12. ☐ `BL-626` Turrets acquire the candidate classes the original's turret picker holds
+13. ☐ `BL-440` A downed zeppelin plays its authored breakup (`NodeUndercover` made real)
+14. ☐ `BL-641` Introducing one AI aircraft mid-flight stays under the hitch threshold
+
+### Wave C — Cockpit and flight feel
+
+21. ☐ `BL-663` The cockpit panel's compass drum turns with heading
+22. ☐ `BL-546` Nitro engage: reconcile the green suite with the smoke-free sortie, then settle the prop swap by decode
+23. ☐ `BL-426` A failed stunt run records nothing and announces no best
+
+### Wave D — Closing sortie
+
+31. ☐ At-the-controls pass over every landed item that owes a judgement
+
+## Dependency and parallelism notes
+
+Waves group by theme, not dependency; every code item is independently landable, and D31 runs
+last. Contention rules for parallel worktrees:
+
+- **A2, B13 and C22 all reach the animation runtime family** (the reader/definition instantiation
+  path, `AnimRuntime.cs`, and possibly `NameResolver`). Run them sequentially, or in one worktree.
+- **B11 and B14 both edit the AI spawn/assembly path** (`AiFlightAssembler.Assemble`). Run them
+  sequentially.
+- B13 changes a global condition and C22 may add a resolution tier, so either can move goldens:
+  take a baseline before, and every re-pin is user-reviewed.
+- A1, A3, B12, C21 and C23 touch disjoint files and can run in parallel with anything above.
+- **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
+  worktree session here; use a local commit or a file copy.
+
+---
+
+# Wave A — Campaign flow
+
+## A1 ☐ `BL-581` CM09 completes to the docking
+
+**Goal.** CM09 (C1/M04) goes on to the docking once the radio tower is down and every aircraft is
+killed, instead of holding forever.
+
+**Evidence (confidence: traced for the graph half; the stalling world read is a lead).** The
+objective graph is proven correct and needs no change: driven headless on the shipped script, the
+tower-down route reaches 20 (the Paladin Blake squad wake) 90 s after 19 wakes, 30 wakes 42, and
+42/43/44 nap 31 (the docking) once groups 1, 2 and 5 read empty; a nap landing on a
+`TICK_DEPENDS_ON_OBJ`-gated objective is held and resumed as the original does
+(`FUN_0046a490`/`FUN_0046b160`, `docs/formats/objectives.md`). What stalls is on the world side:
+`DEDG` never reading group 1 (or 2/5) empty through `GroupLiveCount`, or `WAKEUP_ENEMIES` not
+putting the parked `blakebloodhawk_1\2\3\8` into play. The sortie log carries every transition as
+`[campaign] objective N woke|napped|completed|killed` lines (`Session/CampaignDirector.cs:759`).
+
+**Approach.** Diagnose from the log lines of a CM09 flight: if `objective 28 completed` never
+appears, group 2 never read at most two; if `objective 42 completed` never appears after 20 woke,
+group 1 never read empty. Fix the world read the log names, nothing in the graph.
+
+**Model recommendation.** High: the deliverable is a diagnosis of one of two named world-side
+mechanisms, then a targeted fix in campaign/world code.
+
+**Verify.** A CM09 run whose log shows the full chain (28 completed, 42 completed after 20 woke,
+31 napped then resumed) and a mission end that reaches the docking; then the full `RunTests.ps1`.
+`<TODO: whether the win condition (tower down plus every aircraft killed) is reachable in a
+scripted headless run, and the exact launch command; if it is not, the confirmation moves to D31>`
+
+**⚠ Traps.** The Defend marker clearing (`OBJECTIVE25`) is correct. `BL-563` is a separate,
+already-landed fix. The graph needs no change; re-deriving it is the recorded wasted hour.
+Cross-refs: `BL-565`, `docs/formats/objectives.md`, the graph half's closing commit
+(`git log --grep=BL-581`).
+
+## A2 ☐ `BL-628` One hook swing per docking
+
+**Goal.** Any campaign docking's opening camera shot shows exactly one hook swing, with the hooks
+parked retracted when the episode opens.
+
+**Evidence (confidence: direction-sound; the supersede rule itself is a lead until confirmed
+against the parse).** Reported at the controls and re-confirmed on the merged build in CM11's
+closing autodock; airframe-independent (Devastator and Bloodhawk both show it) and present on
+every docking since CM01. The hook engages correctly, so this is the animation running
+repeatedly, not the dock failing. Two separate faults wear the one symptom:
+
+- (a) The repeat: `extracted/zrdr/player_hook.zrd.json`, which authors `player_extend_hook` and
+  its eleven `If NodeActive` airframe branches, uses a plain `NAME` and carries no `NAME1`. The
+  mission log's census line ("reader def(s) superseded by this mission's compiled manifest
+  (mission-scope + NAME1), not instantiated") names only `(NAME1)`-tagged entries, so a
+  plain-`NAME` reader definition is not superseded, coexists with the compiled
+  `C*/cam_anim/player-player_extend_hook.json`, and the fork runs twice, taking its airframe
+  branch with it each time. ⚠ That supersede rule is read off the log line's own wording; confirm
+  it against the parse before building on it.
+- (b) The pre-deployed hooks: seven of the eleven airframes author no `_startup` definition
+  (only `autogyro_hook`, `balmoral_hook`, `brigand_hook`, `warhawk_hook` carry one; `avenger`,
+  `blood`, `firebrand`, `fury`, `kestrel`, `peacemaker`, `pirate` do not). If the startup is what
+  parks the hook retracted at build, that is why the Devastator's hooks are already fully
+  deployed at scene open.
+
+Each airframe has exactly one hook definition bound to its own model (the Devastator's is
+`pirate_hook_extend`, `extracted/zrdr/pirate_hook.zrd.json` authoring
+`NAME1 [pirate_hook_extend, [player_pfighter, pirate_hook]]`), so no airframe is missing one.
+Separately, `blood_hook_extend` and `brig_hook_extend` are each authored twice in `C*/cam_anim/`
+(`…-1.json`, same `name`, same `anim_name`, one byte apart) in all eight chapters; that third
+duplication is not what the Devastator hits.
+
+**Approach.** Settle (a) first: one question about which reader definitions the compiled manifest
+supersedes, and it reaches every airframe. Then (b): what parks a hook retracted at build for the
+seven airframes authoring no startup. Any suite written for this counts the AIRFRAME BRANCH,
+never `player_extend_hook`.
+
+**Model recommendation.** High: a parse-rule confirmation with a high blast radius across every
+mission's definition set.
+
+**Verify.** A suite asserting the airframe branch's play count on a docking episode; then any
+campaign docking watched at the controls (D31), opening shot alone: one hook swing, hooks parked
+before it.
+
+**⚠ Traps.** Do not silence it by latching "already played" on the runtime: a repeat a definition
+authors is data, and a latch would hide the same defect wherever else it happens. The
+player-visible hook engagement is correct today and must stay correct. Do not open this against
+the node-state prerequisite again; it is enforced (ruled out two-sided, `git show 733d0218`). Do
+not trust a suite that counts `player_extend_hook`: that is the measurement which reported this
+closed while it was not (a PLAN-M5-polish-7 slot ruled out its candidate mechanism headless and
+the next sortie re-confirmed the symptom). Cross-refs:
+`docs/formats/anim-definitions/cutscenes.md`.
+
+## A3 ☐ `BL-631` Letterbox bars are unoccludable
+
+**Goal.** Nothing the episode flies past draws over the cutscene letterbox bars.
+
+**Evidence (confidence: traced).** Seen at the controls in CM10 (C1/M05)'s closing docking
+cutscene, where a walkway passes between the camera and the bars and is drawn on top of them;
+re-confirmed on the merged build. The bars are world geometry, not a screen overlay:
+`CutsceneController` binds the definition's own `letterbox` node (`BarsNode`,
+`Session/CutsceneController.cs:26`), pins it to the cutscene camera by transform copy, and picks
+each camera's field of view as the widest one the card still covers (near `:916-933`). Anything
+closer than the card is in front of it, and depth decides the rest. (The entry's original cites
+`:25`/`:846-863` had drifted; symbols and mechanism are unchanged.)
+
+**Approach.** Keep the card as data and make it unoccludable, by render priority or by taking it
+out of the depth test, so its coverage no longer depends on what the episode flies past. Check
+`OriginalScreenshots/CM10.mkv` first for whether the original occludes it.
+
+**Model recommendation.** Medium: a narrow render-state change on one bound node.
+
+**Verify.** CM10's docking, watching the walkway cross the frame (D31); goldens unchanged (no
+cutscene golden exists, so the check is the full suite plus the sortie).
+
+**⚠ Traps.** Do not solve it by moving the camera or narrowing the field of view: both are
+computed from the card's own extent, so a change there moves the framing the definition authored.
+The card is the original's geometry too, so the film is the check on whether the original
+occludes it before any depth behaviour changes.
+
+# Wave B — Combat and AI
+
+## B11 ☐ `BL-557` Roster durability overrides applied
+
+**Goal.** The mission roster's `init_health` and `armor` overrides reach the named aces' spawns,
+so `hafury_1`-`_6`, `hkfirebrand_9`, the Black Hat Brigands and the rest fight at their authored
+durability.
+
+**Evidence (confidence: traced).** The original's roster spawn applies slot 7 `init_health` when
+greater than zero and slot 66 `armor` when greater than or equal to zero, then the difficulty
+scale (`docs/formats/ai-rosters.md`, `docs/org/vehicleDamage.md`). `RosterSpawnPlan` carries
+neither value, `CampaignRosterPlan.Build` does not read them, `SpawnFor` cannot forward them, and
+the assembler seeds airframe defaults; no `InitHealth` symbol exists in the tree. The census
+(`analysis/aim-assist-ttk/Census-RosterDurability.ps1`) over the 414 extracted blocks finds,
+among the 251 enabled non-player-team ones, 25 authoring a positive `init_health` and 20 a
+non-negative `armor`, every armour value between 90 and 132 and every one an override that RAISES
+durability above the airframe default. The insertion point now exists on main: `BL-556`'s close
+(`git show 308784a8`) landed the difficulty scale at `PlaneStats.WithEnemyDurability` in
+`AiFlightAssembler.Assemble`, exactly where these overrides apply, before the scale and the
+jitter.
+
+**Approach.** Add the two fields to `RosterSpawnPlan`, read them in `CampaignRosterPlan.Build`,
+forward them through `SpawnFor`, and apply them in the assembler before the difficulty scale and
+the jitter, at the `WithEnemyDurability` call.
+
+**Model recommendation.** Medium: precise data plumbing along one named chain, with the gates
+already specified.
+
+**Verify.** Unit fixtures for both gates and the absent-slot case (a block stopping at 66 fields
+leaves armour unset); the census script re-run as the ground truth; then the full `RunTests.ps1`.
+TTK judgement, if wanted, happens in D31 at a known `--difficulty=`.
+
+**⚠ Traps.** **A missing slot is not a zero.** Blocks are not fixed-width (field-count histogram
+42/65/66/67/68/81) and 33 of the 414 stop at 66 fields, so slot 66 does not exist on them; a
+reader that maps absent to `0.0` invents 18 armour-stripped hostiles in C2/M05, C2B/M04 and
+C3/M01 that the data does not author. No shipped hostile authors `armor 0`. The two gates differ
+and both matter: `init_health` only when `> 0`, `armor` when `>= 0`. The eight per-zone roster
+slots are `-1` on all 414 blocks and stay parsed-and-ignored; do not revive that path. Direction:
+this makes those enemies TOUGHER, lengthening time-to-kill on exactly the fights that should be
+hard. Cross-refs: `Flight/Difficulty` (the scale this lands in front of), `BL-561` (open
+research; needs this settled first, and any TTK reading taken at a known `--difficulty=`);
+`analysis/aim-assist-ttk/FINDINGS.md`'s census of this field is superseded by the script beside
+it, so quote the script.
+
+## B12 ☐ `BL-626` Turrets acquire the original's candidate classes
+
+**Goal.** Boat, balloon and emplacement guns fire at the targets the original fires at, ships
+included: CM10's patrol boats and lifeboat guns engage the hospital ship, CM12's patrol boats
+engage the Spruce Goose.
+
+**Evidence (confidence: traced on the CSVM side; the original's candidate-class list is the
+item's own decode step).** Reported at the controls in two missions. In CM10 (C1/M05) the
+lifeboats a downed attack balloon drops reach the water, drive their nets and shoot at nothing
+while the Red Cross hospital ship sits in front of them; in CM12 (C2/M01) the `eshipg31`
+generator's patrol boats never attack the Spruce Goose they are launched against.
+`TurretController.AcquireTarget` takes the nearest live hostile **aircraft** inside
+`DETECTION_RANGE` (`Flight/TurretController.cs:624`), and the scan set it fills is an aircraft
+list (`:53`), so a vessel is not a candidate at any range and no later gate in the tick can
+rescue it. The mission data expects otherwise: CM10 authors twelve `patrolboat_1..12` blocks in
+`aiv.zrd` at `y = 0` and nine `bbtur` balloon turrets, and each `lifesaverNM` carries its own
+gun. The original's behaviour is on film in `OriginalScreenshots/CM10.mkv`, where patrol boats
+attack the hospital ship shortly after the start.
+
+**Approach.** Settle from the decode which candidate classes the original's turret picker holds
+(`docs/org/targeting.md` is the starting point; the aim assist already keeps a vehicle list
+beside its aircraft list, `docs/org/aim-assist.md` "The four lists", so the classes exist to draw
+on), then widen the acquisition to match. Scope this slot to turret acquisition only.
+`<TODO: the decompiled function carrying the original's turret candidate scan is not yet named;
+finding it is the decode step>`
+
+**Model recommendation.** High: the decode step decides the fix, and a wrong class list changes
+combat balance across missions.
+
+**Verify.** CM10 with a dropped lifeboat and the hospital ship in frame, then CM12 as the Goose
+passes the boats, both against the film (D31); the full `RunTests.ps1`.
+
+**⚠ Traps.** Do not reach the behaviour by making a ship an aircraft-class entity so the existing
+list picks it up. The aim assist's own vehicle list is a separate mechanism, its membership
+settled and its candidates already carrying each hull's velocity; nothing here should reach into
+it. A patrol boat's own gunnery runs through the AI mode machine (`BL-523`), so a turret-side fix
+by itself does not make a boat shoot; that boundary is deliberate. Cross-refs: `BL-523`,
+`docs/org/targeting.md`.
+
+## B13 ☐ `BL-440` The zeppelin breakup plays
+
+**Goal.** A downed zeppelin pitches over, sheds its six gasbags with splashes, and drops the
+gondola, as the authored `killpzep` choreography specifies.
+
+**Evidence (confidence: traced; the symptom is read from the data and the stub, never yet
+watched at the controls).** The kill already plays the authored hull-death def
+(`ZeppelinRuntime.PlayHullDeath` plays `killpzep`, e.g.
+`extracted/C1/M04/mis_anim/piratezep-killpzep.json`), and that def's `main_altitude_check`
+sequence is `Initial`, so it runs from the moment the def starts: it tests
+`If NodeUndercover(rock_zeppelin)` and, on the else branch, loops forever (`Loop -1`).
+`AnimRuntime.cs:3197` stubs `NodeUndercover` to a constant `false` (the entry's `:2476` had
+drifted). The gate never opens, `rotatezep` and `breakupzep` are never called, and nothing
+reaches the `StopSequence` that ends `floatdown`'s −3.5 gravity descent, so the hull sinks
+intact. What the data authors: `rotatezepdown` pitches `rock_zeppelin` 0 to −15° over 8 s and
+`rotatezep` eases it −15° to −7° over 0.5 s at the break; `breakupzep` then fans out 13 same-tick
+CALLs (the deepest authored fan-out in the game, the one that sized `SequenceRunner`'s cap):
+`break1`…`break6` drop each gasbag under −9.8 gravity with a slow forward tumble and a
+`bounce_sequence.water` of `hit_waterN` (a `huge_splash`, then `huge_ripple` 0.5 s later at that
+gasbag), `breakunder` translates `underneath` −35 m over 2 s and deactivates it, and six
+`break_[lr]eng[123]1` each gate on their own `NodeUndercover` before calling `destroy_pz…`.
+
+**Approach.** The gate is the whole feature: a real ground/occlusion probe behind
+`NodeUndercover`, since the motions themselves are `ObjectMotion`/`ObjectMotionFromTo`, which
+`MotionRuntime`/`PoseChannel` already run. Decode the condition's `distance` operand first: it
+arrives as a raw u32 (`3263299584` on the hull test, `3229614080` on the engines) and is not a
+length until decoded. Correct the stub's own comment with the fix (its "all 473 uses sit in
+`OnCall` definitions the bootstrap never reaches" premise is already broken by `killpzep`).
+
+**Model recommendation.** High: a global condition change whose blast radius is every def that
+reaches it, plus a u32 decode.
+
+**Verify.** The goldens are the check for the global change: baseline before, compare after,
+every moved shot attributed. Then an Instant Action `zeppelin_run`, torpedo the hull down, and
+watch it pitch over, shed six gasbags with splashes, and drop the gondola (D31). `BL-291`'s
+closed harness (`zeppelin_run` plus a `wep_14` pylon, `git log --grep=BL-291`) is the
+spawn-and-kill rig.
+
+**⚠ Traps.** (a) The stub is global: making the condition real changes every other def that
+reaches it, so the goldens are the check. (b) The distance operand is not a length until decoded.
+(c) Effect templates snap to absolute world points and never track a moving host
+(`ZeppelinRuntime.cs:732`; the entry's `:524` had drifted), so a splash authored at a falling
+gasbag has to be placed from that gasbag's position at the moment of the call. Cross-refs:
+`BL-291` (closed), `docs/architecture.md`'s `ZeppelinDamage.cs` bullet (the survivor-count kill
+that fires the def).
+
+## B14 ☐ `BL-641` The AI-spawn hitch reaches the threshold
+
+**Goal.** Introducing one AI aircraft mid-flight no longer trips the hitch monitor: CM18
+(C4/M03)'s generator launches stay under each frame's printed threshold.
+
+**Evidence (confidence: traced, measured).** The two CM18 stalls are `cargozep1`'s first two
+generator launches, on the authored `ind_period` 3 + `wave_period` 1 cycle (4.017 and 8.033 sim s
+under `--det`'s 1/60 s step), each building a `Cargo_params` Black Swan through
+`AiFlightAssembler.Assemble`. The shader-memo half already landed (`git show 8563f465`, merged
+`ed035fd8`): sharing the generated shaders across builders took the frames from 363/325 ms to
+156/117 ms at 1P and 337/323 ms to 135/117 ms at 4P, paired A/B, two kept launches a side. What
+remains is genuine per-aircraft construction, attributed by stopwatch inside the `ai_spawn`
+scope: about 50 ms crash rig (template staging, the wreck subtree, and 194 to 198 pre-warmed
+emitters at about 19 ms), 22 ms `FlightController.Bind` (prop, wing-light and control-surface
+animators, collider), 10 ms model build, 5 ms loadout, turrets and damage visuals.
+
+**Approach.** The crash rig is the only block not needed for the aircraft to be observable
+(`_worldRoot.AddChild(controller)` already runs before it), so build it a frame or more later
+behind a "build it now if this aircraft dies first" guard. That alone leaves about 90 ms, so
+reaching the threshold means spreading the whole assembly over three or more frames.
+
+**Model recommendation.** High: spreading construction across frames without changing observable
+spawn behaviour or `--det` byte-identity is judgement-heavy.
+
+**Verify.** CM18 under `--det` at 1P and 4P, the same paired A/B discipline, frames 241 and 482
+compared against their own printed thresholds; `HitchMonitor` quiet on the launches; the full
+`RunTests.ps1` (the goldens guard the spawn's visible outcome).
+
+**⚠ Traps.** The stall is far past `HitchMonitor`'s grace window and reproduces to the same sim
+frame under `--det`, so it is not workstation noise (`docs/verification.md` PERF-12/13). The 4P
+threshold reads about 75 ms rather than 46 ms because the relative term rides a slower rolling
+median: compare frames against their own printed threshold. Do not re-derive the shader-compile
+term; it is gone, and PERF-22 records it. How OFTEN CM18 pays this is a separate open question
+(`GeneratorCycle` switches the capacity check off at authored `capacity <= 0` unless a
+`WAKEUP_GENERATOR` has armed it, CM18 authors none, so `cargozep1` launches every 4 s up to
+`max_active` 10 unasked; `docs/formats/mission-entities/enemy-generators.md` "Capacity rule and
+limit" says the data does not establish that reading). It stays out of this slot. Cross-refs:
+`BL-434` (the per-viewport splitscreen cost the same measurement pass profiled).
+
+# Wave C — Cockpit and flight feel
+
+## C21 ☐ `BL-663` The compass drum turns
+
+**Goal.** The 3D cockpit panel's compass drum turns with the aircraft's heading and agrees with
+the screen-space heading tape.
+
+**Evidence (confidence: traced).** The authored `gauges` subtree carries a compass drum the
+original drives as `FUN_004d1a30(node, 0, -heading, 0)` at `0049f8fe` (`docs/formats/hud.md`,
+"Cockpit gauges"), and that call is decoded but left unwired. `CockpitGauges` binds `hundreds`,
+`thousands`, `speed`, `nitro_boost`, `nitro_charge`, `ggarrow`, `mgarrow` and `pfhorizon`
+(`Flight/CockpitGauges.cs:33`) and nothing else, so the drum holds its authored pose for the
+whole flight. The screen-space tape is not the fault: `CompassTape.HeadingDeg` is fed every frame
+from the nose (`Flight/FlightController.cs:1810`, `Flight/FlightHud.cs:322`) and the control
+repaints unconditionally in `_Process`.
+
+**Approach.** Heading has to reach `CockpitGauges.Apply`, which today takes only `GaugeCluster`;
+carry it on the cluster, keeping the rule that the 3D panel and the screen-space dials read one
+already-computed state, after which the drum takes its angle the way the altimeter needles take
+theirs.
+
+**Model recommendation.** Medium: one plumbing step and one bind, with the traps already named.
+
+**Verify.** Extend the gauge coverage so the drum's rotation is asserted against a driven heading
+(the panel suites that pinned the altimeter needles are the pattern); then D31: fly a circle in
+the cockpit view and watch the drum against the heading tape at the top of the screen; the two
+show the same card and turn together, headings increasing to the left.
+
+**⚠ Traps.** The node's name in the DATA is `comp` while the binary's own lookup string is
+`compass`, so a bind by either name alone misses on some airframes (the same split that forced
+`pfhorizon` over `horizn`). The needle writes are negated because a +Z node rotation is
+counter-clockwise-positive, which the decoded `-heading` argument may already account for: the
+sign is one to confirm on the panel rather than to derive. Cross-refs: `BL-113` (compass tape
+tuning) shares the tape but not this node; `docs/formats/hud.md`'s "Known uncertainty" still has
+compass north unverified as world −Z, and a wrong axis there would move both readouts together
+rather than one.
+
+## C22 ☐ `BL-546` Nitro: the smoke contradiction, then the prop swap by decode
+
+**Goal.** A nitro engage shows the exhaust smoke the data authors in a real flown session, and
+the prop-swap half is settled either as a fix or as a decode-confirmed disproof.
+
+**Evidence (confidence: traced for the smoke contradiction; the prop swap is decode-gated).**
+The call-shape half already landed (`git show 4a567bdb`): `nitro_boost`/`nitro_decay`
+(`plane_props.zrd`) author their anchor as NAME `warhawk`, which never resolves inside a
+per-plane crash rig's own index, and `FlightController.AdvanceNitro` called `PlayWithin`, which
+has no fallback for a NAME that fails to resolve; `AdvanceNitro` now uses the
+`Play(name, PlaneModel, applyReset: false)` fallback the working `startprops`/`stopprops` call
+site uses, and the `nitro-boost-anchors` suite (builds the real `player_warhawk` rig, plays
+`nitro_boost` through the production call shape, asserts the puffer sustains) is green.
+⚠ A sortie on the merged build contradicts that half: an engage flown at the controls shows no
+exhaust smoke at all, so the suite is green while the effect it guards is invisible in a real
+session. The suite builds its own `player_warhawk` rig, so the difference between that rig and a
+flown aircraft's is the first place to look.
+
+The prop swap (`OBJECT_ACTIVE_STATE`/`OBJECT_OPACITY_FROM_TO nitropropN`, `spin_nitrorotorN`,
+`snd_nitrostart AT_NODE nitroprop1`) is still not visible, and the open question is why:
+`extracted/planes/nodes.json` declares exactly 34 `nitropropN` nodes and carries BOTH a
+bare-named root and a `player_*` root for nearly every aircraft (`warhawk`/`player_warhawk`,
+`fury`/`player_fury`, and so on), yet building all eleven `player_*` rigs through `PlaneBuilder`
+turns up only `staticpropN`; no `nitropropN` node is reachable from any flyable airframe's own
+subtree. Reading A: the original also resolves the `NAME warhawk` anchor per-plane, the disc
+never showed on a flyable aircraft there either, and the prop-swap half closes as a disproof.
+Reading B: the original resolves `NAME` globally against the world/library set, finds the bare
+`warhawk` root (which carries the discs), and DID show a prop swap that a per-plane-scoped
+resolution structurally cannot reproduce.
+
+**Approach.** First reconcile the suite with the sortie (suite rig vs flown rig; a fix that only
+satisfies the suite again leaves the same gap). Then decode `FUN_004b2110`'s "play nitro_boost
+def on the plane node" call (cited in `docs/org/flightModel.md` "Nitro") for whether the
+original's anchor resolution is scoped to the calling vehicle or is a global NAME search; that
+answer alone separates reading A from B, and it comes before any prop-swap code. If B, the fix is
+a CSVM resolution change (a second NAME-search tier for this class of def, or a bespoke bare-root
+lookup), not a call-site swap like the smoke fix was.
+
+**Model recommendation.** High: a suite-vs-reality contradiction plus a decode whose answer may
+turn half the item into a disproof.
+
+**Verify.** A probe of a flown session (not the suite's own rig) showing the exhaust puffers
+sustaining on engage; the decode's answer written to `docs/org/flightModel.md` "Nitro"; smoke
+judged at the controls in D31. If reading A holds, the prop-swap half lands as a recorded
+disproof with no code.
+
+**⚠ Traps.** The suite's green is the misleading instrument here; settle which of suite and
+sortie describes the shipped path before touching the prop swap. The same sortie reports no shake
+on the engage: `BL-447`'s ledger edge there is the AI's `medium_aishake`, so whether the player's
+own engage is meant to shake at all is an open question recorded in this item, not that one.
+Cross-refs: `BL-447` (also the AI's `snd_nitro` blip, and the decay lockout `_nitroDecayLeftS`
+stands in for), `docs/org/flightModel.md` "Nitro", the `nitro-boost-anchors` suite.
+
+## C23 ☐ `BL-426` A failed stunt run records nothing
+
+**Goal.** Losing an Instant Action stunt run neither records a time nor announces NEW BEST; a
+completed run still records.
+
+**Evidence (confidence: traced; cites re-verified this session).** The wrap-up path is
+`InstantActionDirector.StuntSummary` (`Session/InstantActionDirector.cs:733-744`), which calls
+`store.RecordIfBest(key, run.Elapsed)` (`:742`) behind two guards and no third: the objective is
+`ZonesFlown`, and the pilot has a `Stunt` run at all. Neither asks whether the run was finished,
+so every end of a stunt mission records a time, a loss included, and a failed run wins the
+comparison almost every time because it ended early (`ScoreStore.RecordIfBest` takes any lower
+total). The write persists immediately to `user://stunt_scores.json`, so a bogus time becomes the
+record a later honest run is measured against and, being unbeatably short, can never be displaced
+by real flying. The fix's predicate already exists in the same file: the solo path is correct by
+construction (`StuntScoreboard.OnRunCompleted`, `StuntScoreboard.cs:58`, only runs on completion,
+using `StuntMission.AllComplete`, `:101`), and `pilot.Stunt is { AllComplete: true }` is already
+used at `InstantActionDirector.cs:721`. `prevBest` is read at `:741`, in the same method, before
+the record. (The entry's `StuntSummaryFor :761-764`, `GameSession.cs:3091-3092`,
+`StuntScoreboard.cs:156-160` and `:98` cites had all drifted; the mechanism is unchanged.)
+
+**Approach.** Gate the record per pilot on that pilot's run being complete, and fix the displayed
+previous-best alongside (trap (b)). Two calls belong to the author and go to D31: whether a
+failed run shows its elapsed time without the NEW BEST flag or shows no time (the original's own
+behaviour is not decoded; the working default until judged is elapsed shown, no flag), and
+whether to invalidate existing `user://stunt_scores.json` entries, since machines already hit
+carry a poisoned file no code change repairs.
+
+**Model recommendation.** Medium: the predicate exists; the care is per-pilot gating and the
+display read-order.
+
+**Verify.** Fail a stunt mission deliberately: the wrap-up claims no best and
+`user://stunt_scores.json` is byte-identical afterwards; complete one: it records. Cover the
+split splitscreen end (one pilot complete, one not) in whatever harness the gate lands in; then
+the full `RunTests.ps1`.
+
+**⚠ Traps.** (a) Do not gate on the mission's win/loss flag: Decision 10 of
+`docs/plans/PLAN-instant-action.md` has every player fly their own zone set with the mission
+ending when all of them are done, so a splitscreen mission can end with one pilot complete and
+another not; the test belongs on the run, per pilot. (b) `prevBest` is read before the record, so
+a fix that stops the write without touching the display would still show a stale figure. (c) The
+store is in `user://`, not the repo; decide the poisoned-file question explicitly rather than
+silently.
+
+# Wave D — Closing sortie
+
+## D31 ☐ At-the-controls pass over the landed items
+
+**Goal.** Every landed item whose acceptance needs eyes or a judgement gets both, and every
+finding becomes a fix, a follow-up `BL`, or a recorded verdict.
+
+**Evidence (confidence: n/a; this item consumes the others' playtest lines).** The checks owed,
+by item: A1 CM09 flown to the docking if the headless run could not prove it; A2 any campaign
+docking, opening shot alone, one hook swing from a parked start; A3 CM10's docking, the walkway
+crossing the frame under intact bars; B11 optionally the feel of a named-ace fight at a known
+`--difficulty=`; B12 CM10 (dropped lifeboat, hospital ship in frame) and CM12 (the Goose passing
+the boats) against `OriginalScreenshots/CM10.mkv`; B13 an Instant Action `zeppelin_run`, torpedo
+the hull, watch the pitch-over, six gasbag drops with splashes, and the gondola; B14 CM18 flown
+without a felt hitch on the generator launches; C21 a circle flown in cockpit view, drum against
+tape; C22 an engage showing exhaust smoke, and the prop-swap verdict as decoded; C23 a deliberate
+failed run then a completed one, plus the two author calls (failed-run time display, poisoned
+`stunt_scores.json` invalidation).
+
+**Approach.** One session, mission order where missions are involved; the session reads the
+sortie logs beside the author's reports, lands same-day corrections that are unambiguous, and
+mints `BL` items for anything larger, per the standing rule that the author's eyes outrank the
+instruments.
+
+**Model recommendation.** High: reading reports against logs and deciding fix-now vs file is
+judgement work.
+
+**Verify.** Every code item's plan section carries a **Verified.** line naming what was seen; any
+overturned reading is recorded in the item it overturns.
+
+**⚠ Traps.** A live symptom is evidence about the build that was running: confirm which build and
+worktree flew before minting anything. The sim clock can lag wall time on physics-bound late-C2
+missions; check the hitch lines before blaming an authored rate.

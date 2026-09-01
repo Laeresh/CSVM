@@ -410,41 +410,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   a bound group's window the same way. Launch rates are worth tuning from here, and the
   `DAMAGES_ZEPPELIN` rule is exercisable in the cockpit rather than only in `AiRocketeerTests`.
 
-- `BL-440` `[Feature]` **A downed zeppelin never comes apart: the authored breakup stalls on an
-  unimplemented `NodeUndercover` gate.** *Evidence:* the kill already plays the authored hull-death
-  def (`ZeppelinRuntime.PlayHullDeath` → `killpzep`, e.g.
-  `extracted/C1/M04/mis_anim/piratezep-killpzep.json`), and that def's `main_altitude_check`
-  sequence is `Initial`, so it runs from the moment the def starts: it tests
-  `If NodeUndercover(rock_zeppelin)` and, on the else branch, loops forever (`Loop -1`).
-  `AnimRuntime.cs:2476` stubs `NodeUndercover` to a constant `false`. The gate therefore never
-  opens, `rotatezep` and `breakupzep` are never called, and nothing reaches the `StopSequence` that
-  ends `floatdown`'s −3.5 gravity descent, so the hull sinks intact instead of pitching over and
-  breaking up.
-  *What the data authors:* `rotatezepdown` pitches `rock_zeppelin` 0 → −15° over 8 s and
-  `rotatezep` eases it −15° → −7° over 0.5 s at the break; `breakupzep` then fans out 13 same-tick
-  CALLs (the deepest authored fan-out in the game, the one that sized `SequenceRunner`'s cap) —
-  `break1`…`break6` drop each gasbag under −9.8 gravity with a slow forward tumble and a
-  `bounce_sequence.water` of `hit_waterN` (a `huge_splash`, then `huge_ripple` 0.5 s later at that
-  gasbag), `breakunder` translates `underneath` −35 m over 2 s and deactivates it, and six
-  `break_[lr]eng[123]1` each gate on their own `NodeUndercover` before calling `destroy_pz…`.
-  *Fix shape:* the gate is the whole feature — a real ground/occlusion probe behind
-  `NodeUndercover`, since the motions themselves are `ObjectMotion`/`ObjectMotionFromTo`, which
-  `MotionRuntime`/`PoseChannel` already run.
-  *⚠ Traps:* (a) the stub is global and its own comment justifies itself by "all 473 uses sit in
-  `OnCall` definitions the bootstrap never reaches" — that premise no longer holds for `killpzep`,
-  and making the condition real changes every other def that reaches it, so the goldens are the
-  check. (b) the condition's `distance` operand arrives as a raw u32 (`3263299584` on the hull
-  test, `3229614080` on the engines) and is not a length until decoded. (c) effect templates snap
-  to absolute world points and never track a moving host (`ZeppelinRuntime.cs:524`), so a splash
-  authored at a falling gasbag has to be placed from that gasbag's position at the moment of the
-  call.
-  *Status of the symptom:* read out of the data and the stub, not yet watched at the controls.
-  *Playtest after fix:* an Instant Action `zeppelin_run`, torpedo the hull down, and watch it pitch
-  over, shed six gasbags with splashes, and drop the gondola.
-  *Cross-refs:* `BL-291` (closed — Instant Action's `zeppelin_run` plus a `wep_14` pylon is the
-  spawn-and-kill harness this needs, `git log --grep=BL-291`), `docs/architecture.md`'s
-  `ZeppelinDamage.cs` bullet (the survivor-count kill that fires the def).
-
 - `BL-515` `[Research]` **CM04 (C3/M03): the Barracuda takes damage from every side, and the original may
   only accept hits inside its hangar.** *Evidence:* reported at the controls as a question: the
   submarine can be damaged from any angle, where the recollection is that the original demands
@@ -473,34 +438,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   flies or shoots, which it does not.
   *Cross-refs:* `Flight/Difficulty`, `docs/formats/instant-action.md`, `docs/cli.md`'s
   `--difficulty`.
-
-- `BL-557` `[Bug]` **The roster's `init_health` and `armor` overrides are parsed away, so the named
-  aces spawn too soft.** *Evidence:* the original's roster spawn applies slot 7 `init_health` when
-  greater than zero and slot 66 `armor` when greater than or equal to zero, then the difficulty
-  scale ([`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md),
-  [`docs/org/vehicleDamage.md`](docs/org/vehicleDamage.md)). `RosterSpawnPlan` carries neither value,
-  `CampaignRosterPlan.Build` does not read them, `SpawnFor` cannot forward them, and the assembler
-  seeds the airframe defaults instead. There is no `InitHealth` symbol in the tree at all. The census
-  (`analysis/aim-assist-ttk/Census-RosterDurability.ps1`) over the 414 extracted blocks finds, among
-  the 251 enabled non-player-team ones, **25 authoring a positive `init_health` and 20 a non-negative
-  `armor`**, every armour value between 90 and 132 and every one of them an override that RAISES
-  durability above the airframe default. They are the mission's named aces: `hafury_1`-`_6` at
-  108/108 in C2/M03, `hkfirebrand_9` at 132/132, the Black Hat Brigands at 126/126, and so on.
-  *Fix shape:* add the two fields to `RosterSpawnPlan`, read them in `CampaignRosterPlan.Build`,
-  forward them through `SpawnFor`, and apply them in the assembler before the difficulty scale and
-  the jitter, at `AiFlightAssembler.Assemble`'s `WithEnemyDurability` call, which is where the
-  engine's spawn order is already reproduced.
-  *⚠ Traps:* **a missing slot is not a zero.** Blocks are not fixed-width (field-count histogram
-  42/65/66/67/68/81) and 33 of the 414 stop at 66 fields, so slot 66 does not exist on them; a reader
-  that maps absent to `0.0` invents 18 armour-stripped hostiles in C2/M05, C2B/M04 and C3/M01 that
-  the data does not author. No shipped hostile authors `armor 0`. The two gates also differ and both
-  matter, `init_health` only when `> 0` but `armor` when `>= 0`. The eight per-zone roster slots are
-  `-1` on all 414 blocks and stay parsed-and-ignored; do not revive that path. And note the
-  direction: fixing this makes those enemies TOUGHER, so it does not relieve a long time-to-kill, it
-  lengthens it on exactly the fights that should be hard.
-  *Cross-refs:* `Flight/Difficulty` (the scale this lands in front of),
-  `analysis/aim-assist-ttk/FINDINGS.md` (whose census of this field is superseded by the script
-  beside it).
 
 - `BL-561` `[Research]` **Aircraft projectile hit volumes are tuned convex decompositions, and the
   original's hit geometry is untraced.** *Evidence:* `PlaneCollider` builds an aircraft's hit boxes
@@ -909,29 +846,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   calls it (an objective completion action, or a zeppelin node arrival) and why the caller never
   fires. *Cross-refs:* `ZeppelinMotion`, `docs/formats/mission-entities.md` "Steering",
   `zeppelin-pandora-dead-end`.
-
-- `BL-626` `[Bug]` **A turret acquires only aircraft, so no boat, balloon or emplacement gun ever
-  fires at a ship.** *Evidence:* reported at the controls in two missions. In CM10 (C1/M05) the
-  lifeboats a downed attack balloon drops reach the water, drive their nets and shoot at nothing
-  while the Red Cross hospital ship sits in front of them; in CM12 (C2/M01) the `eshipg31`
-  generator's patrol boats never attack the Spruce Goose they are launched against.
-  `TurretController.AcquireTarget` takes the nearest live hostile **aircraft** inside
-  `DETECTION_RANGE` (`Flight/TurretController.cs:621-624`), and the scan set it fills is an
-  aircraft list (`:53`), so a vessel is not a candidate at any range and no later gate in the tick
-  can rescue it. The mission data expects otherwise: CM10 authors twelve `patrolboat_1..12` blocks
-  in `aiv.zrd` at `y = 0` and nine `bbtur` balloon turrets, and each `lifesaverNM` carries its own
-  gun. *Fix shape:* settle from the decode which candidate classes the original's turret picker
-  holds, then widen the acquisition to match. The aim assist already keeps a vehicle list beside
-  its aircraft list ([`docs/org/aim-assist.md`](docs/org/aim-assist.md), "The four lists"), so the
-  classes exist to draw on. *⚠ Traps:* do not reach the behaviour by making a ship an
-  aircraft-class entity so that the existing list picks it up. The assist's own vehicle list is a
-  separate mechanism, its membership settled and its candidates already carrying each hull's
-  velocity, so nothing here should reach into it. A patrol boat's own gunnery runs through the AI mode machine
-  (`BL-523`), so a turret-side fix by itself does not make a boat shoot.
-  *Playtest after fix:* CM10 with a dropped lifeboat and the hospital ship in frame, then CM12 as
-  the Goose passes the boats. The original's behaviour is on film in
-  `OriginalScreenshots/CM10.mkv`, where patrol boats attack the hospital ship shortly after the
-  start. *Cross-refs:* `BL-523`, `docs/org/targeting.md`.
 
 ## Flight model & collision physics
 
@@ -1482,52 +1396,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Ruled out, do not re-chase:* collapsed clutter cards writing depth or a dark fragment (the fade-on frame is pixel-identical to `--no-clutter` in every row where the fade has culled every instance); C5's fog-volume clutter overlapping the templates fade (its field is 16,170 cloud sprites at `fade 1200-1800 m`, outside the 200–900 m the templates author); the gamez buildings carrying an ignored `far_fade_range` (`FUN_004d5de0` is reached only from the clutter instance list `FUN_004d5d90` and the clutter quadtree `FUN_004d6010`, both behind `CameraRenderClutter` in the world walk `FUN_004d5910`, while ordinary scene nodes draw through `FUN_004d4a20` and never reach the fade test); the alpha-texture lighting gate of `BL-613` (the band is a function of camera distance and lifts under a mip-policy switch that changes no lighting term); and decorrelating the dither lattice per stamp, which was probed and changes the frame barely at all.
   *Cross-refs:* `PT-85` (the flight that judges it, with the pose and the A/B), `BL-337` (closed; the fade), `docs/org/clutter.md`, `docs/formats/gamez.md` on the authored mip levels.
 
-- `BL-546` `[Bug]` **A nitro engage shows no prop swap, and at the controls no exhaust smoke
-  either.**
-  *Evidence:* `nitro_boost`/`nitro_decay` (`plane_props.zrd`) never started at all: they author
-  their anchor as NAME `warhawk`, which never resolves inside a per-plane crash rig's own index
-  (built only from the flown aircraft's own subtree), and `FlightController.AdvanceNitro` called
-  `PlayWithin`, which has no fallback for a NAME that fails to resolve. `startprops`/`stopprops`
-  carry the identical `NAME warhawk` anchor in the same file and already worked, because their
-  call site uses `Play(name, PlaneModel, applyReset: false)`, whose fallback-to-anchor covers
-  exactly this case; `AdvanceNitro` now does the same for both nitro defs. That landed the
-  exhaust half: `nitro_boost`'s own `PUFFER_STATE nitropuff1..4 AT_NODE exhaust1..4` now fires,
-  confirmed by the `nitro-boost-anchors` suite (builds the real `player_warhawk` rig, plays
-  `nitro_boost` through the production call shape, asserts the puffer sustains).
-  ⚠ **A sortie on the merged build contradicts that half:** an engage flown at the controls shows
-  no exhaust smoke at all, so the suite is green while the effect it guards is invisible in a real
-  session. Settle which of the two is describing the shipped path before going back to the prop
-  swap. The suite builds its own `player_warhawk` rig, so the difference between that rig and a
-  flown aircraft's is where to look first, and a fix that only satisfies the suite again would
-  leave the same gap. The same sortie reports no shake on the engage. `BL-447`'s ledger edge there
-  is the AI's `medium_aishake`, so whether the player's own engage is meant to shake at all is an
-  open question and not that entry's, and it is recorded here with the rest of what an engage does
-  not show.
-  The prop swap (`OBJECT_ACTIVE_STATE`/`OBJECT_OPACITY_FROM_TO nitropropN`, `spin_nitrorotorN`,
-  `snd_nitrostart AT_NODE nitroprop1`) is still not visible after that fix, and the open question
-  is why. `extracted/planes/nodes.json` declares exactly 34 `nitropropN` nodes and carries BOTH a
-  bare-named root and a `player_*` root for nearly every aircraft (`warhawk`/`player_warhawk`,
-  `fury`/`player_fury`, and so on), so the geometry exists somewhere in the shipped data. Building
-  all eleven `player_*` rigs through `PlaneBuilder` (the model every player and AI vehicle def's
-  own `nodename` points at, `vehicle.zrd`) turns up only `staticpropN` on every one; no
-  `nitropropN` node is reachable from any flyable airframe's own subtree.
-  *Open question:* which root the original resolves `nitro_boost`'s `NAME warhawk` anchor
-  against. Reading A: the original also resolves it against the per-plane (flyable) node the way
-  CSVM's crash rig does, in which case the disc never showed on a flyable aircraft in the
-  original either, and this item is a disproof once that is confirmed. Reading B: the original
-  resolves `NAME` globally against the world/library set rather than per-plane-scoped, in which
-  case it would find the bare `warhawk` root (which carries the discs) even while a `player_*`
-  aircraft is flown, and the original DID show a prop swap that CSVM's per-plane-scoped
-  `AnimRuntime` structurally cannot reproduce without a different resolution path for this def.
-  *Fix shape:* decode `FUN_004b2110`'s "play nitro_boost def on the plane node" call (cited in
-  `docs/org/flightModel.md` "Nitro") for whether the original's own anchor resolution is scoped to
-  the calling vehicle or is a global NAME search; that answer alone separates reading A from B.
-  If B, the fix is a CSVM resolution change (a second NAME-search tier for this class of def, or a
-  bespoke bare-root lookup), not a call-site swap like the smoke fix was.
-  *Cross-refs:* `BL-447` (the AI's `medium_aishake` and `snd_nitro` blip on an engage, and the
-  decay lockout that `_nitroDecayLeftS` stands in for), `docs/org/flightModel.md` "Nitro",
-  the `nitro-boost-anchors` suite (the smoke half's regression coverage).
-
 - `BL-555` `[Feature]` `[Divergence]` **A held key fast-forwards a mid-mission cutscene instead of
   skipping it: the definition plays at a raised rate that spools up while the key is held and
   spools back down on release, with its sound pitched up to match.** The original arms a skip only
@@ -1584,52 +1452,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   must be checked against the suites that pin it, not only against timings. This is a separate
   question from which half of the reset dominates, which is `BL-535`'s. *Cross-refs:* `BL-535`
   (the measurement this came out of), `PoseChannel.ApplyOpacity`, the `effect-pool-reset` suite.
-
-- `BL-628` `[Bug]` **A docking cutscene plays its hook animation three times inside its opening
-  camera shot.** *Evidence:* reported at the controls and re-confirmed on the merged build in
-  CM11's closing autodock. It is not airframe-specific: the Devastator and the Bloodhawk both show
-  it, and it has been there since CM01, so every docking in the campaign is affected. The hook
-  engages correctly, so this is the animation running repeatedly rather than the dock failing.
-  ⚠ **The headless count that reads "once" counts the wrong definition.** `landings-hookup-airframe`,
-  `landings-balmoral-dock` and `landings-docking-hold` assert on `player_extend_hook`, the GENERIC
-  definition, which is authored once per archive and does play once. That definition forks to an
-  airframe-specific branch (`blood_hook_extend`, `brig_hook_extend`, `bal_hook_extend`, one per
-  airframe), and no suite counts those. A census that counts the generic name proves nothing about
-  the branch the fork actually plays.
-  The Devastator's own hook animation is `pirate_hook_extend`, which the data binds to the
-  `player_pfighter` model: `extracted/zrdr/pirate_hook.zrd.json` authors
-  `NAME1 [pirate_hook_extend, [player_pfighter, pirate_hook]]`. Every one of the eleven airframes has
-  exactly one such definition bound to its own model, so no airframe is missing one.
-  Two separate faults wear this one symptom, and they explain its two halves.
-  (a) **The repeat is airframe-independent, and the duplicated definition is the FORK, not the
-  branch.** `extracted/zrdr/player_hook.zrd.json`, which authors `player_extend_hook` and its eleven
-  `If NodeActive` branches, uses a plain `NAME` and carries no `NAME1` anywhere. The mission log's own
-  census line reads "reader def(s) superseded by this mission's compiled manifest (mission-scope +
-  NAME1), not instantiated", and every entry it names is tagged `(NAME1)`. A plain-`NAME` reader
-  definition is therefore not superseded, so it coexists with the compiled
-  `C*/cam_anim/player-player_extend_hook.json` and the fork runs twice, taking its airframe branch
-  with it each time. That matches the symptom being present on every docking since CM01 and on more
-  than one airframe. ⚠ The supersede rule here is read off that log line's own wording; confirm it
-  against the parse before building on it.
-  (b) **Seven of the eleven airframes author no `_startup` definition**, the Devastator among them.
-  Only `autogyro_hook`, `balmoral_hook`, `brigand_hook` and `warhawk_hook` carry one; `avenger`,
-  `blood`, `firebrand`, `fury`, `kestrel`, `peacemaker` and `pirate` do not. If the startup is what
-  parks the hook retracted at build, that is why the Devastator's hooks are already fully deployed
-  when the episode opens, which is what was seen at the controls.
-  Separately, `blood_hook_extend` and `brig_hook_extend` are each authored twice in
-  `C*/cam_anim/` (`…-1.json`, same `name`, same `anim_name`, one byte apart) in all eight chapters.
-  That is a third duplication, and it is not what the Devastator hits.
-  *Fix shape:* settle (a) first, since it is one question about which reader definitions the
-  compiled manifest supersedes and it reaches every airframe. Then (b), which is a different
-  question: what parks a hook retracted at build for the seven airframes authoring no startup.
-  Count the AIRFRAME BRANCH, never `player_extend_hook`, in any suite written for this.
-  *⚠ Traps:* do not silence it by latching "already played" on the runtime. A repeat a definition
-  authors is data, and a latch would hide the same defect wherever else it happens. The
-  player-visible hook engagement is correct today and must stay correct. Do not open this against
-  the node-state prerequisite again; it is enforced. Do not trust a suite that counts
-  `player_extend_hook`: that is the measurement which reported this closed while it was not.
-  *Playtest after fix:* any campaign docking, watching the opening shot alone: one hook swing.
-  *Cross-refs:* `docs/formats/anim-definitions/cutscenes.md`.
 
 - `BL-630` `[Bug]` **CM02 (C3/M05): the docking hook's two inward-rotating side parts swing too
   far on the captured Balmoral's auto-land.** *Evidence:* seen at the controls on that mission's
@@ -2176,22 +1998,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `PLAN-cockpit-view.md` (every decision above, by wave: B11, C21, C22, D31), `BL-391`
   (engine level, kept separate from (f)).
 
-- `BL-631` `[Bug]` **Geometry nearer to the camera than the letterbox card draws over the bars.**
-  *Evidence:* seen at the controls in CM10 (C1/M05)'s closing docking cutscene, where a walkway
-  passes between the camera and the bars and is drawn on top of them, and re-confirmed on the
-  merged build. The bars are world geometry rather than a screen overlay: `CutsceneController`
-  binds the definition's own `letterbox` node (`BarsNode`, `Session/CutsceneController.cs:25`),
-  pins it to the cutscene camera by transform copy, and picks each camera's field of view as the
-  widest one the card still covers (`:846-863`). Anything closer than that card is therefore in
-  front of it, and depth decides the rest.
-  *Fix shape:* keep the card as data and make it unoccludable, by render priority or by taking it
-  out of the depth test, so its coverage no longer depends on what the episode flies past.
-  *⚠ Traps:* do not solve it by moving the camera or narrowing the field of view. Both are computed
-  from the card's own extent, so a change there moves the framing the definition authored. The card
-  is the original's geometry too, so `OriginalScreenshots/CM10.mkv` is the check on whether the
-  original occludes it before any depth behaviour changes.
-  *Playtest after fix:* CM10's docking, watching the walkway cross the frame.
-
 - `BL-632` `[Bug]` **CM15 (C2/M05): the capture cutscene frames no Balmoral.** *Evidence:*
   reported at the controls. The missing aeroplane is an NPC actor, not the player's aircraft, and
   the pilot was flying a Bloodhawk in the chase view when the episode started, which rules out the
@@ -2474,30 +2280,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   shot can move to a row and confirm on it. *Cross-refs:* the plane selection and ammo screens'
   open lists are unpinned by any golden until this exists.
 
-- `BL-663` `[Bug]` **The cockpit panel's compass drum never turns, so it reads north on every
-  heading.** *Evidence:* the authored `gauges` subtree carries a compass drum the original drives
-  as `FUN_004d1a30(node, 0, -heading, 0)` at `0049f8fe`
-  ([`docs/formats/hud.md`](docs/formats/hud.md), "Cockpit gauges"), and that call is decoded but
-  left unwired. `CockpitGauges` binds `hundreds`, `thousands`, `speed`, `nitro_boost`,
-  `nitro_charge`, `ggarrow`, `mgarrow` and `pfhorizon` (`Flight/CockpitGauges.cs:33`) and nothing
-  else, so the drum holds its authored pose for the whole flight and the panel reads north
-  wherever the aircraft points. The screen-space tape is not the fault: `CompassTape.HeadingDeg`
-  is fed every frame from the nose (`Flight/FlightController.cs:1810`, `Flight/FlightHud.cs:322`)
-  and the control repaints unconditionally in `_Process`. *Fix shape:* heading has to reach
-  `CockpitGauges.Apply`, which today takes only `GaugeCluster`; carrying it on the cluster keeps
-  the rule that the 3D panel and the screen-space dials read one already-computed state, after
-  which the drum takes its angle the way the altimeter needles take theirs. *⚠ Traps:* the node's
-  name in the DATA is `comp` while the binary's own lookup string is `compass`, so a bind by
-  either name alone misses on some airframes (the same split that forced `pfhorizon` over
-  `horizn`); and the needle writes are negated because a +Z node rotation is
-  counter-clockwise-positive, which the decoded `-heading` argument may already account for, so
-  the sign is one to confirm on the panel rather than to derive. *Playtest after fix:* fly a
-  circle in the cockpit view and watch the drum against the heading tape at the top of the
-  screen; the two show the same card and turn together, headings increasing to the left.
-  *Cross-refs:* `BL-113` (compass tape tuning) shares the tape but not this node;
-  [`docs/formats/hud.md`](docs/formats/hud.md)'s "Known uncertainty" still has compass north
-  unverified as world −Z, and a wrong axis there would move both readouts together rather than one.
-
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2621,37 +2403,6 @@ usual.
   original's landing cutscenes. *Fix shape:* three separate reads of the hookup definition and the
   airframe's own nodes (the hook and the wing-fold are per-airframe animated parts, the height is
   the `AT_NODE` pose's offset). *Cross-refs:* `BL-544`; `docs/plans/PLAN-M5-polish-2.md` C10 and C12.
-
-- `BL-426` `[Bug]` **A failed stunt mission records and announces a new best time.** Seen at the
-  controls: losing an Instant Action stunt run still shows NEW BEST on the wrap-up.
-  **The mechanism.** `InstantActionDirector.StuntSummaryFor` (`Session/InstantActionDirector.cs:761-764`) calls
-  `store.RecordIfBest(key, run.Elapsed)` behind two guards and no third: the objective is
-  `ZonesFlown`, and player 1 has a `Stunt` run at all. Neither asks whether the run was
-  **finished**. So every end of an Instant Action stunt mission records a time, a loss included.
-  A failed run then wins the comparison almost every time, because it ended early: `RecordIfBest`
-  (`ScoreStore.cs:59-63`) takes any total lower than the stored one, and dying halfway round
-  produces exactly that.
-  **Why it is not cosmetic.** The write persists immediately to `user://stunt_scores.json`, so a
-  bogus time becomes the record a later honest run is measured against and, being unbeatably short,
-  can never be displaced by real flying. The damage outlives the session that caused it.
-  **The shape of the fix is already in the file.** The solo path does this correctly by
-  construction: `StuntScoreboard.OnRunCompleted` (`StuntScoreboard.cs:156-160`) only runs on
-  completion, and the board uses `StuntMission.AllComplete` (`:98`) as its own retire test. The
-  Instant Action wrap-up needs the same predicate; the two paths disagree today and only one of
-  them is right.
-  ⚠ **Traps.** (a) Do not gate on the mission's win/loss flag instead. Decision 10 of
-  [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) has every player fly
-  their own zone set with the mission ending when all of them are done, so a splitscreen mission
-  can end with one pilot complete and another not; the test belongs on the run, per pilot, not on
-  the mission. (b) `prevBest` is read *before* the record (`GameSession.cs:3091-3092`), so a fix
-  that stops the write without touching the display would still show a stale figure. (c) The store
-  is in `user://`, not the repo, so any machine that has already hit this carries a poisoned file
-  that no code change repairs. Decide explicitly whether to invalidate existing entries.
-  **Open question, a taste call.** Whether a failed run shows its elapsed time at all (without the
-  NEW BEST flag) or shows no time. The original's own behaviour here is not decoded.
-  *How you'd know it worked:* fail a stunt mission deliberately, confirm the wrap-up claims no best
-  and `user://stunt_scores.json` is byte-identical afterwards; then complete one and confirm it
-  does record.
 
 - `BL-314` `[Feature]` `[Blocked: PT-45]` **Race countdown — a rolling start on rails before the run clock
   opens.** The abreast starting grid landed 2026-08-08 (`StartGrid`), so every pilot in a splitscreen
@@ -2917,33 +2668,6 @@ usual.
   primary 3 completed), so this is not an objective bug. *Cross-refs:* `docs/org/aiPilot.md` (the
   activation primitive and `FUN_00432010`).
 
-- `BL-641` `[Bug]` **Introducing one AI aircraft mid-flight costs about 90 ms of main thread,
-  which is a hitch wherever a mission spawns one: CM18 (C4/M03) still stalls about 155 ms and
-  115 ms at sim frames 241 and 482 against a 46 ms trip threshold.** *Evidence:* the two CM18
-  stalls are `cargozep1`'s first two generator launches, on the authored `ind_period` 3 +
-  `wave_period` 1 cycle (4.017 and 8.033 sim s under `--det`'s 1/60 s step), each building a
-  `Cargo_params` Black Swan through `AiFlightAssembler.Assemble`. Sharing the generated shaders
-  across builders took the frames from 363/325 ms to 156/117 ms at 1P and 337/323 ms to 135/117 ms
-  at 4P, paired A/B, two kept launches a side. What remains is genuine per-aircraft construction,
-  attributed by stopwatch inside the `ai_spawn` scope: about 50 ms crash rig (template staging, the
-  wreck subtree, and 194 to 198 pre-warmed emitters at about 19 ms), 22 ms `FlightController.Bind`
-  (prop, wing-light and control-surface animators, collider), 10 ms model build, 5 ms loadout,
-  turrets and damage visuals. *Fix shape:* the crash rig is the only block that is not needed for
-  the aircraft to be observable, since `_worldRoot.AddChild(controller)` already runs before it, so
-  it can be built a frame or more later behind a "build it now if this aircraft dies first" guard.
-  That alone leaves about 90 ms, so reaching the threshold means spreading the whole assembly over
-  three or more frames. *⚠ Traps:* the stall is far past `HitchMonitor`'s grace window and
-  reproduces to the same sim frame under `--det`, so it is not workstation noise
-  (`docs/verification.md` PERF-12/13); the 4P threshold reads 75 ms rather than 46 ms because the
-  relative term rides a slower rolling median, so compare frames against their own printed
-  threshold. Do not re-derive the shader-compile term: it is gone, and PERF-22 records it. How
-  OFTEN CM18 pays this is a separate open question: `GeneratorCycle` switches the capacity check off
-  at authored `capacity <= 0` unless a `WAKEUP_GENERATOR` has armed it, CM18 authors none, so
-  `cargozep1` launches every 4 s up to `max_active` 10 unasked by any objective, and
-  `docs/formats/mission-entities/enemy-generators.md` "Capacity rule and limit" says the data does
-  not establish that reading. *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same
-  measurement pass profiled).
-
 - `BL-653` `[Research]` **The plane selection screen's TOP SPEED and OFFENSE ratings have no decoded
   formula, and ship as a stand-in.** *Evidence:* `PS_T_TOPSPEEDP`/`PS_T_OFFENSEP` and their wingman
   twins are four text widgets fed one of langui 501-505 (`Poor`, `Fair`, `Average`, `Good`,
@@ -2974,22 +2698,6 @@ usual.
   holds a roster position without producing input came to take the seat `AssignPads` fills by
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
-
-- `BL-581` `[Bug]` **CM09 (C1/M04): with the radio tower down and every aircraft killed, the
-  mission does not go on to the docking.** *Evidence (graph disproved, world side open):* reported
-  at the controls. The objective graph closes the chain: driven headless on the shipped script,
-  the tower-down route reaches 20 (the Paladin Blake squad wake) 90 s after 19 wakes, 30 wakes
-  42, and 42/43/44 nap 31 (the docking) once groups 1, 2 and 5 read empty; a nap landing on a
-  `TICK_DEPENDS_ON_OBJ`-gated objective is held and resumed, as the original does
-  (`FUN_0046a490`/`FUN_0046b160`, `docs/formats/objectives.md`). What stalls is on the world
-  side: `DEDG` never reading group 1 (or 2/5) empty through `GroupLiveCount`, or `WAKEUP_ENEMIES`
-  not putting the parked `blakebloodhawk_1/2/3/8` into play. *Fix shape:* the sortie log now
-  carries every transition as `[campaign] objective N woke|napped|completed|killed` lines; if
-  `objective 28 completed` never appears, group 2 never read at most two, and if `objective 42
-  completed` never appears after 20 woke, group 1 never read empty. Fix the world read that log
-  names. *⚠ Traps:* the Defend marker clearing (`OBJECTIVE25`) is correct; `BL-563` is a
-  separate landed fix; the graph needs no change. *Cross-refs:* `BL-563`, `BL-565`,
-  `docs/formats/objectives.md`, the closing commit of the graph half (`git log --grep=BL-581`).
 
 - `BL-584` `[Research]` **`PerfSampleTests.AScopeAllocatesNothing` went red once and neither named
   mechanism reproduces.** *Evidence:* the full `RunTests.ps1` unit stage reported it red once
