@@ -1168,6 +1168,16 @@ swap in those sequences takes the RESET-derived `ApplyDeathSwap`, withheld when 
 its own visible death, the same rule the live kill applies. Shipped `DAMAGE_SEQUENCE`s carry only
 `CallAnimation` puffer calls (and three `StopAnimation`s), so a carried partial HP lands as the
 stage counter alone and no stage burst plays. Regression: the `carried-state-silent` suite.
+**`NODE_UNDERCOVER` is a real probe**, not a stub: `EvaluateCondition`'s arm casts a vertical
+segment of the condition's own signed length from the named node against `ContactMask`, excluding
+the collider bodies under the host the probed node belongs to, since the original clears the probed
+node's own collidable bit and one gamez node is a whole subtree of bodies here. The operand needs
+decoding before it is a length (`UndercoverReach`); the probe's semantics, the sign convention and
+the u32 bit pattern are in `docs/org/sequences.md` and `docs/formats/anim-definitions.md`. No mask
+wired answers false, the same structural fallback the contact tiers take, so every lab, golden and
+collision-less suite is unaffected. This is what makes a downed zeppelin's `killpzep` breakup play:
+its `main_altitude_check` polls 65 m under the hull and opens as the wreck sinks, and each engine's
+own break polls 4 m under that engine. Regression: the `zeppelin-breakup` suite.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
@@ -6282,7 +6292,11 @@ and logs so — never an invented default. `PollDamage` (per `SimStep`) drives
 `Motion.AliveEngines`, plays record cannon stages, and owns the kill (`ZeppelinDamage.IsDead`);
 the kill logs, stops the motion, plays the prerequisite-gated hull-death def
 (`all_pzep_gasbags`-shaped, found by data, never by name) and raises `ZeppelinKilled` (the
-generator disable). The same recount raises `ZeppelinEnginesDisabled` once the LAST engine dies
+generator disable). That def calls `killpzep`, whose whole breakup waits on a `NODE_UNDERCOVER`
+probe under the hull, so the pitch-over, the six gasbag drops and the gondola drop arrive as the
+wreck sinks rather than at the kill; the gasbag splashes are sited by the `CALL_ANIMATION` arm from
+each gasbag's live transform at the moment its bounce fires, which is what a template that snaps to
+an absolute world point needs. The same recount raises `ZeppelinEnginesDisabled` once the LAST engine dies
 (gated on the hull, since the original's list compaction stops at death): that is Instant Action's
 own `zeppelin_run` win, ahead of the hull kill, and `WireZones` warns outright about an engine with
 no pool because such an engine can never die and would leave the mode unwinnable on its own

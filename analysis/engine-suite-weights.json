@@ -65,6 +65,7 @@
     "zeppelin-scripted-pose": 3.0,
     "zeppelin-launch": 0.773,
     "zeppelin-damage": 3.190,
+    "zeppelin-breakup": 10.800,
     "zeppelin-broadside": 3.427,
     "zeppelin-cannon-burnout": 8.890,
     "zeppelin-hull-activation": 2.800,

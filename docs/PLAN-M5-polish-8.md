@@ -73,7 +73,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ `BL-557` Roster `init_health`/`armor` overrides reach the named aces' spawns
 12. ☑ `BL-626` Turrets acquire the candidate classes the original's turret picker holds
-13. ☐ `BL-440` A downed zeppelin plays its authored breakup (`NodeUndercover` made real)
+13. ☑ `BL-440` A downed zeppelin plays its authored breakup (`NodeUndercover` made real)
 14. ☐ `BL-641` Introducing one AI aircraft mid-flight stays under the hitch threshold
 
 ### Wave C — Cockpit and flight feel
@@ -510,7 +510,7 @@ and the shared predicate refuses a neutral on either side. A teamed mission-stru
 source is the missing piece, and it is not turret-side. The picker's turret and ordnance pools are
 decoded and still unscanned.
 
-## B13 ☐ `BL-440` The zeppelin breakup plays
+## B13 ☑ `BL-440` The zeppelin breakup plays
 
 **Goal.** A downed zeppelin pitches over, sheds its six gasbags with splashes, and drops the
 gondola, as the authored `killpzep` choreography specifies.
@@ -520,11 +520,14 @@ watched at the controls).** The kill already plays the authored hull-death def
 (`ZeppelinRuntime.PlayHullDeath` plays `killpzep`, e.g.
 `extracted/C1/M04/mis_anim/piratezep-killpzep.json`), and that def's `main_altitude_check`
 sequence is `Initial`, so it runs from the moment the def starts: it tests
-`If NodeUndercover(rock_zeppelin)` and, on the else branch, loops forever (`Loop -1`).
-`AnimRuntime.cs:3197` stubs `NodeUndercover` to a constant `false` (the entry's `:2476` had
-drifted). The gate never opens, `rotatezep` and `breakupzep` are never called, and nothing
-reaches the `StopSequence` that ends `floatdown`'s −3.5 gravity descent, so the hull sinks
-intact. What the data authors: `rotatezepdown` pitches `rock_zeppelin` 0 to −15° over 8 s and
+`If NodeUndercover(gasbag4, −65 m)` (the condition's `node_index` 1 is the def's own first
+support node, `gasbag4`, not `rock_zeppelin`) and, on the else branch, loops forever (`Loop -1`).
+`AnimRuntime.cs` stubbed `NodeUndercover` to a constant `false`. The gate never opened,
+`rotatezep` and `breakupzep` were never called, and the wreck sank intact.
+Correction to the last clause: reaching the `StopSequence` does NOT end `floatdown`'s −3.5
+gravity descent, because halting a runner never retracts what it already launched
+(`docs/org/sequences.md`); what ends the descent is `MotionRuntime`'s contact tier against the sea.
+What the data authors: `rotatezepdown` pitches `rock_zeppelin` 0 to −15° over 8 s and
 `rotatezep` eases it −15° to −7° over 0.5 s at the break; `breakupzep` then fans out 13 same-tick
 CALLs (the deepest authored fan-out in the game, the one that sized `SequenceRunner`'s cap):
 `break1`…`break6` drop each gasbag under −9.8 gravity with a slow forward tumble and a
@@ -552,9 +555,34 @@ spawn-and-kill rig.
 reaches it, so the goldens are the check. (b) The distance operand is not a length until decoded.
 (c) Effect templates snap to absolute world points and never track a moving host
 (`ZeppelinRuntime.cs:732`; the entry's `:524` had drifted), so a splash authored at a falling
-gasbag has to be placed from that gasbag's position at the moment of the call. Cross-refs:
+gasbag has to be placed from that gasbag's position at the moment of the call. That trap needed no
+code: the `CALL_ANIMATION` arm already resolves an `AT_NODE` site through `CallTargetSite` and
+sites the effect from that node's live transform when the call fires, which is what
+`hit_waterN`'s `AtNode gasbagN` reaches. Cross-refs:
 `BL-291` (closed), `docs/architecture.md`'s `ZeppelinDamage.cs` bullet (the survivor-count kill
 that fires the def).
+
+**Decode.** `NODE_UNDERCOVER` is a signed vertical ray, not an occlusion cone. `FUN_004ec410`
+takes the node's world position (`FUN_004cf200`), clears that node's own collidable bit at `+0x24`
+for the cast (`FUN_004cd260`/`FUN_004cd210`), sets the query filter `0x40000` and the
+stop-at-first-hit flag (`FUN_004c7620`/`FUN_004c75e0`), and casts from `(x, y, z)` to
+`(x, y + d, z)` through the world segment query `FUN_004c8f70`, which reports the first cell node
+carrying both the visible bit `0x4` and the collidable bit `0x10`. The `0x10` branch of the
+condition evaluator `FUN_004ec080` reads the hit flag and answers false on a missing node or a
+failed query. `d` is the record's own `+0x14` slot, a raw u32 holding the IEEE-754 bit pattern of a
+signed length in metres: `3263299584` is `0xC2820000` = −65.0 and `3229614080` is `0xC0800000` =
+−4.0. The sign is the direction, negative down and positive up, which is why the reader spells the
+same token `NODE_NEAR_GROUND`. All 473 shipped operands decode to round values; `chuteman` is the
+only carrier of the eight positive ones and shows both directions in one chain (ground within 15 m
+below, or something within 32 m above, and only otherwise deploy the chute).
+
+**Verified.** <pending orchestrator run>
+`dotnet build CSVM/CSVM.sln` (0 warnings), `dotnet test CSVM.Tests/CSVM.Tests.csproj` (2791
+passed), `.\RunTests.ps1 -Filter zeppelin -SkipUnits -SkipGoldens` (13/13, including the new
+`zeppelin-breakup`), `-Filter anim`, `-Filter chute` and `-Filter motion` (5/5), and the goldens
+comparison `.\RunTests.ps1 -SkipUnits -SkipEngine` with `CSVM_DATA_ROOT=Z:\CSVM`: 18 shots,
+all hash-identical, no golden moved. That is structural rather than lucky: the probe answers false
+with no `ContactMask` wired, and no golden or lab wires one.
 
 ## B14 ☐ `BL-641` The AI-spawn hitch reaches the threshold
 

@@ -415,7 +415,7 @@ so the runtime has a single convention.
 | 4007 | `AnimHealth` | `ANIM_HEALTH [n]` | `health <= n` — "worn down to n". Full health in a world build, so uniformly false. |
 | 1052 | `PlayerRange` | `PLAYER_RANGE [m]` | `dist²(anchor, player) <= value`. **Compiled is metres SQUARED** (reader 270 ↔ compiled 72900, exact across the install; the parser squares it, confirmed in the exe). No scale factor rides on the comparison. |
 | 717 | `NodeActive` | `NODE_ACTIVE [name]` | the node is visible. Compiled carries an INDEX, reader a name — see below. |
-| 473 | `NodeUndercover` | `NODE_NEAR_GROUND [name, d]` | **stubbed false** — needs a ground/occlusion probe. All 473 sit in `ON_CALL` defs the bootstrap never reaches. |
+| 473 | `NodeUndercover` | `NODE_NEAR_GROUND [name, d]` | a vertical probe of `d` metres from the node meets world geometry. `d` is SIGNED and arrives as a float bit pattern — see below. |
 | 124 | `AnimHealthRange` | — | `min <= health <= max`. Same as `AnimHealth`: false at full health. |
 | 120 | `AnimationLod` | `ANIMATION_LOD [HIGH]` | `ourLod >= n`. **Our setting, not the data's** — see below. |
 | 120 | `PlayerFirstPerson` | `PLAYER_1ST_PERSON` | our camera mode: true while any human pilot has the Cockpit or Nose view selected, false with no view seam wired (a lab, a test). |
@@ -432,6 +432,35 @@ player-cockpit def that never runs in a world build, so nothing turns on it.)
 reader spells it `HIGH`), so the project defaults to 2 and every LOD-gated branch passes —
 the hardware has no reason to hide detail the original hid only for performance.
 `--anim-lod=N` lowers it for A/B comparison.
+
+**`NODE_UNDERCOVER`'s `distance` is a signed length in metres carried as a raw u32.** The compiled
+record's shared 4-byte value slot holds the IEEE-754 bit pattern, and the extraction types the
+field as an unsigned integer, so it is not a length until it is reinterpreted. All 473 shipped
+occurrences decode to round values:
+
+| Raw u32 | Metres | Uses |
+|---:|---:|---:|
+| 3229614080 | −4 | 354 |
+| 3258449920 | −46 | 30 |
+| 3263299584 | −65 | 22 |
+| 3262119936 | −60 | 20 |
+| 3259498496 | −50 | 18 |
+| 1107296256 | +32 | 8 |
+| 3245342720 | −15 | 8 |
+| 3266052096 | −86 | 5 |
+| 3265265664 | −80 | 3 |
+| 3251109888 | −25 | 3 |
+| 3263430656 | −66 | 1 |
+| 3261071360 | −56 | 1 |
+
+The sign is the probe direction: negative casts DOWN, which is the reader spelling
+`NODE_NEAR_GROUND`, and positive casts UP, which is "undercover". `chuteman` is the definition that
+shows both in one chain, and it is the only carrier of the eight positive uses: `If` the ground is
+within 15 m below, deactivate the parachutist; `Elseif` something is within 32 m above, deactivate
+him; `Else` deploy the chute and start his drift. C1/M04's `killpzep` is the plainest negative
+carrier, gating the whole zeppelin breakup on 65 m under the hull and each engine's own break on
+4 m under that engine. The probe itself, with the addresses, is in
+[`org/sequences.md`](../org/sequences.md).
 
 **Condition node references are 1-based indices into the definition's own `nodes` support
 array**, not gamez node indices and not names — mech3ax resolves index→name for every other
@@ -978,7 +1007,9 @@ Two field traps:
 231 have a compiled twin (compiled wins in `AnimProgram`), and all 21 that do not — `sprucegoose`/
 `g_enginesound`, `locklear_gasbag`, the zep nacelles — are `ON_CALL`, which the bootstrap never
 reaches. So the reader triple path is implemented and correct by construction but is not
-exercised in a default session, the same status `NODE_UNDERCOVER` has.
+exercised in a default session. The reader spelling of `NODE_UNDERCOVER` sits the same way: the
+install ships no `NODE_NEAR_GROUND` at all, so `AnimDefs.ReaderCondition`'s branch for it is
+implemented against the parser's vocabulary rather than against shipped data.
 
 **An emitter is silent while its host is not visible in tree**, the same rule the point lights
 use: C1/IA1 deactivates both multiplayer zeppelins, so 36 of its 38 emitters are built and
