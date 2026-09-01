@@ -65,7 +65,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Campaign flow
 
 1. ☐ `BL-581` CM09 completes to the docking once the tower is down and every aircraft is killed
-2. ☐ `BL-628` A docking cutscene's opening shot plays one hook swing, hooks parked at build
+2. ❌ `BL-628` A docking cutscene's opening shot plays one hook swing, hooks parked at build
 3. ☐ `BL-631` The letterbox bars draw over everything the episode flies past
 
 ### Wave B — Combat and AI
@@ -136,7 +136,7 @@ already-landed fix. The graph needs no change; re-deriving it is the recorded wa
 Cross-refs: `BL-565`, `docs/formats/objectives.md`, the graph half's closing commit
 (`git log --grep=BL-581`).
 
-## A2 ☐ `BL-628` One hook swing per docking
+## A2 ❌ `BL-628` One hook swing per docking
 
 **Goal.** Any campaign docking's opening camera shot shows exactly one hook swing, with the hooks
 parked retracted when the episode opens.
@@ -147,19 +147,29 @@ closing autodock; airframe-independent (Devastator and Bloodhawk both show it) a
 every docking since CM01. The hook engages correctly, so this is the animation running
 repeatedly, not the dock failing. Two separate faults wear the one symptom:
 
-- (a) The repeat: `extracted/zrdr/player_hook.zrd.json`, which authors `player_extend_hook` and
-  its eleven `If NodeActive` airframe branches, uses a plain `NAME` and carries no `NAME1`. The
-  mission log's census line ("reader def(s) superseded by this mission's compiled manifest
-  (mission-scope + NAME1), not instantiated") names only `(NAME1)`-tagged entries, so a
-  plain-`NAME` reader definition is not superseded, coexists with the compiled
-  `C*/cam_anim/player-player_extend_hook.json`, and the fork runs twice, taking its airframe
-  branch with it each time. ⚠ That supersede rule is read off the log line's own wording; confirm
-  it against the parse before building on it.
-- (b) The pre-deployed hooks: seven of the eleven airframes author no `_startup` definition
-  (only `autogyro_hook`, `balmoral_hook`, `brigand_hook`, `warhawk_hook` carry one; `avenger`,
-  `blood`, `firebrand`, `fury`, `kestrel`, `peacemaker`, `pirate` do not). If the startup is what
-  parks the hook retracted at build, that is why the Devastator's hooks are already fully
-  deployed at scene open.
+- (a) The repeat, DISPROVED against the parse. `extracted/zrdr/player_hook.zrd.json` does author
+  `player_extend_hook` under a plain `NAME`, and it is true that the two gates the census line
+  names leave it standing. What the line does not name is the third rule: `AnimProgram.Add`
+  deduplicates every surviving definition on its (`NAME`, `ANIMATION_NAME`) pair, and the compiled
+  archives are loaded first, so the reader copy is dropped against
+  `C*/cam_anim/player-player_extend_hook.json` and never becomes a second instance. The same rule
+  disposes of the `blood_hook_extend`/`brig_hook_extend` twins. Statically, every archive names
+  `player_extend_hook` exactly once, so there is no second call site either.
+- (b) The pre-deployed hooks, DISPROVED. The `_startup` definitions are not what parks a hook:
+  all four are `ON_CALL`, and the only definitions that call one are C4/M04's black-market hookup
+  and its AI airframe states (`bhmhookup.zrd`, `bhm_warhawks.zrd`, `anim2_*-ai_*_state`,
+  `player-bm_unhook_player`), which pose a hook on an AI aeroplane. What parks a player's hook is
+  the aircraft archive's own inactive bit on the `<x>_hook` group, which `PlaneBuilder` copies onto
+  the built group, and all eleven airframes ship that bit clear.
+- (c) What is measurable and does look like the report. Each `<x>_hook_extend` switches its group
+  and arm nodes on in its `state` sequence at t=0 while its `control` sequence starts the arms'
+  scale motion a second later, and that motion's `from` is a collapsed scale. For that second the
+  arm is drawn at the model's own full length, so the hook reads as already out before it visibly
+  extends, and the collapse-then-grow that follows can read as a second swing. Measured on a driven
+  docking: `pirate_hook_extend` shows `l_arm3`/`r_arm3` at `(1, 1, 1)` where the motion starts from
+  `(1, 0, 0)`, `bal_hook_extend` shows `l_arm1`/`r_arm1` at `(1, 1, 1)` where it starts from
+  `(1, 1, 0.5)`. Whether the original shows the same second is undecoded, so this is a reading for
+  D31 rather than a fix.
 
 Each airframe has exactly one hook definition bound to its own model (the Devastator's is
 `pirate_hook_extend`, `extracted/zrdr/pirate_hook.zrd.json` authoring
@@ -188,6 +198,31 @@ not trust a suite that counts `player_extend_hook`: that is the measurement whic
 closed while it was not (a PLAN-M5-polish-7 slot ruled out its candidate mechanism headless and
 the next sortie re-confirmed the symptom). Cross-refs:
 `docs/formats/anim-definitions/cutscenes.md`.
+
+**Verified.** <pending orchestrator run>
+
+Closed as disproved for both named faults, with the instrument the item asked for landed and no
+production code changed. The confirmed supersede rule is three rules, not one: a mission-scope
+reader definition is skipped unless the mission's compiled `mis_anim` lists its (`NAME`,
+`ANIMATION_NAME`) pair; a shared- or chapter-scope `NAME1` multi-target definition is skipped
+because the compiler expands it per instance; and everything that survives is then deduplicated on
+that same pair by `AnimProgram.Add`, compiled first and therefore winning. Only the first two are in
+the census line, which is where the plan's reading of it came from.
+
+`landings-hookup-airframe` now counts the airframe BRANCH as well as the shared fork, reads how many
+definitions the loaded program holds for each, checks all eleven airframes' hook groups against the
+aircraft archive's active bit, and records each arm's pose at the instant its definition starts
+beside the motion's authored `from`. Ran green over C3/M01 in the Balmoral and the Devastator: all
+eleven groups ship inactive, one definition loaded for `player_extend_hook` and for each branch, and
+`player_extend_hook`, `bal_hook_extend` and `pirate_hook_extend` each play exactly once. The only
+repeats anywhere in the episode are `random_prop x12` and `wing_lights_blink x2`, neither in a
+docking closure.
+
+What is owed to D31: the reported repeat is not reproducible on any headless path and is not
+authored by the data, so the remaining candidate is (c) above, the second in which the arm is drawn
+at full length before its scale motion begins. The judgement to make at the controls is whether the
+opening shot's hook is out before it extends, and whether what reads as a repeat is that
+collapse-then-grow rather than a second play.
 
 ## A3 ☐ `BL-631` Letterbox bars are unoccludable
 

@@ -935,7 +935,10 @@ shared-scope FILE gate (`ListedSharedFiles`: a shared reader file loads only whe
 `anim.zrd` index closure, the chapter's `cam_anim.zrd` or the mission's `mis_anim.zrd` names it,
 reported as `SharedFilesSkipped`) are decode knowledge: docs/formats/anim-definitions.md "Mission
 library scope". Both gates apply only with a compiled mission manifest present, so a reader-only
-extraction is untouched. Pinned by the `mission-off-turrets` suite (C3/M03 loads no balloon def,
+extraction is untouched. Whatever survives them is then deduplicated on the (`NAME`,
+`ANIMATION_NAME`) pair in `Add`, and since the compiled archives load first the compiled form always
+wins: that third rule, absent from the census line, is what stops a plain-`NAME` shared definition
+coexisting with its compiled twin, and what makes the archives' own duplicate files free. Pinned by the `mission-off-turrets` suite (C3/M03 loads no balloon def,
 C3/M02 does). Which world ENTITIES a mission shows is MissionSetup
 plus the interp boot script, not this file. `Defs`, `StartAnims` and `MissionLibrarySkipped` are
 `IReadOnlyList` over private backing lists: one program is already shared by every runtime `Subset`

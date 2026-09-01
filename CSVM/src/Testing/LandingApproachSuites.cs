@@ -294,9 +294,11 @@ internal static class LandingApproachSuites
         + "its active bit, it carries its own docking-hook group built retracted, and the "
         + "episode ends with that hook extended, the airframe hung at the mount offset the "
         + "extend-hook definition authors for it, and its wings turned to the angles its own "
-        + "fold definition authors where the airframe has one, having swung that hook once "
-        + "(BL-628: the episode's every start counted by name, the shared extend-hook "
-        + "definition among them)")]
+        + "fold definition authors where the airframe has one, having swung that hook once. "
+        + "Every airframe the shared fork branches on builds its hook group parked, and the "
+        + "loaded program holds one definition per hook name, so a call cannot start the same "
+        + "swing twice; the episode's every start is counted by name, the airframe's own "
+        + "extend-hook branch among them rather than only the shared fork")]
     internal static void HookupAirframe(TestContext ctx) =>
         DriveMission(ctx, FirstSeq, "test-hookup-airframe", DriveHookupAirframe);
 
@@ -660,6 +662,7 @@ internal static class LandingApproachSuites
             return;
         }
 
+        CheckHooksParked(ctx, world, report);
         foreach (var plane in HookupPlanes)
         {
             report.AppendLine($"--- {plane} ---");
@@ -706,10 +709,24 @@ internal static class LandingApproachSuites
             $"and carries its own '{branch.HookAnim}' hook group rather than a skipped subtree");
         ctx.Check(hook is not { Visible: true }, $"which starts retracted");
 
+        // One definition per animation name is what the compiled-plus-reader merge leaves
+        // (docs/formats/anim-definitions.md, the scope gates and the pair deduplication after
+        // them). Two would make one CALL_ANIMATION start the same choreography twice.
+        string branchAnim = branch.HookAnim ?? "";
+        int forkDefs = world.Runtime.DefsFor(ExtendHookAnim).Count;
+        int branchDefs = branchAnim.Length > 0 ? world.Runtime.DefsFor(branchAnim).Count : 0;
+        report.AppendLine($"definitions loaded: '{ExtendHookAnim}' x{forkDefs}, " +
+            $"'{branchAnim}' x{branchDefs}");
+        ctx.Same(1, forkDefs,
+            $"the loaded program holds one '{ExtendHookAnim}', so its one call site starts one fork");
+        ctx.Same(1, branchDefs,
+            $"and one '{branchAnim}', so that fork's branch starts one swing");
+
         // Which definitions the episode actually reached, so a check that fails says whether the
         // pose was wrong or the branch that writes it never ran at all (DIAG-20).
         var started = new List<string>();
         var plays = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var atSwitchOn = new List<(string Node, Vector3 From, Vector3 At)>();
         void Record(AnimDefinition def, Node3D? anchor)
         {
             if (def.AnimName is { Length: > 0 } name)
@@ -718,6 +735,12 @@ internal static class LandingApproachSuites
                 if (!started.Contains(name))
                 {
                     started.Add(name);
+                }
+
+                if (atSwitchOn.Count == 0
+                    && string.Equals(name, branchAnim, StringComparison.OrdinalIgnoreCase))
+                {
+                    SampleScaledMovers(def, model, atSwitchOn);
                 }
             }
         }
@@ -742,10 +765,18 @@ internal static class LandingApproachSuites
         var repeats = plays.Where(p => p.Value > 1)
             .OrderByDescending(p => p.Value).Select(p => $"{p.Key} x{p.Value}").ToList();
         report.AppendLine($"plays: {plays.Count} definition(s), repeats [{string.Join(", ", repeats)}]");
+        foreach (var (node, from, at) in atSwitchOn)
+        {
+            report.AppendLine($"at switch-on '{node}': scale {at}, its motion starts from {from}");
+        }
+
         // One call site playing three times and three call sites playing once are different
-        // faults, and the hook the episode swings is the airframe's own extend-hook branch.
+        // faults. The shared fork's count says nothing about the branch, which is what moves the
+        // arms: the fork is authored once per archive and does play once whatever the branch does.
         ctx.Same(1, plays.TryGetValue(ExtendHookAnim, out int hookPlays) ? hookPlays : 0,
             $"the episode swings '{planeNode}'s hook once, playing '{ExtendHookAnim}' a single time");
+        ctx.Same(1, plays.TryGetValue(branchAnim, out int branchPlays) ? branchPlays : 0,
+            $"…and '{branchAnim}', the branch whose motions actually swing the arms, a single time");
         report.AppendLine($"after the episode: mount {model.Position}, hook visible={hook?.Visible}");
         ctx.Check(hook is { Visible: true },
             $"the hookup extends '{planeNode}'s own docking hook");
@@ -1480,6 +1511,96 @@ internal static class LandingApproachSuites
         }
 
         return null;
+    }
+
+    // The airframes the shared fork branches on, in the order it authors them: one
+    // OBJECT_TRANSLATE_STATE per branch, on that airframe's own node.
+    private static List<string> BranchPlanes(TestWorld world)
+    {
+        var planes = new List<string>();
+        foreach (var def in world.Runtime.DefsFor(ExtendHookAnim))
+        {
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind == "ObjectTranslateState"
+                        && ev.Data.Str("node") is { Length: > 0 } node
+                        && !planes.Contains(node, StringComparer.OrdinalIgnoreCase))
+                    {
+                        planes.Add(node);
+                    }
+                }
+            }
+        }
+
+        return planes;
+    }
+
+    // Every airframe the fork branches on, read for the bit a human rig's build copies onto its
+    // hook group (PlaneBuilder parks the group at its archive-authored active flag). Only four of
+    // the eleven author a startup definition and no docking calls one, so if a startup were what
+    // parked a hook the other seven would ship theirs active and open deployed.
+    private static void CheckHooksParked(TestContext ctx, TestWorld world, StringBuilder report)
+    {
+        var planes = BranchPlanes(world);
+        ctx.Check(planes.Count > 0, $"'{ExtendHookAnim}' authors the airframe branches this reads");
+        var gamez = GameZ.Load(ctx.PlanesGamezPath);
+        int read = 0;
+        foreach (string plane in planes)
+        {
+            if (MountBranch(world, plane) is not { HookAnim: { Length: > 0 } hookAnim })
+            {
+                continue;
+            }
+
+            string group = HookGroupOf(world, hookAnim);
+            var node = group.Length > 0 ? gamez.FindByName(group) : null;
+            report.AppendLine($"{plane}: '{hookAnim}' on '{group}' " +
+                (node == null ? "absent from the aircraft archive"
+                    : node.Active ? "ships ACTIVE" : "ships inactive, so the build parks it"));
+            ctx.Check(node != null, $"'{plane}' carries the '{group}' group '{hookAnim}' drives");
+            ctx.Check(node is not { Active: true },
+                $"…shipped inactive, which is what parks it whether or not the airframe authors a startup");
+            read++;
+        }
+
+        ctx.Same(planes.Count, read, $"every branch the fork authors names a hook to read");
+    }
+
+    // The node a hook definition is rooted on, as that definition names it.
+    private static string HookGroupOf(TestWorld world, string hookAnim)
+    {
+        foreach (var def in world.Runtime.DefsFor(hookAnim))
+        {
+            if (def.Name is { Length: > 0 } name)
+            {
+                return name;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    // What each of a hook definition's scaled movers is drawn at when that definition starts. The
+    // arms are switched on by its state sequence and only scaled by a motion its control sequence
+    // starts a second later, so this reads the pose the opening shot shows in between.
+    private static void SampleScaledMovers(AnimDefinition def, Node3D model,
+        List<(string Node, Vector3 From, Vector3 At)> into)
+    {
+        foreach (var seq in def.Sequences)
+        {
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Kind != "ObjectMotionFromTo" || ev.Data.Obj("scale") is not { } scale
+                    || ev.Data.Str("name") is not { } name)
+                {
+                    continue;
+                }
+
+                into.Add((name, scale.Vec3("from"), NamedNode(model, name)?.Scale ?? Vector3.Zero));
+            }
+        }
     }
 
     // The airframe's own wing fold, if it authors one: a CALL_ANIMATION inside the hookup's

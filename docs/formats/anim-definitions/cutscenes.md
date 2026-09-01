@@ -571,6 +571,37 @@ rooted on `player_balmoral` and turns `rwingbend` and `lwingbend` ±1.9198622 ra
 `move_player` gives the Balmoral and Warhawk branches their own two-second wait and then `all_done`,
 so those two airframes end the episode sooner than the rest.
 
+**One swing per docking is a property of the merge, not of a runtime guard.** The fork and each of
+its branches exist exactly once in a loaded mission's program, so the single `CALL_ANIMATION` in
+`hooked_to_klondike` starts one fork and that fork's arm starts one hook. `AnimProgram` loads the
+compiled archives first and then drops any later definition repeating a loaded one's (`NAME`,
+`ANIMATION_NAME`) pair, whatever scope it came from, which is what makes the shared `player_hook.zrd`
+copy of `player_extend_hook` and the `-1` twins of `blood_hook_extend`, `brig_hook_extend` and
+`brig_hook_startup` cost nothing. The census line naming `(mission-scope + NAME1)` describes the two
+gates that run BEFORE that drop rather than the drop itself: a mission-scope reader definition is
+skipped unless the mission's compiled `mis_anim` lists its pair, and a shared- or chapter-scope
+`NAME1` multi-target definition is skipped because the compiler expands it per instance. A
+plain-`NAME` shared definition passes both gates and is then deduplicated against its compiled twin,
+so it cannot become a second instance. `landings-hookup-airframe` reads the loaded count for the fork
+and for the flown airframe's branch, and counts both over a driven docking.
+
+**No `<x>_hook_startup` runs in a player docking.** Four airframes author one (`bal`, `gyro`, `brig`,
+`war`), every one of them `ON_CALL`, and the only definitions that call them are C4/M04's
+black-market hookup and its AI airframe states (`bhmhookup.zrd`, `bhm_warhawks.zrd`,
+`anim2_*-ai_*_state`, `player-bm_unhook_player`), which pose a hook on an AI aeroplane. What parks a
+player's hook is the aircraft archive's own inactive bit on the `<x>_hook` group, and all eleven
+airframes ship that bit clear, so the seven authoring no startup are parked exactly like the four
+that do.
+
+⚠ **The arms are switched on a second before they are scaled.** Each extend definition activates its
+group and arm nodes in its `state` sequence at t=0 while its `control` sequence starts the arms' own
+scale motion one second later, and that motion's `from` is a collapsed scale (`pirate_hook_extend`
+takes `l_arm3` and `r_arm3` from `(1, 0, 0)`, `bal_hook_extend` takes `l_arm1` and `r_arm1` from
+`(1, 1, 0.5)`). For that second the arm is drawn at the model's own full length, so a shot opening on
+the aeroplane sees the hook as already out before it visibly extends. The
+`landings-hookup-airframe` artifact records the measured pose at switch-on beside the motion's
+authored `from`. Whether the original shows the same second is undecoded.
+
 **All three therefore need the flown aeroplane's own subtree in the animation runtime's node
 table.** CSVM indexes it there when the flight rigs are built, and again after an airframe swap,
 rebased onto the chapter's cross-archive base the same way the staged intro aircraft are

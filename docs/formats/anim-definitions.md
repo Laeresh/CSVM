@@ -983,6 +983,29 @@ mission that compiles `tethertower`.
 which was generalised from C1/IA1. It is compiled into the missions that use it; being
 uncompiled is exactly the signal that the mission does not instantiate it.
 
+### The scope gates run before a (NAME, ANIMATION_NAME) deduplication
+
+Three separate rules decide whether a reader definition becomes an instance, and the census line
+`N reader def(s) superseded by this mission's compiled manifest (mission-scope + NAME1), not
+instantiated` names only the first two:
+
+1. **Mission scope** is gated on the compiled manifest, above: the definition is skipped unless the
+   mission's `mis_anim` lists its (`NAME`, `ANIMATION_NAME`) pair.
+2. **Shared and chapter scope** are gated by file first (the `ANIMATION_DEFINITION_FILE` lists,
+   below), and then a `NAME1` multi-target definition is skipped because the compiler expands it per
+   instance into `mis_anim`, and the reader form would anchor sub-parts the loaded mission never
+   authors.
+3. **Everything that survives is deduplicated on the (`NAME`, `ANIMATION_NAME`) pair**
+   (`AnimProgram.Add`), and because the compiled archives are loaded first the compiled form always
+   wins. This rule is not in the census line and is what keeps a plain-`NAME` shared definition from
+   coexisting with its compiled twin: `player_hook.zrd`'s `player_extend_hook` passes both gates and
+   is then dropped against `cam_anim`'s `player-player_extend_hook`. It is also why the archives'
+   own duplicate files (`blood_hook_extend`, `brig_hook_extend` and `brig_hook_startup`, each
+   shipped twice a chapter as `<name>.json` and `<name>-1.json` carrying the same pair) cost nothing.
+
+All three gates apply only with a compiled mission manifest present, so a reader-only extraction
+still loads every definition it has.
+
 ### Shared-scope files are listed per mission too
 
 The shared `zrdr.zbd` is not one runtime-global set. Its 190 `ANIMATION_DEFINITIONS` files
