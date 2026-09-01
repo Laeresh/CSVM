@@ -6157,6 +6157,17 @@ C3/M03's `cgzep_camera`, which no start list names (its start anim `calldestroy_
 calls it first and the zeppelin's destruction half a second later, so the destruction plays under
 the camera from that one call and the host re-issues nothing). Decode:
 `docs/formats/anim-definitions/cutscenes.md`.
+The card's own material carries no occlusion guarantee: `BindWorld` overrides it (no depth test,
+top render priority, moved into the sorted-transparent pass) so the card wins the pixel regardless
+of what the episode flies between the camera and it, without touching the card's position or the
+field of view `FrameBars` computes from its extent. The override cannot be a plain duplicate of
+the card's own material, since every world mesh carries `SceneBuilder.BiasMaterial`'s
+`ShaderMaterial`, which has no depth-test or render-priority property of its own; it is built
+fresh instead, reading the source shader's `albedo_color` parameter so the card keeps its authored
+colour, unshaded and both-sided so neither the light nor the source polygon's authored sidedness
+changes how it reads. The `letterbox` definition only ever toggles the node's `ACTIVE` state and
+its pose (see `docs/formats/anim-definitions/cutscenes.md`), never an opacity or a colour, so
+replacing the material outright authors no fade the override could fight.
 
 ## src/Session/GeneratorCycle.cs
 The decoded egen launch timing law for ONE generator (M4 B6 + F20), pure over `Step` calls (no

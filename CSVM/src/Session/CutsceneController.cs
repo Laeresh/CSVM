@@ -142,6 +142,7 @@ public sealed partial class CutsceneController : Node
     private AircraftStage? _aircraft;
     private Node3D? _card;
     private Aabb _cardBox;
+    private MeshInstance3D? _cardMesh;
     // The bars node's authored scale, read alongside the card measurement and for the same reason:
     // PinBars re-asserts a pose every tick, and reading the scale back off a posed node would let
     // it compound.
@@ -209,6 +210,11 @@ public sealed partial class CutsceneController : Node
     /// <summary>The letterbox card's extent as <see cref="BindWorld"/> measured it, in the bars
     /// root's own frame. Read-only, and measured once: see the note in <c>BindWorld</c>.</summary>
     public Aabb CardBox => _cardBox;
+
+    /// <summary>The card's own mesh instance, whose material <see cref="BindWorld"/> overrode to
+    /// draw unoccludable (no depth test, top render priority). Null before a bind, or if
+    /// the bound chapter ships no card mesh under the bars.</summary>
+    public MeshInstance3D? CardMesh => _cardMesh;
 
     // The scripted player's rig: P1's, the one aeroplane an authored `player` token means. It is
     // what an unclaimed episode owns, so a 1P session and every mission intro resolve to P1.
@@ -309,9 +315,11 @@ public sealed partial class CutsceneController : Node
         // last answer back and oscillate.
         _card = _bars != null && _bars.GetChildCount() > 0 ? _bars.GetChild(0) as Node3D : null;
         _barsScale = _bars?.Basis.Scale ?? Vector3.One;
+        _cardMesh = null;
         if (_card != null && CardBounds(_card) is { } box)
         {
             _cardBox = box;
+            _cardMesh = MakeUnoccludable(_card);
         }
 
         GD.Print($"cutscene: {(_cutsceneCamera != null ? "camera1" : "NO camera1")}, " +
@@ -514,6 +522,57 @@ public sealed partial class CutsceneController : Node
         }
 
         return null;
+    }
+
+    // The card's own material carries no occlusion guarantee, so it is overridden: no depth test
+    // plus the top render priority draws it last regardless of what claimed the pixel that frame.
+    // ⚠ Not a Duplicate(): every world mesh carries the bias ShaderMaterial
+    // (SceneBuilder.BiasMaterial), with no NoDepthTest/RenderPriority of its own, so the
+    // replacement is built fresh from the source shader's albedo_color, unshaded and both-sided.
+    private static MeshInstance3D? MakeUnoccludable(Node3D card)
+    {
+        var mesh = card as MeshInstance3D;
+        if (mesh == null)
+        {
+            foreach (var child in card.GetChildren())
+            {
+                if (child is MeshInstance3D found)
+                {
+                    mesh = found;
+                    break;
+                }
+            }
+        }
+
+        if (mesh == null)
+        {
+            return null;
+        }
+
+        var albedo = Colors.Black;
+        if (mesh.GetActiveMaterial(0) is ShaderMaterial source)
+        {
+            var tint = source.GetShaderParameter("albedo_color");
+            if (tint.VariantType == Variant.Type.Color)
+            {
+                albedo = tint.As<Color>();
+            }
+        }
+        else if (mesh.GetActiveMaterial(0) is StandardMaterial3D standard)
+        {
+            albedo = standard.AlbedoColor;
+        }
+
+        mesh.MaterialOverride = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            AlbedoColor = new Color(albedo.R, albedo.G, albedo.B),
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            NoDepthTest = true,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            RenderPriority = 127, // the engine's ceiling: renders after every other transparent draw
+        };
+        return mesh;
     }
 
     // The question the slot is claimed on, asked of the whole call closure: a row that raises no

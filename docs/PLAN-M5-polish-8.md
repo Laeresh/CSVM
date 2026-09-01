@@ -66,7 +66,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☐ `BL-581` CM09 completes to the docking once the tower is down and every aircraft is killed
 2. ❌ `BL-628` A docking cutscene's opening shot plays one hook swing, hooks parked at build
-3. ☐ `BL-631` The letterbox bars draw over everything the episode flies past
+3. ☑ `BL-631` The letterbox bars draw over everything the episode flies past
 4. ❌ Hook arms drawn full-size before their scale motion starts
 
 ### Wave B — Combat and AI
@@ -225,7 +225,7 @@ at full length before its scale motion begins. The judgement to make at the cont
 opening shot's hook is out before it extends, and whether what reads as a repeat is that
 collapse-then-grow rather than a second play.
 
-## A3 ☐ `BL-631` Letterbox bars are unoccludable
+## A3 ☑ `BL-631` Letterbox bars are unoccludable
 
 **Goal.** Nothing the episode flies past draws over the cutscene letterbox bars.
 
@@ -234,9 +234,9 @@ cutscene, where a walkway passes between the camera and the bars and is drawn on
 re-confirmed on the merged build. The bars are world geometry, not a screen overlay:
 `CutsceneController` binds the definition's own `letterbox` node (`BarsNode`,
 `Session/CutsceneController.cs:26`), pins it to the cutscene camera by transform copy, and picks
-each camera's field of view as the widest one the card still covers (near `:916-933`). Anything
+each camera's field of view as the widest one the card still covers (near `:972-977`). Anything
 closer than the card is in front of it, and depth decides the rest. (The entry's original cites
-`:25`/`:846-863` had drifted; symbols and mechanism are unchanged.)
+`:25`/`:846-863`, then `:916-933`, had drifted; symbols and mechanism are unchanged.)
 
 **Approach.** Keep the card as data and make it unoccludable, by render priority or by taking it
 out of the depth test, so its coverage no longer depends on what the episode flies past. Check
@@ -251,6 +251,42 @@ cutscene golden exists, so the check is the full suite plus the sortie).
 computed from the card's own extent, so a change there moves the framing the definition authored.
 The card is the original's geometry too, so the film is the check on whether the original
 occludes it before any depth behaviour changes.
+
+**Verified.** <pending orchestrator run>
+
+`OriginalScreenshots/Videos/CM10.mkv` (3:58, 60 fps) was extracted with ffmpeg and read frame by
+frame from t=205s onward. The letterbox bars first appear at t≈234s as the aeroplane closes on
+Pandora's docking hook, and the recording ends at t≈238.6s, mid-approach under the hook, before
+any walkway or other geometry crosses between the camera and the card. The film does not show the
+occlusion the evidence describes; it is inconclusive rather than a disproof, since the capture
+simply stops short of the moment in question. Proceeded on the evidence's own reading (world
+geometry with no depth guarantee) rather than treating the film as a clearance.
+
+`CutsceneController.BindWorld` now overrides the card mesh's material once it measures the card's
+extent: `NoDepthTest = true`, `Transparency = Alpha` (moves the card into the sorted-transparent
+pass, where render priority is honoured), `RenderPriority = 127` (the engine's ceiling). A first
+pass duplicated the card's existing material, which review caught as wrong: every world mesh
+carries `SceneBuilder.BiasMaterial`'s `ShaderMaterial`, which has neither property, so the
+duplicate-then-set fell through to `?? new StandardMaterial3D()` and rendered the bars white. The
+override is instead built fresh, reading the source shader's `albedo_color` parameter (the gamez
+material the card's polygons reference, `Colored { color: {0,0,0}, alpha: 255 }` in every
+chapter's `materials.json`) so it keeps the card's authored black, unshaded and both-sided
+(`CullMode = Disabled`) so neither lighting nor the source polygon's authored sidedness changes
+how it reads. The camera pose, the card's position and scale, and the field of view `FrameBars`
+computes from the card's extent are all untouched. The `letterbox` definition only ever toggles
+the node's `ACTIVE` state and its pose, never a colour or an opacity, so replacing the material
+outright authors no fade the override could fight.
+
+`dotnet build CSVM/CSVM.sln` and `dotnet test CSVM.Tests/CSVM.Tests.csproj` both pass (2785 unit
+tests). The `cutscene-letterbox` suite's `LetterboxCardIsUnoccludable` check now reads the card's
+own surface material (untouched by `MaterialOverride`) alongside the override, and asserts the
+override's colour matches the authored one (or is opaque black if the source read fails),
+`ShadingMode == Unshaded` and `CullMode == Disabled`, on top of the render-state flags; a
+temporary reintroduction of the reviewed bug (duplicate-or-`new StandardMaterial3D()`) was
+confirmed to fail this check before being reverted. `.\RunTests.ps1 -Suite cutscene-letterbox
+-SkipUnits -SkipGoldens` passes. No cutscene golden exists, so no golden is expected to move; a
+golden covering this shot would very likely be unaffected too, since the override only changes
+what wins the pixel when something else claims it, not the card's own appearance.
 
 ## A4 ❌ Hook arms drawn full-size before their scale motion starts
 
