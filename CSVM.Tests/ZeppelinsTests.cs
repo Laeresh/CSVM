@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
 using Godot;
@@ -273,6 +275,48 @@ public class ZeppelinsTests
         // The campaign's own shortest leg, C4/M04's M4Piratezep: re-measure it here rather
         // than trust the number staying true as extraction or mission data drifts.
         Assert.Equal(143.9f, shortest, 1);
+    }
+
+    // C1B/MP3's ZVZ1a turns 67.7 degrees at node 6 on a 205 m leg, against a 343.8 m turn
+    // circle: BL-670's own worst-case shortfall. Flying it real confirms the hull turns
+    // through and carries on, never orbiting the node.
+    [ExtractedDataFact]
+    public void TheWorstShippedTurnBreaksOutRatherThanOrbits()
+    {
+        var net = AiNets.ByName(
+            AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, "C1B")), "ZVZ1a")!;
+        var def = Zeppelins.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1B", "MP3"))
+            .First(d => d.Node.Equals("multiplayer1zep", StringComparison.OrdinalIgnoreCase));
+
+        var follower = new AiNetFollower(net, new Random(1), ZeppelinRuntime.ArrivalFloorM,
+            observesStopPoints: true);
+        var motion = new ZeppelinMotion(def, follower);
+        int steps = 0;
+        const int budget = 60 * 90; // 90 sim-seconds, ~3x the measured transit through node 6
+        bool reachedNode6 = false;
+        bool passedNode6 = false;
+        while (!passedNode6 && steps < budget)
+        {
+            motion.Step(1f / 60f);
+            steps++;
+            if (follower.ArrivedNode is not { } arrived)
+            {
+                continue;
+            }
+            if (arrived.Position == net.Nodes[6].Position)
+            {
+                reachedNode6 = true;
+            }
+            else if (reachedNode6)
+            {
+                passedNode6 = true;
+            }
+        }
+
+        Assert.True(reachedNode6, $"never reached node 6 in {steps / 60f:0.#}s");
+        // Advancing past node 6, not just reaching it, rules out a hull circling forever.
+        Assert.True(passedNode6,
+            $"reached node 6 but never advanced past it in {steps / 60f:0.#}s: orbiting");
     }
 
     private static IEnumerable<(string Chapter, string Mission)> Missions()

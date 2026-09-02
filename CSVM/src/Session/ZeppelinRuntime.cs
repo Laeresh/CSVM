@@ -22,9 +22,10 @@ namespace CSVM.Session;
 public sealed partial class ZeppelinRuntime : Node
 {
     /// <summary>The zeppelin's own floor on <see cref="AiNetFollower"/>'s decoded arrival
-    /// radius, metres: set below the shortest shipped zeppelin leg, 143.9 m (C4/M04's
-    /// M4Piratezep), so a short leg is flown rather than skipped at once. A smaller radius can
-    /// overshoot and orbit a slow-turning hull's node instead; that is accepted, not fixed.</summary>
+    /// radius. Set below the shortest shipped leg, 143.9 m (C4/M04's M4Piratezep), so a short
+    /// leg is flown rather than skipped at once. The census's sharpest turn, 67.7° on a 205 m
+    /// leg against a 343.8 m turn circle, still breaks out rather than orbiting
+    /// (<c>ZeppelinsTests.TheWorstShippedTurnBreaksOutRatherThanOrbits</c>).</summary>
     public const float ArrivalFloorM = 50f;
 
     private readonly List<LiveZeppelin> _live = new();
