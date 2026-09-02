@@ -178,7 +178,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave F — The Game Options page
 
-51. ☐ Compose Original's Game Options page and move both option rows onto it
+51. ☑ Compose Original's Game Options page and move both option rows onto it
 
 ## Dependency and parallelism notes
 
@@ -1896,7 +1896,7 @@ either. Do not add a token Modern screen; the extension contract is the delivera
 
 # Wave F — The Game Options page
 
-## F51 ☐ Compose Original's Game Options page and move both option rows onto it
+## F51 ☑ Compose Original's Game Options page and move both option rows onto it
 
 **Goal.** Original's two options stand on the decoded Game Options page, each under its own title
 with a description beside it, in the widget idiom the original uses for a choice (a dropdown) and
@@ -2031,7 +2031,22 @@ decoded pixels against E44's `builtin-after` set, identical. The complete `.\Run
 merged plan tree is the orchestrator's. At the controls the user judges the page with a
 montage, since the two rows' words and the checkbox choice are remake-only readings.
 
-**Verified.** Not yet.
+**Verified.** The plan tree with F51 landed passed the complete `.\RunTests.ps1` (3061 units,
+221 engine suites across 4 shards, 18 goldens hash-identical, engine errors clean, 185.2s). The
+item's own gate: `dotnet test` 3061 passed; `-Filter "menu,campaign"` 58 of 58 with engine errors
+clean; comment caps, encoding and item ids clean. The manifest census over the install moved to 99
+required and 63 optional (`GO_BackGround.png`, the two `PF_B_*Changes.png` plaques and
+`PF_B_CheckBoxSmall.Png` now drawn), and the coverage check reads 24 screens over the install, 38
+journeys by 3 families, 25 driven, 2 slot rows, 5 drawn disabled, 14 out of scope, 0 dead ends.
+Built-in's `mode`, `chapter`, `plane`, `selected` and `loadboard` aids are identical by decoded
+pixels to E44's set; its `options` aid differs from that set only by the graphics row landed after
+those shots were taken, and no Built-in file is in the change. No options file was written and the
+plane store held its eight planes. The checkbox strip's frame order was confirmed against the
+install's `PF_B_CheckBoxSmall.Png` (45x232, eight frames, the checked X in frames 4 to 7). Two
+things the montage put before the user and only the controls settle: whether the checkbox reads as
+the graphics switch, and whether the open list's dark panel reads against the plate. The aid grew
+two poses beyond the item's letter, `game-options:open` and `game-options:checked`, since no other
+aid could pose the open list or the checked box for a shot.
 
 **⚠ Traps.** Do not put a third control on the page for Difficulty "while you are there": the
 scale's row needs a store field, a `Flight/Difficulty` reader and a golden's independence from
