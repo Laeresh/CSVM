@@ -203,6 +203,7 @@
     "menu-original-instant-action": 0.1,
     "menu-hangar-journey": 0.6,
     "menu-original-hangar": 0.2,
+    "menu-original-campaign": 0.6,
     "menu-campaign-journey": 1.0,
     "campaign-layout-parity": 0.28,
     "perf-hud-layout": 0.009,

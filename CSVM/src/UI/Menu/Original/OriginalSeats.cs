@@ -103,6 +103,13 @@ public sealed partial class OriginalShell
         bool changed = false;
         if (!IsSortie)
         {
+            // On the campaign's flight check a joined seat drives its own check, the frame it is
+            // showing; anywhere else off the sortie screens a later seat can only leave.
+            if (_screen == OriginalScreen.CampaignFlightCheck && _campaign?.Field.Current == index)
+            {
+                return Step(commands);
+            }
+
             if (commands.Back)
             {
                 changed = _setup.Unjoin(seat);

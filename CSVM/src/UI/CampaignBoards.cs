@@ -24,6 +24,20 @@ public readonly record struct BoardButtonRef(BoardButton Button, int Slot = 0)
 /// </summary>
 public static class CampaignBoards
 {
+    /// <summary>A drop-down field's height: the sixteen pixels the reference screenshot draws
+    /// between one field's top edge and its bottom, which is also the field's hit rectangle for a
+    /// pointer-driven presentation.</summary>
+    public const float ComboFieldHeight = 16f;
+
+    /// <summary>The messagebox's left button row, the two-button box's first answer.</summary>
+    public const string DialogLeftKey = "MB_B_LEFT";
+
+    /// <summary>The messagebox's centred button row, the one-button box's OK.</summary>
+    public const string DialogCenterKey = "MB_B_CENTER";
+
+    /// <summary>The messagebox's right button row, the two-button box's second answer.</summary>
+    public const string DialogRightKey = "MB_B_RIGHT";
+
     // The original's own button strips: four stacked frames, disabled / normal / rollover /
     // depressed, in the column order LAYOUT.CSV's own colour fields carry them.
     private const int StripFrames = 4;
@@ -36,9 +50,7 @@ public static class CampaignBoards
     // they take a smaller face than a listbox row does.
     private const float NoteFont = 11f;
 
-    // A drop-down field's height and face: the sixteen pixels the reference screenshot draws
-    // between one field's top edge and its bottom, and a face that fits inside them.
-    private const float ComboFieldHeight = 16f;
+    // A face that fits inside a drop-down field.
     private const float ComboFont = 11f;
 
     // Both arrow strips are four frames in the same disabled / normal / rollover / depressed order
@@ -325,26 +337,54 @@ public static class CampaignBoards
     /// <c>MB_B_CENTER</c>, <c>MB_T_MESSAGE</c>), offset by where the 410x300 art lands; the
     /// reference (<c>OriginalScreenshots/Campaign Flight Check Change Plane Export dialog.png</c>)
     /// puts its edges at the centred one.</summary>
-    public static BoardPanel Dialog(CampaignModal modal, CampaignLayout? layout = null)
+    public static BoardPanel Dialog(CampaignModal modal, CampaignLayout? layout = null) =>
+        Dialog(modal.Message, new[] { new DialogButton(DialogCenterKey, modal.Button, 2, BoardInk.LabelActivate) }, layout);
+
+    /// <summary>The messagebox over any of its button sets: the single centred OK (<c>MB_B_CENTER</c>,
+    /// the <c>0x1</c> box) or the two-button pair (<c>MB_B_LEFT</c> and <c>MB_B_RIGHT</c>, the
+    /// <c>0x4</c> box the delete confirm asks for), each button drawn in the strip frame and label
+    /// ink its caller names, which is how a pointer-driven presentation shows which one is under
+    /// the pointer.</summary>
+    public static BoardPanel Dialog(string message, IReadOnlyList<DialogButton> buttons, CampaignLayout? layout = null)
     {
         layout ??= CampaignLayout.Fallback;
         const string section = CampaignLayout.DialogSection;
         var (iconX, iconY) = layout.At(section, "MB_P_ICON", 36f, 65f);
-        var (buttonX, buttonY) = layout.At(section, "MB_B_CENTER", 174f, 254f);
         var (messageX, messageY, messageWidth) = layout.Box(section, "MB_T_MESSAGE", 94f, 70f, 282f);
         var pictures = new List<BoardPicture>
         {
             new(layout.Art(section, "MB_P_BACKGROUND", Ui("MB_Background.png")), DialogX, DialogY),
             new(layout.Art(section, "MB_P_ICON", Ui("MB_B_Icon.Png", DialogIconFrames)), DialogX + iconX, DialogY + iconY),
-            new(layout.Art(section, "MB_B_CENTER", Ui("MB_B_Buttons.Png", StripFrames)), DialogX + buttonX, DialogY + buttonY, 2),
         };
         var lines = new List<BoardLine>
         {
-            new(modal.Message, DialogX + messageX, DialogY + messageY, messageWidth, DialogFont, BoardInk.Dialog),
-            new(modal.Button, DialogX + buttonX, DialogY + buttonY + DialogLabelDrop, DialogButtonWidth, DialogFont,
-                BoardInk.LabelActivate, Justify: BoardJustify.Center),
+            new(message, DialogX + messageX, DialogY + messageY, messageWidth, DialogFont, BoardInk.Dialog),
         };
+        foreach (var button in buttons)
+        {
+            var (art, x, y) = DialogSlot(button.Key, layout);
+            pictures.Add(new BoardPicture(art, x, y, button.Frame));
+            lines.Add(new BoardLine(button.Label, x, y + DialogLabelDrop, DialogButtonWidth, DialogFont,
+                button.Ink, Justify: BoardJustify.Center));
+        }
+
         return new BoardPanel(Array.Empty<BoardFill>(), pictures, lines);
+    }
+
+    /// <summary>Where one of the messagebox's three buttons sits on the board, and its strip: the
+    /// row's own position inside the art offset by where the art lands. The fallbacks are the
+    /// shipped rows' values (<c>74</c>, <c>174</c> and <c>274</c> at <c>254</c>).</summary>
+    public static (BoardArt Art, float X, float Y) DialogSlot(string key, CampaignLayout? layout = null)
+    {
+        layout ??= CampaignLayout.Fallback;
+        float fallbackX = key switch
+        {
+            DialogLeftKey => 74f,
+            DialogRightKey => 274f,
+            _ => 174f,
+        };
+        var (x, y) = layout.At(CampaignLayout.DialogSection, key, fallbackX, 254f);
+        return (layout.Art(CampaignLayout.DialogSection, key, Ui("MB_B_Buttons.Png", StripFrames)), DialogX + x, DialogY + y);
     }
 
     /// <summary>Where one of a screen's authored buttons sits and what art it draws, for a page
@@ -352,10 +392,17 @@ public static class CampaignBoards
     /// unselected tab, which the original puts behind the card. Null when the screen has no such
     /// button.</summary>
     public static (BoardArt Art, float X, float Y)? SlotOf(
-        CampaignScreen screen, BoardButton button, CampaignLayout? layout = null)
+        CampaignScreen screen, BoardButton button, CampaignLayout? layout = null) =>
+        SlotOf(screen, new BoardButtonRef(button), layout);
+
+    /// <summary>The same slot by its full reference, crew slot included: the flight check's second
+    /// CHANGE AMMO is the wingman's plaque, at its own row. This is where a pointer-driven
+    /// presentation reads the rectangle it hit-tests a page's button row against.</summary>
+    public static (BoardArt Art, float X, float Y)? SlotOf(
+        CampaignScreen screen, BoardButtonRef reference, CampaignLayout? layout = null)
     {
         var slots = Buttons.TryGetValue(screen, out var found) ? found : Array.Empty<BoardSlot>();
-        return Find(slots, new BoardButtonRef(button))?.Resolve(layout ?? CampaignLayout.Fallback);
+        return Find(slots, reference)?.Resolve(layout ?? CampaignLayout.Fallback);
     }
 
     /// <summary>The briefing parchment's objectives list, at the <c>LIST</c> widget's own authored
@@ -518,6 +565,10 @@ public static class CampaignBoards
 
         return null;
     }
+
+    /// <summary>One button of a composed messagebox: its layout row, its words, the strip frame to
+    /// draw and the ink its label takes.</summary>
+    public readonly record struct DialogButton(string Key, string Label, int Frame, BoardInk Ink);
 
     // One button: the layout row it is read from (null for the briefing's zrd-authored plaques)
     // and the fallback beside it. Labelled says the row carries a ResID, so the plaque's words are

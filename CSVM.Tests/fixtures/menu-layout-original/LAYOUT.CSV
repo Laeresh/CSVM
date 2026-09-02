@@ -23,6 +23,11 @@ MM_B_QUIT=B,PM_B_Quit.png,280,530,0,0,,0x1000,0,,,,,,
 [@FlightCheck@]
 V1=PLAQUE,PM_B_Paper.png
 FC_B_CHANGEPLANE=B,<PLAQUE>,120,130,0,IDS_PM_CHANGEPLANE,PlaneSelection,0x1000,1,,,,,,,0xFF767676,0xFF133D77,0xFF374D6B,0xFF000000
+FC_B_CHANGEAMMO=B,<PLAQUE>,270,130,0,IDS_PM_CHANGEPLANE,OrdinanceLayout,0x1000,1,,,,,,,0xFF767676,0xFF133D77,0xFF374D6B,0xFF000000
+FC_B_CHANGEPLANEW=B,<PLAQUE>,120,350,0,IDS_PM_CHANGEPLANE,PlaneSelection,0x1000,1,,,,,,,0xFF767676,0xFF133D77,0xFF374D6B,0xFF000000
+FC_B_CHANGEAMMOW=B,<PLAQUE>,270,350,0,IDS_PM_CHANGEPLANE,OrdinanceLayout,0x1000,1,,,,,,,0xFF767676,0xFF133D77,0xFF374D6B,0xFF000000
+FC_B_RETURNBRIEF=B,PM_B_ReturnBrief.png,340,550,0,0,,0x1000,0,,,,,,
+FC_B_FLYMISSION=B,PM_B_FlyMission.png,550,550,0,0,,0x1000,0,,,,,,
 
 ;The campaign boards' sections: the keys the boards read, on invented lines and art, so a moved
 ;row shows in the composed board and a pinned value shows by staying put.
@@ -40,21 +45,54 @@ MB_P_BACKGROUND=P,PM_Box.png,0,0,0,1,0,1,0
 MB_P_ICON=P,PM_Icons.png,30,60,0,3,0,1,0
 MB_T_MESSAGE=T,0,90,72,0,280,140,0xFFFFFFFF,0
 MB_B_CENTER=B,PM_B_Small.png,170,250,0,IDS_OK,,0x1000,0,,,,,,,<DISABLED>,<ACTIVE>,<ROLLOVER>,<DEPRESSED>
+MB_B_LEFT=B,PM_B_Small.png,70,250,0,IDS_OK,,0x1000,0,,,,,,,<DISABLED>,<ACTIVE>,<ROLLOVER>,<DEPRESSED>
+MB_B_RIGHT=B,PM_B_Small.png,270,250,0,IDS_OK,,0x1000,0,,,,,,,<DISABLED>,<ACTIVE>,<ROLLOVER>,<DEPRESSED>
 
 [@ScrapBook_TOC@]
 SBTOC_T_CHARACTER=T,0,420,60,0,310,24,0xFF000000,1
 SBTOC_T_MISSIONS=T,0,420,110,0,310,24,0xFF000000,3
 SBTOC_L_TOCList=L,PM_B_Slider.png,PM_B_Up.png,PM_B_Down.png,410,150,0,330,60,5
+SBTOC_B_VIEW=B,PM_B_Paper.png,440,500,0,IDS_PM_CHANGEPLANE,,0x1000,0,,,,,,,0xFF767676,0xFF133D77,0xFF374D6B,0xFF000000
+SBTOC_B_REPLAY=B,PM_B_Paper.png,600,500,0,IDS_PM_CHANGEPLANE,,0x1000,0,,,,,,,0xFF767676,0xFF133D77,0xFF374D6B,0xFF000000
+SBTOC_B_CURRENT=B,PM_B_Current.png,560,10,0,IDS_PM_CHANGEPLANE,,0x1000,0,,,,,,,0xFF767676,0xFF133D77,0xFF374D6B,0xFF000000
+SBTOC_B_RETURN=B,PM_B_ReturnCabin.png,590,560,0,0,PassengerCabin,0x1000,1,,,,,,
 
 [@OrdinanceLayout@]
 OL_S_AMMODESC=S,0xFF554C67,0xFFE6DABE,PM_B_Slider.png,PM_B_Up.png,PM_B_Down.png,560,100,0,180,190,,0xFF000000
 OL_D_AMMO0=D,PM_B_Slider.png,PM_B_Up.png,PM_B_Down.png,PM_B_DropUp.png,PM_B_DropDown.png,130,125,0,150,16,6
+OL_B_ACCEPT=B,PM_B_AcceptLoadout.png,340,550,0,0,FlightCheck,0x1000,1,,,,,,
+OL_B_CANCEL=B,PM_B_CancelLoadout.png,550,550,0,0,FlightCheck,0x1000,1,,,,,,
 
 [@ScrapbookZoom@]
 SBZ_T_TITLEB=T,0,24,55,0,670,82,0xFF000000,1
 SBZ_T_CAPTIONB=T,0,0,0,0,700,550,0xFF000000,0
 SBZ_T_TEXTB=T,0,20,140,0,674,373,0xFF000000,4
 SBZ_T_TITLEC=T,0,27,45,0,660,72,0xFF000000,1
+
+;The cabin, the book and the plane selection: the buttons the Original campaign hit-tests, on
+;invented lines and art.
+[@PassengerCabin@]
+PC_BACKGROUND=P,PM_Cabin.png,0,0,4,1,0,2,0
+PC_FRAME=P,PM_Frame2.png,170,320,0,1,0,1,0
+PC_B_NEWMISSION=B,PM_B_NextMission.png,90,500,0,0,,0x1000,0,,,,,,
+PC_B_PREVIOUS=B,PM_B_Previous.png,360,540,0,0,ScrapBook_TOC,0x1000,1,,,,,,
+PC_B_PLANEX=B,PM_B_PlaneX.png,450,430,0,0,PlaneName,0x1000,1,,,,,,
+PC_B_RETURNMM=B,PM_B_ReturnMM.png,590,560,0,0,MainMenu,0x1000,1,,,,,,
+
+[@ScrapBook@]
+SB_BACKGROUND=P,PM_Book.jpg,0,0,0,1,0,1,0
+SB_B_REPLAY=B,PM_B_Paper.png,590,500,0,IDS_PM_CHANGEPLANE,,0x1000,0,,,,,,,0xFF767676,0xFF133D77,0xFF374D6B,0xFF000000
+SB_B_TOC=B,PM_B_ViewAll.png,370,560,0,0,,0x1000,0,,,,,,
+SB_B_RETURNPC=B,PM_B_ReturnCabin.png,590,560,0,0,PassengerCabin,0x1000,1,,,,,,
+SB_B_PREV=B,PM_B_BackTab.png,0,460,0,0,,0x1000,0,,,,,,
+SB_B_NEXT=B,PM_B_MoreTab.png,710,460,0,0,,0x1000,0,,,,,,
+SB_B_CURRENT=B,PM_B_Current.png,560,10,0,IDS_PM_CHANGEPLANE,,0x1000,0,,,,,,,0xFF767676,0xFF133D77,0xFF374D6B,0xFF000000
+
+[@PlaneSelection@]
+PS_BACKGROUND=P,PM_Plane.jpg,0,0,0,1,0,1,0
+PS_B_EXPORTP=B,PM_B_Paper.png,560,170,0,IDS_PM_CHANGEPLANE,,0x1000,0,,,,,,,0xFF767676,0xFF133D77,0xFF374D6B,0xFF000000
+PS_B_ACCEPT=B,PM_B_AcceptSel.png,340,550,0,0,FlightCheck,0x1000,1,,,,,,
+PS_B_CANCEL=B,PM_B_CancelSel.png,550,550,0,0,FlightCheck,0x1000,1,,,,,,
 
 ;The Instant Action setup screen: the same widget keys and row types the shipped section carries,
 ;on invented lines. The two enemy pages share the right column's lines, as the shipped file's do.

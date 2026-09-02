@@ -52,8 +52,14 @@ internal static class MenuOriginalSuites
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
             ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true }));
+        // ⚠ The debrief return below opens the campaign, so the presentation is pointed at a
+        // scratch store: nothing here may read or write user://Profiles.
+        string profiles = System.IO.Path.Combine(ctx.ScratchDir, "menu-original-tracer", "Profiles");
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
-            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }));
+            ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
+        {
+            CampaignProfiles = new CSVM.Session.CampaignProfileStore(profiles),
+        });
         var host = new MenuHost(registry, audio, exits.Add);
         MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
         host.AddSeat(seat);
@@ -121,9 +127,18 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.FocusedKey == "MM_B_QUIT", $"a pointer over Quit takes the focus ({shell.FocusedKey})");
         ctx.Check(audio.Cues.Count == 1 && audio.Cues[0] == OriginalCues.Rollover,
             $"and cues one rollover through the host's audio ({string.Join(",", audio.Cues)})");
+        var multiplayer = Row(shell, "MM_B_MULTIPLAYER");
+        ctx.Check(multiplayer is { Enabled: false }, $"the Multiplayer plaque has no destination yet and is disabled");
+        if (multiplayer != null)
+        {
+            Press(host, seat, Pointer(fit, multiplayer.X + 5f, multiplayer.Y + 5f));
+            ctx.Check(shell.FocusedKey == "MM_B_QUIT" && audio.Cues.Count == 1,
+                $"a pointer over the disabled Multiplayer plaque moves nothing and cues nothing ({shell.FocusedKey}, {audio.Cues.Count})");
+        }
+
         Press(host, seat, Pointer(fit, campaign.X + 5f, campaign.Y + 5f));
-        ctx.Check(shell.FocusedKey == "MM_B_QUIT" && audio.Cues.Count == 1,
-            $"a pointer over the disabled Campaign plaque moves nothing and cues nothing ({shell.FocusedKey}, {audio.Cues.Count})");
+        ctx.Check(shell.FocusedKey == OriginalShell.CampaignKey && audio.Cues.Count == 2,
+            $"the Campaign plaque is live over the campaign feature: a pointer over it takes the focus and cues a rollover ({shell.FocusedKey}, {audio.Cues.Count})");
         var board = shell.Compose();
         ctx.Check(board.Overlays.Count == 1 && board.Overlays[0].Pictures.Count == 1,
             $"the pointer is composed as the last overlay ({board.Overlays.Count})");
@@ -180,9 +195,14 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && shell.PickedAirframe == null,
             $"on the top level with the airframe pick dropped ({shell.Screen}, {shell.PickedAirframe ?? "none"})");
         ctx.Check(exits.Count == 1, $"and nothing relaunched on the way back in ({exits.Count})");
+        // The scratch store holds no such profile, so the return opens the campaign on its
+        // profile screen rather than the book; menu-original-campaign drives the seated case.
         host.Show(new DebriefReturn("Nathan", 2));
-        ctx.Check(shell.Screen == OriginalScreen.TopLevel,
-            $"a debrief return maps onto the top level while Original has no campaign screens ({shell.Screen})");
+        ctx.Check(shell.Screen == OriginalScreen.CampaignRoster && host.Features.Get<CampaignFeature>().Profile == null,
+            $"a debrief return for a profile the store lacks lands on the profile screen with nobody seated ({shell.Screen})");
+        host.Show(MenuReturnDestination.TopLevel);
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel && !host.Features.Get<CampaignFeature>().IsOpen,
+            $"and a top-level show closes that campaign again ({shell.Screen})");
     }
 
     // The switch, as the launcher performs it after an Options exit: from mid-setup on the Free

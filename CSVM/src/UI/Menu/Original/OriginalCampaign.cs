@@ -1,0 +1,1045 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using CSVM.Session;
+
+namespace CSVM.UI.Menu.Original;
+
+/// <summary>One answer of a dialog standing over a campaign screen: its row key, the messagebox
+/// button row it draws at, its words, and what answering it runs.</summary>
+public sealed record OriginalDialogAnswer(string Key, string LayoutKey, string Label, Action? Run);
+
+/// <summary>A dialog standing over a campaign screen, the original's <c>messagebox.script</c>
+/// over whatever screen was showing: its words and its one or two answers. While one stands the
+/// rows are its answers alone.</summary>
+public sealed record OriginalDialog(string Message, IReadOnlyList<OriginalDialogAnswer> Answers);
+
+/// <summary>
+/// The Original campaign, the shell's partial over the shared <see cref="CampaignFeature"/>: the
+/// decoded profile, cabin, table of contents, flight check, ammo, plane selection, scrapbook and
+/// zoom screens and the briefing dialog. The screen graph, the pointer's hit rectangles, the
+/// rollover and pressed frames, the cues, the dialogs and every door out are this file's; what
+/// each screen draws is the shared board component, <c>CampaignBoards.For</c> over the campaign
+/// pages, which this shell hosts in a <c>CampaignFlow</c> of its own built over the feature and
+/// the layout it already holds. That flow is never walked: its screen is moved to mirror the one
+/// showing here, its row to mirror the focus, and a page that names a destination or raises a
+/// dialog has both read off it and re-entered through this graph. The pages' own editing state (a
+/// working loadout, a pick, a page turn) stays theirs, since a commit is what the feature writes.
+/// </summary>
+public sealed partial class OriginalShell
+{
+    /// <summary>The Campaign row's key on the top level.</summary>
+    public const string CampaignKey = "MM_B_CAMPAIGN";
+
+    /// <summary>A one-answer dialog's OK.</summary>
+    public const string DialogOkKey = "DIALOG:OK";
+
+    /// <summary>A two-answer dialog's confirming answer.</summary>
+    public const string DialogYesKey = "DIALOG:YES";
+
+    /// <summary>A two-answer dialog's declining answer.</summary>
+    public const string DialogNoKey = "DIALOG:NO";
+
+    // A page row that is neither a button nor a field: a roster name, a mission row, a scrap.
+    private const string RowKeyPrefix = "ROW:";
+
+    // A page row carrying a drop-down field.
+    private const string FieldKeyPrefix = "FIELD:";
+
+    // One entry of an open drop-down list, keyed by its index into the list.
+    private const string EntryKeyPrefix = "ENTRY:";
+
+    // The roster's own list colours, CAMPAIGN.SCRIPT's sub-script VB: the selection bar behind the
+    // picked row (0xff800000) and the frame around the row under the pointer (0xffff0000).
+    private const byte RosterBarRed = 0x80;
+    private const byte RosterFrameRed = 0xff;
+
+    // A plaque whose art the measurer cannot see: the briefing's brief_button1 is mission art
+    // under extracted/rimage, 196x32 in the shipped file; every other plaque is a rof strip.
+    private const float BriefPlaqueWidth = 196f;
+    private const float BriefPlaqueHeight = 32f;
+
+    // A capture with no authored region is forced to 164x123 and drawn at a quarter on the page.
+    private const float CaptureRegionWidth = 41f;
+    private const float CaptureRegionHeight = 31f;
+
+    // The name box's own height where the row carries none.
+    private const float FallbackFieldHeight = 20f;
+
+    private readonly CampaignFeature? _campaign;
+    private readonly Func<CampaignProfileStore>? _profiles;
+    private readonly Func<CSVM.Flight.StockLoadouts?>? _stock;
+    private readonly string? _dataRoot;
+    private readonly CampaignLayout _campaignLayout;
+
+    // The pages' host, mirrored to the screen showing and never walked (see the class summary).
+    private CampaignFlow? _flow;
+    private OriginalDialog? _dialog;
+    private int _focusBeforeDialog = -1;
+    private OriginalScreen _briefingReturn = OriginalScreen.CampaignCabin;
+    private OriginalScreen _bookReturn = OriginalScreen.CampaignCabin;
+
+    /// <summary>Whether the screen showing is one of the campaign's.</summary>
+    public bool IsCampaignScreen => _screen >= OriginalScreen.CampaignRoster && _screen <= OriginalScreen.CampaignScrapbookZoom;
+
+    /// <summary>Whether a campaign is open on this shell.</summary>
+    public bool CampaignOpen => _flow != null;
+
+    /// <summary>The campaign page composing the screen showing, or null off the campaign.</summary>
+    public ICampaignPage? CampaignContent => IsCampaignScreen ? _flow?.Page : null;
+
+    /// <summary>Which campaign screen the one showing is, or null off the campaign; what the
+    /// presentation picks the board's palette by.</summary>
+    public CampaignScreen? CampaignPage => IsCampaignScreen ? CampaignScreenOf(_screen) : null;
+
+    /// <summary>The dialog standing over the screen, or null.</summary>
+    public OriginalDialog? Dialog => _dialog;
+
+    /// <summary>The name in the roster's box.</summary>
+    public string RosterName => RosterEntry?.Text ?? string.Empty;
+
+    /// <summary>How many times the briefing showing has asked for its narration, or 0 off the
+    /// briefing; the presentation starts playback whenever this rises.</summary>
+    public int NarrationStarts => _screen == OriginalScreen.CampaignBriefing ? _campaign?.Briefing?.NarrationStarts ?? 0 : 0;
+
+    /// <summary>The briefing's narration wav, or "" when there is none or the briefing is not showing.</summary>
+    public string NarrationWav => _screen == OriginalScreen.CampaignBriefing ? _campaign?.Briefing?.NarrationWav ?? string.Empty : string.Empty;
+
+    private CampaignTextEntry? RosterEntry => _flow?.Page is CampaignRosterPage roster ? roster.TextEntry : null;
+
+    // The focused row as a page row, for the pages that read the flow's cursor.
+    private int PageFocus
+    {
+        get
+        {
+            if (_flow == null || _dialog != null)
+            {
+                return _focusBeforeDialog;
+            }
+
+            int focus = _focus[(int)_screen];
+            return focus >= 0 && focus < _flow.Page.RowCount ? focus : -1;
+        }
+    }
+
+    private CampaignCombo? OpenCombo =>
+        _flow != null && _dialog == null && PageFocus >= 0 && _flow.Page.Combo(PageFocus) is { Open: true } combo ? combo : null;
+
+    /// <summary>The Campaign row's door: opens the campaign over the user's profile store and lands
+    /// on the profile screen. Nothing happens when the shell has no feature or no store.</summary>
+    public void OpenCampaign()
+    {
+        if (_profiles != null)
+        {
+            OpenCampaignOver(_profiles());
+        }
+    }
+
+    /// <summary>Opens the campaign over <paramref name="store"/>, the aids' and the suites' door,
+    /// and lands on the profile screen with the name box pre-filled with the last player seated,
+    /// the way <c>CAMPAIGN.SCRIPT</c> pre-fills it from the registry.</summary>
+    public void OpenCampaignOver(CampaignProfileStore store)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        if (_campaign == null)
+        {
+            return;
+        }
+
+        _campaign.Open(store, _planes, _stock?.Invoke(), _dataRoot);
+        _flow = new CampaignFlow(_campaign, _campaignLayout);
+        _dialog = null;
+        _briefingReturn = OriginalScreen.CampaignCabin;
+        _bookReturn = OriginalScreen.CampaignCabin;
+        string last = _campaign.LastPlayed;
+        RosterEntry?.Set(RosterHas(last) ? last : string.Empty);
+        ShowCampaign(OriginalScreen.CampaignRoster);
+    }
+
+    /// <summary>Seats the named profile re-read from the store and lands on the cabin, the door a
+    /// flight return takes; false, on the profile screen, when the profile cannot be read.</summary>
+    public bool ShowCabin(string profile)
+    {
+        if (_flow == null || _campaign == null || !_campaign.SeatProfile(profile))
+        {
+            return false;
+        }
+
+        ShowCampaign(OriginalScreen.CampaignCabin);
+        return true;
+    }
+
+    /// <summary>Seats the named profile and opens the book on a mission's first spread with the
+    /// cabin on its far side, the mission end's own door; false when the profile cannot be read.</summary>
+    public bool ShowScrapbook(string profile, int seq)
+    {
+        if (_flow == null || _campaign == null || !_campaign.SeatProfile(profile))
+        {
+            return false;
+        }
+
+        _campaign.EnterScrapbook(seq);
+        _bookReturn = OriginalScreen.CampaignCabin;
+        ShowCampaign(OriginalScreen.CampaignScrapbook);
+        return true;
+    }
+
+    /// <summary>Opens one of the screens past the cabin on the seated profile's next mission, the
+    /// aids' door: the table of contents, the briefing, the flight check, ammo selection on the
+    /// pilot's aircraft or plane selection on the pilot's slot. Nothing happens with nobody seated.</summary>
+    public void ShowMissionScreen(OriginalScreen screen)
+    {
+        if (_flow == null || _campaign?.Profile == null || !IsCampaign(screen))
+        {
+            return;
+        }
+
+        _campaign.SetMission(_campaign.NextMissionSeq);
+        _campaign.SetAmmoSlot(0);
+        _campaign.SetPlaneSlot(0);
+        _briefingReturn = OriginalScreen.CampaignCabin;
+        ShowCampaign(screen);
+    }
+
+    /// <summary>Moves the briefing's reveal on by a frame's worth of seconds while the briefing
+    /// shows, the presentation's clock; returns whether the reveal is still running, which is when
+    /// the board has to repaint on the frame clock.</summary>
+    public bool AdvanceBriefing(double seconds)
+    {
+        if (_screen != OriginalScreen.CampaignBriefing || _campaign?.Briefing is not { } briefing)
+        {
+            return false;
+        }
+
+        briefing.Advance(seconds);
+        return !briefing.Complete;
+    }
+
+    /// <summary>Drops the open campaign, if any: the feature's transient state and the pages. Every
+    /// door out of the campaign and every return to the top level comes through here.</summary>
+    public void CloseCampaign()
+    {
+        _campaign?.Discard();
+        _flow = null;
+        _dialog = null;
+    }
+
+    private static bool IsCampaign(OriginalScreen screen) =>
+        screen >= OriginalScreen.CampaignRoster && screen <= OriginalScreen.CampaignScrapbookZoom;
+
+    private static CampaignScreen CampaignScreenOf(OriginalScreen screen) => screen switch
+    {
+        OriginalScreen.CampaignRoster => CampaignScreen.Roster,
+        OriginalScreen.CampaignCabin => CampaignScreen.Cabin,
+        OriginalScreen.CampaignPreviousMissions => CampaignScreen.PreviousMissions,
+        OriginalScreen.CampaignBriefing => CampaignScreen.Briefing,
+        OriginalScreen.CampaignFlightCheck => CampaignScreen.FlightCheck,
+        OriginalScreen.CampaignAmmo => CampaignScreen.Ammo,
+        OriginalScreen.CampaignPlaneSelection => CampaignScreen.PlaneSelection,
+        OriginalScreen.CampaignScrapbook => CampaignScreen.Scrapbook,
+        _ => CampaignScreen.ScrapbookZoom,
+    };
+
+    private static OriginalScreen OriginalOf(CampaignScreen screen) => screen switch
+    {
+        CampaignScreen.Roster => OriginalScreen.CampaignRoster,
+        CampaignScreen.Cabin => OriginalScreen.CampaignCabin,
+        CampaignScreen.PreviousMissions => OriginalScreen.CampaignPreviousMissions,
+        CampaignScreen.Briefing => OriginalScreen.CampaignBriefing,
+        CampaignScreen.FlightCheck => OriginalScreen.CampaignFlightCheck,
+        CampaignScreen.Ammo => OriginalScreen.CampaignAmmo,
+        CampaignScreen.PlaneSelection => OriginalScreen.CampaignPlaneSelection,
+        CampaignScreen.Scrapbook => OriginalScreen.CampaignScrapbook,
+        _ => OriginalScreen.CampaignScrapbookZoom,
+    };
+
+    // A row key for a page row: the authored button it presses (with its crew slot), else the
+    // kind of row it is with its index.
+    private static string CampaignRowKey(ICampaignPage page, int row)
+    {
+        var reference = page.Button(row);
+        if (reference.Button != BoardButton.None)
+        {
+            return reference.Slot > 0
+                ? reference.Button + ":" + reference.Slot.ToString(CultureInfo.InvariantCulture)
+                : reference.Button.ToString();
+        }
+
+        return (page.Combo(row) != null ? FieldKeyPrefix : RowKeyPrefix) + row.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static bool HoverOnly(OriginalRow row) => row.Key.StartsWith(EntryKeyPrefix, StringComparison.Ordinal);
+
+    private static int? Entry(string key) =>
+        key.StartsWith(EntryKeyPrefix, StringComparison.Ordinal)
+            && int.TryParse(key.AsSpan(EntryKeyPrefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out int entry)
+            ? entry
+            : null;
+
+    private static OriginalDialogAnswer Ok(Action? run = null) =>
+        new(DialogOkKey, CampaignBoards.DialogCenterKey, "OK", run);
+
+    private bool RosterHas(string name)
+    {
+        if (_campaign == null || name.Length == 0)
+        {
+            return false;
+        }
+
+        foreach (string stored in _campaign.Roster)
+        {
+            if (stored == name)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Enters a campaign screen: the pages' host is moved onto its page (its cursor landing on the
+    // page's own opening row, which is where this screen's focus opens too), no dialog stands, and
+    // the pointer state starts afresh. A way back onto a screen keeps the focus where it stood, on
+    // the plaque that opened what is being left, so a round trip lands where it started.
+    private void ShowCampaign(OriginalScreen screen, bool keepFocus = false)
+    {
+        if (_flow == null)
+        {
+            return;
+        }
+
+        _flow.GoTo(CampaignScreenOf(screen));
+        _dialog = null;
+        Open(screen);
+        if (!keepFocus || _focus[(int)screen] < 0)
+        {
+            _focus[(int)screen] = _flow.Row;
+        }
+    }
+
+    private void EnterBriefing(OriginalScreen returnTo)
+    {
+        _briefingReturn = returnTo;
+        ShowCampaign(OriginalScreen.CampaignBriefing);
+    }
+
+    // Every door out of the campaign: CANCEL and Back on the profile screen, RETURN TO MAIN MENU.
+    private void LeaveCampaign()
+    {
+        CloseCampaign();
+        Open(OriginalScreen.TopLevel);
+    }
+
+    // Back from the hangar the cabin opened: the profile is re-read so a purchase or a sale shows.
+    private void ResumeCampaign()
+    {
+        _campaign?.Resume();
+        ShowCampaign(OriginalScreen.CampaignCabin, keepFocus: true);
+    }
+
+    // The joined humans on the flight check, once a frame: the seats are the shared setup's.
+    private void SyncCampaignField()
+    {
+        if (_screen == OriginalScreen.CampaignFlightCheck && _campaign != null)
+        {
+            _campaign.Field.SetPlayers(_setup.Seats.Count);
+        }
+    }
+
+    // Typed characters and Backspace into the roster's name box, the campaign's own character set
+    // and cap, each character cueing the box's keystroke or reject sound.
+    private bool TypeRosterName(MenuCommands commands, List<string> cues)
+    {
+        if (RosterEntry is not { } entry || _dialog != null)
+        {
+            return false;
+        }
+
+        bool changed = false;
+        foreach (char c in commands.Typed)
+        {
+            if (entry.Type(c.ToString()))
+            {
+                changed = true;
+                cues.Add(OriginalCues.Text);
+            }
+            else
+            {
+                cues.Add(OriginalCues.TextError);
+            }
+        }
+
+        if (commands.Erase && entry.Backspace())
+        {
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    private void RaiseDialog(string message, params OriginalDialogAnswer[] answers)
+    {
+        _focusBeforeDialog = _focus[(int)_screen];
+        _dialog = new OriginalDialog(message, answers);
+        _hover = -1;
+        _pressed = -1;
+        // A two-answer box opens on its declining answer, so the press that follows a mistaken
+        // DELETE PLAYER cannot be the one that destroys a campaign.
+        _focus[(int)_screen] = answers.Length - 1;
+    }
+
+    private void AnswerDialog(string key)
+    {
+        if (_dialog is not { } dialog)
+        {
+            return;
+        }
+
+        _dialog = null;
+        _focus[(int)_screen] = _focusBeforeDialog;
+        foreach (var answer in dialog.Answers)
+        {
+            if (answer.Key == key)
+            {
+                answer.Run?.Invoke();
+                return;
+            }
+        }
+    }
+
+    // The rows of a campaign screen: a standing dialog's answers alone; else one row per page
+    // row at the rectangle the shared board component draws it at (a button's slot and strip, a
+    // field's box, a list row's slot), a row with no rectangle keeping its index unseen and unhit
+    // and a row the page refuses focus on disabled, then the open list's entries where a field is
+    // open.
+    private void BuildCampaignRows(List<OriginalRow> rows)
+    {
+        if (_flow == null)
+        {
+            return;
+        }
+
+        if (_dialog is { } dialog)
+        {
+            foreach (var answer in dialog.Answers)
+            {
+                var (art, x, y) = CampaignBoards.DialogSlot(answer.LayoutKey, _campaignLayout);
+                var size = PlaqueSizeOf(art);
+                rows.Add(new OriginalRow(answer.Key, answer.Label, OriginalRowKind.Button, x, y, size.Width, size.Height, true, 0, art));
+            }
+
+            return;
+        }
+
+        var page = _flow.Page;
+        var screen = page.Screen;
+        int listIndex = 0;
+        for (int row = 0; row < page.RowCount; row++)
+        {
+            string key = CampaignRowKey(page, row);
+            bool enabled = page.Focusable(row) && RowEnabled(page, row);
+            if (page.Combo(row) is { } combo)
+            {
+                rows.Add(new OriginalRow(key, combo.Text, OriginalRowKind.Dropdown, combo.X, combo.Y, combo.Width,
+                    CampaignBoards.ComboFieldHeight, enabled, 0, null));
+                continue;
+            }
+
+            var reference = page.Button(row);
+            if (reference.Button != BoardButton.None)
+            {
+                if (CampaignBoards.SlotOf(screen, reference, _campaignLayout) is { } slot)
+                {
+                    var size = PlaqueSizeOf(slot.Art);
+                    rows.Add(new OriginalRow(key, page.RowText(row), OriginalRowKind.Button, slot.X, slot.Y, size.Width, size.Height, enabled, 0, slot.Art));
+                }
+                else
+                {
+                    rows.Add(new OriginalRow(key, page.RowText(row), OriginalRowKind.Button, 0f, 0f, 0f, 0f, false, 0, null, false));
+                }
+
+                continue;
+            }
+
+            // A focusable row with no rectangle (a mission row scrolled out of its window) keeps
+            // its place for the keyboard, unseen and unhit.
+            var box = ListRowBox(page, row, listIndex++);
+            var kind = screen == CampaignScreen.Roster && row == 0 ? OriginalRowKind.TextField : OriginalRowKind.ListRow;
+            rows.Add(box is { } b
+                ? new OriginalRow(key, page.RowText(row), kind, b.X, b.Y, b.Width, b.Height, enabled, 0, null)
+                : new OriginalRow(key, page.RowText(row), kind, 0f, 0f, 0f, 0f, enabled, 0, null, false));
+        }
+
+        if (OpenCombo is { } open)
+        {
+            float top = open.Y + CampaignBoards.ComboFieldHeight;
+            for (int seen = 0; seen < open.Visible; seen++)
+            {
+                int entry = open.First + seen;
+                if (entry >= open.Entries.Count)
+                {
+                    break;
+                }
+
+                rows.Add(new OriginalRow(EntryKeyPrefix + entry.ToString(CultureInfo.InvariantCulture), open.Entries[entry],
+                    OriginalRowKind.ListRow, open.X, top + (seen * open.RowHeight), open.Width, open.RowHeight, true, 0, null));
+            }
+        }
+    }
+
+    // The cabin's NEXT MISSION is disabled once the campaign is finished, the script's own
+    // mail(10000) when uiData 2600 answers 0; every other button is live as the page offers it.
+    private bool RowEnabled(ICampaignPage page, int row) =>
+        !(page.Screen == CampaignScreen.Cabin && page.Button(row).Button == BoardButton.NextMission && _campaign?.CampaignComplete == true);
+
+    // Where a list or text row sits: the roster's box and its list rows at the layout's own item
+    // height, a mission row inside the table of contents' window, a scrap at its authored region
+    // (or its picture's bounds where the row authors none), and nothing for anything else.
+    private (float X, float Y, float Width, float Height)? ListRowBox(ICampaignPage page, int row, int listIndex)
+    {
+        switch (page)
+        {
+            case CampaignRosterPage:
+            {
+                var (x, y, width) = CampaignBoards.TextSlot(CampaignScreen.Roster, listIndex, _campaignLayout);
+                float height = row == 0
+                    ? _campaignLayout.Int(CampaignLayout.RosterSection, "CM_E_NAME", "Height", (int)FallbackFieldHeight)
+                    : _campaignLayout.Int(CampaignLayout.RosterSection, "CM_L_PLAYERS", "ItemHeight", 20);
+                return (x, y, width, height);
+            }
+
+            case CampaignPreviousMissionsPage contents:
+                return contents.RowBox(row);
+            case CampaignScrapbookPage book when book.ScrapOf(row) is { } scrap:
+                if (scrap.Region is { } region)
+                {
+                    return region;
+                }
+
+                if (scrap.IsCapture)
+                {
+                    return (scrap.X, scrap.Y, CaptureRegionWidth, CaptureRegionHeight);
+                }
+
+                if (Measure($"SCRAPBOOK/{scrap.FileName}") is { } size)
+                {
+                    return (scrap.X, scrap.Y, size.Width, size.Height);
+                }
+
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    // A plaque's one-frame size: the strip measured where the file is a rof bitmap, the shipped
+    // size for the briefing's rimage plaque, the roster's CONTINUE strip as the fallback otherwise.
+    private (float Width, float Height) PlaqueSizeOf(BoardArt art)
+    {
+        if (art.Library == BoardArtLibrary.Rimage)
+        {
+            return (BriefPlaqueWidth, BriefPlaqueHeight);
+        }
+
+        return StripSize(art, 113f, 34f);
+    }
+
+    private int RowIndexOf(string key)
+    {
+        var rows = Rows;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (rows[i].Key == key)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private void HighlightComboEntry(OriginalRow row)
+    {
+        if (OpenCombo is { } combo && Entry(row.Key) is { } entry)
+        {
+            combo.Move(entry - combo.Highlight);
+        }
+    }
+
+    private bool CloseCampaignCombo() => IsCampaignScreen && OpenCombo is { } combo && combo.Collapse();
+
+    private bool MoveCampaignCombo(IReadOnlyList<OriginalRow> rows, int focus, int direction) =>
+        IsCampaignScreen && OpenCombo is { } combo && combo.Move(direction);
+
+    // A sideways step on a closed field picks its next entry, the page's own stepper, which the
+    // plane selection may refuse with its dialog.
+    private bool StepCampaignSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction)
+    {
+        if (_flow == null || _dialog != null || focus < 0 || focus >= rows.Count || rows[focus].Kind != OriginalRowKind.Dropdown)
+        {
+            return false;
+        }
+
+        var before = _flow.Screen;
+        _flow.FocusRow(focus);
+        _flow.Page.Step(focus, direction);
+        SyncAfterPage(before);
+        return true;
+    }
+
+    // A press handed to the page: the page edits its own state, and whatever it named on the way
+    // (a destination, a dialog, a refusal) is read off the host and re-entered through this graph.
+    private void PagePress(int pageRow)
+    {
+        if (_flow == null)
+        {
+            return;
+        }
+
+        var before = _flow.Screen;
+        _flow.FocusRow(pageRow);
+        _flow.Page.Accept(pageRow);
+        SyncAfterPage(before);
+    }
+
+    private void SyncAfterPage(CampaignScreen before)
+    {
+        if (_flow == null)
+        {
+            return;
+        }
+
+        if (_flow.TakeModal() is { } modal)
+        {
+            RaiseDialog(modal.Message, Ok(modal.Confirm));
+        }
+        else if (_flow.TakeMessage() is { Length: > 0 } message)
+        {
+            RaiseDialog(message, Ok());
+        }
+
+        if (_flow.Screen != before)
+        {
+            EnterFromPage(_flow.Screen, before);
+        }
+        else if (_dialog == null)
+        {
+            // The page may have moved the cursor onto the control just pressed (a page turn).
+            _focus[(int)_screen] = _flow.Row;
+        }
+    }
+
+    // The destination a page named, entered through this graph with its own return remembered:
+    // a replay's briefing goes back to where it was pressed, the book remembers whether the
+    // table of contents or the cabin opened it.
+    private void EnterFromPage(CampaignScreen to, CampaignScreen from)
+    {
+        switch (to)
+        {
+            case CampaignScreen.Briefing:
+                EnterBriefing(OriginalOf(from));
+                break;
+            case CampaignScreen.Scrapbook:
+                if (from == CampaignScreen.PreviousMissions)
+                {
+                    _bookReturn = OriginalScreen.CampaignPreviousMissions;
+                }
+                else if (from is not (CampaignScreen.Scrapbook or CampaignScreen.ScrapbookZoom))
+                {
+                    _bookReturn = OriginalScreen.CampaignCabin;
+                }
+
+                ShowCampaign(OriginalScreen.CampaignScrapbook);
+                break;
+            case CampaignScreen.FlightCheck:
+                // ACCEPT or CANCEL on the ammo and plane screens: back onto the plaque that opened them.
+                ShowCampaign(OriginalScreen.CampaignFlightCheck, keepFocus: from is CampaignScreen.Ammo or CampaignScreen.PlaneSelection);
+                break;
+            default:
+                ShowCampaign(OriginalOf(to));
+                break;
+        }
+    }
+
+    private MenuExit? ActivateCampaign(OriginalRow row)
+    {
+        if (_flow == null || _campaign == null)
+        {
+            return null;
+        }
+
+        if (_dialog != null)
+        {
+            AnswerDialog(row.Key);
+            return null;
+        }
+
+        if (Entry(row.Key) != null)
+        {
+            HighlightComboEntry(row);
+            PagePress(PageFocus);
+            return null;
+        }
+
+        int pageRow = RowIndexOf(row.Key);
+        if (pageRow < 0)
+        {
+            return null;
+        }
+
+        switch (_screen)
+        {
+            case OriginalScreen.CampaignRoster:
+                ActivateRoster(row, pageRow);
+                return null;
+            case OriginalScreen.CampaignCabin:
+                ActivateCabin(row);
+                return null;
+            case OriginalScreen.CampaignBriefing:
+                ActivateBriefing(row);
+                return null;
+            case OriginalScreen.CampaignFlightCheck:
+                return ActivateFlightCheck(row);
+            default:
+                PagePress(pageRow);
+                return null;
+        }
+    }
+
+    // The profile screen: the box and CONTINUE both start on the name in the box (Enter in the
+    // box is the script's own commit path), a roster row fills the box and a second press on the
+    // filled row starts (the double-click), DELETE PLAYER asks, CANCEL leaves.
+    private void ActivateRoster(OriginalRow row, int pageRow)
+    {
+        if (RosterEntry is not { } entry || _campaign == null)
+        {
+            return;
+        }
+
+        switch (row.Key)
+        {
+            case nameof(BoardButton.Continue):
+                ContinuePlayer();
+                return;
+            case nameof(BoardButton.DeletePlayer):
+                BeginDelete();
+                return;
+            case nameof(BoardButton.CancelProfile):
+                LeaveCampaign();
+                return;
+        }
+
+        if (pageRow == 0)
+        {
+            ContinuePlayer();
+            return;
+        }
+
+        int index = pageRow - 1;
+        if (index >= 0 && index < _campaign.Roster.Count)
+        {
+            string name = _campaign.Roster[index];
+            if (entry.Text == name)
+            {
+                ContinuePlayer();
+                return;
+            }
+
+            entry.Set(name);
+        }
+    }
+
+    private void ContinuePlayer()
+    {
+        if (_campaign == null || RosterEntry is not { } entry)
+        {
+            return;
+        }
+
+        if (_campaign.ContinuePlayer(entry.Text) is { } refusal)
+        {
+            RaiseDialog(refusal, Ok());
+            return;
+        }
+
+        entry.Set(_campaign.Profile?.Name ?? entry.Text.Trim());
+        ShowCampaign(OriginalScreen.CampaignCabin);
+    }
+
+    // DELETE PLAYER: the original's question (langui 201) as the two-answer box, the deletion
+    // taking the profile's own directory alone and clearing the box.
+    private void BeginDelete()
+    {
+        if (_campaign == null || RosterEntry is not { } entry)
+        {
+            return;
+        }
+
+        string name = entry.Text.Trim();
+        if (name.Length == 0 || !_campaign.HasPlayer(name))
+        {
+            RaiseDialog($"There is no player named \"{name}\".", Ok());
+            return;
+        }
+
+        RaiseDialog(
+            _campaign.Strings.Text(201, "Are you sure you want to delete this player and all associated saved games?"),
+            new OriginalDialogAnswer(DialogYesKey, CampaignBoards.DialogLeftKey, "YES", () =>
+            {
+                _campaign.DeletePlayer(name);
+                entry.Set(string.Empty);
+                _focus[(int)_screen] = 0;
+            }),
+            new OriginalDialogAnswer(DialogNoKey, CampaignBoards.DialogRightKey, "NO", null));
+    }
+
+    private void ActivateCabin(OriginalRow row)
+    {
+        if (_campaign?.Profile is not { } profile)
+        {
+            LeaveCampaign();
+            return;
+        }
+
+        switch (row.Key)
+        {
+            case nameof(BoardButton.NextMission):
+                _campaign.SetMission(CampaignProgression.NextMissionSeq(profile));
+                EnterBriefing(OriginalScreen.CampaignCabin);
+                break;
+            case nameof(BoardButton.PreviousMissions):
+                ShowCampaign(OriginalScreen.CampaignPreviousMissions);
+                break;
+            case nameof(BoardButton.PlaneConstruction):
+                OpenHangar(_campaign.Wallet());
+                break;
+            case nameof(BoardButton.ReturnToMainMenu):
+                LeaveCampaign();
+                break;
+        }
+    }
+
+    private void ActivateBriefing(OriginalRow row)
+    {
+        switch (row.Key)
+        {
+            case nameof(BoardButton.ReplayBriefing):
+                _campaign?.Briefing?.Restart();
+                break;
+            case nameof(BoardButton.ReturnToCabin):
+                ShowCampaign(OriginalScreen.CampaignCabin);
+                break;
+            case nameof(BoardButton.GoToFlightCheck):
+                ShowCampaign(OriginalScreen.CampaignFlightCheck);
+                break;
+        }
+    }
+
+    // The flight check: CHANGE AMMO and CHANGE PLANE name their crew slot and open their screen,
+    // RETURN TO BRIEFING abandons the walk, and FLY MISSION advances to the next joined human's
+    // check or, on the last, leaves as the feature's launch with every seat's devices.
+    private MenuExit? ActivateFlightCheck(OriginalRow row)
+    {
+        if (_campaign == null || _flow == null)
+        {
+            return null;
+        }
+
+        int pageRow = RowIndexOf(row.Key);
+        var reference = pageRow >= 0 ? _flow.Page.Button(pageRow) : BoardButtonRef.None;
+        switch (reference.Button)
+        {
+            case BoardButton.ChangeAmmo:
+                _campaign.SetAmmoSlot(reference.Slot);
+                ShowCampaign(OriginalScreen.CampaignAmmo);
+                return null;
+            case BoardButton.ChangePlane:
+                _campaign.SetPlaneSlot(reference.Slot);
+                ShowCampaign(OriginalScreen.CampaignPlaneSelection);
+                return null;
+            case BoardButton.ReturnToBriefing:
+                _campaign.Field.Rewind();
+                ShowCampaign(OriginalScreen.CampaignBriefing);
+                return null;
+            case BoardButton.FlyMission:
+                _campaign.Field.SetPlayers(_setup.Seats.Count);
+                if (_campaign.Field.Advance())
+                {
+                    ShowCampaign(OriginalScreen.CampaignFlightCheck);
+                    return null;
+                }
+
+                var pads = new List<IReadOnlyList<int>>(_setup.Seats.Count);
+                foreach (var seat in _setup.Seats)
+                {
+                    pads.Add(_flightDevices(seat));
+                }
+
+                return _campaign.BuildExit(pads);
+            default:
+                return null;
+        }
+    }
+
+    // Back through the campaign's own graph: a dialog takes its declining answer, an open list
+    // closes, a guest's check retreats to the player before, and each screen returns to the one
+    // that opened it, the profile screen leaving the campaign.
+    private void BackCampaign()
+    {
+        if (_flow == null || _campaign == null)
+        {
+            return;
+        }
+
+        if (_dialog is { } dialog)
+        {
+            AnswerDialog(dialog.Answers[dialog.Answers.Count - 1].Key);
+            return;
+        }
+
+        switch (_screen)
+        {
+            case OriginalScreen.CampaignRoster:
+                LeaveCampaign();
+                break;
+            case OriginalScreen.CampaignCabin:
+                ShowCampaign(OriginalScreen.CampaignRoster, keepFocus: true);
+                break;
+            case OriginalScreen.CampaignPreviousMissions:
+                ShowCampaign(OriginalScreen.CampaignCabin, keepFocus: true);
+                break;
+            case OriginalScreen.CampaignBriefing:
+                ShowCampaign(_briefingReturn, keepFocus: true);
+                break;
+            case OriginalScreen.CampaignFlightCheck:
+                if (_campaign.Field.Retreat())
+                {
+                    ShowCampaign(OriginalScreen.CampaignFlightCheck);
+                }
+                else
+                {
+                    _campaign.Field.Rewind();
+                    ShowCampaign(OriginalScreen.CampaignBriefing, keepFocus: true);
+                }
+
+                break;
+            case OriginalScreen.CampaignAmmo:
+            case OriginalScreen.CampaignPlaneSelection:
+                // The page's own Back: an open list closes, else the working copy is dropped or
+                // the picks restored, and the screen falls back to the check.
+                _flow.FocusRow(Math.Max(0, PageFocus));
+                if (!_flow.Page.Back())
+                {
+                    ShowCampaign(OriginalScreen.CampaignFlightCheck, keepFocus: true);
+                }
+
+                break;
+            case OriginalScreen.CampaignScrapbook:
+                ShowCampaign(_bookReturn, keepFocus: true);
+                break;
+            case OriginalScreen.CampaignScrapbookZoom:
+                ShowCampaign(OriginalScreen.CampaignScrapbook, keepFocus: true);
+                break;
+        }
+    }
+
+    // The screen as the shared board component composes it over the page, with this graph's own
+    // additions: the roster's list colours and its box's words, and a standing dialog.
+    private void ComposeCampaign(
+        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
+        List<BoardFill> fills, List<BoardStroke> strokes, List<BoardLine> lines, List<BoardPlaque> plaques,
+        List<BoardNote> notes, List<BoardPanel> overlays)
+    {
+        if (_flow == null)
+        {
+            return;
+        }
+
+        var page = _flow.Page;
+        int pageFocus = PageFocus;
+        if (pageFocus >= 0)
+        {
+            _flow.FocusRow(pageFocus);
+        }
+
+        bool pressed = _dialog == null && _pressed >= 0 && _pressed == focus;
+        string detail = page.Screen == CampaignScreen.Ammo && pageFocus >= 0 ? page.Detail(pageFocus) : string.Empty;
+        var board = CampaignBoards.For(page, pageFocus, pressed, detail, null, _campaignLayout);
+        backdrop.AddRange(board.Backdrop);
+        fills.AddRange(board.Fills);
+        pictures.AddRange(board.Pictures);
+        strokes.AddRange(board.Strokes);
+        plaques.AddRange(board.Plaques);
+        notes.AddRange(board.Notes);
+        overlays.AddRange(board.Overlays);
+        if (page.Screen == CampaignScreen.Roster)
+        {
+            ComposeRoster(rows, focus, board.Lines, fills, lines);
+        }
+        else
+        {
+            lines.AddRange(board.Lines);
+        }
+
+        if (_dialog is { } dialog)
+        {
+            var buttons = new List<CampaignBoards.DialogButton>(dialog.Answers.Count);
+            for (int i = 0; i < dialog.Answers.Count; i++)
+            {
+                bool focused = i == focus;
+                bool held = i == _pressed;
+                buttons.Add(new CampaignBoards.DialogButton(
+                    dialog.Answers[i].LayoutKey, dialog.Answers[i].Label,
+                    ComposedBoard.PlaqueFrame(4, focused, held), ComposedBoard.PlaqueInk(focused, held)));
+            }
+
+            overlays.Add(CampaignBoards.Dialog(dialog.Message, buttons, _campaignLayout));
+        }
+    }
+
+    // The profile screen's own list drawing, CAMPAIGN.SCRIPT's sub-script: the selection bar
+    // behind the row the box names and the frame around the row under the pointer, over the
+    // list rows the board component wrote; the box shows the typed name itself with a caret while
+    // it is the focused row.
+    private void ComposeRoster(IReadOnlyList<OriginalRow> rows, int focus, IReadOnlyList<BoardLine> composed, List<BoardFill> fills, List<BoardLine> lines)
+    {
+        string name = RosterName;
+        int picked = -1;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (rows[i].Kind == OriginalRowKind.ListRow && rows[i].Label.TrimStart('✓', ' ') == name && name.Length > 0)
+            {
+                picked = i;
+            }
+        }
+
+        if (picked >= 0)
+        {
+            var bar = rows[picked];
+            fills.Add(new BoardFill(bar.X, bar.Y, bar.Width, bar.Height, RosterBarRed, 0, 0));
+        }
+
+        if (_dialog == null && _hover >= 0 && _hover < rows.Count && rows[_hover].Kind == OriginalRowKind.ListRow)
+        {
+            var framed = rows[_hover];
+            fills.Add(new BoardFill(framed.X, framed.Y, framed.Width, framed.Height, RosterFrameRed, 0, 0, Border: true));
+        }
+
+        foreach (var line in composed)
+        {
+            if (line.Row == 0)
+            {
+                bool caret = _dialog == null && focus == 0;
+                lines.Add(line with { Text = caret ? name + "_" : name });
+            }
+            else if (line.Row > 0 && line.Text.StartsWith("✓ ", StringComparison.Ordinal))
+            {
+                lines.Add(line with { Text = line.Text[2..] });
+            }
+            else
+            {
+                lines.Add(line);
+            }
+        }
+    }
+}

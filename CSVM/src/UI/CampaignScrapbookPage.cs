@@ -269,6 +269,10 @@ public sealed class CampaignScrapbookPage : CampaignPage
         }
     }
 
+    /// <summary>The scrap a row stands for, or null for a control row: the row's own clickable
+    /// region and picture are what a pointer-driven presentation hit-tests.</summary>
+    public ScrapbookScrap? ScrapOf(int row) => ScrapAt(row);
+
     // The hint band's line for a scrap: the words on the scrap itself where its row names a string,
     // read off the first line of the title the zoom view heads with. Never the image name, which is
     // an asset path and not something to show a player, and never the raw IDS_ symbol either: most

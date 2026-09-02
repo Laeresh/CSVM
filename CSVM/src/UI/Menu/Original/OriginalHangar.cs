@@ -155,9 +155,10 @@ public sealed partial class OriginalShell
     /// totals page or the inventory.</summary>
     public bool IsHangarScreen => _screen >= OriginalScreen.PlaneName;
 
-    /// <summary>Whether seat 0's typed characters feed a text field right now, which is the name
-    /// screen's edit box and nothing else.</summary>
-    public bool CapturingText => _screen == OriginalScreen.PlaneName;
+    /// <summary>Whether seat 0's typed characters feed a text field right now: the name screen's
+    /// edit box, and the campaign roster's name box while no dialog stands over it.</summary>
+    public bool CapturingText =>
+        _screen == OriginalScreen.PlaneName || (_screen == OriginalScreen.CampaignRoster && _dialog == null);
 
     /// <summary>The name typed on the name screen so far.</summary>
     public string HangarName => _hangarName;
@@ -181,17 +182,19 @@ public sealed partial class OriginalShell
 
     private bool IsHub => IsHangarTab || _screen == OriginalScreen.HangarPurchase;
 
-    /// <summary>Opens the hangar from the screen showing: a wallet-free build over the saved-plane
-    /// store, entered through the name screen as the original's own chain does. Nothing happens
-    /// when the shell has no feature or no store.</summary>
-    public void OpenHangar()
+    /// <summary>Opens the hangar from the screen showing: a build over the saved-plane store,
+    /// wallet-free from the top level's door and over <paramref name="wallet"/> from the cabin's
+    /// PLANE CONSTRUCTION, entered through the name screen as the original's own chain does. The
+    /// screen the door was pressed on is where CANCEL and a commit return to. Nothing happens when
+    /// the shell has no feature or no store.</summary>
+    public void OpenHangar(IHangarWallet? wallet = null)
     {
         if (_hangar == null || _planes == null)
         {
             return;
         }
 
-        _hangar.Open(_planes);
+        _hangar.Open(_planes, wallet);
         _hangarReturn = IsHangarScreen ? OriginalScreen.TopLevel : _screen;
         _hangarName = string.Empty;
         _hangarDefaults = true;
@@ -484,7 +487,7 @@ public sealed partial class OriginalShell
     {
         _hangar?.Discard();
         _hangarOpen = null;
-        Open(_hangarReturn);
+        ReturnFromHangar();
     }
 
     // The commit: on success the roster both presentations pick from gains the plane at once, the
@@ -499,6 +502,19 @@ public sealed partial class OriginalShell
         _builtPlane = _hangar.BuiltPlaneName;
         RefreshRosterFromStore();
         _hangar.Discard();
+        ReturnFromHangar();
+    }
+
+    // Back onto the entry screen. The cabin re-reads its profile on the way, so a purchase or a
+    // sale through the wallet shows on it.
+    private void ReturnFromHangar()
+    {
+        if (_hangarReturn == OriginalScreen.CampaignCabin)
+        {
+            ResumeCampaign();
+            return;
+        }
+
         Open(_hangarReturn);
     }
 
@@ -516,10 +532,17 @@ public sealed partial class OriginalShell
         }
     }
 
-    // Typed characters and Backspace on the name screen, the edit box's own rule: the feature's
-    // character set and length cap, nothing else.
-    private bool TypeName(MenuCommands commands)
+    // Typed characters and Backspace into whichever edit box is showing, each box's own rule: the
+    // hangar name's character set and cap on the name screen, the campaign name's on the roster.
+    // A taken character cues the edit box's keystroke sound and a refused one its reject sound,
+    // the two wavs the globals script binds to the box.
+    private bool TypeName(MenuCommands commands, List<string> cues)
     {
+        if (_screen == OriginalScreen.CampaignRoster)
+        {
+            return TypeRosterName(commands, cues);
+        }
+
         if (_screen != OriginalScreen.PlaneName)
         {
             return false;
@@ -532,6 +555,11 @@ public sealed partial class OriginalShell
             {
                 _hangarName += c;
                 changed = true;
+                cues.Add(OriginalCues.Text);
+            }
+            else
+            {
+                cues.Add(OriginalCues.TextError);
             }
         }
 

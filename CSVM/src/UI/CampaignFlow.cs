@@ -552,6 +552,26 @@ public sealed class CampaignFlow
         ClampedRow();
     }
 
+    /// <summary>Takes the standing dialog off the flow without answering it, for a presentation
+    /// that shows a page's dialog its own way and runs the answer itself; null when none stands.
+    /// Built-in never calls this: its dialogs are answered through <see cref="Accept"/> and
+    /// <see cref="Back"/>.</summary>
+    public CampaignModal? TakeModal()
+    {
+        var modal = Modal;
+        Modal = null;
+        return modal;
+    }
+
+    /// <summary>Takes the refusal line off the flow, for a presentation that shows a page's
+    /// refusal its own way; "" when none stands.</summary>
+    public string TakeMessage()
+    {
+        string message = Message;
+        Message = string.Empty;
+        return message;
+    }
+
     // A private feature opened for the store-first constructor, so the two constructors chain.
     private static CampaignFeature Opened(
         CampaignFeature feature, CampaignProfileStore store, CustomPlaneStore? planes, StockLoadouts? stock, string? dataRoot)

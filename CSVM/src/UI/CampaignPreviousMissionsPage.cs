@@ -442,6 +442,21 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     // Where a row's text column starts: past the icon pane and its gap.
     private float TextX => _listX + IconWidth + TextGap;
 
+    /// <summary>A mission row's rectangle inside the list window, for a presentation that
+    /// hit-tests the rows; null for a button row and for a mission row scrolled out of the
+    /// window.</summary>
+    public (float X, float Y, float Width, float Height)? RowBox(int row)
+    {
+        var seqs = Seqs();
+        int top = Window(seqs.Count);
+        if (row < 0 || row >= seqs.Count || row < top || row >= top + _visibleRows)
+        {
+            return null;
+        }
+
+        return (_listX, _listY + ((row - top) * _rowHeight), _listWidth, _rowHeight);
+    }
+
     /// <summary>A mission row draws no list text of its own: its three lines already stand at their
     /// authored positions inside the row.</summary>
     public override string RowText(int row) => ButtonAt(row) switch

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using CSVM.Flight;
+using CSVM.Session;
 using CSVM.Utils;
 using Godot;
 
@@ -46,9 +48,23 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the hangar's inventory.</summary>
     public const string PlaneInventoryAid = "plane-inventory";
 
+    /// <summary>The campaign aid values Original shares with Built-in, each over the scratch
+    /// profile store: the empty profile screen, the two-player one, the cabin, the table of
+    /// contents, the book on the last mission flown, the briefing (with its seconds argument),
+    /// the flight check, ammo selection and plane selection.</summary>
+    public static readonly IReadOnlyList<string> CampaignAids = new[]
+    {
+        "campaign-empty", "campaign-roster", "campaign-cabin", "campaign-previous", "campaign-scrapbook",
+        "campaign-briefing", "campaign-flightcheck", "campaign-ammo", "campaign-planeselection",
+    };
+
     // The aids' scratch build carries this name, so the shots read the same on every machine; it
     // is never committed by an aid.
     private const string AidPlaneName = "Sample Plane";
+
+    // The briefing aid's reveal is advanced in frame-sized slices, since the script blocks on
+    // authored waits and cue points and one large step would stand at the first of them.
+    private const double AidSlice = 1.0 / 60.0;
 
     private readonly Node _parent;
     private readonly string _dataRoot;
@@ -67,6 +83,12 @@ public sealed class OriginalPresentation : IMenuPresentation
     private BoardPalette _hangarPalette = BoardPalette.Paper;
     private bool _shown;
     private bool _joiningOpen;
+
+    // The narration bookkeeping: how many starts the briefing had asked for when playback last
+    // began (0 while nothing plays), and whether the reveal was running last frame, so the frame
+    // it finishes still repaints.
+    private int _narrationStarts;
+    private bool _revealRunning;
 
     /// <summary>A presentation drawing under <paramref name="parent"/> over the art beneath
     /// <paramref name="dataRoot"/>, composed from <paramref name="layout"/>, opening on
@@ -87,6 +109,12 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     /// <summary>The shell while built, for the suites that read the screen back.</summary>
     public OriginalShell? Shell => _shell;
+
+    /// <summary>The profile store the Campaign row and the two flight returns open the campaign
+    /// over: <c>user://Profiles</c> unless a suite sets a scratch store here, so no driven journey
+    /// can write a real player's progress. Read on every open, so it may be set before the first
+    /// show or between shows.</summary>
+    public CampaignProfileStore? CampaignProfiles { get; set; }
 
     /// <summary>The board palette the shell's inks resolve to: list text in the file-wide
     /// disabled grey with the active white for the focused row, plaque labels in the paper
@@ -142,7 +170,11 @@ public sealed class OriginalPresentation : IMenuPresentation
             _shell = new OriginalShell(_layout, host.Features.Get<FreeFlightFeature>(), setup, Measure, _devices.FlightPads,
                 instantAction: host.Features.Get<InstantActionFeature>(),
                 hangar: host.Features.TryGet<HangarFeature>(out var hangar) ? hangar : null,
-                planes: CustomPlaneStore.UserPlanes());
+                planes: CustomPlaneStore.UserPlanes(),
+                campaign: host.Features.TryGet<CampaignFeature>(out var campaign) ? campaign : null,
+                profiles: () => CampaignProfiles ?? CampaignProfileStore.UserProfiles(),
+                stock: () => StockLoadouts.Load(),
+                dataRoot: _dataRoot);
             _palette = PaletteFor(_shell.Inks);
             _paperPalette = PaletteFor(_shell.InstantActionInks);
             _hangarPalette = PaletteFor(_shell.HangarInks);
@@ -165,11 +197,28 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         _shell.ReturnToTopLevel();
-        if (destination is CabinReturn or DebriefReturn)
+        StopNarration();
+        if (destination is CabinReturn cabin)
         {
-            // Original campaign is not built yet, so both campaign destinations land on the top
-            // level; the log says so rather than the screen pretending otherwise.
-            Log.Info("ui", $"original presentation: {destination.GetType().Name} mapped to the top level (no Original campaign screens yet)");
+            // The two flight returns reopen the campaign on the user's store and seat the profile
+            // the mission wrote; a profile that cannot be read leaves the profile screen showing.
+            _shell.OpenCampaign();
+            if (!_shell.ShowCabin(cabin.Profile))
+            {
+                Log.Warn("ui", $"original presentation: cabin return could not seat '{cabin.Profile}'; the profile screen shows instead");
+            }
+        }
+        else if (destination is DebriefReturn debrief)
+        {
+            _shell.OpenCampaign();
+            if (!_shell.ShowScrapbook(debrief.Profile, debrief.MissionSeq))
+            {
+                Log.Warn("ui", $"original presentation: debrief return could not seat '{debrief.Profile}'; the profile screen shows instead");
+            }
+        }
+        else if (_aid.Length > 0 && OpenCampaignAid(_aid))
+        {
+            // A campaign aid over the scratch store, shared with Built-in's aids of the same name.
         }
         else
         {
@@ -252,6 +301,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         var size = _view.GetViewportRect().Size;
         var fit = BoardFit.For(size.X, size.Y);
+        changed |= TickBriefing(dt);
         // Text capture is set before the poll: the name screen's letters must be text, not
         // cursor aliases, for the frame that reads them.
         _host.Seats[0].CapturingText = _shell.CapturingText;
@@ -286,6 +336,12 @@ public sealed class OriginalPresentation : IMenuPresentation
             changed |= step.Changed;
         }
 
+        // Leaving the briefing this frame, by any door, ends its narration and lifts the duck.
+        if (_shell.Screen != OriginalScreen.CampaignBriefing)
+        {
+            StopNarration();
+        }
+
         // And again after the frame, so a screen change this frame is what the next poll reads.
         _host.Seats[0].CapturingText = _shell.CapturingText;
         if (changed)
@@ -302,12 +358,14 @@ public sealed class OriginalPresentation : IMenuPresentation
             _layer.Visible = false;
         }
 
-        // Off screen nothing types, so a seat left capturing on the name screen is released.
+        // Off screen nothing types, so a seat left capturing on the name screen is released, and
+        // nothing narrates: a launch from the briefing's flight check ends the voice with it.
         if (_host is { Seats.Count: > 0 } host)
         {
             host.Seats[0].CapturingText = false;
         }
 
+        StopNarration();
         Input.MouseMode = Input.MouseModeEnum.Visible;
     }
 
@@ -328,8 +386,113 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     private static Color ToColor(MenuLayoutColor c) => new(c.R / 255f, c.G / 255f, c.B / 255f, 1f);
 
-    // Joining is open on the two sortie screens, where a seat has an aircraft column to pick from.
-    private bool JoiningOpen() => _shell is { Screen: OriginalScreen.FreeFlight or OriginalScreen.Dogfight };
+    // Joining is open on the two sortie screens, where a seat has an aircraft column to pick from,
+    // and on the campaign's flight check, where a joined seat gets a check of its own.
+    private bool JoiningOpen() =>
+        _shell is { Screen: OriginalScreen.FreeFlight or OriginalScreen.Dogfight or OriginalScreen.CampaignFlightCheck };
+
+    // The briefing's clock and its narration, the two things the shared feature leaves to the
+    // presentation: the reveal moves on by the frame, playback begins whenever the script asks
+    // for its narration again (REPLAY BRIEFING raises the count), and the board repaints while
+    // the reveal runs and once more when it stops. Returns whether to redraw.
+    private bool TickBriefing(float dt)
+    {
+        if (_shell == null || _host == null)
+        {
+            return false;
+        }
+
+        bool running = _shell.AdvanceBriefing(dt);
+        int starts = _shell.NarrationStarts;
+        if (starts != _narrationStarts && starts > 0)
+        {
+            _narrationStarts = starts;
+            _host.Audio.BeginNarration(_shell.NarrationWav);
+        }
+
+        bool repaint = running || _revealRunning;
+        _revealRunning = running;
+        return repaint;
+    }
+
+    // Ends the narration where one has begun, which lifts the music duck too; idempotent, so
+    // every door out of the briefing and every hide can call it.
+    private void StopNarration()
+    {
+        _revealRunning = false;
+        if (_narrationStarts == 0)
+        {
+            return;
+        }
+
+        _narrationStarts = 0;
+        _host?.Audio.EndNarration();
+    }
+
+    // A campaign aid: the same values and the same scratch store as Built-in's, so the two
+    // presentations' shots show one seeded player. False for a value that is not one.
+    private bool OpenCampaignAid(string aid)
+    {
+        if (_shell == null)
+        {
+            return false;
+        }
+
+        int colon = aid.IndexOf(':');
+        string value = colon < 0 ? aid : aid[..colon];
+        if (!CampaignAids.Contains(value))
+        {
+            return false;
+        }
+
+        bool seeded = value != "campaign-empty";
+        _shell.OpenCampaignOver(CampaignAidProfiles.Store(seeded, progressed: value != "campaign-roster"));
+        switch (value)
+        {
+            case "campaign-cabin":
+                _shell.ShowCabin(CampaignAidProfiles.Pilot);
+                break;
+            case "campaign-previous":
+                _shell.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.ShowMissionScreen(OriginalScreen.CampaignPreviousMissions);
+                break;
+            case "campaign-scrapbook":
+                // The book as a finished mission leaves it: opened on the last mission this
+                // profile flew.
+                _shell.ShowScrapbook(CampaignAidProfiles.Pilot, Math.Max(0, CampaignAidProfiles.MissionsFlown - 1));
+                break;
+            case "campaign-briefing":
+                _shell.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.ShowMissionScreen(OriginalScreen.CampaignBriefing);
+                double seconds = 0;
+                if (colon >= 0)
+                {
+                    double.TryParse(aid[(colon + 1)..], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out seconds);
+                }
+
+                for (double t = 0; t < seconds; t += AidSlice)
+                {
+                    _shell.AdvanceBriefing(AidSlice);
+                }
+
+                break;
+            case "campaign-flightcheck":
+                _shell.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);
+                break;
+            case "campaign-ammo":
+                _shell.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.ShowMissionScreen(OriginalScreen.CampaignAmmo);
+                break;
+            case "campaign-planeselection":
+                _shell.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+                break;
+        }
+
+        return true;
+    }
 
     // --debug-join=N, once: N device-less seats with distinct cursors, the last one selected, so
     // the seat strip and the aircraft tags can be shot with one controller.
@@ -362,11 +525,12 @@ public sealed class OriginalPresentation : IMenuPresentation
     {
         if (_shell != null && _view != null)
         {
-            // The Instant Action screen and the inventory are paper pages with authored black
-            // text, the hub writes in its own inks, and the other screens write in the file-wide
-            // inks over the dark top level.
+            // Paper pages write in authored black, the hub in its own inks, a campaign screen in
+            // the palette its shared board component takes under Built-in, and the rest in the
+            // file-wide inks over the dark top level.
             var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.HangarInventory ? _paperPalette
                 : _shell.IsHangarScreen ? _hangarPalette
+                : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)
                 : _palette;
             _view.Show(_shell.Compose(), palette, string.Empty, string.Empty);
         }

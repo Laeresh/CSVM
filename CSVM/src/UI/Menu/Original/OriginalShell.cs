@@ -3,10 +3,11 @@ using System.Collections.Generic;
 
 namespace CSVM.UI.Menu.Original;
 
-/// <summary>The Original presentation's screens. The top level, the Instant Action screen and the
-/// hangar's screens are decoded; the others are remake-only screens composed in the decoded
-/// chrome's conventions. The hangar's members sit last, from <see cref="PlaneName"/> on, which is
-/// what the shell reads its hangar branch off.</summary>
+/// <summary>The Original presentation's screens. The top level, the Instant Action screen, the
+/// campaign's screens and the hangar's screens are decoded; the others are remake-only screens
+/// composed in the decoded chrome's conventions. The campaign's members run from
+/// <see cref="CampaignRoster"/> to <see cref="CampaignScrapbookZoom"/> and the hangar's sit last,
+/// from <see cref="PlaneName"/> on, which is what the shell reads its two branches off.</summary>
 public enum OriginalScreen
 {
     /// <summary>The main menu: the decoded <c>[@MainMenu@]</c> rows plus the Free Flight, Dogfight and hangar doors.</summary>
@@ -24,6 +25,34 @@ public enum OriginalScreen
     /// <summary>The decoded <c>[@InstantAction@]</c> setup screen: the Table of Contents, the
     /// dropdowns, the paged enemy rows, the radio pair and its buttons.</summary>
     InstantAction,
+
+    /// <summary>The decoded <c>[@Campaign@]</c> player profile screen: the name box, the roster,
+    /// CONTINUE, DELETE PLAYER and CANCEL.</summary>
+    CampaignRoster,
+
+    /// <summary>The decoded <c>[@PassengerCabin@]</c> hub.</summary>
+    CampaignCabin,
+
+    /// <summary>The decoded <c>[@ScrapBook_TOC@]</c> table of contents, PREVIOUS MISSIONS' destination.</summary>
+    CampaignPreviousMissions,
+
+    /// <summary>The briefing dialog, <c>Briefing.zrd</c>'s own chrome over the mission's reveal.</summary>
+    CampaignBriefing,
+
+    /// <summary>The decoded <c>[@FlightCheck@]</c> screen, one check per joined human.</summary>
+    CampaignFlightCheck,
+
+    /// <summary>The decoded <c>[@OrdinanceLayout@]</c> ammo selection.</summary>
+    CampaignAmmo,
+
+    /// <summary>The decoded <c>[@PlaneSelection@]</c> screen.</summary>
+    CampaignPlaneSelection,
+
+    /// <summary>The decoded <c>[@ScrapBook@]</c> spread, the mission end's destination.</summary>
+    CampaignScrapbook,
+
+    /// <summary>The decoded <c>[@ScrapbookZoom@]</c> detail view of one scrap.</summary>
+    CampaignScrapbookZoom,
 
     /// <summary>The decoded <c>[@PlaneName@]</c> screen: the edit box, the defaults box, OK and Cancel.</summary>
     PlaneName,
@@ -102,8 +131,9 @@ public sealed record OriginalInks(
 /// The Original presentation's screen graph, engine-free: the decoded top level with the
 /// remake-only Free Flight, Dogfight and hangar doors, the two sortie screens over the shared
 /// player setup (their own partial file), the minimal Options screen, the decoded Instant Action
-/// screen (its own partial file) and the decoded hangar screens over the shared hangar feature
-/// (their own partial file), driven by each seat's semantic commands and composed into a
+/// screen (its own partial file), the decoded campaign screens over the shared campaign feature
+/// (their own partial file) and the decoded hangar screens over the shared hangar feature (their
+/// own partial file), driven by each seat's semantic commands and composed into a
 /// <see cref="ComposedBoard"/> in the authored 800x600 space. Seat 0's pointer arrives already
 /// mapped into that space; hovering a live row moves the focus onto it, so keyboard, pad and
 /// pointer share one cursor. Every rectangle and art name comes from the layout; the art's pixel
@@ -179,11 +209,11 @@ public sealed partial class OriginalShell
     private string _choice = PresentationId.Original.Value;
 
     /// <summary>A shell over <paramref name="layout"/> and the shared features. <paramref name="measure"/>
-    /// answers an art name with its strip's pixel size, or null when the file is not there;
-    /// <paramref name="flightDevices"/> answers a seat with its launch's devices (none when omitted);
-    /// the chapters default to <see cref="OriginalRosters"/>; no Instant Action feature means a
-    /// private one over the built-in defaults; the hangar door stands only when both
-    /// <paramref name="hangar"/> and the store <paramref name="planes"/> it opens over are given.</summary>
+    /// answers an art name with its strip's pixel size (null when the file is not there),
+    /// <paramref name="flightDevices"/> a seat with its launch's devices; the chapters default to
+    /// <see cref="OriginalRosters"/>, a missing Instant Action feature to a private one. The hangar
+    /// door stands only over <paramref name="hangar"/> and <paramref name="planes"/> together, the
+    /// Campaign row only over <paramref name="campaign"/> and <paramref name="profiles"/> together.</summary>
     public OriginalShell(
         MenuLayout layout,
         FreeFlightFeature free,
@@ -193,7 +223,11 @@ public sealed partial class OriginalShell
         IReadOnlyList<OriginalChapter>? chapters = null,
         InstantActionFeature? instantAction = null,
         HangarFeature? hangar = null,
-        CSVM.Flight.CustomPlaneStore? planes = null)
+        CSVM.Flight.CustomPlaneStore? planes = null,
+        CampaignFeature? campaign = null,
+        Func<CSVM.Session.CampaignProfileStore>? profiles = null,
+        Func<CSVM.Flight.StockLoadouts?>? stock = null,
+        string? dataRoot = null)
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _free = free ?? throw new ArgumentNullException(nameof(free));
@@ -204,6 +238,11 @@ public sealed partial class OriginalShell
         _instantAction = instantAction ?? new InstantActionFeature(_ => Mech3.InstantAction.Defaults());
         _hangar = hangar;
         _planes = planes;
+        _campaign = campaign;
+        _profiles = profiles;
+        _stock = stock;
+        _dataRoot = dataRoot;
+        _campaignLayout = CampaignLayout.Over(layout);
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
         Inks = ReadInks(layout, plaqueRow);
@@ -254,10 +293,12 @@ public sealed partial class OriginalShell
 
     /// <summary>Stands the shell on its top level, the landing point of every return and of a
     /// cold start: the list cursors stay where they were, every seat's pick goes back to browsing
-    /// so a return from flight cannot fly again on a stale pick.</summary>
+    /// so a return from flight cannot fly again on a stale pick, and an open campaign is dropped,
+    /// since the two flight returns reopen it on the profile the mission wrote.</summary>
     public void ReturnToTopLevel()
     {
         _setup.ResetPicks(fits: true);
+        CloseCampaign();
         Open(OriginalScreen.TopLevel);
     }
 
@@ -276,7 +317,8 @@ public sealed partial class OriginalShell
         ArgumentNullException.ThrowIfNull(commands);
         var cues = new List<string>();
         MenuExit? exit = null;
-        bool changed = TypeName(commands);
+        SyncCampaignField();
+        bool changed = TypeName(commands, cues);
         var rows = Rows;
         int focus = EnsureFocus(rows);
 
@@ -291,7 +333,17 @@ public sealed partial class OriginalShell
                 changed = true;
                 if (over >= 0 && rows[over].Enabled)
                 {
-                    focus = over;
+                    // An open campaign list's entry takes the highlight, not the focus, which
+                    // stays on the field the list hangs from.
+                    if (HoverOnly(rows[over]))
+                    {
+                        HighlightComboEntry(rows[over]);
+                    }
+                    else
+                    {
+                        focus = over;
+                    }
+
                     if (rows[over].Kind != OriginalRowKind.ListRow)
                     {
                         cues.Add(OriginalCues.Rollover);
@@ -304,14 +356,18 @@ public sealed partial class OriginalShell
             _pressed = pressed;
             if (pointer.Clicked && over >= 0 && rows[over].Enabled)
             {
-                focus = over;
-                _focus[(int)_screen] = focus;
+                if (!HoverOnly(rows[over]))
+                {
+                    focus = over;
+                    _focus[(int)_screen] = focus;
+                }
+
                 exit = Activate(rows[over], cues);
                 changed = true;
                 rows = Rows;
                 focus = EnsureFocus(rows);
             }
-            else if (pointer.Clicked && over < 0 && (CloseInstantActionDropdown() || CloseHangarDropdown()))
+            else if (pointer.Clicked && over < 0 && (CloseInstantActionDropdown() || CloseHangarDropdown() || CloseCampaignCombo()))
             {
                 // A click off an open list closes it and picks nothing.
                 changed = true;
@@ -322,21 +378,31 @@ public sealed partial class OriginalShell
 
         if (commands.MoveY != 0)
         {
-            focus = StepWithinColumn(rows, focus, commands.MoveY);
+            // Inside an open campaign list the axis walks the list's entries.
+            if (!MoveCampaignCombo(rows, focus, commands.MoveY))
+            {
+                focus = StepWithinColumn(rows, focus, commands.MoveY);
+            }
+
             changed = true;
         }
 
         if (commands.MoveX != 0)
         {
             // On the Instant Action screen a sideways step on a dropdown or a radio changes its
-            // value, in the hangar it steps a dropdown or walks the tab bar; anywhere else it
-            // crosses columns.
+            // value, in the hangar it steps a dropdown or walks the tab bar, on a campaign screen
+            // it steps a closed field's pick; anywhere else it crosses columns.
             if (_screen == OriginalScreen.InstantAction && StepInstantActionValue(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
             }
             else if (IsHangarScreen && StepHangarSideways(rows, focus, commands.MoveX))
+            {
+                rows = Rows;
+                focus = EnsureFocus(rows);
+            }
+            else if (IsCampaignScreen && StepCampaignSideways(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
@@ -372,11 +438,13 @@ public sealed partial class OriginalShell
         var backdrop = new List<BoardPicture>();
         var pictures = new List<BoardPicture>();
         var fills = new List<BoardFill>();
+        var strokes = new List<BoardStroke>();
         var lines = new List<BoardLine>();
         var plaques = new List<BoardPlaque>();
+        var notes = new List<BoardNote>();
         var overlays = new List<BoardPanel>();
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
-        bool ownPage = _screen == OriginalScreen.InstantAction || IsHangarScreen;
+        bool ownPage = _screen == OriginalScreen.InstantAction || IsHangarScreen || IsCampaignScreen;
         if (!ownPage && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
         {
             pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, logo.Art[0], logo.Frames), logo.Int("X"), logo.Int("Y")));
@@ -391,6 +459,9 @@ public sealed partial class OriginalShell
         {
             case OriginalScreen.InstantAction:
                 ComposeInstantAction(rows, focus, backdrop, pictures, fills, lines, plaques, overlays);
+                break;
+            case var _ when IsCampaignScreen:
+                ComposeCampaign(rows, focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
                 break;
             case var _ when IsHangarScreen:
                 ComposeHangar(rows, focus, backdrop, pictures, fills, lines, plaques, overlays);
@@ -458,7 +529,7 @@ public sealed partial class OriginalShell
                 Array.Empty<BoardLine>()));
         }
 
-        return new ComposedBoard(pictures, Array.Empty<BoardStroke>(), lines, plaques,
+        return new ComposedBoard(pictures, strokes, lines, plaques, notes,
             backdrop: backdrop, fills: fills, overlays: overlays);
     }
 
@@ -622,6 +693,9 @@ public sealed partial class OriginalShell
                     case HangarKey:
                         OpenHangar();
                         break;
+                    case CampaignKey:
+                        OpenCampaign();
+                        break;
                     case "MM_B_INSTANTACTION":
                         OpenInstantAction();
                         break;
@@ -638,6 +712,8 @@ public sealed partial class OriginalShell
                 return ActivateSortie(row);
             case OriginalScreen.InstantAction:
                 return ActivateInstantAction(row);
+            case var _ when IsCampaignScreen:
+                return ActivateCampaign(row);
             case var _ when IsHangarScreen:
                 return ActivateHangar(row);
             case OriginalScreen.Options:
@@ -663,7 +739,7 @@ public sealed partial class OriginalShell
 
     // Back on a sortie screen first undoes seat 0's own pick, a stage at a time; browsing, it
     // leaves the screen. On the Instant Action screen the first Back closes an open list; the
-    // next one leaves.
+    // next one leaves. The campaign and the hangar have their own graphs to walk back through.
     private MenuExit? Back()
     {
         if (_screen == OriginalScreen.TopLevel)
@@ -678,6 +754,12 @@ public sealed partial class OriginalShell
 
         if (_screen == OriginalScreen.InstantAction && CloseInstantActionDropdown())
         {
+            return null;
+        }
+
+        if (IsCampaignScreen)
+        {
+            BackCampaign();
             return null;
         }
 
@@ -704,13 +786,18 @@ public sealed partial class OriginalShell
                 {
                     if (main?.Widget(key) is { } widget)
                     {
-                        rows.Add(Button(widget, key is "MM_B_QUIT" or "MM_B_PREFERENCES" or "MM_B_INSTANTACTION"));
+                        bool enabled = key is "MM_B_QUIT" or "MM_B_PREFERENCES" or "MM_B_INSTANTACTION"
+                            || (key == CampaignKey && _campaign != null && _profiles != null);
+                        rows.Add(Button(widget, enabled));
                     }
                 }
 
                 break;
             case OriginalScreen.InstantAction:
                 BuildInstantActionRows(rows);
+                break;
+            case var _ when IsCampaignScreen:
+                BuildCampaignRows(rows);
                 break;
             case var _ when IsHangarScreen:
                 BuildHangarRows(rows);

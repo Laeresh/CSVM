@@ -167,7 +167,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ Separate campaign feature state from presentation descriptions
 32. ☑ Migrate campaign fixed chrome to decoded layouts without visual change
-33. ☐ Complete Original campaign interaction, briefing and audio integration
+33. ☑ Complete Original campaign interaction, briefing and audio integration
 
 ### Wave E — Completion and release gate
 
@@ -1249,7 +1249,7 @@ engine errors clean, 150.3s).
 **⚠ Traps.** Fixed chrome may migrate; dynamic content may not be serialized into extracted output.
 Patch-overlay precedence must match extraction, and no game asset enters git.
 
-## D33 ☐ Complete Original campaign interaction, briefing and audio integration
+## D33 ☑ Complete Original campaign interaction, briefing and audio integration
 
 **Goal.** Original completes every campaign journey with evidenced pointer behaviour, equivalent
 keyboard/pad access, briefing narration and presentation-owned cues over the shared campaign features.
@@ -1290,9 +1290,108 @@ same reads.
 
 **Model recommendation.** high — timing, narration and persistent campaign paths cross several seams.
 
-**Verify.** Run every campaign aid in both presentations, the campaign-loop suite, narration replay
-and interruption cases, and an at-the-controls roster → cabin → briefing → flight check → mission →
-scrapbook → cabin journey. <TODO: reference captures and exact audio assertions.>
+What was built: `OriginalCampaign.cs`, the shell's partial over the shared `CampaignFeature`, nine
+`OriginalScreen` members between the Instant Action screen and the hangar's. The choice the two
+handoffs left open was made this way: the shared board component is reused whole (the Built-in
+pages hosted in a `CampaignFlow(feature, CampaignLayout.Over(layout))` of Original's own and composed
+through `CampaignBoards.For`), and the screen graph, the hit-testing, the rollover and pressed
+frames, the cues, the dialogs and every door out are Original's. The flow is never walked: its
+screen and row are mirrored from Original's (`GoTo`, `FocusRow`), and a page that names a destination
+or raises a dialog has it read off the flow (`TakeModal`/`TakeMessage`, two additions to
+`CampaignFlow`) and re-entered through Original's graph. The stack's `Back`, the cursor's `Move`,
+the refusal band and the modal's dismissal are not used. Rows are read back as rectangles from the
+component (`CampaignBoards.SlotOf` by `BoardButtonRef`, `ComboFieldHeight`, `TextSlot`,
+`CampaignPreviousMissionsPage.RowBox`, `CampaignScrapbookPage.ScrapOf` over the new
+`ScrapbookScrap.Region`), a dialog through `CampaignBoards.Dialog(message, buttons)` and
+`DialogSlot`, so no campaign geometry lives in Original. The Campaign row is live; `CabinReturn` and
+`DebriefReturn` reopen the campaign and map through `SeatProfile` and `EnterScrapbook`
+(`ShowCabin`/`ShowScrapbook`), replacing the top-level fallback and its log line. The presentation
+owns the briefing's clock (`AdvanceBriefing` per tick) and turns the script's start count into
+`BeginNarration`, ending it on the frame the shell leaves the briefing and on `Hide`; the audio
+service itself is unchanged, since its contract already carried replay (a begin replaces) and
+interruption (an idempotent end). The cue table gained nothing: the campaign's plaques ask for the
+two button cues, and the profile screen's box asks for `menu.text`/`menu.text-error`, which the
+table already resolved and nothing had requested (the hangar's name box now asks too). The campaign
+aids' scratch store moved into `CampaignAidProfiles` so both presentations' aids seat one player;
+`OriginalPresentation.CampaignProfiles` is the suites' scratch door, as `LaunchMenu.CampaignProfiles`
+is Built-in's.
+
+Capture gaps resolved by implementing the reading the data supports and marking it unconfirmed,
+each added to `CAP-52`'s clause: a campaign plaque cues the rollover and the click and a list row
+or scrap cues nothing; the edit box cues its two bound wavs per character; the passive pointer over
+a scrap; REPLAY BRIEFING restarts the narration from the top and RETURN TO CABIN or GO TO FLIGHT
+CHECK ends it; a mission end starts no narration; a scrap with a `0,0,0,0` region is hit on its
+picture's bounds; YES and NO as the delete confirm's words; Back landing on the plaque that opened
+the screen.
+
+**Verify.** `dotnet build CSVM/CSVM.sln`; the whole `dotnet test` (3012, of which 12 are
+`CSVM.Tests/OriginalCampaignTests.cs` over the fixture's campaign sections, extended with
+`[@PassengerCabin@]`, `[@ScrapBook@]`, `[@PlaneSelection@]` and the flight check's, contents',
+ammo's and message box's button rows on invented lines, and a scratch profile store: the Campaign
+row's door, the box's typing with its cues, CONTINUE creating and seating, the empty-name refusal as
+the one-button dialog at `MB_B_CENTER`'s row, a roster row filling the box then starting with the
+selection bar and pointer frame, the delete confirm opening on NO and deleting on YES, the cabin's
+plaques under the pointer with their rollover and pressed frames and the keyboard wrapping them,
+RETURN TO MAIN MENU and Back closing the campaign, the briefing's three plaques, the flight check
+into ammo and back and FLY MISSION as a `CampaignMissionExit` with the profile saved, PLANE
+CONSTRUCTION over the wallet with the cabin as the return, the two flight returns' mapping and a
+failed seat landing on the profile screen, the book backing to the contents that opened it);
+`.\RunTests.ps1 -Suite menu-original-campaign -SkipUnits -SkipGoldens` (the new suite in
+`CSVM/src/Testing/MenuOriginalCampaignSuites.cs`, through a real `MenuHost` and
+`OriginalPresentation` over the install's layout and a scratch store: the Campaign row clicked,
+`Zachary` typed with one `menu.text` per character and Enter seating them, the contents and back,
+NEXT MISSION into the briefing with 600 ticks advancing the reveal past 9.9 s and the recording
+audio's `BeginNarration` called once with the mission's wav and `EndNarration` not at all, REPLAY
+BRIEFING beginning it again, RETURN TO CABIN ending it once and a frame on the cabin starting
+nothing, re-entry beginning it a third time where REPLAY left the reveal, GO TO FLIGHT CHECK
+ending it, two `MenuIdleSource` seats joined so the field reads three humans, FLY MISSION advancing
+to P2's check (headed `FLIGHT CHECK P2`), Back retreating, FLY MISSION twice more and the last
+leaving through the sink as one `CampaignMissionExit` for `Zachary` at seq 0 with three seats and
+the profile saved as it stood, the flown mission recorded and `Show(DebriefReturn)` landing on the
+book with RETURN TO CABIN focused, `Mission Completed` on the card and no narration begun,
+RETURN TO CABIN then Back to the profile screen then Back out, `Show(CabinReturn)` on the cabin,
+CHANGE AMMO with a sideways step to `Dum-dum`, the list opened under the box and closed by Back,
+ACCEPT LOADOUT writing the pick, a third plane making CHANGE PLANE stand, plane selection's Left onto
+it and ACCEPT SELECTIONS writing `SelectedPlane` 2, PLANE CONSTRUCTION over the wallet and Back
+resuming the cabin on that plaque, `Deactivate` leaving no open campaign); the same run over
+`menu-original-tracer` (its Campaign-plaque expectation updated: the plaque is live and a debrief
+return for a profile the scratch store lacks lands on the profile screen), `menu-original-hangar`,
+`menu-original-instant-action` and `menu-player-setup-seats` (5 passed);
+`.\RunTests.ps1 -Filter "campaign,menu" -SkipUnits -SkipGoldens` (56 suites, 56 passed, engine errors
+clean, `menu-campaign-journey`, `campaign-layout-parity` and `campaign-loop` unchanged among them);
+`.\CheckCommentCaps.ps1 -Summary` (all within cap); `.\CheckEncoding.ps1` (no mojibake). Built-in
+unchanged: the twelve scratch-profile aids `campaign-empty`, `campaign-roster`, `campaign-entry`,
+`campaign-cabin`, `campaign-previous`, `campaign-scrapbook`, `campaign-briefing:24`,
+`campaign-flightcheck`, `campaign-guestcheck:2 --debug-join=3`, `campaign-ammo`,
+`campaign-planeselection` and `campaign-hangar`, each one Godot run on the hidden desktop with
+`--resolution 1280x720` ahead of the `--` and `--menu=<aid> --screenshot=<abs path>`
+(`.scratch\d33-shots.ps1`), from a detached worktree at the plan branch's tip (`a5f11882`) built
+there into `.scratch\d33-shots\builtin-before\` and from this worktree into
+`.scratch\d33-shots\builtin-after\`, compared by decoded 32bpp pixels (SHA-256 over the rows,
+`.scratch\d33-compare.ps1`): 12 of 12 identical, zero differing pixels. Original: the seven screens
+`campaign-roster`, `campaign-cabin`, `campaign-briefing:24`, `campaign-flightcheck`, `campaign-ammo`,
+`campaign-planeselection` and `campaign-scrapbook` under `--presentation=original` at 1024x768 and
+1920x1080 into `.scratch\d33-shots\original\`, 14 shots present. What each pose cannot show: the
+profile screen's shot has no pointer and an empty box (the scratch store remembers nobody), so the
+selection bar, the pointer frame and a refusal dialog are not in it; the cabin's shows NEXT MISSION
+in its rollover frame as the focused plaque and no other state; the briefing's is the 24 s frame
+alone (SHOT-32), not the reveal running or the narration, which the suite asserts; the flight
+check's, ammo's and plane selection's show the opening focus and closed fields, not an open list, a
+pressed frame or a dialog; the book's shows spread 1 of the last flown mission with RETURN TO CABIN
+focused, not a page turn or a scrap under the pointer. `docs/verification.md` rules that bit:
+**METHOD-6** (which binary each side used is named: the plan-tip worktree against this one),
+**METHOD-3** (the aids read a scratch store emptied on every open), **METHOD-9** (the unit tests
+click plaques at the fixture's invented rows, so a rectangle read from the wrong place misses),
+**SHOT-6** (decoded pixels, never PNG bytes), **SHOT-9**/**SHOT-10** (windowed probes on the hidden
+desktop, absolute paths, every file checked present), **SHOT-32** (a shot of the briefing proves its
+frame alone; the reveal running is the suite's), **SRC-4** (the unconfirmed readings are listed once,
+in the inventory's Part 4, and `CAP-52`'s clause points there). Not proven here: the at-the-controls
+journey (the profile screen to the cabin to the briefing to the flight check to a flown mission to
+the book and back, hearing the narration start, restart and stop) is the user's and is owed, as it
+was for D31; the suite's launch is verified at the host's sink and the flown mission's record is
+written the way the director writes one.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Shared board components do not make the two presentations one screen graph. Briefing
 state drives narration, but cue selection and transition timing remain presentation responsibilities.
@@ -1310,6 +1409,15 @@ coverage; A1 supplies the authoritative list.
 **Approach.** Close the inventory one row at a time, implementing only evidenced behaviour or an
 explicitly accepted remake-only rule. Add Options to Built-in as this plan’s sole intended behaviour
 addition and expose the same shared options through Original’s own composition.
+
+Handoff from D33: Original's top level now opens Campaign (`MM_B_CAMPAIGN`, the whole campaign
+family in `OriginalCampaign.cs`), Instant Action, the Options stand-in behind Preferences and Quit,
+plus the three remake-only doors; what it still lacks is Multiplayer and Credits (both draw frame 0
+and take no input, and Credits is out of scope) and the decoded Preferences pages (Preferences,
+GameOptions, Audio, Video, ControlsPrefs, Keys), for which the minimal Options screen stands in.
+Every campaign screen's Back and every RETURN plaque already lead somewhere; the two-answer
+messagebox (`CampaignBoards.Dialog` over `DialogButton`s) and the one-answer box are the dialog
+idiom the remaining screens' confirms should take.
 
 **Model recommendation.** high — broad integration and fidelity review.
 
@@ -1351,6 +1459,16 @@ callbacks (`CSVM/src/UI/LaunchMenu.cs:37-45`); the unified contract was settled 
 **Approach.** Migrate Free Flight, Instant Action, Dogfight and campaign payloads to the A4 exit
 contract. Convert return-to-top-level, cabin and scrapbook/debrief paths to semantic destinations.
 Delete transitional callbacks only after all callers and aids use the new host.
+
+Handoff from D33: both presentations now map `CabinReturn` and `DebriefReturn` into their own
+graphs (Original through `OriginalShell.ShowCabin`/`ShowScrapbook`, seating the named profile
+re-read from the store and opening the book on the flown mission) and both leave a campaign launch
+as one `CampaignMissionExit`, so the semantic side of the campaign's return routing is done. What
+still goes through `--menu=` is the top-level show: `Launcher.ShowMenu` applies the aid on every
+top-level `Show`, so a return to the top level after a flight re-enters the aid's screen rather than
+the top level itself, in both presentations; and `--menu=campaign` still names the real store while
+every other campaign aid names the scratch one, a distinction the destination vocabulary does not
+yet carry.
 
 **Model recommendation.** max — session lifecycle and campaign progression are high-blast-radius.
 

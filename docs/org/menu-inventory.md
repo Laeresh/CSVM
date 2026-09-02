@@ -451,15 +451,15 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 | ControlsPrefs | (none) | 12 rows | no | **none** | layout only |
 | Keys | (none) | 17 rows | no | `Keybinds Movement/Throttle/Targeting/Weapons/Views 1/Views 2/Other.png` | composition of all seven tabs; no interaction |
 | InstantAction | Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, Presets | 48 rows | [`instant-action.md`](../formats/instant-action.md) | **none** | option sets, the ace's control hiding and the paged enemy rows are script-proven; the screen itself has never been seen. **Built as Original's Instant Action screen** from the section's rows over the shared feature: `IA_BackGround`, the `T` rows, the contents list in its 14-row window with its own scroll arrows and slider, the dropdowns on their authored lines, the enemy rows paged by `IA_B_UP`/`IA_B_DOWN`, the radio pair, View Story, Fly Mission and Exit; Build Custom Plane and Weapon Loadout draw disabled until their Original screens exist. What the data does not settle is listed under Part 4 for `CAP-50` |
-| Campaign (profile) | `CampaignScreen.Roster` | 6 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | `Campaign Player Profile.png` | full: roster fill, name validator, all four exits |
-| PassengerCabin | `Cabin` | 16 rows | same | `Campaign CAP-44 Cabin.png` | full for the six buttons; whether anything on the screen animates is open |
-| FlightCheck | `FlightCheck` | 25 rows | same | `Campaign Flight Check.png`, `… Change Plane Button.png` | full: both slots, four lists, the wingman gate, both plane-change rules |
-| PlaneSelection | `PlaneSelection` | 27 rows | same | `… Change Plane.png`, `… Combo Box.png`, `… Unique Warning.png`, `… Export dialog.png` | full, including the rollover preview and the duplicate rule |
-| OrdinanceLayout | `Ammo` | 31 rows | same | `… Change Ammo Menu.png`, `… ComboBox.png`, `Campaign Ammo Selection.png` | full |
-| ScrapBook | `Scrapbook` | 46 rows | same + [`debrief.md`](debrief.md) | `Campaign Scrapbook CM01 Story Scraps.png` | full |
-| ScrapBook_TOC | `PreviousMissions` | 8 rows | same | `Campaign CAP-41 Previous Mission 1/2.png` | full |
-| ScrapbookZoom | `ScrapbookZoom` | 83 rows | same | `Campaign Scrapbook CM02 Mission select….png` | full |
-| (Briefing, a `zrdr` dialog, not a script) | `Briefing` | none | [`briefing.md`](../formats/briefing.md) | `Campaign Briefing.png` | full |
+| Campaign (profile) | `CampaignScreen.Roster` | 6 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | `Campaign Player Profile.png` | full: roster fill, name validator, all four exits. **Built as Original's profile screen** over the shared campaign feature and the shared board component: the name box pre-filled with the last player seated, `CM_B_START` / Enter in the box / a second click on the filled roster row starting, a first click filling the box, the list sub-script's own selection bar and pointer frame, the four refusals as the one-button messagebox, `CM_B_DELETEPLAYER` asking with langui 201 as the two-button box, `CM_B_CANCEL` leaving. Remake-only: YES and NO as the two answers' words, the caret |
+| PassengerCabin | `Cabin` | 16 rows | same | `Campaign CAP-44 Cabin.png` | full for the six buttons; whether anything on the screen animates is open. **Built as Original's cabin**: the four plaques the board component draws, `PC_B_NEWMISSION` disabled once the campaign is complete, `PC_B_PLANEX` into the name screen over the profile's wallet with the cabin as the hangar's return, `PC_B_PREVIOUS` and `PC_B_RETURNMM` on their layout edges |
+| FlightCheck | `FlightCheck` | 25 rows | same | `Campaign Flight Check.png`, `… Change Plane Button.png` | full: both slots, four lists, the wingman gate, both plane-change rules. **Built as Original's flight check**: the paper plaques per crew slot hit-tested at their rows, `FC_B_RETURNBRIEF` rewinding a co-op walk, `FC_B_FLYMISSION` advancing to the next joined human's check or leaving as the feature's launch with every seat's devices; a joined seat drives its own check |
+| PlaneSelection | `PlaneSelection` | 27 rows | same | `… Change Plane.png`, `… Combo Box.png`, `… Unique Warning.png`, `… Export dialog.png` | full, including the rollover preview and the duplicate rule. **Built as Original's plane selection** through the shared page: the fields at their `D` rows with the open list's entries hit-tested under the box, a sideways step on the closed field, the 710 refusal and the 702 export message as Original's own messagebox. Remake-only: the rollover preview is not drawn (the page previews nothing on a highlight) |
+| OrdinanceLayout | `Ammo` | 31 rows | same | `… Change Ammo Menu.png`, `… ComboBox.png`, `Campaign Ammo Selection.png` | full. **Built as Original's ammo selection** through the shared page: the twelve fields, the description pane following the focused field, ACCEPT and CANCEL back onto the plaque that opened the screen |
+| ScrapBook | `Scrapbook` | 46 rows | same + [`debrief.md`](debrief.md) | `Campaign Scrapbook CM01 Story Scraps.png` | full. **Built as Original's book** through the shared page: every scrap hit-tested on its `SCRAPBOOK.CSV` region (the picture's own bounds where the row authors `0,0,0,0`), the arrows, tabs, bookmark and buttons at their rows, Back returning to the contents or the cabin, whichever opened it |
+| ScrapBook_TOC | `PreviousMissions` | 8 rows | same | `Campaign CAP-41 Previous Mission 1/2.png` | full. **Built as Original's table of contents** through the shared page: the mission rows hit-tested inside the listbox's window, a click picking and a second click replaying, the buttons at their rows |
+| ScrapbookZoom | `ScrapbookZoom` | 83 rows | same | `Campaign Scrapbook CM02 Mission select….png` | full. **Built as Original's zoom** through the shared page: `SBZ_B_RETURN` and `SBZ_B_EXPORT`, the export's 705/706 as Original's messagebox |
+| (Briefing, a `zrdr` dialog, not a script) | `Briefing` | none | [`briefing.md`](../formats/briefing.md) | `Campaign Briefing.png` | full. **Built as Original's briefing**: the three `brief_button1` plaques at the dialog's own positions with their label-face states, the reveal advanced on the presentation's clock, the narration begun through the shared audio service on entry and again on REPLAY BRIEFING and ended on RETURN TO CABIN and GO TO FLIGHT CHECK |
 | Hangar | `HangarScreen.PlaneSelection` | 16 rows | [`hangar.md`](hangar.md) | `CustomPlane PlaneSelection.png` | callbacks and economy decoded; navigation only from the layout. **Built as Original's INVENTORY**, the hub's SELL PLANES destination (a remake reading: `PX_B_Sell` states no edge): `HA_BACKGROUND`, the title and prompt, `HA_D_PILOTPLANE` over the shared feature's saved planes, the picked plane's `HA_P_PILOTPLANE` frame, name, agility, armour, value (1258) and guns, `HA_B_SELLP` selling or deleting through the feature, `HA_B_EXPORTP` drawn disabled, `HA_B_DONE` back to the tab |
 | PlaneName | `Name` | 8 rows | partly | **none** | the edit box's font and colours are authored; nothing about the validator here. **Built as Original's name screen**: `PN_E_NAME` fed by seat 0's typed characters under the shared feature's character set and 32-character cap, `PN_B_DEFAULT` (checked as authored) choosing the default configuration or a bare airframe, `PN_B_OK` live once a name stands with langui 203 shown until then, `PN_B_CANCEL` dropping the build; the original's `MaxChars` of 16 is not applied, the saved-plane index's 32 is |
 | PlaneConstruction | (no counterpart; Built-in has no hub) | 47 rows | [`hangar.md`](hangar.md) | `Campaign CAP-40 Plane Construction 1/2.png` | composition; the tab bar's own behaviour is unseen. **Built as Original's Plane Construction hub**: the background, the plane at the `PX_P_PLANE` corner (the airframe's blueprint, or the `PX_ICON` set tinted with the picked colours), PLANE NAME, PLANE COST as the running total, AIRFRAME, WEIGHT CAPACITY, CURRENT WEIGHT, the agility and armour words with their `PX_BarGraph` segments, the cash note over a wallet only, the six `PX_Tab` tabs as siblings with the standing one disabled, `PX_B_Sell`, `PX_B_Ready` and `PX_B_Cancel`. What the data does not settle is listed under Part 4 for `CAP-53` |
@@ -470,7 +470,7 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 | HardPoints | `Hardpoints` | 9 rows | same | none | as above. **Built as the hardpoints tab** over `HP_D_POINT0..1` |
 | Paint | `Paint` | 27 rows | same + [`rof.md`](../formats/rof.md) | 8 `CustomPlane Paint*.png` | composition well covered by the paint stills; the pattern pickers' behaviour is not. **Built as the paint tab**: `PT_D_PATTERN` over the wearable patterns, `PT_D_COLORS0..2` as swatches in an 18-row window, `PT_D_SHADES0..2`, `PT_D_DECALS0..2` as `PT_P_DECALS` tiles in a two-row window |
 | Purchase | `Purchase` | 29 rows | same | none | the purchase gate and cost are decoded from the executable. **Built as the hub's totals page**, READY TO PURCHASE's destination: the column heads, one line per priced component at the authored lines and text lists, the totals, `PUR_T_PROBLEMS` in the commit's words, `PUR_B_PURCHASE` live while the feature can commit |
-| MessageBox | (the `_error` line) | 16 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | two campaign dialogs | the `@globals@OR` parameter block and the button masks are decoded |
+| MessageBox | (the `_error` line) | 16 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | two campaign dialogs | the `@globals@OR` parameter block and the button masks are decoded. **Built as Original's dialog** over the campaign screens: the `0x1` box on `MB_B_CENTER` for every refusal and notice, the `0x4` box on `MB_B_LEFT`/`MB_B_RIGHT` for the delete confirm, the answer under the pointer in its rollover frame, Back taking the declining answer |
 
 ⚠ **Built-in has no counterpart for Preferences, GameOptions, Audio, Video, ControlsPrefs, Keys or
 PlaneConstruction, and the original has no counterpart for Free Flight, Dogfight, the Chapter
@@ -498,9 +498,14 @@ resume through `uiControl` 2503/2504. There is no cue-name indirection; scripts 
 files.
 
 **Built-in plays none of these.** `LaunchMenu` owns exactly two audio behaviours: it enters
-`MusicState.Menu` on every screen, and it plays the briefing narration itself while ducking the
-music. There is no click, no rollover and no keystroke sound anywhere in the menu today, so A4's
-audio contract and D33's cue work start from nothing rather than from a rewiring.
+`MusicState.Menu` on every screen, and it asks the shared audio service for the briefing narration,
+which ducks the music. There is no click, no rollover and no keystroke sound anywhere in Built-in.
+**Original requests the first four through the shared service** (`MenuCueTable`): `MOUSEOVER` on
+entering a live button, `MOUSECLICK` on pressing one, `ENTERTEXT` per character an edit box takes
+and `ENTERTEXT_ERROR` per character it refuses, on the top level, the Instant Action screen, the
+hangar and the campaign screens alike, and nothing on a list row or a scrap; the briefing's
+narration is begun on entry and on REPLAY BRIEFING and ended on every door out. Which sound the
+original plays where is `CAP-52`'s to confirm.
 
 ## Part 3: assets, required and optional
 
@@ -601,6 +606,27 @@ plays on a rollover and which on a press, whether a disabled button makes either
 make a rollover sound (Original plays none on a list row), which pointer bitmap shows over a
 button, over a list and over nothing, and where each bitmap's hotspot is (Original draws the
 bitmap's top-left at the pointer).
+
+The campaign screens are built from what the layout, the scripts and the briefing dialog evidence:
+every `B` row's position and four-frame strip, the `D` rows' boxes, the listbox's window, the
+scrapbook rows' region column, the two messagebox button sets and their rows, the roster
+sub-script's two colours, the edit box's pre-fill and its two bound wavs, NEXT MISSION disabled
+once the campaign is complete, the briefing's narration following its script's start count.
+Everything else is remake-only until filmed. `CAP-52` must confirm, for the campaign: whether a
+campaign plaque (a cabin button, a briefing plaque, a paper button) plays the rollover and click
+sounds a main-menu button does (Original plays both) and whether a roster row, a mission row of the
+table of contents or a scrap plays anything on entry (Original plays nothing); what the edit box's
+keystroke and reject sounds are attached to (Original plays `ENTERTEXT` per taken character and
+`ENTERTEXT_ERROR` per refused one in the profile screen's box); which pointer bitmap shows over a
+scrap (Original draws the passive one, as over a list row); whether REPLAY BRIEFING restarts the
+narration from its start (Original begins the wav again from the top) and whether leaving the
+briefing by RETURN TO CABIN or GO TO FLIGHT CHECK cuts the voice (Original ends it and lifts the
+music duck); whether a mission's end starts any narration on the book (Original starts none);
+whether a scrap whose region column reads `0,0,0,0` is clickable on its picture (Original hit-tests
+the picture's bounds); what words the delete confirm's two buttons carry (Original writes YES and
+NO); and whether any keyboard or pad focus exists on these screens at all, and where Back lands
+(Original walks each screen back to the one that opened it and keeps the focus on the plaque that
+opened what is being left, a remake equivalence).
 
 The Instant Action screen is built from what the layout and the script evidence: the widgets at
 their authored positions over `IA_BackGround`, the contents list's 14-row window with its own

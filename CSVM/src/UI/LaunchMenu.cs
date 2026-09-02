@@ -83,17 +83,6 @@ public sealed partial class LaunchMenu : CanvasLayer
     // onto the 19 presets (docs/formats/instant-action.md, "Screen controls"). Decoded, not a fit
     // to our own layout — do not "tidy" it to the item count.
     private const int PresetWindow = 14;
-    // How many missions the campaign screenshot aids' seeded profile has flown. Three gives the
-    // previous-missions list a body and leaves the cabin's Next Mission somewhere other than the
-    // campaign's first entry. Raising it walks campaign-briefing onto a longer narration than
-    // campaign-briefing-repaint's own 90-second window covers.
-    private const int AidMissionsFlown = 3;
-
-    // The completed-objective mask those runs record. Bit 0 alone would leave every scrapbook page
-    // blank, since the story scraps are gated on the objectives that unlock them, so the aid
-    // records a clean run: bits 0 to 12, the range the shipped rows' own gates use.
-    private const int AidCompletedMask = 0x1fff;
-
     // The chip strip's own font size and corner inset, in authored board points — scaled through
     // the same BoardFit the board itself draws at, so the chips read like part of that screen.
     private const float ChipFont = 16f;
@@ -1823,46 +1812,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
     }
 
-    // The scratch store the campaign screenshot aids read: emptied on every open, and seeded with
-    // two profiles for the filled-roster shot. A progressed store additionally flies the first
-    // three missions, which is what puts rows on the previous-missions list and moves the cabin's
-    // Next Mission off the campaign's first entry.
-    private CampaignProfileStore AidProfileStore(bool seeded, bool progressed = false)
-    {
-        var dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "CSVM", "menu-aid-profiles");
-        try
-        {
-            if (System.IO.Directory.Exists(dir))
-            {
-                System.IO.Directory.Delete(dir, recursive: true);
-            }
-        }
-        catch (System.IO.IOException)
-        {
-            // A leftover the aid cannot clear is not worth failing a screenshot over.
-        }
-
-        var store = new CampaignProfileStore(dir);
-        if (!seeded)
-        {
-            return store;
-        }
-
-        var first = CampaignProfileDef.NewProfile("Zachary");
-        if (progressed)
-        {
-            for (int seq = 0; seq < AidMissionsFlown; seq++)
-            {
-                CampaignProgression.Record(first, new MissionAttempt(
-                    seq, AidCompletedMask, 300_000 + (seq * 20_000), 400, 120,
-                    first.Planes[0].Airframe, first.Planes[0].Name));
-            }
-        }
-
-        store.Save(first);
-        store.Save(CampaignProfileDef.NewProfile("Nathan"));
-        return store;
-    }
+    // The scratch store the campaign screenshot aids read, the one both presentations' aids share
+    // (CampaignAidProfiles): emptied on every open, seeded for the filled-roster shot, progressed
+    // for the screens past the cabin.
+    private CampaignProfileStore AidProfileStore(bool seeded, bool progressed = false) =>
+        CampaignAidProfiles.Store(seeded, progressed);
 
     // One frame of player 1's input on a campaign screen. While a page's text field is armed the
     // keyboard's letters are text, so the cursor axes come from the pad alone.
