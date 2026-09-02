@@ -1,8 +1,8 @@
 # Enhanced graphics mode — opt-in lit world beside the faithful original
 
-**ACTIVE PLAN** (written 2026-09-01). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE** (2026-09-02). Every item landed or was closed as a recorded disproof; the plan is
+kept here for its evidence, its dead ends and its Open judgements, and is indexed in
+[`plans.md`](plans.md). The mode itself is recorded as a divergence in `docs/architecture.md`.
 
 This plan delivers an opt-in **enhanced graphics mode**: the world receives real Godot lighting
 (sun, ambient, shadow maps, omni point lights) driven by the mission's authored SUNLIGHT values,
@@ -1162,7 +1162,8 @@ per scenario in the landing commit message.
 **⚠ Traps.** Read docs/verification.md before measuring; the sim clock lagging wall time on
 physics-bound scenes will masquerade as a rendering regression if measured naively.
 
-**Verified.** <pending orchestrator run> All commands from the worktree with
+**Verified.** The complete `.\RunTests.ps1` on the final tree (every Wave E item merged): 2805
+units, 200 engine suites (errors clean), 18 goldens hash-identical, all passing in 172.8 s. All commands from the worktree with
 `$env:CSVM_DATA_ROOT="Z:\CSVM"`.
 
 `dotnet build CSVM/CSVM.sln`: clean, 0 warnings, 0 errors (no TUNE constant moved, see the lever
@@ -1240,6 +1241,12 @@ measured), so the
 GPU/render-server terms this build reports should be read as a per-viewport floor, not the whole
 splitscreen GPU bill, and `frame_ms` (which already sums every pane's cost into one wall
 measurement) is the number the 60 fps / 16.7 ms line is judged against.
+
+**Re-take after Wave E.** One `--fly --players=4 --perf --no-vsync --frames=600` run per cell on
+the final tree (clutter pushed 2x, the 2 degree sun, the mirror kept): the steady `baseline_ms` reads
+C4 9.09 original / 9.07 enhanced and C5 8.93 / 9.97, `gpu_ms` C4 0.34 / 0.53 and C5 1.60 / 1.93,
+so the 16.7 ms line still holds with room; the probes' own hitch lines (a 40 ms threshold) fired
+on the same frames in both modes, which is the script's own stall, not the renderer.
 
 **Lever decision: nothing moves.** The worst measured cell is C4 at 4 panes enhanced, 15.04 ms
 against the 16.7 ms line, a 1.66 ms (9.9 %) margin; C5 clears it by 3.10 ms (18.6 %) and C3 by
@@ -1345,7 +1352,8 @@ hashes. They stay here so the pin is one `-RegenGoldens` from this record once t
 }
 ```
 
-**Verified.** <pending orchestrator run> — this item's own sweep and manifest-diff proof are
+**Verified.** The complete `.\RunTests.ps1` on the final tree (every Wave E item merged): 2805
+units, 200 engine suites (errors clean), 18 goldens hash-identical, all passing in 172.8 s. — this item's own sweep and manifest-diff proof are
 above; the plan's landing gate is the complete `.\RunTests.ps1` the orchestrator runs once D31
 also lands.
 
@@ -1375,7 +1383,8 @@ split fractions still put the near cascades where the aircraft's shadow lives.
 **Verify.** C1 and C4 horizon captures: no shadow visible inside the ramp; the hangar and
 aircraft shadows unchanged near the camera. Goldens zero movers.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the final tree (every Wave E item merged): 2805
+units, 200 engine suites (errors clean), 18 goldens hash-identical, all passing in 172.8 s.
 
 `dotnet build CSVM/CSVM.sln`: clean, 0 warnings, 0 errors.
 `$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -Suite fog-state -SkipUnits -SkipGoldens`: engine
@@ -1504,7 +1513,8 @@ day 0.6900 to 0.8461, nothing in the gap.
 that draw a moon and a star field (`docs/formats/weather.md`), so the dome's night art does not
 separate the populations.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the final tree (every Wave E item merged): 2805
+units, 200 engine suites (errors clean), 18 goldens hash-identical, all passing in 172.8 s.
 
 Commands, all from the item's worktree with `$env:CSVM_DATA_ROOT="Z:\CSVM"`:
 `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
@@ -1593,7 +1603,8 @@ budgeted (`MaxActive` slot ranking against the nearest viewer), not fog-bounded,
 The zone gate carries no distance at all (B13). The far-field AI plant's 1 km branch is a gameplay
 physics simplification, not a visual population, so it stays untouched.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the final tree (every Wave E item merged): 2805
+units, 200 engine suites (errors clean), 18 goldens hash-identical, all passing in 172.8 s.
 
 C2 (`--freecam --chapter=C2 --pos=-5722,186,-3457 --direction=-0.438,-0.15,-0.899 --graphics=enhanced
 --det --mute`): `clutter fade:` `scale_sq` 1 before, 0.25 after; `clutter uv lattice: placed=46752`
@@ -1685,7 +1696,8 @@ only, and `BGMode.Color` had simply removed the specular. Under the flat panoram
 control tints the water red, which is what licenses the numbers below (`docs/verification.md`
 WORLD-29).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the final tree (every Wave E item merged): 2805
+units, 200 engine suites (errors clean), 18 goldens hash-identical, all passing in 172.8 s.
 
 Commands, all from the item's worktree with `$env:CSVM_DATA_ROOT="Z:\CSVM"`:
 `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
@@ -1756,7 +1768,8 @@ structure (sample the sun-side and shade-side of one fogged hill, the two means 
 fog colour); the near world unchanged. Original-mode every-key dump identical; goldens zero
 movers.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the final tree (every Wave E item merged): 2805
+units, 200 engine suites (errors clean), 18 goldens hash-identical, all passing in 172.8 s.
 
 The landed change is 7 lines in `CSVM/src/Mech3/SceneBuilder.cs`, inside `GetBiasShader`'s `fogged`
 block. `fog_amt` and the whole of `csky_fog_amount` are untouched; the emitted line is now selected
@@ -1921,7 +1934,8 @@ reflection outright. The water bit is parked: the `waterLit` shader arm and
 ordinary matte `worldLit` arm like every other lit-but-glossless surface, and C24's verdict is
 re-recorded above as superseded.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the final tree (every Wave E item merged): 2805
+units, 200 engine suites (errors clean), 18 goldens hash-identical, all passing in 172.8 s.
 
 Commands, all from the item's worktree with `$env:CSVM_DATA_ROOT="Z:\CSVM"`:
 `dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
@@ -2065,7 +2079,8 @@ allows: mean luminance over that box reads 71.08 (original), 85.79 (enhanced, be
 (enhanced, after) — the aircraft brightened when the world first took a real sun (B12/B11) and
 moves negligibly further under this item's 3% nudge, as expected for a factor this small.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the final tree (every Wave E item merged): 2805
+units, 200 engine suites (errors clean), 18 goldens hash-identical, all passing in 172.8 s.
 
 The complete `.\RunTests.ps1` on this item's tree: 2805 units, 200 engine suites (errors clean),
 18 goldens hash-identical, all passing in 142.6 s.
@@ -2170,7 +2185,8 @@ the hangar before/after pair shows zero difference on every building and tree si
 black in the diff) and a fine, uniform dither elsewhere consistent with the wider shadow filter
 touching self-shadowed terrain broadly, not a shape change to any single cast shadow.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the final tree (every Wave E item merged): 2805
+units, 200 engine suites (errors clean), 18 goldens hash-identical, all passing in 172.8 s.
 
 ## Open judgements
 
