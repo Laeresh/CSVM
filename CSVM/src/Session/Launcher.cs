@@ -81,6 +81,13 @@ public partial class Launcher : Node3D
     private const float EnhancedShadowSplit2 = 0.17f;
     private const float EnhancedShadowSplit3 = 0.42f;
 
+    // TUNE. Screen-space reflection on the glossy water arm: the step count buys reflection length
+    // along the ray, the fades hide where a ray runs off the screen or past the depth buffer.
+    private const int EnhancedSsrMaxSteps = 64;
+    private const float EnhancedSsrFadeIn = 0.15f;
+    private const float EnhancedSsrFadeOut = 2.0f;
+    private const float EnhancedSsrDepthTolerance = 0.2f;
+
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
     // exists — the same empty list the pre-split root held after a teardown.
     private static readonly List<PlayerRig> NoRigs = new();
@@ -950,6 +957,8 @@ public partial class Launcher : Node3D
             AmbientLightSource = Godot.Environment.AmbientSource.Sky,
             AmbientLightEnergy = 0.9f,
         };
+        if (GraphicsMode.Enhanced)
+            EnableWaterReflections(_env);
         AddChild(new WorldEnvironment { Environment = _env });
     }
 
@@ -967,6 +976,19 @@ public partial class Launcher : Node3D
         sun.DirectionalShadowBlendSplits = true;
         sun.ShadowBias = EnhancedShadowBias;
         sun.ShadowNormalBias = EnhancedShadowNormalBias;
+    }
+
+    // Screen-space reflection, for the one glossy population in the world: the water surfaces
+    // SceneBuilder.ClassifySurface names. Every other enhanced surface is matte, so nothing else
+    // can reflect. ⚠ SSR reflects only what the camera already draws; content off-screen or behind
+    // the near plane has no reflection at all.
+    private void EnableWaterReflections(Godot.Environment env)
+    {
+        env.SsrEnabled = true;
+        env.SsrMaxSteps = EnhancedSsrMaxSteps;
+        env.SsrFadeIn = EnhancedSsrFadeIn;
+        env.SsrFadeOut = EnhancedSsrFadeOut;
+        env.SsrDepthTolerance = EnhancedSsrDepthTolerance;
     }
 
     // Shows the launchscreen (building it on first use) and wiring its Launch/Quit

@@ -561,8 +561,10 @@ the LIGHT_STATE spill; `lighting: false` surfaces and both billboard generators 
 enhanced mode the two billboard generators' `glow` arm (the original's own camera-facing light-source
 class, plus the flare/fire/flame cylindrical facades) additionally scales its colour by
 `EmissiveScale` so the pixels exceed 1.0 for the glow pass; those arms are `unshaded`, where Godot
-discards EMISSION, so the scale is applied to the colour. Format/decode:
-docs/formats/gamez.md, docs/formats/world-structure.md, docs/formats/gotchas.md.
+discards EMISSION, so the scale is applied to the colour. Inside that lit world arm, a surface
+`ClassifySurface` calls water takes `WaterRoughness`/`WaterSpecular` in place of the matte values,
+which is what `Launcher.EnableWaterReflections`' screen-space reflection has to march against.
+Format/decode: docs/formats/gamez.md, docs/formats/world-structure.md, docs/formats/gotchas.md.
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
@@ -5519,7 +5521,9 @@ biased road decals), and a `DirectionalShadowMaxDistance` that is a FALLBACK: a 
 overwrites it per zone from that zone's pushed-out fog far (`WeatherRig`). The world meshes and the
 aircraft are the only casters; every other population is already `ShadowCastingSetting.Off` or
 declares `shadows_disabled` in its shader. The front-culled world needs no `DoubleSided` casting:
-the source's visible side is Godot's back face, which is the face the sun sees.
+the source's visible side is Godot's back face, which is the face the sun sees. `EnableWaterReflections`
+is the same mode gate on the Environment's SSR, for the one glossy population `SceneBuilder` builds;
+what it can and cannot reflect is measured in `docs/PLAN-enhanced-graphics.md` C24.
 Vsync resolves at the same `_Ready` site as the shader clock / `--perf` tick: `display.vsync`
 config key (default true) or `--no-vsync`, the flag always beating the key.
 The config read is unconditional even when the flag already decided, so the key still registers

@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ Lighting-exempt surfaces become emissive (light-source class only; the rest is a disproof)
 22. ☐ Environment glow + tonemap
 23. ☐ SSAO
-24. ☐ SSR on water — evaluate, then ship or park
+24. ☑ SSR on water — evaluate, then ship or park
 
 ### Wave D — Hardening and record
 
@@ -871,16 +871,36 @@ without halos on the aircraft against sky. `-Perf` delta recorded at 1 and 4 pan
 **⚠ Traps.** SSAO reads the resolved depth buffer, so its edges shimmer independently of MSAA;
 judge it in motion, not in stills.
 
-## C24 ☐ SSR on water — evaluate, then ship or park
+## C24 ☑ SSR on water — evaluate, then ship or park
 
 **Goal.** A verdict, with captures: does screen-space reflection on sea/water surfaces in enhanced
 mode read well enough to ship, or is it parked with the reasons recorded?
 
 **Evidence (confidence: lead-only).** Godot 4.6 rewrote SSR (less temporal instability, explicit
 half/full-res modes); SSR reflects opaque geometry only and cannot reflect off-screen content
-(verified against the docs during planning). `<TODO: establish whether water surfaces are an
-identifiable material/mesh population in the decoded worlds at all; without that handle the item
-is dead on arrival.>`
+(verified against the docs during planning).
+
+**Census result: water IS an identifiable population, and the engine already classifies it.**
+`SceneBuilder.ClassifySurface` names a surface `"water"` from its texture name, and the collision
+buckets are built from that; the same call identifies the shading population with no new plumbing.
+Counted over each chapter's placed models joined to the textures they draw
+(`.scratch/c24/census.ps1`, the read-only streaming census C21's script uses):
+
+| Chapter | placed models | water polygon instances | water textures | models drawing water |
+|---|---|---|---|---|
+| C1 (day, lake and river) | 2,237 | 652 of 25,962 | `water1`, `water1_trans1/2`, `wakefront1`, `watersquirt` | 51 (50 `lighting: true`) |
+| C1B (night sea) | 1,305 | 1,085 of 14,060 | `wtr00000`, `srf0001`, `wakefront1`, `watersquirt` | 154 (151 `lighting: true`) |
+| C3 (island, harbour) | 1,901 | 1,571 of 21,554 | `wtr00000`, `watersquirt` | 348 (all `lighting: true`) |
+| C5 (night city waterfront) | 2,851 | 704 of 39,796 | `wtr00000`, `watersquirt` | 164 (all `lighting: true`) |
+
+Two properties make the handle usable. It is at most five materials per chapter, so the shader key
+splits at material granularity with no per-polygon work. And essentially every water model is
+authored `lighting: true`, so the population sits inside B11's `worldLit` arm, which is the only arm
+that can carry a roughness at all.
+
+Two watery-named families are NOT in it and stay out: C1's `river1`/`river2` (149 polygon instances)
+and C3's `cliff1_watertrans*` (258). They are the shoreline and cliff transition sheets, and
+widening the decoded classifier to take them would be an invention, not a decode.
 
 **Approach.** Prototype on the C1 sea: water surfaces get low roughness in the enhanced variant so
 SSR has something to work with; judge at the controls in motion (banking over water is the worst
@@ -895,6 +915,92 @@ recorded verdict either way. Original-mode goldens zero movers.
 
 **⚠ Traps.** A disproof here is a valid landing (ground rules); do not tune SSR past its
 screen-space physics to force a ship.
+
+**Verified.** <pending orchestrator run>
+
+The landed change is a `water` bit on `GetBiasShader`'s key (16384, next free bit now 32768) fed
+from `ClassifySurface(texName) == "water"` through `BiasMaterial`, plus two TUNE constants
+`WaterRoughness = 0.1f` / `WaterSpecular = 0.5f` with invariant-culture literals beside them. The
+arm is `waterLit = worldLit && water`, so it exists only inside enhanced mode's lit world arm and
+original mode never sets the bit. It emits `ROUGHNESS = 0.1; METALLIC = 0.0; SPECULAR = 0.5;` where
+the matte arm emits 1.0/0.0/0.0. `GetMaterial`'s cache key is unchanged, because the class is a
+function of `materialIndex`, which the key already carries.
+
+In `Launcher.cs` the addition is one mode-gated call, `if (GraphicsMode.Enhanced)
+EnableWaterReflections(_env);` at the end of `SetupLighting`, and the method it calls, placed at the
+end of the lighting region after `EnableSunShadows`. It sets `SsrEnabled = true`, `SsrMaxSteps = 64`,
+`SsrFadeIn = 0.15f`, `SsrFadeOut = 2.0f`, `SsrDepthTolerance = 0.2f`, from four `EnhancedSsr*`
+constants declared beside the `EnhancedShadow*` ones. Nothing else in `SetupLighting` was touched.
+
+Commands and results, all from the worktree with `$env:CSVM_DATA_ROOT="Z:\CSVM"`:
+`dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
+`.\RunTests.ps1 -Suite plane-shader-reuse -SkipUnits -SkipGoldens`: PASS, 1 suite run of 200
+(non-zero), engine errors clean, 0 unexpected lines.
+`.\RunTests.ps1 -SkipUnits -SkipEngine`: PASS, 18 shot(s) hash-identical, zero movers, 37.8 s.
+The 8-chapter enhanced `--freecam --det --mute --frames=15 --screenshot=` sweep exited 0 on all of
+C1, C1B, C1C, C2, C2B, C3, C4 and C5 with zero error lines; C1's single warning is the
+`snd_police` late-sound line `--mute` produces, and an original-mode run of the same command
+produces it too.
+
+Original-mode byte identity used C21's method rebuilt as a throwaway: a static enumerator in
+`SceneBuilder`'s constructor armed by `CSVM_SCRATCH_SHADER_DUMP`, walking every reachable key of all
+three generators and writing each key's `Shader.Code`, with a second variable
+`CSVM_SCRATCH_SHADER_WATER` selecting the water dimension so both halves of the new bit are dumped.
+The baseline came from the committed tree before the water bit was added.
+`dump_orig_before.txt`, `dump_orig_after_w0.txt` and `dump_orig_after_w1.txt` are all 13,100,096
+bytes and SHA-256 `5C020A703AD5CBA1C23397C194F73940FBF23AA2411E47C14AAB95004D80ADF0`, identical, so
+original mode's shader text does not move for either value of the bit.
+`dump_enh_before.txt` and `dump_enh_after_w0.txt` are both 12,684,096 bytes and
+`3AA59A633F203CC29253B6058B7D5EB5B75683B3B6894870013ABDB20B573047`, so the bit does not leak into
+non-water enhanced surfaces, while `dump_enh_after_w1.txt` is
+`3CEBAF044C1CB170D3E8DF3E246F4307DFD2A311BD29EC1FBB6B36DC51216D19`, which differs, so the instrument
+was seen able to fail. The instrument was deleted before finishing.
+
+Captures are `.\RunProbe.ps1 … --graphics=enhanced --det --mute` runs under `.scratch/c24/`, with
+labelled montages beside them (`montage_c3_sealevel.png`, `montage_c3_bank.png`,
+`montage_altitude.png`). Four arms were captured at each pose: original, enhanced with matte water
+(the committed HEAD), enhanced with the water bit and SSR off, and enhanced with both. The two
+extra arms came from throwaway environment switches (`CSVM_SCRATCH_NO_SSR`, `CSVM_SCRATCH_NO_WATER`),
+both removed before finishing.
+
+**The water bit is the larger half of the change, and SSR the smaller.** At the C3 island pose at
+40 m the water bit alone moves 52.42 % of pixels against the matte arm (mean 15.97, max 83): the sea
+stops being a flat teal card and takes a sky gradient. SSR on top of it moves a further 37.28 %
+(mean 2.98, max 33), and that share is the mirrored island under the shoreline.
+
+**Where the reflection exists it is stable; the limit is screen space, and it is severe.** Over the
+level pass, measured in 400x40 bands walking down from the shoreline at x=560, the mean absolute SSR
+contribution is 12.20 at y=380, 7.70 at 420, 3.04 at 460, 1.97 at 500, 1.07 at 540, 0.22 at 580,
+0.004 at 620 and 0.000 at 660. The reflection dies over about 240 px, exactly as the reflected
+shoreline walks off the top of the frame, and the near half of every frame gets nothing. Frame to
+frame it does not flicker: over 8 consecutive `--shots` frames of a banked pass at 90 m, the
+SSR-minus-no-SSR mean luminance of the 400x140 rect under the shoreline is 5.641 with a standard
+deviation of 0.333 (5.9 %), and the trend across the eight is monotone with the roll rather than
+noisy; the level pass reads 3.538 with sd 0.116 (3.3 %). The whole-frame contribution over the same
+eight frames holds at 28.24 % to 26.55 % of pixels with max fixed at 29 every frame.
+
+**The reflection fades out with altitude.** At the same C3 heading with SSR on against SSR off, the
+maximum channel delta over the frame falls 33 (40 m), 29 (100 m), 26 (200 m), 23 (400 m), 21 (800 m),
+16 (1600 m), and the mean falls 2.98 to about 1.0. A first banked pass flown at 400 m confirmed it
+from the cockpit's side: 9.17 % to 13.43 % of pixels touched, mean 0.33 to 0.42, max 24 to 26, which
+on the touched pixels is about 3 levels of 255.
+
+**Verdict: ship, mode-gated.** The census gives a decoded handle rather than an invented one, the
+prototype is one shader bit and five Environment properties, original mode is byte-identical and all
+18 goldens are unmoved, and at and near sea level the reflected shoreline is both readable and
+temporally stable. The SSR values are Godot's own defaults in shape and were not pushed to
+manufacture a reflection: the alternative to shipping is a glossy sea that reflects only the sky,
+which is strictly less than what the marched rays deliver at no authoring cost.
+
+**What the chosen poses cannot show.** They cannot show a reflection at cruise: everything readable
+here is below roughly 200 m, and above 400 m the effect is under a level of 255 on average, so a
+player who never descends will not see the feature at all. They cannot show the aircraft reflected
+in its own wake, because it never is: the water rect directly under the aircraft during the banked
+pass moves at most 4 of 255 with SSR on, since the reflected airframe is off the top of the frame.
+They cannot say anything about frame cost, which D31 owns and which SSR is the first item in this
+plan to add per viewport rather than per scene, so the 4-pane splitscreen case is genuinely
+untested here. And they cannot show broken water: the surfaces are flat planes with no wave normals,
+so where a reflection lands it is a hard mirror, which is a look the original never had.
 
 # Wave D — Hardening and record
 
