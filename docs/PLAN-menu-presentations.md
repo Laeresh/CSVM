@@ -165,7 +165,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Campaign convergence
 
-31. ☐ Separate campaign feature state from presentation descriptions
+31. ☑ Separate campaign feature state from presentation descriptions
 32. ☐ Migrate campaign fixed chrome to decoded layouts without visual change
 33. ☐ Complete Original campaign interaction, briefing and audio integration
 
@@ -1001,7 +1001,7 @@ an undo path. Presentation switching also discards the scratch flow without comm
 
 # Wave D — Campaign convergence
 
-## D31 ☐ Separate campaign feature state from presentation descriptions
+## D31 ☑ Separate campaign feature state from presentation descriptions
 
 **Goal.** Campaign profile, navigation intent and operations become typed shared features; board
 primitives and authored geometry no longer form the cross-presentation contract.
@@ -1026,9 +1026,129 @@ stays disabled until the campaign's EXPORT is a feature operation.
 
 **Model recommendation.** max — largest domain/presentation separation and campaign persistence risk.
 
-**Verify.** Run every campaign page/flow unit and campaign-loop engine suite, then compare all
-existing campaign aids before and after. <TODO: exact command set and semantic ownership review for
-each navigation edge.>
+**Verify.** Characterization first, on the pre-extraction code: the new engine suite
+`menu-campaign-journey` (`CSVM/src/Testing/MenuCampaignSuites.cs`) drives a real `LaunchMenu`
+through `Drive`/`Shown*` and the composed board over a scratch profile store handed in through the
+one pre-extraction edit, `LaunchMenu.CampaignProfiles` (the store the Campaign door and the two
+flight returns open, `user://Profiles` unless a suite sets it), so no driven journey can write a
+real player's progress: the Mode screen's Campaign door onto the empty roster (four rows, the name
+field's "(none)", the langui 200 refusal on a nameless CONTINUE, CANCEL back to Mode), a typed
+name continuing onto the cabin with the store holding exactly `Serialize(NewProfile)` and the
+last-played record, the roster then standing on that player's ticked row, the field keeping the
+continued name (a quirk pinned as it is), a second player created and deleted through the confirm
+stage (Back keeps, the Delete answer removes only that directory and clears the last-played
+record), a roster row selecting on the first confirm and continuing on the second, the empty
+previous-missions contents, the cabin return over a progressed profile, the contents' three rows
+with the pick, X opening the book, REPLAY MISSION into a replay's briefing, Next Mission's
+briefing headed by the mission's long name running its reveal for 600 driven frames and restarting
+the narration on REPLAY BRIEFING (re-entering the same mission keeps the reveal where REPLAY left
+it), the flight check's row shape with and without CHANGE PLANE, ammo selection whose stepper takes
+the next ammunition and whose ACCEPT writes the pick into the profile file while CANCEL leaves the
+file byte for byte, plane selection's ACCEPT writing the pilot's pick and CANCEL keeping it, PLANE
+CONSTRUCTION opening the hangar over the profile's wallet and Back resuming the cabin on the row
+that opened it, FLY MISSION leaving as one `CampaignMissionExit` for the seated profile's next
+story position with one seat (the picked airframe's node, its campaign fit, no build, no pad) and
+the profile saved as it stood, the debrief return opening the scrapbook on the flown mission over
+the profile as the mission wrote it with the results card reading its outcome and cash, the back
+arrow turning a page and the forward arrow returning, RETURN TO CABIN then Back to the roster and
+out, the guest check under `DebugJoin(3)` walking P3, P2, and forward again, and every
+scratch-profile aid opening its screen. Green before the extraction and, with no edit, after it.
+One finding the characterization made and pinned as it behaves: `--menu=campaign-roster` seeds two
+profiles and lands on the first one's cabin, not the roster the inventory and `docs/cli.md`
+describe, because the aid walker seats the seeded profile before branching on the aid's name; a
+Built-in defect outside this plan's scope (Decision 16), left for the backlog.
+
+The classification of every stack and modal operation, which decided what moved:
+
+| Operation | Shared or presentation | Why |
+|---|---|---|
+| The profile store, the roster, the seated profile, last-played | shared | the campaign's persisted state; every presentation seats the same player |
+| CONTINUE (create or continue) with its four refusals, DELETE PLAYER | shared | the original's own rules and the store's write points |
+| The name rule (letters, digits, spaces, 32) | shared | it is what keeps a name a legal directory; `CampaignTextEntry` forwards to it |
+| The mission named (`MissionSeq`), its `cm_sequence` entry, the wingman flag, Next Mission, campaign complete | shared | the position the screens after the cabin are about |
+| The briefing's state, objectives, narration wav and the reveal's progress | shared | authored campaign data both presentations run identically; narration follows it |
+| The reveal's clock, the per-frame repaint, when to begin and end narration | presentation | pacing and cue timing, `TickCampaignAudio` |
+| CHANGE PLANE's two gates, the seated pair's same-plane rule | shared | `FLIGHTCHECK.SCRIPT`'s and `PLANESELECTION.SCRIPT`'s own rules |
+| ACCEPT LOADOUT, ACCEPT SELECTIONS, EXPORT | shared | the writes into the profile and build stores |
+| The ammo and plane screens' working copies before ACCEPT | presentation | editing state of one screen; the commit rule is shared |
+| The sortie's field (guests, their copies, the walk's position and lock) | shared | it feeds the launch's seats and the no-duplicate rule |
+| The intents between screens (`AmmoSlot`, `PlaneSlot`, `ScrapbookEntry`, `ZoomTarget`) | shared | what the next screen is about, whichever graph reaches it |
+| The wallet the hangar prices against | shared | the seated profile as `IHangarWallet` |
+| FLY MISSION's save and the `CampaignMissionExit` | shared | the one typed launch handoff (Decision 22) |
+| The screen stack, `GoTo` returning to an open screen, Back popping, Cancel | presentation | Built-in's graph; Decision 4 lets Original navigate differently |
+| The cursor, its settle over unfocusable rows, the opening row | presentation | choreography |
+| The refusal line (`Message`), the modal and its one-answer dismissal | presentation | how Built-in shows a refusal; the words come from the feature |
+| The pending job (`CampaignExit.OpenHangar`, `FlyMission`) | presentation | a handoff inside Built-in's shell |
+| `Pictures`, `Strokes`, `Fills`, `Captions`, `Notes`, `Button`, `Combo`, art | presentation | board composition, Decisions 16 and 18 |
+
+The landed shape: `CampaignFeature` (`CSVM/src/UI/Menu/CampaignFeature.cs`, engine-free, in the
+host's feature set) owns `Open(store, planes, stock, dataRoot)`, `Roster`/`RefreshRoster`,
+`LastPlayed`, `Profile`, `ContinuePlayer`, `DeletePlayer`, `SelectProfile`, `SeatProfile`,
+`Resume`, `MissionSeq`/`SetMission`, `Mission`, `MissionHasWingman`, `NextMissionSeq`,
+`CampaignComplete`, `ChangePlaneAllowed`, `Briefing` (a `CampaignBriefing`, the loaded state and
+reveal with `Advance`/`Restart`), `AmmoSlot`, `PlaneSlot`, `ScrapbookEntry`/`EnterScrapbook`,
+`ZoomTarget`, `Field` (the `CampaignFlightField`, moved into `CSVM.UI.Menu`), `AmmoTarget`,
+`CommitLoadout`, `SeatedPairClashes`, `CommitPlanes`, `ExportPlane`, `Wallet()` (a
+`CampaignWallet`, the former `HangarCampaignContext` moved into `CSVM.UI.Menu`), `BuildExit`,
+`CapturePath`, `ValidName`/`AcceptsNameChar` and `Discard`. `BriefingScript.cs` and
+`BriefingObjectives.cs` moved into `CSVM.UI.Menu` with it. One feature rather than a family: the
+operations share one seated profile and one mission position, and splitting them would put the
+same `Profile` behind two doors. `CampaignFlow` keeps its whole surface and its stack, constructed
+by `LaunchMenu` over the host's one feature (`CampaignFlow(feature)`) and by its old constructor
+over a private one for the unit tests and `campaign-loop`; every property a page reads forwards to
+the feature and every write goes through it. `LaunchMenu` gets the feature from the host,
+`NewCampaignFlow` opens it on the store, `OpenCampaignHangar` opens `HangarFlow` over
+`Feature.Wallet()`, `FlyCampaignMission` leaves through `Feature.BuildExit`, and every door out
+discards the feature with the flow. Nothing about the boards changed: `ICampaignPage`,
+`CampaignBoards`, `ComposedBoard` and the pages' composition are as they were, reading their
+content from the feature through the flow.
+
+Checked: `dotnet build CSVM/CSVM.sln`, the whole `dotnet test` (2989, of which 22 are
+`CampaignFeatureTests` pinning the store's write points as file text over a scratch directory:
+what a created player writes and where (the profile file as `Serialize(NewProfile)`, the
+last-played record), what the refusals leave untouched, an existing player continuing without a
+rewrite, the full roster, what a delete removes and clears, what ACCEPT LOADOUT writes for the
+seated pilot and does not write for a guest, what ACCEPT SELECTIONS writes with and without a
+wingman, the seated pair rule, what EXPORT writes into the build store alone and refuses, what a
+purchase and a sale write through the wallet, what FLY MISSION saves and carries per seat, what a
+flown mission's record reads back as through the return's `SeatProfile`, `Resume`, the CHANGE PLANE
+gates, the scrapbook entry count and capture path, absent data, `Discard` touching no file, a second
+`Open`; `CampaignWalletTests` renamed from `HangarCampaignContextTests` with the type;
+`MenuNamespaceDependencyTests` green with the feature, the wallet, the field and the briefing types
+in the shared namespace), then
+`.\RunTests.ps1 -Suite "menu-campaign-journey,menu-free-flight-journey,menu-player-setup-journey,menu-player-setup-seats,menu-instant-action-journey,menu-original-instant-action,menu-hangar-journey,menu-original-hangar,menu-host-tracer,menu-original-tracer,menu-zone-layout,menu-screenshot-key,campaign-briefing-repaint,campaign-hangar-handover" -SkipUnits -SkipGoldens`
+(14 suites, 14 passed, engine errors clean) and `.\RunTests.ps1 -Filter "campaign" -SkipUnits -SkipGoldens`
+(43 suites, every `campaign-*` suite with `campaign-loop` and `menu-campaign-journey` among them,
+43 passed, engine errors clean),
+`.\CheckCommentCaps.ps1 -Summary` and `.\CheckEncoding.ps1`. Shots: the twelve scratch-profile
+aids `campaign-empty`, `campaign-roster`, `campaign-entry`, `campaign-cabin`, `campaign-previous`,
+`campaign-scrapbook`, `campaign-briefing:24`, `campaign-flightcheck`,
+`campaign-guestcheck:2 --debug-join=3`, `campaign-ammo`, `campaign-planeselection` and
+`campaign-hangar`, each one Godot run on the hidden desktop with `--resolution 1280x720` ahead of
+the `--` and `--menu=<aid> --screenshot=<abs path>`, from this worktree built at the plan branch's
+tip before any edit into `.scratch\d31-before\` and from the extracted tree into
+`.scratch\d31-after\`, compared by decoded 32bpp pixels (SHA-256 over the rows): all twelve
+identical, zero differing pixels. `docs/verification.md` rules that bit: **METHOD-6** (which
+binary each side used is named: this tree at the plan tip before the first edit against this tree
+after the extraction), **METHOD-3** (the aids read a scratch store emptied on every open, so no
+baseline moved; `campaign-hangar` lists the profile's own planes, not `user://Planes/`), **SHOT-6**
+(decoded pixels, never PNG bytes), **SHOT-9**/**SHOT-10** (windowed probes on the hidden desktop,
+absolute paths, every file checked present), **SHOT-32** (the briefing aid advances the reveal in
+1/60 s slices to 24 s before it draws, so its shot is deterministic and proves that frame alone;
+the reveal running and repainting is pinned by `campaign-briefing-repaint` and the 600 driven frames
+in `menu-campaign-journey`; the entry aid's caret is a fixed glyph, not a blink, so it needs no
+mask), **SRC-4** (the aid's cabin-not-roster finding is recorded once, here, and not restated in
+the inventory).
+
+What this did not prove: the harness runs a suite before any session builds, so the
+`CampaignMissionExit` is verified at the host's sink and the debrief return is entered by calling
+`OpenCampaignScrapbook` with a result recorded the way the director records one; the built world
+between them is `campaign-loop`'s, which walks `CampaignFlow` over the old constructor and flies
+the mission, and the real cabin-to-scrapbook return is owed at the controls: `.\RunDev.ps1`,
+Campaign, a player, Next Mission, GO TO FLIGHT CHECK, FLY MISSION, the mission's end, and the
+scrapbook must open on it with RETURN TO CABIN focused.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not replace one presentation-shaped `ICampaignPage` with a universal screen schema.
 Not every current stack operation necessarily belongs in shared feature state; classify it first.
@@ -1045,6 +1165,13 @@ boards, and `ComposedBoardView` already resolves extracted art and nearest-sampl
 **Approach.** Map A2’s decoded layout into the existing composition primitives or a presentation-local
 successor. Keep dynamic profiles, mission rows, aircraft, ammo and scrapbook content supplied by D31
 features. Compare each screen before replacing its hardcoded fixed description.
+
+Handoff from D31: the dynamic content a migrated board still draws is read off `CampaignFlow`'s
+forwarding members over `CampaignFeature` (`Profile`, `Roster`, `Mission`, `Briefing`, `Field`,
+`AmmoTarget`, the results through `CampaignProgression`), so a page rebuilt over a decoded layout
+changes only its `Pictures`/`Captions`/`Fills`/`Button` composition and no read; the twelve
+scratch-profile aids and `menu-campaign-journey` are the regression baseline, with
+`--menu=campaign-roster` known to land on the cabin.
 
 **Model recommendation.** high — mechanical breadth under a strict pixel-regression constraint.
 
@@ -1069,6 +1196,19 @@ input (`CSVM/src/UI/LaunchMenu.cs:1880-2105`).
 hit-testing, rollover, transitions and cue requests in Original. Move resource lookup/playback and
 session handoff into the shared audio service. Resolve A1 capture gaps before implementing affected
 behaviour.
+
+Handoff from D31: an Original campaign is another `OriginalScreen` family over
+`host.Features.Get<CampaignFeature>()`, opened with `Open(CampaignProfileStore.UserProfiles(),
+CustomPlaneStore.UserPlanes(), StockLoadouts.Load(), dataRoot)` on the cabin door and discarded on
+every way out; the roster is `ContinuePlayer`/`DeletePlayer` with their refusals, the cabin's
+PLANE CONSTRUCTION is `HangarFeature.Open(store, campaign.Wallet())` through `OriginalShell.OpenHangar`
+with the cabin as the hangar's return screen, the briefing reads `Briefing.State`/`Reveal` and
+advances it on the presentation's own clock with `NarrationStarts` driving
+`MenuAudioService.BeginNarration(Briefing.NarrationWav)`, the flight check and ammo screens commit
+through `CommitLoadout`/`CommitPlanes`/`ExportPlane`, guests walk `Field`, and FLY MISSION is
+`host.Exit(campaign.BuildExit(padsPerSeat))`. `CabinReturn` and `DebriefReturn` map onto its
+screens through `SeatProfile(name)` and `EnterScrapbook(seq)`. The screen stack, the cursor, the
+refusal line and the modal are Built-in's `CampaignFlow`'s and are not to be reused.
 
 **Model recommendation.** high — timing, narration and persistent campaign paths cross several seams.
 

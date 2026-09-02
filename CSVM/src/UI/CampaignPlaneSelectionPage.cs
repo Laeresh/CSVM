@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Session;
+using CSVM.UI.Menu;
 
 namespace CSVM.UI;
 
@@ -449,8 +450,7 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     }
 
     // The script's permit test on 10015: the change is allowed when the two combos differ or when
-    // only one crew slot is active. ⚠ Compared by name, CampaignFlightField.KeyOf's rule for a
-    // profile aircraft, since two of them may share an airframe and flying that pair is legal.
+    // only one crew slot is active; the seated pair's rule is the feature's, compared by name.
     // ⚠ A guest's own answer comes from the field, never from a second copy of the rule: the field
     // compares a stock entry by airframe and a profile copy by name, and it is the only thing that
     // knows what the other humans on the sortie took.
@@ -461,46 +461,21 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
             return Flow.Field.Taken(Player, pick);
         }
 
-        if (ActiveSlots < 2)
-        {
-            return false;
-        }
-
-        var planes = (Flow.Profile ?? EmptyProfile).Planes;
-        int other = _combos[slot == 0 ? 1 : 0].Selected;
-        return pick >= 0 && pick < planes.Count && other >= 0 && other < planes.Count
-            && planes[pick].Name == planes[other].Name;
+        return ActiveSlots >= 2 && Flow.Feature.SeatedPairClashes(pick, _combos[slot == 0 ? 1 : 0].Selected);
     }
 
-    // EXPORT: the plane and the loadout the campaign fitted it with, into the build store the
-    // Instant Action and multiplayer pickers list, then the original's own words for it.
-    // ⚠ Refused for a stock record. It is named for its airframe, so a write under that name would
-    // land on any hangar plane sharing it (CampaignFlightField.IsStock, and why a guest's check
-    // draws no EXPORT at all).
+    // EXPORT: the plane and the loadout the campaign fitted it with, into the build store, which is
+    // the feature's write, then the original's own words for it. A guest gets no EXPORT row, and
+    // the feature refuses a stock record on its own.
     private bool Export(int slot)
     {
-        if (PlaneFor(slot) is not { } plane || Flow.Planes is not { } store || Guest != null
-            || Flow.Field.IsStock(plane) || string.IsNullOrWhiteSpace(plane.Name))
+        if (PlaneFor(slot) is not { } plane || Guest != null || !Flow.Feature.ExportPlane(plane))
         {
             return false;
         }
 
-        // ⚠ An existing record IS the build: export sets its loadout and leaves paint, armour and
-        // engine alone. A starter or a granted aircraft has none, so one is created over the
-        // flight check's own build-or-stock resolution rather than exporting an unarmed airframe.
-        var def = store.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane) ?? StockBuild(plane);
-        def.SetLoadout(plane.Ammo, plane.Ordnance);
-        store.Save(def);
         Flow.RaiseModal(ExportedText(AirframeTitle(plane.Airframe)));
         return true;
-    }
-
-    private CustomPlaneDef StockBuild(OwnedPlane plane)
-    {
-        var def = new CustomPlaneDef { Name = plane.Name, Airframe = plane.Airframe };
-        HangarFlow.LoadStockWeapons(
-            def, Flow.Stock?.ForModel(PlanePickerRoster.AirframeNode(plane.Airframe)));
-        return def;
     }
 
     // langui 702 with the airframe's title in its one placeholder. The fallback carries the same
@@ -514,8 +489,9 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
               "Instant Action missions.";
     }
 
-    // ACCEPT: the two picks into the profile, and the profile to disk. A guest's ACCEPT moves their
-    // own session-scoped pick instead and writes nothing at all, keeping the profile unchanged.
+    // ACCEPT: the two picks into the profile and the profile to disk, the feature's write. A guest's
+    // ACCEPT moves their own session-scoped pick instead and writes nothing at all, keeping the
+    // profile unchanged.
     private void Commit()
     {
         if (Guest != null)
@@ -530,13 +506,7 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
             return;
         }
 
-        profile.SelectedPlane = _combos[0].Selected;
-        if (HasWingman)
-        {
-            profile.WingmanPlane = _combos[1].Selected;
-        }
-
-        Flow.Store.Save(profile);
+        Flow.Feature.CommitPlanes(_combos[0].Selected, HasWingman ? _combos[1].Selected : null);
         _opened[0] = profile.SelectedPlane;
         _opened[1] = profile.WingmanPlane;
     }

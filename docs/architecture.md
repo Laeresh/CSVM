@@ -4183,16 +4183,21 @@ session's own director reads that one. `campaign-guestcheck[:player]` opens a gu
 C22's walk; it reads its argument as a player number rather than a cursor step count, and is applied
 inside `DebugJoin`, since the aid runs during `ShowMenu` and the guests it needs arrive right after.
 
-The flow's three exits are the shell's three jobs. `Cancelled` returns to the Mode screen.
-`OpenHangar` opens `HangarFlow` over a `HangarCampaignContext` on the flow's own profile and leaves
-the campaign flow standing; `CloseHangar` calls `Resume` on it, built or cancelled alike, so a
-purchase or a sale shows on the cabin the moment the hangar closes. `FlyMission` saves the profile,
-stops the score and hands the host a `CampaignLaunch`; with guests joined the flight check only asks
-for it on the LAST player's press, every earlier one advancing the walk instead (`C22`): the profile,
-the story position, and one entry per joined human — its stock node, its hangar build where it has
-one, and the fit `CampaignLoadout` derives from its picks, entry 0 the seated pilot's own and every
-entry after it a guest's `CampaignFlightField.Plane`. The wingman is deliberately not in it, since
-`CampaignDirector` resolves that binding from the same profile it opens anyway.
+The flow's three exits are the shell's three jobs. `Cancelled` returns to the Mode screen and
+discards the feature. `OpenHangar` opens `HangarFlow` over the feature's `CampaignWallet`
+(`CampaignFeature.Wallet()`, the seated profile as `IHangarWallet`) and leaves the campaign flow
+standing; `CloseHangar` calls `Resume` on it, built or cancelled alike, so a purchase or a sale
+shows on the cabin the moment the hangar closes. `FlyMission` hands the feature one pad list per
+joined slot and leaves through the `CampaignMissionExit` `CampaignFeature.BuildExit` returns, which
+saves the profile first; with guests joined the flight check only asks for it on the LAST player's
+press, every earlier one advancing the walk instead: the profile, the story position, and one seat
+per joined human, its stock node, its hangar build where it has one, and the fit `CampaignLoadout`
+derives from its picks, seat 0 the seated pilot's own and every seat after it a guest's
+`CampaignFlightField.Plane`. The wingman is deliberately not in it, since `CampaignDirector`
+resolves that binding from the same profile it opens anyway. Every door onto the campaign
+(`OpenCampaign`, `OpenCampaignCabin`, `OpenCampaignScrapbook`, the aids) opens the host's one
+feature on its store through `NewCampaignFlow`; `CampaignProfiles` is the store the door and the two
+flight returns open, `user://Profiles` unless a driven suite hands in a scratch store first.
 
 Two things the campaign pages cannot own live here, because a page holds no Godot node and has no
 frame to advance on: the briefing's reveal clock (`page.Advance(delta)` once per frame while the
@@ -4277,8 +4282,8 @@ wallet-free door. `LaunchMenu` builds every flow over the host's one feature
 (`HangarFlow(feature, store, dataRoot, campaign, rng)`); the older constructor over a private
 feature serves the unit tests. Every property a page reads (`Scratch`, `Saved`, `Strings`,
 `DefaultsAsk`, `EditingName`, `AirframeChosen`, `Message`, `BuiltPlaneName`, the name helpers)
-forwards to the feature; `Campaign` stays the `HangarCampaignContext` the flow was opened with,
-which the feature sees as its `IHangarWallet`.
+forwards to the feature; `Campaign` stays the `CampaignWallet` the flow was opened with, which the
+feature sees as its `IHangarWallet`.
 Editing a saved plane starts from a copy made through the store's own canonical serialisation, so
 abandoning an edit cannot touch what is on disk. `DeleteSaved(name)` is the plane-selection
 screen's Sell Plane (`ps_b_sellp`) in a build with no economy: it removes the file, re-reads
@@ -4295,7 +4300,7 @@ carries at rest.
 
 **Ownership, not storage, is what separates the campaign from Instant Action.** Both doors write
 into the one `user://Planes/` build store; over a campaign flow `ReadRoster` puts
-`HangarCampaignContext.OwnedBuilds()` in `Saved` instead of the whole directory, resolving each
+`CampaignWallet.OwnedBuilds()` in `Saved` instead of the whole directory, resolving each
 ownership record to its stored build, else a reward aircraft's own award template, else the
 campaign's starting-Devastator spec (the two seeded starters are never hangar-built). The screen
 then reads as the original's INVENTORY: a Buy row over the wallet, one row per owned plane with its
@@ -4348,37 +4353,46 @@ id 1 (the stock Lvl-2 tier), and armour from the stock zone allocations (`ZrdrPa
 `CSVM.Tests/HangarPurchasePageTests.cs`.
 
 ## src/UI/CampaignFlow.cs
-The campaign's out-of-mission screens as one engine-free flow, the same split `HangarFlow` uses: a
-page owns its rows and its navigation, the launchscreen owns every Godot control. Screens are a
-stack, not a fixed order, because the campaign's navigation is a graph; `GoTo` returns to a screen
-already open instead of stacking a second copy, and backing out of the first one ends the flow with
+Built-in's campaign screen graph as one engine-free flow over the shared `CampaignFeature`
+(`src/UI/Menu/CampaignFeature.cs`), the same split `HangarFlow` makes over its feature: the feature
+owns the profile, the seated player, the mission named and every write into the store; a page owns
+its rows and its navigation; the launchscreen owns every Godot control. Screens are a stack, not a
+fixed order, because the campaign's navigation is a graph; `GoTo` returns to a screen already open
+instead of stacking a second copy, and backing out of the first one ends the flow with
 `CampaignExit.Cancelled`. `CampaignFlow.Registry` maps a `CampaignScreen` to its page factory and is
 the wave's whole mount point: a new screen is one page file plus one line there, with
 `CampaignPlaceholderPage` covering any screen not yet registered. A page may hand the shell a
 `HangarArt` (the same art column the hangar draws) and a `CampaignTextEntry`; while that field is
 armed, `CapturesText` tells the shell the keyboard is typing, and the flow's own cursor axes edit
-the name instead of the list. Profiles are created, read and deleted only through
-`CampaignProfileStore`, so a deletion takes the profile directory and never `user://Planes/`. That
-store also remembers which profile was last seated, by name; `ICampaignPage.OpeningRow` is where a
-screen says which row the cursor arrives on, and the roster page answers with that profile's row
+the name instead of the list. `LaunchMenu` builds every flow over the host's one feature
+(`CampaignFlow(feature)`, the feature already opened on a store); the older store-first constructor
+opens a private feature for the unit tests and the campaign loop suite. Every property a page reads
+(`Store`, `Profile`, `Roster`, `MissionSeq`, `Mission`, `AmmoSlot`, `PlaneSlot`, `ScrapbookEntry`,
+`ZoomTarget`, `Field`, `Planes`, `Stock`, `DataRoot`, `Strings`) forwards to the feature, and the
+pages write through the feature's operations (`ContinuePlayer`, `DeletePlayer`, `CommitLoadout`,
+`CommitPlanes`, `ExportPlane`), so the flow itself never touches the store. The stack, the cursor,
+`Message` and `Modal` stay here: they are how Built-in offers the operations, not the campaign's
+state. The roster page's `OpeningRow` answers with the last-seated profile's row
 (`docs/org/campaign-board.md`, "Which player the profile screen opens on").
 ⚠ A campaign page draws as a composed board, not as the shared `BoardMenu` idiom: it contributes its
 `Pictures`, `Strokes` and `Captions` and names which of the screen's authored buttons each row
 presses through `Button`, and `CampaignBoards` supplies the geometry. The `HangarArt` a page still
 hands over is the hangar's own art column and is unused on the campaign path.
-`CampaignFlow.Field` is the sortie's human field (below); `AmmoTarget` is the one place that turns
-"whose check is showing" plus `AmmoSlot` into the record the ammo screen edits, so neither page
-resolves an aircraft out of the profile by index any more.
+`CampaignFlow.Field` is the feature's sortie field (`src/UI/Menu/CampaignFlightField.cs`);
+`AmmoTarget` (the feature's) is the one place that turns "whose check is showing" plus `AmmoSlot`
+into the record the ammo screen edits, so neither page resolves an aircraft out of the profile by
+index any more.
 Off-engine coverage: `CSVM.Tests/CampaignFlowTests.cs`,
 `CSVM.Tests/CampaignRosterPageTests.cs`, `CSVM.Tests/CampaignTextEntryTests.cs`,
 `CSVM.Tests/CampaignCabinPageTests.cs`, `CSVM.Tests/CampaignPreviousMissionsPageTests.cs`,
 `CSVM.Tests/CampaignComboTests.cs`, `CSVM.Tests/CampaignModalTests.cs`,
 `CSVM.Tests/CampaignPlaneSelectionPageTests.cs`.
 
-## src/UI/CampaignFlightField.cs
-Owns a campaign sortie's humans: joined count, current flight check and each guest's pick. Player 0
-keeps the seated profile's aircraft; later players fly session-scoped stock records or copies, so
-guest edits cannot persist.
+## src/UI/Menu/CampaignFlightField.cs
+Owns a campaign sortie's humans as part of the shared `CampaignFeature` (`Feature.Field`, in
+`CSVM.UI.Menu` so either presentation walks the same field): joined count, current flight check
+and each guest's pick. Player 0 keeps the seated profile's aircraft; later players fly
+session-scoped stock records or copies, so guest edits cannot persist.
 `Advance`/`Retreat`/`Rewind` walk one reused `FlightCheck` page through the field. The seated
 player's first FLY MISSION latches `Locked` across that walk; only `Rewind` to the briefing clears
 it, while a physical disconnect may still shrink the committed field. The no-duplicate filter
@@ -6974,7 +6988,7 @@ fixtures, plus the install's own census under `[ExtractedDataFact]`.
 The hangar as a shared feature (`CSVM.UI.Menu`, engine-free, in the host's feature set), the
 rules and the store operations both presentations walk: one build at a time, opened by
 `Open(store, wallet)` over a `CustomPlaneStore` and an optional `IHangarWallet` (the interface
-`HangarCampaignContext` implements: funds, affordability, airframe availability, the special and
+`CampaignWallet` implements: funds, affordability, airframe availability, the special and
 sellable answers, the owned builds, purchase and sale), with `Saved` the roster a presentation
 offers (the store's planes wallet-free, the wallet's owned planes over one) and `IsNameTaken` over
 the whole build directory either way. The scratch plane has three starts: `StartNewPlane` (bare,
@@ -6999,6 +7013,64 @@ wallet, the roster and the messages, and touches nothing saved; the presentation
 through the feature set, and both presentations' cancels call it directly. Off-engine coverage:
 `CSVM.Tests/HangarFeatureTests.cs` with a fake wallet; the same rules reach Built-in through
 `HangarFlow` and Original through `OriginalHangar.cs`.
+
+## src/UI/Menu/CampaignFeature.cs
+The campaign as a shared feature (`CSVM.UI.Menu`, engine-free, in the host's feature set): the
+state and the operations both presentations read and write, with none of Built-in's board shell in
+it. `Open(store, planes, stock, dataRoot)` opens a campaign over a `CampaignProfileStore` (the
+build store, the stock table and the data root optional, each degrading to absent art, stock fits
+and no mission data), reading `Roster` once; `Discard` drops all of it and touches no file. The
+roster operations are the original's own: `ContinuePlayer(name)` seats the named player, creating
+a fresh `CampaignProfileDef.NewProfile` when it is new, and returns the refusal in the original's
+words (200 empty, 707 the character rule, 212 the length, 202 the 24-slot roster) or null;
+`DeletePlayer(name)` removes that profile's own directory and nothing else; `SelectProfile` and
+`SeatProfile(name)` (the flight returns' door, re-reading the store) record the last-played
+player; `Resume` re-reads the seated profile after the hangar. The mission the screens after the
+cabin are about is `MissionSeq` (`SetMission`), with `Mission` the `cm_sequence` entry read once
+per mission, `MissionHasWingman`, `NextMissionSeq`, `CampaignComplete` and `ChangePlaneAllowed`
+(the two `FLIGHTCHECK.SCRIPT` rules: barred on the two story-grant missions and under three
+planes). `Briefing` is the mission's `CampaignBriefing` (below), loaded once per mission and kept
+with its reveal's progress. The intents between screens are `AmmoSlot`, `PlaneSlot`,
+`ScrapbookEntry` (`EnterScrapbook(seq)` counts every opening so a re-entry lands on spread 1) and
+`ZoomTarget`; the writes are `CommitLoadout(plane, ammo, ordnance)` (saving the profile for the
+seated player's aircraft and nothing for a guest's session-scoped record), `CommitPlanes(pilot,
+wingman)`, `ExportPlane(plane)` (into the build store only, refusing a stock record) and
+`BuildExit(padsPerPlayer)`, which saves the profile and returns the `CampaignMissionExit` with one
+seat per joined human. `SeatedPairClashes` is the plane selection's permit test by name;
+`AmmoTarget` resolves whose record the ammo screen edits; `Wallet()` is the seated profile as a
+`CampaignWallet` for `HangarFeature.Open`; `Field` is the sortie's `CampaignFlightField`;
+`CapturePath(fileName)` resolves a scrapbook capture in the profile's directory; `ValidName` and
+`AcceptsNameChar` are the name rule `CampaignTextEntry` forwards to. Not here, by classification:
+the screen stack and its return-to-open-screen rule, the cursor and its settle over unfocusable
+rows, the refusal line, the modal, the ammo and plane screens' working copies before ACCEPT, and
+the briefing's clock, all of which are how a presentation offers the operations. Off-engine
+coverage: `CSVM.Tests/CampaignFeatureTests.cs` pins every write's file contents over a scratch
+store; the same operations reach Built-in through `CampaignFlow` and its pages
+(`menu-campaign-journey`).
+
+## src/UI/Menu/CampaignBriefing.cs
+One mission's briefing as the campaign feature holds it: the `cm_sequence` entry, the
+`BriefingState` the `brief_c<campaign><mission>` formula names, the narration wav its sound
+resolves to, the `BriefingObjectives` note, the `Messages` table the buttons are labelled from,
+and the running `BriefingReveal`, whose progress is feature state (`NarrationStarts`, `Complete`).
+`Load(dataRoot, seq)` reads everything once and degrades to a briefing with no state on a broken or
+absent extraction; `Advance(seconds)` and `Restart` are the presentation's, called on its own clock
+and on REPLAY BRIEFING, and when to draw stays the presentation's business. `BriefingScript.cs`
+(`BriefingDialog`, `BriefingState`, `BriefingStep`, `BriefingReveal`, `BriefingElement`) and
+`BriefingObjectives.cs` live beside it in `CSVM.UI.Menu`, since a reveal is authored campaign data
+both presentations run identically, not a drawing.
+
+## src/UI/Menu/CampaignWallet.cs
+The seated campaign profile as the hangar's `IHangarWallet`, built by `CampaignFeature.Wallet()`
+for the cabin's Plane Construction and null on every wallet-free door: `Funds`, `CanAfford`,
+`IsAirframeAvailable` (the stat table's threshold against `MissionsCompleted + 1`, the comparison
+`FUN_00410120` makes), `IsSpecial` and `CanSell` (a reward aircraft is refused, and at least two
+planes remain), `OwnedBuilds` (each ownership record resolved to its stored build, else the award
+template, else the campaign's starting-Devastator spec), `SellPrice` (the full build cost, no
+depreciation), `Purchase` (funds deducted, ownership recorded once per name, the profile saved) and
+`Sell` (funds credited, the record removed, the profile saved, the build deleted). Off-engine
+coverage: `CSVM.Tests/CampaignWalletTests.cs` through `HangarFlow`, and the purchase and sale
+writes in `CSVM.Tests/CampaignFeatureTests.cs`.
 
 ## src/UI/Menu/Original/OriginalShell.cs
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over

@@ -1,0 +1,543 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using CSVM.Flight;
+using CSVM.Mech3;
+using CSVM.Session;
+
+namespace CSVM.UI.Menu;
+
+/// <summary>
+/// The campaign as a shared feature: the profile store and the seated profile, the roster
+/// operations in the original's own words, the mission the screens after the cabin are about (the
+/// <c>cm_sequence</c> entry, the briefing and its reveal), the picks the flight check's screens
+/// write into the profile (ammunition and ordnance, the crew's aircraft, an export), the humans on
+/// the sortie, the wallet the hangar prices against, and the launch as one
+/// <see cref="CampaignMissionExit"/>. Engine-free and presentation-neutral: Built-in walks it
+/// through <c>CampaignFlow</c>'s screen stack and reads every board's content from here, and every
+/// write into the profile store goes through an operation below, so what a created player, a fit,
+/// a purchase, a sale, a launch and a deletion write is this class's contract. The screen stack,
+/// the cursor, the refusal line and the dialog over a screen are a presentation's own.
+/// </summary>
+public sealed class CampaignFeature : IMenuFeature
+{
+    /// <summary>The roster's capacity: the original's profile block is 24 slots
+    /// (docs/formats/campaign-screens.md), which is the number langui 202 states when it refuses a
+    /// new player.</summary>
+    public const int MaxProfiles = 24;
+
+    /// <summary>The longest player name: the original's roster is 24 slots of 33 bytes, a
+    /// 32-character name plus its terminator (docs/formats/campaign-screens.md).</summary>
+    public const int MaxNameLength = 32;
+
+    // The two missions on which FLIGHTCHECK.SCRIPT bars CHANGE PLANE outright, as 1-based ordinals
+    // (docs/formats/campaign-screens.md, "Plane change"): the two story-aircraft-grant missions.
+    private const int FirstGrantOrdinal = 13;
+    private const int SecondGrantOrdinal = 17;
+
+    private readonly Func<int, string> _nodeOfAirframe;
+
+    // The sequence entry read for MissionSeq, and which sequence that was; -2 is "not read for
+    // any", which no MissionSeq ever is, since the cabin's own default is -1.
+    private CampaignMission? _mission;
+    private int _missionSeq = -2;
+    private CampaignBriefing? _briefing;
+    private int _briefingSeq = -2;
+
+    /// <summary>A feature labelling from <paramref name="strings"/> and resolving an airframe id
+    /// to its planes.zbd node through <paramref name="nodeOfAirframe"/>, which is what a launch
+    /// seat carries.</summary>
+    public CampaignFeature(UiStrings strings, Func<int, string> nodeOfAirframe)
+    {
+        Strings = strings ?? throw new ArgumentNullException(nameof(strings));
+        _nodeOfAirframe = nodeOfAirframe ?? throw new ArgumentNullException(nameof(nodeOfAirframe));
+        Field = new CampaignFlightField(this);
+        Roster = Array.Empty<string>();
+    }
+
+    /// <summary>The langui table every label here is read from.</summary>
+    public UiStrings Strings { get; }
+
+    /// <summary>Whether a campaign is open: a store was handed in by <see cref="Open"/> and
+    /// <see cref="Discard"/> has not ended it.</summary>
+    public bool IsOpen => Store != null;
+
+    /// <summary>The profile store the open campaign creates, reads and deletes through, or null
+    /// when none is open.</summary>
+    public CampaignProfileStore? Store { get; private set; }
+
+    /// <summary>The hangar's build store (<c>user://Planes/</c>), or null when the caller has none:
+    /// every owned plane then reads as its airframe's stock fit and nothing can be exported.</summary>
+    public CustomPlaneStore? Planes { get; private set; }
+
+    /// <summary>The stock-loadout table, or null when the caller has none.</summary>
+    public StockLoadouts? Stock { get; private set; }
+
+    /// <summary>The folder <c>extracted/</c> sits in, or null when the caller has none; the
+    /// mission entry and the briefing then read as absent.</summary>
+    public string? DataRoot { get; private set; }
+
+    /// <summary>Every stored profile's name, sorted, re-read by <see cref="RefreshRoster"/> and by
+    /// every operation that creates or deletes one.</summary>
+    public IReadOnlyList<string> Roster { get; private set; }
+
+    /// <summary>The name of the profile last seated, or "" when the store has never recorded one
+    /// or none is open. A name whose profile is gone still reads back; resolve it against
+    /// <see cref="Roster"/>.</summary>
+    public string LastPlayed => Store?.LastPlayed ?? string.Empty;
+
+    /// <summary>The profile the player seated, or null while nobody is.</summary>
+    public CampaignProfileDef? Profile { get; private set; }
+
+    /// <summary>The <c>cm_sequence.zrd</c> index (0..23) of the mission the briefing, flight check
+    /// and ammo screens are about; -1 until the cabin names one.</summary>
+    public int MissionSeq { get; private set; } = -1;
+
+    /// <summary>Whose aircraft the ammo screen edits: 0 the pilot's, 1 the wingman's.</summary>
+    public int AmmoSlot { get; private set; }
+
+    /// <summary>Which crew slot the plane selection opens focused on, 0 the pilot's and 1 the
+    /// wingman's, the original's <c>@globals@ZQ</c> of -1 and -2.</summary>
+    public int PlaneSlot { get; private set; }
+
+    /// <summary>How many times the book has been opened through <see cref="EnterScrapbook"/>. A
+    /// presentation watches this rather than <see cref="MissionSeq"/> alone, so reopening the book
+    /// on the mission it is already browsing still lands on that mission's spread 1, which is what
+    /// the original's <c>uiData</c> 2405 mode 1 does however the book is reached.</summary>
+    public int ScrapbookEntry { get; private set; }
+
+    /// <summary>The scrap a zoom view is open on: the <c>SCRAPBOOK.CSV</c> mission slot, spread and
+    /// item. Null until <see cref="SetScrapbookZoom"/> is called.</summary>
+    public (int Mission, int Spread, int Item)? ZoomTarget { get; private set; }
+
+    /// <summary>The humans flying this sortie: how many joined, whose flight check is showing, and
+    /// what each guest picked. Solo until a presentation says otherwise.</summary>
+    public CampaignFlightField Field { get; }
+
+    /// <summary>The <c>cm_sequence.zrd</c> entry <see cref="MissionSeq"/> names, or null when the
+    /// data root, the file or the entry is unavailable. Read once per mission, and here because more
+    /// than one screen asks: the flight check and the plane selection both draw a wingman only when
+    /// this mission carries one.</summary>
+    public CampaignMission? Mission
+    {
+        get
+        {
+            if (_missionSeq != MissionSeq)
+            {
+                _missionSeq = MissionSeq;
+                _mission = ReadMission();
+            }
+
+            return _mission;
+        }
+    }
+
+    /// <summary>Whether this mission flies a wingman, its <c>cm_sequence</c> flag.</summary>
+    public bool MissionHasWingman => Mission?.Wingman ?? false;
+
+    /// <summary>The briefing for <see cref="MissionSeq"/>, loaded on first sight of each mission
+    /// and kept with its reveal's progress, or null when the data root or the entry is
+    /// unavailable. A presentation advances it on its own clock.</summary>
+    public CampaignBriefing? Briefing
+    {
+        get
+        {
+            if (_briefingSeq != MissionSeq)
+            {
+                _briefingSeq = MissionSeq;
+                _briefing = DataRoot is { } root && MissionSeq >= 0 ? CampaignBriefing.Load(root, MissionSeq) : null;
+            }
+
+            return _briefing;
+        }
+    }
+
+    /// <summary>The story position Next Mission resolves to for the seated profile, or 0 with
+    /// nobody seated.</summary>
+    public int NextMissionSeq => Profile is { } profile ? CampaignProgression.NextMissionSeq(profile) : 0;
+
+    /// <summary>Whether the seated profile has finished the campaign, which disables Next Mission.</summary>
+    public bool CampaignComplete => Profile is { } profile && CampaignProgression.Complete(profile);
+
+    /// <summary>Whether the flight check may offer CHANGE PLANE for <see cref="MissionSeq"/>: the
+    /// two rules <c>FLIGHTCHECK.SCRIPT</c> applies, barred outright on the two story-aircraft-grant
+    /// missions and while the profile owns fewer than three planes.</summary>
+    public bool ChangePlaneAllowed
+    {
+        get
+        {
+            int ordinal = MissionSeq + 1;
+            return ordinal != FirstGrantOrdinal && ordinal != SecondGrantOrdinal
+                && (Profile?.Planes.Count ?? 0) >= 3;
+        }
+    }
+
+    /// <summary>Whether one character may be typed into a player name: the original's
+    /// alphanumeric-and-space rule (langui 707). Restricting the alphabet this far is also what
+    /// keeps <see cref="CampaignProfileStore.DirFor"/>'s sanitisation from ever having anything to
+    /// change, since a profile name becomes a directory name.</summary>
+    public static bool AcceptsNameChar(char c) => char.IsAsciiLetterOrDigit(c) || c == ' ';
+
+    /// <summary>Whether a whole name is one a player may carry, empty names excluded.</summary>
+    public static bool ValidName(string text)
+    {
+        if (text.Length == 0 || text.Length > MaxNameLength)
+        {
+            return false;
+        }
+
+        foreach (char c in text)
+        {
+            if (!AcceptsNameChar(c))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Opens a campaign over <paramref name="store"/>, reading its roster once, with
+    /// nobody seated and no mission named. Opening again drops whatever campaign was open, as
+    /// leaving a presentation for another door does; nothing saved is touched.</summary>
+    public void Open(CampaignProfileStore store, CustomPlaneStore? planes = null, StockLoadouts? stock = null, string? dataRoot = null)
+    {
+        Discard();
+        Store = store ?? throw new ArgumentNullException(nameof(store));
+        Planes = planes;
+        Stock = stock;
+        DataRoot = dataRoot;
+        Roster = store.List();
+    }
+
+    /// <summary>Re-reads the store's roster.</summary>
+    public void RefreshRoster() => Roster = Store?.List() ?? Array.Empty<string>();
+
+    /// <summary>Whether the store holds a profile of that name.</summary>
+    public bool HasPlayer(string name) => Store?.Load(name) != null;
+
+    /// <summary>CONTINUE: seats the named player, creating the profile when it is new, the
+    /// original's own commit path from the button, from Enter in the name box and from a
+    /// double-click on a roster row alike. Returns the refusal in the original's words (an empty
+    /// name, langui 200; a name outside the character rule, 707; one over the length, 212; a full
+    /// roster, 202), or null once the player is seated. Nothing is written for a refusal.</summary>
+    public string? ContinuePlayer(string name)
+    {
+        if (Store is not { } store)
+        {
+            return "No campaign is open.";
+        }
+
+        name = name.Trim();
+        if (name.Length == 0)
+        {
+            return Strings.Text(200, "You must enter a player name.");
+        }
+
+        if (!ValidName(name))
+        {
+            return NameRefusal(name);
+        }
+
+        var profile = store.Load(name);
+        if (profile == null)
+        {
+            if (Roster.Count >= MaxProfiles)
+            {
+                string full = Strings.Format(202, MaxProfiles);
+                return full.Length > 0
+                    ? full
+                    : $"Crimson Skies supports only {MaxProfiles} active players. " +
+                      "To add a new player, delete a player from the list.";
+            }
+
+            profile = CampaignProfileDef.NewProfile(name);
+            store.Save(profile);
+            RefreshRoster();
+        }
+
+        SelectProfile(profile);
+        return null;
+    }
+
+    /// <summary>DELETE PLAYER's confirmed answer: removes the named profile's own directory and
+    /// nothing else, so the planes it referenced by name are still in the hangar afterwards, and
+    /// re-reads the roster. False when the store holds no such profile. A seated profile of that
+    /// name stays seated: the roster screen is where this is pressed, and the next seat replaces
+    /// it.</summary>
+    public bool DeletePlayer(string name)
+    {
+        if (Store is not { } store)
+        {
+            return false;
+        }
+
+        bool gone = store.Delete(name.Trim());
+        RefreshRoster();
+        return gone;
+    }
+
+    /// <summary>Seats a loaded profile, recording it as the store's last-played player, the way
+    /// every door onto the cabin does.</summary>
+    public void SelectProfile(CampaignProfileDef profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        Profile = profile;
+        Store?.RecordLastPlayed(profile.Name);
+    }
+
+    /// <summary>Seats the named profile re-read from the store, the two flight returns' door: what
+    /// the mission just recorded is what the cabin then shows. False, with nobody seated, when the
+    /// profile cannot be read.</summary>
+    public bool SeatProfile(string name)
+    {
+        if (Store?.Load(name) is not { } profile)
+        {
+            return false;
+        }
+
+        SelectProfile(profile);
+        return true;
+    }
+
+    /// <summary>Back from a job a presentation ran on the campaign's behalf, the hangar: the
+    /// seated profile is re-read so a purchase or a sale shows on the cabin.</summary>
+    public void Resume()
+    {
+        if (Profile != null && Store?.Load(Profile.Name) is { } fresh)
+        {
+            Profile = fresh;
+        }
+    }
+
+    /// <summary>Names the mission the screens after the cabin are about.</summary>
+    public void SetMission(int seq) => MissionSeq = seq;
+
+    /// <summary>Points the ammo screen at the pilot's (0) or the wingman's (1) aircraft.</summary>
+    public void SetAmmoSlot(int slot) => AmmoSlot = slot;
+
+    /// <summary>Which crew slot's CHANGE PLANE press opened the plane selection.</summary>
+    public void SetPlaneSlot(int slot) => PlaneSlot = slot;
+
+    /// <summary>Names the scrap a zoom view opens on.</summary>
+    public void SetScrapbookZoom(int mission, int spread, int item) => ZoomTarget = (mission, spread, item);
+
+    /// <summary>Opens the book on a mission's first spread, the original's <c>uiData</c> 2405 mode
+    /// 1: the mission-end entry, the table of contents' VIEW SELECTED and both CURRENT MISSION
+    /// bookmarks all take this door.</summary>
+    public void EnterScrapbook(int seq)
+    {
+        SetMission(seq);
+        ScrapbookEntry++;
+    }
+
+    /// <summary>Where a scrapbook capture's file is for the seated profile, or null when there is
+    /// none on disk. A <c>Snap_</c> row resolves against the profile's own directory rather than
+    /// the asset library (<c>docs/formats/campaign-screens.md</c>, "The scrapbook").</summary>
+    public string? CapturePath(string fileName)
+    {
+        if (Profile is not { } profile || Store is not { } store)
+        {
+            return null;
+        }
+
+        string path = Path.Combine(store.DirFor(profile.Name), fileName);
+        return File.Exists(path) ? path : null;
+    }
+
+    /// <summary>The record the ammo screen is editing: a guest's own session-scoped aircraft while
+    /// their flight check is the screen showing, else the seated profile's plane for
+    /// <see cref="AmmoSlot"/>. Null when there is nothing to fit.</summary>
+    public OwnedPlane? AmmoTarget()
+    {
+        if (Field.Current > 0)
+        {
+            return Field.Plane(Field.Current);
+        }
+
+        if (Profile is not { } profile)
+        {
+            return null;
+        }
+
+        int at = AmmoSlot == 0 ? profile.SelectedPlane : profile.WingmanPlane;
+        return at >= 0 && at < profile.Planes.Count ? profile.Planes[at] : null;
+    }
+
+    /// <summary>ACCEPT LOADOUT: writes the picks into the record and, for the seated player's own
+    /// aircraft, saves the profile, the original's <c>uiData</c> 2034 commit path. A guest's record
+    /// is session-scoped and belongs to no profile, so their ACCEPT writes the record and saves
+    /// nothing.</summary>
+    public void CommitLoadout(OwnedPlane plane, int[] ammo, int[] ordnance)
+    {
+        ArgumentNullException.ThrowIfNull(plane);
+        plane.Ammo = ammo;
+        plane.Ordnance = ordnance;
+        if (Field.Current == 0 && Profile is { } profile)
+        {
+            Store?.Save(profile);
+        }
+    }
+
+    /// <summary>The script's permit test on the seated pair (<c>PLANESELECTION.SCRIPT</c>'s 10015):
+    /// whether putting the profile's plane <paramref name="pick"/> in one crew slot clashes with
+    /// plane <paramref name="other"/> in the other, compared by name, since two owned planes may
+    /// share an airframe and flying that pair is legal.</summary>
+    public bool SeatedPairClashes(int pick, int other)
+    {
+        var planes = Profile?.Planes;
+        return planes != null && pick >= 0 && pick < planes.Count && other >= 0 && other < planes.Count
+            && planes[pick].Name == planes[other].Name;
+    }
+
+    /// <summary>ACCEPT SELECTIONS on the seated player's check: the pilot's pick and, when the
+    /// mission carries one, the wingman's into the profile, and the profile to disk. Nothing is
+    /// written with nobody seated or nothing owned.</summary>
+    public void CommitPlanes(int pilot, int? wingman)
+    {
+        if (Profile is not { } profile || profile.Planes.Count == 0)
+        {
+            return;
+        }
+
+        profile.SelectedPlane = pilot;
+        if (wingman is { } chosen)
+        {
+            profile.WingmanPlane = chosen;
+        }
+
+        Store?.Save(profile);
+    }
+
+    /// <summary>EXPORT: the plane and the loadout the campaign fitted it with, into the build store
+    /// the Instant Action and multiplayer pickers list. An existing record is the build and keeps
+    /// its paint, armour and engine; a starter or a granted aircraft has none, so one is created
+    /// over the flight check's own build-or-stock resolution. False, with nothing written, for a
+    /// stock record (named for its airframe, so a write under that name would land on any hangar
+    /// plane sharing it), a nameless plane, or no build store.</summary>
+    public bool ExportPlane(OwnedPlane plane)
+    {
+        ArgumentNullException.ThrowIfNull(plane);
+        if (Planes is not { } store || Field.IsStock(plane) || string.IsNullOrWhiteSpace(plane.Name))
+        {
+            return false;
+        }
+
+        var def = store.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane) ?? StockBuild(plane);
+        def.SetLoadout(plane.Ammo, plane.Ordnance);
+        store.Save(def);
+        return true;
+    }
+
+    /// <summary>The seated profile as the hangar's wallet, for <see cref="HangarFeature.Open"/>:
+    /// null with nobody seated or no build store to own planes in.</summary>
+    public CampaignWallet? Wallet() =>
+        Profile is { } profile && Store is { } store && Planes is { } planes
+            ? new CampaignWallet(store, profile, planes)
+            : null;
+
+    /// <summary>FLY MISSION: saves the profile as it stands and builds the launch for the seated
+    /// profile at <see cref="MissionSeq"/>, one seat per joined human in player order with the
+    /// devices <paramref name="padsPerPlayer"/> names for each (the join flow's own binding, which
+    /// the consumer cannot re-derive): the aircraft's stock node, the ammunition and ordnance the
+    /// ammo screen stored, and its hangar build where it has one (a reward aircraft with no file
+    /// falls back to its own award template). Null with nobody seated.</summary>
+    public CampaignMissionExit? BuildExit(IReadOnlyList<IReadOnlyList<int>> padsPerPlayer)
+    {
+        ArgumentNullException.ThrowIfNull(padsPerPlayer);
+        if (Profile is not { } profile)
+        {
+            return null;
+        }
+
+        Store?.Save(profile);
+        var seats = new List<MenuSeatChoice>(padsPerPlayer.Count);
+        for (int player = 0; player < padsPerPlayer.Count; player++)
+        {
+            var plane = Field.Plane(player) ?? new OwnedPlane();
+            var custom = Planes?.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane);
+            seats.Add(new MenuSeatChoice(
+                _nodeOfAirframe(plane.Airframe),
+                padsPerPlayer[player],
+                CampaignLoadout.For(plane, Stock),
+                custom));
+        }
+
+        return new CampaignMissionExit(profile.Name, MissionSeq, seats);
+    }
+
+    /// <summary>Drops the open campaign: the store, the seated profile, the mission and its
+    /// briefing, the sortie's field and every intent. Called on a presentation switch and by every
+    /// door out of the campaign; nothing saved is touched.</summary>
+    public void Discard()
+    {
+        Store = null;
+        Planes = null;
+        Stock = null;
+        DataRoot = null;
+        Roster = Array.Empty<string>();
+        Profile = null;
+        MissionSeq = -1;
+        AmmoSlot = 0;
+        PlaneSlot = 0;
+        ScrapbookEntry = 0;
+        ZoomTarget = null;
+        _mission = null;
+        _missionSeq = -2;
+        _briefing = null;
+        _briefingSeq = -2;
+        Field.SetPlayers(1);
+        Field.Rewind();
+    }
+
+    // Which refusal a rejected name earns: too long has its own string (langui 212), anything else
+    // is the character rule (707). Both are the original's, and both fall back to their own words.
+    private string NameRefusal(string name)
+    {
+        if (name.Length <= MaxNameLength)
+        {
+            return Strings.Text(707,
+                "Your player name is limited to alphabetic and numeric characters and spaces.");
+        }
+
+        string limit = Strings.Format(212, MaxNameLength);
+        return limit.Length > 0
+            ? limit
+            : $"Your player name is limited to {MaxNameLength} characters.";
+    }
+
+    private CustomPlaneDef StockBuild(OwnedPlane plane)
+    {
+        var def = new CustomPlaneDef { Name = plane.Name, Airframe = plane.Airframe };
+        HangarFeature.LoadStockWeapons(def, Stock?.ForModel(_nodeOfAirframe(plane.Airframe)));
+        return def;
+    }
+
+    // The sequence entry for MissionSeq. Absent data, an unreadable file or a sequence with no such
+    // entry all read as null: a screen then draws no wingman rather than refusing to open.
+    private CampaignMission? ReadMission()
+    {
+        if (DataRoot is not { } root)
+        {
+            return null;
+        }
+
+        try
+        {
+            string zrdrPath = SessionPaths.PreferUnzipped(Path.Combine(root, "extracted", "zrdr.zip"));
+            foreach (var mission in CampaignSequence.Load(zrdrPath))
+            {
+                if (mission.Seq == MissionSeq)
+                {
+                    return mission;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException)
+        {
+            return null;
+        }
+
+        return null;
+    }
+}

@@ -488,21 +488,13 @@ public sealed class CampaignAmmoPage : CampaignPage
     // access: Cancel, Back and a just-completed Accept all call this.
     private void Discard() => _plane = null;
 
-    // Writes the working copy into the plane's own record and saves the profile, the original's
-    // uiData 2034/gosCallback 12 commit path. ⚠ A guest's record is session-scoped and belongs to
-    // no profile, so their ACCEPT writes the record and saves nothing.
+    // Writes the working copy into the plane's own record through the feature, which saves the
+    // profile for the seated player's aircraft and nothing for a guest's session-scoped record.
     private void Commit()
     {
-        if (_plane == null)
+        if (_plane != null)
         {
-            return;
-        }
-
-        _plane.Ammo = _ammo;
-        _plane.Ordnance = _ordnance;
-        if (Flow.Field.Current == 0 && Flow.Profile is { } profile)
-        {
-            Flow.Store.Save(profile);
+            Flow.Feature.CommitLoadout(_plane, _ammo, _ordnance);
         }
     }
 

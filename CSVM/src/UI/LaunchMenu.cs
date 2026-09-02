@@ -202,6 +202,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The campaign's out-of-mission flow while it is open. One door (the Mode screen's Campaign
     // row); its own screens are the flow's pages, so a new one needs no change here.
     private CampaignFlow? _campaign;
+    // The shared campaign feature the flow walks: the host's one instance, opened over a store on
+    // every door and discarded with the flow, so a switch of presentation drops the same seated
+    // profile Original would have been reading.
+    private CampaignFeature _campaignFeature = null!;
     // A character reached a plane's name since the last frame, so the menu owes a redraw that no
     // polled input asked for.
     private bool _typed;
@@ -265,6 +269,12 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>The campaign flow while one is open, or null. Read-only: the flow's own screens
     /// are driven through it, not around it.</summary>
     public CampaignFlow? Campaign => _campaign;
+
+    /// <summary>The profile store the Campaign door and the two flight returns open the campaign
+    /// over: <c>user://Profiles</c> unless a driven suite hands in a scratch store first, so no
+    /// scripted journey can write a real player's progress. Resolved on every open rather than
+    /// cached, so a store set after the build applies to the next door press.</summary>
+    public CampaignProfileStore? CampaignProfiles { get; set; }
 
     /// <summary>The hangar flow while one is open, or null. Read-only, for the same reason
     /// <see cref="Campaign"/> is: its screens are driven through it, not around it.</summary>
@@ -385,6 +395,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             _ia = host.Features.Get<InstantActionFeature>(),
             _setup = host.Features.Get<PlayerSetupFeature>(),
             _hangarFeature = host.Features.Get<HangarFeature>(),
+            _campaignFeature = host.Features.Get<CampaignFeature>(),
             _player1 = player1,
             Layer = HudLayers.Board,
             Visible = false,
@@ -575,6 +586,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // Same rule for the campaign: its flow holds a selected profile and a screen stack, and
         // resuming one after a session would be continuing something nobody remembers starting.
         _campaign = null;
+        _campaignFeature.Discard();
         _aidGuest = 0;
         RefreshRoster();
         OpenHangarAid(startScreen);
@@ -1623,18 +1635,22 @@ public sealed partial class LaunchMenu : CanvasLayer
     // one door and one exit; every screen inside it is a page of the flow's own.
     private void OpenCampaign()
     {
-        _campaign = NewCampaignFlow(CampaignProfileStore.UserProfiles());
+        _campaign = NewCampaignFlow(CampaignProfiles ?? CampaignProfileStore.UserProfiles());
         _screen = Screen.Campaign;
         _error = "";
         PrimeJoins(); // joining opens here too, so a held Start must not fire on entry
     }
 
-    // A campaign flow over one store, with the two stores its later screens resolve fits through:
-    // the hangar's build store for a player-built aircraft, the stock table for everything else
-    // (the two profile-seeded starters and the reward aircraft, neither of which is hangar-built).
-    // Without them the flight check and ammo screens read every plane as fit-less.
-    private CampaignFlow NewCampaignFlow(CampaignProfileStore store) =>
-        new(store, HangarStrings(), _dataRoot, CustomPlaneStore.UserPlanes(), Fits);
+    // A campaign flow over the shared feature opened on one store, with the two stores its later
+    // screens resolve fits through: the hangar's build store for a player-built aircraft, the stock
+    // table for everything else (the two profile-seeded starters and the reward aircraft, neither
+    // of which is hangar-built). Without them the flight check and ammo screens read every plane
+    // as fit-less.
+    private CampaignFlow NewCampaignFlow(CampaignProfileStore store)
+    {
+        _campaignFeature.Open(store, CustomPlaneStore.UserPlanes(), Fits, _dataRoot);
+        return new CampaignFlow(_campaignFeature);
+    }
 
     // The campaign's screens sit behind a flow rather than behind the screen enum, so --menu=
     // reaches them the way it reaches the hangar's. Every scripted value runs over a scratch
@@ -1921,6 +1937,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 StopNarration();
                 _screen = Screen.Mode;
                 _campaign = null;
+                _campaignFeature.Discard();
                 _error = "";
                 return true;
         }
@@ -1942,74 +1959,55 @@ public sealed partial class LaunchMenu : CanvasLayer
         return input.Keyboard || input.Pads is { Length: > 0 } ? input : p1;
     }
 
-    // PLANE CONSTRUCTION: the hangar over the profile's own wallet (B13's HangarCampaignContext),
+    // PLANE CONSTRUCTION: the hangar over the profile's own wallet, the feature's CampaignWallet,
     // with the campaign flow left standing behind it. CloseHangar resumes the flow, which re-reads
     // the profile, so a purchase or a sale shows on the cabin the moment the hangar closes.
     private void OpenCampaignHangar(CampaignFlow flow)
     {
-        if (flow.Profile is not { } profile)
+        if (flow.Feature.Wallet() is not { } wallet || flow.Planes is not { } planes)
         {
             flow.Resume();
             return;
         }
 
-        var planes = CustomPlaneStore.UserPlanes();
         _hangarReturn = Screen.Campaign;
-        _hangar = new HangarFlow(_hangarFeature, planes, _dataRoot,
-            new HangarCampaignContext(flow.Store, profile, planes), Rng.NewSystemRandom(Rng.PlaneName));
+        _hangar = new HangarFlow(_hangarFeature, planes, _dataRoot, wallet, Rng.NewSystemRandom(Rng.PlaneName));
         _screen = Screen.Hangar;
         _error = "";
     }
 
-    // FLY MISSION: the profile is saved and the host is handed a campaign mission exit for this
-    // profile and story position. Every joined human's aircraft goes with it as a seat choice:
-    // its stock node, the pads it joined on, the ammunition and ordnance the ammo screen (or a
-    // guest's own flight check) stored, and its hangar build where it has one. The wingman's own
-    // binding is resolved by CampaignDirector, which has the profile open anyway.
+    // FLY MISSION: the feature saves the profile and builds the campaign mission exit for this
+    // profile and story position, one seat per joined human with the pads that seat joined on (the
+    // cabin's join flow is the only place that binding exists, and the consumer cannot re-derive it
+    // from the connected roster). The wingman's own binding is resolved by CampaignDirector, which
+    // has the profile open anyway.
     private void FlyCampaignMission(CampaignFlow flow)
     {
-        if (flow.Profile is not { } profile)
+        int players = _slots.Count;
+        var pads = new List<IReadOnlyList<int>>(players);
+        for (int player = 0; player < players; player++)
+        {
+            pads.Add(_slots[player].Input.Pads ?? Array.Empty<int>());
+        }
+
+        if (flow.Feature.BuildExit(pads) is not { } exit)
         {
             flow.Resume();
             return;
         }
 
-        flow.Store.Save(profile);
-        int players = _slots.Count;
-        var seats = new List<MenuSeatChoice>(players);
-        string seatedName = "";
-        for (int player = 0; player < players; player++)
-        {
-            var plane = flow.Field.Plane(player) ?? new OwnedPlane();
-            // A reward aircraft with no file in the build store falls back to its own award
-            // template: the grant writes one, and this is what carries a profile granted before it
-            // did. Per entry, since a guest may pick a granted aircraft from the seated profile too.
-            var custom = CustomPlaneStore.UserPlanes().Load(plane.Name)
-                         ?? CampaignProgression.BuildForOwned(plane);
-            // The pads are the device this seat joined on: the cabin's join flow is the only place
-            // that binding exists, and the consumer cannot re-derive it from the connected roster.
-            seats.Add(new MenuSeatChoice(
-                PlanePickerRoster.AirframeNode(plane.Airframe),
-                _slots[player].Input.Pads ?? Array.Empty<int>(),
-                CampaignLoadout.For(plane, Fits),
-                custom));
-            if (player == 0)
-            {
-                seatedName = plane.Name;
-            }
-        }
-
-        StopNarration();
-        _campaign = null;
-        _screen = Screen.Mode;
-        _error = "";
-        GD.Print($"launchscreen: campaign '{profile.Name}' flying mission seq {flow.MissionSeq} in \"{seatedName}\"");
+        GD.Print($"launchscreen: campaign '{exit.Profile}' flying mission seq {exit.MissionSeq} in \"{flow.Field.Plane(0)?.Name}\"");
         for (int player = 1; player < players; player++)
         {
             GD.Print($"launchscreen: campaign P{player + 1} flying \"{flow.Field.Plane(player)?.Name}\"");
         }
 
-        _host.Exit(new CampaignMissionExit(profile.Name, flow.MissionSeq, seats));
+        StopNarration();
+        _campaign = null;
+        _campaignFeature.Discard();
+        _screen = Screen.Mode;
+        _error = "";
+        _host.Exit(exit);
     }
 
     // The briefing's clock and its narration, the two things its page cannot own: a page holds no

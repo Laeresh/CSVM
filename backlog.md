@@ -2158,7 +2158,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   buy without limit.** *Evidence:* found while landing the campaign Plane Construction screen
   (`git log --grep=BL-634`). The original's profile holds 25 plane records and its free-slot finder
   reserves six of them (`FUN_004111f0`), refusing a purchase past that with langui 204
-  `IDS_PN_TOOMANYPLANES`. Nothing in the remake caps a campaign purchase: `HangarCampaignContext.Purchase`
+  `IDS_PN_TOOMANYPLANES`. Nothing in the remake caps a campaign purchase: `CampaignWallet.Purchase`
   debits and records with no count check, so a wealthy profile grows its inventory past anything the
   original would accept. *Fix shape:* the refusal belongs beside the two that already exist, the
   reward-aircraft one and the two-plane floor, so the shape is a third gate reading

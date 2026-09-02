@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using CSVM.Mech3;
 
-namespace CSVM.UI;
+namespace CSVM.UI.Menu;
 
 /// <summary>One line of the briefing's parchment note: the mission objective a flag pin stands
 /// for. The text carries its own numbering ("1) Find the main treasure site."), so a renderer

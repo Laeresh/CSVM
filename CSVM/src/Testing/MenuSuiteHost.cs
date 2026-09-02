@@ -8,7 +8,7 @@ using CSVM.UI.Menu.BuiltIn;
 namespace CSVM.Testing;
 
 /// <summary>The menu host a suite stands a <see cref="LaunchMenu"/> on: the Free Flight, Instant
-/// Action and player-setup features, one Built-in seat over a real poller (which reads nothing in
+/// Action, player-setup, hangar and campaign features, one Built-in seat over a real poller (which reads nothing in
 /// a scripted run), a silent audio service, and a sink that records every exit. The suites that
 /// drive the launchscreen directly build through <see cref="Menu"/>; the host tracers register
 /// the presentation itself.</summary>
@@ -36,8 +36,9 @@ internal static class MenuSuiteHost
         // The hangar reads its labels and stock defaults the way the launcher wires them: the langui
         // table, the stock fits on first need and the zrdr scope the data root carries.
         string zrdr = SessionPaths.PreferUnzipped(System.IO.Path.Combine(dataRoot, "extracted", "zrdr.zip"));
-        host.Features.Add(new HangarFeature(UiStrings.TryLoad(dataRoot) ?? UiStrings.Empty,
-            PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), zrdr));
+        var strings = UiStrings.TryLoad(dataRoot) ?? UiStrings.Empty;
+        host.Features.Add(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), zrdr));
+        host.Features.Add(new CampaignFeature(strings, PlanePickerRoster.AirframeNode));
     }
 
     /// <summary>A launchscreen over a bare host, for a suite that drives the screens and reads

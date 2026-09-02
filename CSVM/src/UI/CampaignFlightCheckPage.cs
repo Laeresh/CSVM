@@ -4,6 +4,7 @@ using System.IO;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.UI.Menu;
 
 namespace CSVM.UI;
 
@@ -347,11 +348,11 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         else
         {
             AddSlot(rows, PlaneAt(profile, profile.SelectedPlane), slot: 0, heading: "PILOT",
-                changePlane: ChangePlaneAllowed(profile));
+                changePlane: Flow.Feature.ChangePlaneAllowed);
             if (HasWingman)
             {
                 AddSlot(rows, PlaneAt(profile, profile.WingmanPlane), slot: 1, heading: "WINGMAN",
-                    changePlane: ChangePlaneAllowed(profile));
+                    changePlane: Flow.Feature.ChangePlaneAllowed);
             }
         }
 
@@ -391,15 +392,6 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     {
         string title = AirframeTitle(plane.Airframe);
         return plane.Name == title ? title : $"{plane.Name}   {title}";
-    }
-
-    // The two rules FLIGHTCHECK.SCRIPT applies, both traced (docs/formats/campaign-screens.md,
-    // "Plane change"): barred outright on the two story-aircraft-grant missions (ordinal 13 and
-    // 17, MissionSeq+1), and barred while the profile owns fewer than three planes.
-    private bool ChangePlaneAllowed(CampaignProfileDef profile)
-    {
-        int ordinal = Flow.MissionSeq + 1;
-        return ordinal != 13 && ordinal != 17 && profile.Planes.Count >= 3;
     }
 
     private string AirframeTitle(int airframe) => Flow.Strings.Text(3000 + airframe, $"Airframe {airframe}");

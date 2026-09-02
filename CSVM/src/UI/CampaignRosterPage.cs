@@ -1,5 +1,3 @@
-using CSVM.Session;
-
 namespace CSVM.UI;
 
 /// <summary>
@@ -9,7 +7,9 @@ namespace CSVM.UI;
 /// path from the button, from Enter in the box and from a double-click on a roster row alike. A
 /// roster row selects on the first confirm and continues on a second, the launchscreen's
 /// double-enter idiom, so no press does two things at once. Deleting is a separate confirmed stage
-/// and takes only the profile's own directory, never a hangar plane.
+/// and takes only the profile's own directory, never a hangar plane. The rules and the writes are
+/// the feature's (<c>CampaignFeature.ContinuePlayer</c>, <c>DeletePlayer</c>); this page owns the
+/// field, the stages and the cursor.
 /// </summary>
 public sealed class CampaignRosterPage : CampaignPage
 {
@@ -79,7 +79,7 @@ public sealed class CampaignRosterPage : CampaignPage
                 return _selected;
             }
 
-            string last = Flow.Store.LastPlayed;
+            string last = Flow.Feature.LastPlayed;
             return RosterRow(last) > 0 ? last : string.Empty;
         }
     }
@@ -254,61 +254,21 @@ public sealed class CampaignRosterPage : CampaignPage
         return 0;
     }
 
-    // The screen's one commit path: validate the name in the original's own words, create the
-    // profile when it is new, and open the cabin on it.
+    // The screen's one commit path: the feature validates the name in the original's own words,
+    // creates the profile when it is new and seats it; the page then opens the cabin on it.
     private bool Continue()
     {
         string name = NameInPlay;
-        if (name.Length == 0)
+        if (Flow.Feature.ContinuePlayer(name) is { } refusal)
         {
-            Flow.SetMessage(Flow.Strings.Text(200, "You must enter a player name."));
+            Flow.SetMessage(refusal);
             return true;
-        }
-
-        if (!CampaignTextEntry.Valid(name))
-        {
-            Flow.SetMessage(Refusal(name));
-            return true;
-        }
-
-        var profile = Flow.Store.Load(name);
-        if (profile == null)
-        {
-            if (Flow.Roster.Count >= CampaignFlow.MaxProfiles)
-            {
-                string full = Flow.Strings.Format(202, CampaignFlow.MaxProfiles);
-                Flow.SetMessage(full.Length > 0
-                    ? full
-                    : $"Crimson Skies supports only {CampaignFlow.MaxProfiles} active players. " +
-                      "To add a new player, delete a player from the list.");
-                return true;
-            }
-
-            profile = CampaignProfileDef.NewProfile(name);
-            Flow.Store.Save(profile);
-            Flow.RefreshRoster();
         }
 
         _entry.Disarm();
         _selected = name;
-        Flow.SelectProfile(profile);
+        Flow.GoTo(CampaignScreen.Cabin);
         return true;
-    }
-
-    // Which refusal a rejected name earns: too long has its own string (langui 212), anything else
-    // is the character rule (707). Both are the original's, and both fall back to their own words.
-    private string Refusal(string name)
-    {
-        if (name.Length <= CampaignTextEntry.MaxLength)
-        {
-            return Flow.Strings.Text(707,
-                "Your player name is limited to alphabetic and numeric characters and spaces.");
-        }
-
-        string limit = Flow.Strings.Format(212, CampaignTextEntry.MaxLength);
-        return limit.Length > 0
-            ? limit
-            : $"Your player name is limited to {CampaignTextEntry.MaxLength} characters.";
     }
 
     // Opens the confirm, on a profile that exists. The cursor lands on the keep answer: the press
@@ -316,7 +276,7 @@ public sealed class CampaignRosterPage : CampaignPage
     private bool BeginDelete()
     {
         string name = NameInPlay;
-        if (name.Length == 0 || Flow.Store.Load(name) == null)
+        if (name.Length == 0 || !Flow.Feature.HasPlayer(name))
         {
             Flow.SetMessage($"There is no player named \"{name}\".");
             return true;
@@ -337,8 +297,7 @@ public sealed class CampaignRosterPage : CampaignPage
         if (row == 0)
         {
             string name = _entry.Text.Trim();
-            Flow.Store.Delete(name);
-            Flow.RefreshRoster();
+            Flow.Feature.DeletePlayer(name);
             if (_selected == name)
             {
                 _selected = string.Empty;

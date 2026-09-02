@@ -3,15 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Session;
-using CSVM.UI.Menu;
 
-namespace CSVM.UI;
+namespace CSVM.UI.Menu;
 
 /// <summary>
-/// The optional campaign wallet a hangar flow prices against. Absent (null) for every existing
-/// door — the IA Build button and the top-level launchscreen entry — keeping those paths
-/// wallet-free. Present only when the cabin's Plane Construction opens
-/// the flow over a selected <see cref="CampaignProfileDef"/>.
+/// The campaign profile as the hangar's wallet, the <see cref="IHangarWallet"/> the campaign
+/// feature hands <see cref="HangarFeature.Open"/> when the cabin's Plane Construction opens a
+/// build over the seated profile. Absent (null) on every wallet-free door (the Instant Action
+/// Build button, the top-level hangar entry), which never consult funds.
 ///
 /// <para>Reads and writes the profile through <see cref="CampaignProfileStore"/>'s public API.
 /// A mission-reward aircraft (docs/org/hangar.md, the reward table at <c>0x0061ae80</c>) is
@@ -19,14 +18,14 @@ namespace CSVM.UI;
 /// when it grants one: the original's class-2 record, which its sell handler refuses (langui 704
 /// <c>IDS_PS_SPECIALPLANE</c>).</para>
 /// </summary>
-public sealed class HangarCampaignContext : IHangarWallet
+public sealed class CampaignWallet : IHangarWallet
 {
     private readonly CampaignProfileStore _store;
     private readonly CustomPlaneStore _planes;
 
     /// <summary>Wraps an already-loaded profile. <paramref name="planes"/> is the global build
     /// store (<c>user://Planes/</c>) the profile's owned planes name into.</summary>
-    public HangarCampaignContext(CampaignProfileStore store, CampaignProfileDef profile, CustomPlaneStore planes)
+    public CampaignWallet(CampaignProfileStore store, CampaignProfileDef profile, CustomPlaneStore planes)
     {
         _store = store;
         Profile = profile;

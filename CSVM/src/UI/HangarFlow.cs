@@ -134,7 +134,7 @@ public sealed class HangarFlow
     /// empty. <paramref name="campaign"/> is null for both existing doors, keeping them
     /// wallet-free; only the cabin's Plane Construction passes one.</summary>
     public HangarFlow(CustomPlaneStore store, UiStrings strings, string? dataRoot = null,
-        StockLoadouts? stockFits = null, string? zrdrPath = null, HangarCampaignContext? campaign = null,
+        StockLoadouts? stockFits = null, string? zrdrPath = null, CampaignWallet? campaign = null,
         Random? nameRng = null)
         : this(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => stockFits, zrdrPath),
             store, dataRoot, campaign, nameRng)
@@ -145,7 +145,7 @@ public sealed class HangarFlow
     /// <paramref name="store"/> funded by <paramref name="campaign"/> (null for a wallet-free door).
     /// The launchscreen builds every flow this way, over the host's one feature.</summary>
     public HangarFlow(HangarFeature feature, CustomPlaneStore store, string? dataRoot = null,
-        HangarCampaignContext? campaign = null, Random? nameRng = null)
+        CampaignWallet? campaign = null, Random? nameRng = null)
     {
         _feature = feature ?? throw new ArgumentNullException(nameof(feature));
         NameRng = nameRng ?? new Random();
@@ -180,7 +180,7 @@ public sealed class HangarFlow
     /// <summary>The campaign wallet this flow prices against, or null over the two existing doors
     /// (Instant Action's Build button, the top-level entry), which stay wallet-free by construction
     /// Non-null only when the cabin's Plane Construction opened this flow.</summary>
-    public HangarCampaignContext? Campaign { get; }
+    public CampaignWallet? Campaign { get; }
 
     /// <summary>The airframe whose defaults the pending ask (langui 206) offers, or null when
     /// none is showing. Raised only by an explicit confirm on an airframe row that is not already
@@ -713,7 +713,7 @@ public sealed class HangarPlaneSelectionPage : HangarPage
     // The campaign's own detail lines: the wallet the buy row spends (langui 1149), an owned
     // plane's airframe and value (1258), and on the sell stage the refusal a press would meet
     // (704 for a reward aircraft, 701 for the two-plane floor) in place of that value.
-    private string CampaignDetail(HangarCampaignContext campaign, int row)
+    private string CampaignDetail(CampaignWallet campaign, int row)
     {
         if (_removing)
         {
