@@ -515,6 +515,7 @@ both sit on top of these types.
 - `src/Bindings/DefaultBindings.cs` — the shipped keymap as data, one map per context, reproducing `docs/controls.md`; also the placeholder pad identity a default is authored on.
 - `src/Bindings/BindingProfile.cs` — one seat's whole input: a map and a `PlayerActions` per context, plus the keyboard gate that applies to all of them.
 - `src/Bindings/BindingStore.cs` — the versioned, human-readable JSON keymap file, one per player under `user://`, falling back per action to the shipped default for anything it cannot read.
+- `src/Bindings/LaunchBindings.cs` — where a seat's keymap comes from when the seat is built: the player's saved file, or the shipped defaults under the deterministic gate a scripted run needs (DET-8).
 - `src/Bindings/ControlCapture.cs` — what a rebinding screen may capture and the release-first scan that turns a press into a binding on the seat's own device identity; no axis and no hat.
 - `src/Bindings/BindingLabels.cs` — what a rebinding screen prints: an action's name, a control's keycap name, and a binding row that counts what it is not showing.
 
@@ -8317,3 +8318,23 @@ bindings and nothing else: an unknown action or context name, an unreadable toke
 action is written, the unbound ones included, so a deliberate unbind survives a reload. Whether a
 seat reads the keyboard is not persisted, or a saved file could hand a pad-only splitscreen player
 the keyboard back. Coverage: `CSVM.Tests/BindingStoreTests.cs`.
+
+## src/Bindings/LaunchBindings.cs
+
+Where a seat's keymap comes from when the seat is built. `FlightController`, `SpectatorCamera` and
+`MenuInput` each ask this instead of building `BindingProfile.Defaults` for themselves, so there is
+one place the read is gated and one place to look when a rebind is not felt. `Launcher` calls
+`Configure` before the first seat exists, and the gate is shut until it does, so a host that never
+configures gets the shipped set rather than somebody's file.
+
+⚠ **A scripted run reads no keymap** (`docs/verification.md`, DET-8). `--det` ignores `config.json`
+so that a run is a function of its committed tree, and a keymap loaded from the user's profile
+directory would make every golden and every probe depend on whoever ran it; `--run-tests` is shut for
+the same reason. `LaunchBindings.ReadSavedKeymaps` is the ship switch, and setting it false leaves
+every seat on the defaults while the rebinding screen still edits and saves.
+
+A seat is put on the loaded map through `ActionMap.Fill`, which replaces a map's contents in place.
+A polling site hands one map to two or three `PlayerActions`, so swapping the reference would leave
+those readers on the map the seat was constructed with. Coverage:
+`CSVM.Tests/LaunchBindingsTests.cs` for the gate and the fallbacks, the `bindings-launch-load` engine
+suite for a real `FlightController` picking the file up through its own `Bind`.

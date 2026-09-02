@@ -78,8 +78,9 @@ public sealed partial class SpectatorCamera : Node
         _padDevices = padDevices;
         _useKeyboard = useKeyboard;
         // One map behind both halves, so a rebinding screen edits a single object and the two
-        // reads stay two views of the same keymap rather than two keymaps.
-        var map = BindingProfile.Defaults(SeatPad, useKeyboard).Map(InputContext.Camera);
+        // reads stay two views of the same keymap rather than two keymaps. The free camera is
+        // player one's, and under the launch gate this is the shipped set (LaunchBindings).
+        var map = LaunchBindings.Map(1, InputContext.Camera, SeatPad, useKeyboard);
         // Each half mutes the other's devices: the keyboard reader is given no pads, and the pad
         // reader no keyboard, so a key and a stick on one action keep their own look rates and sum.
         _keyActions = new PlayerActions(map, useKeyboard);

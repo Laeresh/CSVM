@@ -188,7 +188,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 31. ☑ The rebinding screen: capture, assign, steal-from-previous-owner
 32. ☐ Binding an axis or a hat to a digital action
 33. ☐ Close `BL-296` and `BL-398`, and hand `BL-357` its keys
-34. ☐ The saved keymap is read at launch, so a flight rebind is felt
+34. ☑ The saved keymap is read at launch, so a flight rebind is felt
 35. ☑ Staged edits and a whole-map reset: Accept, Cancel, Reset to default
 
 ⚠ **34 lands before 33, and 33 lands last of the wave.** A flight rebind is written and never read,
@@ -1151,6 +1151,8 @@ launch-time load with a `--det` gate, since DET-8 makes a scripted run a functio
 tree and a user's saved keymap would break exactly that; it also means re-entering
 `FlightController`'s constructor, which the plan flags. It is a successor item's, and it is stated
 here rather than left to be found at the controls.
+**Resolved by D34**, which puts all three sites on `LaunchBindings` behind a gate `--det` and
+`--run-tests` shut, so every context is read at launch and a scripted run still reads nothing.
 
 **D32 is unaffected either way.** `ControlCapture` scans keys, pad buttons and mouse buttons and
 returns `Binding?`; adding an axis arm means adding a movement rule (a rest baseline plus a travel
@@ -1282,7 +1284,98 @@ closing evidence and its date go in the commit message, found later with `git lo
 per-player one. Both are true in the menu context alone until the saved map is read at launch, so
 closing them before D34 would retire the items against a third of the feature.
 
-## D34 ☐ The saved keymap is read at launch, so a flight rebind is felt
+## D34 ☑ The saved keymap is read at launch, so a flight rebind is felt
+
+**Landed.** One new file, `CSVM/src/Bindings/LaunchBindings.cs`, is where a seat's keymap comes from
+when the seat is built: the player's saved file, or the shipped defaults. The three polling sites ask
+it instead of calling `BindingProfile.Defaults` for themselves, so there is one place the read is
+gated and one place to look when a rebind is not felt. `Launcher` calls `Configure` before the first
+seat exists, and the gate is shut until it does, so a host that never configures gets the shipped set
+rather than somebody's file.
+
+**A seat is put on the loaded map through `ActionMap.Fill`, which replaces a map's contents in place
+rather than swapping the reference.** That is not a refinement: every migrated site hands one
+`ActionMap` to two or three `PlayerActions` (B11's three readers, B13's two, B12's typing clone), so
+a load that returned a new map would leave every one of those readers on the map the seat was
+constructed with. It is the same property D35 kept for `Accept`, for the same reason, and `Fill` uses
+`Add` rather than `Assign` because the shipped set deliberately puts one control on two actions.
+
+**Where each seat gets its player number**, which the constructors do not know:
+
+- `FlightController` loads from `Bind`, after `PlayerIndex` is assigned and only when
+  `IsHumanPiloted`. An AI rig reads no player's file, which matters because a mission builds dozens
+  of them.
+- `MenuInput` gains `LoadSavedKeymap(player)`. Seat 0 is player 1 and loads in `Launcher`; a
+  splitscreen seat loads in `MenuSeatDevices` after the join, which is what decides its number.
+- `SpectatorCamera` loads player one's camera context in its constructor. The free camera has no
+  seat of its own.
+
+**`LaunchMenu.ControlsProfile` now opens the screen on the same file.** It built the Flight and
+Camera maps from the shipped defaults, which was correct while nothing read them and is a defect the
+moment something does: the screen would show rows the player never chose, and Accept would write
+those back over their saved ones.
+
+**The corruption answers, each one a fact rather than a reading of the code.** (a) A file that is not
+valid JSON, which is what a truncated or half-written save looks like, leaves every action of every
+context at its shipped default and throws nothing; `Load` catches the IO failures on top of that.
+(b) A valid file naming an action this build no longer has costs that row and nothing else: every
+other row the file carries is kept, and every action it does not name stays at its default. (c) A
+valid file binding nothing to a fire action loads that action unbound, because an empty row is C21's
+deliberate unbind and the screen is the only thing that writes one. The seat stays flyable, which the
+fact asserts beside it. The way back from a keymap a player regrets is Reset to default on the
+screen, or deleting `bindings_p<N>.json` under `user://`.
+
+⚠ **The one hazard this item creates and does not close.** Before it, an unbind of a menu control was
+lost on the next launch; now it persists, so a player who unbinds Menu Accept in every context and
+leaves keeps a launchscreen they cannot confirm anything on. Deleting the file is the recovery and
+the screen offers no other. Whether the screen should refuse to leave an action unbound is D31's
+judgement, not this item's, and is stated here rather than left to be found at the controls.
+
+**Verified.** `CSVM.Tests/LaunchBindingsTests.cs`, 9 facts, and the `bindings-launch-load` engine
+suite, 8 checks over a real `FlightController`.
+
+*The gate is the item's whole risk, so its facts are built to fail.* Both `DeterministicRun_Ignores…`
+and `TheGateIsTheOnlyDifference…` write a profile that genuinely differs from the shipped set,
+through the real serializer, into a real file the real reader opens; the first asserts the
+deterministic read does not carry the rebind and matches the defaults action for action across all
+three contexts, and the second reads the same file twice, once with the gate open and once shut, and
+asserts the two answers differ. Deleting the `!deterministic` term from `Configure` fails exactly
+those two and nothing else, which was run rather than assumed. The engine suite repeats the pair
+against a `FlightController` that has been through its own `Bind`.
+
+*The rest.* A stored profile reaches a flight seat's live map; a human rig's own construction loads
+the file while an AI rig built with the same index does not; player two's file leaves player one's
+seat alone, at the seam and again over two live seats; the three corruption cases above; the menu
+poller loading into the very map object its readers hold; and `Fill` replacing rather than merging
+while keeping a control that drives two actions. Run the units with
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~LaunchBindingsTests" -SkipEngine -SkipGoldens` and
+the suite with `.\RunTests.ps1 -Suite bindings-launch-load -SkipUnits -SkipGoldens`.
+
+Complete `.\RunTests.ps1` in the item's worktree: PASS, exit 0, 3359 units, 234 engine suites, 18
+goldens hash-identical, 0 build warnings (182.7s total against a 180.0s budget, and the engine stage
+113.2s against 100.0s, which is awareness only).
+
+**The `--det` probes B14 names are unchanged.** The four invocations in that section, run in a
+throwaway worktree at this branch's parent and again in the item's own worktree: eleven PNGs, all
+eleven md5-identical across the pair. Each argument is quoted at the shell, and each invocation
+carries a `--screenshot=` path, without which `--shots` never quits.
+
+⚠ **What no automated evidence here can reach.** A `--det` run with a real file present at
+`user://` was not measured, because the gate's whole point is that such a run reads nothing, and
+because writing a keymap into the author's own profile directory is not a suite's business. More
+generally the B14 limitation applies unchanged: `--det` implies `--no-pads`, every scripted run is
+unattended, and no suite presses a key (`DET-2`, `DET-6`, `INSTR-14`). **Owed at the controls, and
+the author's to judge:**
+
+1. Open Options, Controls, rebind a *flight* action (say Nitro) to a free key, Accept, quit, relaunch
+   and fly. The new key must fly the aeroplane and the old one must not.
+2. Rebind a menu action and confirm it survives a restart as well as the frame after Accept.
+3. In splitscreen, rebind on seat 2, restart, and confirm seat 1's keymap came back unchanged.
+4. Whether the load ships enabled at all. It is built enabled;
+   `LaunchBindings.ReadSavedKeymaps = false` is the one-line switch that leaves every seat on the
+   shipped defaults while the screen still edits and saves.
+
+**Original approach (kept for reference).**
 
 **Goal.** A control rebound on the screen is the control that flies the aeroplane, in the next
 session and in this one.

@@ -2340,7 +2340,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             int player = i + 1;
             if (!ControlsHasSeat(player))
             {
-                _controls.AddSeat(player, ControlsProfile(_slots[i].Input), ControlsPadOf, _slots[i].Input.Keyboard);
+                _controls.AddSeat(player, ControlsProfile(player, _slots[i].Input), ControlsPadOf, _slots[i].Input.Keyboard);
             }
         }
 
@@ -2353,15 +2353,18 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // One seat's three keymaps. Menu is the poller's own live map, so an accepted rebind there is
-    // felt on the next frame; Flight and Camera are the shipped defaults on the portable pad
-    // placeholder, since no polling site reads a saved profile yet (D31's recorded gap).
-    private BindingProfile ControlsProfile(MenuInput input)
+    // felt on the next frame. Flight and Camera come from the same saved file their polling sites
+    // read at launch, on the portable pad placeholder: opening the screen on the shipped defaults
+    // instead would show the player rows they never chose and Accept would write those back.
+    private BindingProfile ControlsProfile(int player, MenuInput input)
     {
         var maps = new Dictionary<InputContext, ActionMap>
         {
-            [InputContext.Flight] = DefaultBindings.MapFor(InputContext.Flight, DefaultBindings.AnyPad),
+            [InputContext.Flight] = LaunchBindings.Map(
+                player, InputContext.Flight, DefaultBindings.AnyPad, input.Keyboard),
             [InputContext.Menu] = input.Map,
-            [InputContext.Camera] = DefaultBindings.MapFor(InputContext.Camera, DefaultBindings.AnyPad),
+            [InputContext.Camera] = LaunchBindings.Map(
+                player, InputContext.Camera, DefaultBindings.AnyPad, input.Keyboard),
         };
         return new BindingProfile(maps, input.Keyboard);
     }

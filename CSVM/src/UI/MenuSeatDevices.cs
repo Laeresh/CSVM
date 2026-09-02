@@ -159,6 +159,9 @@ public sealed class MenuSeatDevices
             input.Prime();
             if (_setup.Join(new BuiltInSeat(input)) != null)
             {
+                // After the join, which is what decides the seat's player number and therefore
+                // which saved keymap this pad navigates on.
+                input.LoadSavedKeymap(_setup.Seats.Count);
                 GD.Print($"launchscreen: P{_setup.Seats.Count} joined on pad {pad} \"{Input.GetJoyName(pad)}\"");
                 dirty = true;
             }
