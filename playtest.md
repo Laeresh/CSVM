@@ -874,6 +874,19 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   *Blocks:* nothing tracks the outcome; a gun firing on the wrong side mints a new `BL` against
   the structure-team decode.
 
+- `PT-111` `[Own]` **A wave-1 attack balloon's marker stays legible as the wave arrives, never
+  reading as parked on the water** (`BL-656`, disproven). The marker already tracks the group's
+  live geometry with no staleness; the wave's own scripted entrance dives from a hidden altitude
+  to a low pass over the water, roughly 11-14 m under the marker, before climbing to attack
+  height, and that low pass is the one moment worth eyeballing. Watch OBJECTIVE10 wake (the first
+  attack-balloon site to appear) through its whole entrance.
+  *Look for:*
+  - (a) the marker sits visibly above the water throughout, including at the low pass;
+  - (b) nothing reads as the marker resting on or under the water surface;
+  - (c) the marker's motion looks continuous through the dive and the climb, with no snap or jump.
+  *Blocks:* nothing tracks the outcome; a marker that does read as resting on the water reopens
+  `BL-656` against the entrance flight's own authored path rather than against `ObjectiveSites.cs`.
+
 ### CM12 (C2/M01) · the patrol boats and the Spruce Goose
 
 ```powershell

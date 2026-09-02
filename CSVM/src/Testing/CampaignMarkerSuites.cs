@@ -50,6 +50,13 @@ internal static class CampaignMarkerSuites
 
     private const float AltitudeTolerance = 0.5f;
 
+    // OBJECTIVE10, the shipped script's own wake trigger for wave 1: WAKE_ANIM attack_wave1 then
+    // ADD_OBJECTIVE_TARGET, which is what carries the group from its rest pose through the
+    // SiScript entrance that passes close to the water before the rise sequence lifts it.
+    private const int WakeObjective = 10;
+    private const float WakeStepDt = 0.1f;
+    private const int WakeSteps = 700; // 70 s: past the entrance's lowest pass over the water.
+
     // ScanForCompletion resolves one objective per tick, so a removal needs more than one.
     private const float RetireSeconds = 3f;
 
@@ -215,13 +222,17 @@ internal static class CampaignMarkerSuites
     /// <c>lifesaverNM</c> site is a group node standing on the water with the balloon hung above it
     /// and the lifeboat at its own origin, so the marker belongs on the group's geometry rather
     /// than on the node. Asserted over the shipped table and script, then flown at two balloon
-    /// altitudes, and retired by the balloon rather than by the boat.</summary>
+    /// altitudes and retired by the balloon; then, over a second BUILT world, driven through the
+    /// shipped OBJECTIVE10 wake trigger, sampled across the wave's own SiScript entrance.</summary>
     [Suite("campaign-balloon-marker",
         "CM10's attack-balloon markers over C1/M05's BUILT world: its nine lifesaver sites are "
         + "group nodes standing on the water with the balloon hung above and the lifeboat at "
         + "the group's own origin, so the marker stands on the group's geometry clear of the "
         + "boat, flies with the assembly and rises when the balloon alone rises, and retires "
-        + "when the balloon its objective watches goes inactive while the boat is still afloat")]
+        + "when the balloon its objective watches goes inactive while the boat is still afloat; "
+        + "driven through the shipped OBJECTIVE10 wake trigger, the marker is offered from the "
+        + "tick the wave wakes and tracks the live assembly through its whole SiScript entrance, "
+        + "never a stale reading that predates the balloon")]
     internal static void CampaignBalloonMarker(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -261,8 +272,15 @@ internal static class CampaignMarkerSuites
         var director = CampaignDirector.Create(script, mission, profile, null);
         ctx.WithWorld(chapter, collision: false, folder, world =>
             DriveBalloon(ctx, world, director, targets, messages, report));
+
+        // A second, separate BUILT world: the wake-driven drive triggers the real attack_wave1
+        // animation, which must not run in the same world the check above poses by hand.
+        var wakeDirector = CampaignDirector.Create(shipped, mission, profile, null);
+        ctx.WithWorld(chapter, collision: false, folder, world =>
+            DriveBalloonWake(ctx, world, wakeDirector, targets, messages, report));
+
         ctx.WriteArtifact($"test-campaign-balloon-marker-{chapter}.txt", report.ToString());
-        ctx.Note($"{chapter}/{folder}: the attack-balloon marker stands on the balloon group's geometry, at two altitudes, and retires with the balloon");
+        ctx.Note($"{chapter}/{folder}: the attack-balloon marker stands on the balloon group's geometry, at two altitudes, retires with the balloon, and tracks the live wave-1 entrance from the tick it wakes");
     }
 
     // The shipped files: nine attack-balloon sites, each retired by its own balloon going inactive.
@@ -417,6 +435,71 @@ internal static class CampaignMarkerSuites
 
         Walk(node);
         return merged;
+    }
+
+    // The wave-1 wake drive over its own BUILT world: the site is offered the instant OBJECTIVE10
+    // wakes, and its SiScript entrance carries the whole assembly from a hidden altitude down
+    // past the water before the rise sequence lifts it to attack height. Samples the marker every
+    // tick across that entrance and checks it never reads outside the group's own currently built
+    // geometry, which is what a stale, balloon-less merge would do.
+    private static void DriveBalloonWake(TestContext ctx, TestWorld world, CampaignDirector director,
+        MissionTargets targets, Messages messages, StringBuilder report)
+    {
+        var listener = ctx.Camera.GlobalPosition;
+        director.Attach(new CampaignDirector.WorldInputs
+        {
+            Runtime = world.Runtime,
+            Gamez = world.Gamez,
+            Sounds = world.Runtime.Sounds,
+            ListenerPosition = () => listener,
+            Rng = new Random(1),
+        });
+        var graph = director.Graph!;
+        graph.Step(WakeStepDt);
+
+        var group = ObjectiveSites.ResolveTarget(world.Runtime, ObjectiveTarget.Parse(BalloonSite));
+        ctx.Check(group != null, $"'{BalloonSite}' builds its group node");
+        if (group == null)
+        {
+            return;
+        }
+
+        // OBJECTIVE10 itself gates on nothing once awake, so its ADD_OBJECTIVE_TARGET fires on
+        // completion the very next Step after Wake rather than inside Wake itself; a real session
+        // never renders the gap, since both happen well inside one frame's Step call.
+        graph.Wake(WakeObjective);
+        graph.Step(WakeStepDt);
+
+        var sites = new ObjectiveSites(director, messages, targets, world.Runtime);
+        var pilot = new Pilot(sites);
+        int offered = 0, tracked = 0;
+        float worstMargin = float.MaxValue;
+        string worstAt = "";
+        for (int i = 0; i < WakeSteps; i++)
+        {
+            pilot.Fly(listener);
+            if (Find(pilot.Selection.Pool.Enemy, BalloonSite) is { } marked && WorldBox(group) is { } built)
+            {
+                offered++;
+                float margin = Mathf.Min(marked.Position.Y - built.Position.Y, built.End.Y - marked.Position.Y);
+                tracked += margin >= -AltitudeTolerance ? 1 : 0;
+                if (margin < worstMargin)
+                {
+                    worstMargin = margin;
+                    worstAt = $"t={i * WakeStepDt:0.0}s anchor.y={marked.Position.Y:0.0} built.y=[{built.Position.Y:0.0}..{built.End.Y:0.0}]";
+                }
+            }
+
+            world.Runtime.Advance(WakeStepDt);
+            graph.Step(WakeStepDt);
+        }
+
+        report.AppendLine($"wave 1 wake: offered {offered}/{WakeSteps} sampled ticks, anchor inside the "
+            + $"currently built mesh bounds on {tracked}/{offered}, worst margin {worstMargin:0.00} m ({worstAt})");
+        ctx.Same(WakeSteps, offered,
+            $"'{BalloonSite}' is offered from the tick its wave wakes through the whole sampled entrance");
+        ctx.Same(offered, tracked,
+            $"and the marker never reads outside the group's own live geometry, so it is never a stale reading that predates the balloon");
     }
 
     private static void DriveLabels(TestContext ctx, TestWorld world, CampaignDirector director,
