@@ -394,22 +394,22 @@ public static class CampaignBoards
             case CampaignScreen.Roster when index == 0:
                 return layout.Box(CampaignLayout.RosterSection, "CM_E_NAME", 243f, 297f, 221f);
             case CampaignScreen.Roster:
-            {
-                var (x, y, width) = layout.Box(CampaignLayout.RosterSection, "CM_L_PLAYERS", 245f, 356f, 305f);
-                int pitch = layout.Int(CampaignLayout.RosterSection, "CM_L_PLAYERS", "ItemHeight", 20);
-                return (x, y + ((index - 1) * pitch), width);
-            }
+                {
+                    var (x, y, width) = layout.Box(CampaignLayout.RosterSection, "CM_L_PLAYERS", 245f, 356f, 305f);
+                    int pitch = layout.Int(CampaignLayout.RosterSection, "CM_L_PLAYERS", "ItemHeight", 20);
+                    return (x, y + ((index - 1) * pitch), width);
+                }
 
             // One heading per crew slot, at the PILOT and WINGMAN widgets. The row carries the
             // heading and the aircraft's name in one line where the layout splits them over two
             // widgets, so the wrap width is the pair's and not FC_T_PILOT's own 94.
             case CampaignScreen.FlightCheck:
-            {
-                var (x, y) = layout.At(
-                    CampaignLayout.FlightCheckSection, index == 0 ? "FC_T_PILOT" : "FC_T_WINGMAN",
-                    138f, index == 0 ? 102f : 320f);
-                return (x, y, 400f);
-            }
+                {
+                    var (x, y) = layout.At(
+                        CampaignLayout.FlightCheckSection, index == 0 ? "FC_T_PILOT" : "FC_T_WINGMAN",
+                        138f, index == 0 ? 102f : 320f);
+                    return (x, y, 400f);
+                }
 
             // ⚠ The ammo screen has no entry here, and must not regain one: its picks are drop-down
             // fields and its captions are the page's own lines, so no row of it reaches this table.
