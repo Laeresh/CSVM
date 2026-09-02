@@ -840,8 +840,26 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   - (b) the Klondike drawn and intact after the intro hands off, since the whole endgame gates on
     that hull being switched on;
   - (c) the docking cutscene starting on its own once the last hostile dies.
-  *Blocks:* an absent line reopens `BL-581` as an AI-reachability question, not an objectives one;
-  a mission that ends in neither direction after a gasbag-only zeppelin kill is `BL-666`.
+  *Blocks:* an absent line reopens `BL-581` as an AI-reachability question, not an objectives one.
+
+- `PT-115` `[Own]` **A gasbag-only kill of the pirate zeppelin ends CM09, after about half a
+  minute of nothing.** Shooting the hull the briefing says to defend reaches OBJECTIVE41's
+  `INSTANTLOSS` rather than leaving the mission running: the burning bays and `killpzep`'s
+  water-gated engine destroys switch off all twelve engine `healthy` models, which is what
+  OBJECTIVE26 and OBJECTIVE27 count. The `campaign-cm09-gasbag-kill` suite measures 32.6 s from
+  the kill to the loss, and 30 s of that is the two authored naps (26 naps 27 for 10 s, 27 naps 41
+  for 20 s), so the wait is the design rather than a stall. Those are sim seconds, so a rig whose
+  sim clock lags wall time waits longer. What no headless run can say is whether that wait reads
+  as a hung mission at the controls. Kill three gasbags on the `piratezep`, then keep flying and
+  watch the clock instead of quitting.
+  *Look for:*
+  - (a) the mission-failed screen arriving about 33 s after the hull dies;
+  - (b) whether those 30 s of silence read as a hang, which would be a pacing item rather than a
+    chain one;
+  - (c) the wreck's own breakup still playing through the wait, since it is the only thing on
+    screen that says the mission is still running.
+  *Blocks:* nothing tracks the outcome today. An ending that never arrives mints a new `BL` for
+  the chain; an ending that arrives but reads as a hang mints one for the wait.
 
 ### CM10 (C1/M05) · the docking's walkway and the hospital ship
 
