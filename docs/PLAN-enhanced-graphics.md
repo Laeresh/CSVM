@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 43. ☑ The clutter building fade reaches as far as the pushed fog
 44. ☑ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
 45. ☑ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
-46. ☐ The water mirror strength, measured against the original's water, or the water bit parked
+46. ❌ The water mirror strength, measured against the original's water, or the water bit parked
 47. ☑ Day chapters read brighter than the original overall; the energy mapping re-anchored on frames
 
 ## Dependency and parallelism notes
@@ -1112,12 +1112,19 @@ maximum channel delta over the frame falls 33 (40 m), 29 (100 m), 26 (200 m), 23
 from the cockpit's side: 9.17 % to 13.43 % of pixels touched, mean 0.33 to 0.42, max 24 to 26, which
 on the touched pixels is about 3 levels of 255.
 
-**Verdict: ship, mode-gated.** The census gives a decoded handle rather than an invented one, the
-prototype is one shader bit and five Environment properties, original mode is byte-identical and all
-18 goldens are unmoved, and at and near sea level the reflected shoreline is both readable and
+**Verdict at the time: ship, mode-gated.** The census gives a decoded handle rather than an invented
+one, the prototype is one shader bit and five Environment properties, original mode is byte-identical
+and all 18 goldens are unmoved, and at and near sea level the reflected shoreline is both readable and
 temporally stable. The SSR values are Godot's own defaults in shape and were not pushed to
 manufacture a reflection: the alternative to shipping is a glossy sea that reflects only the sky,
 which is strictly less than what the marched rays deliver at no authoring cost.
+
+**Verdict, superseded.** E46 measured the shipped pair, and four alternatives, against the original's
+water luminance at three poses once E44 had put the mission's own sky behind the reflection. Every
+pair that kept a visible reflection read further above the original than this verdict's captures
+showed, because the mission's authored sky is bright by day and the reflection contributes a floor
+the roughness/specular pair cannot reach under regardless of setting by night. The water bit and its
+SSR call are removed; see E46 for the measurement and the park.
 
 **What the chosen poses cannot show.** They cannot show a reflection at cruise: everything readable
 here is below roughly 200 m, and above 400 m the effect is under a level of 255 on average, so a
@@ -1834,7 +1841,7 @@ Montages: `montage_c1_hills.png`, `montage_c4_horizon.png`, `montage_c2_building
 `.claude/worktrees/eg-e45/.scratch/e45/` and copied to
 `.claude/worktrees/enhanced-graphics/.scratch/e45/`.
 
-## E46 ☐ The water mirror strength, measured against the original's water, or the water bit parked
+## E46 ❌ The water mirror strength, measured against the original's water, or the water bit parked
 
 **Goal.** Enhanced-mode water reads close to the original's water luminance by day and by night,
 with whatever reflection survives that constraint; if no roughness/specular pair gets there, the
@@ -1853,6 +1860,87 @@ shoreline reflection at sea level, or park the bit if none does. The pair stays 
 **Model recommendation.** medium, a measurement sweep with one judgement.
 
 **Verify.** The three poses' water within a stated distance of the original; goldens zero movers.
+
+**As landed: the water bit is parked.** The sweep is six roughness/specular pairs, each with SSR
+on and off, at three poses, sampling a fixed water rect and a fixed non-water reference rect per
+pose through a throwaway environment-variable override on the two constants
+(`CSVM_SCRATCH_WATER_ROUGHNESS`/`_SPECULAR`) and a throwaway gate on the SSR call
+(`CSVM_SCRATCH_NO_SSR`), both removed before finishing. Rects (`x,y,w,h`, pixels): C1 waterfall lake
+water `(50,560,250,90)`, reference (left cliff) `(50,60,200,100)`; C3 island sea water
+`(550,470,200,80)`, reference (mountain) `(550,150,200,100)`, shoreline crop
+`(0,260,350,110)`; C1B night sea water `(550,550,200,100)`, reference (island) `(880,200,200,80)`.
+Rec.709 luminance, 0-255, mean over the rect.
+
+| Pose | original | 0.1/0.5 (shipped) | 0.3/0.5 | 0.5/0.5 | 0.5/0.25 | 0.7/0.25 | 1.0/0.0 (matte) |
+|---|---|---|---|---|---|---|---|
+| C1 lake, water | 33.47 | 83.64 | 79.57 | 71.82 | 59.45 | 56.60 | 49.60 |
+| C3 sea, water | 87.47 | 111.94 | 111.66 | 111.05 | 104.09 | 103.80 | 100.45 |
+| C1B night sea, water | 17.73 | 56.96 | 58.19 | 63.06 | 58.25 | 59.19 | 56.57 |
+
+SSR on and SSR off read the same water mean to within 0.1 at every pair and pose (the reflection's
+own contribution at these poses is a fraction of a level once averaged over the whole rect; C24
+already measured it dies within about 240 px of the shoreline and falls off further with altitude,
+and two of the three poses here are shot from above rather than at grazing incidence). The
+reference rect holds flat across every setting at a given pose (C1 154.97, C3 64.99, C1B 52.1-52.6,
+the small C1B spread being SSR bleed a few tenths of a level wide at the rect's lower edge, nearest
+the water line below the sampled island), which is the control showing only the water rect moved.
+
+**The pattern is monotone and the closest pair is the matte one.** Lowering roughness and specular
+from the shipped 0.1/0.5 toward 1.0/0.0 tracks water luminance down toward the original at both day
+poses, and 1.0/0.0 (ROUGHNESS 1.0, METALLIC 0.0, SPECULAR 0.0) is exactly the ordinary matte world
+arm's own values, so that setting is the water bit already switched off in substance, not merely in
+number. Distance from the original at that pair: C1 16.13, C3 12.98. The nearest pair that still
+carries any specular, 0.7/0.25, sits at 23.13 and 16.33, worse in both, and every pair between it
+and the shipped 0.1/0.5 is worse again. At C1B every pair, matte included, clusters within about 7
+of the original's furthest point (56.57 to 63.06 against 17.73, distance 38.84 to 45.33): the
+residual there is dominated by the enhanced sun and ambient landing on the water's albedo, a term
+this item does not own and no roughness/specular pair moves.
+
+A crop at the C3 shoreline (`montage_c3_shoreline_crop.png`, the rect above) shows what the numbers
+say: the shipped pair's water reads as a pale mirror of the overcast dome, and the matte pair reads
+as the original's darker, more saturated teal, with no mirrored shoreline at all. No pair in between
+reads meaningfully different from the shipped pair in that crop; the grey cast comes from any
+non-zero specular meeting a bright authored sky, not from the specific magnitude chosen.
+
+**Judgement.** No roughness/specular pair lands near the original while keeping a visible
+reflection. The day poses' water luminance moves smoothly with the pair chosen, but even the
+least reflective non-matte pair (0.7/0.25) stays 16-23 levels above the original, most of the gap
+the shipped pair opened; the night pose barely moves at all across the whole sweep, because its
+residual is lighting, not reflection. The only pair that gets near the original removes the
+reflection outright. The water bit is parked: the `waterLit` shader arm and
+`Launcher.EnableWaterReflections`'s SSR call are removed, water surfaces render through the
+ordinary matte `worldLit` arm like every other lit-but-glossless surface, and C24's verdict is
+re-recorded above as superseded.
+
+**Verified.** <pending orchestrator run>
+
+Commands, all from the item's worktree with `$env:CSVM_DATA_ROOT="Z:\CSVM"`:
+`dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
+`.\RunTests.ps1 -Suite plane-shader-reuse -SkipUnits -SkipGoldens`: PASS, 1 suite run of 200
+(non-zero), engine errors clean.
+`.\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only): PASS, 18 shot(s) hash-identical, zero
+movers.
+
+Original-mode byte identity used the established every-key dump method as a throwaway: a static
+enumerator in `SceneBuilder`'s constructor, armed by `CSVM_SCRATCH_SHADER_DUMP`, walking every
+reachable key of `GetBiasShader` and writing each key's generated `Shader.Code`. The baseline came
+from the committed tree (with the `waterLit` arm still present, `water` fixed to `false`, which is
+original mode's value at every key regardless of the argument); the after dump came from this
+item's tree with the arm removed. `dump_before.txt` and `dump_after.txt` are both 6,323,200 bytes
+and SHA-256 identical, so original mode's shader text did not move. The instrument was removed
+before finishing.
+
+Thirty-nine captures through `.\RunProbe.ps1` (`--det --mute --frames=120`, the three poses' own
+golden-camera args where a golden pose exists), all exiting 0, under `.scratch/e46/` and copied to
+`.claude/worktrees/enhanced-graphics/.scratch/e46/`: one original-mode shot per pose, twelve
+enhanced-mode shots per pose (the six pairs above, each with SSR on and off). The three-pose
+comparison montages (`montage_c1.png`, `montage_c3.png`, `montage_c1b.png`) show original / the
+shipped pair / the parked result side by side with the measured water level in the caption;
+`montage_c3_shoreline_crop.png` shows the shoreline crop the judgement above cites. A byte-for-byte
+check confirms the parked code path: a fresh capture per pose with no environment override and
+`--graphics=enhanced` hashes identical to that pose's `1.0/0.0` sweep capture (both SSR on and off),
+confirming the matte arm produced by parking the water bit is the same pixels the sweep measured
+under that pair's name.
 
 ## E47 ☑ Day chapters read brighter than the original overall; the energy mapping re-anchored on frames
 

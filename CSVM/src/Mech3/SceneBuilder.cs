@@ -229,23 +229,11 @@ void fragment() {
     // decides how far it spreads. ⚠ Only the light-source arms take it; the general `lighting:
     // false` population is not emissive (docs/org/vertexLighting.md).
     private const float EmissiveScale = 1.5f;
-    // Enhanced mode only: what a surface <see cref="ClassifySurface"/> calls water gets instead of
-    // the matte world values, so screen-space reflection has a glossy surface to march against.
-    // TUNE, judged at the controls: roughness sets how far a reflection smears, specular how much
-    // of it survives at a glancing angle.
-    private const float WaterRoughness = 0.1f;
-    private const float WaterSpecular = 0.5f;
     // ⚠ Format every scale invariantly; a comma decimal separator emits shader text that will not
     // compile. Godot discards EMISSION on an `unshaded` material and the glow pass reads the HDR
     // colour buffer, so these arms reach it by scaling the colour rather than by writing EMISSION.
     private static readonly string EmissiveLiteral =
         EmissiveScale.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
-
-    private static readonly string WaterRoughnessLiteral =
-        WaterRoughness.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
-
-    private static readonly string WaterSpecularLiteral =
-        WaterSpecular.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
 
     // ⚠ Process-wide, not per builder: Godot compiles a Shader the first time a material takes it,
     // and each generated text is a pure function of its key, so a per-builder memo made every later
@@ -1272,7 +1260,7 @@ void fragment() {
                 RegisterCycle(src, billboard); // same albedo_tex, see GetCylindricalMaterial
                 return billboard;
             }
-            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, ClassifySurface(texName) == "water");
+            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade);
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);
             return textured;
@@ -1306,7 +1294,7 @@ void fragment() {
     // The per-node draw-order term is added at instance level (see BuildSubtree).
     private ShaderMaterial BiasMaterial(int priority, int rank, bool noClutter, bool doubleSided, ImageTexture? tex,
         Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0,
-        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool water = false)
+        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
         bool scrolls = tex != null && scroll != Vector2.Zero;
@@ -1315,7 +1303,7 @@ void fragment() {
         var mat = new ShaderMaterial
         {
             Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor, doubleSided,
-                scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water),
+                scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade),
         };
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         if (noClutter)
@@ -1345,23 +1333,20 @@ void fragment() {
     // the shader text it always did, so honouring the flags cannot perturb the overwhelming
     // majority of the world through float rounding in a mix().
     // Key bits: 1/2/4/8/16/32/64 the flags above, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048
-    // clutterFade, 4096 DebugClutterFlag, 8192 enhanced, 16384 enhanced water; next free 32768.
+    // clutterFade, 4096 DebugClutterFlag, 8192 enhanced; next free 16384.
     private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
-        bool clutterFade = false, bool water = false)
+        bool clutterFade = false)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
         // fullbright arm, so `fullbright` rather than `!shaded` selects the terms that arm owns.
         bool worldLit = GraphicsMode.Enhanced && !shaded && lit;
         bool fullbright = !shaded && !worldLit;
-        // ⚠ The water arm exists only inside the lit world arm, so original mode never sets its key
-        // bit and its shader text cannot move.
-        bool waterLit = worldLit && water;
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
             | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (DebugClutterFlag ? 4096 : 0)
-            | (GraphicsMode.Enhanced ? 8192 : 0) | (waterLit ? 16384 : 0);
+            | (GraphicsMode.Enhanced ? 8192 : 0);
         if (BiasShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -1474,17 +1459,10 @@ void fragment() {{");
             sb.AppendLine("    METALLIC = 0.0;");
             sb.AppendLine("    SPECULAR = 0.5;");
         }
-        else if (waterLit)
-        {
-            // Glossy, so screen-space reflection has a surface to march against (WaterRoughness).
-            sb.AppendLine($"    ROUGHNESS = {WaterRoughnessLiteral};");
-            sb.AppendLine("    METALLIC = 0.0;");
-            sb.AppendLine($"    SPECULAR = {WaterSpecularLiteral};");
-        }
         else if (worldLit)
         {
-            // Matte: the source authors no gloss for terrain or building walls, so any specular
-            // sheen here is invented, and it reads as wet plastic as the sun swings past.
+            // Matte: the source authors no gloss for terrain, building walls or water. A glossy
+            // water arm was tried and parked; the rationale is in docs/PLAN-enhanced-graphics.md.
             sb.AppendLine("    ROUGHNESS = 1.0;");
             sb.AppendLine("    METALLIC = 0.0;");
             sb.AppendLine("    SPECULAR = 0.0;");

@@ -481,13 +481,13 @@ pushed far so shadows never end in clear air; `LIGHT_STATE` point lights are mir
 `OmniLight3D` nodes that light the world and the aircraft, not only a fullbright spill texture
 (`WorldLights.cs`); the light-source class of glow-arm sprites (flares, beacons, signal lamps)
 scales its colour above 1.0 to feed an Environment glow pass, and an AgX tonemap rolls the
-resulting HDR scene off instead of clipping it; SSAO adds contact shading in ambient light, and
-SSR reflects the shoreline off water surfaces the engine already classifies as `"water"`
-(`Launcher.cs`'s `SetupLighting`); the sky those water surfaces reflect where SSR finds nothing is
-the flown zone's own `FOG_COLOR`, painted flat over Godot's procedural placeholder
-(`Launcher.cs`'s `UseMissionSky`, `WeatherRig.WriteSkyColor`). ⚠ That needs a `Sky` resource: a
-background COLOUR gives the specular no radiance at all, which reads as a plausible improvement
-because it removes the placeholder rather than replacing it. The cockpit interior pass and every splitscreen pane pick up
+resulting HDR scene off instead of clipping it; SSAO adds contact shading in ambient light. A
+glossy water arm with screen-space reflection was tried and parked: water surfaces are matte like
+the rest of the enhanced world, since every roughness/specular pair that kept a visible reflection
+put the water's luminance above the original by day and did not read meaningfully closer to the
+original by night either. The mission's own `FOG_COLOR` still feeds the Environment's sky as a flat
+panorama over Godot's procedural placeholder (`Launcher.cs`'s `UseMissionSky`,
+`WeatherRig.WriteSkyColor`), which now reaches only ambient light. The cockpit interior pass and every splitscreen pane pick up
 the same settings and the same per-zone updates, since both duplicate or share the session's own
 sun and Environment (`CockpitOverlay.cs`, `SplitScreen.cs`).
 
@@ -505,15 +505,17 @@ rule can hold them at their authored brightness without also relighting the wall
 general, non-glow-sprite population is about half non-luminous (a cloud deck, both skydome
 textures, baked ground-shadow decals, tree and bush cards) mixed in with the genuinely self-lit
 signs and lamps, so scaling that whole population would bloom a cloud deck and a skydome (C21,
-census in `docs/org/vertexLighting.md`).
+census in `docs/org/vertexLighting.md`). And a glossy roughness/specular pair on water with SSR did
+not hold up either: every pair that kept a visible reflection put the water's luminance above the
+original at each of three poses, and the only pair that landed near the original had no specular
+left to reflect anything, so the arm was removed rather than shipped at a pair nobody chose.
 
 **Open judgements.** The energy mapping from authored SUNLIGHT units to Godot light energies, the
-2x fog-range push and the shadow distance that follows it, the night key read off `FOG_COLOR`
+2x fog-range push and the shadow distance that follows it, and the night key read off `FOG_COLOR`
 luminance with its 0.25 separator and its 0.6 / 0.15 energy cap (a proxy the original never uses:
-it lights from SUNLIGHT and darkens from FOG_COLOR independently), and SSR's hard mirror on
-wave-less water planes are all TUNE: judged at the controls against captures, not derived from a
-decoded rule. `docs/PLAN-enhanced-graphics.md`'s Open judgements list is where the user's at-the-controls
-pass tracks them.
+it lights from SUNLIGHT and darkens from FOG_COLOR independently) are all TUNE: judged at the
+controls against captures, not derived from a decoded rule. `docs/PLAN-enhanced-graphics.md`'s
+Open judgements list is where the user's at-the-controls pass tracks them.
 
 The options menu exposes `graphics.mode` through the menu plan's own options store
 (`docs/PLAN-menu-presentations.md`); every reader in this codebase consults the resolved
@@ -621,10 +623,11 @@ the fullbright arm's mix gives. In enhanced mode the two billboard generators' `
 original's own camera-facing light-source
 class, plus the flare/fire/flame cylindrical facades) additionally scales its colour by
 `EmissiveScale` so the pixels exceed 1.0 for the glow pass; those arms are `unshaded`, where Godot
-discards EMISSION, so the scale is applied to the colour. Inside that lit world arm, a surface
-`ClassifySurface` calls water takes `WaterRoughness`/`WaterSpecular` in place of the matte values,
-which is what `Launcher.EnableWaterReflections`' screen-space reflection has to march against. See
-"Rendering: the enhanced graphics mode" above for the divergence record as a whole.
+discards EMISSION, so the scale is applied to the colour. Water surfaces get no special treatment:
+a glossy roughness/specular pair with screen-space reflection was tried and parked, because
+reflecting the mission sky put the water's luminance above the original at every pair that kept a
+visible reflection. See "Rendering: the enhanced graphics mode" above for the divergence record as
+a whole.
 Format/decode: docs/formats/gamez.md, docs/formats/world-structure.md, docs/formats/gotchas.md,
 docs/org/vertexLighting.md (the lighting-bit census enhanced mode's glow arm is keyed on).
 
@@ -5586,9 +5589,9 @@ biased road decals), and a `DirectionalShadowMaxDistance` that is a FALLBACK: a 
 overwrites it per zone from that zone's pushed-out fog far (`WeatherRig`). The world meshes and the
 aircraft are the only casters; every other population is already `ShadowCastingSetting.Off` or
 declares `shadows_disabled` in its shader. The front-culled world needs no `DoubleSided` casting:
-the source's visible side is Godot's back face, which is the face the sun sees. `EnableWaterReflections`
-is the same mode gate on the Environment's SSR, for the one glossy population `SceneBuilder` builds;
-what it can and cannot reflect is measured in `docs/PLAN-enhanced-graphics.md` C24.
+the source's visible side is Godot's back face, which is the face the sun sees. Enhanced mode's
+Environment carries no SSR: a glossy water arm with screen-space reflection was tried and parked,
+measured in `docs/PLAN-enhanced-graphics.md`'s C24 and E46 sections.
 `UseMissionSky` is the same mode gate on the Environment's sky: enhanced mode swaps Godot's
 placeholder `ProceduralSkyMaterial` for a flat `PanoramaSkyMaterial` carrying one colour, which
 `WeatherRig` rewrites per zone from that zone's `FOG_COLOR`, and takes the ambient off the sky so
@@ -6632,9 +6635,8 @@ mode `ApplyZone` also drives the real sun and the Environment ambient from the z
 dimming does not land twice; original mode's path is unchanged. A zone whose authored `FOG_COLOR`
 is near-black is treated as a night zone (`IsNightZone`), which caps those two energies at the
 install's own night pair; every day zone is untouched. `WriteSkyColor` then paints the Environment's
-sky the zone's own `FOG_COLOR` as a flat panorama, so the water's specular reflects the mission's
-authored sky at every zone rather than a placeholder gradient (census in
-[org/weather.md](org/weather.md)).
+sky the zone's own `FOG_COLOR` as a flat panorama, which now reaches only ambient light since water
+is matte (census in [org/weather.md](org/weather.md)).
 Enhanced mode also pushes the fog out. `FogRangeFor` scales a zone's authored near/far by
 `EnhancedFogRangeScale` (2.0, TUNE) and is identity in original mode; both fog-range writers
 (`ApplyZone` and `ApplyFogState`) go through it, so a FOG_STATE edge cannot snap the haze back to
