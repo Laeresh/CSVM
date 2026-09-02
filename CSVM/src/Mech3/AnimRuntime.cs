@@ -1150,26 +1150,37 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _resolver.ClearFindCache();
     }
 
-    /// <summary>Parks a flown airframe's docking hook where the airframe's own
-    /// <c>&lt;x&gt;_hook_retract</c> RESET_STATE puts it, scoped to definitions anchored on a
-    /// <see cref="PlaneBuilder.IsDockingHook"/> group inside this model since the general pass
-    /// deliberately does not run over a rebased aircraft (<see cref="IndexRebasedStage"/>).
-    /// ⚠ Without it the extend switches a full-length arm on and collapses it a second later.
+    /// <summary>Parks a flown airframe's docking hook where its own <c>&lt;x&gt;_hook_retract</c>
+    /// RESET_STATE puts it, scoped to a <see cref="PlaneBuilder.IsDockingHook"/> group inside this
+    /// model since the general pass skips a rebased aircraft (<see cref="IndexRebasedStage"/>). A
+    /// RESET_STATE alone can leave a node unparked or on the wrong axis; <see cref="SeedFromExtend"/>
+    /// closes that gap from the matching extend definition's own FROM pose.
     /// Decode: docs/formats/anim-definitions/cutscenes.md. Returns the definitions applied.</summary>
     public int ParkDockingHook(Node3D planeModel)
     {
         ArgumentNullException.ThrowIfNull(planeModel);
         int applied = 0;
+        // Two explicit passes, not one interleaved: _program.Defs lists a group's own extend and
+        // retract in whatever order they were loaded, and the seed pass below must win over every
+        // RESET_STATE, never race it.
         foreach (var def in _program.Defs)
         {
             if (def.ResetState == null)
                 continue;
-            foreach (var a in Anchors(def))
+            foreach (var a in DockingHookAnchors(def, planeModel))
             {
-                if (a == null || !planeModel.IsAncestorOf(a)
-                    || !PlaneBuilder.IsDockingHook(NameOf(a)))
-                    continue;
                 ApplyInstant(def.ResetState.Events, def, a);
+                applied++;
+            }
+        }
+        foreach (var def in _program.Defs)
+        {
+            if (def.AnimName is not { } name
+                || !name.EndsWith("_extend", StringComparison.OrdinalIgnoreCase))
+                continue;
+            foreach (var a in DockingHookAnchors(def, planeModel))
+            {
+                SeedFromExtend(def, a);
                 applied++;
             }
         }
@@ -1987,6 +1998,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         root.GlobalTransform = xf;
     }
 
+    // A plain depth-first name search under one root: no symbol table, no wildcard, just NameOf
+    // equality, scoped to a single aircraft's own subtree so it cannot cross into another.
+    private static Node3D? FindNamedChild(Node3D root, string name)
+    {
+        if (string.Equals(NameOf(root), name, StringComparison.OrdinalIgnoreCase))
+            return root;
+        foreach (var child in root.GetChildren())
+        {
+            if (child is Node3D n3d && FindNamedChild(n3d, name) is { } found)
+                return found;
+        }
+        return null;
+    }
+
     /// <summary>INVALIDATE_ANIMATION: latches an animation off without touching what it is doing.
     /// Whatever is running keeps running to its own end; what changes is that nothing can start it
     /// again until a RESET_ANIMATION (or an explicit <see cref="Play"/>) clears the latch. See
@@ -2469,6 +2494,63 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         Emitters.Discard(def, anchor);
         Light.DiscardFor(anchor);
         Sound.DiscardFor(anchor);
+    }
+
+    // A definition's own anchors, filtered to the ones this plane owns and that are actually a
+    // docking-hook group — the shared filter both ParkDockingHook passes need.
+    private IEnumerable<Node3D> DockingHookAnchors(AnimDefinition def, Node3D planeModel)
+    {
+        foreach (var a in Anchors(def))
+        {
+            if (a != null && planeModel.IsAncestorOf(a) && PlaneBuilder.IsDockingHook(NameOf(a)))
+                yield return a;
+        }
+    }
+
+    // Not every node an extend definition swings is covered by its retract's RESET_STATE (bal
+    // and war author no scale reset at all; three more park a wrong axis). This closes that gap:
+    // each node's FIRST authored FROM pose, translate/rotate/scale gathered independently, then
+    // written as one combined basis — PoseRotate/PoseScale each reset the OTHER component to
+    // rest, so composing through them loses whichever channel is applied first.
+    private void SeedFromExtend(AnimDefinition extend, Node3D? anchor)
+    {
+        var rotate = new Dictionary<string, Vector3>(StringComparer.OrdinalIgnoreCase);
+        var scale = new Dictionary<string, Vector3>(StringComparer.OrdinalIgnoreCase);
+        var translate = new Dictionary<string, Vector3>(StringComparer.OrdinalIgnoreCase);
+        var firstEvent = new Dictionary<string, AnimEvent>(StringComparer.OrdinalIgnoreCase);
+        foreach (var seq in extend.Sequences)
+        {
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Kind != "ObjectMotionFromTo" || ev.Data.Str("name") is not { } name)
+                    continue;
+                firstEvent.TryAdd(name, ev);
+                if (ev.Data.Obj("rotate") is { } r && r.Has("from"))
+                    rotate.TryAdd(name, r.Vec3("from"));
+                if (ev.Data.Obj("scale") is { } s && s.Has("from"))
+                    scale.TryAdd(name, s.Vec3("from"));
+                if (ev.Data.Obj("translate") is { } tr && tr.Has("from"))
+                    translate.TryAdd(name, tr.Vec3("from"));
+            }
+        }
+
+        foreach (var (name, ev) in firstEvent)
+        {
+            if (!rotate.ContainsKey(name) && !scale.ContainsKey(name) && !translate.ContainsKey(name))
+                continue;
+            // A plain name walk under the anchor, scoped so it cannot cross into another
+            // aircraft: the docking-hook subtree is small and its node names are unambiguous
+            // within it, so this needs no symbol table.
+            if (anchor == null || FindNamedChild(anchor, name) is not { } t)
+                continue;
+            var rest = RestOf(t);
+            var rot = rotate.TryGetValue(name, out var r) ? r
+                : rest.Basis.Orthonormalized().GetEuler(EulerOrder.Yxz);
+            var sc = scale.TryGetValue(name, out var s) ? s : rest.Basis.Scale;
+            var origin = translate.TryGetValue(name, out var o) ? o : rest.Origin;
+            t.Transform = new Transform3D(
+                Basis.FromEuler(rot, EulerOrder.Yxz).Scaled(NonSingularScale(sc)), origin);
+        }
     }
 
     // Applies a list of events with no clock — the RESET_STATE path, where every op is a base state

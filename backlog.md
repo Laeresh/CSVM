@@ -1238,6 +1238,30 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
   file's own rule).
 
+- `BL-679` `[Bug]` **`NameResolver` keeps a disposed `Node3D` across a plane switch, so a suite
+  staging several airframes in one process throws intermittently.** *Evidence:* an
+  `ObjectDisposedException` inside `NameResolver.Add` reaching `Node3DIdentity.Equals`, seen on
+  roughly one run in four of the `landings` filter while `landings-hookup-airframe` drives six
+  airframes in sequence; the rate does not change with the number of planes driven, so it is a stale
+  entry surviving a switch rather than a capacity effect. *Fix shape:* find who owns removal from
+  the resolver's dictionary when a staged airframe is freed, and clear the entry there; a
+  `Node3DIdentity` that compares a freed node is the symptom, not the cause. *⚠ Traps:* do not
+  guard `Equals` with an `IsInstanceValid` check and call it fixed, which hides a stale entry that
+  will also answer a later lookup with the wrong node. This is non-deterministic, so a green run
+  proves nothing: reproduce it by driving the sequence repeatedly before and after.
+- `BL-680` `[Research]` **The compiled symbol table resolves nothing for `brig`/`fury`/`peace`'s
+  nested hook arms at `ParkDockingHook`'s staging point, though the same lookup succeeds later.**
+  *Evidence:* `_resolver.SymbolClaims` returns "claimed but unbuilt" for `l_arm1`/`r_arm1` under
+  `brig_hook`, `fury_hook` and `peace_hook` when `ParkDockingHook` runs, while the identical
+  node and definition pair resolves during ordinary animation dispatch afterwards.
+  `AnimRuntime.ParkDockingHook` works around it with a scoped plain-name walk (`FindNamedChild`).
+  *Fix shape:* find what the staging point has not yet built or indexed that the later dispatch
+  has, then decide whether the park should move after it or the index should be complete earlier.
+  *⚠ Traps:* the workaround is a name walk and will pick the wrong sibling if these airframes ever
+  gain a duplicate arm name, so it is a stopgap rather than an answer. The three airframes that
+  fail are exactly the three whose retract parks on the wrong axis, so check whether the two are
+  the same underlying data shape before treating them as separate questions.
+  *Cross-refs:* `BL-630`'s closing commit.
 - `BL-508` `[Research]` **The original never alpha-tests, so every alpha texture we scissor is an
   invention rather than a reproduction.** *Evidence:* decoded from `crimson.exe`
   (`analysis/alpha-classification/FINDINGS.md`, "The original has no cutout path"). The renderer is
