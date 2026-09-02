@@ -7103,7 +7103,9 @@ predicate drives both window hiding (scripted run) and focus request (interactiv
 ## src/Utils/OptionsStore.cs
 Process-wide, version-tolerant JSON persistence for `OptionsDef`, today the requested menu
 presentation (`menuPresentation`) and the requested graphics mode (`graphicsMode`): one file,
-`user://options.json`, independent of `Session/CampaignProfileStore.cs`. Missing/malformed reads as
+`user://options.json`, independent of `Session/CampaignProfileStore.cs`; under `--run-tests`
+`UserOptions()` reads and writes an emptied scratch directory instead (`DirectoryOverride`), so no
+driven suite depends on or touches the player's file. Missing/malformed reads as
 empty, an unknown version invalidates the file, an unknown value drops only that field, and a field
 the file does not carry reads as never set. That last rule is why adding a field does not bump
 `Version`: an older file loads with everything it does have. The version moves only when an

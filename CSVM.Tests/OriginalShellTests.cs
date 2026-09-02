@@ -293,6 +293,29 @@ public class OriginalShellTests
         Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
     }
 
+    /// <summary>The graphics row's description reads the choice against the running mode, so a
+    /// saved word the world has not picked up yet says a restart is owed rather than repeating
+    /// the next-start note. Which of the two words is the running one depends on the process, so
+    /// the fact checks that exactly one of them owes the restart.</summary>
+    [Fact]
+    public void TheGraphicsRowSaysWhenARestartIsStillOwed()
+    {
+        var saved = new OptionsDef { GraphicsMode = GraphicsMode.EnhancedWord };
+        var shell = Shell(out _, () => saved);
+        shell.OpenGameOptions();
+        string enhanced = shell.Compose().Lines.Single(l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal)).Text;
+
+        saved.GraphicsMode = GraphicsMode.Default;
+        shell.OpenGameOptions();
+        string original = shell.Compose().Lines.Single(l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal)).Text;
+
+        var owed = new[] { enhanced, original }.Where(t => t.EndsWith("restart to apply.", System.StringComparison.Ordinal)).ToList();
+        var settled = new[] { enhanced, original }.Where(t => t.EndsWith("Takes effect on the next start.", System.StringComparison.Ordinal)).ToList();
+        Assert.Single(owed);
+        Assert.Single(settled);
+        Assert.Contains(GraphicsMode.Enhanced ? "This run is enhanced" : "This run is original", owed[0]);
+    }
+
     [Fact]
     public void TheOptionsScreenIsComposedOverThePreferencesChromeWithOnlyItsGameOptionsDoorLive()
     {

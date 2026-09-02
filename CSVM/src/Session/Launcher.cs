@@ -555,6 +555,24 @@ public partial class Launcher : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
+        // --run-tests reads and writes options in a fresh scratch directory, never the player's
+        // file: a suite driving an Options screen must open it on the shipped defaults whatever was
+        // last saved at the controls. Set before the first UserOptions() call below. One directory
+        // per process, since the shards start together and a shared one deleted by a sibling
+        // mid-write threw out of _Ready and left that shard erroring in _Process until its timeout.
+        if (_spec.RunTests)
+        {
+            string scratchOptions = Path.Combine(Path.GetTempPath(), "CSVM", "run-tests-options",
+                System.Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (Directory.Exists(scratchOptions))
+            {
+                Directory.Delete(scratchOptions, recursive: true);
+            }
+
+            Directory.CreateDirectory(scratchOptions);
+            OptionsStore.DirectoryOverride = scratchOptions;
+        }
+
         // After the --det block, so ClearOverrides has dropped a config graphics.mode; ahead of the
         // clutter fade, which needs the mode to follow the pushed fog. ⚠ --det reads no saved
         // option either: options.json is one machine's state (docs/cli.md's --graphics bullet).

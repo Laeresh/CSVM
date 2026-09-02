@@ -2292,6 +2292,19 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string GraphicsChoiceLabel() =>
         _graphicsChoice == GraphicsMode.EnhancedWord ? "Enhanced" : "Original";
 
+    // The graphics row's detail says whether a restart is still owed: the mode is resolved once at
+    // launch, so a choice that differs from the running one reaches the world on the next start,
+    // and a player who saved it and came back would otherwise read the unchanged world as a
+    // failed switch.
+    private string GraphicsDetail()
+    {
+        bool running = GraphicsMode.Enhanced;
+        bool chosen = _graphicsChoice == GraphicsMode.EnhancedWord;
+        return chosen == running
+            ? "Original is the faithful world; Enhanced lights it. Takes effect on the next start."
+            : $"Original is the faithful world; Enhanced lights it. This run is {(running ? "Enhanced" : "Original")}; restart to apply.";
+    }
+
     // What this screen is, the middle band's first line.
     private string Heading()
     {
@@ -3014,7 +3027,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Options => focus switch
         {
             0 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
-            1 => "Original is the faithful world; Enhanced lights it. Takes effect on the next start.",
+            1 => GraphicsDetail(),
             _ => "Saves both choices and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Presets => PresetDetail(focus),

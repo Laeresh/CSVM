@@ -162,7 +162,10 @@ which beats the `graphics.mode` config key (`docs/cli.md`).
 
 A screen never writes the store. Both values ride the exit and `Launcher.ApplyOptions` is the only
 writer, so the options file has exactly one, and no test or suite that drives an Options screen
-through Apply can write the player's own file.
+through Apply can write the player's own file. Nor read it: `--run-tests` points
+`OptionsStore.UserOptions()` at an emptied scratch directory (`OptionsStore.DirectoryOverride`)
+before any suite runs, so every driven Options screen opens on the shipped defaults whatever the
+player last saved at the controls.
 
 `PresentationResolution` (`CSVM/src/Utils/PresentationResolution.cs`) fixes the precedence:
 `--force-builtin`, then `--presentation=<token>`, then the saved request, then Built-in. Availability
@@ -187,7 +190,8 @@ and leave through an `OptionsApplyExit` carrying every choice. Both presentation
 two shipped tokens alone, so a third presentation extends them as well as the registry (checklist
 below); both graphics choosers cover `original` and `enhanced` and say in their description that
 the choice takes effect on the next start, since the mode is resolved once at launch and applying
-it rebuilds nothing. The
+it rebuilds nothing; while the choice differs from the running mode the description names the
+running mode and says a restart is still owed, read off `GraphicsMode.Enhanced`. The
 startup recovery is `--force-builtin`, which beats everything and rewrites nothing.
 
 ## Audio

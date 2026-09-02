@@ -70,8 +70,16 @@ public sealed class OptionsStore
         _dir = directory;
     }
 
-    /// <summary>The production store, <c>user://</c> resolved to its OS path.</summary>
-    public static OptionsStore UserOptions() => new(Godot.ProjectSettings.GlobalizePath("user://"));
+    /// <summary>Where <see cref="UserOptions"/> reads and writes instead of <c>user://</c> while
+    /// set. The in-engine suites point it at an emptied scratch directory before any suite runs,
+    /// so a suite that drives an Options screen opens it on the shipped defaults and its Apply
+    /// lands in scratch: the player's own options.json is one machine's state, and a suite that
+    /// read it would pass or fail with the last choice saved at the controls.</summary>
+    public static string? DirectoryOverride { get; set; }
+
+    /// <summary>The production store, <c>user://</c> resolved to its OS path, or the
+    /// <see cref="DirectoryOverride"/> while one is set.</summary>
+    public static OptionsStore UserOptions() => new(DirectoryOverride ?? Godot.ProjectSettings.GlobalizePath("user://"));
 
     /// <summary>The canonical JSON text for <paramref name="def"/>.</summary>
     public static string Serialize(OptionsDef def)

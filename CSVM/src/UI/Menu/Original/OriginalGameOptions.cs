@@ -59,10 +59,10 @@ public sealed partial class OriginalShell
     // carries both choices and Launcher.ApplyOptions is the options file's one writer.
     private static readonly GameOption[] GameOptions =
     {
-        new(PresentationKey, "Menu", "Select the menu presentation.", OriginalRowKind.Dropdown, PresentationWords,
+        new(PresentationKey, "Menu", _ => "Select the menu presentation.", OriginalRowKind.Dropdown, PresentationWords,
             s => s._choice == PresentationId.BuiltIn.Value ? 1 : 0,
             (s, i) => s._choice = i == 1 ? PresentationId.BuiltIn.Value : PresentationId.Original.Value),
-        new(GraphicsKey, "Enhanced Graphics", "Select the lit world. Takes effect on the next start.",
+        new(GraphicsKey, "Enhanced Graphics", s => s.GraphicsDescription(),
             OriginalRowKind.Radio, GraphicsWords,
             s => s._graphics == CSVM.Utils.GraphicsMode.EnhancedWord ? 1 : 0,
             (s, i) => s._graphics = i == 1 ? CSVM.Utils.GraphicsMode.EnhancedWord : CSVM.Utils.GraphicsMode.Default),
@@ -82,6 +82,19 @@ public sealed partial class OriginalShell
         _goOpen = null;
         _focus[(int)OriginalScreen.GameOptions] = -1;
         Open(OriginalScreen.GameOptions);
+    }
+
+    // The graphics row's description says whether a restart is still owed. The mode is resolved
+    // once at launch, so a choice that differs from the running one reaches the world on the next
+    // start and nothing on the page can show it sooner; a player who saved it and came back
+    // otherwise sees the box checked and a world unchanged, and reads that as a failed switch.
+    private string GraphicsDescription()
+    {
+        bool running = CSVM.Utils.GraphicsMode.Enhanced;
+        bool chosen = _graphics == CSVM.Utils.GraphicsMode.EnhancedWord;
+        return chosen == running
+            ? "Select the lit world. Takes effect on the next start."
+            : $"Select the lit world. This run is {(running ? "enhanced" : "original")}; restart to apply.";
     }
 
     // The saved options the page shows back: what was asked for, not what this process resolved,
@@ -327,7 +340,7 @@ public sealed partial class OriginalShell
             lines.Add(new BoardLine(option.Title, page.TitleX, page.RowY(i), page.TitleWidthFor(option.Kind),
                 GameOptionTitleFont, BoardInk.Row, -1, false,
                 option.Kind == OriginalRowKind.Radio ? BoardJustify.Center : BoardJustify.Left));
-            lines.Add(new BoardLine(option.Description, page.DescX, page.RowY(i) + page.DescDy, page.DescWidth,
+            lines.Add(new BoardLine(option.Description(this), page.DescX, page.RowY(i) + page.DescDy, page.DescWidth,
                 GameOptionDescFont, BoardInk.Row));
         }
 
@@ -401,10 +414,11 @@ public sealed partial class OriginalShell
         return new BoardPanel(panelFills, Array.Empty<BoardPicture>(), panelLines);
     }
 
-    // One option of the page: its title, its description, the control it takes, the words of the
-    // store field it shows, and how that field is read and written.
+    // One option of the page: its title, its description (read off the shell, since a row can say
+    // something about its saved state), the control it takes, the words of the store field it
+    // shows, and how that field is read and written.
     private sealed record GameOption(
-        string Key, string Title, string Description, OriginalRowKind Kind, IReadOnlyList<string> Words,
+        string Key, string Title, Func<OriginalShell, string> Description, OriginalRowKind Kind, IReadOnlyList<string> Words,
         Func<OriginalShell, int> Read, Action<OriginalShell, int> Write);
 
     // The page's row shape in authored pixels, every number off the section's own widgets: the
