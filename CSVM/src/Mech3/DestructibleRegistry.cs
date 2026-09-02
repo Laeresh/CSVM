@@ -29,6 +29,10 @@ public sealed class DestructibleRegistry
     // anchored above that node must not displace it, whichever order the two register in.
     private readonly HashSet<ulong> _ownClaim = new();
 
+    // Nodes whose authoritative claim is a pool's ANCHOR rather than its own damage node, so
+    // Resolve can tell the two apart while it climbs.
+    private readonly HashSet<ulong> _fallbackClaim = new();
+
     /// <summary>Coarse lifecycle state of one destructible instance. Everything sits at
     /// <see cref="Healthy"/> until damage is applied.</summary>
     public enum State
@@ -68,7 +72,7 @@ public sealed class DestructibleRegistry
         var key = (def, anchor.GetInstanceId());
         if (_byKey.TryGetValue(key, out var existing))
             return existing;
-        var inst = new Instance(def, anchor, maxHealth);
+        var inst = new Instance(def, anchor, maxHealth, damageNode);
         _byKey[key] = inst;
         _all.Add(inst);
         ulong aid = anchor.GetInstanceId();
@@ -128,15 +132,22 @@ public sealed class DestructibleRegistry
 
     /// <summary>The destructible instance a struck world node belongs to: climbs the parent chain
     /// from the raycast-hit collider to a registered anchor, nearest compiled anchor first, then
-    /// nearest reader (docs/formats/destructibles.md). Null off the destructible chain
-    /// entirely.</summary>
+    /// nearest reader (docs/formats/destructibles.md). Null off the destructible chain entirely,
+    /// and null for a climb that reaches a live pool only through its anchor while that pool's own
+    /// damage node is switched off, which is a hit on the housing rather than on the piece.</summary>
     public Instance? Resolve(Node? struck)
     {
         Instance? nearestReader = null;
-        for (var n = struck; n != null; n = n.GetParent())
+        bool climbed = false;
+        for (var n = struck; n != null; n = n.GetParent(), climbed = true)
         {
-            if (!_authoritative.TryGetValue(n.GetInstanceId(), out var inst))
+            ulong id = n.GetInstanceId();
+            if (!_authoritative.TryGetValue(id, out var inst))
                 continue;
+            // ⚠ Stop rather than climb on. The next claim up is the airship's gasbag, and letting
+            // a hatch round through to it would trade one wrong pool for a worse one.
+            if (climbed && _fallbackClaim.Contains(id) && Stowed(inst))
+                return nearestReader;
             if (inst.Def.Archive != null)
                 return inst;               // compiled = authoritative, take the nearest
             nearestReader ??= inst;        // fallback if no compiled anchor is found up the chain
@@ -152,7 +163,15 @@ public sealed class DestructibleRegistry
         _anchors.Clear();
         _authoritative.Clear();
         _ownClaim.Clear();
+        _fallbackClaim.Clear();
     }
+
+    // A live pool whose own damage node is out of the world: a broadside cannon retracted behind
+    // its shut hatch, whose deploy RESET_STATE switches the gun off. The housing around it stays
+    // solid, so a round meets that and must not find the pool. A destroyed pool is exempt: its
+    // death hid the same node, and a hit on the wreck still belongs to it.
+    private static bool Stowed(Instance inst) =>
+        inst.Status != State.Destroyed && !inst.DamageNode.Visible;
 
     // Who answers a hit resolved at this node. Compiled beats reader, and a def whose own damage
     // node this is beats one merely anchored above it; otherwise the first claimant keeps it.
@@ -165,6 +184,14 @@ public sealed class DestructibleRegistry
         if (free || better)
         {
             _authoritative[node] = inst;
+            if (ownRoot)
+            {
+                _fallbackClaim.Remove(node);
+            }
+            else
+            {
+                _fallbackClaim.Add(node);
+            }
         }
 
         if (ownRoot)
@@ -177,16 +204,24 @@ public sealed class DestructibleRegistry
     /// binds to, and the HP that actually falls as it takes fire.</summary>
     public sealed class Instance
     {
-        public Instance(AnimDefinition def, Node3D anchor, float maxHealth)
+        public Instance(AnimDefinition def, Node3D anchor, float maxHealth, Node3D? damageNode = null)
         {
             Def = def;
             Anchor = anchor;
             MaxHealth = maxHealth;
             Health = maxHealth;
+            DamageNode = damageNode ?? anchor;
         }
 
         public AnimDefinition Def { get; }
         public Node3D Anchor { get; }
+
+        /// <summary>The node a weapon hit resolves through: this definition's own animation-root
+        /// node inside <see cref="Anchor"/>, or the anchor where the def names none
+        /// (docs/formats/destructibles.md). The piece the pool's HP stands for, which is why
+        /// <see cref="Resolve"/> refuses a hit on the housing while it is switched off.</summary>
+        public Node3D DamageNode { get; }
+
         public float MaxHealth { get; private set; }
         public float Health { get; set; }
         public State Status { get; set; } = State.Healthy;

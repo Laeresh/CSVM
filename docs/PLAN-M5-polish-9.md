@@ -91,7 +91,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☐ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs
 23. ☐ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake
 24. ☐ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
-25. ☐ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
+25. ☑ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
 26. ☐ `BL-632` CM15: the capture cutscene frames its Balmoral
 
 ### Wave D — Closing sortie
@@ -500,7 +500,7 @@ regression with unchanged node counts; D31 looks at the Pandora's landing cones 
 **⚠ Traps.** Stripping `~n` and taking the first hit is wrong; the suffix identifies which sibling.
 C24 shares the `Anim/` folder with A1 and C22 but is `NameResolver.cs` alone.
 
-## C25 ☐ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
+## C25 ☑ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
 
 **Goal.** In CM14 (C2B/M04) a round fired at a Gemini broadside cannon whose hatch is shut does
 not damage the cannon; a deployed cannon takes damage as before.
@@ -537,6 +537,30 @@ elsewhere. The `deploy_gmzep_lbroadNN` animations are the mission's progress cou
 `INVALID` completing primary 3), so anything changing how easily a cannon dies moves the pacing.
 `BL-629`'s routing fix chose between two definitions on one anchor; it is a precedent for the walk,
 not this bug. `BL-639` (the gasbag burn-out) stays blocked on `CAP-47`.
+
+**Landed.** A round that meets a shut hatch damages nothing. `DestructibleRegistry.Resolve` now
+tells an own-damage-node claim from an anchor-fallback claim, and a climb that arrives at a live
+pool through its anchor alone, while that pool's own damage node is switched off, answers with
+nothing and stops climbing rather than passing the hit up to the airship's gasbag. A destroyed pool
+is exempt, so a hit on a wreck still finds the pool that owns it. The definition's activation is
+untouched, and no door state is read anywhere.
+
+What a round actually strikes was established before anything was changed. `gunback`'s and `gun1`'s
+colliders are already gone while stowed, since the deploy definition's `RESET_STATE` switches both
+off and `WorldCollision` derives every collider from visibility, and `frame` never had one
+(`intersect_surface` is clear on it in the gamez). The hatch is the only solid geometry left, and
+`Resolve` climbed `upper_br_door` → `lbroad11` to the cannon's pool: 30 rounds into a shut hatch
+destroyed a HEALTH 60 cannon. So this was the attribution walk, not a stray collider. The original
+says the same thing in its own briefing text, `MSG_BRF_HWM4_OBJ3`: "Destroy the GEMINI by shooting
+the open cannon hatches."
+
+The pacing moves, in the direction the data authors. The six `deploy_gmzep_lbroadNN` INVALID states
+feed a 1/3/5 objective ladder ending in PRIMARY 3, and the Gemini's cannons now cannot be hurt until
+they deploy, which needs `OBJECTIVE25`'s `COMPLETED_ZEPCANNONS` (the two airships closing to 1000 m)
+and the player inside the firing arc. No mission `startanims` deploys them early, so before that
+gate the cannons are immune where they were previously killable through their hatches.
+
+**Verified.** <pending orchestrator run>
 
 ## C26 ☐ `BL-632` CM15: the capture cutscene frames its Balmoral
 

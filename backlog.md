@@ -86,6 +86,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
+- `BL-672` `[Fidelity]` **The remake attributes a weapon hit by climbing the node-parent chain;
+  the original attributes it only to the struck node's own handler.** *Evidence:* `FUN_005abcf0`
+  reads the hit record's struck node at `+0x24`, reads that node's handler at `+0xbc`, and returns
+  0 when it is null. There is no parent walk at all. `DestructibleRegistry.Resolve` instead climbs
+  to the nearest node a pool claims, which is the deliberate remake rule recorded in
+  `docs/formats/destructibles.md` under "Remake node resolution". Two visible consequences: a round
+  on the Gemini's *open* hatch still damages the cannon behind it, where the original's
+  `upper_br_door` registers no handler and the hit does nothing; and a round on `turret`
+  (model 865, under `gunback`) damages the cannon where the original ignores it. *Fix shape:*
+  decide whether the climb is kept as a deliberate forgiveness or narrowed to the decode. Narrowing
+  it needs `Probes.cs`'s deep-descendant walk-up assertion rewritten first, which is why it is not
+  a small change. *⚠ Traps:* the climb is what makes most destructibles hittable at all, so do not
+  narrow it without a per-chapter census of which pools stop answering. `BL-640`'s stowed-cannon
+  fix already carves out the one case that mattered (a fallback claim to a live pool whose damage
+  node is hidden), so this entry is the remaining, wider question, not that one again.
+  *Cross-refs:* `BL-640`'s closing commit, `docs/formats/destructibles.md` "Which node takes the
+  hit".
+- `BL-673` `[Bug]` **`AnimRuntime.DamageAt` never consults `Instance.Dormant`, so a deactivated
+  hull's pools can still be damaged by script.** *Evidence:* a deactivated zeppelin's pools
+  (C2B/M04's Gemini ships `deactivated: 1`) are correctly refused as AI *targets*, but a scripted
+  `DamageAt` reaches them anyway. Not reachable by weapon fire today, because a dormant hull's
+  colliders are off, so this is latent rather than a live symptom. *Fix shape:* have `DamageAt`
+  read `Dormant` the way the target scan already does, and add a unit that damages a dormant pool
+  and asserts nothing happens. *⚠ Traps:* a pool that is dormant at mission start and woken later
+  must still take damage after the wake, so the read has to be live rather than captured at build.
 - `BL-668` `[Bug]` **A downed zeppelin's wreck sinks 400 m under the sea and four gasbags fall
   through the water.** *Evidence:* the `zeppelin-breakup` suite's artifact records the wreck at
   rest at y = −411 with the water surface at y = 0, and gasbags 1 to 4 falling about 1228 m
