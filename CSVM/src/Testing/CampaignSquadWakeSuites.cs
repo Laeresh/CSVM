@@ -45,8 +45,14 @@ internal static class CampaignSquadWakeSuites
     private const float PlayerRingM = 900f;
     private const float ScanRangeM = 3000f;
 
+    // BL-665: the block a mission script has moved before its wake. britpeace_7's own FindNodes
+    // answer is overridden to a pose well clear of its authored spawn, so the same OBJECTIVE5/8
+    // wake chain proves WAKEUP_ENEMIES re-places it at that pose rather than its authored one.
+    private const string NodeOverrideBlock = "britpeace_7";
+
     private static readonly string[] Squad = { "britpeace_7", "britpeace_8", "britpeace_9" };
     private static readonly string[] FirstSquad = { "britpeace_1", "britpeace_2", "britpeace_3" };
+    private static readonly Vector3 NodeOverrideOffset = new(5000f, 0f, 0f);
 
     // BL-499: the aircraft arm of the same directive, which the zeppelin arm above does not
     // stand in for. CM02's ace squad is the worked case.
@@ -95,6 +101,172 @@ internal static class CampaignSquadWakeSuites
 
         ctx.WriteArtifact($"test-campaign-squad-wakeup-{Chapter}-{Mission}.txt", report.ToString());
         ctx.Note($"{Chapter}/{Mission}: the ace's squad stays out of the world until OBJECTIVE{GateObjective} wipes group 1");
+    }
+
+    [Suite("campaign-roster-wake-node",
+        "BL-665 over CM02's own wake chain: britpeace_7's FindNodes answer is overridden to a "
+        + "pose 5000 m from its authored spawn, the build itself already honours the override, "
+        + "and once OBJECTIVE5's DEDG naps OBJECTIVE8 awake through the real graph the woken "
+        + "rig lands on the overridden node rather than snapping back to its authored spawn")]
+    internal static void CampaignRosterWakeNode(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
+        ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
+        ctx.RequireData(texturesPath, $"{Chapter} textures");
+
+        CampaignMission? found = null;
+        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        {
+            if (m.ChapterFolder.Equals(Chapter, StringComparison.OrdinalIgnoreCase)
+                && m.MissionFolder.Equals(Mission, StringComparison.OrdinalIgnoreCase))
+            {
+                found = m;
+            }
+        }
+        if (found is not { } mission)
+        {
+            throw new SuiteSkippedException($"{Chapter}/{Mission} is not in cm_sequence");
+        }
+
+        var script = ObjectiveScript.Load(missionZrdr);
+        var blocks = AiSkills.LoadRoster(missionZrdr);
+        var report = new StringBuilder();
+        var director = CampaignDirector.Create(script, mission,
+            CampaignProfileDef.NewProfile("Zachary"), null);
+        ctx.WithWorld(Chapter, collision: false, Mission, world =>
+            DriveNodeOverride(ctx, world, director, blocks, missionZrdr, chapterZrdr, texturesPath, report));
+
+        ctx.WriteArtifact($"test-campaign-roster-wake-node-{Chapter}-{Mission}.txt", report.ToString());
+        ctx.Note($"{Chapter}/{Mission}: '{NodeOverrideBlock}' wakes on the world node its name resolves to, not its authored spawn");
+    }
+
+    private static void DriveNodeOverride(TestContext ctx, TestWorld world, CampaignDirector director,
+        IReadOnlyList<(string Name, List<object?> Fields)> blocks,
+        string missionZrdr, string chapterZrdr, string texturesPath, StringBuilder report)
+    {
+        var textures = new TextureArchive(texturesPath);
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        ProjectilePool? pool = null;
+        FlightRoster? roster = null;
+        FlightController? player = null;
+        Node3D? overrideNode = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            roster = Spawner(ctx, planesGamez, textures, live);
+
+            var pose = PlayerPose(blocks);
+            player = HumanRig(ctx, planesGamez, textures, live, pose.Position, pose.Position + pose.Forward);
+            var human = player;
+
+            // The block's own authored spawn, read the same way the roster plan would with no
+            // override, so the placed pose asserted below is provably somewhere else.
+            if (Fields(blocks, NodeOverrideBlock) is not { } fields
+                || AiSkills.RosterSpawnPose(fields) is not { } authoredPose)
+            {
+                throw new SuiteSkippedException($"{Chapter}/{Mission} does not author '{NodeOverrideBlock}'");
+            }
+            Vector3 authored = authoredPose.Position;
+            Vector3 placed = authored + NodeOverrideOffset;
+
+            overrideNode = new Node3D();
+            ctx.Host.AddChild(overrideNode);
+            overrideNode.GlobalPosition = placed;
+
+            string what = director.BuildRoster(new CampaignDirector.RosterInputs
+            {
+                ChapterZrdrPath = chapterZrdr,
+                MissionZrdrPath = missionZrdr,
+                ZrdrPath = ctx.ZrdrPath,
+                MinAiActiveDist = AiSkills.Load(ctx.ZrdrPath).MinAiActiveDist,
+                Player = () => human,
+                NetTrailers = new NetTrailerTargets(
+                    () => human.WorldPosition,
+                    name => world.Runtime.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null),
+                FindNodes = name => name.Equals(NodeOverrideBlock, StringComparison.OrdinalIgnoreCase)
+                    ? new Node3D[] { overrideNode }
+                    : world.Runtime.FindNodes(name),
+                Spawn = (plan, pos, look, pilot) => roster!.SpawnAi(
+                    CampaignRosterPlan.SpawnFor(plan, pos, look, pilot)),
+                Rng = new Random(1),
+            });
+            report.AppendLine($"build summary suffix: '{what}'");
+
+            var rigs = director.Roster;
+            ctx.Check(rigs.TryGetValue(NodeOverrideBlock, out var rig) && rig.Inert,
+                $"'{NodeOverrideBlock}' spawns inert, deactivated by CM02's own roster");
+            if (rig == null)
+            {
+                return;
+            }
+            report.AppendLine($"spawn: '{NodeOverrideBlock}' authored={authored} placed={placed} actual={rig.WorldPosition}");
+            ctx.Check(rig.WorldPosition.DistanceTo(placed) < 1f,
+                $"the spawn itself already honours the overridden node: {rig.WorldPosition} vs {placed}");
+
+            director.Attach(new CampaignDirector.WorldInputs
+            {
+                Runtime = world.Runtime,
+                Sounds = world.Runtime.Sounds,
+                Projectiles = live,
+                ListenerPosition = () => human.WorldPosition,
+                PlayerAircraft = () => human,
+                Rng = new Random(1),
+            });
+
+            var graph = director.Graph;
+            ctx.Check(graph != null, $"the world phase armed the objective graph");
+            if (graph == null)
+            {
+                return;
+            }
+
+            foreach (var name in FirstSquad)
+            {
+                if (rigs.TryGetValue(name, out var first))
+                {
+                    first.DebugForceCrash();
+                }
+            }
+
+            float woke = -1f, elapsed = 0f;
+            float limit = NapSeconds * 3f;
+            while (elapsed < limit && woke < 0f)
+            {
+                director.Step(StepDt);
+                elapsed += StepDt;
+                if (rig.InPlay)
+                {
+                    woke = elapsed;
+                }
+            }
+            report.AppendLine($"wake: '{NodeOverrideBlock}' woke {woke:0.00} s after group 1 went down, at {rig.WorldPosition}");
+            ctx.Check(woke > 0f, $"'{NodeOverrideBlock}' is woken through the real graph, {woke:0.00} s in");
+            ctx.Check(rig.WorldPosition.DistanceTo(placed) < 1f,
+                $"the wake re-places '{NodeOverrideBlock}' on the overridden node, not its authored spawn: {rig.WorldPosition} vs {placed}");
+            ctx.Check(rig.WorldPosition.DistanceTo(authored) > NodeOverrideOffset.Length() - 1f,
+                $"…which is confirmed clear of the authored spawn itself: {rig.WorldPosition} vs authored {authored}");
+        }
+        finally
+        {
+            player?.Free();
+            var members = new List<FlightController>(
+                roster?.AiAircraft ?? Array.Empty<FlightController>());
+            roster?.ClearMembership();
+            foreach (var r in members)
+            {
+                r.Free();
+            }
+            overrideNode?.Free();
+            pool?.Free();
+            textures.Dispose();
+        }
     }
 
     // The authored shape this suite consumes, read off the shipped files rather than restated: the

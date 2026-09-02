@@ -6043,7 +6043,8 @@ woken definition may stage library roots), both sound-group directives through
 a named net, and the airship holds or leaves), and, over the spawned roster, `DEDG`
 (`GroupLiveCount`: not-crashed members of the block group, a parked one counting as alive) and
 `WAKEUP_ENEMIES`, one directive over two deactivated flags: an inert named aircraft re-activated at
-its spawn pose, or a dormant `ZeppelinRuntime` record put into the world.
+its PLACED pose (a world node of the block's name where one exists, its authored spawn otherwise,
+never a stale copy of the plan), or a dormant `ZeppelinRuntime` record put into the world.
 `SET_AI_NET` / `SET_AI_TEAM` / `SET_AI_ATTACK_RADIUS` share one lookup by roster block name
 (`Commanded`) and write the follower, the team and the attack range over the spawned roster; their
 zeppelin arm has no seam here, so an unmatched name is always reported.

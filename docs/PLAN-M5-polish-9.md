@@ -82,7 +82,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☐ `BL-597` CM08: the Pandora halts over the tanker and its sequence there plays
 12. ☐ `BL-666` CM09: a zeppelin killed by gasbags alone ends the mission one way or the other
-13. ☐ `BL-665` A woken roster block is re-placed where the script left it, not at its authored pose
+13. ☑ `BL-665` A woken roster block is re-placed where the script left it, not at its authored pose
 14. ☐ `BL-656` CM10: an attack balloon's marker never rests on the water before the wave arrives
 
 ### Wave C — Hollywood (C2)
@@ -289,7 +289,7 @@ ending.
 original's mechanism and is correct. `BL-440`'s breakup runs on the same kill path; keep the
 breakup playing.
 
-## B13 ☐ `BL-665` A woken roster block is re-placed where the script left it
+## B13 ☑ `BL-665` A woken roster block is re-placed where the script left it
 
 **Goal.** A deactivated roster block that a mission's script placed or moved before its wake
 appears at that pose on the wake, not at its authored one.
@@ -320,6 +320,17 @@ before and after).
 **⚠ Traps.** A block placed by pose and never animated must not move. If the census finds no
 shipped mission with such a node, the item still lands as a latent fix, and its Landed line says
 so.
+
+**Landed.** `CampaignDirector` keeps a `_rosterPlacedPose` dictionary beside `_rosterPlans`, filled
+in `BuildRoster`'s spawn loop with the pose the rig is actually placed at (the node override where
+`FindNodes` resolves one, the authored spawn otherwise). `World.WakeupEnemies` re-places a woken
+block from that placed pose, falling back to the plan's authored pose for a name with no placed
+entry (a generator launch, which this item does not touch). The census, `CampaignRosterPlan.Build`
+run over all 24 shipped missions' rosters checking each deactivated block's name against
+`GameZ.IsLibraryRoot`, finds none names a placed world node: this lands as a latent fix, and no
+shipped mission shows the symptom today.
+
+**Verified.** <pending orchestrator run>
 
 ## B14 ☐ `BL-656` CM10: an attack balloon's marker never rests on the water
 
