@@ -211,6 +211,11 @@ public sealed class WeatherRig
     public static Vector2 FogRangeFor(Vector2 authored)
         => GraphicsMode.Enhanced ? authored * EnhancedFogRangeScale : authored;
 
+    /// <summary>The push factor <see cref="FogRangeFor"/> applies as a plain scalar (identity, 1,
+    /// in original mode), so another distance-gated population can follow the same pushed fog
+    /// without this class exposing <c>EnhancedFogRangeScale</c> itself.</summary>
+    public static float EnhancedFogScale() => GraphicsMode.Enhanced ? EnhancedFogRangeScale : 1f;
+
     /// <summary>Registers a second (sun, env) pair — a cockpit overlay's cloned copies — so every
     /// future enhanced-mode zone change reaches it too, not only the zone live when it was built.
     /// <paramref name="env"/> may be null (a suite rig with no Environment); the shadow max

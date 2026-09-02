@@ -112,7 +112,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 41. ☑ Shadows end before the fog ramp, not inside it
 42. ☑ C5 reads too bright in enhanced mode, its water a light grey
-43. ☐ The clutter building fade reaches as far as the pushed fog
+43. ☑ The clutter building fade reaches as far as the pushed fog
 44. ☐ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
 45. ☐ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
 
@@ -1540,7 +1540,7 @@ item does not own: the 2x fog-range push (`E41`), the glow and AgX tonemap (`C22
 placeholder procedural sky standing in for the mission dome behind the horizon. That last one is
 the single largest remaining lever and has no item yet.
 
-## E43 ☐ The clutter building fade reaches as far as the pushed fog
+## E43 ☑ The clutter building fade reaches as far as the pushed fog
 
 **Goal.** In enhanced mode the clutter populations (city blocks, trees) fade at the same pushed
 distance as the fog, so unique buildings no longer stand alone past the clutter line.
@@ -1560,6 +1560,51 @@ Re-measure C5 at 4 panes with `--perf`, since more clutter instances draw.
 
 **Verify.** C5 and C2 horizon captures: clutter blocks reach the fog line; instance counts logged
 before and after. Goldens zero movers.
+
+**As landed.** `WeatherRig.EnhancedFogScale()` exposes `EnhancedFogRangeScale` (1 in original mode)
+as a plain scalar; `EffectsLevel.ClutterFadeScaleSq`/`ResolveClutterFadeScaleSq` take it as a
+`fogScale` parameter (default 1, so every existing caller is untouched) and DIVIDE by it squared:
+the shader multiplies the scale into the squared camera distance, so a larger scale fades sooner,
+and pushing the fade out by the fog factor means shrinking the scale by its square (the first
+landing multiplied and made the towers vanish at half the distance; the orchestrator caught it on
+the montage). `Launcher._Ready` resolves `GraphicsMode` before the
+clutter-fade write (it used to run after) and passes `WeatherRig.EnhancedFogScale()` in, so the one
+write site scales with the mode already resolved. `MapEdgeExtender`'s own clutter continuation
+reads the same `csky_clutter_fade_scale_sq` global as `Clutter.cs`, so it follows with no code
+change of its own.
+
+The audit: `Clutter.cs` and `MapEdgeExtender`'s clutter both read the one global above, so both
+follow. `Effects/FogVolumeClutter` (the `fvol` ambient cloud field) carries its own authored
+`far_fade_range` per kind, explicitly exempt from distance fog by design (`fog: false`, "carry
+`far_fade_range` instead") and unrelated to the "unique buildings stand out" complaint the user
+raised, so it is left alone. `WorldBuilder.CloudClusters` (placed `cloudparent` subtrees) are gated
+by camera altitude, not distance, so there is nothing to scale. `WorldLights`' 900-1500 m fade is
+budgeted (`MaxActive` slot ranking against the nearest viewer), not fog-bounded, so it stays as is.
+The zone gate carries no distance at all (B13). The far-field AI plant's 1 km branch is a gameplay
+physics simplification, not a visual population, so it stays untouched.
+
+**Verified.** <pending orchestrator run>
+
+C2 (`--freecam --chapter=C2 --pos=-5722,186,-3457 --direction=-0.438,-0.15,-0.899 --graphics=enhanced
+--det --mute`): `clutter fade:` `scale_sq` 1 before, 0.25 after; `clutter uv lattice: placed=46752`
+unchanged. C5 (`--pos=-9256,178,-3155 --direction=-0.588,-0.1,-0.809`, same flags): `scale_sq` 1
+before, 0.25 after; `placed=177291` unchanged. The C5 horizon montage shows the clutter towers
+reaching the fog line beside the unique bridge towers. A same-pose original-mode
+capture is md5-identical before and after; the two enhanced-mode captures differ (C2 84,656/921,600
+px, C5 60,651/921,600 px), confirming the fade moved and nothing else did.
+
+C5 `--perf` (`--freecam --det --mute`, three runs per configuration, mean gpu_ms over the first
+eight steady windows past sim frame 180; frame_ms holds at the 120 fps cap of 8.3-8.6 in every run):
+1 pane 2.085 ms before, 2.184 ms after; 4 panes (`--players=4`) 2.185 ms before, 2.187 ms after.
+Both deltas sit inside the run-to-run spread (1.89-2.24 ms) seen across all twelve runs, so the
+uniform-only change costs nothing measurable; flagged provisional under the shared desktop's
+contention.
+
+`.\RunTests.ps1 -Suite clutter-determinism -SkipUnits -SkipGoldens`: PASS, 1/200, engine errors
+clean. `.\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only): PASS, 18 shot(s) hash-identical,
+zero movers, on an RTX 5080. The complete `.\RunTests.ps1`: PASS, 2802 units, 200 engine suites
+(errors clean), 18 goldens hash-identical, 169.7 s total. `dotnet build CSVM/CSVM.sln`: clean, 0
+warnings, 0 errors.
 
 ## E44 ☐ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
 

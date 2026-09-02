@@ -6669,7 +6669,11 @@ A second key, `graphics.clutterFarFade` (bool, default `true`), is the remake's 
 than an engine option: `false` resolves the same global to 0, which is a never-fades scale because
 the shader multiplies it into the squared camera distance, so no stamp reaches its near² and
 clutter draws out to the fog instead of ending at the authored metres. Both keys and the resolved
-scale are on the `[world] clutter fade:` launch line.
+scale are on the `[world] clutter fade:` launch line. Enhanced mode pushes the resolved scale by
+`WeatherRig.EnhancedFogScale()` squared, so clutter reaches as far as the pushed fog instead of
+standing at its authored distance underneath it; original mode's factor is identity, so its value
+is unchanged. `MapEdgeExtender`'s own clutter continuation shares this same global, so it follows
+without its own code.
 
 ## src/Utils/GraphicsMode.cs
 The opt-in enhanced-lighting mode's config key, `graphics.mode` (`original`/`enhanced`, default

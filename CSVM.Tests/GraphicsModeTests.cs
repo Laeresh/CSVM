@@ -1,3 +1,4 @@
+using CSVM.Session;
 using CSVM.Utils;
 using Xunit;
 
@@ -45,5 +46,17 @@ public class GraphicsModeTests
     {
         Assert.False(GraphicsMode.Resolve("ultra"));
         Assert.False(GraphicsMode.Enhanced);
+    }
+
+    [Fact]
+    public void EnhancedFogScaleIsIdentityInOriginalAndThePushInEnhanced()
+    {
+        GraphicsMode.Resolve("original");
+        Assert.Equal(1f, WeatherRig.EnhancedFogScale());
+
+        GraphicsMode.Resolve("enhanced");
+        Assert.Equal(2f, WeatherRig.EnhancedFogScale());
+
+        GraphicsMode.Resolve("original");
     }
 }

@@ -518,18 +518,20 @@ public partial class Launcher : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
+        // Resolved after the --det block above, so a user config's graphics.mode is dropped by
+        // ClearOverrides the same way EffectsLevel's is; --graphics= bypasses Config outright and
+        // survives it. Ahead of the clutter fade below, which needs it to follow the pushed fog.
+        bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode);
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={(graphicsEnhanced ? "enhanced" : "original")}");
         // The graphics EffectsLevel's one global: the clutter fade's squared distance scale, 0
-        // when the fade is switched off (never fades, clutter draws out to the fog).
-        float clutterFadeScaleSq = Utils.EffectsLevel.ResolveClutterFadeScaleSq();
+        // when the fade is switched off. Enhanced mode pushes the fade out by the fog range's own
+        // factor (the scale shrinks), so clutter reaches as far as the pushed haze; original mode's
+        // factor is identity.
+        float clutterFadeScaleSq = Utils.EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale());
         RenderingServer.GlobalShaderParameterAdd(Utils.EffectsLevel.ShaderParam,
             RenderingServer.GlobalShaderParameterType.Float, clutterFadeScaleSq);
         string clutterFarFade = Utils.EffectsLevel.ClutterFarFadeEnabled() ? "true" : "false";
         Log.Info("world", $"clutter fade: {Utils.EffectsLevel.FadeKey}={clutterFarFade} {Utils.EffectsLevel.Key}={Config.GetString(Utils.EffectsLevel.Key, Utils.EffectsLevel.Default)} scale_sq={clutterFadeScaleSq}");
-        // Resolved after the --det block above, so a user config's graphics.mode is dropped by
-        // ClearOverrides the same way EffectsLevel's is; --graphics= bypasses Config outright and
-        // survives it. One resolution point read by every later scene builder.
-        bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode);
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={(graphicsEnhanced ? "enhanced" : "original")}");
         // The animated world's LIGHT_STATE point lights. Defaults to an empty set, so a session
         // with no lit animations renders exactly as it did before they existed.
         WorldLights.RegisterGlobals();

@@ -60,19 +60,28 @@ public static class EffectsLevel
     /// ⚠ Off is 0, a NEVER-fades scale rather than a fade-everything one: the shader multiplies it
     /// into the squared camera distance, so nothing ever reaches its near² and every stamp keeps
     /// full alpha and its full card, the same arm the engine's own far² of 0 takes.</summary>
-    public static float ClutterFadeScaleSq(bool farFade, string level)
+    public static float ClutterFadeScaleSq(bool farFade, string level) => ClutterFadeScaleSq(farFade, level, 1f);
+
+    /// <summary>As the two-argument overload, additionally pushed by <paramref name="fogScale"/>
+    /// (<c>WeatherRig.EnhancedFogScale()</c>, identity in original mode). ⚠ DIVIDED, and squared:
+    /// the shader multiplies this scale into the squared camera distance, so a larger scale fades
+    /// SOONER; pushing the fade out by the fog factor means shrinking the scale by its square. The
+    /// clutter then reaches as far out as the pushed fog instead of standing at its authored
+    /// distance underneath it.</summary>
+    public static float ClutterFadeScaleSq(bool farFade, string level, float fogScale)
     {
         if (!farFade)
         {
             return 0f;
         }
         TryClutterFadeScaleSq(level, out float scaleSq);
-        return scaleSq;
+        return scaleSq / (fogScale * fogScale);
     }
 
     /// <summary>The configured scale, saying so when the level word is one the original does not
-    /// know.</summary>
-    public static float ResolveClutterFadeScaleSq()
+    /// know, pushed by <paramref name="fogScale"/> as <see cref="ClutterFadeScaleSq(bool, string, float)"/>
+    /// describes.</summary>
+    public static float ResolveClutterFadeScaleSq(float fogScale = 1f)
     {
         bool farFade = ClutterFarFadeEnabled();
         string level = Config.GetString(Key, Default);
@@ -80,6 +89,6 @@ public static class EffectsLevel
         {
             Log.Warn("world", $"config {Key}={level} is not high/medium/low; using {Default}");
         }
-        return ClutterFadeScaleSq(farFade, level);
+        return ClutterFadeScaleSq(farFade, level, fogScale);
     }
 }
