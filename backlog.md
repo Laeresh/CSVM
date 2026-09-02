@@ -2673,6 +2673,23 @@ usual.
   so any repro copies a profile under a new name and deletes the copy afterwards. *Impact:* while it
   stands, an agent cannot take a screenshot deep inside a campaign mission from a probe, so items
   whose verification wants one fall back to an engine suite plus an at-the-controls `PT-` row.
+- `BL-677` `[Fidelity]` **CSVM starts a `CALL_ANIMATION` callee inside the caller's own tick; the
+  original starts it on the next one.** *Evidence:* `AnimRuntime.Start` advances a new instance at
+  t=0 inside the `CallAnimation` dispatch (`CSVM/src/Mech3/AnimRuntime.cs:1763-1775`), so a callee's
+  first event runs before the caller's later events in the same sequence. The original does not:
+  `FUN_004ed8c0` appends the new instance at the tail of the action list its dispatcher walks
+  (`FUN_004d04e0`, the append store at `004d050d`), the walk re-reads `next` every iteration
+  (`FUN_004cffa0` at `004cffee`), and no start-guard flag exists, so the callee is reached only on a
+  later dispatcher invocation, after the caller's tick has returned. *Consequence:* a callee whose
+  first event is `INVALIDATE_ANIMATION` latches before the caller reaches the call that would have
+  started the invalidated definition, which cannot happen in the original. *Fix shape:* queue a
+  started instance and give it its first advance on the next tick, rather than advancing it in the
+  dispatch. *⚠ Traps:* the ordering is load-bearing for definitions that rely on a callee posing
+  something before the caller reads it, so this moves scripted motion across every mission and wants
+  the golden and campaign suites run before and after. The Spruce Goose chain is NOT an instance of
+  this: its branch is chosen by `ACTIVATION_PREREQUISITE` node states, not by a call race, and both
+  branches run (`docs/PLAN-M5-polish-9.md` C22). *Impact:* unknown breadth. No shipped symptom is
+  attributed to it yet; it is a decoded divergence looking for its missions.
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled
   SDL (3.2.28 up to Godot 4.7.1) hard-freezes the engine when a >255-button DirectInput device

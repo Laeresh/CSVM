@@ -761,9 +761,11 @@ loss. What the engine renders was decodable from the authored constants + oscill
   worst-case per-step displacement against a 0.62 m authored ceiling and a 0.0098 m step across
   the leg hand-off, all clean, while the same mission on a Realtime clock logged `phys_hz` at a
   steady 59.99 mean against `fps` at a 97.9 mean, above 60 in 163 of 190 `--perf` windows. Read
-  `fps` against `phys_hz` on a `--no-det` run first; a pose trace answers what the sim computed,
-  never what the screen showed. The per-step pose itself is readable by naming a node in
-  `CSVM_TRACE_SISCRIPT`, which logs `sitrace` lines from `ScriptPlayback`.
+  `fps` against `phys_hz` on a `--no-det` run first; a pose trace answers what the simulation
+  computed, never what the screen showed. The per-step pose itself is readable by naming a node in
+  `CSVM_TRACE_SISCRIPT`, which logs `sitrace` lines from `ScriptPlayback`. The same property is
+  what makes the fix safe to land: `RenderPoses` is inert on any clock but the realtime one, so all
+  18 goldens are hash-identical with it and without it.
 - **INSTR-34** — **Identify what is in original footage from the pixels alone. A remake log, a
   livery name or a definition name is the remake's answer, not the film's, and using one to label
   the film is circular.** A frame-by-frame comparison identified the aircraft docking in
@@ -789,6 +791,13 @@ loss. What the engine renders was decodable from the authored constants + oscill
   (the AI ground blow, the AI wind, the skipped weathervane). Drive an AI rig with
   `AiPilot.HoldingCourse` and a bound `HumanPositions` seam, and assert `FarFieldPlant` reads the
   branch you meant before reading anything else off the run.
+- **INSTR-36** — **A golden that moves on your branch is not yours until you have run it without
+  your change.** A parallel wave merges siblings into your tree, and a shot one of them moved
+  arrives already broken; re-pinning it then buries their evidence under your name. Measured on
+  `campaign-intro-fill`: it moved `a8ebd3dc…` to `be23e13d…` under a render-interpolation change
+  that is provably inert in `--det`, and a detached worktree at the merge commit, with none of that
+  change present, produced the same `be23e13d…`. Attribution costs one `git worktree add --detach
+  <merge-commit>` and one golden stage. Do it before you touch `manifest.json`.
 
 ## SRC — sources and documents
 

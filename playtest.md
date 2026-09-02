@@ -976,6 +976,25 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   - (c) a boat that never fires at all, which is `BL-523`'s gunnery and not this item.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`.
 
+- `PT-114` `[Own]` **The Spruce Goose and a torpedo both read smooth** (`BL-627`, `BL-676`). Every
+  simulation-driven pose is now drawn between its last two simulation steps instead of on the
+  latest one, which is what the player's own aircraft already did and nothing else did. The
+  fastest movers are the ones to judge: the Goose at 11 to 37 m/s and ordnance in flight, which is
+  where the author first saw it. Blow the Kowloon gate, formate on the Goose and hold station
+  beside it from the harbour leg out, then fire a torpedo across your own view and watch it run.
+  *Look for:*
+  - (a) the Goose gliding rather than stepping while you hold station on it, worst when it fills
+    the view;
+  - (b) a torpedo or rocket tracking as one continuous line rather than a dotted one, judged from
+    abeam where the crossing speed is highest;
+  - (c) the A/B that separates a remaining fault from this one: fly the same leg again under
+    `--max-fps 60` and say whether it reads the same. It should now, where before the fix 60 was
+    the smoother of the two;
+  - (d) the Goose slowing almost to a stop at the end of the first leg and picking up again, which
+    is the authored `path2_decelerate` waiting on the barge and not a defect.
+  *Blocks:* `BL-627`, `BL-676`. Anything still stepping names a subsystem the survey put in the
+  "needs nothing" column, and reopens that one rather than the mechanism.
+
 - `PT-107` `[Own]` **The ace `hkfirebrand_9` after `OBJECTIVE67` wakes it** (`BL-669`, `BL-678`).
   The ace is authored at `(-4518, 150, -6233)`, 78.9 m below the terrain surface there. That is
   harmless in the original, which culls the single-sided faces it climbs out through, and fatal
@@ -1047,21 +1066,6 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   - (b) it moving through the shot rather than sitting parked;
   - (c) the paratroopers still dropping and the letterbox/handoff unchanged from before.
   *Blocks:* nothing tracks the outcome; a fail reopens `BL-632`.
-
-- `PT-114` `[Own]` **The Spruce Goose reads smooth from the harbour leg** (`BL-627`). The authored
-  path and the runtime that plays it both measure clean, so what is left to judge is the picture:
-  the Goose's pose is written once per 60 Hz physics tick while the player's own aircraft, and
-  therefore the camera, is drawn between its last two sim poses every rendered frame. Blow the
-  Kowloon gate, then formate on the Goose and hold station beside it from the harbour leg out.
-  *Look for:*
-  - (a) the Goose stepping rather than gliding while the camera moves smoothly, worst when you are
-    close enough for the hull to fill the view;
-  - (b) whether capping the render rate to the physics rate removes it, which is the discriminator:
-    fly the same leg again under `--max-fps 60` and say whether it reads better, the same or worse;
-  - (c) the Goose slowing almost to a stop at the end of the first leg and picking up again, which
-    is the authored `path2_decelerate` waiting on the barge and not a defect.
-  *Blocks:* `BL-627`. A "smooth at 60, stepping at 120" answer is the confirmation that the fix is
-  render interpolation for scripted world nodes; "stepping at both" reopens the diagnosis.
 
 ### CM18 (C4/M03) · the generator launches
 

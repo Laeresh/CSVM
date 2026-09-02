@@ -5173,6 +5173,21 @@ authored motions step on the physics tick; its `_Process` takes over only under 
 or a parent-driven mode unless authored animation itself is held. Regression: the `anim-clock-realtime`
 suite. Published as `GameClock.Current` (session-scoped, nulled on teardown; null = raw frame delta).
 
+## src/Utils/RenderPoses.cs
+The render half of the fixed-tick simulation, shared by every subsystem that moves something
+visible. A realtime session advances poses on the 60 Hz physics tick while the display redraws at
+its own rate, so a pose drawn raw is held for a frame and jumped the next, and it steps against the
+camera in proportion to speed. Two consumption shapes over one gate and one fraction: a node writer
+calls `Record(node)` right after writing it and `Draw()` places it between its last two simulation
+poses, while a subsystem holding its own coordinates (`Projectile`'s rounds) reads `Fraction` and
+interpolates its own pair. `Restore(tick)` opens every physics callback, putting the exact
+simulation pose back and rolling the pair once per tick, so nothing the simulation seeds from a
+node's transform can observe a drawn one. `Draw()` has one caller, `GameSession._Process`, which is
+why a suite stepping the simulation by hand always reads the simulation pose. Realtime only:
+`Fraction` is 1 elsewhere and the whole-step case takes the stored pose rather than an
+interpolation to 1, so fixed-step captures stay byte-identical. Regression: the `render-poses`
+suite. Static like `GameClock.Current` and cleared beside it on teardown.
+
 ## src/Utils/Log.cs
 The diagnostic log: `Log.Info("world", $"…")` / `Warn` / `Error` / `Debug` over nine categories
 (`anim world flight weapons sound perf test ui core`) and four levels. Two sinks with different

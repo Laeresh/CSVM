@@ -393,6 +393,7 @@ public sealed partial class ZeppelinRuntime : Node
     {
         host.GlobalTransform = new Transform3D(
             Basis.FromEuler(new Vector3(pitchRad, yawRad, 0f)), position);
+        RenderPoses.Record(host);
     }
 
     // The follower's park: from here until the motion ends, the hull's pose is the script's.
