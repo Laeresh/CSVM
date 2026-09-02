@@ -189,9 +189,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 32. ☐ Binding an axis or a hat to a digital action
 33. ☐ Close `BL-296` and `BL-398`, and hand `BL-357` its keys
 34. ☐ The saved keymap is read at launch, so a flight rebind is felt
+35. ☑ Staged edits and a whole-map reset: Accept, Cancel, Reset to default
 
-⚠ **34 lands before 33.** A flight rebind is written and never read, so closing `BL-296` and
-`BL-398` ahead of 34 would retire two items against a feature that works in one context of three.
+⚠ **34 lands before 33, and 33 lands last of the wave.** A flight rebind is written and never read,
+so closing `BL-296` and `BL-398` ahead of 34 would retire two items against a feature that works in
+one context of three. 35 is landed and does not change that order.
 
 ## Dependency and parallelism notes
 
@@ -1059,6 +1061,15 @@ event narration. The keypad debug-key layout is intentional and is not a mistake
 
 ## D31 ☑ The rebinding screen: capture, assign, steal-from-previous-owner
 
+⚠ **D35 replaced this item's edit model, and the paragraphs below describe the model it replaced.**
+This item edited the live `ActionMap` in place, so a rebind was felt on the next frame in the menu
+context and `Discard()` dropped only the capture and the status line while the binding change stood;
+`Save()` wrote on Back and `ResetContext()` reset one context. D35 stages every edit in a working
+copy, commits on Accept and abandons on Cancel, which is the original's model, and adds the
+whole-map reset. Read **D35** for what the screen does now. Everything else here still holds: the
+capture, the steal rule, the four inherited defects and their decisions, the row limit, and the
+per-seat routing.
+
 **Landed.** Three new files and one screen. `CSVM/src/Bindings/ControlCapture.cs` is what a screen
 may capture and the release-first scan that turns a press into a `Binding`;
 `CSVM/src/Bindings/BindingLabels.cs` is what the screen prints, including the row that counts what
@@ -1132,9 +1143,10 @@ L/Y drops the one under the cursor.
 
 ⚠ **Nothing in the game reads a saved keymap yet, and this item does not change that.** `FlightController`,
 `SpectatorCamera` and `MenuInput` each build `BindingProfile.Defaults(...)` in their own constructor,
-and `BindingStore` is called from no polling site. So the Menu context is live (the screen edits
-`MenuInput.Map` itself, the object seat 0's readers hold, and a menu rebind is felt on the next
-frame) while Flight and Camera are edited and saved but not yet consumed. Closing that gap means a
+and `BindingStore` is called from no polling site. So the Menu context is live (the screen writes
+into `MenuInput.Map` itself, the object seat 0's readers hold, so a menu rebind is felt on the frame
+after Accept; before D35 it was felt on the frame after the capture) while Flight and Camera are
+edited and saved but not yet consumed. Closing that gap means a
 launch-time load with a `--det` gate, since DET-8 makes a scripted run a function of the committed
 tree and a user's saved keymap would break exactly that; it also means re-entering
 `FlightController`'s constructor, which the plan flags. It is a successor item's, and it is stated
@@ -1298,3 +1310,97 @@ than an assertion that it was written.
 ⚠ A stored profile names actions and controls that a later build may not have. A rename or a dropped
 action must degrade to the default for that action rather than throwing at launch or, worse, leaving
 a seat with no fire button.
+
+## D35 ☑ Staged edits and a whole-map reset: Accept, Cancel, Reset to default
+
+**Landed.** `ControlsFeature` edits a working copy of each registered seat's three `ActionMap`s
+rather than the maps themselves. `Accept` writes every changed seat's working copy through and saves
+it, `Cancel` throws every seat's staged edits away and re-stages from the live maps, and `ResetSeat`
+puts the whole seat back to the shipped defaults across every `InputContext`. `ResetContext` stays
+for the one-context form. `Save()` is gone: a save that is not a commit has no meaning in a staged
+model, and leaving both would have given a caller two ways to half-commit. The built-in screen gains
+three rows below the action list, in the original's own order, Reset to default, Cancel changes,
+Accept changes; `P`/`X` still resets and now resets the whole seat; Back leaves the way Cancel does.
+
+**The property D31 landed deliberately, and what happened to it.** D31 made the menu context live by
+editing the very object `MenuInput`'s readers hold, so a menu rebind was felt on the next frame.
+Staging necessarily moves that to Accept: an edit that is not committed is not in the map anything
+reads. The property that survives is the one that matters, and it is kept on purpose rather than by
+luck: `Accept` **fills the existing `ActionMap` in place** (clear, then `Add` each binding) instead
+of swapping the reference, so the object `MenuInput` holds is still the object that changed, and a
+menu rebind is felt on the frame after Accept without a reload. `TheCommitFillsTheSameMapObjectSoAMenuPollerFeelsIt`
+asserts both halves, the reference identity and the new binding. `Add` rather than `Assign` in that
+copy, because the shipped set deliberately puts one control on two actions (C21's numpad diagonals,
+B15's d-pad up) and a steal on the way in would silently undo the second.
+
+**What the binary answered, with addresses.**
+
+- **RESET TO DEFAULT is staged, not immediate** (`FUN_00419de0`). Called with a non-zero flag it
+  pushes a scratch copy of the command manager (`FUN_00537ca0`, which allocates a `0x3f5c` manager,
+  copies the current one into it and links the old one onto a stack at `DAT_0075cb04`), clears every
+  word of the copy (`FUN_00537ac0` into `FUN_00537040`), lays the 64 shipped defaults down into it
+  (`FUN_004936c0`), refills the screen's own record table from that copy, and then pops it
+  (`FUN_00537d90`), which destroys the copy and restores the manager the game was playing. The live
+  command map is byte-identical across the whole call.
+- **The screen edits a working copy and commits on ACCEPT** (`FUN_00419d50`, reached from the UI
+  dispatcher `FUN_00407670` case `0x12`). The working table is `DAT_0064ab2c`, allocated at case
+  `0x14` as `FUN_0041a000()` records of `0x168` bytes each, one per command across every category,
+  each holding the command id at `+0x154` and the packed four-slot word at `+0x164`. `FUN_00419d50`
+  clears the whole live map and re-defines every command from that table through `FUN_00537bc0` into
+  `FUN_00537360`. Even the steal rule runs inside the working copy: `FUN_00405900` scans the table
+  for another record holding the same code and clears the field out of *that record*, so no
+  reassignment reaches the live map before ACCEPT either.
+- **RESET reaches the whole command map, not the page on screen.** `FUN_00419de0`'s outer loop runs
+  `0` to `FUN_00493530()` (the category count) and its inner loop `0` to `FUN_00493560(category)`,
+  rebuilding a record for every command in every category. The author's reading is confirmed from
+  the binary.
+- **CANCEL restores nothing after a RESET, because a RESET moved nothing.** The reset rewrote only
+  the working table and popped its scratch manager, so the live map still holds what it held when
+  the screen was opened, and leaving without `FUN_00419d50` leaves it there.
+
+The button-to-handler mapping is an inference and is stated as one: the labels are not in
+`crimson.exe` (they live in the localised UI data, and a string search for "RESET TO DEFAULT" or
+"ACCEPT CHANGES" returns nothing), so RESET was identified by `FUN_004936c0` having exactly two
+callers, the startup path `FUN_0043fb50` and `FUN_00419de0`'s flagged branch, and ACCEPT by
+`FUN_00419d50` being the only writer of the live map from the screen's table. **No cancel-specific
+code path exists to find**, which is itself the answer: nothing needs undoing.
+
+**What the screenshot alone settled.** That there are exactly three buttons and that they persist on
+every category page (`Z:\CSVM\OriginalScreenshots\Keybinds Movement.png`, and the author states the
+same strip appears on all seven). Their on-screen order, Reset / Cancel / Accept, is the screenshot's
+too. Our three rows sit at the tail of one list rather than as a persistent strip, because this
+presentation has one windowed list and no button band; that is a fit to our layout, not a decode
+result, and it is the author's to judge.
+
+**Verified.** `CSVM.Tests/ControlsFeatureTests.cs`, 22 facts, each asserting a specific resolution.
+Six are new and speak to this item directly: an edit is visible in the staged view and absent from
+the map the polling site holds until Accept; Accept writes it through and clears the dirty mark;
+Cancel leaves it in neither the live map nor the save (a counting save hook, asserted empty); a
+reset reaches every one of the three contexts, driven by breaking one binding in each so a
+per-context reset would leave two of them broken; Cancel puts back everything a reset cleared, over
+a rebind that had already been accepted; and Accept commits two contexts at once. Two more cover the
+seams the change could have broken: the commit fills the same `ActionMap` object a menu poller holds,
+and a reset on seat 2 leaves seat 1's staged edit alone. Every pre-existing fact was rewritten
+against the staged view rather than loosened, and `DiscardDropsTheCaptureAndThePendingStealAndKeepsTheStagedEdits`
+now asserts the staged edits survive a presentation switch while the capture and the pending steal
+do not.
+
+Run the three rebinding suites with
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~ControlsFeatureTests|FullyQualifiedName~ControlCaptureTests|FullyQualifiedName~ActionMapTests" -SkipEngine -SkipGoldens`:
+54 facts, all passing.
+
+Complete `.\RunTests.ps1` in the item's worktree: PASS, exit 0, 3349 units, 233 engine suites, 18
+goldens hash-identical, 0 build warnings (183.1s total against a 180.0s budget, and the engine stage
+112.5s against 100.0s, which is awareness only). `menu-original-tracer` still walks into the Controls
+screen and back out, over the three rows this item adds.
+
+⚠ **What the automated evidence cannot reach, and is owed at the controls.** The same limitation
+D31 records applies unchanged: no suite presses a physical key, `--det` implies `--no-pads`, and
+every scripted run is unattended (`DET-2`, `DET-6`, `INSTR-14`). The checks this item adds to D31's
+list are in the report; the three-row tail, its labels and its position are the author's call.
+
+**⚠ Traps.** ⚠ **Do not swap the `ActionMap` reference on commit.** `MenuInput` holds the object, not
+the profile, and replacing it would leave the menu on the pre-Accept keymap with nothing to show for
+it. ⚠ A staged model has one new way to lose work: leaving the screen. Back is Cancel here, which is
+the original's shape, and it means a player who walks away without pressing Accept keeps the keymap
+they were playing with. Whether that reads right at the controls is a judgement, not a decode.

@@ -94,6 +94,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // the Table of Contents rather than shrinking the whole band to fit. TUNE.
     private const int ControlsWindow = 14;
     private const int ControlsHeaderRows = 2;
+    // The three rows below the action list, in the original's own order: reset the whole keymap,
+    // abandon every staged edit, commit them. The original draws these as persistent buttons on
+    // every category page; here they are the tail of the one list this presentation has. TUNE.
+    private const int ControlsFooterRows = 3;
     // The Controls list's two column widths and the extra band width they need, in ems of the row
     // font and in 720p points. TUNE: measured against the longest shipped action name and the
     // longest four-control row, not decoded from anything.
@@ -2342,12 +2346,15 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         _controlsIndex = 0;
         _controlsTop = 0;
+        // Cancel first, so the screen opens on what the game is actually playing rather than on a
+        // staged edit left behind by an earlier visit, then Discard to clear its status line.
+        _controls.Cancel();
         _controls.Discard();
     }
 
-    // One seat's three keymaps. Menu is the poller's own live map, so a rebind there is felt on the
-    // next frame; Flight and Camera are the shipped defaults on the portable pad placeholder, since
-    // no polling site reads a saved profile yet (D31's recorded gap).
+    // One seat's three keymaps. Menu is the poller's own live map, so an accepted rebind there is
+    // felt on the next frame; Flight and Camera are the shipped defaults on the portable pad
+    // placeholder, since no polling site reads a saved profile yet (D31's recorded gap).
     private BindingProfile ControlsProfile(MenuInput input)
     {
         var maps = new Dictionary<InputContext, ActionMap>
@@ -2383,10 +2390,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         if (_controls.Capturing)
         {
-            bool captured = _controls.Poll(p1.Devices);
-            if (captured)
-                p1.RebindsApplied();
-            return captured;
+            return _controls.Poll(p1.Devices);
         }
 
         bool dirty = false;
@@ -2421,17 +2425,15 @@ public sealed partial class LaunchMenu : CanvasLayer
     private bool HandleControlsShortcuts(MenuInput p1)
     {
         bool dirty = false;
-        if (p1.Loadout && _controlsIndex >= ControlsHeaderRows)
+        if (p1.Loadout && IsControlsActionRow(_controlsIndex))
         {
             _controls.UnbindSlot();
-            p1.RebindsApplied();
             dirty = true;
         }
 
         if (p1.Presets)
         {
-            _controls.ResetContext();
-            p1.RebindsApplied();
+            _controls.ResetSeat();
             dirty = true;
         }
 
@@ -2443,20 +2445,35 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (_controls.Pending != null)
         {
             _controls.ConfirmSteal();
-            p1.RebindsApplied();
             return;
         }
 
         switch (_controlsIndex)
         {
-            case 0: StepControlsPlayer(1); break;
-            case 1: StepControlsContext(1); break;
+            case 0: StepControlsPlayer(1); return;
+            case 1: StepControlsContext(1); return;
+        }
+
+        switch (ControlsButton(_controlsIndex))
+        {
+            case 0: _controls.ResetSeat(); break;
+            case 1: _controls.Cancel(); break;
+            case 2: CommitControls(p1); break;
             default: _controls.BeginCapture(p1.Devices); break;
         }
     }
 
+    // Accepting is where a rebind reaches the live maps, so it is also where the menu poller's
+    // typing reading is rebuilt: MenuInput derives its dead-letter aliases from its own keymap.
+    private void CommitControls(MenuInput p1)
+    {
+        _controls.Accept();
+        p1.RebindsApplied();
+    }
+
     // Back means the narrowest thing still open: the pending steal, then the capture, then the
-    // screen itself, which is where the keymap is written.
+    // screen, which it leaves the way CANCEL CHANGES does. Nothing is written on the way out; the
+    // Accept row is the only commit.
     private void BackFromControls()
     {
         if (_controls.Pending != null)
@@ -2465,16 +2482,18 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        _controls.Save();
+        _controls.Cancel();
         _screen = Screen.Options;
     }
 
-    private bool StepControls(int dir) => _controlsIndex switch
+    private bool StepControls(int dir)
     {
-        0 => StepControlsPlayer(dir),
-        1 => StepControlsContext(dir),
-        _ => StepControlsSlot(dir),
-    };
+        if (_controlsIndex == 0)
+            return StepControlsPlayer(dir);
+        if (_controlsIndex == 1)
+            return StepControlsContext(dir);
+        return ControlsButton(_controlsIndex) >= 0 ? false : StepControlsSlot(dir);
+    }
 
     private bool StepControlsPlayer(int dir)
     {
@@ -2521,16 +2540,35 @@ public sealed partial class LaunchMenu : CanvasLayer
         else if (_controlsIndex >= top + ControlsWindow)
             top = _controlsIndex - ControlsWindow + 1;
         _controlsTop = Math.Clamp(top, 0, last);
-        if (_controlsIndex >= ControlsHeaderRows)
+        if (IsControlsActionRow(_controlsIndex))
             _controls.Focus(_controlsIndex - ControlsHeaderRows);
     }
 
-    private string ControlsRowLabel(int index) => index switch
+    // Whether that row names an action, as against a stepper above the list or a button below it.
+    private bool IsControlsActionRow(int index) =>
+        index >= ControlsHeaderRows && index < ControlsHeaderRows + _controls.Actions.Count;
+
+    // Which of the three buttons a row past the action list is, in the original's order, or -1.
+    private int ControlsButton(int index)
     {
-        0 => "Player",
-        1 => "Control set",
-        _ => BindingLabels.Name(_controls.Actions[index - ControlsHeaderRows]),
-    };
+        int at = index - ControlsHeaderRows - _controls.Actions.Count;
+        return at >= 0 && at < ControlsFooterRows ? at : -1;
+    }
+
+    private string ControlsRowLabel(int index)
+    {
+        if (index == 0)
+            return "Player";
+        if (index == 1)
+            return "Control set";
+        return ControlsButton(index) switch
+        {
+            0 => "Reset to default",
+            1 => "Cancel changes",
+            2 => "Accept changes",
+            _ => BindingLabels.Name(_controls.Actions[index - ControlsHeaderRows]),
+        };
+    }
 
     // A row's controls, with the highlighted slot marked so the player can see which of several
     // bindings the next capture would replace. The empty slot past the end is what adds one.
@@ -2540,6 +2578,8 @@ public sealed partial class LaunchMenu : CanvasLayer
             return _controls.Player.ToString(System.Globalization.CultureInfo.InvariantCulture);
         if (index == 1)
             return ControlsContextLabel(_controls.Context);
+        if (ControlsButton(index) >= 0)
+            return _controls.Dirty ? "changed" : string.Empty;
 
         var action = _controls.Actions[index - ControlsHeaderRows];
         string row = _controls.RowText(action);
@@ -2562,10 +2602,15 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         if (_controls.Status.Length > 0)
             return _controls.Status;
-        return focus switch
+        if (focus == 0)
+            return "Whose keymap this is. Each seat holds its own, so rebinding here touches nobody else.";
+        if (focus == 1)
+            return "Which keymap: one control means different things flying, on a board and in the free camera.";
+        return ControlsButton(focus) switch
         {
-            0 => "Whose keymap this is. Each seat holds its own, so rebinding here touches nobody else.",
-            1 => "Which keymap: one control means different things flying, on a board and in the free camera.",
+            0 => "Puts every control set back to the shipped keymap. Cancel still undoes it.",
+            1 => "Throws away everything changed here, a reset included.",
+            2 => "Writes the changes to this seat's keymap and saves them.",
             _ => "Enter / A rebinds the marked control; ←→ picks which one.",
         };
     }
@@ -2576,10 +2621,10 @@ public sealed partial class LaunchMenu : CanvasLayer
             return "Press a control       Esc / B  Cancel";
         if (_controls.Pending != null)
             return "Enter / A  Take it       Esc / B  Leave it alone";
-        return _controlsIndex < ControlsHeaderRows
-            ? "↑↓  Choose       ←→  Change       P / X  Defaults       Esc / B  Back"
-            : "↑↓  Choose       ←→  Which control       Enter / A  Rebind"
-                + "       L / Y  Unbind       P / X  Defaults       Esc / B  Back";
+        if (!IsControlsActionRow(_controlsIndex))
+            return "↑↓  Choose       ←→  Change       Enter / A  Do it       Esc / B  Back without saving";
+        return "↑↓  Choose       ←→  Which control       Enter / A  Rebind"
+            + "       L / Y  Unbind       P / X  Defaults       Esc / B  Back without saving";
     }
 
     private void TogglePresentationChoice() =>
@@ -2995,7 +3040,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Hangar => _hangar?.Page.RowCount ?? 1,
         Screen.Campaign => _campaign?.Page.RowCount ?? 1,
         Screen.Options => 4, // the two steppers, the controls door, then the apply row
-        Screen.Controls => ControlsHeaderRows + _controls.Actions.Count,
+        Screen.Controls => ControlsHeaderRows + _controls.Actions.Count + ControlsFooterRows,
         Screen.Chapter => CurrentChapters.Length,
         Screen.Presets => InstantActionPresets.All.Count,
         Screen.Environment => InstantActionFeature.Environments.Count,
