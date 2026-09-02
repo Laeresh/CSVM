@@ -89,7 +89,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☐ `BL-635` CM11: the stunt planes carry the objective marker their roster blocks author
 22. ◐ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs (diagnosed: render rate, not the animation; the session-wide fix is `BL-676`)
-23. ❌ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake (disproven: the ace is authored 79 m inside the hill, and the finding is recorded)
+23. ❌ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake (disproven: the ram is a contact the original does not have, because it backface-culls collision per polygon and both tiles here are single-sided; `BL-678`, with `BL-669` for the authored pose)
 24. ❌ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
 25. ☑ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
 26. ☑ `BL-632` CM15: the capture cutscene frames its Balmoral
