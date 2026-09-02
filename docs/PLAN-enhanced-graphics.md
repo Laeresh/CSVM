@@ -114,6 +114,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 42. ☑ C5 reads too bright in enhanced mode, its water a light grey
 43. ☐ The clutter building fade reaches as far as the pushed fog
 44. ☐ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
+45. ☐ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
 
 ## Dependency and parallelism notes
 
@@ -1585,6 +1586,35 @@ reflection source if the new sky makes it read right, keeping E42's cap.
 
 **Verify.** C1B and C5 night seas darker toward the original; C3 and C1 day water reflects a sky
 that matches the dome's colour; original mode untouched, goldens zero movers.
+
+## E45 ☐ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
+
+**Goal.** In enhanced mode a surface inside the fog ramp fades into the fog colour the way the
+original's does, only farther away; the lit and shaded sides of a fogged hill no longer read as
+structure through the haze.
+
+**Evidence (confidence: traced).** The user saw hill structure inside the fogged band on the C1
+hills capture after E41. The `worldLit` arm keeps the original's fog as
+`ALBEDO = mix(col, csky_fog_color, fog_amt)` inside `fragment()`, and Godot then applies the sun,
+ambient, shadow and specular terms to that fogged albedo, so a fully fogged fragment still varies
+with its normal. The fullbright arm is `unshaded`, so its fogged colour is final, which is why the
+original fades cleanly.
+
+**Approach.** In the `worldLit` (and `waterLit`) arms only, leave `ALBEDO = col.rgb` and write
+the same ramp through the spatial shader's post-lighting `FOG` output
+(`FOG = vec4(csky_fog_color, fog_amt)`), which blends the final lit pixel toward the fog colour
+after every light term; the cylindrical and altitude logic in `csky_fog_amount` is unchanged and
+the fullbright arm's text is untouched. Confirm the fog colour is in the space Godot expects on
+that output (the atmosphere include already linearises it) and that the tonemap sees the fogged
+result the same way it sees the dome. Check the same for shadows: a shadow inside the ramp must
+fade with the fog, which this gives for free.
+
+**Model recommendation.** high, generated-shader surgery.
+
+**Verify.** C1 hills and C4 horizon captures: the fogged band shows no normal-dependent
+structure (sample the sun-side and shade-side of one fogged hill, the two means converge to the
+fog colour); the near world unchanged. Original-mode every-key dump identical; goldens zero
+movers.
 
 ## Open judgements
 
