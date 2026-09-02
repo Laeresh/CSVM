@@ -153,13 +153,24 @@ public class SpectatorBindingsTests
     }
 
     [Fact]
-    public void PastTheDeadzoneTheSeamRescalesWhereTheOldHelperPassedTheRawValue()
+    public void PastTheDeadzoneTheSeamPassesTheRawTravelTheOldHelperPassed()
     {
-        // ⚠ The one numeric difference the migration carries, recorded rather than asserted away.
-        // The old PadAxis passed the raw travel through once past 0.18; Binding.Resolve rescales
-        // the remainder onto [0, 1], leaving rest and full deflection where they were.
-        Assert.Equal(0.4f, Stick(JoyAxis.RightX, 0.508f).Axis(InputAction.CameraLookRight, InputAction.CameraLookLeft), 2);
+        // The seam briefly rescaled the travel past 0.18 onto [0, 1], which made a stick at 0.508
+        // read 0.40 where the old PadAxis read 0.508. It passes the raw value again, so this camera
+        // swings at the rate it swung at before the migration across the whole of the travel.
+        Assert.Equal(0.508f, Stick(JoyAxis.RightX, 0.508f).Axis(InputAction.CameraLookRight, InputAction.CameraLookLeft), 5);
         Assert.Equal(1f, Stick(JoyAxis.RightX, 1f).Axis(InputAction.CameraLookRight, InputAction.CameraLookLeft), 5);
+    }
+
+    [Fact]
+    public void TheOrbitDollyReadsTheWholeTriggerTravelOnItsOwnAction()
+    {
+        // Old: the dolly took PadTrigger raw, from zero, while only the boost gate compared it to
+        // 0.5. Borrowing CameraBoost for both left the trigger's first half inert here, so the
+        // dolly has its own action at a deadzone of zero and the boost keeps the gate.
+        Assert.Equal(0.2f, Stick(JoyAxis.TriggerRight, 0.2f).Value(InputAction.CameraDollyOut), 5);
+        Assert.Equal(0.2f, Stick(JoyAxis.TriggerLeft, 0.2f).Value(InputAction.CameraDollyIn), 5);
+        Assert.False(Stick(JoyAxis.TriggerRight, 0.2f).Held(InputAction.CameraBoost));
     }
 
     [Fact]

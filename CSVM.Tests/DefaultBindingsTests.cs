@@ -12,11 +12,20 @@ namespace CSVM.Tests;
 /// the numpad snap-look diagonals, and a pad default lands on the seat's own pad.</summary>
 public class DefaultBindingsTests
 {
-    // The four numpad diagonals are one key on two actions on purpose (Kp7 is Look Up and Look
-    // Left), which is what a binding list expresses and the original's four typed slots cannot.
-    private static readonly Key[] Diagonals = { Key.Kp7, Key.Kp9, Key.Kp1, Key.Kp3 };
-
     private static readonly DeviceId Pad = DeviceId.Joypad("030000004c050000c405000000010000");
+
+    // The controls the shipped set deliberately puts on two actions, which is what a binding list
+    // expresses and the original's four typed slots cannot. The four numpad diagonals are one key
+    // driving two look directions (Kp7 is Look Up and Look Left); d-pad up cycles the stunt marker
+    // as well as the target, because a stunt target is an objective marker (`BL-686`).
+    private static readonly Binding[] Shared =
+    {
+        new(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp7)),
+        new(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp9)),
+        new(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp1)),
+        new(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp3)),
+        new(Pad, BindingControl.Button((int)JoyButton.DpadUp)),
+    };
 
     /// <summary>The coverage gate: a migrating polling site must never discover a missing default
     /// one call at a time, so every member of the enum is accounted for here.</summary>
@@ -77,7 +86,8 @@ public class DefaultBindingsTests
     }
 
     /// <summary>Inside a context the steal rule holds, so the map a rebinding screen edits has no
-    /// pre-existing conflict to resolve. The snap-look diagonals are the stated exception.</summary>
+    /// pre-existing conflict to resolve. Two shipped exceptions are stated rather than discovered:
+    /// the snap-look diagonals, and flight's d-pad up.</summary>
     [Fact]
     public void InsideAContext_OneControlDrivesOneAction()
     {
@@ -91,8 +101,7 @@ public class DefaultBindingsTests
                 {
                     if (owners.TryGetValue(binding, out var first))
                     {
-                        Assert.Contains((Key)binding.Control.Index, Diagonals);
-                        Assert.Equal(ControlKind.Key, binding.Control.Kind);
+                        Assert.Contains(binding, Shared);
                         Assert.NotEqual(first, action);
                         continue;
                     }

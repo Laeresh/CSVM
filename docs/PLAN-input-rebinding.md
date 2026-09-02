@@ -173,7 +173,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ Migrate `MenuInput`
 13. ☑ Migrate `SpectatorCamera` and whatever the census turns up
 14. ☐ Determinism gate: `--det` / `--hold` reproduce bit for bit
-15. ☐ Reconcile what the migration proved: one seat device state, the axis rescale, the stunt marker
+15. ☑ Reconcile what the migration proved: one seat device state, the axis rescale, the stunt marker
 
 ### Wave C — defaults and persistence
 
@@ -612,7 +612,49 @@ the action resolves from the same control the old code polled, driven by a fake 
 items carry that requirement in their own Verify lines. This gate's job is narrower and still worth
 running: it proves the refactor did not disturb the scripted path, the fixed tick, or the sim.
 
-## B15 ☐ Reconcile what the migration proved: one seat device state, the axis rescale, the stunt marker
+## B15 ☑ Reconcile what the migration proved: one seat device state, the axis rescale, the stunt marker
+
+**Landed.** `CSVM/src/Bindings/SeatDeviceState.cs` replaces the three private nested copies in
+`FlightController`, `MenuInput` and `SpectatorCamera` (164 lines deleted between them). It takes the
+seat's placeholder identity and a `Func` supplying the seat's pad list, because two of the three
+seats change that list after construction, ORs buttons and takes the largest magnitude for axes
+across `Pads.For`, and snapshots once per tick. The pad half is gated and the keyboard and mouse
+halves read `Input` directly, per the asymmetry above.
+
+The axis rescale is gone: `Binding.Resolve` returns raw travel past the deadzone. Verified against
+the pre-migration code, whose `PadAxis` was `Mathf.Abs(best) < PadDeadzone ? 0f : best`, so a stick
+at 0.508 on the camera's 0.18 deadzone reads 0.508 again rather than the rescale's 0.400. A1's
+invariant is untouched, since a below-deadzone read is still `None`.
+
+`CameraDollyOut`/`CameraDollyIn` are their own actions on the triggers at deadzone 0, so the dolly
+covers the same travel it used to, while boost and slow keep their 0.5 gate on the same two axes.
+`CycleStuntTarget` sits on `D-pad Up` beside `TargetNextEnemy` through `ActionMap.Add`, and
+`docs/controls.md`'s stunt-cycle row gains its pad column.
+
+**Verified.** All three migration suites still pass, `--det` re-run image-identical across both of
+B11's invocations (seven PNGs, md5-identical), complete `.\RunTests.ps1` PASS exit 0 at 3312 units,
+233 engine suites, 18 goldens hash-identical.
+
+⚠ **Four tests changed, and the plan predicted one.** Each pins an intended change rather than
+accommodating an accident, and the suite named all four before any was touched: B13's rescale test
+inverted as expected; `BindingModelTests.AnAxisAtPointFour…` also pinned the rescale, which the plan
+missed, so A1's own suite was asserting the rule being removed; `FlightBindingMappingTests`'s
+dropped-pad-route fact asserted `CycleStuntTarget` held no joypad binding at all and narrowed to
+"not pad `X`", which is what it was really protecting; and `DefaultBindingsTests`'s one-control-one-
+action rule took a named list of deliberate sharers rather than only the numpad diagonals.
+
+⚠ **A third alias class exists now**, created by the dolly change and recorded for D31 alongside the
+other two: `Axis(TriggerRight, +1, 0.5)` and `Axis(TriggerRight, +1, 0f)` are two `Binding` values,
+since deadzone is part of equality, but one control under `SameControl`, which ignores deadzone. Two
+camera actions therefore share a trigger, reachable through `Assign` and `TryFindOwner`.
+
+**Correction to this item's own Evidence.** Calling `GodotDeviceState`'s missing `Pads.For` gate a
+live determinism hole overstated it. A repo-wide grep shows no polling site has ever used that type,
+because all three migrations wrote private copies precisely to avoid it. It was a latent hazard for
+the next site rather than a `--det` hole in anything shipped, and the consolidation closes it by
+making the shared type the only thing a site would reach for.
+
+**Original approach (kept for reference).**
 
 **Goal.** The three things Wave B each had to work around privately become one answer in
 `CSVM/src/Bindings/`, the two behaviour deviations B13 recorded are undone, and the stunt marker
@@ -663,10 +705,33 @@ around it rather than by inspection, and each is named in a landed commit.
 
 **Model recommendation.** high. It changes a resolve rule every migrated site now depends on.
 
-**Verify.** The three migrations' suites (`FlightBindingMappingTests` 76, `MenuInputBindingTests` 46,
-`SpectatorBindingsTests` 28) must all still pass unchanged, except B13's rescale test, which
-inverts. Re-run B11's `--det` image comparison, which is the only instrument here that can see a
-resolve-rule change reach the sim. Complete `.\RunTests.ps1`.
+**Verify.** `CSVM/src/Bindings/SeatDeviceState.cs` replaces the three private copies, and the three
+migrations' suites still pass: `FlightBindingMappingTests` 77, `MenuInputBindingTests` 46,
+`SpectatorBindingsTests` 29. Four facts moved, each pinning a change this item makes rather than
+accommodating one it did not intend, and every other fact in the three suites is untouched:
+
+- `SpectatorBindingsTests`'s rescale fact inverts, and now reads the raw 0.508 the old `PadAxis`
+  returned instead of the 0.40 the rescale produced.
+- `BindingModelTests`'s A1 fact pinned the same rule one level down (0.6 travel past a 0.5 deadzone
+  read 0.2) and now reads 0.6.
+- `FlightBindingMappingTests`'s dropped-pad-routes fact narrows from "no pad binding at all" to "not
+  pad `X`, which stays Nitro's", since the stunt cycle gains d-pad up.
+- `DefaultBindingsTests`'s one-control-one-action fact takes a list of the shipped shared controls
+  rather than the four snap-look diagonal keys alone.
+
+Two facts are new: the dolly reading the whole of a trigger's travel on its own action while the
+boost gate stays at half, and d-pad up firing both the stunt cycle and the target cycle.
+
+B11's `--det` image comparison, both invocations, baselined in this item's worktree before the first
+edit and repeated after the six changes: seven PNGs md5-identical across the pair, the trigger-held
+run included. Complete `.\RunTests.ps1` in the item's worktree: PASS, exit 0, 3312 units, 233 engine
+suites, 18 goldens hash-identical, 0 build warnings (169.5s total; the engine stage 3.6s over its
+budget, which is awareness only).
+
+⚠ **The `--det` pass is weak evidence here for the reason B14 states**, and the arithmetic is what
+actually stands behind the rescale removal: a stick at 0.508 through the camera's 0.18 deadzone read
+`(0.508 - 0.18) / (1 - 0.18) = 0.40` and now reads 0.508, which is what `PadAxis` passed through.
+`--det` implies `--no-pads`, so no axis moves in either tree and the resolve rule cannot fail there.
 
 **⚠ Traps.** ⚠ **Do not widen `ActionMap.SameControl` to fix aliasing.** Two aliases are recorded
 now: `Hat(0, Up)` against `Button(DpadUp)`, and a saved real-GUID binding against a `pad:*` default,

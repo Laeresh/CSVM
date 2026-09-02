@@ -165,7 +165,7 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 - `src/UI/` (16) — launchscreen, splitscreen rig, and the inspection labs (each with a scripted `--debug-*` twin).
 - `src/Utils/` (9) — session-wide services: clock, log, seed, shader time, config, startup profile, options, graphics mode. Determinism lives here.
 - `src/Testing/` (6) — the in-engine assertion harness behind `--run-tests` and the `--dump-*` probes.
-- `src/Bindings/` (15) — the input binding model and the named-action seam: device identity, the tagged control, the binding list an action resolves through, the registry that resolves a device identity to a live pad, a player's action map resolved once per tick, and the shipped default keymap with its versioned per-player file.
+- `src/Bindings/` (16) — the input binding model and the named-action seam: device identity, the tagged control, the binding list an action resolves through, the registry that resolves a device identity to a live pad, the seat device state a polling site reads its pad set through, a player's action map resolved once per tick, and the shipped default keymap with its versioned per-player file.
 - `src/Session/` (11) — `Launcher.cs` (Main.tscn root: bootstrap, launchscreen, persistent camera/lighting) and `GameSession.cs` (the per-launch session node it instantiates), plus livery/spawn/plane-roster resolution, the roster aggregate with grouped inputs and its two internal assemblers, the effect/crash stage factory, and the weather rig.
 - `src/` root (3) — `SessionSpec.cs`, `SessionPaths.cs`, `Pads.cs`.
 - `CSVM.Tests/` — the xUnit project: engine-free reader units. Anything reaching `GD.*` or a live `Node` belongs in `src/Testing/` instead.

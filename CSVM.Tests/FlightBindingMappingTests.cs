@@ -326,19 +326,36 @@ public class FlightBindingMappingTests
         Assert.True(padActions.Held(InputAction.LookBack));
     }
 
-    /// <summary>The two pad reads the migration dropped, recorded so a later change cannot restore
-    /// them by accident: the stunt cycle had an undocumented pad `X` that collided with Nitro, and
-    /// the nearest-target key had no pad control of its own at all.</summary>
+    /// <summary>The dropped pad reads, recorded so a later change cannot restore them by accident.
+    /// The nearest-target key still has no pad control of its own, and the stunt cycle's
+    /// undocumented pad `X` stays gone with `X` left to Nitro. The stunt cycle now shares d-pad up
+    /// with the target cycle instead, which is a deliberate second owner and not the old
+    /// collision.</summary>
     [Fact]
     public void TheDroppedPadRoutes_StayUnbound()
     {
         var map = FlightMap();
-        Assert.DoesNotContain(map.Bindings(InputAction.CycleStuntTarget),
-            b => b.Device.Kind == DeviceKind.Joypad);
         Assert.DoesNotContain(map.Bindings(InputAction.TargetNearest),
             b => b.Device.Kind == DeviceKind.Joypad);
+        Assert.DoesNotContain(map.Bindings(InputAction.CycleStuntTarget),
+            b => b.Control.Kind == ControlKind.Button && b.Control.Index == (int)JoyButton.X);
         Assert.Contains(map.Bindings(InputAction.Nitro),
             b => b.Control.Kind == ControlKind.Button && b.Control.Index == (int)JoyButton.X);
+    }
+
+    /// <summary>D-pad up drives the stunt marker's cycle as well as the target cycle, so a pad-only
+    /// stunt pilot can step the marker at all. A stunt target is an objective marker, so cycling one
+    /// is the objective cycle (`BL-686`).</summary>
+    [Fact]
+    public void TheDpadUpButton_CyclesTheStuntMarkerBesideTheTarget()
+    {
+        var (state, actions) = Seat();
+        state.Buttons.Add((Pad, (int)JoyButton.DpadUp));
+        actions.Poll(state);
+
+        Assert.True(actions.Held(InputAction.CycleStuntTarget));
+        Assert.True(actions.Held(InputAction.TargetNextEnemy));
+        Assert.Equal(2, FlightMap().Bindings(InputAction.CycleStuntTarget).Count);
     }
 
     /// <summary>A pad-only splitscreen seat still reads nothing off the one keyboard and the one

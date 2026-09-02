@@ -117,7 +117,11 @@ public static class DefaultBindings
         b.Keys(InputAction.TargetNextNonAircraft, Key.U);
         b.Keys(InputAction.TargetNearest, Key.I);
         b.Keys(InputAction.TargetClear, Key.O);
-        b.Keys(InputAction.CycleStuntTarget, Key.Tab);
+        // D-pad up deliberately drives this as well as TargetNextEnemy, through Add rather than
+        // Assign: a stunt target is an objective marker, so cycling one is the objective cycle
+        // (`BL-686`, which carries the fold-together and the rule that markers stay per player).
+        b.Keys(InputAction.CycleStuntTarget, Key.Tab)
+            .Buttons(InputAction.CycleStuntTarget, JoyButton.DpadUp);
         b.Keys(InputAction.CycleCockpitViews, Key.F8).Buttons(InputAction.CycleCockpitViews, JoyButton.DpadDown);
         b.Keys(InputAction.SelectChaseView, Key.F6).Buttons(InputAction.SelectChaseView, JoyButton.Back);
         b.Keys(InputAction.LookUp, Key.Kp7, Key.Kp8, Key.Kp9);
@@ -192,12 +196,19 @@ public static class DefaultBindings
             .Stick(InputAction.CameraLookLeft, JoyAxis.RightX, -1, CameraStickDeadzone);
         b.Keys(InputAction.CameraLookRight, Key.L)
             .Stick(InputAction.CameraLookRight, JoyAxis.RightX, 1, CameraStickDeadzone);
+
+        // The dolly shares the trigger pair with boost and slow at its own deadzone of zero, because
+        // it is a rate the whole travel feeds while boost is a switch that wants half of it. The two
+        // readings are separate actions rather than one, so neither has to carry the other's number.
+        b.Stick(InputAction.CameraDollyOut, JoyAxis.TriggerRight, 1, 0f);
+        b.Stick(InputAction.CameraDollyIn, JoyAxis.TriggerLeft, 1, 0f);
         return b;
     }
 
     // One context's shipped set while it is being written: the map, and the actions it owns in the
     // order they were first named. Bindings go in through ActionMap.Add rather than Assign because
-    // a snap-look diagonal is deliberately on two actions, which the steal rule would undo.
+    // some controls are deliberately on two actions (a snap-look diagonal, d-pad up in flight),
+    // which the steal rule would undo.
     private sealed class ContextBuilder
     {
         private readonly List<InputAction> _actions = new();

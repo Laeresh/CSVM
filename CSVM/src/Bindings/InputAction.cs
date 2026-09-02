@@ -82,4 +82,9 @@ public enum InputAction
     CameraLookDown,
     CameraLookLeft,
     CameraLookRight,
+
+    // The locked orbit's dolly. Its own pair rather than a second reading of the boost and slow
+    // triggers, whose digital threshold would leave the first half of trigger travel inert here.
+    CameraDollyOut,
+    CameraDollyIn,
 }

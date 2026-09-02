@@ -25,7 +25,9 @@ public sealed class ActionSnapshot
     public float Value(InputAction action) => _value[(int)action];
 
     /// <summary>The two halves of a control axis as one signed number, the shape a stick or a
-    /// key pair feeds a flight input. Both ends held reads zero, as a key pair does today.</summary>
+    /// key pair feeds a flight input. Both ends held reads zero, which is what the flight and camera
+    /// pairs do. A menu cursor axis does not: it gives the negative end priority, so
+    /// <c>MenuInput.Dir</c> reads those rather than this.</summary>
     public float Axis(InputAction positive, InputAction negative) =>
         _value[(int)positive] - _value[(int)negative];
 
