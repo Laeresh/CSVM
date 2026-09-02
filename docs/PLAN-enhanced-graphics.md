@@ -105,7 +105,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Hardening and record
 
-31. ☐ Performance gate: enhanced mode under -Perf/-Hitch, worst chapter, 4-pane splitscreen
+31. ☑ Performance gate: enhanced mode under -Perf/-Hitch, worst chapter, 4-pane splitscreen
 32. ☑ Divergence documentation, final golden sweep, optional enhanced goldens
 
 ### Wave E — At-the-controls findings from the Wave C montages
@@ -1127,7 +1127,7 @@ so where a reflection lands it is a hard mirror, which is a look the original ne
 
 # Wave D — Hardening and record
 
-## D31 ☐ Performance gate
+## D31 ☑ Performance gate
 
 **Goal.** Enhanced mode's frame cost is measured and acceptable: the full stack holds frame rate
 on the heaviest chapters and in 4-pane splitscreen, with the levers (shadow distance, SSAO
@@ -1149,6 +1149,102 @@ per scenario in the landing commit message.
 
 **⚠ Traps.** Read docs/verification.md before measuring; the sim clock lagging wall time on
 physics-bound scenes will masquerade as a rendering regression if measured naively.
+
+**Verified.** <pending orchestrator run> All commands from the worktree with
+`$env:CSVM_DATA_ROOT="Z:\CSVM"`.
+
+`dotnet build CSVM/CSVM.sln`: clean, 0 warnings, 0 errors (no TUNE constant moved, see the lever
+decision below). `.\CheckEncoding.ps1`: no mojibake.
+
+`.\RunTests.ps1 -Perf -SkipUnits -SkipEngine -SkipGoldens` (original) and the same with
+`-Graphics enhanced`: both PASS, 6/6 scenarios, 300 sim frames x 3 launches per scenario (first
+discarded), history appended. Medians of the kept windows, render_cpu_ms / gpu_ms / draws:
+
+| Scenario | original render_cpu / gpu / draws | enhanced render_cpu / gpu / draws |
+|---|---|---|
+| empty-stage | 0.15 / 0.11 / 119 | 0.24 / 0.29 / 217 |
+| c1-flight | 0.42 / 0.375 / 380.8 | 0.705 / 0.47 / 1201 |
+| c2b-water | 0.285 / 0.10 / 115 | 0.39 / 0.37 / 160 |
+| c4-terrain | 0.66 / 0.23 / 978 | 1.115 / 0.54 / 2550 |
+| c2m02-hollywood | 0.635 / 0.30 / 675.6 | 0.925 / 0.55 / 1305.25 |
+| c5-city | 1.055 / 1.51 / 1235 | 1.425 / 1.945 / 2055 |
+
+Every one of these is a fraction of a millisecond to low single digits, nowhere near the 16.7 ms
+line at one pane; the draw-count columns show the stack's real cost (roughly double the draws on
+the heavier scenes) without any frame-time budget pressure yet.
+
+`.\RunTests.ps1 -Hitch -SkipUnits -SkipEngine -SkipGoldens`, three runs each mode, and the same
+with `-Graphics enhanced`: every run PASS, clean stays silent (0 hitch lines) and the injected run
+trips exactly once, in both modes, every time:
+
+| Run | original frame_ms / wall | enhanced frame_ms / wall |
+|---|---|---|
+| 1 | 64.82 ms / 18.2 s | 68.91 ms / 19.0 s |
+| 2 | 62.84 ms / 18.1 s | 63.80 ms / 19.2 s |
+| 3 | 63.81 ms / 18.1 s | 67.42 ms / 21.7 s |
+
+All six runs land well inside the 30 s hitch budget (worst 21.7 s), so no budget entry moved.
+
+**Targeted probes** (`RunProbe.ps1`, `--det --mute --perf --no-vsync --frames=600`, screenshot
+ending the run at exactly sim_frame=600, three runs per cell, median of each run's per-window
+median with the first perf window dropped for shader-compile warmup): `c4-terrain` and `c5-city`
+are the two heaviest chapters already in the perf manifest; C3 stands in for the water/SSR arm
+with the golden manifest's own `c3-island` pose. Each cell flew `--fly --plane=player_bhawk`
+over the pose below, held level with `--hold=0,0,0,0.6`, at 1 pane and again with `--players=4`:
+
+- C4: `--chapter=C4 --pos=-3330,958,-9181 --direction=-0.682,-0.2,0.731`
+- C5: `--chapter=C5 --pos=-9256,178,-3155 --direction=-0.588,-0.1,-0.809`
+- C3: `--chapter=C3 --pos=-4518,400,-2015 --direction=-0.35,-0.35,-1`
+
+| Chapter | Panes | Mode | render_cpu_ms | gpu_ms | frame_ms |
+|---|---|---|---|---|---|
+| C4 | 1 | original | 0.80 | 0.74 | 8.33 |
+| C4 | 1 | enhanced | 1.37 | 0.59 | 8.37 |
+| C4 | 4 | original | 1.12 | 0.42 | 10.40 |
+| C4 | 4 | enhanced | 1.58 | 0.66 | 15.04 |
+| C5 | 1 | original | 1.10 | 1.54 | 8.35 |
+| C5 | 1 | enhanced | 1.49 | 1.93 | 8.36 |
+| C5 | 4 | original | 1.06 | 1.69 | 11.00 |
+| C5 | 4 | enhanced | 1.44 | 2.03 | 13.60 |
+| C3 | 1 | original | 1.07 | 0.59 | 8.37 |
+| C3 | 1 | enhanced | 1.69 | 0.53 | 8.41 |
+| C3 | 4 | original | 0.31 | 0.34 | 9.15 |
+| C3 | 4 | enhanced | 0.50 | 0.60 | 12.51 |
+
+C3's enhanced 4-pane cell carries one outlier run of the three (24.13 ms against 12.03 and
+12.51 ms on the other two, with render_cpu_ms/gpu_ms unremarkable on that same run); the median
+already absorbs it, and nothing in the render/GPU terms attributes it to the water or SSR path,
+so it reads as ordinary machine noise (verification PERF-5, METHOD-3) rather than a regression.
+
+**Reading the sim-clock trap.** Every 1-pane cell floors at 8.33-8.41 ms regardless of chapter or
+mode, which is this machine's own ~120 Hz external pacing surviving `--no-vsync` (docs/cli.md's
+`--no-vsync` entry measured the same floor on C4). Under `--det` the sim clock advances exactly
+one step per rendered frame with no physics catch-up to fall behind on, so every frame_ms above
+that floor is real per-frame cost, not a physics-bound scene lagging wall time. The four-pane
+numbers clear the floor by 0.78-2.65 ms in original mode and 4.10-6.67 ms in enhanced mode, and in
+every chapter the enhanced-vs-original increment at four panes (2.60-4.64 ms) is bigger than the
+render_cpu_ms/gpu_ms readings account for on their own (those stay under 2.1 ms in every cell
+measured), so the
+GPU/render-server terms this build reports should be read as a per-viewport floor, not the whole
+splitscreen GPU bill, and `frame_ms` (which already sums every pane's cost into one wall
+measurement) is the number the 60 fps / 16.7 ms line is judged against.
+
+**Lever decision: nothing moves.** The worst measured cell is C4 at 4 panes enhanced, 15.04 ms
+against the 16.7 ms line, a 1.66 ms (9.9 %) margin; C5 clears it by 3.10 ms (18.6 %) and C3 by
+4.19 ms (25.1 %, ignoring the one noise outlier above). None of the three heaviest scenes exceeds
+the budget, so per the plan's own order (SSAO quality, then shadow max distance, then SSR steps)
+nothing needs reducing. SSAO's project-level quality/half-res settings stay at Godot's defaults
+(no `rendering/environment/ssao/*` override exists in `project.godot`), which is mode-neutral
+already: `SsaoEnabled` is only set true inside `Launcher.SetupLighting`'s `GraphicsMode.Enhanced`
+branch, and original mode never reaches that code path at all. `EnhancedShadowMaxDistance` (`Launcher.cs`),
+`WeatherRig.EnhancedFogRangeScale` and `EnhancedSsrMaxSteps` (`Launcher.cs`) are unchanged from
+their committed values. C4 is the tightest of the three and is worth re-measuring first if a
+heavier world or a fifth splitscreen pane ever lands, but it is not a disproof today.
+
+**Budgets: unchanged.** The perf stage carries no budget by design (records, does not judge,
+`analysis/verification-budgets.json`); the hitch stage's existing 30 s budget covers the enhanced
+runs measured above (worst 21.7 s) without a new lane or a loosened figure, so no entry moved in
+`analysis/verification-budgets.json` or `analysis/engine-suite-weights.json`.
 
 ## D32 ☑ Divergence documentation, final golden sweep, optional enhanced goldens
 

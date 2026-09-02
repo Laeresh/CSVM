@@ -175,6 +175,12 @@
 .PARAMETER PerfFrames
     Sim frames per launch, overriding the manifest.
 
+.PARAMETER Graphics
+    "original" (default) or "enhanced" -- appends --graphics=enhanced to the perf and hitch
+    launches ONLY, never to goldens or the engine suites, which stay original-mode by
+    construction. Printed in the perf/hitch stage headers. "original" appends nothing, so the
+    default launch argument lists are byte-identical to a run that omits this parameter.
+
 .EXAMPLE
     .\RunTests.ps1
     Build, the unit tests, the in-engine suites, one summary block, one exit code.
@@ -235,7 +241,9 @@ param(
     [string]$PerfCompare = "",
     [string]$PerfFilter = "",
     [int]$PerfIterations = 0,
-    [int]$PerfFrames = 0
+    [int]$PerfFrames = 0,
+    [ValidateSet("original", "enhanced")]
+    [string]$Graphics = "original"
 )
 
 $ErrorActionPreference = "Stop"
@@ -262,6 +270,9 @@ if ($Quick -and -not $UnitFilter) {
     $UnitFilter = "Tier=Quick"
 }
 $SkipGoldensNow = ($SkipGoldens -or $Quick)
+# Perf/hitch only: "original" appends nothing, so the default arg lists are byte-identical
+# to a run that omits -Graphics. Goldens and the engine suites never see this array.
+$GraphicsArgs = if ($Graphics -eq "enhanced") { @("--graphics=enhanced") } else { @() }
 # The hitch stage's own opt-in gate ($RunHitchNow) is computed where the stage runs, after perf --
 # it is the one stage whose default is off rather than on, so it is not part of this shared block.
 
@@ -1261,7 +1272,7 @@ if (-not $Perf) {
     Add-Stage -Name "perf" -Status "SKIP" -Seconds 0 -Detail "no manifest at $PerfManifest"
     Add-Unchecked "the perf scenarios did not run: no manifest at $PerfManifest"
 } else {
-    Write-Stage-Banner "perf"
+    Write-Stage-Banner "perf (graphics=$Graphics)"
     # Every launch here carries the .scratch\perf output path, an argument nothing else passes --
     # so the kill cannot reach a live playtest or a hand-run capture (SHELL-2).
     Stop-StrayGodots -Marker "\.scratch\perf\"
@@ -1333,7 +1344,7 @@ if (-not $Perf) {
             }
             # --frames=N --screenshot= is what ends the run at exactly N sim frames, and the
             # saved-shot line prints sim_frame= so the count is proved rather than assumed.
-            $runArgs = @($scenario.args) + @("--det", "--mute", "--perf", "--no-vsync",
+            $runArgs = @($scenario.args) + $GraphicsArgs + @("--det", "--mute", "--perf", "--no-vsync",
                                              "--frames=$perfFrameCount", "--screenshot=$png")
             $ErrorActionPreference = "Continue"
             $runCode = Invoke-Godot (@("--path", $ProjectDir, "--log-file", $log,
@@ -1649,7 +1660,7 @@ if (-not $RunHitchNow) {
     Add-Stage -Name "hitch" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
     Add-Unchecked "the hitch-detector check did not run: no Godot at $GodotExe"
 } else {
-    Write-Stage-Banner "hitch (--hitch-inject=)"
+    Write-Stage-Banner "hitch (--hitch-inject=, graphics=$Graphics)"
     Stop-StrayGodots -Marker "\.scratch\hitchcheck\"
     if (-not $env:SDL_JOYSTICK_DIRECTINPUT) {
         $env:SDL_JOYSTICK_DIRECTINPUT = "0"
@@ -1713,7 +1724,7 @@ if (-not $RunHitchNow) {
     # landing B6 to write nothing but the sidecar's own BOM). Decision 13 says a clean run must
     # stay silent -- a detector that fires on nothing would read as a monitor that fires on
     # everything, and this is the only check here that would catch that.
-    $clean = Read-HitchRun -RunName "clean" -RunArgs @("--det", "--no-vsync", "--mute") -ExpectFrame 180
+    $clean = Read-HitchRun -RunName "clean" -RunArgs (@("--det", "--no-vsync", "--mute") + $GraphicsArgs) -ExpectFrame 180
     if ($clean.SimFrame -ne $clean.ExpectFrame) {
         $problems += "clean: ran to sim_frame=$($clean.SimFrame), asked for $($clean.ExpectFrame) -- see $($clean.Log)"
     } elseif ($clean.SinkPath -eq $null) {
@@ -1740,8 +1751,8 @@ if (-not $RunHitchNow) {
     # Injected run: --hitch-inject=50@300 is the verified-safe pair (@120 sits inside the
     # grace window on the dev machine and is not portable).
     # Must trip exactly once, with a full ring and a sidecar record matching the printed line.
-    $inject = Read-HitchRun -RunName "inject" -RunArgs @("--det", "--no-vsync", "--mute",
-        "--hitch-inject=50@300") -ExpectFrame 310
+    $inject = Read-HitchRun -RunName "inject" -RunArgs (@("--det", "--no-vsync", "--mute",
+        "--hitch-inject=50@300") + $GraphicsArgs) -ExpectFrame 310
     if ($inject.SimFrame -ne $inject.ExpectFrame) {
         $problems += "inject: ran to sim_frame=$($inject.SimFrame), asked for $($inject.ExpectFrame) -- see $($inject.Log)"
     } elseif ($inject.SinkPath -eq $null) {
