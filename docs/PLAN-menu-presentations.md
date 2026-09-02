@@ -1845,7 +1845,11 @@ stood is read off the log line, and the rollover, pressed, pointer and sound beh
 suites' and the controls', never a picture's), **SRC-4** (the matrix is recorded once, here; the
 contract page states what is and cites no result).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The plan tree with E44 landed passed the complete `.\RunTests.ps1` (3024 units, 213
+engine suites across 4 shards, 18 goldens hash-identical, engine errors clean, 147.1s), the same
+tally the item's own gate reported. The user decided the three queued choices: Original stays
+normally selectable, the two-answer box follows the script with Yes focused, and the Options
+chooser's description moves above its plaques; the at-the-controls rows remain owed.
 
 **What the user must do at the controls, and decide.** The nine owed rows above, in that order,
 each over `.\RunDev.ps1` and never against a real profile (copy one first) or the real extraction
