@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using CSVM.Bindings;
 using CSVM.Effects;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -428,10 +429,6 @@ public partial class FlightController : Node3D
                                                    // per action
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
 
-    // The head-look recenter key: the original's Kp5 "Look Forward", the middle of the numpad
-    // cluster its eight direction slots surround.
-    private const Key SnapCenterKey = Key.Kp5;
-
     // Everything this pane draws for its pilot. Always present, so no site has to ask whether
     // there is a HUD: an aircraft with no readouts built simply has a module that draws nothing.
     private readonly FlightHud _pilotHud = new();
@@ -457,6 +454,18 @@ public partial class FlightController : Node3D
     // Resume hands input back while F/A is still down from confirming it.
     private readonly RocketTriggerLatch _rocketLatch = new();
 
+    // This seat's keymap, and three views of it. One map, three readers, because the keyboard half
+    // and the pad half of an attitude action are processed differently here and then summed: the
+    // keys ramp through StickRamp, the sticks bend through StickCurve. A single OR-ed read cannot
+    // express that, so the halves stay separable while the bindings stay shared.
+    private readonly BindingProfile _bindings;
+    private readonly PlayerActions _actions;      // keyboard, mouse and pad together
+    private readonly PlayerActions _keyActions;   // the keyboard and mouse half alone
+    private readonly PlayerActions _padActions;   // the pad half alone
+    private readonly SeatDeviceState _seatState;
+    private readonly SeatDeviceState _padMutedState;
+
+    private ulong _inputFrame = ulong.MaxValue;  // the rendered frame the three readers above hold
     private bool _initialTargetDone;             // --target= has had its one chance
     private int _initialTargetWaits;             // …frames it has waited for a non-empty pool
     private FlightModel _model = null!;
@@ -544,6 +553,17 @@ public partial class FlightController : Node3D
     // at, and raises the flag below so the hand-back moves the flight model too.
     private Transform3D? _stagedFrom;
     private bool _resumePlaced;
+
+    public FlightController()
+    {
+        _seatState = new SeatDeviceState(this, readsPads: true);
+        _padMutedState = new SeatDeviceState(this, readsPads: false);
+        _bindings = BindingProfile.Defaults(default, true);
+        _actions = _bindings.Actions(InputContext.Flight);
+        var map = _bindings.Map(InputContext.Flight);
+        _keyActions = new PlayerActions(map, true);
+        _padActions = new PlayerActions(map, false);
+    }
 
     /// <summary>Raised once per crash, at <see cref="Crash"/>: (victim <see cref="PlayerIndex"/>,
     /// killer shooter id). Null for terrain, mid-air, an unowned round or any other crash cause. A
@@ -1311,9 +1331,10 @@ public partial class FlightController : Node3D
     public void EndPhotoMode()
     {
         InPhotoMode = false;
-        // The raw combination, not PauseTogglePressed: that still reads the gates, and the point
+        // The bare action, not PauseTogglePressed: that still reads the gates, and the point
         // is to record what the hands are doing regardless of them.
-        _pausePrev = KeyDown(Key.P) || KeyDown(Key.Escape) || PadPressed(JoyButton.Start);
+        PollInput();
+        _pausePrev = _actions.Held(InputAction.Pause);
     }
 
     /// <summary>Photo mode's forward onto <see cref="FlightHud.SetVisible"/>: the session drives it
@@ -1508,6 +1529,8 @@ public partial class FlightController : Node3D
         // every caller (the session simulation or a focused suite) honours it in one place.
         if (Inert)
             return;
+
+        PollInput();
 
         // Advance the stunt clock every physics frame — including through the crash freeze so the
         // clock never stops (a deliberate rule); it stops only at AllComplete (inside Tick). A
@@ -1753,6 +1776,7 @@ public partial class FlightController : Node3D
 
     public override void _Process(double delta)
     {
+        PollInput();
         var clock = GameClock.Current;
         if (!Inert)
             PollResultsShortcuts((float)delta);
@@ -1831,7 +1855,7 @@ public partial class FlightController : Node3D
                 // Rigid at cockpit_camera (wobble inherited), the mode's own FOV, aimed by the
                 // head. Look-back stays IN the cockpit — head to dead astern while held, as the
                 // original does — which is why this arm sits above the look-behind branch below.
-                _cam.Head.Step(simDt, _cam.BackActive(PadPressed(JoyButton.RightStick))
+                _cam.Head.Step(simDt, _cam.BackActive(_padActions.Held(InputAction.LookBack))
                     ? new HeadLookInput(0f, -1f, 0f, 0f, false)
                     : HeadLookRead());
                 _cam.FirstPersonView(_renderPose);
@@ -1844,7 +1868,7 @@ public partial class FlightController : Node3D
             // E42: this player's right-stick click looks back, the pad twin of holding
             // numpad 0 — read here, not in CameraController, same "no pad devices in the camera"
             // rule OrbitInput/PadLookInput follow.
-            else if (_cam.BackActive(PadPressed(JoyButton.RightStick)))
+            else if (_cam.BackActive(_padActions.Held(InputAction.LookBack)))
             {
                 _cam.BackView(_renderPose);
                 view = CameraController.BackViewLog;
@@ -2022,7 +2046,7 @@ public partial class FlightController : Node3D
 
     // N / gamepad X — the nitro command (the original's MSG_CMD_NITROUS "Use Nitro-Booster").
     // A level read: the command arm engages on pressed-or-held and ignores it otherwise.
-    private bool NitroPressed() => AutoNitro || KeyDown(Key.N) || PadPressed(JoyButton.X);
+    private bool NitroPressed() => AutoNitro || _actions.Held(InputAction.Nitro);
 
     // The nitro lifecycle for this step, in the original's order: the command arm (human key,
     // or the AI's nitro-flagged maneuver), then the tank, then the edges the flag produced.
@@ -2091,14 +2115,14 @@ public partial class FlightController : Node3D
 
     // Space / gamepad B — the gun trigger (caller drives the fire-rate clock);
     // `--fire` holds it down for unattended runs.
-    private bool FirePressed() => AutoFire || KeyDown(Key.Space) || PadPressed(JoyButton.B);
+    private bool FirePressed() => AutoFire || _actions.Held(InputAction.FireGuns);
 
     // F / gamepad A — the rocket trigger. One discrete pull launches one rocket (holding
     // does NOT auto-repeat; only the 1.0 s cooldown gates it), and `--fire-rockets` auto-repeats
     // for unattended runs. ⚠ Gamepad A must not also respawn: PadPressed is a level read, so a
     // button still held when the plane goes live fires a rocket on the spawn frame, the same
     // shape the latch below also catches, since it arms wherever flight regains input.
-    private bool RocketButtonDown() => KeyDown(Key.F) || PadPressed(JoyButton.A);
+    private bool RocketButtonDown() => _actions.Held(InputAction.FireRockets);
 
     private bool RocketFirePressed() => _rocketLatch.Read(RocketButtonDown());
 
@@ -2112,20 +2136,24 @@ public partial class FlightController : Node3D
     // ⚠ The D-pad side follows the cockpit dial it drives: the GUNS gauge sits in the right column
     // (above the speedometer) and ROCKETS in the left, so pressing away from the dial reads as a
     // mis-binding at the controls.
-    private bool GunSelectPressed() => KeyDown(Key.G) || PadPressed(JoyButton.DpadRight);
+    private bool GunSelectPressed() => _actions.Held(InputAction.SelectGunGroup);
 
     // F9 / gamepad left-stick click, the auto-land button, read live by
     // LandingApproachRuntime.Tick() so a press lands in the same frame it happens. Kept beside the
     // other button reads rather than hoisted for SA1202's sake, the same trade made elsewhere here.
 #pragma warning disable SA1202
-    internal bool AutoLandPressed() => AutoLand || KeyDown(Key.F9) || PadPressed(JoyButton.LeftStick);
+    internal bool AutoLandPressed()
+    {
+        PollInput();    // read from outside this node's own tick, so it resolves its own frame
+        return AutoLand || _actions.Held(InputAction.AutoLand);
+    }
 #pragma warning restore SA1202
 
     // H / gamepad D-pad Left — moves the hardpoint selector to the next pylon that still
     // carries ordnance (each pylon is its own selectable slot, whatever it loads — even a plane with
     // one uniform ordnance type). The rocket trigger then launches from the selected pylon. Caller
     // edge-detects.
-    private bool RocketSelectPressed() => KeyDown(Key.H) || PadPressed(JoyButton.DpadLeft);
+    private bool RocketSelectPressed() => _actions.Held(InputAction.SelectOrdnance);
 
     // This frame's pilot-HUD feed. The pipper's inputs are resolved HERE and only where there is a
     // reticle to draw: a muzzle midpoint reads one world transform per barrel, which every aircraft
@@ -2694,17 +2722,25 @@ public partial class FlightController : Node3D
             Downed?.Invoke(PlayerIndex, landing.Killer);
     }
 
-    // True when the button is down on one of THIS player's gamepads. With
-    // PadDevices null (single player) that is every connected pad — never `pads[0]`:
-    // phantom joypad devices (wireless dongles enumerating with the pad asleep, non-pad HID like
-    // Razer boards) can occupy the early slots, which made a pad connected after launch (= a later
-    // slot) dead. Splitscreen binds each player to its own device list instead.
-    private bool PadPressed(JoyButton button)
+    // Resolves this seat's named actions, at most once per rendered frame. Godot's input state does
+    // not move inside a frame, so one resolve answers every read a frame makes — the sim step, the
+    // draw pass and the landing runtime alike — exactly as a direct hardware read did. Whichever of
+    // them asks first pays for it, which is why there is no fixed call site.
+    private void PollInput()
     {
-        foreach (int pad in Pads.For(PadDevices))
-            if (Input.IsJoyButtonPressed(pad, button))
-                return true;
-        return false;
+        ulong frame = Engine.GetProcessFrames();
+        if (frame == _inputFrame)
+            return;
+        _inputFrame = frame;
+        // Splitscreen P2-P4 are pad-only and the field can change after construction, so the gate is
+        // re-read rather than captured. The pad-half reader is never given the keyboard.
+        _bindings.ReadsKeyboard = UseKeyboard;
+        _keyActions.ReadsKeyboard = UseKeyboard;
+        _seatState.Refresh();
+        _padMutedState.Refresh();
+        _actions.Poll(_seatState);
+        _keyActions.Poll(_padMutedState);
+        _padActions.Poll(_seatState);
     }
 
     // The largest-magnitude value of the axis across this player's gamepads (0 when
@@ -2751,8 +2787,7 @@ public partial class FlightController : Node3D
             Rerun();   // the solo board takes R as a fresh run, distinct from a mid-run respawn
     }
 
-    private bool RespawnPressed() =>
-        KeyDown(Key.R) || PadPressed(JoyButton.Y);
+    private bool RespawnPressed() => _actions.Held(InputAction.Respawn);
 
     // P, Esc or gamepad Start, edge-detected so one press toggles once, gated on AllowPause
     // (false for AI rigs and the suites' bare test rigs). Esc opens the pause board rather than
@@ -2760,8 +2795,7 @@ public partial class FlightController : Node3D
     // ⚠ Silent in photo mode: Escape is what LEAVES that mode, and this reads Escape too, so one
     // press would both close the mode and unpause the session behind it (BL-429).
     private bool PauseTogglePressed() =>
-        AllowPause && !InPhotoMode
-        && (KeyDown(Key.P) || KeyDown(Key.Escape) || PadPressed(JoyButton.Start));
+        AllowPause && !InPhotoMode && _actions.Held(InputAction.Pause);
 
     // One frame of the pause key, and the halt it mirrors into the shared clock. Polled from
     // _Process, not the sim step: a halted sim takes no steps and could never resume itself.
@@ -2794,10 +2828,9 @@ public partial class FlightController : Node3D
         return halted;
     }
 
-    // Tab / gamepad X — cycles the stunt marker's displayed target (caller edge-detects).
-    // Gamepad Y would clash with the respawn button, so X (a free face button) instead.
-    private bool CycleTargetPressed() =>
-        KeyDown(Key.Tab) || PadPressed(JoyButton.X);
+    // Cycles the stunt marker's displayed target (caller edge-detects). Keyboard only: the shipped
+    // keymap gives this no pad control, because every free face button already carries one.
+    private bool CycleTargetPressed() => _actions.Held(InputAction.CycleStuntTarget);
 
     /// <summary>One frame of player targeting: rebuild the pool and re-resolve, prune the
     /// attacker queue, then dispatch this frame's input. That order is the original's — its
@@ -2859,7 +2892,7 @@ public partial class FlightController : Node3D
         // D-pad Up, the pad's one targeting button (decision 6/7): tap steps the enemy cycle, hold
         // selects the target nearest the crosshair. TapHoldButton owns the timing and the
         // resolve-on-release rule; this reads the pad and acts on the verdict.
-        switch (_targetHold.Step(PadPressed(JoyButton.DpadUp), dt))
+        switch (_targetHold.Step(_padActions.Held(InputAction.TargetNextEnemy), dt))
         {
             case TapHold.Hold:
                 sel.NearestCrosshairs(_model.Position, _model.Attitude);
@@ -2872,11 +2905,11 @@ public partial class FlightController : Node3D
         // The curated keyboard set (decision 14): every one of the original's eleven targeting keys
         // collides with our flight scheme, so these five free keys carry one action per class plus
         // the two class-less ones. They are defaults, not a scheme — the rebind layer is its own item.
-        DispatchTargetKey(0, Key.T, () => sel.NextEnemy());
-        DispatchTargetKey(1, Key.Y, () => sel.Next(TargetClass.Ally));
-        DispatchTargetKey(2, Key.U, () => sel.Next(TargetClass.NonAircraft));
-        DispatchTargetKey(3, Key.I, () => sel.NearestCrosshairs(_model.Position, _model.Attitude));
-        DispatchTargetKey(4, Key.O, () => sel.Clear());
+        DispatchTargetKey(0, InputAction.TargetNextEnemy, () => sel.NextEnemy());
+        DispatchTargetKey(1, InputAction.TargetNextAlly, () => sel.Next(TargetClass.Ally));
+        DispatchTargetKey(2, InputAction.TargetNextNonAircraft, () => sel.Next(TargetClass.NonAircraft));
+        DispatchTargetKey(3, InputAction.TargetNearest, () => sel.NearestCrosshairs(_model.Position, _model.Attitude));
+        DispatchTargetKey(4, InputAction.TargetClear, () => sel.Clear());
     }
 
     /// <summary>Spends <c>--target=</c>'s one application. Waits for a non-empty pool first:
@@ -2933,10 +2966,10 @@ public partial class FlightController : Node3D
     /// The pad half makes the views reachable for a pad-only pilot (P2–P4), who has no keyboard.</summary>
     private void PollViewModeKeys()
     {
-        DispatchViewModeKey(0, KeyDown(Key.F8), () => _cam!.CycleCockpitViews());
-        DispatchViewModeKey(1, KeyDown(Key.F6), () => _cam!.SelectChase());
-        DispatchViewModeKey(2, PadPressed(JoyButton.DpadDown), () => _cam!.CycleCockpitViews());
-        DispatchViewModeKey(3, PadPressed(JoyButton.Back), () => _cam!.SelectChase());
+        DispatchViewModeKey(0, _keyActions.Held(InputAction.CycleCockpitViews), () => _cam!.CycleCockpitViews());
+        DispatchViewModeKey(1, _keyActions.Held(InputAction.SelectChaseView), () => _cam!.SelectChase());
+        DispatchViewModeKey(2, _padActions.Held(InputAction.CycleCockpitViews), () => _cam!.CycleCockpitViews());
+        DispatchViewModeKey(3, _padActions.Held(InputAction.SelectChaseView), () => _cam!.SelectChase());
     }
 
     // Same one-action-per-press rule as DispatchTargetKey, against its own slots.
@@ -2948,11 +2981,12 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>Edge-detects one targeting key against its own slot and runs its action once per
-    /// press. Splitscreen-safe by construction: <see cref="KeyDown"/> is gated on
-    /// <see cref="UseKeyboard"/>, so P2–P4 (pad-only) never see these.</summary>
-    private void DispatchTargetKey(int slot, Key key, System.Action act)
+    /// press. Read off the keyboard half alone: the pad's one targeting control is the tap/hold
+    /// splitter above, which holds the same action and would otherwise dispatch twice. Splitscreen-safe
+    /// by construction, since that half is gated on <see cref="UseKeyboard"/>.</summary>
+    private void DispatchTargetKey(int slot, InputAction action, System.Action act)
     {
-        bool down = KeyDown(key);
+        bool down = _keyActions.Held(action);
         if (down && !_targetKeyPrev[slot])
             act();
         _targetKeyPrev[slot] = down;
@@ -3342,18 +3376,16 @@ public partial class FlightController : Node3D
     // other sim-step helpers, rather than hoisting it for SA1202's sake.
     internal FlightInput ReadKeyboard(float dt)
     {
-        // this player's gamepad(s) fly the plane (see PadPressed/PadAxis);
+        // this player's gamepad(s) fly the plane, read through the pad half of the keymap;
         // arcade-flight standard: stick back (+Y) = nose up, stick right = bank right
-        float padPitch = StickCurve(PadAxis(JoyAxis.LeftY));
-        float padRoll = -StickCurve(PadAxis(JoyAxis.LeftX));
-        float padYaw = (PadPressed(JoyButton.LeftShoulder) ? 1f : 0f)
-                     - (PadPressed(JoyButton.RightShoulder) ? 1f : 0f);
-        float padThrottle = PadAxis(JoyAxis.TriggerRight)
-                          - PadAxis(JoyAxis.TriggerLeft);
-        if (PadPressed(JoyButton.Y))
+        float padPitch = StickCurve(_padActions.Axis(InputAction.PitchUp, InputAction.PitchDown));
+        float padRoll = -StickCurve(_padActions.Axis(InputAction.RollRight, InputAction.RollLeft));
+        float padYaw = _padActions.Axis(InputAction.YawLeft, InputAction.YawRight);
+        float padThrottle = _padActions.Axis(InputAction.ThrottleUp, InputAction.ThrottleDown);
+        if (_padActions.Held(InputAction.Respawn))
             Respawn();
 
-        if (KeyDown(Key.R))
+        if (_keyActions.Held(InputAction.Respawn))
             Respawn();
 
         // The burn reads the lever as it stands entering this tick, and a dry tank skips the step
@@ -3362,14 +3394,18 @@ public partial class FlightController : Node3D
         bool leverFree = Crashed || Fuel.Step(dt, _throttle);
         if (leverFree)
             _throttle = Mathf.Clamp(
-                _throttle + (KeyAxis(Key.Shift, Key.Ctrl) + padThrottle) * ThrottleRate * dt, 0f, 1f);
+                _throttle
+                + (_keyActions.Axis(InputAction.ThrottleUp, InputAction.ThrottleDown) + padThrottle)
+                    * ThrottleRate * dt,
+                0f, 1f);
 
         // pull = S/Down, push = W/Up; bank/yaw left = A/Left/Q
         _keyPitch = StickRamp.Step(
-            _keyPitch, Mathf.Sign(KeyAxis(Key.S, Key.W) + KeyAxis(Key.Down, Key.Up)), dt);
+            _keyPitch, Mathf.Sign(_keyActions.Axis(InputAction.PitchUp, InputAction.PitchDown)), dt);
         _keyRoll = StickRamp.Step(
-            _keyRoll, Mathf.Sign(KeyAxis(Key.A, Key.D) + KeyAxis(Key.Left, Key.Right)), dt);
-        _keyYaw = StickRamp.Step(_keyYaw, KeyAxis(Key.Q, Key.E), dt);
+            _keyRoll, Mathf.Sign(_keyActions.Axis(InputAction.RollLeft, InputAction.RollRight)), dt);
+        _keyYaw = StickRamp.Step(
+            _keyYaw, _keyActions.Axis(InputAction.YawLeft, InputAction.YawRight), dt);
 
         return new FlightInput
         {
@@ -3593,9 +3629,12 @@ public partial class FlightController : Node3D
         }
     }
 
-    // The paused orbit camera's three axes, mixed from this player's keyboard and pads.
-    // Read here rather than in CameraController so the camera never learns about
-    // pad devices, window focus or the stick response curve.
+    // The weapon lab's orbit camera, mixed from this player's keyboard and pads. Read here rather
+    // than in CameraController so the camera never learns about pad devices, window focus or the
+    // stick response curve.
+    // ⚠ Deliberately not a named-action read: these are lab controls, like the panel keys, and the
+    // numpad +/- zoom pair is bound to nothing a player may rebind. The two key pairs also SUM
+    // rather than OR, so W and Up together swing at double rate, which an action read cannot say.
     private (float Yaw, float Pitch, float Zoom) OrbitInput()
     {
         float padYaw = StickCurve(PadAxis(JoyAxis.LeftX));
@@ -3614,7 +3653,8 @@ public partial class FlightController : Node3D
     // both views, so the chase swing and the first-person head cannot take different sticks.
     private (float X, float Y) PadLookInput()
     {
-        float x = StickCurve(PadAxis(JoyAxis.RightX)), y = StickCurve(PadAxis(JoyAxis.RightY));
+        float x = StickCurve(_padActions.Axis(InputAction.LookAimRight, InputAction.LookAimLeft));
+        float y = StickCurve(_padActions.Axis(InputAction.LookAimDown, InputAction.LookAimUp));
         // A live stick beats the scripted pin, the rule a held numpad key follows against --view=.
         // PinnedLook's Y is +up, this pair's is the stick's own +down, so it is negated back here
         // and every caller keeps reading one convention.
@@ -3630,7 +3670,7 @@ public partial class FlightController : Node3D
         var (lookX, lookY) = PadLookInput();
         // The pad aims absolutely here, as it does in the chase view; the mouse stays on the
         // decoded relative path. `lookY` is the stick's +down, HeadLook wants +up.
-        return new HeadLookInput(snapX, snapY, freeRight, freeUp, KeyDown(SnapCenterKey),
+        return new HeadLookInput(snapX, snapY, freeRight, freeUp, _actions.Held(InputAction.LookCenter),
             lookX, -lookY);
     }
 
@@ -3655,11 +3695,8 @@ public partial class FlightController : Node3D
     // first-person mode, where the numpad drives no fixed view (PilotView.HoldsFixedViews).
     private (float X, float Y) SnapLookInput()
     {
-        float x = (KeyDown(Key.Kp9) || KeyDown(Key.Kp6) || KeyDown(Key.Kp3) ? 1f : 0f)
-                - (KeyDown(Key.Kp7) || KeyDown(Key.Kp4) || KeyDown(Key.Kp1) ? 1f : 0f);
-        float y = (KeyDown(Key.Kp7) || KeyDown(Key.Kp8) || KeyDown(Key.Kp9) ? 1f : 0f)
-                - (KeyDown(Key.Kp1) || KeyDown(Key.Kp2) || KeyDown(Key.Kp3) ? 1f : 0f);
-        return (x, y);
+        return (_actions.Axis(InputAction.LookRight, InputAction.LookLeft),
+                _actions.Axis(InputAction.LookUp, InputAction.LookDown));
     }
 
     // Free-look direction: the mouse while its right button is held (the RMB-to-look posture the
@@ -3681,8 +3718,74 @@ public partial class FlightController : Node3D
         var pos = (Vector2)DisplayServer.MouseGetPosition();
         var delta = pos - _mouseLookPrev;
         _mouseLookPrev = pos;
-        bool looking = UseKeyboard && Input.IsMouseButtonPressed(MouseButton.Right);
+        bool looking = _actions.Held(InputAction.FreeLook);
         return looking && delta.LengthSquared() > 1f ? delta : Vector2.Zero;
+    }
+
+    // This seat's hardware, addressed the way the shipped defaults author it: a pad binding names
+    // the placeholder pad identity, which here means every pad Pads.For hands this player.
+    // ⚠ Do not narrow that to one device id. With PadDevices null (single player) it is every
+    // connected pad, never `pads[0]`: phantom joypad devices (wireless dongles enumerating with the
+    // pad asleep, non-pad HID like Razer boards) can occupy the early slots, which made a pad
+    // connected after launch dead. Splitscreen binds each player to its own device list instead.
+    private sealed class SeatDeviceState : IDeviceState
+    {
+        private readonly FlightController _rig;
+        private readonly bool _readsPads;
+        private readonly List<int> _pads = new();
+
+        public SeatDeviceState(FlightController rig, bool readsPads)
+        {
+            _rig = rig;
+            _readsPads = readsPads;
+        }
+
+        // The seat's pads for this tick, taken once. Pads.For re-reads the connected roster on
+        // every call, and a tick asks it once per pad binding rather than once.
+        public void Refresh()
+        {
+            _pads.Clear();
+            if (!_readsPads)
+                return;
+            foreach (int pad in Pads.For(_rig.PadDevices))
+                _pads.Add(pad);
+        }
+
+        public bool IsKeyDown(DeviceId device, int keyCode) =>
+            device.Kind == DeviceKind.Keyboard && Input.IsKeyPressed((Key)keyCode);
+
+        public bool IsMouseButtonDown(DeviceId device, int button) =>
+            device.Kind == DeviceKind.Mouse && Input.IsMouseButtonPressed((MouseButton)button);
+
+        public bool IsButtonDown(DeviceId device, int button)
+        {
+            if (device.Kind != DeviceKind.Joypad)
+                return false;
+            foreach (int pad in _pads)
+                if (Input.IsJoyButtonPressed(pad, (JoyButton)button))
+                    return true;
+            return false;
+        }
+
+        // The largest-magnitude reading across this seat's pads, so an idle phantom device reads
+        // ~0 and never masks the real stick.
+        public float AxisValue(DeviceId device, int axis)
+        {
+            if (device.Kind != DeviceKind.Joypad)
+                return 0f;
+            float v = 0f;
+            foreach (int pad in _pads)
+            {
+                float a = Input.GetJoyAxis(pad, (JoyAxis)axis);
+                if (Mathf.Abs(a) > Mathf.Abs(v))
+                    v = a;
+            }
+
+            return v;
+        }
+
+        // Nothing authors a hat binding on this backend: a d-pad arrives as the four buttons above.
+        public HatDirection HatState(DeviceId device, int hat) => HatDirection.None;
     }
 
     // This plane's half of a contact the resolver is deciding: the engine effects it has to
