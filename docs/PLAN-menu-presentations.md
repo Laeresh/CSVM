@@ -1148,7 +1148,11 @@ the mission, and the real cabin-to-scrapbook return is owed at the controls: `.\
 Campaign, a player, Next Mission, GO TO FLIGHT CHECK, FLY MISSION, the mission's end, and the
 scrapbook must open on it with RETURN TO CABIN focused.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The plan tree with D31 landed passed the complete `.\RunTests.ps1` (2989 units, 210
+engine suites across 4 shards with `menu-campaign-journey` and every `campaign-*` suite among them,
+18 goldens hash-identical, engine errors clean, 141.3s). No real profile was written by any run.
+The cabin to scrapbook return through a flown mission remains owed at the controls, as the Verify
+paragraph states.
 
 **⚠ Traps.** Do not replace one presentation-shaped `ICampaignPage` with a universal screen schema.
 Not every current stack operation necessarily belongs in shared feature state; classify it first.
