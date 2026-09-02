@@ -2072,6 +2072,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   tracks its own pick. Depends on H22's target-tracking plumbing; `docs/controls.md` gains the
   bindings when it lands.
 
+- `BL-686` `[Feature]` **One target HUD: the stunt marker and the objective marker are the same
+  thing shown by two systems.** *Evidence:* the user's call, made while `PLAN-input-rebinding`'s
+  `B11` was migrating `FlightController`. A stunt target IS an objective marker, so cycling one is
+  the same action as stepping the objective cycle, and the two should not be separate features with
+  separate keys and separate drawing. Today they are: `CycleStuntTarget` is its own action on `Tab`
+  (`docs/controls.md`) driving the stunt marker, while `TargetNextEnemy` steps the targeting HUD's
+  enemy/objective cycle on `T` and `D-pad Up` (tap), and the two draw through different code.
+  *Fix shape:* fold the stunt marker into the targeting HUD's objective class so one cycle, one
+  marker style and one keybinding cover both, and the stunt modes stop needing a private marker at
+  all. `BL-400`'s curated non-aircraft list and `BL-351`'s class-cycling generalisation are the
+  neighbouring pieces of the same HUD, so whoever takes this should read all three together.
+  ⚠ Trap: the original's own `targets.zrd` cycle is decoded in `docs/org/targeting.md` and is the
+  reference for what belongs in a cycle; do not invent a class the original has no equivalent of.
+  ⚠ Until this lands, `CycleStuntTarget` shares `D-pad Up` with `TargetNextEnemy` as an interim,
+  which is a deliberate two-actions-on-one-control case (see `PLAN-input-rebinding`'s note on
+  `ActionMap.Assign` stealing from only the first owner it finds).
+  *Cross-refs:* `BL-351`, `BL-400`, `BL-397`, `docs/org/targeting.md`, `docs/controls.md`.
+
 - `BL-431` `[Feature]` **The screen-space `GaugeCluster` doubles up over the driven 3D panel in
   first person, and whether it should is undecided.** The drive itself has landed:
   `CockpitGauges` (`src/Flight/CockpitGauges.cs`) binds the needle nodes, the artificial-horizon
