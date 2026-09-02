@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — Hardening and record
 
 31. ☐ Performance gate: enhanced mode under -Perf/-Hitch, worst chapter, 4-pane splitscreen
-32. ☐ Divergence documentation, final golden sweep, optional enhanced goldens
+32. ☑ Divergence documentation, final golden sweep, optional enhanced goldens
 
 ## Dependency and parallelism notes
 
@@ -1144,7 +1144,7 @@ per scenario in the landing commit message.
 **⚠ Traps.** Read docs/verification.md before measuring; the sim clock lagging wall time on
 physics-bound scenes will masquerade as a rendering regression if measured naively.
 
-## D32 ☐ Divergence documentation, final golden sweep, optional enhanced goldens
+## D32 ☑ Divergence documentation, final golden sweep, optional enhanced goldens
 
 **Goal.** The mode is recorded as a [Divergence] with its config key documented, the whole plan's
 zero-mover property is confirmed one last time, and enhanced mode optionally gains its own pinned
@@ -1169,3 +1169,84 @@ nothing else.
 
 **⚠ Traps.** A stale `-RegenGoldens` silently re-baselines (GOLD-9): check `git diff` on the
 manifest before believing any PASS in this item.
+
+**As landed.** The divergence is recorded in `docs/architecture.md` under "Rendering: the enhanced
+graphics mode (a documented divergence)" (placed beside "Cross-module conventions", since
+`architecture.md` has no single existing section for rendering as a whole): the config key and
+flag, what enhanced mode changes item by item, the byte-identity proof (the per-item shader-key
+dumps plus the 18 goldens, both named as the instruments), the two recorded disproofs (lit windows
+are texels in lit walls; the `lighting: false` bit's general arm is half non-luminous), and the
+open TUNE judgements. `SceneBuilder.cs`, `GraphicsMode.cs`, `WeatherRig.cs`, `WorldLights.cs`,
+`CockpitOverlay.cs`, `SplitScreen.cs` and `Launcher.cs` each already carried their own
+enhanced-mode paragraph from the items that landed them; each now also points back at the new
+section, and `SceneBuilder.cs`'s entry gained the `docs/org/vertexLighting.md` cross-link C21's
+census depends on that it had not carried before. `PROJECT_CONTEXT.md`'s flag-index and
+`src/Utils/` counts were re-measured rather than trusted: `docs/cli.md`'s flag index carries 146
+unique `--` flags today (the day-to-day table 30 of them), and `CSVM/src/Utils/` holds 16 `.cs`
+files; both lines are updated to the measured counts.
+
+**The menu-plan handoff.** `docs/PLAN-menu-presentations.md` is not in this worktree, so the note
+for its authors lives here instead: the options menu exposes `graphics.mode` through the menu
+plan's own options store; every reader in this codebase consults the resolved
+`GraphicsMode.Enhanced` boolean only, so that layer slots in without touching them.
+
+**Final golden sweep.** `$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -SkipUnits -SkipEngine` on
+this tree: PASS, 18 shot(s) hash-identical, 44.4 s (budget 50.0 s), gpu NVIDIA GeForce RTX 5080 /
+1.4.341. `git diff --stat -- analysis/goldens/manifest.json` and `git status --short --
+analysis/goldens/manifest.json` both report nothing: the manifest is unmodified in the working
+tree, so the PASS above is not GOLD-9's stale-regen false green.
+
+**Enhanced goldens, prepared not pinned.** Two candidates, one day and one night, each the
+existing golden's own camera args plus `--graphics=enhanced`, captured as manual
+`.\RunProbe.ps1` shots (not through `-RegenGoldens`) under
+`.claude/worktrees/enhanced-graphics/.scratch/d32/`: `c1-waterfall-original.png` /
+`c1-waterfall-enhanced.png` and `c5-city-night-original.png` / `c5-city-night-enhanced.png`, with
+labelled side-by-side montages `montage_c1_waterfall.png` and `montage_c5_city_night.png` (built
+with a local copy of B11's `montage.ps1`). The original-mode twin of each reproduced its golden
+hash exactly (`6410c3bdaf263124994aeaf0da892f0d`, `652069b267ba51789d5b5bf42d839651`), confirming
+the pose is right before trusting the enhanced hash beside it. At the captures: the C1 waterfall
+cliff face picks up real shadow and the lake darkens under it; the C5 skyline gains lit
+skyscraper silhouettes against the shoreline that the original's flat night card does not draw.
+Neither manifest entry below is written into `analysis/goldens/manifest.json` — that edit is the
+user's call, made with `-RegenGoldens` from this record in one step if they want the enhanced path
+its own tripwire.
+
+```json
+{
+  "name": "c1-waterfall-enhanced",
+  "frame": 120,
+  "hash": "11f49c0d974ccbc27fd4678133a62fe8",
+  "exercises": "Enhanced mode's lit-world shading, shadow-mapped cliff and darkened water over the day waterfall pose, run with graphics=enhanced beside its original twin.",
+  "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--graphics=enhanced", "--det", "--mute"]
+}
+```
+
+```json
+{
+  "name": "c5-city-night-enhanced",
+  "frame": 120,
+  "hash": "b58d2b796c10022ae57e731bd044b681",
+  "exercises": "Enhanced mode's authored-sunlight sun, shadow maps and real omni lights over the night city skyline, run with graphics=enhanced beside its original twin.",
+  "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--graphics=enhanced", "--det", "--mute"]
+}
+```
+
+**Verified.** <pending orchestrator run> — this item's own sweep and manifest-diff proof are
+above; the plan's landing gate is the complete `.\RunTests.ps1` the orchestrator runs once D31
+also lands.
+
+## Open judgements
+
+The following stay TUNE: correct in shape, but judged at the controls rather than derived from a
+decoded rule.
+
+- The SUNLIGHT-to-Godot energy mapping (`WeatherRig.EnhancedEnergies`'s `SunEnergyPerDiffuse` and
+  `AmbientEnergyPerAuthored`), anchored on the install's modal day zone.
+- The 2x fog-range push (`WeatherRig.EnhancedFogRangeScale`) and the shadow max distance that
+  follows it.
+- C5's night zone authoring a day-level SUNLIGHT, so its skyline reads daylit under the pushed
+  fog with nothing in the data asking for a dimmer light there.
+- SSR's hard mirror on wave-less water planes, since the surfaces carry no wave normals to break
+  the reflection up.
+- Whether to pin the two enhanced goldens proposed in D32, and whether the day/night pair chosen
+  there is the right pair to stand in for the whole mode.
