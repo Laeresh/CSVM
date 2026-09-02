@@ -111,16 +111,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   read `Dormant` the way the target scan already does, and add a unit that damages a dormant pool
   and asserts nothing happens. *⚠ Traps:* a pool that is dormant at mission start and woken later
   must still take damage after the wake, so the read has to be live rather than captured at build.
-- `BL-668` `[Bug]` **A downed zeppelin's wreck sinks 400 m under the sea and four gasbags fall
-  through the water.** *Evidence:* the `zeppelin-breakup` suite's artifact records the wreck at
-  rest at y = −411 with the water surface at y = 0, and gasbags 1 to 4 falling about 1228 m
-  through the water while 5 and 6 land on it after 4 to 5 m. That is `MotionRuntime`'s contact and
-  bounce handling of a large untimed gravity body, independent of the `NodeUndercover` gate that
-  now lets the breakup play. *Fix shape:* find why the contact tier reads the water for two
-  gasbags and not the other four, and what stops the hull. *⚠ Traps:* `floatdown`'s descent is not
-  ended by the `StopSequence` (`docs/org/sequences.md`); the contact tier is what ends it, so a fix
-  belongs there, not in the sequence runner. *Cross-refs:* `PLAN-M5-polish-8.md` B13, `BL-440`
-  (closed), `docs/architecture.md`'s `ZeppelinRuntime.cs` entry.
 
 - `BL-060` `[Feature]` **Improve on the original crash — the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
   User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the
@@ -525,16 +515,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Weapons & combat
 
-- `BL-667` `[Bug]` **The zeppelin cannons' own scan still reads the aircraft half of the
-  VehicleList.** *Evidence:* `ZeppelinRuntime.Cannons.cs` fills its candidate set with
-  `ProjectilePool.CollectAircraft`, while the decoded turret picker (`FUN_0041f9c0`,
-  `docs/org/targeting.md` "What a turret's candidate set holds") walks the whole `VehicleList`,
-  hulls included; `TurretController` was widened to `CollectVehicleList` and the cannons were not.
-  *Fix shape:* the same one-call swap, with a suite placing a hostile hull under a zeppelin cannon
-  and no aircraft in the scene. *⚠ Traps:* the turret and ordnance pools of the picker stay
-  unscanned on purpose; do not widen further here. *Cross-refs:* `PLAN-M5-polish-8.md` B12,
-  `turret-vessel-targets` (the pattern suite).
-
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
   (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research
   risk:** the pickup entities have not been located, and they may be mission-scripted rather
@@ -888,34 +868,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-678` (the collision-side backface cull), `ace-wake-terrain` (the suite that
   pins the pose, the sheet and the track), `BL-522`'s undecoded net-nearest snap `FUN_004b0f40`,
   whose activate branch re-bases x and z through `FUN_00432010` but leaves y untouched.
-- `BL-678` `[Fidelity]` **The original backface-culls its collision test per polygon; CSVM forces
-  every world collider double-sided, so we take contacts the original does not have.**
-  *Evidence:* `FUN_0055c9c0`, the node mesh test, calls the ray-polygon routine as
-  `FUN_0055d6c0(param_2, &start, &end, verts, uVar17 & 0x3ff, uVar17 >> 10 & 1)`. Inside it, after
-  building the face normal from two edge cross products, the segment's END distance decides:
-  `if ((0.0 <= fVar14) && (param_6 == 0)) return 0;` culls the face outright, and only then does
-  the sign test `(((uint)fVar14 ^ (uint)fVar2) & 0x80000000) == 0` look for a crossing. `param_6`
-  is bit 10 of the packed word whose low ten bits are the vertex count, which is polygon flag bit 0,
-  documented in [`docs/formats/gamez.md`](docs/formats/gamez.md) as `unk2` / upstream
-  `SHOW_BACKFACE`. One flag governs both rendering and collision. CSVM sets
-  `BackfaceCollision = true` unconditionally in `SceneBuilder.CollidersForMesh`
-  (`CSVM/src/Mech3/SceneBuilder.cs:896`) and in `Clutter` (`CSVM/src/Mech3/Clutter.cs:1087`), on
-  the stated grounds that the source winding is inconsistent, and no query anywhere sets
-  `HitBackFaces` or `HitFromInside`, so every ray runs Godot's defaults where back faces hit.
-  *Census (C2):* 7656 of 12645 polygons (60.5 %) clear the flag, matching the install-wide figure
-  in [`docs/formats/gotchas.md`](docs/formats/gotchas.md); of terrain polygons specifically 2251 of
-  2325 (96.8 %) clear it, and both tiles CM12's ace meets are wholly single-sided (`g35052` 37/37,
-  `tagged` 23/23). *Why it matters at the controls:* an aircraft, a round or a probe approaching a
-  single-sided face from behind is stopped here and passes through in the original. `BL-669` is the
-  worked example, where it turns a harmless authored pose into a scripted death.
-  *Fix shape:* honour `poly.ShowBackface` on the collision shape, which the loader already decodes
-  (`GameZ.cs:481`), behind a census and an A/B rather than as a blanket flip.
-  ⚠ *Traps:* the render side shares the flag and is a separate known simplification, so a collision
-  fix must not silently change what draws; the 266 game-wide back-to-back pairs (one quad authored
-  as two opposite-wound polygons) make a naive per-face change collidable from both sides anyway;
-  weapon rays run the same test, so [`docs/org/weaponRay.md`](docs/org/weaponRay.md) is in scope;
-  and the change reaches every chapter, every aircraft and every clutter body, so it will move
-  goldens and suites and needs its own item.
 - `BL-443` `[Fidelity]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
   late.** `FUN_0048fc40` (call `0x48c883`) writes the delivered body-up G and the ramp reads it at
   `0x48ca1e` in the same tick, before the torques; `FlightModel.Step` rotates before it translates
@@ -1024,26 +976,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   altitude. The decode gives it four falsifiable predictions (`docs/org/shadows.md`, last section);
   the one to shoot at first is that the **player's own** shadow trails the aircraft by ~1.5 × its
   altitude along the flight direction while an AI aircraft's sits directly beneath it.
-
-- `BL-332` `[Bug]` **The aircraft light's intensity is hardcoded; the mission authors it**
-  (split out of `BL-324`, 2026-08-09). `Launcher.cs` sets `LightEnergy 1.6` and
-  `AmbientLightEnergy 0.9` (ambient source `Sky`) once at launcher level, for every mission.
-  The original sets `SUNLIGHT_DIFFUSE` and `SUNLIGHT_AMBIENT` **on the same `sunlight` node in the
-  same zone-apply call** as the orientation — `FUN_00472ea0` calls `FUN_004dbdb0` (diffuse) and
-  `FUN_004dbce0` (ambient) directly beside `FUN_004dc610` (the rotation setter), on the named
-  `sunlight` gamez Light node every chapter ships. They swing hard: `DIFFUSE` 0.4–2.0,
-  `AMBIENT` 0.15–0.6, with
-  C1B night at `0.6 / 0.15` against C1C day at `2.0 / 0.6`. `Weather.cs` already parses both, but
-  only collapses them into the `WorldLight` scalar for the **fullbright world**
-  (`AMBIENT + DIFFUSE·SunIncidence`); the shaded path — aircraft, the only lit things in the scene
-  — never sees them. So a plane in C1B's night mission is lit exactly as brightly as one in C1C's
-  daylight, and since `BL-324` its bearing is now per-chapter while its brightness is not.
-  ⚠ Not a straight port: `DIFFUSE` is a DX7-era intensity, not Godot's `LightEnergy` units, so
-  mapping 0.4–2.0 onto the light is a **new calibration**, not a substitution — which is why it is
-  not part of `BL-324`. Keep it to those two constants; whether Godot's ambient should stop being
-  `Sky`-sourced is a separate rendering-design question, not this.
-  *Needs an original-game A/B:* a matched night/day pose showing aircraft brightness, in the spirit
-  of `CAP-11`'s `WorldLight` calibration (which pinned the world half of the same pair).
 
 - `BL-272` `[Tuning]` **Precipitation: every unit mapping from `weather.json` to a look is invented, and
   one deviation is deliberately held back** (`Precipitation.cs:29-62` — type/tint/rate/density
@@ -1284,17 +1216,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
   file's own rule).
 
-- `BL-679` `[Bug]` **`NameResolver` keeps a disposed `Node3D` across a plane switch, so a suite
-  staging several airframes in one process throws intermittently.** *Evidence:* an
-  `ObjectDisposedException` inside `NameResolver.Add` reaching `Node3DIdentity.Equals`, seen on
-  roughly one run in four of the `landings` filter while `landings-hookup-airframe` drives six
-  airframes in sequence; the rate does not change with the number of planes driven, so it is a stale
-  entry surviving a switch rather than a capacity effect. *Fix shape:* find who owns removal from
-  the resolver's dictionary when a staged airframe is freed, and clear the entry there; a
-  `Node3DIdentity` that compares a freed node is the symptom, not the cause. *⚠ Traps:* do not
-  guard `Equals` with an `IsInstanceValid` check and call it fixed, which hides a stale entry that
-  will also answer a later lookup with the wrong node. This is non-deterministic, so a green run
-  proves nothing: reproduce it by driving the sequence repeatedly before and after.
 - `BL-680` `[Research]` **The compiled symbol table resolves nothing for `brig`/`fury`/`peace`'s
   nested hook arms at `ParkDockingHook`'s staging point, though the same lookup succeeds later.**
   *Evidence:* `_resolver.SymbolClaims` returns "claimed but unbuilt" for `l_arm1`/`r_arm1` under
@@ -1330,26 +1251,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   tree lines and C2's Eiffel replica, where the erosion this rule was written to prevent would show
   first. *Cross-refs:* `analysis/alpha-classification/FINDINGS.md`, which carries the decode and the
   install-wide census; the coastline commit that filed this (`git log --grep=SoftAlphaCoastline`).
-
-- `BL-613` `[Fidelity]` **An alpha-textured surface takes a sun term in ours and none in the
-  original.** *Evidence (decoded):* [`docs/org/vertexLighting.md`](docs/org/vertexLighting.md) pins
-  the original's per-surface lighting exemption as two gates, and the second is engine-wide: in
-  `FUN_005524d0`'s textured branch, bit `0x02` of the texture object's storage flags byte at `+0x09`
-  (set for exactly the textures carrying an alpha channel) skips the per-vertex light evaluation
-  outright and sends the polygon through the unlit submission path. CSVM has no counterpart, so
-  every alpha-textured surface in every chapter is modulated where the original leaves it
-  fullbright. Confirmed against the shipped data: `poleflare` and `lightpole` are `alpha: Full`
-  and exempt, while `cblock1`, `bldg1` and `wtr00000` are `alpha: None` and lit in both.
-  *Fix shape:* carry the exemption on the material the builder creates, keyed on the texture's own
-  alpha class, alongside the existing per-model `lighting` gate. *⚠ Traps:* **the deployed texture
-  tree cannot answer the question.** It ships PNGs only; the alpha class lives in the extractor's
-  `alpha` field in `texture.zip`'s `manifest.json`, so the plumbing to reach it is the first half of
-  the work. **A PNG alpha-channel test is not a substitute**, because it loses the one to ten
-  `Simple` textures per chapter that carry the bit as well. This changes how a large population of
-  surfaces reads across all eight chapters, so it wants a golden re-pin and the user's eyes, not a
-  suite alone. *Cross-refs:* `BL-322` (the C5 facade overlays, this rule's first concrete instance),
-  `BL-070` (whose "should be exempt from the dim" half this decode settles, leaving only its
-  billboard-axis half), `docs/org/textures.md` (the storage-flag bits).
 
 ## Effects & animation runtime
 
@@ -1447,33 +1348,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   deliberate deviation from a decoded rule.
   Cross-link: `BL-292` (crash-splash orientation, different spawn path; scheduled in
   `docs/plans/PLAN-m3-polish-10.md` A3).
-
-- `BL-419` `[Fidelity]` **The sonic ground burst does not read like the original's: ours is soft cyan
-  hoops rising in the air, the original is one flat crisp pale-green ring growing on the terrain.**
-  *Evidence:* `OriginalScreenshots/Videos/CAP-23 Rocket Sonic Ground.mp4` (frames 200-330 at 30 fps,
-  impact at ~204): a bright white star flare with two or three thin pale rings for ~0.3 s, then ONE
-  flat crisp pale yellow-green annulus lying on the terrain with radial striations and a dark centre,
-  expanding smoothly for ~3 s and fading by ~4.2 s, plus a thin blue-white vapour column and no
-  smoke. `CAP-23 Rocket SONIC Air.mp4`: the air detonation is a small brief white sparkle. Ours
-  (`--weapon-lab=wep_08 --weapon-fire`, sim frames 12-126): three or four fat soft cyan hoops read as
-  rings rising in mid-air, all finished inside ~1.1 s, then `ring_down1` grows into a very large
-  fuzzy cyan torus above the ground from 1.3 to 2.1 s, under a thick grey puffer column the original
-  does not have. Total life is comparable (~3.8 s authored vs ~4.2 s measured), but ours is
-  front-loaded and airborne where the original is one continuous ground ring. The defs are
-  `sonic_ground_effect` calling `ring_up1..4` at t=0 and `ring_down1` at +1.2 s on `sonic_ring1..5`
-  (`extracted/zrdr/sonic_rings.zrd.json`, `sonic_control.zrd.json`), placed as a `SURFACE_ANIMATION`
-  with world up rotated onto the struck normal.
-  *Where to look:* how the anim runtime reads the ring defs' motion (a translation up versus a scale
-  in the ground plane), their opacity ramps and colour, and whether the puffer smoke belongs to this
-  def at all; the burst can be filmed frame by frame in the weapon lab against the reference frames.
-  This is a decode question against `crimson.exe`'s anim interpreter before it is a tuning one: no
-  number here should be adjusted to the footage.
-  *How you would know:* a weapon-lab burst on flat C1 ground reads as one flat pale-green ring on the
-  terrain growing for about three seconds, no airborne torus, and the same def in the air reads as
-  a brief sparkle.
-  *Cross-refs:* `CAP-26` (the rocket-impact rings capture; the sonic half is answered by the CAP-23
-  clips above, and its "look for" list should gain the flat-ring-versus-airborne-hoops question),
-  `BL-406` (closed).
 
 - `BL-535` `[Bug]` **A repeat sonic burst pays a 10 to 14 ms slot re-reset once the pool recycles a still-live slot.** With every emitter pre-built at bind (`AnimRuntime.PrewarmEmitters`), the weapon-lab probe (`--chapter=C1 --weapon-lab=wep_08 --weapon-fire --infinite-ammo --weapon-surface=default --weapon-standoff=90 --no-det --no-vsync --seed=1 --no-pads --frames=1200 --screenshot=<path>`) with `hitchMonitor.floorMs` 10 and `medianMultiple` 1.2 in `CSVM/config.json` records `effect_checkout` samples of 15.6 ms and 12.2 ms in `.hitches.jsonl`; under the stock monitor it never trips. `AnimRuntime.ResetCheckedOutCopies`'s own def/anchor loop is cheap and constant (17 defs, 17 matched anchors every burst); the cost sits inside `RESET_STATE`'s `ObjectOpacityState` dispatch on the ring defs — `PoseChannel.SetSubtreeOpacity` → `ApplyOpacity`'s recursive subtree walk plus `WorldCollision.SetFaded` → `SyncSubtree`/`FadedAbove` — and lands exactly at the pool wrap (a per-burst `Stopwatch` shows burst 4 cheap, then the log's own `anim: effect pool for 'sonic_ground_effect' recycled slot 0 of 4 while it was still live` line, then burst 5 onward expensive), not two bursts before it as first measured.
   *Where to look:* isolate `ApplyOpacity`'s material/shader-param cost from `SetFaded`'s collider-resync cost before changing either — `EnsureOpacityPath`'s own `Shader.Code.Contains` scan is measured NOT to be the bottleneck (under 0.1 ms typically). Both are shared machinery well beyond the sonic burst; `WorldCollision._fadedRoots` is a single process-wide counter, so `FadedAbove`'s ancestor walk degrades for every currently-faded object in the world, not just this one, once more than one is faded at a time.
@@ -1604,23 +1478,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   on its own; but the engine that declines to pitch-shift a police siren is unlikely to pitch-shift a
   passing plane. Treat Doppler on IA traffic as **unverified**, and measure it (same method: track a
   tonal component against the source WAV) before implementing it.
-
-- `BL-459` `[Feature]` **The damaged engine's re-arm delay is not ported.** When the engine slot's
-  handle is not playing and the airframe is damaged, `FUN_004b18a0` does not restart the damaged
-  loop at once: it accumulates the frame time into the airframe DEFINITION's field at `def+0x88`
-  and only starts a loop once that total passes a threshold redrawn each frame as
-  `3.0 + 2·rand()/32767` seconds, resetting the field to zero as it does
-  (`docs/formats/vehicle.md`, "What makes an airframe damaged"). CSVM restarts the loop the frame
-  the swap is decided, so a damaged aircraft coming back inside `AiEngineAudio`'s 2000 m cull is
-  audible three to five seconds earlier than the original's would be.
-  *How you would know:* an AI plane damaged below a quarter health, flown out past 2000 m and back,
-  logs its `slot 0 -> snd_damagedengine` line three to five seconds after the `audible` line rather
-  than beside it.
-  ⚠ Traps: the timer sits on the **definition**, not the instance, so every aircraft sharing an
-  airframe def shares one counter and one draw. Port that sharing or record why not, but do not
-  quietly give each aircraft its own. A looped `snd_damagedengine` that is still playing never
-  reaches the timer, so this is only reachable through the cull (or a stream that ends), which is
-  also why it is small. Rejected: treating the delay as a crossfade; the transition is a hard cut.
 
 - `BL-252` `[Tuning]` `[Owed-playtest]` **Overspeed-whine volume** (`prop_sound`). `CAP-10` plus a
   live cross-check incidentally confirmed the **gating** of the original's dive/overspeed sound and
@@ -1995,20 +1852,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   record why. Build beside `BL-399` — it is the same byte's third state.
   *Cross-refs:* `BL-399` (padlock, the byte's third state), `PLAN-cockpit-view.md` C21 (`HeadLook`,
   `src/Flight/HeadLook.cs`).
-
-- `BL-433` `[Feature]` **Numpad `+`/`−` are unbound; the original uses them for the chase camera's
-  zoom, which CSVM has no equivalent of.** `OriginalScreenshots/Keybinds Views 2.png` labels the
-  pair **External Camera Zoom In/Out** — decoded as keys `0x43`/`0x44` moving a stored zoom value at
-  `2·dt`, clamped `[0, 1]`, smoothed at `1.5`/s (`PLAN-cockpit-view.md`, "What the data actually
-  ships"). `BL-150`'s own item (f) records the same pair, independently measured, as a "camera
-  distance trim" — read together, that trim IS this zoom axis, not a separate control. The
-  head-look controller's own center key (`0x3e`) also zeroes this same zoom value in free-look, so
-  the two features share one piece of state.
-  *Fix shape:* one zoom axis bound to numpad `+`/`−`, driving `CameraController`'s chase distance
-  with the decoded rate/clamp/smoothing; the center key's zero-the-zoom behaviour rides along once
-  `HeadLook`'s center path reaches the chase camera (`BL-435`).
-  *Cross-refs:* `BL-150` item (f) (same control, measured independently), `BL-435` (the center-key
-  zero), `PLAN-cockpit-view.md` (constants, `DAT_0064ef30`/`38`).
 
 - `BL-435` `[Feature]` **The original drives the chase camera through the same head-look controller
   as the cockpit views; CSVM's chase view has no look-around at all.** `FUN_0042c7f0` (the chase
@@ -2386,20 +2229,6 @@ usual.
 
 ## Missions, modes & campaign
 
-- `BL-670` `[Tuning]` **The invented `1.5 * turnCircle` arrival floor deforms zeppelin routes.**
-  *Evidence:* `ZeppelinRuntime.cs`'s `arrival = 1.5f * turnCircle`, where
-  `turnCircle = MaxSpeed / DegToRad(MaxRateYawDeg)`, is 515.7 m for CM08's Pandora
-  (`max_speed` 30, `max_rate_yaw` 5), not the 125 m the older paraphrase claimed. Measured: the
-  node walk advanced past node 4 while still 515 m short of it, so the hull flew 64 % of the
-  1443 m leg 3 to 4 and cut the corner; on the chain past the cargo point the legs are shorter
-  than the floor (7 to 8 is 628 m, 8 to 9 is 545 m, 9 to 10 is 640 m), so the walk advances
-  almost immediately at each node and the route is barely flown. *Fix shape:* the floor is
-  explicitly invented and only a floor, so it is tunable without touching a decode; measure what
-  radius lets the shortest shipped leg still be flown. *⚠ Traps:* it does not affect where an
-  armed stop parks the hull, which is the settling glide (`BL-597`), so a route that looks wrong
-  at a stop point is a different question. Do not confuse this floor with the aeroplane
-  executor's decoded along-leg test, which zeppelins do not use.
-  *Cross-refs:* `BL-597`'s closing commit, `docs/formats/mission-entities.md` "Steering".
 - `BL-671` `[Research]` **A holding zeppelin never levels its pitch, though the decode says it
   should.** *Evidence:* `ZeppelinMotion` commands `desiredPitch = 0` while `Holding`, but
   integrates it through `way = Speed / MaxSpeed`, which is zero at a stop, so the hull keeps
