@@ -734,6 +734,19 @@ loss. What the engine renders was decodable from the authored constants + oscill
   900-frame (15 s) `--screenshot=` run logged the credit and nothing after it, while 3600 frames
   logged the door, the booking and the drop. Give a campaign probe a minute of sim, or read the
   `cutscene:` lines before concluding a step never ran.
+- **INSTR-33** — **A smoothness complaint about a sim-driven object cannot be reproduced under
+  `--det`, and a clean per-step pose trace does not clear it.** Under `FixedStep` every rendered
+  frame is exactly one sim step, so the render/sim rate ratio is pinned at 1 and
+  `FlightController`'s interpolation branch is skipped; the defect is a property of the ratio, so
+  the mode that makes a capture reproducible is the mode that removes the thing under test. This
+  reaches every `--shots=` and `--screenshot=` capture, which imply `--det`. Measured on CM12's
+  Spruce Goose: a fixed-dt `--anim-lab` trace of 2602 consecutive sim steps read a 0.2534 m
+  worst-case per-step displacement against a 0.62 m authored ceiling and a 0.0098 m step across
+  the leg hand-off, all clean, while the same mission on a Realtime clock logged `phys_hz` at a
+  steady 59.99 mean against `fps` at a 97.9 mean, above 60 in 163 of 190 `--perf` windows. Read
+  `fps` against `phys_hz` on a `--no-det` run first; a pose trace answers what the sim computed,
+  never what the screen showed. The per-step pose itself is readable by naming a node in
+  `CSVM_TRACE_SISCRIPT`, which logs `sitrace` lines from `ScriptPlayback`.
 
 ## SRC — sources and documents
 

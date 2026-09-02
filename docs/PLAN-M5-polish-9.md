@@ -88,7 +88,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Hollywood (C2)
 
 21. ☐ `BL-635` CM11: the stunt planes carry the objective marker their roster blocks author
-22. ☐ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs
+22. ◐ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs
 23. ☐ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake
 24. ☐ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
 25. ☐ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
@@ -386,7 +386,7 @@ these aircraft invents data the mission does not author. Two aircraft share the 
 on only one is not a pass. C21 edits `CampaignDirector.cs` and `ObjectiveSites.cs`, which B13 and
 B14 also edit; see the contention notes.
 
-## C22 ☐ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs
+## C22 ◐ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs
 
 **Goal.** In CM12 (C2/M01) the Spruce Goose flies its legs without visible jitter while the player
 formates on it.
@@ -427,6 +427,54 @@ reading flying, over consecutive frames, with the camera not the source of the m
 attitude; the Goose's legs run at about 5 to 6 km from the origin, so float rounding is a possible
 contributor to measure at non-zero heading, not an assumption. Any change to the script seed
 moves other scripted motion and may move goldens; baseline first.
+
+**Diagnosed; the fix is a separate item.** Both of the entry's leads are dead and so is the
+re-seat mechanism the Approach was written to confirm. What is left is measured: the Goose's
+authored path is continuous, the runtime that plays it is clean per sim step, and the roughness
+is a render-rate defect. `AnimRuntime` advances scripted motion once per 60 Hz physics tick
+(`AnimRuntime.cs:1285-1296`, whose own comment forbids a frame-driven advance because the sim
+falls behind wall time under load), so a scripted node's pose is written 60 times a second and
+held between writes. The player's aircraft is not: `FlightController` draws it between its last
+two sim poses at `Engine.GetPhysicsInterpolationFraction()` once per rendered frame
+(`FlightController.cs:1782-1786`), and every camera mode is aimed from that interpolated pose, so
+the camera moves at the render rate. That single call is the only render interpolation in the
+codebase, and its own field note at `FlightController.cs:533-538` states the mechanism it was
+added to remove: a raw sim pose "stutters against the smoothly-moving chase camera at any render
+rate above 60 fps, in proportion to speed". The Goose runs 11 to 37 m/s, the fastest scripted
+node in the game, and this machine renders CM12 well above 60 fps. Measured: a fixed-dt
+`--anim-lab` trace of 2602 consecutive sim steps over `free_the_goose` and its hand-off into
+`path2_decelerate` reads a worst-case per-step displacement of 0.2534 m against the 0.62 m
+authored ceiling, a 0.0098 m step across the hand-off itself against 0.0088 m on the step before
+it, no oscillation at any 0.667 s frame boundary and a unit rest scale throughout; the same
+mission on a Realtime clock reports `phys_hz` at a 59.99 mean (58.5 to 61.7) against `fps` at a 97.9 mean
+(16.1 to 122.0), above 60 in 163 of 190 `--perf` windows. So the sim rate is steady and the
+render rate is not, and the two are not tied together for anything except the player's aeroplane.
+The fix is a render-pose pass over the live motion set, which `AnimLab` already implements for
+its own clock (`AnimLab.cs`, `_renderPoses` / `RestoreSimPoses` / `SnapshotSimPoses`); it lands in
+`MotionSet.cs` plus a caller in `GameSession._Process`, neither of which this item owns, and it
+is a session-wide behaviour change rather than a Goose fix. `AnimRuntime.RestOf` is untouched: the
+original's decoded seed rule writes each frame's own cubic with absolute setters and reads nothing
+from the node, and every Goose frame carries an absolute translate and rotate, so the seed reaches
+only a channel no Goose script writes. The instrument is kept: naming a node in
+`CSVM_TRACE_SISCRIPT` logs `ScriptPlayback`'s per-step pose, dt, wall delta and drawn-frame count.
+`PT-114` carries the at-the-controls judgement, including the `--max-fps 60` A/B that discriminates
+this reading from any remaining pose question.
+
+**The goose chain's branch is chosen by activation prerequisites, not by a call race.** The trace
+runs `free_the_goose` and then `path2_decelerate`, and `path2_continue` never starts, which is the
+opposite of what an invalidate race would produce. `sprucegoose-path2_continue.json` requires the
+`healthy` node under `tugandbarge01` INACTIVE and `sprucegoose-path2_decelerate.json` requires it
+ACTIVE, so the two legs are the blockade's two outcomes and both are reachable; `path2_accelerate`
+requires `snkchk` inactive, which is why an unflown stage parks the Goose after the decelerate leg
+rather than stalling. Nothing in the chain is dead. **Separately, CSVM's `CALL_ANIMATION` ordering
+does diverge from the original and that is a real defect for other missions:** `AnimRuntime.Start`
+advances a callee at t=0 inside the dispatch, while the original appends the callee at the tail of
+the action list its dispatcher walks (`FUN_004ed8c0` into `FUN_004d04e0`, the append at `004d050d`)
+and never runs a callee event during the caller's own tick, so a callee's `INVALIDATE_ANIMATION`
+cannot latch before the caller's later events. That belongs to `AnimRuntime.cs` and wants its own
+item and its own decode page.
+
+**Verified.** <pending orchestrator run>
 
 ## C23 ☐ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake
 
