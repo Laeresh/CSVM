@@ -117,7 +117,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 45. ☑ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
 46. ☑ The water mirror strength, measured against the original's water, or the water bit parked (mirror kept on the user's verdict)
 47. ☑ Day chapters read brighter than the original overall; the energy mapping re-anchored on frames
-48. ☐ Soft sun shadow edges, so a cliff's shadow on flat water is not a hard line
+48. ☑ Soft sun shadow edges, so a cliff's shadow on flat water is not a hard line
 
 ## Dependency and parallelism notes
 
@@ -2095,7 +2095,7 @@ already encoded the original's own static shading, the same double-shading the l
 traps named; this item's mandate is the day chapters' overall level, not per-chapter or
 per-surface shading, and it does not touch the vertex-colour-flattening question that trap raised.
 
-## E48 ☐ Soft sun shadow edges, so a cliff's shadow on flat water is not a hard line
+## E48 ☑ Soft sun shadow edges, so a cliff's shadow on flat water is not a hard line
 
 **Goal.** Enhanced-mode sun shadows have a penumbra, so a cast edge on a flat surface (the C1
 waterfall lake under its cliff) reads as a soft transition rather than the hard line the user
@@ -2114,6 +2114,63 @@ PCSS-style filter) with `--perf` on C5 at 4 panes, and check acne at C1's low su
 
 **Verify.** C1 waterfall lake, C1 hangar shadow and the aircraft's shadow before/after; perf delta;
 goldens zero movers.
+
+**As landed.** `Launcher.EnableSunShadows` sets `LightAngularDistance` to 2.0 degrees and leaves
+`ShadowBlur` at Godot's default 1.0. `CockpitOverlay.NewOverlay`'s shadow copy block mirrors both
+onto the interior sun clone alongside the bias pair and splits it already copied (B15).
+
+The C1 waterfall lake's own golden pose sits close enough to the cliff that the whole visible water
+is already inside one shadow (SHOT-4 applies: fog and shore-line shading dominate a plain screenshot
+there); the cast edge itself is legible where the near cliff's shadow crosses OPEN water, found at
+`--pos=-5162,406,-2186 --lookat=-7868,40,-3449 --no-fog` (E41's far-cliff pose), row y=480,
+x=650-950, 5-tap smoothed. A 0.25/0.5/1.0/2.0 sweep of `LightAngularDistance` (`ShadowBlur` held at
+1.0) gives:
+
+| angular distance | blur | edge width (90%-10%, px) | acne at C1's 25° sun | gpu_ms (C5, 4 panes, enhanced) |
+|---|---|---|---|---|
+| 0 (committed) | 1.0 | 6.2 | no | 1.85 / 1.84 / 1.86 (mean 1.85) |
+| 0.25 | 1.0 | 4.8 | no | not separately measured |
+| 0.5 | 1.0 | 4.2 | no | not separately measured |
+| 1.0 | 1.0 | 5.7 | no | not separately measured |
+| 2.0 (chosen) | 1.0 | 18.0 | no | 2.66 / 2.27 / 2.36 (mean 2.43) |
+| 2.0 | 2.0 | over 65, with dithered banding across the lit water beside the edge | yes (banding) | not measured |
+
+The three sub-1.0 candidates hold the edge within measurement noise of the committed hard line;
+only 2.0 opens it into a transition wide enough to read as soft rather than fuzzed. Raising
+`ShadowBlur` to 2.0 alongside 2.0 widens the edge further but dithers the lit plateau next to it, so
+`ShadowBlur` stays at the default.
+
+`dotnet build CSVM/CSVM.sln`: clean, 0 warnings, 0 errors. `.\CheckCommentCaps.ps1 -Summary` and
+`.\CheckEncoding.ps1`: clean over the files this item touched (a pre-existing 4-line block over the
+3-line "above a statement" cap sits at `Launcher.cs`'s clutter-fade comment, already present at the
+branch's fork point and outside this item's `EnableSunShadows`/`CockpitOverlay` scope).
+`.\RunTests.ps1 -Suite cockpit-overlay-pass -SkipUnits -SkipGoldens` and
+`.\RunTests.ps1 -Suite fog-state -SkipUnits -SkipGoldens` and
+`.\RunTests.ps1 -Suite sun-orientation -SkipUnits -SkipGoldens`: all engine PASS, 1 suite run each,
+engine errors clean. `$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -SkipUnits -SkipEngine`
+(goldens only): PASS, 18 shot(s) hash-identical, zero movers. The complete `.\RunTests.ps1`: 2805
+units, 200 engine suites (errors clean), 18 goldens hash-identical, all passing in 143.1 s.
+
+Perf, C5 (4 panes) through `RunProbe.ps1 --graphics=enhanced --freecam --chapter=C5 --players=4
+--det --mute --perf --frames=600`, three runs per configuration, mean `gpu_ms` over the last 8
+`[perf] window` lines of each run: committed (angular distance 0) 1.85 / 1.84 / 1.86, mean 1.85;
+chosen (angular distance 2.0) 2.66 / 2.27 / 2.36, mean 2.43. The chosen setting costs about 0.58 ms
+of GPU time (31%) at 4-pane C5, noisier run to run than the committed setting (range 2.27-2.66
+against 1.84-1.86), consistent with a wider PCSS-style filter kernel.
+
+Captures under `.claude\worktrees\eg-e48\.scratch\e48\`, copied to
+`.claude\worktrees\enhanced-graphics\.scratch\e48\`: `montage_farcliff_nofog.png` (the far-cliff
+`--no-fog` pose, whole frame, before/after), `montage_c1_waterfall_edge.png` (a crop over the cast
+edge on open water, before/after, captioned with the measured widths), `montage_c1_waterfall.png`
+(the golden pose itself, pixel-identical at a glance since the whole frame sits inside one shadow),
+`montage_c1_hangar.png` (the C1 default freecam spawn, hangar cluster, before/after: silhouette and
+building shape unchanged) and `montage_c1_flight_lowpass.png` (a flown low pass over the same spawn
+at sim frame 90, before/after: the aircraft's own silhouette unchanged). A full-frame diff between
+the hangar before/after pair shows zero difference on every building and tree silhouette (pure
+black in the diff) and a fine, uniform dither elsewhere consistent with the wider shadow filter
+touching self-shadowed terrain broadly, not a shape change to any single cast shadow.
+
+**Verified.** <pending orchestrator run>
 
 ## Open judgements
 

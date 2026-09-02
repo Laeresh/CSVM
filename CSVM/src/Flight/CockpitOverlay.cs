@@ -164,6 +164,8 @@ public sealed partial class CockpitOverlay : CanvasLayer
                 light.DirectionalShadowBlendSplits = sun.DirectionalShadowBlendSplits;
                 light.ShadowBias = sun.ShadowBias;
                 light.ShadowNormalBias = sun.ShadowNormalBias;
+                light.LightAngularDistance = sun.LightAngularDistance;
+                light.ShadowBlur = sun.ShadowBlur;
                 // Clamped to this pass's own camera far plane: the world sun's distance is a
                 // zone's fog far (thousands of metres, always past 100 m), and passing it through
                 // would push every PSSM split past what this near-field pass ever renders.

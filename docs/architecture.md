@@ -5582,7 +5582,8 @@ frame from `ReportPerf`, because the hitch record needs the CPU/GPU split on eve
 `SetupLighting` keeps `_sun.ShadowEnabled = false` in the faithful path and calls `EnableSunShadows`
 in enhanced graphics mode only: PSSM 4 splits, blended, splits 0.06/0.17/0.42, bias 0.05 and normal
 bias 1.25 (TUNE, the pair judged against acne at C1's 25 degree sun and against peter-panning of the
-biased road decals), and a `DirectionalShadowMaxDistance` that is a FALLBACK: a flown mission
+biased road decals), `LightAngularDistance` 2.0 degrees so a cast edge on flat water reads as a soft
+penumbra rather than a hard line, and a `DirectionalShadowMaxDistance` that is a FALLBACK: a flown mission
 overwrites it per zone from that zone's pushed-out fog far (`WeatherRig`). The world meshes and the
 aircraft are the only casters; every other population is already `ShadowCastingSetting.Off` or
 declares `shadows_disabled` in its shader. The front-culled world needs no `DoubleSided` casting:

@@ -93,6 +93,17 @@ public partial class Launcher : Node3D
     private const float EnhancedSsrFadeOut = 2.0f;
     private const float EnhancedSsrDepthTolerance = 0.2f;
 
+    // TUNE, judged at the controls. The sun's apparent size in degrees; the real sun is about
+    // 0.5, softening a cast edge into a penumbra instead of a hard line. A 0.25/0.5/1.0/2.0
+    // sweep at the C1 waterfall lake held the edge at 4-6 px through 1.0. Only 2.0 opened it
+    // into a visibly soft ~18 px transition.
+    private const float EnhancedShadowAngularDistance = 2.0f;
+
+    // TUNE, judged at the controls: Godot's own default. Raising it alongside the angular
+    // distance above widened the edge further, but it also dithered the lit water beside it.
+    // Kept here rather than trading a hard line for banding.
+    private const float EnhancedShadowBlur = 1.0f;
+
     // TUNE, judged at the controls on C2/C5. Godot's own default (1.0 m) reads a building's own
     // trim but misses the wider contact shading a street canyon wants at this world's scale
     // (buildings tens of metres tall, streets a similar width); this radius picks up a block's
@@ -528,10 +539,9 @@ public partial class Launcher : Node3D
         // survives it. Ahead of the clutter fade below, which needs it to follow the pushed fog.
         bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode);
         Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={(graphicsEnhanced ? "enhanced" : "original")}");
-        // The graphics EffectsLevel's one global: the clutter fade's squared distance scale, 0
-        // when the fade is switched off. Enhanced mode pushes the fade out by the fog range's own
-        // factor (the scale shrinks), so clutter reaches as far as the pushed haze; original mode's
-        // factor is identity.
+        // The graphics EffectsLevel's one global: the clutter fade's squared distance scale, 0 when
+        // the fade is off. Enhanced mode pushes the fade out by the fog range's own factor (the
+        // scale shrinks) so clutter reaches the pushed haze; original mode's factor is identity.
         float clutterFadeScaleSq = Utils.EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale());
         RenderingServer.GlobalShaderParameterAdd(Utils.EffectsLevel.ShaderParam,
             RenderingServer.GlobalShaderParameterType.Float, clutterFadeScaleSq);
@@ -1060,6 +1070,8 @@ public partial class Launcher : Node3D
         sun.DirectionalShadowBlendSplits = true;
         sun.ShadowBias = EnhancedShadowBias;
         sun.ShadowNormalBias = EnhancedShadowNormalBias;
+        sun.LightAngularDistance = EnhancedShadowAngularDistance;
+        sun.ShadowBlur = EnhancedShadowBlur;
     }
 
     // Screen-space reflection, for the one glossy population in the world: the water surfaces
