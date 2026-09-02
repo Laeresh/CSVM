@@ -5089,12 +5089,15 @@ on SI scripts, so a prop built switched off leaves that intro's wingman out of t
 dive; a bodiless `player` marker the flown aircraft is posed onto; `chuteman`'s parachutist
 subtree (`chutemanparent` → `pilot`/`stamp`), switched off (the shared `chuteman.zrd` RESET_STATE)
 until a mid-mission drop's own definition (e.g. C3/M01's `tdchute`) reparents and activates it;
-`balmoral`, built ACTIVE the same way `piratefighter` is, since C2/M05's capture drop is rooted on
-it and reparents it onto the placed `cargozep2` for its own shot before handing it back; and
-`FigureNodes` (`rope_ladder`, `pickup_cpilot`) under a switched-off holder rather than switched off
-themselves, because nothing ever activates the wing-walking pilot: it is the capture's own
-`OBJECT_ADD_CHILD` into the shot that draws him, which is what the original gets from a library
-root its `world1` walk never reaches, and `PropNodes` (`anim_bloodhawk`, the Bloodhawk on the
+`balmoral`, own `Visible` matching its archive ACTIVE state but staged under a switched-off
+holder like `FigureNodes` rather than at the world root the way `piratefighter` is, since C2/M05's
+capture drop is the only definition that ever names it and nothing else ever reparents it out from
+under that holder: built at the world root directly it drew, idle, at the archive's build origin
+in every OTHER mission that stages an aircraft, and moved a golden hash before this was caught;
+`FigureNodes` (`rope_ladder`, `pickup_cpilot`) under the same kind of switched-off holder rather
+than switched off themselves, because nothing ever activates the wing-walking pilot: it is the
+capture's own `OBJECT_ADD_CHILD` into the shot that draws him, which is what the original gets from
+a library root its `world1` walk never reaches, and `PropNodes` (`anim_bloodhawk`, the Bloodhawk on the
 hangar floor while the pilot parachutes in; `bloodhawk_gear`, the undercarriage the flown aeroplane
 wears on the lift), built switched off the way `chuteman` is because the hangar drop's own legs
 add and activate them (`Props`). All carry a rebased gamez index (`PointerBaseOf`: the chapter's node count rounded up to the

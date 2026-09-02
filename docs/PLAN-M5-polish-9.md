@@ -862,19 +862,30 @@ defect (the pilot left on the world root) and its change must survive.
 **Landed.** `balmoral` is aircraft-archive node 2381 (a parentless `Object3d`, model-less, five
 children, shipped ACTIVE, no `RESET_STATE`), the same archive `piratefighter`/`chuteman` come
 from, confirmed absent from `planes.zip`'s node table under no other name and absent from C2's own
-chapter gamez entirely. `AircraftStage` now stages it beside `piratefighter`, built ACTIVE and
-rebased the same way, so the drop's own `OBJECT_ADD_CHILD`/`OBJECT_MOTION_FROM_TO`/
-`OBJECT_DELETE_CHILD` triple (authored inside `drop_paratroopers` itself, no intermediate caller)
-finds a node instead of a null binding. The `campaign-cm15-capture` suite drives that definition
-over C2/M05's built world and reads it drawn, reparented onto `cargozep2`, moved off the archive's
-own origin and inside the cutscene camera's frustum through the shot (best 1.7 deg off axis), then
-handed back to the world root. Neither `BL-596`'s nor `BL-621`'s shape applied directly: the actor
-is not a roster-spawned vehicle (`RosterMarkers.cs`'s resolution never enters this def, which is
-started by `PlayMissionTrigger` and reaches its anchor through the general name index the moment
-`AircraftStage` puts a node under that name), and the site-naming distinction `BL-621` decoded does
-not arise here since the drop's own `OBJECT_ADD_CHILD` always names its site (`cargozep2`)
-explicitly. `BL-633`'s guard is unexercised by this change: `CutsceneController.cs` was not
-touched, and the `cutscene-handoff-unposed` suite's own numbers are what would show a regression.
+chapter gamez entirely. `AircraftStage` stages it under a switched-off holder, the way
+`FigureNodes` are, own `Visible` matching the archive's shipped ACTIVE state but drawn nowhere
+until the drop's own `OBJECT_ADD_CHILD` reparents it out from under that holder onto `cargozep2`;
+`OBJECT_DELETE_CHILD` later hands it to the world root, where it stays visible at its last posed
+world coordinate (matching how a called library-root actor is left everywhere else in this
+codebase, and unreachable from any other mission since nothing else names `balmoral`). A first cut
+staged it the way `piratefighter` is, built ACTIVE directly under the world root: that moved
+`campaign-intro-fill`'s golden hash, since every OTHER mission that stages an aircraft then also
+draws an idle Balmoral at the archive's own build origin. The holder is what `piratefighter` itself
+lacks and gets away with, which this item does not touch. The `campaign-cm15-capture` suite drives
+the drop over C2/M05's built world and reads the actor drawn, reparented onto `cargozep2`, moved
+off the archive's own origin and inside the cutscene camera's frustum through the shot (best 1.7
+deg off axis), then handed back to the world root. A second suite, `campaign-balmoral-hidden`,
+drives C3/M01 (an aircraft-staging mission with no `balmoral` definition at all) and asserts the
+node is never drawn and never moves over its own bootstrap and start anims; reverting the holder's
+own `Visible` to `true` turns it red, confirmed by hand. Neither `BL-596`'s nor `BL-621`'s shape
+applied directly: the actor is not a roster-spawned vehicle (`RosterMarkers.cs`'s resolution never
+enters this def, which is started by `PlayMissionTrigger` and reaches its anchor through the
+general name index the moment `AircraftStage` puts a node under that name), and the site-naming
+distinction `BL-621` decoded does not arise here since the drop's own `OBJECT_ADD_CHILD` always
+names its site (`cargozep2`) explicitly. `BL-633`'s guard is unexercised by this change:
+`CutsceneController.cs` was not touched, and the `cutscene-handoff-unposed` suite's own numbers are
+what would show a regression. All 18 golden shots are hash-identical to the manifest with the
+holder in place, `campaign-intro-fill` included (`a8ebd3dc189a5aad2677b4c2b1b55b45`).
 
 **Evidence correction.** No suite named or shaped `chuteopen` exists for C2/M05, checked directly:
 neither `hooked_to_klondike` (the mission's other cutscene, also compiled for C3/M05 under the

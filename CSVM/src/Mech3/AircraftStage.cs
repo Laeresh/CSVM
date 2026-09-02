@@ -36,8 +36,8 @@ public sealed class AircraftStage
 
     /// <summary>The aircraft-archive node C2/M05's capture drop is rooted on: a parentless wrapper
     /// its own definition reparents onto <c>cargozep2</c> and moves for the shot, then returns to
-    /// the world root, the same self-contained shape <see cref="PropNode"/>'s SI scripts pose it
-    /// with. Ships ACTIVE, like <see cref="PropNode"/>.</summary>
+    /// the world root. Ships ACTIVE, but staged under a switched-off holder like
+    /// <see cref="FigureNodes"/>: no OTHER mission's definition ever names it.</summary>
     public const string BalmoralNode = "balmoral";
 
     /// <summary>The block a chapter's pointer base is rounded up to. Measured over all eight
@@ -82,9 +82,11 @@ public sealed class AircraftStage
     /// when the archive carries no such node.</summary>
     public Node3D? Chuteman { get; private set; }
 
-    /// <summary>The staged <see cref="BalmoralNode"/> subtree, drawn in the archive's own shipped
-    /// state like <see cref="Prop"/>: C2/M05's capture drop is rooted on it and poses it directly.
-    /// Null when the archive carries no such node.</summary>
+    /// <summary>The staged <see cref="BalmoralNode"/> subtree, own <c>Visible</c> matching its
+    /// archive shipped state but held under a switched-off parent, the way
+    /// <see cref="FigureNodes"/> are: C2/M05's capture drop is rooted on it and its own
+    /// <c>OBJECT_ADD_CHILD</c> is what reparents it into view. Null when the archive carries no
+    /// such node.</summary>
     public Node3D? Balmoral { get; private set; }
 
     /// <summary>The staged <see cref="FigureNodes"/> subtrees, by gamez name. They hang under a
@@ -161,16 +163,20 @@ public sealed class AircraftStage
             stage.Chuteman = builtChute;
         }
 
-        // ⚠ Drawn in the archive's own shipped state (ACTIVE), same as PropNode: the capture
-        // drop's own OBJECT_ADD_CHILD/OBJECT_MOTION_FROM_TO pair reparents and moves it, with no
-        // other definition switching it on.
+        // ⚠ Under a switched-off holder, not switched off itself, the same reason FigureNodes are:
+        // no definition ever activates this node, only the capture drop's own OBJECT_ADD_CHILD
+        // reparenting it out from under the holder, which is what draws it. A subtree built ACTIVE
+        // at worldRoot directly, the way PropNode is, would sit visible at the archive's own build
+        // origin in every OTHER mission that stages an aircraft, since nothing there ever moves it.
+        var balmoralHolder = new Node3D { Name = "balmoral_holder", Visible = false };
+        worldRoot.AddChild(balmoralHolder);
         if (planesGamez.FindByName(BalmoralNode) is { } balmoral
             && scene.BuildSubtree(balmoral, collisionSkip: _ => true) is { } builtBalmoral)
         {
             builtBalmoral.Transform = Transform3D.Identity;
+            builtBalmoral.Visible = balmoral.Active;
             Rebase(builtBalmoral, pointerBase);
-            AnimRuntime.SetSubtreeActive(builtBalmoral, balmoral.Active);
-            worldRoot.AddChild(builtBalmoral);
+            balmoralHolder.AddChild(builtBalmoral);
             stage.Balmoral = builtBalmoral;
         }
 
