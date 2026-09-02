@@ -108,6 +108,12 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 31. ☐ Performance gate: enhanced mode under -Perf/-Hitch, worst chapter, 4-pane splitscreen
 32. ☑ Divergence documentation, final golden sweep, optional enhanced goldens
 
+### Wave E — At-the-controls findings from the Wave C montages
+
+41. ☐ Shadows end before the fog ramp, not inside it
+42. ☐ C5 reads too bright in enhanced mode, its water a light grey
+43. ☐ The clutter building fade reaches as far as the pushed fog
+
 ## Dependency and parallelism notes
 
 A1 → A2 block everything else. Wave B runs in order: B11 (lit world) before B12 (calibration is
@@ -1207,9 +1213,9 @@ hash exactly (`6410c3bdaf263124994aeaf0da892f0d`, `652069b267ba51789d5b5bf42d839
 the pose is right before trusting the enhanced hash beside it. At the captures: the C1 waterfall
 cliff face picks up real shadow and the lake darkens under it; the C5 skyline gains lit
 skyscraper silhouettes against the shoreline that the original's flat night card does not draw.
-Neither manifest entry below is written into `analysis/goldens/manifest.json` — that edit is the
-user's call, made with `-RegenGoldens` from this record in one step if they want the enhanced path
-its own tripwire.
+Neither manifest entry below is written into `analysis/goldens/manifest.json`: the user declined
+to pin them until the TUNE values settle at the controls, since every retune would move both
+hashes. They stay here so the pin is one `-RegenGoldens` from this record once the values hold.
 
 ```json
 {
@@ -1235,6 +1241,77 @@ its own tripwire.
 above; the plan's landing gate is the complete `.\RunTests.ps1` the orchestrator runs once D31
 also lands.
 
+# Wave E — At-the-controls findings from the Wave C montages
+
+The user read the Wave B/C montages and named three things the instruments had not: shadows
+mixed into the fog ramp, C5 too bright with light-grey water, and unique buildings standing out
+past the clutter fade. Each is an enhanced-mode-only change; original mode and the 18 goldens stay
+byte-identical, proved per item as before.
+
+## E41 ☐ Shadows end before the fog ramp, not inside it
+
+**Goal.** In enhanced mode the sun's shadows fade out before the fog ramp begins, so a shadow is
+never seen dissolving into haze.
+
+**Evidence (confidence: traced).** `WeatherRig.ApplyEnhancedLighting` sets
+`DirectionalShadowMaxDistance` to the pushed fog FAR (B13), so shadows run through the whole ramp,
+which is exactly the range the user saw them mixed with fog.
+
+**Approach.** Set the max distance from the pushed fog NEAR instead (the point where the ramp
+starts), with `DirectionalShadowFadeStart` (TUNE) so the last cascade fades before the ramp rather
+than cutting; keep the Launcher fallback for a session with no weather.json in step. Confirm the
+split fractions still put the near cascades where the aircraft's shadow lives.
+
+**Model recommendation.** medium, low effort.
+
+**Verify.** C1 and C4 horizon captures: no shadow visible inside the ramp; the hangar and
+aircraft shadows unchanged near the camera. Goldens zero movers.
+
+## E42 ☐ C5 reads too bright in enhanced mode, its water a light grey
+
+**Goal.** C5's night city reads as night in enhanced mode, and its water reads dark, without
+inventing a value the data does not carry.
+
+**Evidence (confidence: direction-sound, mechanism to establish).** B12 recorded that C5's zone
+authors a day-level SUNLIGHT pair (1.5 / 0.5), so the enhanced sun and ambient light the city like
+noon while the original's darkness comes from FOG_COLOR and the art; C24's water bit then gives the
+sea a sky-gradient specular (52 % of C3's sea pixels moved from the bit alone), which on a night sky
+reads light grey. Which term dominates C5's brightness (sun, ambient, or the water specular) is not
+yet measured.
+
+**Approach.** Measure first: C5 captures with the sun energy, the ambient energy, and the water
+bit each disabled in turn through a throwaway gate, sampling the water and a wall. Then find the
+decoded handle for "this zone is night" (candidates: the zone's FOG_COLOR luminance, the skydome's
+night texture selection, the CLOUD_COVER colours, the mission's own time-of-day field if one is
+decoded); scale the enhanced energies by it as a named TUNE, or clamp the water specular on a dark
+sky, whichever the measurement points at. A rule that is only "C5 is special" is not acceptable.
+
+**Model recommendation.** high, an investigation with a fidelity judgement.
+
+**Verify.** C5 night reads dark with its lamps and lit windows still reading as sources; C1B
+night sea reads dark; day chapters unchanged. Goldens zero movers.
+
+## E43 ☐ The clutter building fade reaches as far as the pushed fog
+
+**Goal.** In enhanced mode the clutter populations (city blocks, trees) fade at the same pushed
+distance as the fog, so unique buildings no longer stand alone past the clutter line.
+
+**Evidence (confidence: traced).** The clutter far fade is the authored metres scaled by
+`EffectsLevel.ResolveClutterFadeScaleSq` into the `csky_clutter_fade` global
+(`Launcher.cs` ~518-522), independent of the fog range; B13's 2x fog push left it at the authored
+distance, which is what the user saw.
+
+**Approach.** In enhanced mode multiply the clutter fade scale by `EnhancedFogRangeScale`
+(squared, since the global is a squared distance) at the one write site, logged on the same
+`clutter fade:` line; audit any other distance-gated population that should follow the fog
+(the map-edge extender, the far-field AI plant, the cloud clusters) and state which do and why.
+Re-measure C5 at 4 panes with `--perf`, since more clutter instances draw.
+
+**Model recommendation.** medium, low effort.
+
+**Verify.** C5 and C2 horizon captures: clutter blocks reach the fog line; instance counts logged
+before and after. Goldens zero movers.
+
 ## Open judgements
 
 The following stay TUNE: correct in shape, but judged at the controls rather than derived from a
@@ -1248,5 +1325,5 @@ decoded rule.
   fog with nothing in the data asking for a dimmer light there.
 - SSR's hard mirror on wave-less water planes, since the surfaces carry no wave normals to break
   the reflection up.
-- Whether to pin the two enhanced goldens proposed in D32, and whether the day/night pair chosen
-  there is the right pair to stand in for the whole mode.
+- When to pin the two enhanced goldens proposed in D32 (declined until the values above settle),
+  and whether the day/night pair chosen there is the right pair to stand in for the whole mode.
