@@ -21,6 +21,13 @@ namespace CSVM.Session;
 /// its own site (this module's docs/architecture.md entry).</summary>
 public sealed partial class ZeppelinRuntime : Node
 {
+    /// <summary>The zeppelin's own floor on <see cref="AiNetFollower"/>'s decoded arrival
+    /// radius. Set below the shortest shipped leg, 143.9 m (C4/M04's M4Piratezep), so a short
+    /// leg is flown rather than skipped at once. The census's sharpest turn, 67.7° on a 205 m
+    /// leg against a 343.8 m turn circle, still breaks out rather than orbiting
+    /// (<c>ZeppelinsTests.TheWorstShippedTurnBreaksOutRatherThanOrbits</c>).</summary>
+    public const float ArrivalFloorM = 50f;
+
     private readonly List<LiveZeppelin> _live = new();
     private AnimRuntime? _runtime;
     private Func<Node3D, bool>? _transformDriven;
@@ -67,11 +74,8 @@ public sealed partial class ZeppelinRuntime : Node
                 continue;
             }
             // A zeppelin flies its net through ZeppelinMotion, not the aeroplane executor whose
-            // along-leg test is decoded, so it keeps its own floor on the radius: clear of the
-            // turning circle (v/ω plus headroom for the rate ramp-in). Invented, and only a floor.
-            float turnCircle = def.MaxSpeed / Mathf.Max(Mathf.DegToRad(def.MaxRateYawDeg), 1e-3f);
-            float arrival = 1.5f * turnCircle;
-            var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai), arrival,
+            // along-leg test is decoded, so it keeps its own floor on the radius (ArrivalFloorM).
+            var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai), ArrivalFloorM,
                 trailerTarget?.Invoke(net), observesStopPoints: true);
             var motion = new ZeppelinMotion(def, follower);
             var zep = new LiveZeppelin(def, motion, host);

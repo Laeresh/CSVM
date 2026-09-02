@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Session;
+using Godot;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -226,6 +230,93 @@ public class ZeppelinsTests
         Assert.Equal(new[] { "player" }, zep.Targets);
         Assert.Empty(zep.CannonHealth);
         Assert.False(zep.Deactivated);   // the key is authored 0 here — the value decides
+    }
+
+    // BL-670: the arrival floor has to clear every shipped zeppelin leg, campaign and
+    // Instant Action alike. Otherwise a short leg advances the walk before the hull is
+    // underway (docs/formats/mission-entities.md, "Steering").
+    [ExtractedDataFact]
+    public void TheArrivalFloorClearsEveryShippedZeppelinLeg()
+    {
+        float shortest = float.MaxValue;
+        foreach (var (chapter, mission) in Missions())
+        {
+            var missionZrdr = SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission);
+            List<ZeppelinDef> defs;
+            try
+            {
+                defs = Zeppelins.Load(missionZrdr);
+            }
+            catch (FileNotFoundException)
+            {
+                continue;   // 3 MP dirs ship no zeppelins file at all
+            }
+            if (defs.Count == 0)
+            {
+                continue;
+            }
+            var nets = AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
+            foreach (var def in defs)
+            {
+                var net = AiNets.ByName(nets, def.Net);
+                Assert.NotNull(net);
+                foreach (var (a, b) in net!.Edges)
+                {
+                    var leg = net.Nodes[b].Position - net.Nodes[a].Position;
+                    float horiz = new Vector2(leg.X, leg.Z).Length();
+                    Assert.True(ZeppelinRuntime.ArrivalFloorM < horiz,
+                        $"{chapter}/{mission} net={def.Net} edge {a}-{b} is {horiz:0.#} m, " +
+                        $"no wider than the {ZeppelinRuntime.ArrivalFloorM} m arrival floor");
+                    shortest = Mathf.Min(shortest, horiz);
+                }
+            }
+        }
+
+        // The campaign's own shortest leg, C4/M04's M4Piratezep: re-measure it here rather
+        // than trust the number staying true as extraction or mission data drifts.
+        Assert.Equal(143.9f, shortest, 1);
+    }
+
+    // C1B/MP3's ZVZ1a turns 67.7 degrees at node 6 on a 205 m leg, against a 343.8 m turn
+    // circle: BL-670's own worst-case shortfall. Flying it real confirms the hull turns
+    // through and carries on, never orbiting the node.
+    [ExtractedDataFact]
+    public void TheWorstShippedTurnBreaksOutRatherThanOrbits()
+    {
+        var net = AiNets.ByName(
+            AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, "C1B")), "ZVZ1a")!;
+        var def = Zeppelins.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1B", "MP3"))
+            .First(d => d.Node.Equals("multiplayer1zep", StringComparison.OrdinalIgnoreCase));
+
+        var follower = new AiNetFollower(net, new Random(1), ZeppelinRuntime.ArrivalFloorM,
+            observesStopPoints: true);
+        var motion = new ZeppelinMotion(def, follower);
+        int steps = 0;
+        const int budget = 60 * 90; // 90 sim-seconds, ~3x the measured transit through node 6
+        bool reachedNode6 = false;
+        bool passedNode6 = false;
+        while (!passedNode6 && steps < budget)
+        {
+            motion.Step(1f / 60f);
+            steps++;
+            if (follower.ArrivedNode is not { } arrived)
+            {
+                continue;
+            }
+            if (arrived.Position == net.Nodes[6].Position)
+            {
+                reachedNode6 = true;
+            }
+            else if (reachedNode6)
+            {
+                passedNode6 = true;
+            }
+        }
+
+        Assert.True(reachedNode6, $"never reached node 6 in {steps / 60f:0.#}s");
+        // Advancing past node 6, not just reaching it, rules out a hull circling forever.
+        Assert.True(passedNode6,
+            $"reached node 6 but never advanced past it in {steps / 60f:0.#}s: orbiting");
     }
 
     private static IEnumerable<(string Chapter, string Mission)> Missions()

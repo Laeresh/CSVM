@@ -80,8 +80,12 @@ below).
 binds all of them present on the model; the **stock** loadout (`loadouts.md`) does not bind them
 sequentially — a fit with fewer than 8 pylons takes `Loadout.PylonFillOrder`'s prefix
 (`{1,5,2,6,3,7,4,8}`, `BL-294`), alternating wings rather than piling onto `pylon1`'s side. These
-are the ordnance hardpoints (rockets, bombs, mines); their positions are omitted here. (AI-plane
-models instead name their pylons `lpylon*`/`rpylon*` — not the player rig.)
+are the ordnance hardpoints (rockets, bombs, mines); their positions are omitted here. (Every AI
+airframe that fires ordnance, namely `bloodhawk`, `fury`, `warhawk`, `autogyro`, `avenger`,
+`balmoral`, `brigand`, `firebrand`, `kestrel` and `peacemaker`, shares this exact `pylon1`…`pylon8`
+rig with the player planes; [aiWeapons.md](../org/aiPilot/aiWeapons.md) has the per-airframe
+census. The one shipped `lpylon*`/`rpylon*` set belongs to `anim_bloodhawk`, a scripted asset
+outside the AI pilot's model roster, not to a second AI pylon naming scheme.)
 
 ## Target marker and gun nodes
 

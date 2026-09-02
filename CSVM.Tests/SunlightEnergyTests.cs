@@ -6,12 +6,13 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The enhanced-mode mapping from a zone's authored SUNLIGHT to Godot energies
-/// (<see cref="WeatherRig.EnhancedEnergies"/>), and the parse that carries the two authored
-/// scalars through uncollapsed beside the faithful path's <c>WorldLight</c> scalar.
+/// Both mappings from a zone's authored SUNLIGHT to Godot energies
+/// (<see cref="WeatherRig.EnhancedEnergies"/>, <see cref="WeatherRig.FaithfulEnergies"/>), and the
+/// parse that carries the two authored scalars through uncollapsed beside the faithful path's
+/// <c>WorldLight</c> scalar.
 ///
-/// The mapping is pinned here rather than at the controls because its failure mode is silent: a
-/// factor that drifts still renders, just at the wrong level in every mission at once.
+/// The mappings are pinned here rather than at the controls because their failure mode is silent:
+/// a factor that drifts still renders, just at the wrong level in every mission at once.
 /// </summary>
 public class SunlightEnergyTests
 {
@@ -107,6 +108,68 @@ public class SunlightEnergyTests
         Assert.Equal(0.7f, zone.SunColorAmbient.R, 2);
         Assert.Equal(0.9f, zone.SunColorAmbient.G, 2);
         Assert.Equal(1.0f, zone.SunColorAmbient.B, 2);
+    }
+
+    // The faithful path's anchor: the modal day zone keeps the energies the launcher builds with,
+    // so the missions that author it render exactly as they did before the mapping existed.
+    [Fact]
+    public void TheModalDayZoneKeepsTheLauncherEnergiesInTheFaithfulPath()
+    {
+        (float sun, float ambient) = WeatherRig.FaithfulEnergies(Zone(diffuse: 1.5f, ambient: 0.5f));
+        Assert.Equal(WeatherRig.DefaultEnergies.Sun, sun, 3);
+        Assert.Equal(WeatherRig.DefaultEnergies.Ambient, ambient, 3);
+    }
+
+    // The point of the item, on the faithful path this time: a night zone's authored values must
+    // light the aircraft dimmer than a day zone's, from the data alone.
+    [Fact]
+    public void ANightZoneLightsThePlaneDimmerThanADayZoneInTheFaithfulPath()
+    {
+        (float nightSun, float nightAmbient) = WeatherRig.FaithfulEnergies(Zone(0.6f, 0.15f));
+        (float daySun, float dayAmbient) = WeatherRig.FaithfulEnergies(Zone(1.5f, 0.5f));
+        Assert.True(nightSun < daySun * 0.5f);
+        Assert.True(nightAmbient < dayAmbient * 0.5f);
+        Assert.Equal(0.64f, nightSun, 2);
+        Assert.Equal(0.27f, nightAmbient, 2);
+    }
+
+    // The cap, which is where the faithful mapping parts from the enhanced one: this pass has no
+    // tonemap, so a zone brighter than the day pair must not push the plane past white.
+    [Fact]
+    public void AZoneBrighterThanTheDayPairIsCappedAtTheDayLevel()
+    {
+        (float sun, float ambient) = WeatherRig.FaithfulEnergies(Zone(2.0f, 0.6f));
+        Assert.Equal(WeatherRig.DefaultEnergies.Sun, sun, 3);
+        Assert.Equal(WeatherRig.DefaultEnergies.Ambient, ambient, 3);
+    }
+
+    // The other parting: no night gate on the faithful path. C5's fullbright world takes its own
+    // day-level SUNLIGHT, so capping the plane there would sink it below its own terrain.
+    [Fact]
+    public void ADayLevelPairUnderABlackSkyIsNotCappedInTheFaithfulPath()
+    {
+        var night = Zone(diffuse: 1.5f, ambient: 0.5f, fog: Colors.Black);
+        Assert.True(WeatherRig.IsNightZone(night));
+        (float sun, float ambient) = WeatherRig.FaithfulEnergies(night);
+        Assert.Equal(WeatherRig.DefaultEnergies.Sun, sun, 3);
+        Assert.Equal(WeatherRig.DefaultEnergies.Ambient, ambient, 3);
+    }
+
+    // The install's own night/day pair, off the shipped data rather than invented scalars: C1B's
+    // night mission against C1C's daylight, which is the A/B this mapping exists to produce.
+    [ExtractedDataFact]
+    public void C1BsNightMissionLightsThePlaneDimmerThanC1CsDayMission()
+    {
+        var night = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1B", "IA1"));
+        var day = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1C", "M01"));
+        Assert.NotNull(night);
+        Assert.NotNull(day);
+        (float nightSun, float nightAmbient) = WeatherRig.FaithfulEnergies(night!.Zone("zone1"));
+        (float daySun, float dayAmbient) = WeatherRig.FaithfulEnergies(day!.Zone("zone1"));
+        Assert.True(nightSun < daySun * 0.5f);
+        Assert.True(nightAmbient < dayAmbient * 0.5f);
+        Assert.Equal(0.64f, nightSun, 2);
+        Assert.Equal(1.6f, daySun, 2);
     }
 
     // The default fog is the install's modal DAY colour, so a case that says nothing about the

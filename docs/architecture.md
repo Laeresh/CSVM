@@ -1371,8 +1371,11 @@ expression and `TumbleAxis` the tumble's; `ProjectilePool`'s gun-casing ejection
 `gunshell` event through both (INSTR-3), because two spellings of the maths is how they disagree —
 see their doc comments in `Anim/MotionRuntime.cs` for the non-normalisation rule.
 Contact is the DEFAULT and comes in the original's two tiers: `TryGroundColumn`, a vertical column
-under the body, unless `do_intersections` upgrades it to `TryContact`'s trajectory sweep (166 events
-install-wide); `no_altitude` vetoes the column only, and `gunshell` alone authors it. No mask wired
+through the body, unless `do_intersections` upgrades it to `TryContact`'s trajectory sweep (166
+events install-wide); `no_altitude` vetoes the column only, and `gunshell` alone authors it. That
+column reads DOWNWARD first and UPWARD only when nothing answers, because the original's query is a
+cell lookup at `(x, z)` whose answer does not depend on the body's height: a body that stepped past
+the surface is lifted back onto it rather than drifting to its watchdog. No mask wired
 means neither tier, which is the structural fallback every lab and 9 of the 14 goldens take;
 `c1-debris-rest` is the one golden that wires a mask and reaches the column tier, a killed
 `m_build03` piece resting with its landing's own spark puffer as the pixel-level tell. Both
@@ -1483,9 +1486,17 @@ the memoized `FindAll`, the scoped tier chain (`Resolve`/`ResolveScoped`), the s
 match → symbol narrowing → root lift, policy inputs `NameResolveFallback`/`SuppressRootLift`/
 `MaxRootLift`), and the bind census (`OpenCensus`/`CloseCensus`, `ResolutionLines`). Node identity
 is constructor-supplied (`IEqualityComparer<TNode>`; the engine keys on `GetInstanceId()`), never
-the node type's inherited `Equals`. Nothing removes a row, so `FindAll` and the by-index map both
-skip a node the caller's liveness test rejects and the map gives that index up to the next `Add`:
-an airframe swap frees the aircraft it staged and re-stages the same cross-archive block. A claimed
+the node type's inherited `Equals`. `FindAll` and the by-index map both skip a node the caller's
+liveness test rejects, and the map gives that index up to the next `Add`: an airframe swap frees the
+aircraft it staged and re-stages the same cross-archive block. **Skipping is not enough on its own,
+because a freed node stays a dictionary KEY.** The ancestry map `IsWithin` walks and the memoized
+find cache are keyed by the supplied identity, so the comparer dereferences a freed node for any
+query whose key hashes into its bucket, and the throw lands in whatever query collided rather than
+at the free. `DropFreed` retires those rows, rebuilding the keyed collections rather than removing
+from them (a `Remove` hashes the dead key it is handed, which is the dereference being avoided);
+`FreedRows` counts what a stage would otherwise leave behind. The owner decides when:
+`AnimRuntime.IndexRebasedStage` sweeps before it grows the table, since it is the one staging entry
+that puts a subtree in over one its caller may have freed. A claimed
 index the build never created is answered by `SoleStagedCopy`: the one live pooled copy carrying
 that gamez index, and only when exactly one does, so a multi-copy effect pool stays anchor-scoped
 while a mission's single staged actor (CM07's pickup switch, sensor and passenger) is reachable by
@@ -1505,12 +1516,21 @@ resolves a node name inside a subtree the definition was given a private copy of
 unrelated instance's copy of a common name (`pilot`, `geometry`, `healthy`) can never answer first.
 Our stand-in is the effect-template pool, whose copies hang under the same crash root a definition
 anchors on, so the raw subtree walk is not exclusive at all. The `stagingAdmits` hook is the owner's
-verdict on one pooled copy (`AnimRuntime.StagingAdmits`): a copy is visible when the scope this tier
-searches sits inside it (a `CALL_ANIMATION` retargeted onto its call site's copy), when its root
-answers to the definition's own NAME or `ANIMATION_ROOT_NAME`, or when the definition's symbol table
+verdict on one pooled copy (`AnimRuntime.StagingAdmits`): a copy is visible when its root answers to
+the definition's own NAME or `ANIMATION_ROOT_NAME`, when the scope this tier searches sits inside it
+(a `CALL_ANIMATION` retargeted onto its call site's copy), or when the definition's symbol table
 names that root. Everything outside the pool always resolves, and on a non-pooled runtime nothing is
 refused, which is what keeps the ambient world boot byte-identical. ⚠ The filter belongs on every
 tier: applied to the first alone it only hands the same foreign copy to the next one down.
+**The call-site allowance stops at the definition's own copy** (`HasOwnCopyBeside`). A `CALL_ANIMATION`
+anchors its callee on the CALLER's node, so the anchor tier searches the caller's copy; where the
+callee has a staged copy of its own in that slot, the original would have searched the private copy
+it was handed and a name both copies carry belongs to the callee's. Refusing the caller's copy drops
+the name to the own-root tier, which is the pair the original reads as `def+0x6c`/`def+0x48`. Without
+it a callee's motion drives the caller's node: the sonic burst's `sonic_puff1` translates
+`sonic_emit1` 30 m up to draw its vapour column, and the caller anchors its ground ring, both lights
+and its second flare on that same name, so all four rode into the air. Regression:
+`sonic-ground-ring`.
 
 ## src/Mech3/Anim/TemplateStage.cs
 The effect-template stage as one module (`TemplateStage<TNode>`): pool-slot arithmetic (`SlotOf`,
@@ -2147,8 +2167,15 @@ a spawn/respawn/crash-cut never shows a stale FOV. `LogView` already names the m
 (`view n=cockpit`), which is what makes a scripted mode selection verifiable. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
 authored) plus a first-order acceleration transient relaxing at the MEASURED 0.65 /sim-s
 (`UpdateDynamics`, host-called once per sim step); the offset's DIRECTION (behind and above at
-~15.7° elevation) is not in the data and stays hand-picked. Collaborators: `FlightController`
-(the only host) and `CamParams`.
+~15.7° elevation) is not in the data and stays hand-picked. The numpad `+`/`−` zoom axis
+(`BL-433`) trims that shared radius further: `UpdateZoom` reads the two keys directly (no pad,
+the same rule `ActiveView`/`BackActive` follow), moving a target at 2/s and easing the shown
+value at 1.5/s, both clamped `[0, 1]`; `EffectiveRadius` is where the trim actually lands
+(`_radius` minus `shown · Dist`, floored at zero), read by `Chase`, `FixedView`, `BackView` and
+`PadLook` instead of `_radius` so the trim reaches every external pose alike. Called only from
+the ordinary flight branch, never while the weapon lab's held orbit is running, since `Orbit`
+reads the same two keys for its own dolly. The head-look centre key zeroing this value too is
+`BL-435`, not yet wired. Collaborators: `FlightController` (the only host) and `CamParams`.
 
 ## src/Flight/HeadLook.cs
 The pilot's head in the two first-person views, decoded from the original's shared look controller
@@ -3006,6 +3033,11 @@ Two flavours of one airframe: `Load` resolves everything down the player chain, 
   roster block's own `init_health`/`armor` override (aiv slots 7/66) to `VehicleHealth`/
   `VehicleArmor` before `WithEnemyDurability`; both arguments arrive already gated, so null always
   means unset, never an authored zero (`docs/org/vehicleDamage.md`).
+`DamagedTimer` (a `DamagedEngineTimer`, one mutable `Elapsed` field) is the damaged-engine
+re-arm timer's shared state (C22, `docs/formats/vehicle.md` "What makes an airframe damaged").
+⚠ Every `With*` method's `MemberwiseClone` carries the SAME reference forward from the cached
+def, on purpose: it is what makes every aircraft flying one airframe share one counter, as the
+original's own def field does. Do not reassign it in a new `With*` method.
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a
@@ -3245,8 +3277,13 @@ because the mission's waves, ace and zeppelin cannot be put back in place.
 `ZoneWeather` records holding fog (`FOG_COLOR`/`FOG_RANGES`/`FOG_ALTITUDE`), `SUNLIGHT_*` →
 `WorldLight` (`SunIncidence` 0.46 / `MinWorldLight` 0.15, TUNE) and `SUNLIGHT_ORIENTATION` →
 `SunOrientation`, the same block's uncollapsed `SunDiffuse`/`SunAmbient` and their two colours
-(what the enhanced lighting drives a real sun from), plus the `CLOUD_COVER` whiteout band (`WhiteoutAmount` trapezoid), `WIND`, and
+(what both lighting arms drive the aircraft light from), plus the `CLOUD_COVER` whiteout band (`WhiteoutAmount` trapezoid), `WIND`, and
 precipitation → `PrecipData`. Schema + colours + zone names: weather.md.
+`DefaultDiffuse`/`DefaultAmbient` (1.5 / 0.5) are the install's modal day pair, public because both
+lighting mappings anchor a zone against them and the `NoFog` zone a weather-less mission gets is
+authored from them. They are deliberately not `WorldLightFactor`'s own 1/0 fallbacks, which belong
+to the faithful collapse and must not move; every shipped weather.json authors both keys, so
+neither fallback fires.
 **The original's weather/sky/fog/light runtime is written up in [org/weather.md](org/weather.md)** —
 the camera weather state machine, the `zone_id` visibility gate, the zone apply's edge trigger, the
 band flicker's two curves, and the sun/dome/deck rules. Read it before changing a weather mechanism.
@@ -3308,6 +3345,9 @@ the swap's one-off pitch draw), `Engine` and `Whine` (each slot's pitch and gain
 per-frame routine for the player and every AI vehicle; the decode is in
 [formats/vehicle.md](formats/vehicle.md), "The engine audio's slots" and "What makes an airframe
 damaged". The damaged swap is a health-fraction gate, not a took-a-hit one.
+`AdvanceDamagedRearm` is C22's re-arm timer, pure and testable off a `DamagedEngineTimer` and a
+caller-drawn `u` rather than a live RNG (`DamagedPitchMul`'s own reason): only `AiEngineAudio`
+reaches it today, since the own-ship path is never culled and so never silences a playing loop.
 The engine slot's parameter is **not the throttle lever alone**: `DriveFrom` reads a turn rate off
 the two body axes perpendicular to the nose and a climb attitude off the orientation, and `Engine`
 adds them to each curve's NORMALISED parameter under a [0, 1.5] clamp before the curve maps it out.
@@ -3326,6 +3366,14 @@ cannot be screenshot-verified, so the `sound` log carries the whole observable: 
 aircraft at build naming what each slot resolved to (or that there was no archive at all), then one
 per cull transition and one per damaged-engine swap. The pair is what separates "silent past the
 cull" from "silent because the definition never resolved".
+On the healthy->damaged edge, `SetEngineDamaged` stops the slot-0 handle but does not swap it;
+`Update`'s `ArmDamagedLoop` is what waits out the shared re-arm timer
+(`PlaneStats.DamagedTimer`, `EngineAudioCurves.AdvanceDamagedRearm`) and performs the swap once it
+fires (docs/formats/vehicle.md, "What makes an airframe damaged"). ⚠ The timer sits on the
+airframe DEFINITION: `PlaneStats`'s per-spawn `With*` clones carry the SAME `DamagedTimer`
+reference forward from the cached def, so every aircraft flying one airframe shares one counter
+and one draw, and a damaged loop that is still playing never re-enters it. The damaged->healthy
+direction stays immediate. Proven by `ai-engine-rearm` and `EngineAudioModelTests`.
 
 ## src/Effects/Puffer.cs
 The original engine's billboard-particle emitter, data-driven from `PUFFER_STATE` blocks
@@ -5327,7 +5375,7 @@ add and activate them (`Props`). All carry a rebased gamez index (`PointerBaseOf
 next multiple of 2500), which is what makes a compiled definition's cross-archive symbol table
 bind them instead of claiming a name with no node. Built for every mission that plays a cutscene
 (`WorldSession`'s intro, approach-trigger or mission-list gate), so every other session's node
-census is exactly what it was. `StageFlown` puts the FLOWN aircraft's own airframe subtree in the runtime's node table under the same rebase, run when the rigs are built and again after an airframe swap: that is what makes a hookup definition's per-airframe branches decidable, since each tests one `player_<airframe>` node's active bit and then poses that airframe's own hook, wing fold and mount offset. That rebased index runs no general RESET_STATE pass, because a chapter definition anchoring on a generic airframe node name must not re-pose a live aeroplane, so `StageFlown` follows it with `AnimRuntime.ParkDockingHook`: the RESET_STATE of every definition anchored on a `*_hook` group inside that model, then every node that group's own `<x>_hook_extend` moves seeded from that definition's own FROM pose, which wins wherever a RESET_STATE omits a node or parks the wrong axis (five of eleven airframes do one or the other). The archive's inactive bit parks the group and nothing else, so without the seed an unparked node is drawn at its archive pose for the second before its own motion starts and then snaps, which reads as a second hook swing; a rotate-only and a scale-only FROM_TO on the same node in the same tick is `PoseChannel`/`FromToMotion`'s own case, carried forward rather than evicted unticked. The pose half is
+census is exactly what it was. `StageFlown` puts the FLOWN aircraft's own airframe subtree in the runtime's node table under the same rebase, run when the rigs are built and again after an airframe swap: that is what makes a hookup definition's per-airframe branches decidable, since each tests one `player_<airframe>` node's active bit and then poses that airframe's own hook, wing fold and mount offset. The airframe it replaces does not leave that table on its own: `IndexRebasedStage` retires every row naming a freed node first, because the rows survive the free and the resolver's own identity comparer dereferences one (`NameResolver.DropFreed`, its entry above). Driving six airframes in one process left 562 stale rows by the last of them, and threw an `ObjectDisposedException` on some runs and not others. That rebased index runs no general RESET_STATE pass, because a chapter definition anchoring on a generic airframe node name must not re-pose a live aeroplane, so `StageFlown` follows it with `AnimRuntime.ParkDockingHook`: the RESET_STATE of every definition anchored on a `*_hook` group inside that model, then every node that group's own `<x>_hook_extend` moves seeded from that definition's own FROM pose, which wins wherever a RESET_STATE omits a node or parks the wrong axis (five of eleven airframes do one or the other). The archive's inactive bit parks the group and nothing else, so without the seed an unparked node is drawn at its archive pose for the second before its own motion starts and then snaps, which reads as a second hook swing; a rotate-only and a scale-only FROM_TO on the same node in the same tick is `PoseChannel`/`FromToMotion`'s own case, carried forward rather than evicted unticked. The pose half is
 `Session/CutsceneController.cs`; the decode is
 `docs/formats/anim-definitions/cutscenes.md`.
 
@@ -5555,12 +5603,9 @@ that matched nothing, which `Run` refuses before any suite starts. `SuiteShards`
 term that divides rather than selects; `Run` applies it AFTER the miss checks, so an empty shard is
 a legitimate division and an empty selector is still a typo. A sharded run's `ScratchDir` moves
 beside its `--log-file`, which is what keeps concurrent shards (and concurrent runs) off each
-other's report and artifacts. The options store a `--run-tests` process reads and writes is a
-scratch directory named by process id, set in `Launcher` before the first `UserOptions()` call, so a
-suite driving an Options screen opens it on the shipped defaults whatever the player last saved at
-the controls. One directory per process, not one shared: the shards start together, and a shared
-directory deleted by a sibling mid-write threw out of `_Ready` and left that shard erroring in
-`_Process` until its timeout. `TestContext.
+other's report and artifacts. The options a `--run-tests` process reads and writes go to a
+per-process scratch directory instead of the player's file; that rule lives on `OptionsStore`, which
+owns the override. `TestContext.
 EmitterFactory` (mutable, default null) forwards straight into `WorldSession.Options.EmitterFactory`
 for the next `WithWorld` build. `WithPrivateWorld` is what a suite installing one uses: never read
 from the shared cache and never written to it, freed when the body returns, so no build option a
@@ -5847,6 +5892,11 @@ threaded through the other path: `SetFocusMuted` owns the bus's mute FLAG (alt-t
 `ApplyMasterVolume` writes its VOLUME once per launch from `--volume=`, else the `audio.volume`
 config key. Separate properties, so neither disturbs the other — and unlike `--mute`, a zero volume
 still loads and plays everything, so the sound counters and log lines stay intact.
+`SetupLighting` builds the session's one `DirectionalLight3D` and `WorldEnvironment` at
+`WeatherRig.DefaultEnergies` and a hand-picked bearing, which is what a viewer, a menu or a
+mission with no weather.json flies under. A mission that has weather overwrites both the bearing
+and the energies per zone-apply (`WeatherRig.ApplyZone`), so these are defaults rather than the
+level every flight renders at.
 The default root is export-aware: editor (and editor-run builds) → the repo checkout
 (`res://`'s parent — `GlobalizePath("res://")` maps to disk only there), exported build → the
 exe's own directory; `CSVM_DATA_ROOT`/`--data-root=` override either.
@@ -6755,7 +6805,8 @@ Runs a mission's zeppelins (M4 F17 motion + F18 damage + F19 broadside, behind
 `ZeppelinDef` whose world node and net resolve has its hull node switched ON (the record is the
 activation: C2 ships `piratezep` with its gamez active bit clear and no mission `.gw` sets it back,
 so without this CM13 docks with a Pandora nothing draws), gets a `ZeppelinMotion` on B5's `AiNetFollower`
-(arrival radius widened per record to clear the turning circle, and the only follower that
+(arrival radius floored at `ArrivalFloorM`, a flat TUNE constant below the shortest shipped
+zeppelin leg so a short leg is flown rather than skipped at once, and the only follower that
 observes stop points), is placed at its authored
 position/yaw/pitch, and the NODE is flown kinematically — no FlightController.
 One writer per transform channel: a hull an animation motion drives (`MotionSet.DrivesTransform`,
@@ -7098,11 +7149,27 @@ written its zone): it writes only the fields the event carries onto the same fog
 next zone edge writes the zone back over it, the original's last-writer order. `FogGlobals` mirrors
 the last writes, since the renderer refuses to read a global back outside the editor. Proven by
 `CSVM.Tests/FogZoneStateTests.cs`, `DeckRegimeTests.cs`, `FlatColorTests.cs`,
-`FogVolumeWhiteoutTests.cs`, `BandFlickerTests.cs` and the `fog-state` suite. In enhanced graphics
-mode `ApplyZone` also drives the real sun and the Environment ambient from the zone's uncollapsed
-`SUNLIGHT_DIFFUSE`/`AMBIENT` and their colours (`EnhancedEnergies`, pinned by
-`CSVM.Tests/SunlightEnergyTests.cs`), and neutralises `csky_world_light` to 1.0 so the fullbright
-dimming does not land twice; original mode's path is unchanged. A zone whose authored `FOG_COLOR`
+`FogVolumeWhiteoutTests.cs`, `BandFlickerTests.cs` and the `fog-state` suite.
+
+`ApplyZone` drives the aircraft light from the zone's uncollapsed `SUNLIGHT_DIFFUSE`/`AMBIENT` in
+**both** graphics modes, through one arm each, both pinned by `CSVM.Tests/SunlightEnergyTests.cs`
+and wired-in by the `sun-energy` suite. The faithful arm (`FaithfulEnergies`,
+`ApplyFaithfulLighting`) scales each authored scalar against the install's modal day pair and caps
+it there, so the day missions keep the energies the launcher builds with (`DefaultEnergies`, 1.6
+sun / 0.9 ambient, both TUNE) and only a dimmer zone moves. That cap is the faithful path's own
+constraint rather than a copy of the enhanced factors: this pass has no tonemap, so an energy past
+the day level clips a plane to flat white. There is deliberately **no night gate** on this arm,
+because the faithful world light ignores `FOG_COLOR` too, and capping C5's plane would sink it
+below its own fullbright terrain.
+⚠ **The faithful ambient write reaches the Environment but the renderer ignores it**, measured:
+with `AmbientLightSource.Sky` at the default full sky contribution the ambient comes off the sky
+cubemap scaled by the background energy, not by `AmbientLightEnergy`, and zeroing that energy moves
+no golden pixel. Whether the faithful path should stop taking its ambient from the sky is an open
+rendering-design question; until it is settled the aircraft's ambient fill is the same procedural
+sky at night as by day, so only the sun half of this mapping is visible.
+
+The enhanced arm additionally neutralises `csky_world_light` to 1.0 so the fullbright
+dimming does not land twice. A zone whose authored `FOG_COLOR`
 is near-black is treated as a night zone (`IsNightZone`), which caps those two energies at the
 install's own night pair; every day zone is untouched. `WriteSkyColor` then paints the Environment's
 sky the zone's own `FOG_COLOR` as a flat panorama, so the water's specular reflects the mission's
@@ -7120,11 +7187,12 @@ pair, the skydome is fitted from the camera's far plane, and `ZoneWeather.ClipFa
 logged but reaches no consumer (the camera far plane is `Launcher`'s fixed 40000 m, past every
 pushed fog far).
 `RegisterExtraLighting` takes a second (sun, env) pair — the cockpit overlay's own clones — and
-`ApplyEnhancedLighting` writes the same energies and colours onto every registered pair beside the
-session sun/env, so a zone crossing mid-flight reaches the interior pass too. The shadow max
+both lighting arms write their energies onto every registered pair beside the session sun/env, so a
+zone crossing mid-flight reaches the interior pass too. `GameSession.BuildCockpitPasses` registers
+in both modes for that reason. The shadow max
 distance is deliberately excluded from that mirroring: a registered clone owns its own
-camera-relative distance, set once at registration (`CockpitOverlay`'s 100 m far plane). The
-energy mapping and the fog-range scale are both open TUNE judgements; see "Rendering: the
+camera-relative distance, set once at registration (`CockpitOverlay`'s 100 m far plane). Both
+energy mappings and the fog-range scale are open TUNE judgements; see "Rendering: the
 enhanced graphics mode" above.
 
 ## src/Session/LensFlareRig.cs
@@ -7193,7 +7261,9 @@ Process-wide, version-tolerant JSON persistence for `OptionsDef`, today the requ
 presentation (`menuPresentation`) and the requested graphics mode (`graphicsMode`): one file,
 `user://options.json`, independent of `Session/CampaignProfileStore.cs`; under `--run-tests`
 `UserOptions()` reads and writes an emptied scratch directory instead (`DirectoryOverride`), so no
-driven suite depends on or touches the player's file. Missing/malformed reads as
+driven suite depends on or touches the player's file. That directory is per process rather than
+shared, because concurrent shards start together and race for one.
+Missing/malformed reads as
 empty, an unknown version invalidates the file, an unknown value drops only that field, and a field
 the file does not carry reads as never set. That last rule is why adding a field does not bump
 `Version`: an older file loads with everything it does have. The version moves only when an

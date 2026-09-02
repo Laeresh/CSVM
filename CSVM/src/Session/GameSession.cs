@@ -3112,10 +3112,10 @@ public partial class GameSession : Node3D
                 continue;
             var overlay = Flight.CockpitOverlay.Build(rig.HudParent, interior, _sun, _env);
             controller.CockpitPass = overlay;
-            // Enhanced mode only: the overlay's cloned sun/env already carry the zone that was
-            // live at build time (WeatherRig.Build runs ahead of this method); registering them
-            // keeps a later mid-flight zone change reaching the interior pass too.
-            if (overlay?.Sun != null && GraphicsMode.Enhanced)
+            // The overlay's cloned sun/env carry the zone live at its build; registering them
+            // keeps a later mid-flight zone change reaching the interior pass too. Both modes,
+            // since the faithful path's aircraft light moves per zone as well.
+            if (overlay?.Sun != null)
                 _weatherRig?.RegisterExtraLighting(overlay.Sun, overlay.Env);
         }
         GD.Print($"cockpit: interior drawn in its own pass at the origin for {_rigs.Count} rig(s)");

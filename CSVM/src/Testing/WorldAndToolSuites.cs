@@ -870,6 +870,65 @@ internal static class WorldAndToolSuites
     internal static bool NearDegrees(Vector3 rotationDegrees, float pitch, float yaw)
         => Mathf.Abs(rotationDegrees.X - pitch) < 0.1f && Mathf.Abs(rotationDegrees.Y - yaw) < 0.1f;
 
+    // The world's light takes the flown zone's authored SUNLIGHT as its ENERGY, not only its
+    // bearing. The CSVM.Tests units pin both mappings; neither can see the write missing from the
+    // zone apply, and a plane lit at one level everywhere is what that looks like.
+    // ⚠ C1B against C1C is the install's OWN night/day pair. Do not fold this onto one mission:
+    // two zones of one mission differ by cloud layer, which is not the difference under test.
+    [Suite("sun-energy",
+        "the world's light takes its energy from the flown zone's authored SUNLIGHT, so C1B's night mission lights an aircraft dimmer than C1C's daylight, and a zone change carries the new energy (BL-332)")]
+    internal static void SunEnergy(TestContext ctx)
+    {
+        string nightZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1B", "IA1");
+        string dayZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1C", "M01");
+        string edgeZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1C", "MP1");
+        ctx.RequireData(nightZrdr, $"C1B/IA1 mission zrdr");
+        ctx.RequireData(dayZrdr, $"C1C/M01 mission zrdr");
+        ctx.RequireData(edgeZrdr, $"C1C/MP1 mission zrdr");
+
+        var (nightSun, nightAmbient) = ZoneEnergies(ctx, "C1B", "IA1", nightZrdr);
+        var (daySun, dayAmbient) = ZoneEnergies(ctx, "C1C", "M01", dayZrdr);
+        ctx.Note($"C1B/IA1 night sun {nightSun:0.000} ambient {nightAmbient:0.000}; C1C/M01 day sun {daySun:0.000} ambient {dayAmbient:0.000}");
+        ctx.Check(nightSun < daySun * 0.5f,
+            $"C1B's night zone lights the aircraft under half as hard as C1C's day zone");
+        ctx.Check(nightAmbient < dayAmbient * 0.5f,
+            $"and its ambient fill is under half of C1C's too");
+        if (!CSVM.Utils.GraphicsMode.Enhanced)
+        {
+            // The faithful mapping's own numbers, so a drifting factor is caught here and not only
+            // by a moved golden. ⚠ The ambient reaches the Environment but the renderer ignores it
+            // while the ambient is sky-sourced (docs/architecture.md).
+            ctx.Check(Mathf.IsEqualApprox(nightSun, 0.64f) && Mathf.IsEqualApprox(daySun, 1.6f),
+                $"the faithful mapping resolves 0.64 at C1B and 1.6 at C1C (got {nightSun:0.000}/{daySun:0.000})");
+        }
+
+        // The other half: an energy written once at build is not the same as one that follows the
+        // camera. C1C/MP1 builds on its dim ZONE2 and crosses to its bright ZONE1 below the band.
+        var sun = new DirectionalLight3D { Name = "sun-energy-edge-probe" };
+        var camera = new Camera3D { Name = "sun-energy-edge-camera" };
+        ctx.Host.AddChild(sun);
+        ctx.Host.AddChild(camera);
+        try
+        {
+            var spec = SessionSpec.Parse(new[] { "--chapter=C1C", "--mission=MP1" });
+            var rig = new PlayerRig { Index = 0, Camera = camera, HudParent = ctx.Host };
+            var rigs = new List<PlayerRig> { rig };
+            var weatherRig = new WeatherRig(spec, ctx.Host, sun);
+            weatherRig.Build(edgeZrdr, rigs, System.Array.Empty<HorizonZone>(), _ => { });
+            float built = sun.LightEnergy;
+            camera.Position = Vector3.Zero;
+            weatherRig.Tick(rigs);
+            ctx.Same(1, rig.CameraWeatherState, $"camera below the band is in weather state 1");
+            ctx.Check(sun.LightEnergy > built * 2f,
+                $"the zone change carries ZONE1's brighter energy (built {built:0.000}, now {sun.LightEnergy:0.000})");
+        }
+        finally
+        {
+            sun.QueueFree();
+            camera.QueueFree();
+        }
+    }
+
     // The lens flare's gating, chapter by chapter. ⚠ Gate it on chapter data, never on a chapter
     // name: it reads a gamez sun node in the horizon subtree and init.gw's LensFlareTexture slot
     // registrations, both true of C2 and C3 and of nothing else. Both directions are asserted, because
@@ -1139,6 +1198,30 @@ internal static class WorldAndToolSuites
         {
             ctx.Host.RemoveChild(omniParent);
             omniParent.Free();
+        }
+    }
+
+    // One mission's ZONE1 energies, off a rig of its own so the two missions cannot share state.
+    // The Environment is a bare one: what is asserted is the value the zone apply wrote.
+    // ⚠ --sky-zone=zone1 on purpose. The default request is zone2, the ABOVE-cloud zone, and
+    // comparing two missions' cloud tops is not the night-against-day question.
+    private static (float Sun, float Ambient) ZoneEnergies(
+        TestContext ctx, string chapter, string mission, string zrdr)
+    {
+        var sun = new DirectionalLight3D { Name = $"sun-energy-{chapter}-{mission}" };
+        var env = new Godot.Environment();
+        ctx.Host.AddChild(sun);
+        try
+        {
+            var spec = SessionSpec.Parse(
+                new[] { $"--chapter={chapter}", $"--mission={mission}", "--sky-zone=zone1" });
+            var weatherRig = new WeatherRig(spec, ctx.Host, sun, env: env);
+            weatherRig.Build(zrdr, System.Array.Empty<PlayerRig>(), System.Array.Empty<HorizonZone>(), _ => { });
+            return (sun.LightEnergy, env.AmbientLightEnergy);
+        }
+        finally
+        {
+            sun.QueueFree();
         }
     }
 }

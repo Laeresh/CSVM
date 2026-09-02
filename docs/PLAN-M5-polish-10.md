@@ -103,7 +103,9 @@ whole set. Take a baseline before either starts, keep them in separate worktrees
 re-pin in front of the author. Two further items can move a narrower band and must not be assumed
 safe: `B13` changes the light every aircraft is lit by, so the plane-bearing shots are in scope, and
 `C21` reaches the particle path, so the particle shots are. An unchanged hash after any of these is
-not evidence until you have seen the shot able to move.
+not evidence until you have seen the shot able to move. `A1` moved one as well, `c1-debris-rest`,
+which its own manifest entry names as the column-tier shot; that pin is open in front of the author
+and every later item's baseline has to be taken against the tree that carries it.
 
 ## Ground rules
 
@@ -131,23 +133,24 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Airships
 
-1. ☐ `BL-668` A downed zeppelin's wreck rests on the sea, and its gasbags stop falling through it
+1. ☑ `BL-668` A downed zeppelin's wreck rests on the sea, and its gasbags stop falling through it
 2. ❌ `BL-667` The zeppelin cannons' own scan reads the whole VehicleList, hulls included (disproven: the broadside runs no candidate scan, it walks the record's authored `targets` names, and the proposed swap is a no-op behind an `IsHumanPiloted` filter; `BL-681` filed for the real gap)
-3. ☐ `BL-670` A zeppelin on a scripted route flies its short legs instead of cutting them
+3. ☑ `BL-670` A zeppelin on a scripted route flies its short legs instead of cutting them
 
 ### Wave B — What a surface is: collision and light
 
 11. ☐ `BL-678` Collision honours the polygon's own backface flag, as the original's test does
 12. ☐ `BL-613` An alpha-textured surface takes no sun term, as the original's light evaluation does
-13. ☐ `BL-332` The aircraft light takes the brightness the mission authors, not one hardcoded pair
+13. ☑ `BL-332` The aircraft light takes the brightness the mission authors, not one hardcoded pair
 
 ### Wave C — Feedback at the controls
 
-21. ☐ `BL-419` The sonic ground burst reads as one flat ring on the terrain
-22. ☐ `BL-459` A damaged engine's loop waits out the original's re-arm delay before it restarts
-23. ☐ `BL-433` Numpad `+`/`−` drive the chase camera's zoom
-24. ☐ `BL-679` A staged airframe leaves no stale node behind in the name resolver
-25. ☐ `BL-405` Mounted ordnance tracks the aim before it launches, or the census closes it
+21. ☑ `BL-419` The sonic ground burst reads as one flat ring on the terrain (the ring is authored on
+    the ground; a callee's translate on the caller's `sonic_emit1` carried it 30 m into the air)
+22. ☑ `BL-459` A damaged engine's loop waits out the original's re-arm delay before it restarts
+23. ☑ `BL-433` Numpad `+`/`−` drive the chase camera's zoom
+24. ☑ `BL-679` A staged airframe leaves no stale node behind in the name resolver
+25. ❌ `BL-405` Mounted ordnance tracks the aim before it launches, or the census closes it (disproven: no shipped airframe authors an animated mount node, so the pylon staying fixed already matches the original)
 
 ### Wave D — Closing sortie
 
@@ -163,7 +166,8 @@ last. Contention rules for parallel worktrees:
   and contact machinery in `Mech3/Anim/MotionRuntime.cs`. They can run in parallel, but all three
   are judged by the same `zeppelin-breakup` suite and the same CM08 and CM14 flights, so land them
   in listed order and re-run that suite after each.
-- **`B11` and `B12` are the run's only golden-movers.** Never run them in one worktree, and never
+- **`B11` and `B12` are the run's only PLANNED golden-movers**, and `A1` moved `c1-debris-rest`
+  before either of them ran. Never run `B11` and `B12` in one worktree, and never
   re-pin from a tree carrying both: a moved shot must be attributable to one of them. `B11` reaches
   `Mech3/SceneBuilder.cs` and `Mech3/Clutter.cs`; `B12` reaches the material path in
   `Mech3/SceneBuilder.cs` as well, so the two contend on that one file and must be sequenced rather
@@ -183,7 +187,91 @@ last. Contention rules for parallel worktrees:
 
 # Wave A — Airships
 
-## A1 ☐ `BL-668` A downed zeppelin's wreck rests on the sea, and its gasbags stop falling through it
+## A1 ☑ `BL-668` A downed zeppelin's wreck rests on the sea, and its gasbags stop falling through it
+
+**Landed.** `MotionRuntime.TryGroundColumn` now reads the body's whole column instead of only what
+is under it: the downward ray runs as before and, only when it answers nothing, a second ray runs
+upward over the same `ColumnDepth`. The original's column is a cell query at `(x, z)` whose answer
+does not depend on the body's height, and whose landing test `y + stepY < height` lifts a body that
+is already beneath a surface back onto it. A single downward ray cannot express that: a body that
+overshoots a surface within one step goes blind and never contacts it again. Nothing is clamped and
+no constant is tuned; both tiers, the landing response and the watchdog are untouched.
+
+**Verified.** The wreck comes to rest at y = 0.0 against the sea at y = 0, where it used to stop at
+y = −411.2. All six gasbags stop between y = 0.0 and y = −5.6 instead of two of them, and the run
+now dispatches 6 `huge_splash` and 6 `huge_ripple` where it dispatched 2 of each. The column
+watchdog fires for none of the seven bodies, where it previously ended five of them. Full
+`.\RunTests.ps1` on the landed tree: 3,073 units, 230 engine suites and 17 of the 18 goldens green
+with engine errors clean, and one golden moved and left UNPINNED, which is the run's exit 1.
+
+**⚠ One golden moved and is UNPINNED.** `c1-debris-rest`,
+`ac23a4f7aba9003441ab0338de9011e4` → `e003acfd62ee90b1fbc2914937ed703f`. It is the manifest's own
+column-tier shot, so it is the shot most able to move. The change is 13,846 pixels, 1.50 % of the
+frame, inside one box at x 970..1144, y 191..299 with a maximum channel delta of 183: the spark
+puffers on one resting debris piece sit a few pixels differently and its smoke plume is a slightly
+different shape. Nothing structural moved, and the shot's own log is otherwise identical on both
+sides (7,064 gamez nodes, 3,433 mesh instances, 1,995 colliders, 14 live motions). With the second
+ray disabled the same tree reproduces the pinned hash exactly, so the move is attributable to this
+change alone. The before and after captures and their crops are in the branch's `.scratch/`
+(`a1-debris-before.png`, `a1-debris-after.png`, `a1-crop-*.png`).
+
+**The same defect reached CM10's lifeboat.** `lifefallNM` throws `lifeboat` straight down at 1 m/s
+from a hull already floating at y = 0.00, so it owes `bounce_sequence.water`. It used to sink 6.18 m
+in the first second and never reach the branch at all; it now stops on the sea and calls
+`med_splash` plus its own `lboat_destructionNM`. `PLAN-M5-polish-9` `B14`'s reading that the CM10
+balloon geometry itself dips to the water is untouched by this: what changed is only that a body at
+the water stays there.
+
+**The diagnosis, which was the deliverable.** The defs cannot explain the split: `floatdown` on
+`piratezep` and `break1` to `break6` on `gasbag1` to `gasbag6` all author `do_intersections: false`,
+`no_altitude: false` and no `run_time`, so all seven bodies take the DEFAULT column tier with the
+15 s column watchdog behind it, and the six gasbag events are identical to each other in every
+field but their node and their `bounce_sequence.water` branch. What differed was arrival time.
+
+- **The hull** does contact the sea, three times, at 105.8, 21.5 and 4.65 m/s with the decoded 0.2
+  restitution between them. The third contact is survivable on the energy test (21.6 ≥ 3.5², the
+  gravity it is falling under), so it parks the hull 7.7 cm above the surface with 0.93 m/s still
+  on it. Two frames later the hull is 3 cm under the water, the downward ray answers nothing from
+  there, and the watchdog freezes it 411 m down.
+- **Gasbags 1 to 4** never get a crossing frame at all. The step the column tests is built from the
+  gasbag's own ballistic origin through the CURRENT parent transform at both ends, so
+  `to.Y − from.Y` carries only their 0.27 m local fall and not the 3.8 m the hull descends in the
+  same frame. Their world height therefore steps +1.03 → −2.76, +2.99 → −0.80, +0.37 → −0.63 and
+  +3.20 → −0.57 straight past the test, and the ray is blind from the next frame on.
+- **Gasbags 5 and 6** are not different bags. They reach the water after the hull's own contact has
+  cut the parent frame's descent from about 113 m/s to about 1 m/s, so their world step is 1.0 m
+  against the same 0.3 m local step and `from.Y` lands inside the window where the surface is still
+  below `from` and above `to`: 0.05 → −0.26 and 0.34 → −0.01. They are the two that arrived late.
+
+The original has the same one-frame blind spot in its own step and does not care, because its query
+answers with the surface height whatever the body's `y`. That is the single divergence, and it is
+the one the fix closes.
+
+**Tests.** `ground-contact` gained case `1b2`, a column body started 25 m UNDER the surface with the
+column below it asserted empty first: it lifts back onto the surface instead of running out at
+−2,085 m. `zeppelin-breakup` gained the wreck's and the six gasbags' resting heights, and its
+`huge_splash` check is now `Same(6, …)`. Its gasbag drop check moved off displacement onto the
+dispatched `ObjectMotion` event, because the old "moved more than 1 m" proxy passed on the defect
+and failed on the fix (see `docs/verification.md` `INSTR-39`). `campaign-balloon-death` now wires
+`SurfaceIsWater` as a real session does and asserts the lifeboat's water branch and its resting
+height, replacing a "still dropping" check that scored sinking as the healthy answer. All the new
+checks were shown red on the unfixed tree and green after.
+
+**Still owed.** The CM14 (C2B/M04, `./RunGame.ps1 --campaign=<profile>:13`) kill over water belongs
+to `D31`: the wreck should be seen floating rather than read off an artifact.
+
+**Docs.** `docs/org/objectMotion.md`'s divergence table (the column is now two rays; the per-step
+admission test is no longer inert; the roughly 4 cm band around a surface where neither ray answers
+is recorded as measured), `docs/architecture.md`'s `src/Mech3/Anim/` entry, and
+`docs/verification.md` `INSTR-39`.
+
+**⚠ For whoever runs `B11`.** The upward half of this column relies on a collider answering a ray
+that reaches it from behind, which today it does because `SceneBuilder` sets `BackfaceCollision`
+unconditionally. `B11` makes that flag per polygon. If a water or terrain polygon clears
+`SHOW_BACKFACE`, `zeppelin-breakup`'s resting checks are what will catch it, and the answer is a
+column that casts downward from above rather than upward from below, not a re-pin.
+
+### Original approach (kept for reference)
 
 **Goal.** A zeppelin killed over water settles on the surface and stays visible there, with every
 gasbag coming to rest on the water rather than sinking through it.
@@ -289,7 +377,53 @@ a prohibition: if a capture of the original ever shows a broadside firing on the
 script that authors `COMPLETED_ZEPCANNONS` on a `targets [player]` record, the decode is what would
 have to give. Nothing shipped puts that case on the screen.
 
-## A3 ☐ `BL-670` A zeppelin on a scripted route flies its short legs instead of cutting them
+## A3 ☑ `BL-670` A zeppelin on a scripted route flies its short legs instead of cutting them
+
+**Landed.** `ZeppelinRuntime.cs:69-75`'s per-instance floor (`1.5 * turnCircle`, up to 515.7 m for
+CM08's Pandora) is replaced with `ZeppelinRuntime.ArrivalFloorM`, a flat 50 m TUNE constant with
+no decoded mechanism behind it. A campaign census
+(`CSVM.Tests/ZeppelinsTests.cs`'s new `TheArrivalFloorClearsEveryShippedZeppelinLeg`) walks
+every mission that ships a `ZeppelinDef` (58 records, the reader's own install-wide census),
+across all 8 chapters plus Instant Action, and measures the horizontal length of every edge on
+every net a zeppelin flies: 678 edges. The shortest is 143.9 m (C4/M04's `M4Piratezep`, edge 0-5),
+comfortably above the new 50 m floor, so no shipped leg advances the walk before the hull is
+meaningfully underway. 50 m was chosen with margin under that measured minimum, not fitted to it:
+it also clears C1/IA1's `IAZep` edge 4-5 (413.7 m), the leg the OLD 515.7 m floor would have
+skipped outright, which is what the test catches when the floor is set back to the old worst-case
+value.
+
+An engine-free simulation of the real Klondike1 net, the same production `AiNetFollower`/
+`ZeppelinMotion`, measured the node 3 to node 4 leg precisely: 1443.2 m long, radius
+`max(10% of leg, 50 m floor)` = 144.3 m, since the DECODED 10%-per-leg rule dominates on a leg
+this long and the floor never engages there. That predicts 90.0% flown; the measured capture landed
+at 90.1%, matching within the turn-in cost of node 3's own 75° corner. An earlier reading of this
+same leg reported 86%, read off a `RunProbe.ps1` flight's `zep:` log lines by interpolating between
+two heartbeat prints roughly 5 s apart; that interpolation, not a second mechanism, produced the
+lower number. The arrival radius alone accounts for the walk's advance on this leg.
+
+A campaign-wide census of every node where a shipped net turns, ranked by how much arc a hull's own
+turn circle (`speed / max_rate_yaw`) demands against the shorter of its two adjacent legs, finds its
+worst case on C1B/MP3's `ZVZ1a`: a 67.7° turn at node 6 on a 205 m leg, against a 343.8 m turn
+circle (speed 30, rate_yaw 5, the Pandora's own class) demanding 406 m of arc, a 201 m shortfall,
+the largest anywhere in the campaign. Driven headless with the real production code, the hull enters
+that leg in 7.7 s and leaves it in 16.5 s, both close to straight-line cruise time; it never orbits.
+`CSVM.Tests/ZeppelinsTests.cs`'s new `TheWorstShippedTurnBreaksOutRatherThanOrbits` pins this: the
+hull reaches node 6 and advances past it inside a 90 s budget, about 3x the measured transit. The
+`ArrivalFloorM` doc comment now cites this test rather than only asserting the overshoot is
+accepted.
+
+The suite `zeppelin-pandora-dead-end` (real Klondike1 data, stops released the way the mission's
+objectives would) still shows every one of the route's 12 edges walked end to end, the cargo point
+settled to within 0.1 m at its own altitude, and the pitch never exceeding the steepest leg's slope.
+The settling glide (`BL-597`, `PLAN-M5-polish-9` `B11`) is unaffected, since an armed stop point
+bypasses the arrival-radius test entirely, and this suite is that item's own cargo-point check,
+re-run clean.
+
+**Verified.** The complete `.\RunTests.ps1`: build clean, 3075 of 3075 units passed, 230 of 230
+engine suites passed with engine errors clean across 4 shards, and all 18 golden shots
+hash-identical, in 194.8 s (over the 180 s budget, awareness only). No golden moved.
+
+**Original approach (kept for reference).**
 
 **Goal.** A zeppelin walking an authored node chain flies each leg to its node, including the legs
 shorter than the arrival radius, instead of advancing the walk almost immediately at each one.
@@ -411,7 +545,81 @@ storage-flag bits and the extractor field name; `BL-070` stays in `backlog.md` a
 exempt from the dim" half is settled by this rule, so its remainder after this lands is the
 billboard-axis question alone.
 
-## B13 ☐ `BL-332` The aircraft light takes the brightness the mission authors, not one hardcoded pair
+## B13 ☑ `BL-332` The aircraft light takes the brightness the mission authors, not one hardcoded pair
+
+**Landed.** The faithful path has its own arm of the zone apply. `WeatherRig.FaithfulEnergies` turns
+a zone's authored `SUNLIGHT_DIFFUSE`/`SUNLIGHT_AMBIENT` into the sun's `LightEnergy` and the
+Environment's `AmbientLightEnergy`, and `ApplyFaithfulLighting` writes them onto the session sun,
+the session Environment and every registered cockpit-pass clone, on every zone change. The
+launcher's two hardcoded values become `WeatherRig.DefaultEnergies`, the pair a viewer, a menu or a
+weather-less mission still flies under, and the day anchor the mapping scales a zone against.
+`GameSession.BuildCockpitPasses` now registers the interior pass in both graphics modes, since the
+faithful light moves per zone too.
+
+**The two constants are TUNE and owe the author's eyes**: sun 1.6 and ambient 0.9, each reached by
+a zone authoring the install's modal day pair (1.5 / 0.5) and **capped** there. Calibrated against
+today's accepted day level rather than against a screenshot: every shipped day zone keeps the exact
+energies the build has been flown at, and only a dimmer zone moves, so the change can darken a
+plane and never brighten one. The cap is the faithful path's own constraint and not a copy of
+enhanced mode's factors (Decision 6): this pass has no tonemap, so an energy past the day level
+clips a plane to flat white, where enhanced mode lights and tonemaps a whole world. There is
+deliberately no night gate either, because the faithful world light ignores `FOG_COLOR` as well, so
+capping C5 would sink its plane below its own fullbright terrain.
+
+**Verified.** `.\RunTests.ps1` exit 1, in the goldens stage alone and only on the four unpinned
+movers below: build PASS, units 3078/3078, engine 231/231 suites with engine errors clean, goldens
+"4 moved, 0 broken of 18". Nothing else regressed, and `analysis/goldens/manifest.json` is
+unmodified in the tree. A new `sun-energy` suite drives a rig per mission and reads the light back:
+C1B/IA1 `zone1` resolves sun 0.640 / ambient 0.270 against C1C/M01 `zone1`'s 1.600 / 0.900, and a
+C1C/MP1 zone crossing carries the new energy mid-flight. It is red on the unfixed tree by
+construction, where both missions leave the light at its Godot default. Five unit facts pin the
+mapping, the cap, the absent night gate and the shipped night/day pair. `--det` still isolates the
+graphics mode: a `config.json` asking for `enhanced` produced byte-identical hashes for all 18
+shots, movers included.
+
+**Goldens moved, UNPINNED and awaiting review.** Four, all C1/IA1 aircraft shots, all from the same
+cause: C1 authors diffuse 1.2, so the plane's sun energy drops 1.6 → 1.28. Measured against
+before-images reproduced from a neutralised build that returned HEAD's own hashes digit for digit.
+
+| shot | pixels changed | max channel delta | rows |
+|---|---|---|---|
+| `c1-destroy-effects` | 11172 (1.212 %) | 22 | 430–555 |
+| `c1-targeting-hud` | 10802 (1.172 %) | 21 | 247–547 |
+| `c1-ai-wreck` | 10393 (1.128 %) | 21 | 209–535 |
+| `c1-flight` | 2314 (0.251 %) | 14 | 418–533 |
+
+The pattern is the evidence (GOLD-5): a control run driving the launcher's sun to 0.5 moved seven
+shots, and the four missing from this list are exactly the ones the mapping cannot reach.
+`viewer-bhawk` and `empty-stage` fly no mission and keep the default pair; `campaign-4p-grid` flies
+C1/M02, whose `zone1` authors diffuse 1.5, which is the anchor itself. No shot without an aircraft
+moved.
+
+**⚠ The ambient half of the mapping is inert, and this is measured.** With
+`AmbientLightSource.Sky` at the default full sky contribution, Godot takes the ambient off the sky
+cubemap scaled by the background energy multiplier, so `AmbientLightEnergy` never reaches the
+shader: taking the launcher's 0.9 to 0.0 left all 18 goldens byte-identical, while the same
+experiment on the sun moved seven. The write is landed and correct, and only the sun half is
+visible today. Recorded as `WORLD-32` in `docs/verification.md`. Whether the faithful path should
+stop taking its ambient from the sky stays the out-of-scope rendering-design question this item
+named, and it now has a measured consequence: an aircraft's ambient fill is the same procedural
+daytime sky at night as by day.
+
+**The night/day reference exists, but not the pair this section asked for.** `CAP-11` shipped
+original stills at C1B IA1 that show the airframe: `playtest/CAP-11/t0.5-c1b-spawn-island.png` and
+`t5-c1b-moon-clouds.png`, chase view, red Bloodhawk, reading deep maroon against the night island;
+`OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png` and its `2` are the same airframe
+at night from a different pose. The day half of that airframe is
+`playtest/CAP-11/t0.5-c2-spawn-city.png`, bright red over C2's suburb. So the original plainly does
+light a plane by the mission, and our own matched-pose `playtest/CAP-11/csvm-c1b-spawn.png` shows
+the defect: our plane reads brighter than the terrain it sits on where the original's does not.
+**C1C has no capture at all** (`CAP-11`'s README: unreachable in Instant Action), and CAP-11's own
+measurement boxes deliberately avoid the plane, so no shipped capture answers the A/B
+quantitatively. What is owed is a matched-pose pair in the original at **one airframe and one
+livery**, C1B IA1 at night against a C1C campaign mission by day, chase view, with our build shot
+at the same poses and the same paint pinned; the existing stills cannot be measured against ours
+because the liveries differ.
+
+**Original approach (kept for reference).**
 
 **Goal.** A plane flying C1B's night mission is visibly darker than the same plane in C1C's daylight,
 because the light driving it reads the mission's own `SUNLIGHT_DIFFUSE` and `SUNLIGHT_AMBIENT`.
@@ -454,7 +662,48 @@ as decoded values; they are TUNE for a different scene. Do not touch `csky_world
 
 # Wave C — Feedback at the controls
 
-## C21 ☐ `BL-419` The sonic ground burst reads as one flat ring on the terrain
+## C21 ☑ `BL-419` The sonic ground burst reads as one flat ring on the terrain
+
+**Landed.** The lead was a decode question and it had a decode answer, in name resolution rather
+than in any authored number. Nothing in `sonic_rings.zrd`/`sonic_control.zrd` was touched.
+
+**What was wrong.** All five sonic rings are called `AT_NODE sonic_emit1, 0, -5, 0`, and
+`ring_down1` (the lasting ground ring, called at `SEQUENCE_OFFSET 1.2`) translates itself from +30
+to +6 in that frame over 0.3 s, so it belongs about a metre over the struck surface and grows 1→5
+there over 2.6 s. That is the reference's single flat annulus. The same `sonic_emit1` is also the
+site `sonic_puff1` is called on, and `sonic_puff1`'s own second sequence translates `sonic_emit1`
+from 0 to 30 m over 1.2 s: that rise is how the thin vapour column is drawn. In the original the two
+never meet, because a definition resolves node names inside the private subtree copy it is handed
+at load (`def+0x6c`/`def+0x48`) and reaches the call site only through the `INPUT_NODE` sentinel.
+Ours anchors a `CALL_ANIMATION`'s callee on the CALLER's node, so `sonic_puff1`'s translate drove
+the caller's `sonic_emit1` and carried the burst's whole second half up with it. Measured: the
+ground ring settled 31 m over the impact instead of 1 m, and the caller's anchor moved 30 m.
+
+**Verified.** `AnimRuntime.StagingAdmits`'s call-site allowance now stops at a definition that has a
+staged copy of its own in that pool slot (`HasOwnCopyBeside`), which drops the name to the own-root
+tier the original reads. The ground ring settles at +1.00 m and grows to 5× there, the vapour column
+still climbs its authored 30 m on `sonic_puff1`'s own copy, and the caller's `sonic_emit1` does not
+move. Filmed in the weapon lab against flat C1 dirt: the airborne cyan torus is gone and one flat
+pale ring lies on the terrain and expands. New regression `sonic-ground-ring`, red on all four of
+its claims before the change. Full `.\RunTests.ps1` green, no golden moved. Docs:
+`docs/org/sequences.md` (the tier chain), `docs/architecture.md` (`AdmissibleStaging`),
+`docs/formats/weapon-effects.md` (the burst's shape, and the `OPACITY_STATE OFF` correction below),
+`docs/verification.md` INSTR-41.
+
+**Two entry claims turned out wrong, and are corrected rather than acted on.** The "thick grey
+puffer column the original does not have" is the authored vapour column (`sonic_emit_puff1`,
+`watersquirt`, blue-white through to near-black), not smoke that should be removed; it read wrong
+only because it was drawn beside a ring that should have been under it. And
+`docs/formats/weapon-effects.md` claimed `ACTIVE` with `OPACITY_STATE OFF` was a way of "starting
+invisible"; the argument says whether translucency is ENABLED, so the sonic rings draw at full
+opacity from the first frame and each is taken away by its own ramp.
+
+**Still open, and not this item's.** The air detonation was not compared frame by frame: a level
+`--weapon-lab --weapon-fire` run detonates at `RANGE` in mid-air, which is what INSTR-41 now
+records, but the air burst's own shape against `CAP-23 Rocket SONIC Air.mp4` still owes a sitting at
+`D31`. `CAP-26`'s "look for" list should gain the flat-ring-against-airborne-hoops question.
+
+### Original approach (kept for reference)
 
 **Goal.** A sonic rocket striking flat ground reads as one flat pale-green ring lying on the terrain
 and growing for about three seconds, with no airborne torus and no smoke column, and the same
@@ -499,7 +748,50 @@ neighbourhood (`PoseChannel.SetSubtreeOpacity`, `ApplyOpacity`) and is a separat
 touches that path, do not silently absorb it. `CAP-26` is the rocket-impact rings capture, and its
 "look for" list should gain the flat-ring-against-airborne-hoops question as this item settles it.
 
-## C22 ☐ `BL-459` A damaged engine's loop waits out the original's re-arm delay before it restarts
+## C22 ☑ `BL-459` A damaged engine's loop waits out the original's re-arm delay before it restarts
+
+**Landed.** `CSVM/src/Flight/AiEngineAudio.cs`'s `SetEngineDamaged` now only STOPS the slot-0 handle
+on the healthy→damaged edge; it no longer swaps the stream on that frame. `Update`'s new
+`ArmDamagedLoop` ticks a shared re-arm timer every frame the handle is silent and the airframe is
+damaged, via the new pure `EngineAudioCurves.AdvanceDamagedRearm(DamagedEngineTimer, dt, u)`
+(`u` the frame's own draw off `Rng.Stream(Rng.FlightAudio)`), and only swaps the stream, draws the
+pitch multiplier and logs `slot 0 -> snd_damagedengine` once the accumulated time crosses a
+threshold redrawn each call as `3.0 + 2·u` seconds. The timer's state
+(`PlaneStats.DamagedTimer`, a new `DamagedEngineTimer` with one mutable `Elapsed` field) lives on
+the airframe DEFINITION, not the instance: it is set once in `PlaneStats`'s object initialiser and
+every `With*` clone's `MemberwiseClone` carries the same reference forward, so every aircraft built
+off one cached `PlaneStats` (`GameSession.BuildFlightRigs`'s `aiStatsCache`) shares one counter and
+one draw, exactly as the original's def field does. A looped `snd_damagedengine` that is still
+playing skips `ArmDamagedLoop` entirely, matching "never reaches the timer". The damaged→healthy
+direction is untouched and stays immediate. `docs/architecture.md`'s `AiEngineAudio.cs`,
+`PlaneStats.cs` and `EngineAudioCurves.cs` entries carry the mechanism and the sharing trap.
+
+**Verified.** New suite `ai-engine-rearm` (`CSVM/src/Testing/AiSuites.cs`) spawns two AI aircraft off
+one cached `PlaneStats`. The first ticks alone to 2.9 s (under the 3 s floor, so this is
+deterministic whatever the seed draws, since no possible drawn threshold sits below it) with no
+swap. The second, only silenced afterward, inherits that head start and swaps within its own 174
+frames (short of the 3 s floor a fresh timer would need), while the untouched first aircraft still
+has not; the damaged→healthy restore is confirmed immediate throughout. Run against the pre-fix
+code (a deliberate revert-and-restore, not landed), the same suite fails on its first check, "the
+damaged loop does not swap on the frame the damage is decided", a real fail-before/pass-after
+regression. A flown `RunProbe.ps1 --chapter=C1 --plane=player_bhawk --ai=player_fury
+--ai-damage=0.1 --volume=0 --log=sound:debug --seed=1 --det` (a temporary physics-frame counter
+added and removed for the measurement) put `audible` at physics frame 8 and
+`slot 0 -> snd_damagedengine` at frame 199, 191 frames, 3.18 s at the fixed 16.667 ms step, inside
+the decoded 3 to 5 s window; the same probe against the pre-fix code logged the swap at frame 8
+too, ahead of `audible` in the log. `EngineAudioModelTests` (`CSVM.Tests`) gained direct unit
+coverage of `AdvanceDamagedRearm`'s threshold/reset arithmetic and of the `DamagedTimer` reference
+surviving every `PlaneStats.With*` clone. Full `.\RunTests.ps1` after this item's own change: build
+clean (0 warnings), 3077/3077 units, 231/231 engine suites, 18/18 goldens hash-identical, no
+golden moved. Re-verified after merging in `A1`, `A3`, `B13`, `C23` and `C24`: build clean,
+3095/3095 units, 232/232 engine suites (232 now that `ai-engine-rearm` joins the other four
+items' own new suites), and the golden stage moves exactly the five shots those items' own
+sections already record as pending (`B13`'s four C1/IA1 aircraft shots plus `A1`'s
+`c1-debris-rest`), all thirteen others hash-identical. None of the five is a shot this item's own
+Evidence, Approach or Verify sections named, and this item touches no rendered pixel path, so
+they are not re-pinned here; that stays each moved shot's own item to close.
+
+**Original approach (kept for reference).**
 
 **Goal.** A damaged AI aircraft that comes back inside the engine-audio cull starts its damaged loop
 three to five seconds after it becomes audible, as the original does, rather than on the same frame.
@@ -530,7 +822,38 @@ airframe def shares one counter and one draw. Port that sharing or record why no
 give each aircraft its own. A looped `snd_damagedengine` that is still playing never reaches the
 timer. Rejected already: treating the delay as a crossfade, because the transition is a hard cut.
 
-## C23 ☐ `BL-433` Numpad `+`/`−` drive the chase camera's zoom
+## C23 ☑ `BL-433` Numpad `+`/`−` drive the chase camera's zoom
+
+**Landed.** Numpad `+` and `−` now drive the chase camera's zoom. `CameraController.UpdateZoom`
+reads `Key.KpAdd`/`Key.KpSubtract` directly, the same convention `ActiveView`/`BackActive` already
+use, moving a target at the decoded 2/s and clamping it to `[0, 1]`; the shown value chases that
+target at the decoded 1.5/s through `HeadLook.Approach`, the same smoothing law the head-look
+angles already use. A private `EffectiveRadius` property subtracts `shown · Dist` (the plane's own
+authored base distance, not the dynamic radius) from the existing dynamic chase radius, floored at
+zero, and `Chase`, `FixedView`, `BackView` and `PadLook` all read it in place of the raw radius, so
+the trim reaches the ordinary chase pose, every numbered fixed view and the look-behind alike,
+matching the architecture's existing rule that those poses share one number.
+`FlightController` calls `UpdateZoom` only from its ordinary per-frame camera branch, never while
+the weapon lab's held-airframe orbit is active: `OrbitInput` reads the same two keys for that
+orbit's own dolly, and the two branches are already mutually exclusive on `Held`, so no new gating
+was needed beyond placing the call correctly. The centre key's zero-the-zoom behaviour stays out of
+scope, filed at `BL-435`.
+
+No CLI mechanism can simulate a held keyboard key here (`--hold=` scripts the flight stick, not the
+keyboard), so the rate/clamp/smoothing law is asserted engine-free in
+`CSVM.Tests/CameraControllerZoomTests.cs` instead: the 2/s target rate in both directions, both
+keys cancelling, the `[0, 1]` clamp at both ends, and the shown value's exponential catch-up at
+1.5/s against a closed-form value. Two probes confirm the wiring without a physical key: an
+unpressed run's chase breadcrumb reads `zoom=0.000` throughout with the dynamic radius unchanged
+from before this item, and a pinned `--view=6` run's `dist=` sequence matches the unpinned chase's
+`d=` sequence frame for frame, so `--view=`'s precedence is untouched. The interactive feel at both
+ends of the clamp is `D31`'s own line for this item.
+
+**Verified.** The full `.\RunTests.ps1` battery on this worktree: build clean, units 3081 passed 0
+failed, engine 230 suites passed 0 failed with errors clean across 4 shards, goldens 18 of 18
+hash-identical (none moved), 202.8 s total, exit 0.
+
+**Original approach (kept for reference).**
 
 **Goal.** Holding numpad `+` or `−` moves the chase camera in and out at the original's rate, and the
 head-look centre key zeroes that same zoom.
@@ -563,7 +886,43 @@ this item adds one axis and must not start that rebuild. Do not invent a zoom ra
 `[0, 1]` over the authored base distance, not an absolute metre figure. The dynamic chase radius is
 shared with `--view=`, so check that a pinned view is unaffected.
 
-## C24 ☐ `BL-679` A staged airframe leaves no stale node behind in the name resolver
+## C24 ☑ `BL-679` A staged airframe leaves no stale node behind in the name resolver
+
+**Landed.** `NameResolver<TNode>.DropFreed` retires every row naming a node the liveness delegate
+rejects, together with the ancestry entries and cached answers keyed on one, and `FreedRows` counts
+what a stage would otherwise leave behind. `AnimRuntime.IndexRebasedStage` calls it before it grows
+the table (through the private `DropFreedNodes`), and `AnimRuntime.FreedNodeRows` exposes the count
+to a suite. That entry is the one staging call that puts a subtree in over one its caller may have
+freed, an airframe swapped for another on the same rig, and `AircraftStage.StageFlown` is its only
+caller. `landings-hookup-airframe` now asserts the count is zero after each airframe is staged.
+
+**The Evidence below cites the wrong site, and the real one is a level down.** The throw is not in
+`Add`. The captured stack is `NameResolver.IsWithin`, the `_parentOf` lookup inside `FindAll`'s
+scope filter, reached from `AnimRuntime.Targets` under `PoseChannel.HandleActiveState` while the
+hookup definition dispatches an `ACTIVE_STATE`. A freed node is not merely a row `FindAll` skips:
+it stays a dictionary KEY in the ancestry map and in the find cache, both keyed by `Node3DIdentity`,
+whose `Equals` reads `GetInstanceId()`. The walk therefore throws for whatever later query happens
+to hash into the dead key's bucket, which is why a minority of runs fail rather than all of them.
+`Remove` cannot be the fix either, since removing hashes the dead key it is handed; `DropFreed`
+rebuilds the keyed collections instead.
+
+The Evidence's second claim, that the rate does not change with the number of planes driven, is
+also wrong. The stale-row count grows strictly, 0, 134, 237, 334, 446 and 562 across the six
+airframes the suite drove, so every further airframe raises the collision odds. That is what made a
+seventh airframe throw often enough for `PLAN-M5-polish-9` to drop `player_autogyro` from the list.
+It is back, seven airframes now, and passes.
+
+**Verified.** The fault is non-deterministic, so both rates were measured over 14 runs of
+`.\RunTests.ps1 -Filter landings -SkipUnits -SkipGoldens`. Unfixed tree: 1 run in 14 threw.
+Fixed tree, with the seventh airframe restored: 0 in 14. The suite's own new check does not rest on
+that rate and is the instrument to read instead: with the sweep commented out it fails on five of
+the six airframes driven at the time, at the counts above, and passes with the sweep in. Off engine,
+three `NameResolverTests` cases pin the rule without Godot, against a comparer that throws for a
+freed node exactly as `Node3DIdentity` does. Both loops ran on one shard, so shard order is not a
+confounder between them. Full battery: build clean, units 3076 passed 0 failed, engine 230 suites
+passed 0 failed over four shards with errors clean, goldens 18 of 18 hash-identical, exit 0.
+
+**Original approach (kept for reference).**
 
 **Goal.** A suite staging several airframes in one process runs clean every time, because a freed
 airframe's nodes are removed from the resolver when it goes rather than surviving to be compared.
@@ -596,7 +955,43 @@ stale entry which will also answer a later lookup with the wrong node, turning a
 silent wrong answer. The liveness delegate at `NameResolver.cs:67` exists for the resolver's own
 sweep and is not the place to paper over this.
 
-## C25 ☐ `BL-405` Mounted ordnance tracks the aim before it launches, or the census closes it
+## C25 ❌ `BL-405` Mounted ordnance tracks the aim before it launches, or the census closes it
+
+**Closed ❌ disproven, no code.** The census this item's own Approach called for came back no: no
+shipped airframe authors an animated node on the mount its ordnance hangs from, so `PylonOrdnance`
+parenting the round body to the pylon marker at identity and never touching it again is not a
+simplification. It is what the original does too, because the original never has anywhere to slew.
+
+**The census.** Full write-up in
+[`docs/org/aiPilot/aiWeapons.md`](org/aiPilot/aiWeapons.md), "Census: no shipped airframe carries
+that node". Per shipped airframe, over the ten `gun_pitch`/`gun_yaw` carriers that author ordnance
+(`devastator` and `bswingman` carry none and are excluded, per `aiWeapons.md`'s own ordnance
+census; `patrolboat`/`t_truck` carry a single gun and no pylons at all):
+
+| Airframe | Def | Pylon rig | Animated mount node authored? |
+|---|---|---|---|
+| Bloodhawk | `bloodhawk` | `pylon1`…`pylon8` | No |
+| Fury | `fury` | `pylon1`…`pylon8` | No |
+| Warhawk | `warhawk` | `pylon1`…`pylon8` | No |
+| Hoplite | `autogyro` | `pylon1`…`pylon8` | No |
+| Hellhound | `avenger` | `pylon1`…`pylon8` | No |
+| Balmoral | `balmoral` | `pylon1`…`pylon8` | No |
+| Brigand | `brigand` | `pylon1`…`pylon8` | No |
+| Firebrand | `firebrand` | `pylon1`…`pylon8` | No |
+| Kestrel | `kestrel` | `pylon1`…`pylon8` | No |
+| Peacemaker | `peacemaker` | `pylon1`…`pylon8` | No |
+
+Every one of the ten hangs its pylons off the identical rig the player planes use: mesh-less
+`Object3d` markers, `model_index -1`, no children, no distinguishing flag
+(`extracted/planes/nodes.json`), and `vehicle.zrd.json` authors no mount or node-reference field for
+any of them. The only nodes any shipped plane model ever moves are the five turret airframes'
+barrels, and turrets run an entirely separate system (`Turret`/`TurretRate` in `turret.cpp`) that
+never reaches this mount. The one shipped `lpylon*`/`rpylon*` node set belongs to `anim_bloodhawk`,
+a scripted asset outside the AI pilot's model roster, not to a second AI pylon rig; the
+`docs/formats/markers.md` pylon section carried that misreading and is corrected in the same commit
+as this closure.
+
+**Original approach (kept for reference).**
 
 **Goal.** Either a mounted rocket visibly follows the aim its launcher has already computed, the way
 the original's animated mount slews, or the shipped data is shown not to author such a mount

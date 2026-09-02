@@ -1146,9 +1146,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// generic node names must not re-pose it.</summary>
     public void IndexRebasedStage(Node3D subtree, int indexOffset)
     {
+        // ⚠ Retire first, and only here: this is the one stage that puts a subtree in over one
+        // its caller may have freed, an airframe swapped for another on the same rig.
+        DropFreedNodes();
         IndexWorld(subtree, indexOffset: indexOffset);
         _resolver.ClearFindCache();
     }
+
+    /// <summary>How many rows of the resolver's node table name a node that has since been freed.
+    /// Zero right after <see cref="IndexRebasedStage"/>, which retires them. A suite reads it to
+    /// assert that, because the fault a stale row causes needs a hash collision and so shows on
+    /// some runs only.</summary>
+    public int FreedNodeRows() => _resolver.FreedRows();
 
     /// <summary>Parks a flown airframe's docking hook where its own <c>&lt;x&gt;_hook_retract</c>
     /// RESET_STATE puts it, scoped to a <see cref="PlaneBuilder.IsDockingHook"/> group inside this
@@ -2338,6 +2347,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     Walk(c, n);
         }
         Walk(worldRoot, worldRoot.GetParent() as Node3D);
+    }
+
+    // Retires every row naming a node freed since the last stage, before this stage's own queries
+    // meet one. Nothing tells the resolver a node has gone, and its ancestry walk hashes each step
+    // of a chain. A dead key then throws for whatever later query lands in its bucket.
+    private void DropFreedNodes()
+    {
+        int dropped = _resolver.DropFreed();
+        if (dropped > 0)
+            Log.Info("anim", $"anim: node table retired {dropped} row(s) naming freed node(s)");
     }
 
     // Re-runs the quiet-stage RESET_STATE posing pass (bootstrap pass 1) for whatever now anchors
@@ -3866,31 +3885,51 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // carrying a name an airframe also uses hits this, not just `chuteman`.
     private bool StagingAdmits(AnimDefinition def, Node3D? scope, Node3D node)
     {
-        // The copy root is the node directly under the poolN container carrying the slot mark.
-        static Node3D? CopyRootOf(Node3D? from)
-        {
-            Node3D? below = null;
-            for (Node? at = from; at != null; at = at.GetParent())
-            {
-                if (at.HasMeta(PoolSlotMeta))
-                    return below;
-                below = at as Node3D;
-            }
-            return null;
-        }
         if (_templateStage.SlotOf(node) < 0 || CopyRootOf(node) is not { } root)
-            return true;
-        // The scope this tier is searching already sits inside that copy — a CALL_ANIMATION
-        // retargeted onto its call site's copy, which is where its own choreography now lives.
-        if (CopyRootOf(scope) is { } scopeRoot && scopeRoot.GetInstanceId() == root.GetInstanceId())
             return true;
         // Its own template, matched the way every tier matches — so a staged `.flt` copy still
         // answers to the NAME its definition authors.
         if (IsNamed(def.Name, root) || IsNamed(def.RootName, root))
             return true;
+        // The scope this tier is searching already sits inside that copy — a CALL_ANIMATION
+        // retargeted onto its call site's copy, which is where its own choreography now lives.
+        // ⚠ Not while the definition has a staged copy beside it (docs/org/sequences.md).
+        if (CopyRootOf(scope) is { } scopeRoot && scopeRoot.GetInstanceId() == root.GetInstanceId()
+            && !HasOwnCopyBeside(def, root))
+            return true;
         var name = NameOf(root);
         // A reader-sourced def has no symbol table to ask, so it keeps the old, wider view.
         return string.IsNullOrEmpty(name) || def.NodeRefs.Count == 0 || def.NodeRefs.ContainsKey(name);
+    }
+
+    // The copy root is the node directly under the poolN container carrying the slot mark.
+    private Node3D? CopyRootOf(Node3D? from)
+    {
+        Node3D? below = null;
+        for (Node? at = from; at != null; at = at.GetParent())
+        {
+            if (at.HasMeta(PoolSlotMeta))
+                return below;
+            below = at as Node3D;
+        }
+        return null;
+    }
+
+    // Whether this definition has a staged copy of its own in the same pool slot as `other`, which
+    // is the private subtree the original hands it at load. A name both copies carry belongs to
+    // that one, so a callee placed on its caller's node must not drive the caller's copy.
+    private bool HasOwnCopyBeside(AnimDefinition def, Node3D other)
+    {
+        if (string.IsNullOrEmpty(def.Name))
+            return false;
+        int slot = _templateStage.SlotOf(other);
+        foreach (var candidate in FindAll(def.Name, null))
+        {
+            if (CopyRootOf(candidate) is { } own && own.GetInstanceId() != other.GetInstanceId()
+                && _templateStage.SlotOf(own) == slot)
+                return true;
+        }
+        return false;
     }
 
     // Every named node under a subtree, first spelling wins — the same NameMeta stamp the world

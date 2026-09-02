@@ -31,6 +31,7 @@ bottom rather than hidden.
 | `FUN_004735b0` | World init — precomputes the whiteout core's bottom edge into `0071c2d0`, the altitude the state-2 test reads every frame |
 | `FUN_00472ea0` | The zone apply: indexes `ZONE1`–`ZONE3` straight off the camera state and writes the fog parameters, then the sunlight |
 | `FUN_004dc610` | Writes the `sunlight` gamez node's rotation triple (`zclass\Light.c`) — the second half of the zone apply |
+| `FUN_004dbdb0` / `FUN_004dbce0` | Write the same `sunlight` node's diffuse and ambient, called beside the rotation setter in that same zone apply |
 | `FUN_004bc3e0` | `SUNLIGHT_ORIENTATION` reader: degrees × `0.017453292`, and the engine's own default bearing |
 | `FUN_0053c610` | The euler `(pitch, yaw)` → direction helper — the binary's own statement of what a bearing *means* |
 | `FUN_0056c430` | The `zone_id` visibility gate, called **per node** during the render walk |
@@ -99,7 +100,11 @@ new state and writes, in a single call:
 
 - the distance fog — colour, near/far ranges, the `FOG_ALTITUDE` band;
 - the `SUNLIGHT`-derived world brightness;
-- the sun's bearing, by calling `FUN_004dc610` on the `sunlight` node.
+- the sun's bearing, by calling `FUN_004dc610` on the `sunlight` node;
+- that same node's diffuse and ambient, by calling `FUN_004dbdb0` and `FUN_004dbce0` beside it, so
+  a zone's authored `SUNLIGHT_DIFFUSE`/`SUNLIGHT_AMBIENT` reach the light itself and not only the
+  world scalar above. They swing across the install (`DIFFUSE` 0.4 to 2.0, `AMBIENT` 0.15 to 0.6),
+  which is why C1B's night mission lights a plane visibly darker than C1C's daylight.
 
 ⚠ **It fires on change, not per frame.** Fog and sun travel together in one call by the binary's
 own shape — a zone change that moved the fog and left the light behind would be a bug the single

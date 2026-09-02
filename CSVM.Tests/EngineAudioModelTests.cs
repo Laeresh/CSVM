@@ -197,4 +197,67 @@ public class EngineAudioModelTests
         Assert.Equal(("snd_normal", 1f),
             EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, cockpitView: true));
     }
+
+    /// <summary>C22 (BL-459): the re-arm timer stays quiet below its 3 s floor. It fires once the
+    /// total crosses the threshold drawn from <c>u</c>, and resets to zero when it does, the
+    /// original's own def+0x88 accumulator.
+    /// Decode: docs/formats/vehicle.md, "What makes an airframe damaged".</summary>
+    [Fact]
+    public void DamagedRearmWaitsOutItsThresholdThenResets()
+    {
+        var timer = new DamagedEngineTimer();
+
+        // u=0 draws the floor, 3.0 s exactly.
+        Assert.False(EngineAudioCurves.AdvanceDamagedRearm(timer, 1f, 0f));
+        Assert.False(EngineAudioCurves.AdvanceDamagedRearm(timer, 1f, 0f));
+        Assert.Equal(2f, timer.Elapsed, 4);
+        Assert.False(EngineAudioCurves.AdvanceDamagedRearm(timer, 0.9f, 0f));
+        Assert.True(EngineAudioCurves.AdvanceDamagedRearm(timer, 0.2f, 0f));
+        Assert.Equal(0f, timer.Elapsed, 4);
+    }
+
+    /// <summary>The threshold's own span is 3 to 5 s (<c>3.0 + 2*rand()/32767</c>). A draw of
+    /// <c>u=1</c> holds off a full 5 s, one tick short of firing at 4.99 s.</summary>
+    [Fact]
+    public void DamagedRearmThresholdReachesFiveSecondsAtTheTopOfTheDraw()
+    {
+        var timer = new DamagedEngineTimer();
+
+        Assert.False(EngineAudioCurves.AdvanceDamagedRearm(timer, 4.99f, 1f));
+        Assert.True(EngineAudioCurves.AdvanceDamagedRearm(timer, 0.02f, 1f));
+    }
+
+    /// <summary>The re-arm timer sits on the airframe DEFINITION, not the per-spawn instance.
+    /// Roster durability, the enemy difficulty scale, the per-spawn jitter and a hangar engine
+    /// swap each clone one loaded <see cref="PlaneStats"/>. Every clone carries the SAME
+    /// <see cref="DamagedEngineTimer"/> reference forward, never a copy.</summary>
+    [Fact]
+    public void EveryPerSpawnCloneSharesTheSameDamagedTimer()
+    {
+        var loaded = new PlaneStats { EngineSound = "snd_normal" };
+
+        var rostered = loaded.WithRosterDurability(50f, 10f);
+        var scaled = loaded.WithEnemyDurability(1.5f);
+        var jittered = loaded.WithAiSpawnJitter(new System.Random(1));
+        var repowered = loaded.WithEnginePower(2f);
+        var chained = loaded.WithRosterDurability(50f, 10f).WithEnemyDurability(1.5f)
+            .WithAiSpawnJitter(new System.Random(2));
+
+        Assert.Same(loaded.DamagedTimer, rostered.DamagedTimer);
+        Assert.Same(loaded.DamagedTimer, scaled.DamagedTimer);
+        Assert.Same(loaded.DamagedTimer, jittered.DamagedTimer);
+        Assert.Same(loaded.DamagedTimer, repowered.DamagedTimer);
+        Assert.Same(loaded.DamagedTimer, chained.DamagedTimer);
+    }
+
+    /// <summary>...and two SEPARATELY loaded airframes never share one. Each load is its own
+    /// definition, so an unrelated plane's timer must not move when this one's does.</summary>
+    [ExtractedDataFact]
+    public void TwoSeparatelyLoadedAirframesDoNotShareADamagedTimer()
+    {
+        var a = PlaneStats.LoadForAi(SharedZrdr, "player_fury");
+        var b = PlaneStats.LoadForAi(SharedZrdr, "player_fury");
+
+        Assert.NotSame(a.DamagedTimer, b.DamagedTimer);
+    }
 }

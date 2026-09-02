@@ -1814,6 +1814,9 @@ public partial class FlightController : Node3D
         else
         {
             PollViewModeKeys();
+            // Numpad +/- (BL-433): only here, never while orbiting, since the weapon lab's held
+            // orbit reads the same two keys for its own dolly (OrbitInput above).
+            _cam.UpdateZoom(simDt);
             // Default to the external FOV global; the FirstPerson arm below overrides it, so a
             // look-behind while SELECTED Cockpit/Nose gets the first-person FOV back on release.
             _cam.RestoreExternalFov();

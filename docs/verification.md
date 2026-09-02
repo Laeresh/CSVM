@@ -510,6 +510,7 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **WORLD-29** — **A term you meant to redirect can leave instead, and the frame looks like a win either way: prove the new source arrives with a control colour.** Setting the Environment's background to a colour and its reflected light source to that background gives Godot no radiance map at all, so the water's specular vanished; the day sea darkened toward the original and read as a success. A pure-red sky rendered byte-identically to the fog-grey one, which is what caught it. The reflection needs a `Sky` resource (a flat `PanoramaSkyMaterial` is enough), and under one the red control tints the water red.
 - **WORLD-30** — **`Wake(n)` fires only that objective's wake verbs synchronously; `ADD_OBJECTIVE_TARGET` applies through its own completion, one `Step()` later when nothing else gates it.** CM10's OBJECTIVE10 gates on nothing once awake, so `Wake(10)` alone leaves its site unoffered until the next `Step()` completes it and applies the target. The gap is real in isolation but invisible in play, since both happen inside one Step call at normal frame rates.
 - **WORLD-31** — **A sibling object is a control only once you have censused every authored path that can reach it.** Six of CM09's twelve zeppelin engines are destroyed by `killpzep`, so the other six looked like the control that would prove the breakup did the work; all twelve went dark, because each burning gasbag's own death definition destroys the two engines beside it. Grep the whole mission's definitions for the target's name before calling anything untouched.
+- **WORLD-32** — **A Godot property that accepts a write is not a property the renderer reads: prove a lighting knob is live by driving it to an extreme and watching the goldens move.** `Environment.AmbientLightEnergy` is inert in the faithful path. With `AmbientLightSource.Sky` and the default full `AmbientLightSkyContribution`, the ambient term is the sky cubemap scaled by the *background* energy multiplier, so the ambient energy never enters the shader. Measured: taking the launcher's 0.9 to 0.0 left all 18 goldens byte-identical, while the same experiment on `DirectionalLight3D.LightEnergy` (1.6 → 0.5) moved 7. Run that pair of experiments before attributing any part of an aircraft's brightness to the ambient, and before spending a calibration on a number nothing reads.
 
 ## SHELL — Windows, PowerShell, and processes
 
@@ -806,6 +807,36 @@ loss. What the engine renders was decodable from the authored constants + oscill
   airframes. Compare sorted magnitudes, or compare the whole basis, and never assert
   `Scale.X == authored.X` on anything that also rotates. The same caution applies to reading a
   rotation back off a node whose scale is non-uniform.
+- **INSTR-38** — **A fault that needs a hash collision fires on a minority of runs, so re-running a
+  suite measures the collision rate and not the fault. Assert the stale state directly.** Measured
+  on `landings-hookup-airframe`: a freed airframe's rows stay keys in the resolver's identity-keyed
+  maps, and the `landings` filter threw `ObjectDisposedException` on 1 run in 14 while the same
+  drive left 134, 237, 334, 446 and 562 stale rows behind, run after run, on every airframe after
+  the first (`AnimRuntime.FreedNodeRows`). The count is deterministic and the throw is not, so a
+  green suite is evidence of nothing here. Read the count.
+- **INSTR-39** — **A "did it move" distance is scored by the defect, so it passes hardest on the
+  worst behaviour.** `zeppelin-breakup` asked each gasbag to move more than 1 m from its rest pose,
+  which all six cleared while four of them were falling 1,228 m through the sea; a gasbag that stops
+  on the water moves 0.5 m and fails the same check. `campaign-balloon-death` asked its lifeboat to
+  end below where it started, which only sinking through the sea satisfies. Read the DISPATCH for
+  "did the event fire" and the RESTING POSITION for "did it end in the right place". A displacement
+  answers neither, and it rewards whichever fault travels furthest.
+- **INSTR-40** — **A self-test whose rows all call helpers proves nothing about the entry point the
+  caller actually uses. Drive the entry point.** Measured on `CheckCommitContent.ps1`:
+  `-Root <tree>` exited 2 on a real comment-cap violation while
+  `-Command 'git -C <same tree> commit ...'`, the shape the hook passes, exited 0 before any check
+  ran, because the guard tested for a bare `git commit` and a worktree-scoped commit puts its
+  options between those two words. All 17 rows passed throughout, and none of them reached the
+  guard.
+
+- **INSTR-41** — **A `--weapon-lab --weapon-fire` run with no target parks the plane level, so a
+  rocket expires at its authored `RANGE` in mid-air and the probe films the AIR burst.** The log
+  says so (`impact: … on /`, with the burst's Y at the aircraft's own altitude) and the shot still
+  shows an explosion, so a ground-effect probe reads as if it had worked. Aim it with
+  `--weapon-surface=<registry name>` plus `--weapon-standoff=<m>`; the surface token is a
+  `SurfaceRegistry` name (`dirt`, `water`, `buildings`, …) and an unknown one is a WARN line and an
+  ignored flag, not a failure. Confirm the impact line names a real surface node before reading any
+  frame.
 
 ## SRC — sources and documents
 
