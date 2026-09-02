@@ -169,10 +169,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the migration
 
-11. ☐ Census the polling sites, then migrate `FlightController`
-12. ☐ Migrate `MenuInput`
-13. ☐ Migrate `SpectatorCamera` and whatever the census turns up
+11. ☑ Census the polling sites, then migrate `FlightController`
+12. ☑ Migrate `MenuInput`
+13. ☑ Migrate `SpectatorCamera` and whatever the census turns up
 14. ☐ Determinism gate: `--det` / `--hold` reproduce bit for bit
+15. ☐ Reconcile what the migration proved: one seat device state, the axis rescale, the stunt marker
 
 ### Wave C — defaults and persistence
 
@@ -610,6 +611,70 @@ What actually proves a migration is per-site mapping evidence: for each migrated
 the action resolves from the same control the old code polled, driven by a fake device state. Wave B
 items carry that requirement in their own Verify lines. This gate's job is narrower and still worth
 running: it proves the refactor did not disturb the scripted path, the fixed tick, or the sim.
+
+## B15 ☐ Reconcile what the migration proved: one seat device state, the axis rescale, the stunt marker
+
+**Goal.** The three things Wave B each had to work around privately become one answer in
+`CSVM/src/Bindings/`, the two behaviour deviations B13 recorded are undone, and the stunt marker
+sits where the user put it.
+
+**Evidence (confidence: traced).** Every item below was found by a migration that had to route
+around it rather than by inspection, and each is named in a landed commit.
+
+**Approach.** Six changes, in this order:
+
+1. **One seat-scoped `IDeviceState`.** B11, B12 and B13 each wrote a private one, because
+   `GodotDeviceState` resolves one `DeviceId` to one connection index while a seat reads a *set* of
+   pads, and because it reads `Input.GetJoyAxis` and `IsJoyButtonPressed` with **no `Pads.For`
+   gate**, so a site on it loses `--no-pads` and the window-focus gate. Since `--det` implies
+   `--no-pads`, that is a determinism hole rather than a tidiness point. Replace all three with one
+   type taking the placeholder identity as a constructor argument, since `menu-seat`,
+   `spectator-seat` and `AnyPad` are the same species. It ORs buttons and takes the largest
+   magnitude for axes across `Pads.For(seat)`, and snapshots the seat's pad list once per tick,
+   because `Pads.For` re-reads the roster on every call.
+   ⚠ **Gate the pad half only.** Godot polls joypads globally regardless of window focus, so a
+   drifting stick reaches a run that owns no window, while keyboard reads are focus-scoped and every
+   scripted run sits on its own desktop. That asymmetry is why `--no-pads` exists with no
+   `--no-keyboard` counterpart, and a uniform gate would either under-protect pads or add a keyboard
+   gate nothing needs.
+2. **Remove the axis rescale.** `Binding.Resolve` maps travel past the deadzone onto [0, 1], and no
+   existing polling site rescales, so keeping the deadzone number did not keep the behaviour: with
+   the camera's 0.18 deadzone a stick at 0.508 reads 0.40. Return the raw travel instead. A1's
+   invariant survives untouched, because a below-deadzone read still returns zero, so `Pressed`
+   still holds exactly when `Value` is above zero. Invert B13's test that pins the rescale.
+3. **The orbit dolly gets its own action.** It inherited `CameraBoost`'s 0.5 digital threshold, so
+   the first half of trigger travel no longer dollies and the second half doubles in slope.
+4. **`CycleStuntTarget` moves to `D-pad Up`**, beside `TargetNextEnemy`, and keeps `Tab`. It sat on
+   pad `X`, undocumented and colliding with `Nitro`, and B11 dropped it, leaving a pad-only stunt
+   pilot unable to cycle the marker. The user's call, and the reasoning is that a stunt target *is*
+   an objective marker, so cycling one is the objective cycle. Two actions deliberately share the
+   control through `ActionMap.Add`, the shape C21 used for the snap-look diagonals. `BL-686` carries
+   the real fix, and its constraint holds here too: stunt markers are per player and never shared.
+5. **Sanction the multi-reader pattern.** B11 and B13 both ran several `PlayerActions` over one
+   shared `ActionMap` (full, keyboard-muted, pad-muted), because the keyboard and pad halves of one
+   action take different processing and are then *summed*, not ORed: a `StickRamp` ramp against a
+   `StickCurve` curve in flight, and `KeyLookRate` 1.6 against `PadLookRate` 2.4 in the camera. One
+   merged read would have to pick a rate and would drop the sum. Two of three migrations
+   independently needed it, so document it as the shape rather than leaving it to be rediscovered.
+6. **Correct `ActionSnapshot.Axis`'s doc comment.** It claims both ends held reads zero "as a key
+   pair does today", which is true of `FlightController` and `SpectatorCamera`, both confirmed pair
+   by pair, and false of `MenuInput`, whose `up ? -1 : down ? 1 : 0` gives the negative end priority.
+   That is why B12 wrote its own `Dir`. Say which is which.
+
+**Model recommendation.** high. It changes a resolve rule every migrated site now depends on.
+
+**Verify.** The three migrations' suites (`FlightBindingMappingTests` 76, `MenuInputBindingTests` 46,
+`SpectatorBindingsTests` 28) must all still pass unchanged, except B13's rescale test, which
+inverts. Re-run B11's `--det` image comparison, which is the only instrument here that can see a
+resolve-rule change reach the sim. Complete `.\RunTests.ps1`.
+
+**⚠ Traps.** ⚠ **Do not widen `ActionMap.SameControl` to fix aliasing.** Two aliases are recorded
+now: `Hat(0, Up)` against `Button(DpadUp)`, and a saved real-GUID binding against a `pad:*` default,
+which a seat device state resolves to the same physical button while `SameControl` calls them
+different controls. Both are D31's to resolve at capture and assign time, and widening the comparison
+would bake device and button numbers into it.
+⚠ `PlayerActions.ReadsKeyboard` now silences the mouse too, so it names three devices. Renaming it is
+tempting and is a separate change; do not fold it in here.
 
 # Wave C — defaults and persistence
 
