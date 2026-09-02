@@ -5912,7 +5912,9 @@ Which directives reach the engine today: `INACTIVEn` (node visibility, the decod
 members of the named group inside or outside the radius against `spec.Count`, the decoded
 `FUN_00465b40` shape `docs/formats/objectives.md` already carried), `WAKEUP_TURRETS` /
 `WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
-(`AiGeneratorRuntime.GrantWaveCapacity`), `DEDG` over the spawned roster plus the human rig when
+(`AiGeneratorRuntime.GrantWaveCapacity`), `DEDG` over the spawned roster, every generator launch
+booked into it under its launch name (`RegisterGeneratorLaunch`, carrying the template's group, so
+C5/M04's `DEDG [5, 0]` counts Miles from the moment the Dante drops him), plus the human rig when
 its `FlightController.Group` is the counted group (a 967 capture swap stamps it; a crashed rig
 drops out, an inert one does not, since a human rig is inert under a cutscene; a roster rig counts
 unless `FlightController.Deactivated`, which is inert with no cutscene park behind it, so the
@@ -6282,8 +6284,10 @@ credit at build, the logged headless stand-in for playing up to the objective); 
 callback receives the whole `EnemyGeneratorDef`, allowing `vehicle.params` to select its AIV
 template while position is still read from the live host. That selection is the mission spawner's
 roster read and runs on any generator session: `GameSession.SpawnFromGenerator` spawns the matched
-template through `CampaignRosterPlan.SpawnFor`, applies the rest of its slots with `ApplyPlan` and
-registers the block's accent, and falls back to the `--generators=` airframe only when the
+template through `CampaignRosterPlan.SpawnFor`, applies the rest of its slots with `ApplyPlan`,
+registers the block's accent, books the launch into the campaign roster under its launch name
+(`CampaignDirector.RegisterGeneratorLaunch`, so the script's `DEDG`, `TRAVELERS` and `SET_AI_*`
+address it; pinned by `generator-launch-dedg`), and falls back to the `--generators=` airframe only when the
 generator authors no `vehicle.params` at all. A label that names no block returns null, and the
 runtime books that as the decoded empty launch: `LaunchOrdinal` advances and the `max_active` slot
 stays taken by nothing (the original never frees it, so C1/M04's `eairg32` blocks itself after

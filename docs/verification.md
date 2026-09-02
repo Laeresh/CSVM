@@ -727,6 +727,13 @@ loss. What the engine renders was decodable from the authored constants + oscill
   under an invisible node" is true of C1 eight times. The `Assert.NotSame` unit test failed
   immediately. A green catalog is evidence about the assertions, not about which world they ran on.
 
+- **INSTR-32** — **A `--campaign=` probe's first seconds of sim belong to the intro cutscene, which
+  holds the mission clock: a short `--frames=` run that shows no launch, no objective and no
+  spawn has measured the hold, not the feature.** Measured on C5/M04 with `--wake-generators`: a
+  900-frame (15 s) `--screenshot=` run logged the credit and nothing after it, while 3600 frames
+  logged the door, the booking and the drop. Give a campaign probe a minute of sim, or read the
+  `cutscene:` lines before concluding a step never ran.
+
 ## SRC — sources and documents
 
 - **SRC-1** — **Validate whether bytes are meaningful before numeric sanity checks.**
