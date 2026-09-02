@@ -462,8 +462,9 @@ Whether that point is already under our terrain is unmeasured.
 
 **Approach.** Answer the placement question first: sample the terrain height at the authored
 spawn with a `--freecam --pos=` capture and a downward probe (add a `--dump-` height read if none
-exists). If the spawn is under ground, that is `BL-457`'s spawn-placement question and this item
-records it and stops. If not, reproduce the dive headless with the AI trace on and log the sweep
+exists). If the spawn is under ground, this item records it and stops. (The plan named `BL-457` as
+that question's home; `BL-457` is closed and was never about spawn placement, so the finding is
+recorded as `BL-669`.) If not, reproduce the dive headless with the AI trace on and log the sweep
 parity, the aircraft's height above the tile surface and the probe result on the frames around
 the crossing, to show whether the crossing lands on a skipped sweep frame. The fix then belongs to
 the contact test at the crossing (a second sweep on the skipped parity when the step is longer
@@ -512,7 +513,8 @@ through `FUN_00432010`, re-homes every collision probe in the `+0x6a4..+0x6a8` a
 the `+0x6B0` sweep accumulator and moves the scene node through `FUN_004d1d50`. That re-base
 preserves y, so it cannot lift the ace out of the hill by itself, and it is gated on `+0x2e4` and a
 match in the `DAT_0064f610` list, neither of which is decoded. This is the same "net-nearest snap
-the original skips" that `BL-522` records as undecoded.
+the original skips" that `BL-522` records as undecoded. The finding is carried by `BL-669`, and
+`PT-107` gathers its at-the-controls half.
 
 **Verified.** <pending orchestrator run>
 

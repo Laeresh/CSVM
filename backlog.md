@@ -825,6 +825,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
+- `BL-669` `[Research]` **CM12's ace `hkfirebrand_9` is authored 79 m inside a hill, so it flies
+  inside the terrain from its wake and dies ramming a tile from below.** `C2/M01`'s `aiv.zrd`
+  authors it at `(-4517.72, 150.0, -6232.58)` with `deactivated` set, and `OBJECTIVE67`'s
+  `WAKEUP_ENEMIES` reactivates it in place. The terrain surface there is 228.92 m on tile `g35052`
+  (model 617, whose vertex bounds reproduce the node's own `model_bbox`), so it begins 78.9 m under
+  ground. It is the only CM12 roster block placed over land; the mission's other land placement,
+  `patrolboat_eg0` at `y 0.021`, sits 5 cm above its surface. Confirmed in the built world: an
+  aeroplane at that pose flown level descends 150 m to 16 m with no contact and no `agl=` reading at
+  all, the same pose at 250 m reads `agl=21` and crashes into `g35052/col` at `y 229`, and the same
+  pose at 150 m pulled up crashes into `g35052/col` at `y 229` from below. **The open question is
+  what the original does with an aircraft inside terrain**, since the authored pose is the same data
+  there and `FUN_00432010` preserves y; that decides whether the fix is a placement rule or a
+  collision one. `PT-107` gathers the at-the-controls half.
+  ⚠ *Traps:* not tunnelling (`SweepCadence` carries the skipped step's origin, and `FUN_0048d7f0`
+  accumulates into `obj+0x6B0` and subtracts it on the sweeping frame, so no span goes untested);
+  not the 20 m floor (`DAT_0071c3f0` is absolute, correctly silent at 150 m, and the original has no
+  AGL floor either); not collider sidedness (`SceneBuilder.CollidersForMesh` already builds terrain
+  double-sided). Do not add a blanket spawn lift. `BL-457` is closed and was never this question.
+  *Cross-refs:* `BL-522`'s undecoded net-nearest snap `FUN_004b0f40`, whose activate branch re-bases
+  x and z through `FUN_00432010` but leaves y untouched.
 - `BL-443` `[Fidelity]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
   late.** `FUN_0048fc40` (call `0x48c883`) writes the delivered body-up G and the ramp reads it at
   `0x48ca1e` in the same tick, before the torques; `FlightModel.Step` rotates before it translates
