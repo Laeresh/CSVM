@@ -15,13 +15,8 @@ public sealed class DeviceRegistry
 
     /// <summary>Rebuilds the live table from this tick's connected pads. Call once at launch and
     /// again on every <c>joy_connection_changed</c> signal; a table left stale after an unplug is
-    /// the reused-index bug this type exists to prevent.
-    /// A pad reports a GUID and a name; the GUID is preferred and the name is the fallback for a
-    /// platform that reports none. A pad with neither is dropped from the table rather than given a
-    /// blank identity, so it simply resolves absent everywhere. Two connected pads that report the
-    /// same stable string (identical hardware sharing one GUID) is a real collision: the first one
-    /// in <paramref name="connected"/> claims the identity and the second stays unresolved, rather
-    /// than two live pads silently driving one binding.</summary>
+    /// the reused-index bug this type exists to prevent. The GUID-before-name preference and the
+    /// same-GUID collision rule are in <c>docs/architecture.md</c> under this file.</summary>
     public void Refresh(IReadOnlyList<(int Index, string Guid, string Name)> connected)
     {
         _indexById.Clear();

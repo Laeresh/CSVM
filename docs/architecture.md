@@ -481,8 +481,9 @@ clusters they delegate to.
 
 ### `src/Bindings/` — the input binding model
 
-What a binding is, and how one resolves against hardware. Named actions and the map that holds
-them sit on top of these types.
+What a binding is, how one resolves against hardware, and the named actions a polling site asks
+for. The registry that turns a device identity into a live pad and the map that holds the actions
+both sit on top of these types.
 
 - `src/Bindings/DeviceId.cs` — which device a binding is on, as a stable value: the one keyboard, or a joypad named by its hardware string rather than by a connection index.
 - `src/Bindings/BindingControl.cs` — the tagged control: a key, a button, one signed half of an axis past a deadzone, or one direction of a hat, built through four validating factories.
@@ -502,6 +503,10 @@ them sit on top of these types.
   resolver, since this module has no polling loop of its own. Godot exposes a d-pad as four
   `JoyButton` values rather than a raw hat, so hat index 0 is that d-pad and every other hat index is
   unbindable.
+- `src/Bindings/InputAction.cs` — the enum of named actions, one member per binding that exists at a polling site, contiguous because the snapshot indexes arrays by it.
+- `src/Bindings/ActionMap.cs` — one player's keymap: which control fires which action, with assignment taking a control off its previous owner and naming the action that lost it.
+- `src/Bindings/ActionSnapshot.cs` — the tick's resolved values, so two consumers reading one action in one tick get the same answer. No edges and no history.
+- `src/Bindings/PlayerActions.cs` — the seam a polling site holds: a map, the tick's snapshot, and the pad-only keyboard gate for splitscreen players two to four.
 
 ### Session root and tests
 
@@ -8079,3 +8084,35 @@ any of them reports so a half-pressed trigger cannot beat a held button on the s
 drops a duplicate rather than rejecting it, `Remove` is the losing half of the steal rule, and
 `Clone` gives an editing screen something it can throw away. It owns no action name and no device
 lookup. Coverage: `CSVM.Tests/BindingModelTests.cs`.
+
+## src/Bindings/InputAction.cs
+
+The named actions, one member per binding a polling site holds today, so migrating a site is a
+lookup swap rather than a rename. The members are contiguous from zero because `ActionSnapshot`
+indexes arrays by them; adding one at the end is safe and renumbering is not. Debug and lab keys
+are deliberately outside the enum: they are development instruments, and a rebinding screen that
+offered them would let a player break their own diagnostics.
+
+## src/Bindings/ActionMap.cs
+
+One player's keymap, an action to a `BindingSet`. `Assign` is the winning half of the steal rule and
+returns the action that lost the control, so a screen can name the loss instead of performing it
+silently; `SameControl` is what "the same control" means there, ignoring an axis deadzone so
+re-binding an axis adjusts it rather than stacking a copy. `ResolveInto` reads every bound action
+once per tick into a reused snapshot. It holds no defaults and no device lookup. Coverage:
+`CSVM.Tests/ActionMapTests.cs`.
+
+## src/Bindings/ActionSnapshot.cs
+
+The tick's resolved held/how-far pair per action, so two consumers asking the same question in one
+tick cannot disagree. It carries no went-down and no went-up: edge detection stays in the consumer
+that already owns its previous-frame slot, because the sim is a level read on the fixed tick and
+scripted `--det` / `--hold` runs depend on that. The instance is reused every tick.
+
+## src/Bindings/PlayerActions.cs
+
+What a polling site holds: a player's `ActionMap`, the tick's snapshot, and `Poll` as the one place
+hardware is read. `ReadsKeyboard` is the existing player-1-only keyboard rule, kept on the seat
+rather than in the map, so a pad-only splitscreen player keeps the shipped keyboard defaults in
+their map and simply reads none of them. Turning a device identity into live hardware belongs to the
+device registry; this type only reads the state it is handed.
