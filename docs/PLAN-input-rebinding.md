@@ -540,6 +540,20 @@ was kept.
 **⚠ Traps.** ⚠ `docs/verification.md` exists because the instruments here mislead. Read it and cite
 the rule that bites before quoting any number as a pass.
 
+⚠ **This gate is necessary and nowhere near sufficient, and it must not be reported as if it were.**
+`--det` bundles `--no-pads`, and an unattended run has nobody at the keyboard, so every polled read
+returns false in both the before tree and the after tree. A migrated site that resolves the *wrong*
+action, or no action at all, passes this gate unchanged. `FirePressed()` is still on the scripted
+path (`FlightController:1679` combines `AutoFire` with the polled read), so the seam is compiled and
+called, but the polled half is constantly false. By the Ground rules' own standard, an unchanged
+number is not evidence unless you have seen it able to fail, and this one cannot fail on a wrong
+mapping.
+
+What actually proves a migration is per-site mapping evidence: for each migrated read, a test that
+the action resolves from the same control the old code polled, driven by a fake device state. Wave B
+items carry that requirement in their own Verify lines. This gate's job is narrower and still worth
+running: it proves the refactor did not disturb the scripted path, the fixed tick, or the sim.
+
 # Wave C — defaults and persistence
 
 ## C21 ☑ Persist the map: a versioned format, per player
