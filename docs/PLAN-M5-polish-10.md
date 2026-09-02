@@ -139,7 +139,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — What a surface is: collision and light
 
-11. ☐ `BL-678` Collision honours the polygon's own backface flag, as the original's test does
+11. ☑ `BL-678` Collision honours the polygon's own backface flag, as the original's test does
 12. ☐ `BL-613` An alpha-textured surface takes no sun term, as the original's light evaluation does
 13. ☑ `BL-332` The aircraft light takes the brightness the mission authors, not one hardcoded pair
 
@@ -470,7 +470,7 @@ short legs are flown, not that the number went down.
 
 # Wave B — What a surface is: collision and light
 
-## B11 ☐ `BL-678` Collision honours the polygon's own backface flag, as the original's test does
+## B11 ☑ `BL-678` Collision honours the polygon's own backface flag, as the original's test does
 
 **Goal.** An aircraft, a round or a probe approaching a single-sided face from behind passes through
 it, as it does in the original, instead of being stopped by a contact the original never has.
@@ -511,6 +511,45 @@ two opposite-wound polygons) make a naive per-face change collidable from both s
 census has to count pairs, not faces. `SceneBuilder.cs:896`'s comment states the original grounds for
 the blanket flag (inconsistent source winding), so a change there must answer that argument rather
 than delete it. This item does not land before the two open sorties are flown (Decision 4).
+
+**Landed.** `CollidersForMesh` emits two shapes per surface class on one `StaticBody3D`, a
+`BackfaceCollision` shape for the `ShowBackface` polygons and a one-sided shape for the rest, the
+latter with reversed winding since the source's visible side is Godot's back face. `MotionRuntime`'s
+ground column had to move with it: water is 100 % one-sided in every chapter but C1B, so an upward
+second cast answers nothing and it now comes down from above. Clutter is deliberately left
+two-sided, because `AppendTriangles` does not alternate a strip's winding and so its triangles have
+no agreed front, and because whether the original's intersection database holds a stamped decoration
+is undecoded; `SolidCollisionOneSidedTriangles` sizes that divergence (1439 in C2, 3156 in C5).
+
+**The winding argument is answered by measurement rather than by argument.** The blanket flag rested
+on the claim that the source winding is inconsistent, evidenced by rendering culling nothing; but the
+world renders double-sided because `_cullBackfaces` is false for the world build, a separate render
+simplification that says nothing about winding. The new `world-ground-solid` suite rays down into the
+centre of every world-partition cell in all eight chapters and then up from beneath what it found:
+1376 of 1376 cells answer from above before and after, while the count answering from below falls
+from 1376 to 24. Nothing lost its topside anywhere. Census: 52541 of 82121 collidable faces are
+one-sided (64.0 %), with 241 back-to-back pairs staying solid both ways by construction.
+
+**The weapon-ray path needed no change, which is itself the finding.** The original honours the flag
+at the query; CSVM honours it on the collider, which every ray shares, so `Projectile`,
+`TurretController`, `FlightController.HitWorld`, `WeaponLab`, `LensFlareRig` and `MotionRuntime`
+inherit it with no per-call-site edit. That also settles the `HitBackFaces` worry empirically: every
+query runs Godot's defaults and the ground census still reads 24 from below rather than 1376.
+
+**Verified.** Full `.\RunTests.ps1`: 3366 units, 235 engine suites, engine errors clean. The
+8-chapter `--freecam --collision` regression is identical in gamez nodes, mesh instances and collider
+counts across all eight. `--collision=show` at the CM12 site is visually identical, the only moving
+pixels being the overlay's own counters and 28 shapes crossing its per-shape box budget, with no
+collision triangle added or removed. `BL-669`'s worked example is answered: a ray from
+`hkfirebrand_9`'s pose up to the surface returns nothing, its level track meets no collider over
+8 km where it used to meet the sheet at 260 m, and flown 40 s it ends with min y 150, grazes 0 and
+`crashed False`. The under-map backstop gained the log line `BL-669` asked for, rate-limited with a
+running reset count. One golden moved, `c1-debris-rest`, and a 2×2 attribution shows the collider
+change moves no golden at all: the mover is the `MotionRuntime` column, and the new frame rests a
+debris piece on the ground instead of sinking it. Re-pinned on the author's review of the A/B.
+
+**Still owed:** `PT-107` re-flown, which is the at-the-controls half and the last thing
+`PLAN-M5-polish-9`'s `D31` waits on.
 
 ## B12 ☐ `BL-613` An alpha-textured surface takes no sun term, as the original's light evaluation does
 
