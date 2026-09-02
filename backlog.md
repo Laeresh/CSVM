@@ -944,7 +944,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   downward ray from the pose finds nothing, and `SweepProbes` registers only where the motion
   crosses a face. **And the ace cannot fall there:** its authored range from the player is 3867 m,
   so `WAKEUP_ENEMIES` puts it on the far-field plant, which computes no gravity and holds
-  `nose · (fd_speed · throttle + 5)`; a powered aircraft under the sheet stays where it is. What
+  `nose · (fd_speed · throttle + 5)`. ⚠ **The "stays where it is" reading below is overturned** —
+  `ace-wake-terrain`'s own flown legs have it at `y 49` five seconds after a `y 150` spawn and 300 m
+  away, then back within 27 m of the authored pose, and at the controls the author saw it "teleport
+  to his start point multiple times" from 3 km away, having fired nothing. The writer is
+  `FlightController.cs:1752`'s under-map backstop (`Position.Y < UnderMapY` calling `Respawn()`,
+  `UnderMapY = 0f`), which emits no log line, so the loop is silent. It is a consequence of being
+  stuck, not a separate defect: `BL-678` removes the trigger. Give the backstop a log line when
+  `BL-678` lands. The rest of this paragraph stands. What
   ends it is the crossing on the way out. A level track along its authored yaw 120 meets the sheet
   again 260 m out, about 5 s at the plant's 52.3 m/s hold, against the 55 s a mover would need to
   close 2867 m to the far-field boundary, so the crossing is reached far-field and the plant flip is
@@ -1546,7 +1553,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   attributing CM18's spawn stalls (`git log --grep=BL-641`). `GeneratorCycle` switches the capacity
   check off at authored `capacity <= 0` unless a `WAKEUP_GENERATOR` has armed it. All 23 shipped
   generators author `capacity 0`, and CM18 (C4/M03) authors no `WAKEUP_GENERATOR` at all, so
-  `cargozep1` launches a Black Swan every 4 s from mission start up to `max_active` 10.
+  `cargozep1` launches every 4 s from mission start up to `max_active` 10. ⚠ **They are the
+  player's own side, not enemy fighters.** `Cargo_params` resolves to `bsfury_1`, net 13
+  (`M3Allies`), team 1, and the sortie log reads
+  `egen: 'cargozep1' spawn #1: 'bsfury_eg0' dropped ... patrolling net 'M3Allies'`. This item and
+  `PT-102` both described enemy Black Swans, which is what made CM18 read as a mission mix-up at the
+  controls; the count is right and the side is not.
   [`docs/formats/mission-entities/enemy-generators.md`](formats/mission-entities/enemy-generators.md)
   ("Capacity rule and limit") records that the literal decoded rule blocks every shipped generator on
   its first tick, and that the data does **not** establish that 0 means unlimited, which is exactly
@@ -1958,6 +1970,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     the dive against the original clip to judge the ported magnitude. Trace:
     `analysis/gun-wobble-shake/FINDINGS.md` (high_speed section) and
     [`docs/org/shakes.md`](docs/org/shakes.md).
+  - **(e) `nitro` is the third source with the same modelling gap.** Judged at the controls on a
+    nitro engage: "it wobbles the plane, amplitude and frequency not quite right". ⚠ **The plane
+    wobbling is the decode, not the defect** — [`docs/org/shakes.md`](docs/org/shakes.md):17-22 has
+    the plane wobble with a plane-mounted camera inheriting it, so only the magnitude and rate are
+    in question, and `PT-86` asked for a *camera* shake it should not have. `shakes.zrd` authors
+    `nitro` as `frequency 4.0, damp 3.0, sawtooth 1, magnitude 0.05`, read unchanged, and
+    `PlaneShake` renders it as a sawtooth under an envelope — the same envelope-versus-random-walk
+    mismatch as (a) and (d), which is why this is a clause here and not its own item.
+    ⚠ **Do not wire a number yet:** two repo sources contradict each other on which triple is
+    position and which is velocity (`docs/org/shakes.md`:168-173 against
+    `analysis/gun-wobble-shake/FINDINGS.md`:168-182, which says the reverse twice), and the
+    `sawtooth 1` branch constant coincides with the authored `frequency` of 4.0, which is exactly
+    the coincidence the trap below warns about. Settle the triple first, then ask the author whether
+    the wobble reads too big or too small, and whether the original's engage moves the nose or only
+    the roll — one word from the controls outranks another pass over the binary here.
   - **(fidelity) judge the port, then dial.** Playtest owed: fly the merged build and judge
     `GunBuzzKickScale` (1.0 default = faithful step) against the original clip before touching it.
     Two honest caveats: the random-walk **decay model (τ≈80 ms) is an engineering guess, not a
@@ -2243,9 +2270,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `user://Planes/` store, but Instant Action's own flow still lists that whole directory, which
   includes every campaign build. The original gates the crossing behind an Export button on the
   campaign side (langui 1139, 702 and 1256, refusal 1254), so a campaign aircraft reaches Instant
-  Action only when the player sends it there. *Fix shape:* the campaign flow needs the Export verb
-  and Instant Action's list needs to show only what was exported, which means a marker the store
-  carries rather than a second directory. *⚠ Traps:* do not give either mode its own build
+  Action only when the player sends it there. ⚠ **The Export verb now exists and the round trip
+  works, but the first press does not take:** reported at the controls as "needed 2 exports but then
+  it worked" (`PT-96`(d)). Whether the picker is not re-read after a successful export, or the first
+  press never confirmed because the message box draws no visible OK (`BL-691`), is unsettled — check
+  `BL-691` first, since one cause would explain both. *Fix shape:* the campaign flow needs the
+  Export verb and Instant Action's list needs to show only what was exported, which means a marker
+  the store carries rather than a second directory, and the list must be re-read when that marker
+  changes. *⚠ Traps:* do not give either mode its own build
   directory. The two profile-seeded starters are never hangar-built and have no entry there at all,
   which is why the campaign roster resolves them from the ownership record; a per-mode store would
   strand them. *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) ("The inventory screen's own
@@ -2266,21 +2298,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   [`docs/org/hangar.md`](docs/org/hangar.md) ("The campaign wallet"), `BL-650` (the unenforced slot
   cap, the other half of the purchase gate).
 
-- `BL-637` `[Research]` **A targeted patrol boat shows no name line, and the original may show none
-  either.** *Evidence:* reported at the controls in CM12 (C2/M01), where the boats can be targeted
-  but carry no text. `targets.zrd` for that mission names only `sprucegoose`, its engine, the
-  propane tanks and the four `tugandbarge0N`, so no authored target entry covers a boat, and the
-  boats themselves are the `eshipg31` generator's. *What to settle:* whether the original draws a
-  name here at all. [`docs/org/targeting.md`](docs/org/targeting.md)'s "The HUD: the label" records
-  three authors of the name string, the roster block's own `title` at `aiv` slot 20, Instant
-  Action's hardcoded ids, and a template-less generator spawn taking its `egen.zrd` value raw, and
-  notes that 239 of the install's 414 roster blocks author an empty `title`, so most enemies in the
-  original show a box and no name. CM12's generator record authors no `title` of its own and
-  resolves `Eshipg31_params` instead, so the answer turns on what that block carries.
-  *⚠ Traps:* do not reach for `MSG_VEH_PATROLBOAT`. The vehicle definition's own title is read by
-  none of the three authors (that same section), so displaying it would invent a name the original
-  never shows. The same page warns that a fourth author is not ruled out, only unfound.
-  *Cross-refs:* `BL-626` (the same boats, their guns).
+- `BL-637` `[Research]` **A targeted patrol boat shows no name line. The answer is per roster
+  block, not per hull: the original names CM08's boats and leaves CM12's blank.** *Evidence
+  (traced):* first reported in CM12 (C2/M01), where the boats target but carry no text, and again in
+  CM08 (C1B/M03) at the controls — "they have no label, should be `Patrol Boat`" — which is the
+  sighting that settles it. The two missions author the field differently:
+  `extracted/C1B/M03/zrdr/aiv.zrd.json`'s `patrolboat_1..4` each author slot 20
+  `MSG_VEH_PATROLBOAT`, which `extracted/messages.json` resolves to "Patrol boat" (lowercase b), so
+  the original *does* draw a name in CM08; `extracted/C2/M01/zrdr/aiv.zrd.json`'s `patrolboat_eg0`,
+  the `eshipg31` generator's own template, authors slot 20 EMPTY, so CSVM's blank in CM12 is
+  faithful. That split is why the fault was invisible in the mission this item was filed against.
+  [`docs/org/targeting.md`](docs/org/targeting.md):660-670 gives slot 20 as the name line's only
+  campaign author, and 239 of the install's 414 roster blocks author it empty, so a nameless box is
+  the common case rather than a fault.
+  *The code gap:* `TargetPool.NameOf`'s source switch has no `SurfaceVehicle` arm and ends `_ => ""`
+  (`CSVM/src/Flight/TargetPool.cs:119-128`), and `Describe`'s Vehicle arm casts the source as
+  `FlightController`, null for a hull (`:157-166`), so both strings come out empty and `TargetHud`
+  omits the line. A hull does reach the pool correctly, so this is a missing switch arm.
+  *What is still open, and why this stays `[Research]`:* `docs/org/targeting.md`:660-666 traces slot
+  20 through `FUN_00437620`/`FUN_0047c210`, which is the AIRCRAFT spawn. Nothing yet says a surface
+  hull's spawn reads slot 20 at all, so the fix shape is not settled even though the data is.
+  *⚠ Traps:* the answer is the BLOCK's slot 20, never the `vehicle.zrd` def's own `MSG_VEH_*` title,
+  which `targeting.md:686` says none of the three authors read — CM08's blocks happen to name that
+  same message key themselves, which is a legitimate use of the per-block field and not a licence to
+  read the def. So do not "fall back to the class". The same page warns a fourth author is unfound
+  rather than ruled out.
+  *Cross-refs:* `BL-687` (the same boats, their guns), `BL-688` (the marker path's own name
+  fallback, a different producer feeding the same renderer), `BL-626`.
 
 - `BL-654` `[Feature]` **The menus take no mouse input at all, where the original is mouse-first.**
   *Evidence:* every `Control` the launchscreen builds is `MouseFilterEnum.Ignore`
