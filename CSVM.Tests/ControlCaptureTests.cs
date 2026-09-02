@@ -7,9 +7,10 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// What a rebinding screen may capture and how: nothing that was already held when the capture
-/// armed, nothing on an axis or a hat (that is D32's, and a resting stick drifts), and every pad
-/// control stamped with the seat's own identity rather than a hardware GUID the seat would never
-/// resolve. Engine-free, over the same kind of fake device state <see cref="ActionMapTests"/> uses.
+/// armed, nothing on an axis until it has been seen at rest and then moved decisively, nothing on a
+/// hat ever (a d-pad direction arrives as its button), and every pad control stamped with the seat's
+/// own identity rather than a hardware GUID the seat would never resolve. Engine-free, over the same
+/// kind of fake device state <see cref="ActionMapTests"/> uses.
 /// </summary>
 public class ControlCaptureTests
 {
@@ -65,16 +66,118 @@ public class ControlCaptureTests
     }
 
     [Fact]
-    public void AMovedAxisAndAHatAreNotCapturedAtAll()
+    public void AnAxisIdlingInsideItsDriftIsNeverCaptured()
     {
         var state = new FakeDevices();
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
 
-        state.Axes[(Seat, (int)JoyAxis.LeftY)] = -1f;
-        state.Hats[(Seat, 0)] = HatDirection.Up;
+        foreach (float drift in new[] { 0.05f, -0.09f, ControlCapture.RestBand - 0.01f })
+        {
+            state.Axes[(Seat, (int)JoyAxis.LeftY)] = drift;
+            Assert.Null(capture.Poll(state));
+        }
+    }
+
+    [Fact]
+    public void AnAxisPastTheRestBandButShortOfTheMoveThresholdIsNotCapturedEither()
+    {
+        var state = new FakeDevices();
+        var capture = new ControlCapture(Seat, readsKeyboard: true);
+        capture.Arm(state);
+
+        state.Axes[(Seat, (int)JoyAxis.LeftY)] = ControlCapture.MoveThreshold - 0.01f;
 
         Assert.Null(capture.Poll(state));
+    }
+
+    [Fact]
+    public void AnAxisMovedDecisivelyIsCapturedWithTheSignItMoved()
+    {
+        var state = new FakeDevices();
+        var capture = new ControlCapture(Seat, readsKeyboard: true);
+        capture.Arm(state);
+
+        state.Axes[(Seat, (int)JoyAxis.LeftY)] = -0.85f;
+        var binding = capture.Poll(state)!.Value;
+
+        Assert.Equal(Seat, binding.Device);
+        Assert.Equal(ControlKind.Axis, binding.Control.Kind);
+        Assert.Equal((int)JoyAxis.LeftY, binding.Control.Index);
+        Assert.Equal(-1, binding.Control.Sign);
+        Assert.Equal(ControlCapture.CapturedDeadzone, binding.Control.Deadzone);
+    }
+
+    [Fact]
+    public void AnAxisDeflectedWhenTheCaptureArmedMustCentreBeforeItCanBeCaptured()
+    {
+        var state = new FakeDevices();
+        state.Axes[(Seat, (int)JoyAxis.LeftX)] = 0.9f;
+        var capture = new ControlCapture(Seat, readsKeyboard: true);
+        capture.Arm(state);
+
+        Assert.Null(capture.Poll(state));
+
+        state.Axes[(Seat, (int)JoyAxis.LeftX)] = 1f;
+        Assert.Null(capture.Poll(state));
+
+        state.Axes[(Seat, (int)JoyAxis.LeftX)] = 0.02f;
+        Assert.Null(capture.Poll(state));
+
+        state.Axes[(Seat, (int)JoyAxis.LeftX)] = 0.9f;
+        Assert.Equal(1, capture.Poll(state)!.Value.Control.Sign);
+    }
+
+    [Fact]
+    public void APressedButtonBeatsAStickAThumbIsRestingOn()
+    {
+        var state = new FakeDevices();
+        var capture = new ControlCapture(Seat, readsKeyboard: true);
+        capture.Arm(state);
+
+        state.Axes[(Seat, (int)JoyAxis.LeftY)] = 1f;
+        state.Buttons.Add((Seat, (int)JoyButton.A));
+
+        Assert.Equal(ControlKind.Button, capture.Poll(state)!.Value.Control.Kind);
+    }
+
+    [Fact]
+    public void ADpadDirectionIsCapturedAsItsButtonAndAHatIsNotCapturedAtAll()
+    {
+        var state = new FakeDevices();
+        var capture = new ControlCapture(Seat, readsKeyboard: true);
+        capture.Arm(state);
+
+        // Godot reports a d-pad as four buttons, so the reported hat is a second encoding of the
+        // same control and binding it would put one direction on two actions (DefaultBindings).
+        state.Hats[(Seat, 0)] = HatDirection.Up;
+        Assert.Null(capture.Poll(state));
+
+        state.Buttons.Add((Seat, (int)JoyButton.DpadUp));
+        var binding = capture.Poll(state)!.Value;
+        Assert.Equal(ControlKind.Button, binding.Control.Kind);
+        Assert.Equal((int)JoyButton.DpadUp, binding.Control.Index);
+    }
+
+    [Fact]
+    public void ACapturedAxisResolvesTheBooleanAnActionDesignedAsAButtonExpects()
+    {
+        var state = new FakeDevices();
+        var capture = new ControlCapture(Seat, readsKeyboard: true);
+        capture.Arm(state);
+        state.Axes[(Seat, (int)JoyAxis.TriggerRight)] = 1f;
+        var captured = capture.Poll(state)!.Value;
+
+        var map = new ActionMap();
+        map.Assign(InputAction.FireGuns, captured);
+        var actions = new PlayerActions(map, readsKeyboard: true);
+
+        actions.Poll(state);
+        Assert.True(actions.Held(InputAction.FireGuns));
+
+        state.Axes[(Seat, (int)JoyAxis.TriggerRight)] = 0f;
+        actions.Poll(state);
+        Assert.False(actions.Held(InputAction.FireGuns));
     }
 
     [Fact]

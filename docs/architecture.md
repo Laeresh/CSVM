@@ -515,7 +515,7 @@ both sit on top of these types.
 - `src/Bindings/DefaultBindings.cs` — the shipped keymap as data, one map per context, reproducing `docs/controls.md`; also the placeholder pad identity a default is authored on.
 - `src/Bindings/BindingProfile.cs` — one seat's whole input: a map and a `PlayerActions` per context, plus the keyboard gate that applies to all of them.
 - `src/Bindings/BindingStore.cs` — the versioned, human-readable JSON keymap file, one per player under `user://`, falling back per action to the shipped default for anything it cannot read.
-- `src/Bindings/ControlCapture.cs` — what a rebinding screen may capture and the release-first scan that turns a press into a binding on the seat's own device identity; no axis and no hat.
+- `src/Bindings/ControlCapture.cs` — what a rebinding screen may capture and the release-first scan that turns a press into a binding on the seat's own device identity; an axis under a rest-then-move rule, and no hat.
 - `src/Bindings/BindingLabels.cs` — what a rebinding screen prints: an action's name, a control's keycap name, and a binding row that counts what it is not showing.
 
 ### Session root and tests
@@ -8236,14 +8236,18 @@ d-pad up). It holds no defaults and no device lookup. Coverage: `CSVM.Tests/Acti
 ## src/Bindings/ControlCapture.cs
 
 What a rebinding screen may capture, and the scan that turns a press into a `Binding`: the bindable
-key list, Godot's whole pad button range, and the mouse buttons past the pointer's own. `Arm` masks
-everything already held so the press that opened the capture is not read as the answer to it, and a
-masked control has to be released first. Every pad control is stamped with the seat's own identity
-rather than a hardware GUID, because a seat reads a set of pads through a placeholder and a real GUID
-beside a placeholder row would be two controls to `ActionMap.SameControl` and one to the player.
-Axes and hats are not scanned: an axis needs a movement rule rather than a threshold, and no hat may
-be authored on this backend. Escape and pad B cancel and are therefore never captured. Coverage:
-`CSVM.Tests/ControlCaptureTests.cs`.
+key list, Godot's whole pad button range, the mouse buttons past the pointer's own, and Godot's SDL
+axis range. `Arm` masks everything already held so the press that opened the capture is not read as
+the answer to it, and a masked control has to be released first. Every pad control is stamped with
+the seat's own identity rather than a hardware GUID, because a seat reads a set of pads through a
+placeholder and a real GUID beside a placeholder row would be two controls to
+`ActionMap.SameControl` and one to the player. An axis carries the release-first rule as a
+rest-then-move rule, since a resting stick drifts and has no release: it is masked until it is seen
+inside `RestBand`, and only then does a travel past `MoveThreshold` capture, with the sign the
+direction moved and a fixed `CapturedDeadzone` rather than the travel the crossing happened to
+report. Hats are not scanned, because a d-pad arrives as four buttons on this backend and a hat
+binding would be a second encoding of a control the defaults already author as a button. Escape and
+pad B cancel and are therefore never captured. Coverage: `CSVM.Tests/ControlCaptureTests.cs`.
 
 ## src/Bindings/BindingLabels.cs
 

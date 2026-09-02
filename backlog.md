@@ -669,6 +669,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   and axes and hats are unbindable. Our binding must be a stable device identity plus a tagged
   control (button, signed axis with deadzone, hat direction) held in a list, not a scancode in a
   typed slot, so the ceiling is not inherited.
+
+- `BL-693` `[Tuning]` `[Owed-playtest]` **The rebinding screen's three axis-capture constants are
+  picked, not measured.** *Evidence:* `ControlCapture.RestBand` **0.25**, `MoveThreshold` **0.6** and
+  `CapturedDeadzone` **0.5** are what decide whether a stick or a trigger a player pushes becomes a
+  binding, and none of them has a decode behind it: the original cannot bind an axis to a command at
+  all (`docs/org/input.md`, `FUN_00537090`'s four typed slots), so there is nothing to match. The
+  ordering is the rule and is deliberate, `RestBand` < `CapturedDeadzone` < `MoveThreshold`: an axis
+  must be seen inside the rest band before a move counts, so drift cannot latch; the move must clear
+  a threshold well past that band, so a sloppy centre cannot either; and the deadzone stamped on the
+  binding sits between the two, because the value a stick crosses is not the value it settles at.
+  *Owed at the controls:* with a real pad, bind a flight action to a stick direction and to a trigger.
+  Does 0.6 feel like a decisive push rather than a nudge, and does 0.25 forgive the stick the pad
+  actually rests at? Then fly the result: at 0.5 the bound half of the stick has to feel like a
+  button, on and off, without a dead patch a player reads as a broken binding.
+  ⚠ A trigger already bound at another deadzone is not a second control: `ActionMap.SameControl`
+  ignores the deadzone on purpose, so capturing the right trigger takes it from both Camera Boost
+  (0.5) and Camera Dolly Out (0) rather than stacking a third reading. Raising or lowering these
+  numbers does not change that, and must not be used to try to.
   *Cross-refs:* `BL-296`, `docs/org/input.md`, `docs/org/targeting.md`, `docs/controls.md`.
 
 - `BL-399` `[Feature]` **Track Target's camera behaviour — `L` is reserved, the camera itself is

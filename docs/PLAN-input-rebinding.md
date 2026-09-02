@@ -186,7 +186,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — the screen
 
 31. ☑ The rebinding screen: capture, assign, steal-from-previous-owner
-32. ☐ Binding an axis or a hat to a digital action
+32. ☑ Binding an axis or a hat to a digital action
 33. ☐ Close `BL-296` and `BL-398`, and hand `BL-357` its keys
 34. ☐ The saved keymap is read at launch, so a flight rebind is felt
 35. ☑ Staged edits and a whole-map reset: Accept, Cancel, Reset to default
@@ -1240,7 +1240,83 @@ while remaining listed.
 (`FUN_00449fc0`), which means its screen *hides* bindings. Ours holds a list, so the screen must
 show all of them or say how many it is not showing.
 
-## D32 ☐ Binding an axis or a hat to a digital action
+## D32 ☑ Binding an axis or a hat to a digital action
+
+**Landed.** `ControlCapture` gains an axis arm and nothing else moved. Three constants, a fourth
+loop over Godot's SDL axis range, and one mask set: `RestBand` 0.25, `MoveThreshold` 0.6,
+`CapturedDeadzone` 0.5, ordered `RestBand` < `CapturedDeadzone` < `MoveThreshold` on purpose. The
+axes are scanned after the keys, the pad buttons and the mouse, so a button press in the same frame
+beats a stick a thumb is resting on.
+
+**The drift rule, which is the release-first mask written for a control that has no release.** A
+button is masked while held and unmasked when it goes up. An axis is masked while it is outside the
+rest band and unmasked only by being seen inside it, which is the one place a mask is dropped. So an
+axis already deflected when the capture armed cannot be captured until it centres, and a stick that
+drifts a few per cent off centre never leaves the band and is therefore never a candidate at all. A
+travel past `MoveThreshold` on an unmasked axis is the player's answer, with the sign taken from the
+direction moved.
+
+**The deadzone stamped on the binding is a constant, not the travel the capture saw.** A crossing is
+a moment in a movement and the value it reports depends on how hard the player shoved, so binding
+the observed travel would give two players two different keymaps for the same gesture. The stored
+number is `CapturedDeadzone`, which sits below the movement threshold, so the control the player
+just bound fires on a smaller push than the one that bound it.
+
+**D31's "no change to `ControlsFeature`" claim held, and was checked rather than assumed.**
+`ControlsFeature` contains no `ControlKind` at all: it takes a `Binding` from `ControlCapture.Poll`
+and hands it to `Offer`, and every downstream step (`SameControl`, the steal, the staged commit,
+`BindingLabels.Describe`, `BindingStore`'s `axis:` token) was already written for all five kinds by
+A1, C21 and D31. The item is one file plus its tests.
+
+**Hats stay out, and the alias stays closed from both ends.** Godot reports no raw hat, so a d-pad
+direction arrives at `ControlCapture` as `JoyButton.DpadUp` and is captured as the `Button` C21's
+defaults already author. Making hats capturable would have produced the second encoding C21 and D31
+closed off, for no control a player cannot already reach.
+
+**The double-bound trigger behaves, and here is what it does.** `SameControl` ignores the deadzone,
+so a captured `TriggerRight+` at 0.5 is the same control as B15's boost binding at 0.5 and its dolly
+binding at 0. The screen names both owners, moves nothing, and takes it from both on confirm. It
+does not stack a third reading of one trigger, which is the property A2's deadzone-blind comparison
+exists to give.
+
+**Thresholds are TUNE and are recorded as such.** `BL-693` carries all three constants, the ordering
+rule, what to judge at the controls, and the warning that the deadzone alias is not something these
+numbers can be tuned around. The original cannot bind an axis to a command at all, so there is
+nothing to decode and nothing to match.
+
+**Verified.** `CSVM.Tests/ControlCaptureTests.cs`, 14 facts (7 new, replacing the one that asserted
+an axis captures nothing): an axis idling anywhere inside its drift captures nothing, an axis past
+the rest band but short of the movement threshold captures nothing either, a decisive move captures
+the right axis with the sign it moved and the constant deadzone, an axis deflected when the capture
+armed has to centre before it can be captured, a button beats a resting stick in one frame, a d-pad
+direction captures as its button while a reported hat captures nothing, and a captured axis bound to
+an action designed as a button resolves the boolean that action expects through `PlayerActions`.
+`CSVM.Tests/ControlsFeatureTests.cs` gains one and now holds 25: a captured right trigger names both
+Camera Boost and Camera Dolly Out whatever deadzone each holds, and the confirm empties the dolly
+while leaving boost its key. `ActionMapTests` is unchanged at 22.
+
+Run the three with
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~ControlsFeatureTests|FullyQualifiedName~ControlCaptureTests|FullyQualifiedName~ActionMapTests" -SkipEngine -SkipGoldens`.
+
+Complete `.\RunTests.ps1` in the item's worktree: PASS, exit 0, 3356 units, 233 engine suites, 18
+goldens hash-identical, 0 build warnings (204.0s total against a 180.0s budget; the engine stage
+124.9s against 100.0s and the goldens 54.2s against 50.0s, which is awareness only).
+
+⚠ **What the automated evidence cannot reach, and is owed at the controls.** No suite moves a
+physical stick: `--det` implies `--no-pads` and every scripted run is unattended (`DET-2`, `DET-6`,
+`INSTR-14`). The suites drive a fake `IDeviceState`, which proves the rule and not the feel. **The
+author's judgement, not the implementer's:**
+
+1. With a pad connected, open Controls and bind a flight action to a stick direction. Does 0.6 read
+   as a decisive push rather than a nudge, and does 0.25 forgive the centre your pad actually rests
+   at?
+2. Bind another to a trigger, then fly it. At 0.5 the bound half has to feel like a button, on and
+   off, with no dead patch that reads as a broken binding.
+3. Push a stick, hold it, and open a capture while it is still over. It must refuse until you let go
+   and centre, which is the drift rule doing its job and could read as an unresponsive screen.
+4. Press a d-pad direction into a capture and confirm the row prints the pad button, not a hat.
+
+**Original approach (kept for reference).**
 
 **Goal.** A player can bind a trigger or a stick direction to an action that was designed as a
 button, and it works.
@@ -1255,7 +1331,11 @@ sign taken from the direction moved. Defaults for deadzone and the digital thres
 
 **Model recommendation.** medium.
 
-**Verify.** <TODO: manual, at the controls.>
+**Verify.** Facts in `ControlCaptureTests`'s shape over a fake `IDeviceState`, each asserting a
+specific resolution: a resting axis captures nothing, a moved axis captures with the right sign, an
+axis released and re-moved behaves, a d-pad direction captures as a button, and a captured axis on
+an action resolves to the boolean the action expects. Then the complete `.\RunTests.ps1`. The feel
+of the movement threshold at a real stick is the author's and is listed above.
 
 **⚠ Traps.** ⚠ A resting stick drifts. Capture must not latch the first axis it sees at rest, which
 is the standard failure of this feature.
