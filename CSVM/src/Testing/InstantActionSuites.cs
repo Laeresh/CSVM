@@ -1033,6 +1033,88 @@ internal static class InstantActionSuites
         }
     }
 
+    // BL-426: InstantActionDirector.BuildStuntSummary over real StuntMission runs and a real
+    // ScoreStore, pointed at a throwaway file under ctx.ScratchDir rather than the player's own
+    // user://stunt_scores.json (the hard rule the fixture must not cross). C1/IA1 supplies real
+    // Danger Zones; DebugCompleteAll drives AllComplete the same way --debug-scoreboard does.
+    [Suite("instant-action-stunt-summary",
+        "BL-426's per-pilot record gate over a real ScoreStore: an incomplete run's summary " +
+        "shows the stored best and claims no new one, and its elapsed total, shorter than that " +
+        "stored best, never overwrites it (the store file is byte-identical before and after); " +
+        "a completed run records and the reload confirms it; and the split splitscreen end — " +
+        "one pilot's own run complete, the other's not — is decided from each pilot's own " +
+        "StuntMission alone, never a shared mission outcome")]
+    internal static void InstantActionStuntSummary(TestContext ctx)
+    {
+        string chapter = "C1", mission = "IA1";
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
+        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+
+        var gamez = GameZ.Load(gamezPath);
+        var messages = Messages.Load(ctx.MessagesPath);
+        StuntMission Fresh() => StuntMission.Load(gamez, missionZrdr, messages)
+            ?? throw new SuiteSkippedException($"{chapter}/{mission} ships no Danger Zones");
+
+        string storePath = Path.Combine(ctx.ScratchDir, "StuntSummary", "stunt_scores.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(storePath)!);
+        if (File.Exists(storePath))
+        {
+            File.Delete(storePath);
+        }
+        const string key = "instant-action-stunt-summary/IA1/player_test";
+
+        // A failed run: no best on file yet, so none is claimed, and nothing is written.
+        var failed = Fresh();
+        failed.Tick(3f);
+        var store = ScoreStore.Load(storePath);
+        var lostSummary = InstantActionDirector.BuildStuntSummary(failed, store, key);
+        ctx.Check(lostSummary.PrevBest == null && !lostSummary.NewBest,
+            $"a lost run over an empty store shows no best and claims none: prev={lostSummary.PrevBest} new={lostSummary.NewBest}");
+        ctx.Check(!File.Exists(storePath),
+            $"…and the store file is not created by a run that never qualified");
+
+        // A completed run: records, and a fresh Load() proves it persisted.
+        var completed = Fresh();
+        completed.DebugCompleteAll();
+        float bestTotal = completed.Elapsed;
+        store = ScoreStore.Load(storePath);
+        var wonSummary = InstantActionDirector.BuildStuntSummary(completed, store, key);
+        ctx.Check(wonSummary.PrevBest == null && wonSummary.NewBest,
+            $"a completed run over an empty store claims NEW BEST: prev={wonSummary.PrevBest} new={wonSummary.NewBest}");
+        ctx.Check(ScoreStore.Load(storePath).GetBest(key) == bestTotal,
+            $"…and a reload finds it recorded: {ScoreStore.Load(storePath).GetBest(key)}");
+
+        // A second, faster run that FAILS must not beat the real record it undercuts only by
+        // ending early — the bug this item closes. Byte-compare the file to prove no write ran.
+        byte[] before = File.ReadAllBytes(storePath);
+        var fasterButLost = Fresh();
+        fasterButLost.Tick(1f);
+        ctx.Check(fasterButLost.Elapsed < bestTotal,
+            $"the fixture's failed run is the shorter total: {fasterButLost.Elapsed} < {bestTotal}");
+        store = ScoreStore.Load(storePath);
+        var undercutSummary = InstantActionDirector.BuildStuntSummary(fasterButLost, store, key);
+        ctx.Check(undercutSummary.PrevBest == bestTotal && !undercutSummary.NewBest,
+            $"a shorter but INCOMPLETE run still shows the real best and claims none: prev={undercutSummary.PrevBest} new={undercutSummary.NewBest}");
+        ctx.Check(before.SequenceEqual(File.ReadAllBytes(storePath)),
+            $"…and the store file is byte-identical afterwards — the early end never wrote");
+
+        // The split splitscreen end: each pilot's own StuntMission decides its own summary: P1
+        // complete records even though P2, sharing nothing but the mission clock, is not.
+        var p1 = Fresh();
+        p1.DebugCompleteAll();
+        var p2 = Fresh();
+        p2.Tick(2f); // still flying/short when the mission ends on P1's side
+        store = ScoreStore.Load(storePath);
+        var p1Summary = InstantActionDirector.BuildStuntSummary(p1, store, key + "/p1");
+        var p2Summary = InstantActionDirector.BuildStuntSummary(p2, store, key + "/p2");
+        ctx.Check(p1Summary.NewBest && !p2Summary.NewBest,
+            $"a splitscreen end records the pilot whose OWN run completed and not the other: p1 new={p1Summary.NewBest} p2 new={p2Summary.NewBest}");
+    }
+
     // The inert state: an aircraft built complete and held out until Activate.
     // ⚠ Compare a live control, inert aircraft, and that aircraft activated with real physics, targeting,
     // shots, and simulation; absence alone can pass for the wrong reason (METHOD-9/METHOD-10).

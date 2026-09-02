@@ -3256,6 +3256,46 @@ method as well, so for an AI the boost animation and the loop outlive the maneuv
 of the per-frame release calls that follow it, and the loop is otherwise a 0.1 s blip at the
 engage. A re-engage is refused for as long as the boost or decay animation is alive.
 
+**The boost animation is anchored per vehicle, and that is why the disc swap never showed on a
+flyable airframe.** The play at `0x4b21a0` is `FUN_004edda0(def [+0x280], [obj+0xc], 0, 0, 0)`: the
+def slot and the vehicle's OWN scene node, which is the only scope the instance is ever given (the
+AI shake at `0x4b21b2` hands `FUN_00473430` the same `[obj+0xc]`). The call reaches the
+instantiation through `FUN_004edc50`, then `FUN_004ed8c0`, which clones the definition
+(`FUN_00520910`) and binds the clone to that node (`FUN_00521180`). Three separate rules decide
+what a name reaches, and none of them is a global search over the world for this class of def:
+
+- **The def's own anchor NAME is resolved once at load, not per play.** The loader calls
+  `FUN_004efaf0` at `0x51e15a` and stores the result at `def+0x6c`. When the NAME resolves nothing
+  it warns (`zeff_anim.cpp:0x2ec6`) and sets `def+0x6c = def+0x48`, the definition's own root, then
+  copies the definition's own name over the anchor name (`0x51e16d`–`0x51e1b2`).
+- **A clone anchors on the node the caller passed whenever the template's anchor IS its root.**
+  `FUN_00520910` compares the template's `+0x6c` against its `+0x48` (`0x520a2e`): equal takes the
+  caller's node directly and adopts its name; otherwise it searches THAT node's subtree for the
+  authored NAME with `FUN_004efa70` (`0x520a5a`), and a miss kills the instance outright (state 5,
+  `zeff_anim.cpp:0x33be`). `FUN_00521180` applies the same rule on a re-bind (`0x52122e`,
+  `zeff_anim.cpp:0x3524`). `FUN_004efa70` is a recursive depth-first name compare over one subtree
+  (the node's name at offset 0, children counted at `+0x56` and listed at `+0x5c`) and has no
+  global tier at all.
+- **A per-event target name walks a five-tier cascade whose last tier is gated by the data.**
+  `FUN_004efaf0` tries the anchor subtree (`+0x6c`), then the instance's bound node subtree
+  (`+0x48`) when the two differ, then two instance-local tables (`FUN_004ee7e0` over `+0xec`,
+  `FUN_004ee770` over `+0xf4`), and only when its third argument is zero the global by-name lookup
+  `FUN_004d0280(7, name)` over the class-7 object registry. That argument is the
+  `LOCAL_NODES_ONLY` bit: the token sets `0x200000` in the definition's flag word `+0x9c` at
+  `0x51f0ec`, and `0x51e14b`–`0x51e157` shifts it down by 21 and pushes it.
+
+`nitro_boost` and `nitro_decay` are authored `LOCAL_NODES_ONLY`, so their global tier is closed and
+every name they touch must lie inside the flown vehicle's own subtree. No flyable `player_*`
+airframe carries a `nitropropN` node, so the authored disc swap (`OBJECT_ACTIVE_STATE` and
+`OBJECT_OPACITY_FROM_TO` on `nitropropN`, the `spin_nitrorotorN` motions, `snd_nitrostart AT_NODE
+nitroprop1`) reached nothing on a flown aircraft in the original either; the discs sit on the
+separate bare-named library root, which no per-vehicle resolution can see. What a flown airframe's
+own nodes do carry is the rest of the definition, and that is what an engage shows: the
+`nitropuffN` exhaust puffers at `exhaust1..4` and the `prop1..3` opacity fade, each authored to run
+for one second (every `PUFFER_STATE … ACTIVE` is paired with its own `INACTIVE` at
+`ANIMATION_OFFSET 1`, alongside the 1.0 s ramps and the 1.0 s minimum animation life at
+`def+0x188`).
+
 **Eligibility is the injector flag `[obj+0x946]`, set from the engine choice.** The player's
 comes from the hangar pick: engine ids 3–5 (the "… nitro" variants, `docs/org/hangar.md`) set it
 at `0x47d4f0` in `FUN_0047c210`, the wingman/MP mirror at `0x47e8d4`, and the debug console's
@@ -3286,7 +3326,12 @@ in percent; it is a debug readout, not a shipped HUD element.
 
 **What CSVM implements.** `Flight/NitroSystem.cs` is the state machine above, engine-free:
 tank, burn, recharge, the 99 % arm, the 5 % cutoff, the engine-out refusal and the boost-animation
-edges. The plan's Decision 3 widens the player-only arms (the human command path, the shake) to
+edges. ⚠ The original has no edges: the play, the player shake and the force-feedback effect all
+run inside `SetNitro` itself, so CSVM's `EngagedThisTick`/`ReleasedThisTick` stand in for that one
+call and must survive from the arm that raises them to the reader at the end of the same step.
+`NitroSystem.BeginStep` is where they are cleared, at the top of `FlightController.AdvanceNitro`
+and nowhere later; clearing them in the tank update deletes the engage, which costs the boost its
+animation, its shake and its loop sound while the aircraft still accelerates. The plan's Decision 3 widens the player-only arms (the human command path, the shake) to
 every human pilot. The force couplings are `FlightModel.BoostLever` 1.8 and `BoostDragFactor` 0.8,
 reached through `FlightInput.Boost`; the far-field cruise target reads the lever, not the boost,
 so a distant AI's `nitro_evade` changes nothing there, which is the decode

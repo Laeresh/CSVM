@@ -41,6 +41,18 @@ public sealed class SceneBuilder
     /// it is never spelled as that string (see <see cref="CollidersForMesh"/>).</summary>
     public const string SurfaceIdMeta = "csky_surface_id";
 
+    /// <summary>Meta key a mission-structure node carries when the mission being built is one it
+    /// authors an owner for: an <c>int</c>, that owner's team
+    /// (<see cref="GameZNode.MissionStructureTeam"/>). A flagged node authoring no owner for this
+    /// mission carries none, since an unowned object is nobody's target either way. Read by
+    /// <see cref="DestructibleRegistry.Register"/>.</summary>
+    public const string MissionStructureTeamMeta = "csky_mstruct_team";
+
+    /// <summary>Meta key every flagged mission-structure node that is a gasbag carries: a
+    /// <c>bool</c>, always true where present. A turret's candidate pass drops these; the player's
+    /// own selection keeps them.</summary>
+    public const string MissionStructureGasbagMeta = "csky_mstruct_gasbag";
+
     public const string OpacityParam = "csky_opacity";
 
     /// <summary>Instance shader parameter behind <see cref="TintLine"/>: rgb is the colour, alpha
@@ -101,6 +113,13 @@ public sealed class SceneBuilder
     /// <summary>Where a material's own texture flipbook (the gamez `cycle` block) is delivered.
     /// Set by the caller before building; null leaves cycling materials static.</summary>
     public TextureCycler? Cycler;
+
+    /// <summary>Which mission of the chapter is being built, 1-based
+    /// (<see cref="GameZ.MissionSlotOf"/>). A mission-structure node authors one owner per mission,
+    /// so this decides which of its slots the build reads. Set by the caller before building; the
+    /// default reads the first mission's slot, which every shipped structure authors the same as
+    /// all its others.</summary>
+    public int MissionSlot = 1;
 
     // Shared shader source lives in res://shaders/*.gdshaderinc, pulled in by Godot's shader
     // preprocessor, which resolves #include in a Shader whose Code is assigned at runtime from C#.
@@ -720,6 +739,21 @@ void fragment() {
         // binds them unambiguously where names do not: names are duplicated and carry a '.flt'
         // suffix inconsistently. See AnimRuntime.
         n3d.SetMeta(AnimRuntime.IndexMeta, node.Index);
+        // The mission-structure flag and team travel with the built node because the destructible
+        // registry meets a pool as a Node3D and has no gamez node to ask. Resolved here because
+        // this is where the mission being built is known, and the ownership slot is per mission.
+        if (node.IsMissionStructure)
+        {
+            if (_gamez.WorldObjectTeam(node, MissionSlot) is var team && team != 0)
+            {
+                n3d.SetMeta(MissionStructureTeamMeta, team);
+            }
+
+            if (node.IsGasbagStructure)
+            {
+                n3d.SetMeta(MissionStructureGasbagMeta, true);
+            }
+        }
         // Root transform is the node's OWN Local, not its world transform — a caller slicing a
         // nested node must overwrite it with GameZ.WorldTransformOf(node) or it lands at the
         // parent's origin.

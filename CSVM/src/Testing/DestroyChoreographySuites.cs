@@ -881,6 +881,123 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // The same engage on the rig a SESSION builds, which is a different rig: the production factory
+    // stages the effect templates and the wreck under a crash root, pre-warms every puffer before
+    // anything plays, and the edge arrives through the flight step rather than a direct Play. A
+    // replica rig cannot see a defect that only the staged neighbours or the pre-warm can cause,
+    // which is why this arm exists beside the one above.
+    [Suite("nitro-boost-flown-rig",
+        "a nitro engage on the rig WorldEffectsFactory builds for a session, reached through FlightController's own step with the command held: the boost engages, nitro_boost anchors on the flown airframe rather than a staged neighbour, and its nitropuffN exhaust puffers are emitting on the aircraft's own exhaust nodes")]
+    internal static void NitroBoostFlownRig(TestContext ctx)
+    {
+        const string model = "player_warhawk";
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            FlightController? player = null;
+            try
+            {
+                var factory = new Session.WorldEffectsFactory(
+                    SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
+                var spawn = new Vector3(0f, 500f, 0f);
+                var stats = PlaneStats.Load(ctx.ZrdrPath, model);
+                var builder = new PlaneBuilder(planesGamez, textures);
+                var planeModel = builder.Build(model);
+                player = new FlightController
+                {
+                    PlaneModel = planeModel,
+                    Collider = PlaneCollider.Build(planeModel),
+                    PlayerIndex = 0,
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                    Damage = PlaneDamage.For(stats),
+                };
+                player.AddChild(planeModel);
+                player.Setup(new FlightModel(stats), null, new CamParams(), spawn, spawn + Vector3.Forward);
+                ctx.Host.AddChild(player);
+                factory.BuildFlightCrashRuntime(player, builder, model, world.Gamez,
+                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                    planesGamez: planesGamez);
+                if (player.CrashRuntime is not { } rig)
+                {
+                    ctx.Check(false, $"{model}: the session rig built a crash runtime");
+                    return;
+                }
+                rig.ManualAdvance = true;
+
+                // The injector is the hangar pick's bit; without it the command arm refuses and the
+                // engage edge this suite is about never exists.
+                const float Dt = 1f / 60f;
+                player.Nitro.Installed = true;
+                player.AutoNitro = true;
+                int engagedAt = -1, firstEmit = -1, lastEmit = -1;
+                string midCensus = "none";
+                bool onOwnExhaust = false;
+                const int Frames = 180;
+                for (int i = 0; i < Frames; i++)
+                {
+                    player.SimStep(Dt);
+                    if (player.Nitro.EngagedThisTick && engagedAt < 0)
+                        engagedAt = i;
+                    rig.Advance(Dt);
+                    var rows = rig.Emitters.Census
+                        .Where(r => r.Name.StartsWith("nitropuff", System.StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                    if (rows.Any(r => r.Emitting))
+                    {
+                        if (firstEmit < 0)
+                            firstEmit = i;
+                        lastEmit = i;
+                    }
+                    if (i == 30)
+                    {
+                        midCensus = rows.Count == 0 ? "none" : string.Join(", ",
+                            rows.Select(r => $"{r.Name}@{r.Host} emitting={r.Emitting} live={r.LiveParticles}"));
+                        onOwnExhaust = rows.Any(r => r.Emitting && r.HostNode != null
+                                                     && planeModel.IsAncestorOf(r.HostNode));
+                    }
+                }
+                ctx.Note($"engaged at frame {engagedAt}, exhaust puffers emitting frames {firstEmit}..{lastEmit} of {Frames}; at frame 30 [{midCensus}]");
+
+                ctx.Check(player.Nitro.Boosting && player.Nitro.BoostAnimAlive,
+                    $"{model}: the held command engaged the boost through the flight step boosting={player.Nitro.Boosting} animAlive={player.Nitro.BoostAnimAlive}");
+                // The edge, not the flag: the boost animation, the shake and the loop sound all hang
+                // off this one read, and a step that clears it before the read cancels all three
+                // while the boost itself still accelerates the aircraft.
+                ctx.Check(engagedAt == 0,
+                    $"{model}: the engage EDGE reached the step's own reader on the engaging frame engagedAt={engagedAt}");
+
+                // Where the def landed. Its authored NAME resolves nothing on an airframe, so the
+                // anchor must be the plane model the call site passes; a staged template root
+                // answering that name instead would put the whole sequence on a neighbour.
+                var anchors = rig.AnchorsOf(world.Session.Program.ByAnimName("nitro_boost")[0]);
+                string anchorNames = anchors.Count == 0 ? "-"
+                    : string.Join(",", anchors.Select(a => a == null ? "null" : AnimRuntime.NameOf(a)));
+                ctx.Check(anchors.Count == 0,
+                    $"{model}: nitro_boost's NAME resolves nothing in the session rig, so the call site's plane model is its anchor [{anchorNames}]");
+
+                ctx.Check(firstEmit == 0,
+                    $"{model}: the exhaust puffers start emitting on the engage frame firstEmit={firstEmit}");
+                ctx.Check(onOwnExhaust,
+                    $"{model}: …on the aircraft's own exhaust nodes, not a staged neighbour's [{midCensus}]");
+                // The burst is one second long because the def says so: each PUFFER_STATE 1 is paired
+                // with its own INACTIVE at ANIMATION_OFFSET 1, alongside the 1.0 s opacity ramps. A
+                // burst that outlives that is a stop this runtime dropped, not a longer boost.
+                ctx.Check(lastEmit is >= 55 and <= 65,
+                    $"{model}: …and stop at the def's own ANIMATION_OFFSET 1 stop, one second in lastEmit={lastEmit}");
+            }
+            finally
+            {
+                player?.Free();
+                textures.Dispose();
+            }
+        });
+    }
+
     // The pre-warm's contract on a replica rig: after Bind and PrewarmEmitters nothing emits, a
     // crash and a panel tear reach the factory for no emitter, the claims count as built, and
     // respawn keeps the emitters so the next crash builds nothing either.
@@ -1026,6 +1143,120 @@ internal static class DestroyChoreographySuites
             }
         }
         return n;
+    }
+
+    // ---- a mid-flight AI introduction owes its crash rig, and pays it later -----------------
+
+    // The deferral's two halves, checked on the production spawn path rather than on a replica rig:
+    // the launch frame leaves the rig unbuilt, and the rig arrives complete however the caller gets
+    // there. ⚠ Read CrashRigPending before anything else on a deferred aeroplane: CrashRuntime,
+    // CrashAnchor and CrashDefs all force the build, which is the point of them.
+    [Suite("ai-crash-rig-deferral",
+        "a mid-flight AI introduction leaves its crash rig armed rather than built, the roster's pump takes more than one frame to finish it, and the finished rig is the same one an undeferred build makes — while a second aeroplane that is hit before the pump reaches it builds its rig on the damage intake instead (BL-641)")]
+    internal static void AiCrashRigDeferral(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            ProjectilePool? pool = null;
+            FlightController? pumped = null;
+            FlightController? forced = null;
+            try
+            {
+                var live = new ProjectilePool(textures, null, null);
+                pool = live;
+                ctx.Host.AddChild(live);
+                var spec = SessionSpec.Parse(System.Array.Empty<string>());
+                var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+                var factory = new Session.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
+                var inputs = new AircraftAssemblyResources
+                {
+                    PlanesGamez = planesGamez,
+                    StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                    PaintRng = new RandomNumberGenerator(),
+                    ZrdrPath = ctx.ZrdrPath,
+                    StockLoadouts = StockLoadouts.Load(),
+                    WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                    Textures = textures,
+                    Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                };
+                var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, factory,
+                    ctx.Host, inputs,
+                    new FlightWorldBindings
+                    {
+                        Projectiles = live,
+                        Gamez = world.Gamez,
+                        WorldScene = world.Session.Builder.Scene,
+                        CrashProgram = world.Session.Program,
+                    },
+                    new HumanRosterBindings());
+
+                // The first pump is what puts the roster into deferring, so this stands in for the
+                // session's first frame: an aeroplane introduced BEFORE it gets its rig in place.
+                spawner.PumpDeferredCrashRigs();
+
+                var at = new Vector3(0f, 500f, 0f);
+                pumped = spawner.SpawnAi(new AiSpawn(ctx.PlaneName, at, at + Vector3.Forward,
+                    AiPilot.HoldingCourse(at, at + Vector3.Forward)));
+                ctx.Check(pumped.CrashRigPending && spawner.PendingCrashRigs == 1,
+                    $"the launch frame left the rig armed rather than built pending={pumped.CrashRigPending} queued={spawner.PendingCrashRigs}");
+                ctx.Check(pumped.IsInsideTree() && pumped.PlaneModel is { },
+                    $"…and the aeroplane is already in the world with its model, which is what the launch frame is for");
+
+                // The spread itself. One pump a frame, so a rig that finished in one call would be
+                // no deferral at all: the count is the claim.
+                int pumps = 0;
+                while (spawner.PendingCrashRigs > 0 && pumps < 200)
+                {
+                    spawner.PumpDeferredCrashRigs();
+                    pumps++;
+                }
+                ctx.Check(pumps > 1 && spawner.PendingCrashRigs == 0,
+                    $"the pump finished the rig over {pumps} frames, none of them the launch frame");
+                ctx.Check(!pumped.CrashRigPending && pumped.CrashRuntime != null
+                          && pumped.CrashDefs != null && pumped.CrashAnchor != null,
+                    $"the pumped rig is whole: runtime={pumped.CrashRuntime != null} defs={pumped.CrashDefs != null} anchor={pumped.CrashAnchor != null}");
+                ctx.Check(pumped.Visuals is { DamageEffectSink: not null },
+                    $"…including the damage-stage wiring the rig's second phase owns");
+
+                // The forcing arm: an aeroplane hit while its rig is still queued builds it on the
+                // intake, so no round can land on a plane whose wreck does not exist yet.
+                var second = at + new Vector3(3000f, 0f, 0f);
+                forced = spawner.SpawnAi(new AiSpawn(ctx.PlaneName, second, second + Vector3.Forward,
+                    AiPilot.HoldingCourse(second, second + Vector3.Forward)));
+                ctx.Check(forced.CrashRigPending,
+                    $"the second aeroplane's rig is queued too pending={forced.CrashRigPending}");
+                forced.TakeCollisionHit(0f, 0f, forced.GlobalPosition, 0);
+                ctx.Check(!forced.CrashRigPending && spawner.PendingCrashRigs == 0,
+                    $"the damage intake built it before spending anything queued={spawner.PendingCrashRigs}");
+
+                // Same rig either way. The pool subtree is the part the step split touches, so its
+                // shape is what a spread build could have got wrong.
+                int pumpedPools = CountPools(pumped.CrashAnchor);
+                int forcedPools = CountPools(forced.CrashAnchor);
+                ctx.Same(pumpedPools, forcedPools,
+                    $"the pumped rig staged the same pool slots as the forced one ({pumpedPools})");
+                ctx.Check(pumpedPools > 0 && pumped.DestroyDef == forced.DestroyDef,
+                    $"…and both took the same death slot '{pumped.DestroyDef ?? "-"}' over {pumpedPools} pool(s)");
+            }
+            finally
+            {
+                // ⚠ Both aeroplanes go, not just the pool. Suites share one host node, and an
+                // aircraft left under it takes a name a later suite's own spawn wants, which Godot
+                // then renames out from under that suite's identity checks.
+                pumped?.Free();
+                forced?.Free();
+                if (pool != null)
+                {
+                    ctx.Host.RemoveChild(pool);
+                    pool.QueueFree();
+                }
+            }
+        });
     }
 
     // ---- an AI plane's crash picks from the ai_crash_* vector ----------------------------
@@ -1591,6 +1822,10 @@ internal static class DestroyChoreographySuites
                 return;
             }
 
+            // ⚠ Force the rig before taking its death slot away. A mid-flight introduction returns
+            // with the rig still armed, and the build writes DestroyDef itself, so a null written
+            // ahead of it would be put straight back.
+            ai.EnsureCrashRig();
             ai.DestroyDef = null;
             var posAtKill = ai.WorldPosition;
             float overkill = (damage.WholeHealthMax + damage.WholeArmorMax) * 4f;
@@ -1903,5 +2138,26 @@ internal static class DestroyChoreographySuites
         }
 
         return null;
+    }
+
+    // The rig's `poolN` containers, the one part of the stage the per-slot step split builds one at
+    // a time.
+    private static int CountPools(Node3D? crashRoot)
+    {
+        if (crashRoot == null)
+        {
+            return 0;
+        }
+
+        int pools = 0;
+        foreach (var child in crashRoot.GetChildren())
+        {
+            if (child is Node3D node && node.Name.ToString().StartsWith("pool", System.StringComparison.Ordinal))
+            {
+                pools++;
+            }
+        }
+
+        return pools;
     }
 }

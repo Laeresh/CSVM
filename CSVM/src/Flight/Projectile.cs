@@ -454,6 +454,17 @@ public sealed partial class ProjectilePool : Node3D
     /// session (the weapon bench, suite labs), where the third-person light is the answer.</summary>
     public Func<bool>? FirstPersonView { get; set; }
 
+    /// <summary>The session's surface hulls, so <see cref="CollectVehicleList"/> can offer the
+    /// whole of the engine's <c>VehicleList</c> rather than its aircraft half. Null in every build
+    /// with no hulls (the weapon lab, the suite labs, a bare stage), where the vehicle list is the
+    /// aircraft roster and nothing else.</summary>
+    public Session.SurfaceVehicleRuntime? SurfaceVehicles { get; set; }
+
+    /// <summary>The session's destructibles, CSVM's stand-in for the engine's mission-structure
+    /// pool, so a scan that wants that pool asks here rather than carrying its own reference.
+    /// Null in a build with no world (the weapon lab, the suite labs).</summary>
+    public Mech3.DestructibleRegistry? Structures { get; set; }
+
     /// <summary>The aircraft each round's swept step is measured against for the near-miss cue
     /// one per flight rig. Empty in every build that has no player aircraft (the weapon
     /// lab, the dump probes), which costs the scan nothing.</summary>
@@ -770,6 +781,29 @@ public sealed partial class ProjectilePool : Node3D
         {
             var rig = body.Rig;
             into.AddVehicle(rig.WorldPosition, rig.WorldVelocity, rig.Team, rig.InPlay, rig);
+        }
+    }
+
+    /// <summary>Appends the whole of the engine's first candidate pool: the aircraft roster and,
+    /// where a session has one, its surface hulls. The engine keeps one <c>VehicleList</c> holding
+    /// "aircraft and AI ground/sea vehicles" (docs/org/aim-assist.md "The four lists") and its
+    /// shared target picker walks that one list, so a scan that wants the pool rather than the
+    /// aircraft half asks here and cannot drift from the half the player's own scan reads.</summary>
+    public void CollectVehicleList(AimCandidateSet into)
+    {
+        CollectAircraft(into);
+        SurfaceVehicles?.CollectVehicles(into);
+    }
+
+    /// <summary>Appends the engine's third candidate pool, the mission structures, where the
+    /// session has any. The pool is offered whole and the team gate on the far side decides: a
+    /// structure the data leaves unowned is neutral and nobody's target, exactly as it reaches the
+    /// player's own scan (docs/org/targeting.md "What a turret's candidate set holds").</summary>
+    public void CollectMissionStructures(AimCandidateSet into)
+    {
+        if (Structures != null)
+        {
+            into.AddStructures(Structures);
         }
     }
 

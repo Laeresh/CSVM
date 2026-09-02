@@ -50,6 +50,14 @@ public sealed class DestructibleRegistry
 
     public IReadOnlyList<Instance> All => _all;
 
+    /// <summary>The team a node carries as a mission structure, or null where it is not one. The
+    /// scene build stamps only the flagged nodes, so the meta's presence is the flag itself
+    /// (docs/org/targeting.md, "What a mission structure's team is").</summary>
+    public static int? MissionStructureTeamOf(Node3D node) =>
+        node.HasMeta(SceneBuilder.MissionStructureTeamMeta)
+            ? node.GetMeta(SceneBuilder.MissionStructureTeamMeta).AsInt32()
+            : null;
+
     /// <summary>Registers one destructible node group at full health. Idempotent: a repeated
     /// <c>(def, anchor)</c> returns the existing instance without resetting its HP, so a second
     /// bootstrap pass or a re-index cannot silently heal a damaged object.
@@ -69,6 +77,15 @@ public sealed class DestructibleRegistry
         // claim: a def usually roots on a node its death then hides, and a hit on the wreck must
         // still find the pool that owns it rather than falling through as scenery.
         var own = damageNode ?? anchor;
+        // A pool standing on a mission-structure node is that structure, and carries the team the
+        // scene data gives it rather than staying neutral scenery. A zeppelin record's own team is
+        // written later and wins, which is the order the original fans it in.
+        if (MissionStructureTeamOf(own) is { } teamed)
+        {
+            inst.Team = teamed;
+            inst.Gasbag = own.HasMeta(SceneBuilder.MissionStructureGasbagMeta);
+        }
+
         Claim(own.GetInstanceId(), inst, ownRoot: true);
         if (!ReferenceEquals(own, anchor))
         {
@@ -174,12 +191,17 @@ public sealed class DestructibleRegistry
         public float Health { get; set; }
         public State Status { get; set; } = State.Healthy;
 
-        /// <summary>The owning side, where the mission data names one, or null where nothing does.
-        /// Only a zeppelin record authors one today (docs/org/targeting.md "The team space"); a null
-        /// reaches the candidate builder as neutral, so the object is nobody's target.
-        /// ⚠ Never write a literal here for an unauthored object. Doing so is what made every
-        /// crate and every gasbag hostile to all comers.</summary>
+        /// <summary>The owning side, where the data names one, or null where nothing does. Two
+        /// sources author one: a zeppelin record, and a pool standing on a mission-structure node,
+        /// whose team comes off that node (docs/org/targeting.md "The team space"). A null reaches
+        /// the candidate builder as neutral, so the object is nobody's target.
+        /// ⚠ Never write a literal here for an object the data leaves unowned. Doing so is what
+        /// made every crate and every gasbag hostile to all comers.</summary>
         public int? Team { get; set; }
+
+        /// <summary>Whether the mission-structure node this pool stands on is a gasbag. A turret's
+        /// candidate pass drops these; every other channel keeps them.</summary>
+        public bool Gasbag { get; set; }
 
         /// <summary>Out of play: the pool exists, but its object is not in the world yet — a
         /// mission's <c>deactivated</c> zeppelin before its script wakes it. Refused as a target

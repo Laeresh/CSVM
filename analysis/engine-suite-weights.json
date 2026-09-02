@@ -39,6 +39,7 @@
     "instant-action": 2.221,
     "instant-action-zeppelin": 4.499,
     "instant-action-end": 5.029,
+    "instant-action-stunt-summary": 0.68,
     "instant-action-wrapup": 0.606,
     "results-board-shell": 0.051,
     "flight-roster-transaction": 2.721,
@@ -49,6 +50,8 @@
     "c1-aa-guns": 4.2,
     "mission-off-turrets": 2.81,
     "carried-turrets": 0.646,
+    "turret-vessel-targets": 3.25,
+    "turret-structure-targets": 1.5,
     "graze-bounce": 0.774,
     "ai-spawn-jitter": 0.945,
     "ai-actor": 0.732,
@@ -63,6 +66,7 @@
     "zeppelin-scripted-pose": 3.0,
     "zeppelin-launch": 0.773,
     "zeppelin-damage": 3.190,
+    "zeppelin-breakup": 10.800,
     "zeppelin-broadside": 3.427,
     "zeppelin-cannon-burnout": 8.890,
     "zeppelin-hull-activation": 2.800,
@@ -114,8 +118,10 @@
     "ai-damage-stages": 1.087,
     "crash-rig-anchors": 0.659,
     "nitro-boost-anchors": 0.4,
+    "nitro-boost-flown-rig": 0.7,
     "emitter-prewarm": 0.638,
     "ai-crash-defs": 0.990,
+    "ai-crash-rig-deferral": 1.400,
     "ai-wreck-fall": 2.385,
     "player-destroy-choreography": 4.560,
     "hostile-marker-hud": 0.650,
@@ -154,6 +160,7 @@
     "campaign-submarine": 1.229,
     "campaign-roster": 8.875,
     "generator-roster-params": 0.766,
+    "generator-launch-dedg": 5.56,
     "campaign-bomber-formation": 7.420,
     "campaign-kill-credit": 5.500,
     "campaign-loop": 2.196,
@@ -207,6 +214,7 @@
     "campaign-coop-dropoff": 4.62,
     "campaign-coop-death": 3.03,
     "campaign-coop-attempt": 1.32,
-    "campaign-coop-cutscene-fullscreen": 0.16
+    "campaign-coop-cutscene-fullscreen": 0.16,
+    "campaign-cm09-docking": 24.4
   }
 }

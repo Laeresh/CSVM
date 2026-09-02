@@ -337,6 +337,37 @@ and yachts (up to `sailboat1`'s 300 s leg held 180° from rest). Seeded from res
 `black_car1` (one ROTSTATE 180° then a single 16 s translate-only loop) drives its whole
 route exactly sideways.
 
+### A `from` pose is written on the event's first dispatched tick, never earlier
+
+Decoded from `crimson.exe`. `OBJECT_MOTION_FROM_TO` is dispatch slot 11 (`FUN_004e9ee0`) of the
+47-slot table at `DAT_00727de0` that `FUN_004ee1a0` populates, the slot after `OBJECT_MOTION`'s
+`FUN_004e8fa0`. Its channel flag word is at `event+0xc`: `0x1` translate, `0x2` rotate, `0x4` scale,
+`0x8` morph. The handler writes the `from` pose only on its first call, guarded by the sequence run
+state at `run+0x20` being zero, and in that same call it also integrates one frame of the authored
+`*_delta` rate. The `to` pose is snapped on the call where the per-event clock at `run+0x28` reaches
+`RUN_TIME` (`event+0x8c`), which is the call that reports the event finished.
+
+That first call lands at the event's own start time, because the sequence stepper (`FUN_004ecbb0`)
+is a cursor rather than a scheduler. Between events it reads the next event's start-time mode at
+`event+1` and value at `event+8`, comparing against the animation instance clock (`inst+0xb0`,
+mode 1), the sequence clock (`run+0x24`, mode 2) or the per-event clock (`run+0x28`, mode 3). Until
+the gate opens it returns without dispatching, so the handler does not run and every event behind
+the cursor waits with it. There is no run list a pending event could be posed from ahead of time.
+
+⚠ **Nothing else writes the node's pose while a gated motion waits.** `OBJECT_ACTIVE_STATE` (slot
+6, `FUN_004e8f40`) calls `gwNodeSetActive` (`FUN_004cca30`, named by its own error string), which
+only toggles bit `0x4` of `node+0x24`. So a definition that switches a node on at t=0 and starts a
+collapsed-`from` scale motion at t=1 draws that node for the whole second at whatever posed it last,
+which is normally another definition's `RESET_STATE` rather than the archive's own pose; the docking
+hooks are the worked example in
+[`anim-definitions/cutscenes.md`](anim-definitions/cutscenes.md).
+
+A `LOOP` rewind is the one re-entry that does not rewrite `from`. `FUN_004ebfd0` calls the sequence
+reset `FUN_004ebfa0` and returns state 4, which the stepper stores at `run+0x20`, and the gate block
+treats 4 like 0 without clearing it. The next dispatch therefore sees a non-zero run state, so a
+`FROM_TO` event re-entered by a loop tweens from wherever the node currently stands. No shipped hook
+definition loops, so nothing in the landing path depends on this.
+
 ### `*_delta` is the same channel's RATE, not a second motion
 
 Decoded from an install-wide census of all 16,114 compiled anim files
@@ -385,7 +416,7 @@ so the runtime has a single convention.
 | 4007 | `AnimHealth` | `ANIM_HEALTH [n]` | `health <= n` — "worn down to n". Full health in a world build, so uniformly false. |
 | 1052 | `PlayerRange` | `PLAYER_RANGE [m]` | `dist²(anchor, player) <= value`. **Compiled is metres SQUARED** (reader 270 ↔ compiled 72900, exact across the install; the parser squares it, confirmed in the exe). No scale factor rides on the comparison. |
 | 717 | `NodeActive` | `NODE_ACTIVE [name]` | the node is visible. Compiled carries an INDEX, reader a name — see below. |
-| 473 | `NodeUndercover` | `NODE_NEAR_GROUND [name, d]` | **stubbed false** — needs a ground/occlusion probe. All 473 sit in `ON_CALL` defs the bootstrap never reaches. |
+| 473 | `NodeUndercover` | `NODE_NEAR_GROUND [name, d]` | a vertical probe of `d` metres from the node meets world geometry. `d` is SIGNED and arrives as a float bit pattern — see below. |
 | 124 | `AnimHealthRange` | — | `min <= health <= max`. Same as `AnimHealth`: false at full health. |
 | 120 | `AnimationLod` | `ANIMATION_LOD [HIGH]` | `ourLod >= n`. **Our setting, not the data's** — see below. |
 | 120 | `PlayerFirstPerson` | `PLAYER_1ST_PERSON` | our camera mode: true while any human pilot has the Cockpit or Nose view selected, false with no view seam wired (a lab, a test). |
@@ -402,6 +433,35 @@ player-cockpit def that never runs in a world build, so nothing turns on it.)
 reader spells it `HIGH`), so the project defaults to 2 and every LOD-gated branch passes —
 the hardware has no reason to hide detail the original hid only for performance.
 `--anim-lod=N` lowers it for A/B comparison.
+
+**`NODE_UNDERCOVER`'s `distance` is a signed length in metres carried as a raw u32.** The compiled
+record's shared 4-byte value slot holds the IEEE-754 bit pattern, and the extraction types the
+field as an unsigned integer, so it is not a length until it is reinterpreted. All 473 shipped
+occurrences decode to round values:
+
+| Raw u32 | Metres | Uses |
+|---:|---:|---:|
+| 3229614080 | −4 | 354 |
+| 3258449920 | −46 | 30 |
+| 3263299584 | −65 | 22 |
+| 3262119936 | −60 | 20 |
+| 3259498496 | −50 | 18 |
+| 1107296256 | +32 | 8 |
+| 3245342720 | −15 | 8 |
+| 3266052096 | −86 | 5 |
+| 3265265664 | −80 | 3 |
+| 3251109888 | −25 | 3 |
+| 3263430656 | −66 | 1 |
+| 3261071360 | −56 | 1 |
+
+The sign is the probe direction: negative casts DOWN, which is the reader spelling
+`NODE_NEAR_GROUND`, and positive casts UP, which is "undercover". `chuteman` is the definition that
+shows both in one chain, and it is the only carrier of the eight positive uses: `If` the ground is
+within 15 m below, deactivate the parachutist; `Elseif` something is within 32 m above, deactivate
+him; `Else` deploy the chute and start his drift. C1/M04's `killpzep` is the plainest negative
+carrier, gating the whole zeppelin breakup on 65 m under the hull and each engine's own break on
+4 m under that engine. The probe itself, with the addresses, is in
+[`org/sequences.md`](../org/sequences.md).
 
 **Condition node references are 1-based indices into the definition's own `nodes` support
 array**, not gamez node indices and not names — mech3ax resolves index→name for every other
@@ -948,7 +1008,9 @@ Two field traps:
 231 have a compiled twin (compiled wins in `AnimProgram`), and all 21 that do not — `sprucegoose`/
 `g_enginesound`, `locklear_gasbag`, the zep nacelles — are `ON_CALL`, which the bootstrap never
 reaches. So the reader triple path is implemented and correct by construction but is not
-exercised in a default session, the same status `NODE_UNDERCOVER` has.
+exercised in a default session. The reader spelling of `NODE_UNDERCOVER` sits the same way: the
+install ships no `NODE_NEAR_GROUND` at all, so `AnimDefs.ReaderCondition`'s branch for it is
+implemented against the parser's vocabulary rather than against shipped data.
 
 **An emitter is silent while its host is not visible in tree**, the same rule the point lights
 use: C1/IA1 deactivates both multiplayer zeppelins, so 36 of its 38 emitters are built and
@@ -982,6 +1044,29 @@ mission that compiles `tethertower`.
 
 which was generalised from C1/IA1. It is compiled into the missions that use it; being
 uncompiled is exactly the signal that the mission does not instantiate it.
+
+### The scope gates run before a (NAME, ANIMATION_NAME) deduplication
+
+Three separate rules decide whether a reader definition becomes an instance, and the census line
+`N reader def(s) superseded by this mission's compiled manifest (mission-scope + NAME1), not
+instantiated` names only the first two:
+
+1. **Mission scope** is gated on the compiled manifest, above: the definition is skipped unless the
+   mission's `mis_anim` lists its (`NAME`, `ANIMATION_NAME`) pair.
+2. **Shared and chapter scope** are gated by file first (the `ANIMATION_DEFINITION_FILE` lists,
+   below), and then a `NAME1` multi-target definition is skipped because the compiler expands it per
+   instance into `mis_anim`, and the reader form would anchor sub-parts the loaded mission never
+   authors.
+3. **Everything that survives is deduplicated on the (`NAME`, `ANIMATION_NAME`) pair**
+   (`AnimProgram.Add`), and because the compiled archives are loaded first the compiled form always
+   wins. This rule is not in the census line and is what keeps a plain-`NAME` shared definition from
+   coexisting with its compiled twin: `player_hook.zrd`'s `player_extend_hook` passes both gates and
+   is then dropped against `cam_anim`'s `player-player_extend_hook`. It is also why the archives'
+   own duplicate files (`blood_hook_extend`, `brig_hook_extend` and `brig_hook_startup`, each
+   shipped twice a chapter as `<name>.json` and `<name>-1.json` carrying the same pair) cost nothing.
+
+All three gates apply only with a compiled mission manifest present, so a reader-only extraction
+still loads every definition it has.
 
 ### Shared-scope files are listed per mission too
 

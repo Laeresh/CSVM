@@ -34,17 +34,23 @@ public class NitroSystemTests
         var n = Installed();
         Tick(n, held: true);
         Assert.True(n.Boosting);
-        Assert.True(n.EngagedThisTick == false, "the edge clears with the tank update of the same tick");
+        Assert.True(n.EngagedThisTick, "the edge survives the tank update, which is where its only consumer reads it");
     }
 
+    // The edge's whole point is being readable at the END of the step that raised it: the boost
+    // animation, the shake and the loop sound all hang off this one read, and a clear placed
+    // between the arm and the read silently cancels all three.
     [Fact]
-    public void TheEngageEdgeIsVisibleBetweenTheCommandArmAndTheTankUpdate()
+    public void TheEngageEdgeSurvivesTheTankUpdateAndClearsOnTheNextStep()
     {
         var n = Installed();
+        n.BeginStep();
         n.HumanCommand(true, false, Dt);
         Assert.True(n.EngagedThisTick);
         Assert.True(n.BoostAnimAlive);
         n.Advance(Dt, false);
+        Assert.True(n.EngagedThisTick);
+        n.BeginStep();
         Assert.False(n.EngagedThisTick);
     }
 
@@ -279,9 +285,11 @@ public class NitroSystemTests
 
     private static NitroSystem Installed() => new() { Installed = true };
 
-    // One human tick in the original's order: the command arm, then the tank update.
+    // One human tick as FlightController.AdvanceNitro runs it: the step opens, then the command
+    // arm, then the tank update, and the caller reads the edges after all three.
     private static void Tick(NitroSystem n, bool held, bool engineOut = false)
     {
+        n.BeginStep();
         n.HumanCommand(held, engineOut, Dt);
         n.Advance(Dt, engineOut);
     }

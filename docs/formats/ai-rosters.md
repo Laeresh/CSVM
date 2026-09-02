@@ -43,7 +43,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 4 | `group` | **mission-logic cohort id, not a formation** (see [below](#group-is-a-cohort-id-not-a-formation)). Values 0-8; `0` (the default) is the at-mission-start population |
 | 5 | `enabled` | `1` = an aircraft present in the initial mission roster; `0` = a generator parameter template, not an initially placed aircraft. Exactly 14 blocks author `0`, and all 14 carry header labels consumed by `egen.json`'s `vehicle.params` (including the shipped spelling mismatch described in [enemy generators](mission-entities/enemy-generators.md)) |
 | 6 | `primary_target` | an assigned target node name. 6 distinct: `""` (346), `player` (27), `devastator_1/2/3`, `piratezep`. The engine's own debug readout prints it as "Primary target: %s". ⚠ **Its meaning depends on `mode`:** on a `jet` it is a targeting assignment, but on a netless `wingman` it is the **formation leader**, and the escort law flies a fixed offset from it ([`org/aiPilot.md`](../org/aiPilot.md)). Corrects the "not a formation leader" reading, which was right about `jet`s and wrong about wingmen |
-| 7 | `init_health` | starting health override; `0.0` = use the airframe default. Real values do occur (e.g. `216.0`) |
+| 7 | `init_health` | the whole-vehicle health-pool override, applied at spawn only when authored **greater than zero**; `0.0` and `-1` both mean "use the airframe default". Real values do occur (e.g. `216.0`), always raising a hostile's pool above its airframe default in the shipped campaign |
 | 8–19 | the activation/attack/return volumes | 12 slots for the 9 named `{active,attack,return}_{rad,u,l}` — see [below](#the-three-unnamed-slots). `rad` is a radius, `u`/`l` an upper/lower altitude band |
 | 20 | `title` | `MSG_*_NAME` display key, resolving in `messages.json` ([missions.md](missions.md)). **This is the targeting readout's name line**, and its only source: the spawn path resolves it into the AI entity's own name string, while the `vehicle.zrd` def's `title` goes to a different object the readout never reads ([`org/targeting.md`](../org/targeting.md#the-hud-the-label)). 175 of the 414 blocks author one; the other 239 show a marker with no name at all |
 | 21 | `deactivated` | |
@@ -65,7 +65,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 56 | `attack_time_factor` | |
 | 57–64 | `anose hnose atail htail aleft hleft aright hright` | **per-zone armour + health**, in `(armor, health)` pairs over the four damage zones nose / tail / left / right — the same zone set and the same armour-first two-pool model as the player's `destroyable_parts` ([vehicle.md](vehicle.md#armor-and-hit-points)) |
 | 65 | `accentID` | **the voice id** → row in `voice.zrd` → `soundsh/VO_id<N>_*` clips |
-| 66 | `armor` | |
+| 66 | `armor` | the whole-vehicle armour-pool override, applied at spawn whenever authored **zero or greater**; only `-1` means "use the airframe default". ⚠ **The gate differs from slot 7's**: `0.0` is a real override here (none is shipped), but a block too short to carry the slot (33 of 414) is unset, never `0.0` |
 | 67 | `ace` | `1` on **26 blocks** across the 53 rosters and `0` on the other 388. Every one of the 26 also authors a `MSG_*_NAME` in slot 20 and a complete skill vector, and each is the block the mission's own script singles out. **It is read**: the block reader stores it at the block struct's `+0xa4` (`0x00437ea0`) and the spawn path copies it to the AI entity's `+0x988` (`0x0047ca42`–`0x0047ca4b`), where one read at `0x0047cde2` sits immediately before the skill block and gates skill interpolation. The Instant Action spawner sets the same field. **The second read, at `0x004ba23a`, is the scrapbook's**: it picks which of the mission's two per-airframe kill tallies a kill is credited to, and the ace tally is the one the debrief draws with a star ([org/debrief.md](../org/debrief.md#what-the-tallies-count)). ⚠ **What the skill-path gate does to a rating is still not decoded.** Narrower than the skill vector, see [below](#the-skill-vector) |
 | 68–71 | `pattern decal1 decal2 decal3` | livery ([paint.md](paint.md)) |
 | 72–80 | `r1 g1 b1 r2 g2 b2 r3 g3 b3` | livery colours ([paint.md](paint.md)) |
@@ -99,7 +99,10 @@ by its positional header label when the mission later credits that generator. Th
 name resolves to its `vehicle.json` def by stripping trailing `_N` ordinals (`blakepeace_2_1` →
 `blakepeace_2`), and the def's `mode` plus slot 0 decide the fork above. Read at spawn: slots 0–7,
 the twelve volume slots 8–19 (over the net's own, see [ai-nets.md](ai-nets.md)), 20, 21, 22–30,
-31, 32, 33, 34, 40 and 65. A surface vehicle (`mode ship`: `patrolboat_N`, `t_truck_N`) has no
+31, 32, 33, 34, 40, 65 and 66. Slots 7 (`init_health`) and 66 (`armor`) reach `PlaneStats` via
+`RosterSpawnPlan.InitHealth`/`Armor` and `AiSpawn`, applied at `AiFlightAssembler.Assemble` before
+the difficulty scale and the per-spawn jitter, the engine's own order
+(docs/org/vehicleDamage.md). A surface vehicle (`mode ship`: `patrolboat_N`, `t_truck_N`) has no
 player airframe and is built as a hull instead, a copy of the chapter's library-root model of the
 def placed on the water at the block's spot and driven along its net by the scripted-path law
 (`Session/SurfaceVehicleRuntime.cs`); C1B/M03's four `patrolboat_1..4` are the shipped roster case,

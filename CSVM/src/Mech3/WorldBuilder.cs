@@ -87,6 +87,15 @@ public sealed class WorldBuilder
         _scene.DebugClutterFlag = debugClutterFlag;
     }
 
+    /// <summary>Which mission of the chapter this world is being built for, 1-based, forwarded to
+    /// the scene builder because a mission-structure node authors one owner per mission
+    /// (<see cref="SceneBuilder.MissionSlot"/>). Set before building.</summary>
+    public int MissionSlot
+    {
+        get => _scene.MissionSlot;
+        set => _scene.MissionSlot = value;
+    }
+
     public int MeshInstanceCount => _scene.MeshInstanceCount;
     public int ColliderCount => _scene.ColliderCount;
 

@@ -15,14 +15,16 @@ internal sealed class AiFlightAssembler
     private readonly AircraftAssemblyResources _aircraft;
     private readonly FlightWorldBindings _world;
     private readonly int _humanCount;
+    private readonly CrashRigQueue? _crashRigs;
     private AiSkills? _aiSkills;
     private System.Collections.Generic.List<Maneuver>? _maneuvers;
     private bool _noAssistLogged;
 
     public AiFlightAssembler(FlightRosterPolicy policy, LiveryResolver liveries,
         WorldEffectsFactory? worldEffects, Node3D worldRoot, AircraftAssemblyResources aircraft,
-        FlightWorldBindings world, int humanCount)
+        FlightWorldBindings world, int humanCount, CrashRigQueue? crashRigs = null)
     {
+        _crashRigs = crashRigs;
         _policy = policy;
         _liveries = liveries;
         _worldEffects = worldEffects;
@@ -65,9 +67,11 @@ internal sealed class AiFlightAssembler
     {
         var baseStats = _aircraft.AiStatsFor(spawn.PlaneName, spawn.AiDef);
         PreparePilot(spawn, baseStats);
-        // The engine's spawn order: the difficulty scale lands on the authored pools and the
-        // per-spawn jitter on the scaled ones, never the reverse (docs/org/vehicleDamage.md).
+        // The engine's spawn order: the roster's own override lands first, then the difficulty
+        // scale, then the per-spawn jitter on the scaled pools, never any step out of that order
+        // (docs/org/vehicleDamage.md).
         var stats = baseStats
+            .WithRosterDurability(spawn.InitHealth, spawn.Armor)
             .WithEnemyDurability(Difficulty.FactorForSpawn(spawn.Team, spawn.Difficulty, _policy.Difficulty))
             .WithAiSpawnJitter(Rng.NewSystemRandom(Rng.Spawn, index, 0));
         // The name the targeting readout prints, resolved here because this is where the string
@@ -203,10 +207,22 @@ internal sealed class AiFlightAssembler
                 // The planes gamez goes in here exactly as it does on the player rig: the destroy
                 // def's `chuteman` is a template root of planes.zbd, and an asymmetry here would
                 // give the parachute to one kind of kill only.
-                _worldEffects!.BuildFlightCrashRuntime(controller, planeBuilder, spawn.PlaneName, _world.Gamez,
-                    _world.WorldScene, _aircraft.Textures, _world.CrashProgram, verbose: false,
+                var rig = _worldEffects!.BeginFlightCrashRuntime(controller, planeBuilder, spawn.PlaneName,
+                    _world.Gamez, _world.WorldScene, _aircraft.Textures, _world.CrashProgram, verbose: false,
                     worldSounds: _world.WorldRuntime?.Sounds, planesGamez: _aircraft.PlanesGamez);
-                controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
+                // The rig is the heaviest block here and the only one the aeroplane does not need in
+                // order to be in the world: the world root already holds this controller. A caller
+                // with a pump takes it off the launch frame; one without builds it in place.
+                if (_crashRigs is { } queue)
+                {
+                    queue.Defer(controller, rig,
+                        () => controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false));
+                }
+                else
+                {
+                    rig.Finish();
+                    controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
+                }
             }
         }
 

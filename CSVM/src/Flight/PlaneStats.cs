@@ -386,6 +386,29 @@ public sealed class PlaneStats
         return jittered;
     }
 
+    /// <summary>The roster block's own durability override (docs/org/vehicleDamage.md "Where the
+    /// numbers come from at spawn", step 2), applied before the difficulty scale and the jitter.
+    /// Each argument replaces the whole-vehicle pool outright when given; the caller has already
+    /// applied the two gates, so null always means "no override", never a zero to invent. Neither
+    /// argument resolves a parts-only pair's sum; a null pool stays null for the later steps.</summary>
+    public PlaneStats WithRosterDurability(float? initHealth, float? armor)
+    {
+        if (initHealth is null && armor is null)
+        {
+            return this;
+        }
+        var overridden = (PlaneStats)MemberwiseClone();
+        if (initHealth is { } health)
+        {
+            overridden.VehicleHealth = health;
+        }
+        if (armor is { } a)
+        {
+            overridden.VehicleArmor = a;
+        }
+        return overridden;
+    }
+
     /// <summary>The difficulty scale on an enemy vehicle's whole-vehicle pair
     /// (docs/org/vehicleDamage.md "The difficulty scale"), which the engine applies at spawn BEFORE
     /// the per-spawn jitter. Resolves a parts-only airframe's pair to its sum on the way, the same

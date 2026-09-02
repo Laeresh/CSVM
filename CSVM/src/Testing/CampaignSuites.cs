@@ -823,6 +823,7 @@ internal static class CampaignSuites
 
         LetterboxBarsRideTheFrameTheyClad(ctx);
         LetterboxCoversThePane(ctx);
+        LetterboxCardIsUnoccludable(ctx);
         PresentingLowersTheWorldOverlays(ctx);
         ctx.Note($"the {ctx.Chapter} letterbox card tracks the cutscene camera by transform copy");
     }
@@ -921,6 +922,75 @@ internal static class CampaignSuites
                 ctx.Check(left > 0f && right > 0f && below > 0f && above > 0f,
                     $"at {aspect:0.###} the card overhangs the pane on every edge (l {left:0.####}, r {right:0.####}, b {below:0.####}, a {above:0.####})");
             }
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+            host.Free();
+        }
+    }
+
+    // The card is world geometry with no depth guarantee of its own, so anything the episode flies
+    // between the camera and it (a walkway, an airframe) draws over the bars unless BindWorld's
+    // override wins the pixel outright.
+    private static void LetterboxCardIsUnoccludable(TestContext ctx)
+    {
+        var host = new CutsceneController();
+        ctx.Host.AddChild(host);
+        ctx.CutsceneRoots = true;
+        try
+        {
+            // Read both the override's and the source shader's properties INSIDE the callback: the
+            // materials are freed once WithWorld returns. The source read is the Mesh resource's
+            // own surface material, untouched by MaterialOverride, so it is still the authored value.
+            bool hasOverride = false, noDepthTest = false, transparent = false, unshaded = false, cullDisabled = false;
+            int renderPriority = 0;
+            var overrideAlbedo = Colors.White;
+            Color? authoredAlbedo = null;
+            ctx.WithWorld(IntroChapter, collision: false, IntroMission,
+                world =>
+                {
+                    host.BindWorld(world.Runtime);
+                    var mesh = host.CardMesh;
+                    if (mesh?.Mesh?.SurfaceGetMaterial(0) is ShaderMaterial source)
+                    {
+                        var tint = source.GetShaderParameter("albedo_color");
+                        if (tint.VariantType == Variant.Type.Color)
+                        {
+                            authoredAlbedo = tint.As<Color>();
+                        }
+                    }
+
+                    if (mesh?.MaterialOverride is StandardMaterial3D material)
+                    {
+                        hasOverride = true;
+                        noDepthTest = material.NoDepthTest;
+                        transparent = material.Transparency == BaseMaterial3D.TransparencyEnum.Alpha;
+                        renderPriority = material.RenderPriority;
+                        unshaded = material.ShadingMode == BaseMaterial3D.ShadingModeEnum.Unshaded;
+                        cullDisabled = material.CullMode == BaseMaterial3D.CullModeEnum.Disabled;
+                        overrideAlbedo = material.AlbedoColor;
+                    }
+                });
+            ctx.Check(hasOverride, $"BindWorld overrides the {CutsceneController.BarsNode} card's material");
+            ctx.Check(noDepthTest,
+                $"the override skips the depth test, so nothing between the camera and the card can win the pixel");
+            ctx.Check(transparent,
+                $"and moves the card into the sorted-transparent pass, where render priority is honoured");
+            ctx.Check(renderPriority == 127,
+                $"claiming the top render priority so it draws last among transparent geometry ({renderPriority})");
+            ctx.Check(unshaded,
+                $"the override is unshaded, so scene lighting cannot dim the bars off their authored colour");
+            ctx.Check(cullDisabled,
+                $"and culls neither face, so the card reads the same off either side of the quad");
+            // The docs-established shipped colour is opaque black, so a source read that fails
+            // (VariantType mismatch) still has a colour to check against.
+            var expectedAlbedo = authoredAlbedo ?? Colors.Black;
+            string authoredNote = authoredAlbedo is { } a ? a.ToString() : "unread, opaque black assumed";
+            ctx.Check(
+                overrideAlbedo.R == expectedAlbedo.R && overrideAlbedo.G == expectedAlbedo.G
+                && overrideAlbedo.B == expectedAlbedo.B && overrideAlbedo.A == 1f,
+                $"the override's colour ({overrideAlbedo}) matches the card's authored one ({authoredNote})");
         }
         finally
         {

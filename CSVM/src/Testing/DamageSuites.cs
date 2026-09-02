@@ -484,6 +484,10 @@ internal static class DamageSuites
 
                 ctx.Check(ai.Visuals != null,
                     $"the spawner built the AI Fury's DamageVisuals (phase 1)");
+                // ⚠ Phase 2 belongs to the crash rig, which a mid-flight introduction leaves armed
+                // rather than built: force it, the way the first round would. Phase 1 is asked
+                // ABOVE this, being the half that must already be there on the launch frame.
+                ai.EnsureCrashRig();
                 ctx.Check(ai.Visuals?.DamageEffectSink != null && ai.Visuals?.DamageEffectStop != null
                           && ai.Visuals?.DamageEffectStopOne != null,
                     $"…and the crash-runtime build wired its sink and both stops (phase 2)");
