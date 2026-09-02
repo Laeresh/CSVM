@@ -79,4 +79,22 @@ public class ClutterFadeTests
         Assert.Equal(0f, EffectsLevel.ClutterFadeScaleSq(false, level));
         Assert.NotEqual(0f, EffectsLevel.ClutterFadeScaleSq(true, level));
     }
+
+    // The shader multiplies the scale into the squared camera distance, so pushing the fade OUT
+    // by a fog factor means the scale shrinks by its square; a larger scale would fade sooner.
+    [Theory]
+    [InlineData("high", 1f, 1f)]
+    [InlineData("high", 2f, 0.25f)]
+    [InlineData("medium", 2f, 1f)]
+    [InlineData("low", 2f, 2.25f)]
+    public void AFogScaleShrinksTheSquaredScaleSoTheFadeReachesFurtherOut(string level, float fogScale, float expected)
+    {
+        Assert.Equal(expected, EffectsLevel.ClutterFadeScaleSq(true, level, fogScale), 5);
+    }
+
+    [Fact]
+    public void AFogScaleNeverRevivesAFadeSwitchedOff()
+    {
+        Assert.Equal(0f, EffectsLevel.ClutterFadeScaleSq(false, "high", 2f));
+    }
 }

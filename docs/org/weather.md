@@ -295,6 +295,38 @@ not exempt in the original** (its textures carry no alpha bit), while the lit-si
 overlay families are. Night cloud sprites being moonlit directionally (`BL-325`) is a separate,
 still-open reading.
 
+### `FOG_COLOR` luminance as the night key (enhanced mode only)
+
+The authored `SUNLIGHT` pair does not say whether a zone is day or night: C5 is a night city whose
+zones author the install's modal **day** pair (1.5 / 0.5), its darkness coming from `FOG_COLOR` and
+the art. `FOG_COLOR` does say it, and the two populations do not overlap. Over all 212 `ZONE*` and
+`SW_ZONE*` blocks, Rec.709 luminance of the authored triple:
+
+| Chapter | zone | fog luminance | authored `SUNLIGHT` diffuse / ambient |
+|---|---|---|---|
+| C1 | ZONE1, ZONE2 | 0.6900 | 1.2 / 0.25, and 1.5 / 0.2 in two missions |
+| C1B | ZONE1, ZONE2 | 0.0942 | 0.6 / 0.15, and 0.65 / 0.35 in M03's ZONE1 |
+| C1C | ZONE1, ZONE2 | 0.6900 | 0.4 / 0.6 and 2.0 / 0.6 |
+| C2 | ZONE1 | 0.8461 | 1.1 / 0.5 |
+| C2 | ZONE2 | 0.6900 | 0.4 / 0.6 through 2.0 / 0.6 |
+| C2B | ZONE1, ZONE2 | 0.6900 | 0.4 / 0.6 and 2.0 / 0.2 |
+| C3 | ZONE1 | 0.7900 | 1.5 / 0.3 |
+| C3 | ZONE2 | 0.0942 | 1.5 / 0.3 |
+| C4 | ZONE1, ZONE2 | 0.7529 | 1.5 / 0.5 |
+| C5 | ZONE1 | 0.0000 | 1.5 / 0.5 |
+| C5 | ZONE3 | 0.0627 | 1.5 / 0.5 |
+
+Night runs 0.0000 to 0.0942 and day 0.6900 to 0.8461, with nothing in the gap, so any separator
+inside it partitions the install the same way. C3's `ZONE2` is the in-cloud zone rather than a
+night one, and its band sits at 9,000 to 10,000 m, above the flight ceiling.
+
+⚠ **This is a proxy the original does not use.** The engine lights from `SUNLIGHT` and darkens from
+`FOG_COLOR` independently, and nothing in the binary reads one off the other. Enhanced mode's
+`WeatherRig.IsNightZone` reads it anyway, because a real Godot sun driven from C5's day-level pair
+lights a night city at noon level and the data carries no other handle. **The skydome is not that
+handle**: a daylit mission draws a moon and a star field too (C1 and C4 both wear `horizon/zone2`),
+which is why the dome's night art cannot separate the two populations.
+
 ## The lens flare (measured, not decoded)
 
 ⚠ Everything in this section is **footage**, not the executable — no `FUN_` address backs it. It is
@@ -382,6 +414,26 @@ chapter by A/B against the original, with the chapter's own horizon contents as 
 a requested zone's subtree is a bare marker. C5 = `zone1`, confirmed by playtest — the user flew
 C5/IA1 in the original and can see across the city, which `ZONE3`'s 50–250 m fog and 300 m clip
 would make impossible.
+
+### The dome's own colour against `FOG_COLOR`
+
+The dome as drawn, sampled off `--freecam --det` captures in original mode (mean sRGB over a fixed
+rect, 0-255), beside the `FOG_COLOR` the flown zone authors:
+
+| Chapter / zone | dome top | dome at the horizon | authored `FOG_COLOR` |
+|---|---|---|---|
+| C1 zone2 | 174, 174, 174 | 176, 176, 176 | 176, 176, 176 |
+| C1B zone1 | 35 median luminance under the puff field | 29, 37, 58 | 16, 24, 48 |
+| C3 zone1 | 176, 209, 242 | 186, 193, 205 | 201, 201, 201 |
+| C5 zone1 | 17, 18, 26 | 2, 2, 3 | 0, 0, 0 |
+
+`FOG_COLOR` is the colour the dome fades into at eye level, and it holds as a whole-dome
+approximation: the grey-sky chapters match it within 2 and 15 units, and both night chapters sit
+within a few units of black like their own fog. Only C3 disagrees in hue, where the dome's blue top
+carries almost exactly the fog's luminance (204 against 201) without its neutrality. No zone block
+carries a sky colour of its own, so nothing finer is decoded: the dome's colours live in its
+textures and vertex data, per chapter, not per zone. Enhanced mode paints its Environment sky this
+colour (`WeatherRig.WriteSkyColor`), which is what a reflection reads.
 
 ## The cloud deck's two regimes
 

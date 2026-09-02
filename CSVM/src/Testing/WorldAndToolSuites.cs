@@ -1060,7 +1060,8 @@ internal static class WorldAndToolSuites
         + "against the NEAREST of every pane's camera, not player 1's alone (B13, BL-366): a "
         + "light 2000 m from a lone P1 stays committed once a second viewer sits 100 m from it, "
         + "the able-to-fail control against P1 alone drops the same light, and the one-viewer "
-        + "case reads exactly what it read before")]
+        + "case reads exactly what it read before; given a parent node the same commit mirrors "
+        + "one OmniLight3D per committed light in enhanced mode and none at all in original mode")]
     internal static void WorldLightsNearestViewer(TestContext ctx)
     {
         var p1 = Vector3.Zero;
@@ -1111,5 +1112,33 @@ internal static class WorldAndToolSuites
         lights.Commit(new[] { p1 });
         ctx.Check(lights.CommittedPositions.Count == 1 && lights.CommittedPositions.Contains(nearP1),
             $"one viewer (single player) uses the single-viewer distance rule");
+
+        // Same instance, same commit shape, gated on the launch's own graphics mode: enhanced
+        // mirrors the committed set onto one OmniLight3D per light, original spawns none at all.
+        var omniParent = new Node3D();
+        ctx.Host.AddChild(omniParent);
+        try
+        {
+            var mirrored = new WorldLights(omniParent);
+            mirrored.Begin();
+            mirrored.Add(nearP1, Colors.White, 1f, 10f);
+            mirrored.Commit(new[] { p1 });
+            if (CSVM.Utils.GraphicsMode.Enhanced)
+            {
+                ctx.Same(mirrored.CommittedPositions.Count, omniParent.GetChildCount(),
+                    $"enhanced mode mirrors one OmniLight3D per committed light");
+            }
+            else
+            {
+                ctx.Same(0, omniParent.GetChildCount(), $"original mode spawns no OmniLight3D nodes");
+            }
+            mirrored.Dispose();
+            ctx.Same(0, omniParent.GetChildCount(), $"Dispose frees every spawned omni");
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(omniParent);
+            omniParent.Free();
+        }
     }
 }

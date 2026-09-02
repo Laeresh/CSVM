@@ -62,6 +62,96 @@ public partial class Launcher : Node3D
     // -80 dB is inaudible, which is the whole point of `--volume=0`.
     private const float MasterVolumeFloor = 0.0001f;
 
+    // TUNE, and the FALLBACK only: a flown mission overwrites this per zone from its own pushed-out
+    // fog near (WeatherRig.ApplyEnhancedLighting), so shadows end where that zone's haze ramp
+    // begins. This value is what a session with no weather.json gets, and it sits in the middle of
+    // the pushed-near range the shipped zones resolve to (2000-4200 m).
+    private const float EnhancedShadowMaxDistance = 3000f;
+
+    // TUNE, paired with the distance above and judged the same way (WeatherRig.ApplyEnhancedLighting
+    // sets the flown-mission copy). Fades the last cascade out before this fallback distance rather
+    // than cutting at a hard edge.
+    private const float EnhancedShadowFadeStart = 0.8f;
+
+    // TUNE, judged at the controls, and the pair trades against each other: lower values put
+    // dithered acne over every terrain triangle at C1's 25° sun, higher ones dissolve a hangar's
+    // shadow along with it. These keep the building and aircraft silhouettes with no acne left.
+    private const float EnhancedShadowBias = 0.05f;
+    private const float EnhancedShadowNormalBias = 1.25f;
+
+    // TUNE. Fractions of EnhancedShadowMaxDistance, tighter than Godot's 0.1/0.2/0.5 because the
+    // shadows a player reads are the aircraft's own and the buildings it passes, all inside the
+    // first few hundred metres; the outer cascades only have to carry a skyline into the haze.
+    private const float EnhancedShadowSplit1 = 0.06f;
+    private const float EnhancedShadowSplit2 = 0.17f;
+    private const float EnhancedShadowSplit3 = 0.42f;
+
+    // TUNE. Screen-space reflection on the glossy water arm: the step count buys reflection length
+    // along the ray, the fades hide where a ray runs off the screen or past the depth buffer.
+    private const int EnhancedSsrMaxSteps = 64;
+    private const float EnhancedSsrFadeIn = 0.15f;
+    private const float EnhancedSsrFadeOut = 2.0f;
+    private const float EnhancedSsrDepthTolerance = 0.2f;
+
+    // TUNE, judged at the controls. The sun's apparent size in degrees; the real sun is about
+    // 0.5, softening a cast edge into a penumbra instead of a hard line. A 0.25/0.5/1.0/2.0
+    // sweep at the C1 waterfall lake held the edge at 4-6 px through 1.0. Only 2.0 opened it
+    // into a visibly soft ~18 px transition.
+    private const float EnhancedShadowAngularDistance = 2.0f;
+
+    // TUNE, judged at the controls: Godot's own default. Raising it alongside the angular
+    // distance above widened the edge further, but it also dithered the lit water beside it.
+    // Kept here rather than trading a hard line for banding.
+    private const float EnhancedShadowBlur = 1.0f;
+
+    // TUNE, judged at the controls on C2/C5. Godot's own default (1.0 m) reads a building's own
+    // trim but misses the wider contact shading a street canyon wants at this world's scale
+    // (buildings tens of metres tall, streets a similar width); this radius picks up a block's
+    // base and a hangar's corner without darkening open tarmac.
+    private const float EnhancedSsaoRadius = 2.5f;
+
+    // TUNE, judged at the controls: Godot's defaults (intensity 2.0, power 1.5) already read as
+    // grounded contact shading rather than a grey wash at this radius, so both are kept.
+    private const float EnhancedSsaoIntensity = 2.0f;
+    private const float EnhancedSsaoPower = 1.5f;
+
+    // TUNE, Godot defaults: detail keeps small-scale creases (window mullions, girders) from
+    // being swallowed by the coarse term above; horizon and sharpness are the denoise pair that
+    // keeps the depth-buffer edges from shimmering worse than the effect is worth.
+    private const float EnhancedSsaoDetail = 0.5f;
+    private const float EnhancedSsaoHorizon = 0.06f;
+    private const float EnhancedSsaoSharpness = 0.98f;
+
+    // TUNE, judged at the controls against C21's contract (only the glow-arm sprites exceed 1.0
+    // in the HDR buffer). A threshold of 1.0 blooms exactly them; bloom stays 0 so nothing below
+    // threshold glows, and screen blend keeps a flare's halo additive without blowing its own
+    // core out further.
+    private const float EnhancedGlowHdrThreshold = 1.0f;
+    private const float EnhancedGlowBloom = 0.0f;
+    private const float EnhancedGlowIntensity = 0.9f;
+    private const float EnhancedGlowStrength = 1.1f;
+    private const Godot.Environment.GlowBlendModeEnum EnhancedGlowBlendMode =
+        Godot.Environment.GlowBlendModeEnum.Screen;
+
+    // TUNE. Scale and cap on the values the glow pass reads before it thresholds them; wide enough
+    // that a saturated flare core (255 before the tonemap) still separates from its own falloff.
+    private const float EnhancedGlowHdrScale = 2.0f;
+    private const float EnhancedGlowHdrLuminanceCap = 8.0f;
+
+    // TUNE, judged at the controls against a C4 horizon, a C1 horizon and C5 at night: AgX rolls
+    // off the far-ridge washout the authored sun energy produces (Wave B) while keeping the night
+    // city's contrast, where Filmic read flatter. Exposure stays neutral; the AgX-specific white
+    // point is what recovers the horizon rather than the general TonemapWhite, which AgX ignores.
+    private const Godot.Environment.ToneMapper EnhancedTonemapMode = Godot.Environment.ToneMapper.Agx;
+    private const float EnhancedTonemapExposure = 1.0f;
+    private const float EnhancedTonemapAgxWhite = 6.0f;
+    private const float EnhancedTonemapAgxContrast = 1.0f;
+
+    // The zone default FOG_COLOR (Flight/Weather.cs's no-weather zone), which is the colour a
+    // horizon dome fades into at eye level. Enhanced mode's sky until a flown zone writes its own
+    // over it, so a world with no weather.json still reflects a plausible sky.
+    private static readonly Color EnhancedDefaultSkyColor = new(0.69f, 0.69f, 0.69f);
+
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
     // exists — the same empty list the pre-split root held after a teardown.
     private static readonly List<PlayerRig> NoRigs = new();
@@ -444,9 +534,15 @@ public partial class Launcher : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
-        // The graphics EffectsLevel's one global: the clutter fade's squared distance scale, 0
-        // when the fade is switched off (never fades, clutter draws out to the fog).
-        float clutterFadeScaleSq = Utils.EffectsLevel.ResolveClutterFadeScaleSq();
+        // Resolved after the --det block above, so a user config's graphics.mode is dropped by
+        // ClearOverrides the same way EffectsLevel's is; --graphics= bypasses Config outright and
+        // survives it. Ahead of the clutter fade below, which needs it to follow the pushed fog.
+        bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode);
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={(graphicsEnhanced ? "enhanced" : "original")}");
+        // The graphics EffectsLevel's one global: the clutter fade's squared distance scale, 0 when
+        // the fade is off. Enhanced mode pushes the fade out by the fog range's own factor (the
+        // scale shrinks) so clutter reaches the pushed haze; original mode's factor is identity.
+        float clutterFadeScaleSq = Utils.EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale());
         RenderingServer.GlobalShaderParameterAdd(Utils.EffectsLevel.ShaderParam,
             RenderingServer.GlobalShaderParameterType.Float, clutterFadeScaleSq);
         string clutterFarFade = Utils.EffectsLevel.ClutterFarFadeEnabled() ? "true" : "false";
@@ -909,11 +1005,14 @@ public partial class Launcher : Node3D
             // per zone-apply (WeatherRig.ApplyZone).
             RotationDegrees = new Vector3(-45, 150, 0),
             LightEnergy = 1.6f,
-            // Off: the world is built fullbright and unshaded, so the only thing a shadow pass
-            // reaches is one aircraft shadowing another — a non-original effect the original's
-            // own projected-blob shadow does not have either.
+            // Off in the faithful path: the world is built fullbright and unshaded, so the only
+            // thing a shadow pass reaches is one aircraft shadowing another, and the original's own
+            // projected-blob shadow is not a shadow map either. Enhanced mode turns it on below.
             ShadowEnabled = false,
         };
+        // Enhanced mode alone: a lit world has surfaces a shadow pass can land on.
+        if (GraphicsMode.Enhanced)
+            EnableSunShadows(_sun);
         AddChild(_sun);
 
         _env = new Godot.Environment
@@ -923,7 +1022,89 @@ public partial class Launcher : Node3D
             AmbientLightSource = Godot.Environment.AmbientSource.Sky,
             AmbientLightEnergy = 0.9f,
         };
+        // Enhanced mode alone: SSAO reads ambient light, which the faithful path never has, so
+        // it has nothing to modulate there. The cockpit pass duplicates this Environment at build
+        // time (CockpitOverlay.NewOverlay), so its 100 m interior inherits the same settings.
+        if (GraphicsMode.Enhanced)
+        {
+            UseMissionSky(_env);
+            _env.SsaoEnabled = true;
+            _env.SsaoRadius = EnhancedSsaoRadius;
+            _env.SsaoIntensity = EnhancedSsaoIntensity;
+            _env.SsaoPower = EnhancedSsaoPower;
+            _env.SsaoDetail = EnhancedSsaoDetail;
+            _env.SsaoHorizon = EnhancedSsaoHorizon;
+            _env.SsaoSharpness = EnhancedSsaoSharpness;
+            EnableWaterReflections(_env);
+            EnableGlowAndTonemap(_env);
+        }
         AddChild(new WorldEnvironment { Environment = _env });
+    }
+
+    // Enhanced mode alone: the sky a reflection reads is the mission's own colour, not Godot's
+    // procedural gradient. The dome is gamez geometry drawn over the background, so this is
+    // normally unseen; what it feeds is the glossy water's specular. WeatherRig.WriteSkyColor
+    // writes the flown zone's own FOG_COLOR over the default here on every zone apply.
+    // ⚠ Do not leave the ambient on the sky: enhanced mode drives it from the zone's authored
+    // SUNLIGHT_AMBIENT, and a flat sky would override that with one colour.
+    private void UseMissionSky(Godot.Environment env)
+    {
+        env.Sky = new Sky { SkyMaterial = new PanoramaSkyMaterial() };
+        env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
+        env.AmbientLightColor = Colors.White;
+        WeatherRig.WriteSkyColor(env, EnhancedDefaultSkyColor);
+    }
+
+    // Every setting here is TUNE: nothing in the original authors a shadow map, so there is no
+    // decoded magnitude to match. Four splits because the useful range spans an aircraft's own
+    // shadow a few metres below it and a skyline several kilometres out.
+    private void EnableSunShadows(DirectionalLight3D sun)
+    {
+        sun.ShadowEnabled = true;
+        sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits;
+        sun.DirectionalShadowMaxDistance = EnhancedShadowMaxDistance;
+        sun.DirectionalShadowFadeStart = EnhancedShadowFadeStart;
+        sun.DirectionalShadowSplit1 = EnhancedShadowSplit1;
+        sun.DirectionalShadowSplit2 = EnhancedShadowSplit2;
+        sun.DirectionalShadowSplit3 = EnhancedShadowSplit3;
+        sun.DirectionalShadowBlendSplits = true;
+        sun.ShadowBias = EnhancedShadowBias;
+        sun.ShadowNormalBias = EnhancedShadowNormalBias;
+        sun.LightAngularDistance = EnhancedShadowAngularDistance;
+        sun.ShadowBlur = EnhancedShadowBlur;
+    }
+
+    // Screen-space reflection, for the one glossy population in the world: the water surfaces
+    // SceneBuilder.ClassifySurface names. Every other enhanced surface is matte, so nothing else
+    // can reflect. ⚠ SSR reflects only what the camera already draws; content off-screen or behind
+    // the near plane has no reflection at all.
+    private void EnableWaterReflections(Godot.Environment env)
+    {
+        env.SsrEnabled = true;
+        env.SsrMaxSteps = EnhancedSsrMaxSteps;
+        env.SsrFadeIn = EnhancedSsrFadeIn;
+        env.SsrFadeOut = EnhancedSsrFadeOut;
+        env.SsrDepthTolerance = EnhancedSsrDepthTolerance;
+    }
+
+    // Enhanced mode alone: with a lit world, sun, shadows and real light energy feeding the HDR
+    // colour buffer, values can exceed 1.0 and clip instead of rolling off, and C21's glow-arm
+    // sprites are the only surfaces meant to bloom. The cockpit pass duplicates this Environment
+    // at build time (CockpitOverlay.NewOverlay), so its own tonemap matches the world pass exactly.
+    private void EnableGlowAndTonemap(Godot.Environment env)
+    {
+        env.GlowEnabled = true;
+        env.GlowHdrThreshold = EnhancedGlowHdrThreshold;
+        env.GlowBloom = EnhancedGlowBloom;
+        env.GlowIntensity = EnhancedGlowIntensity;
+        env.GlowStrength = EnhancedGlowStrength;
+        env.GlowBlendMode = EnhancedGlowBlendMode;
+        env.GlowHdrScale = EnhancedGlowHdrScale;
+        env.GlowHdrLuminanceCap = EnhancedGlowHdrLuminanceCap;
+        env.TonemapMode = EnhancedTonemapMode;
+        env.TonemapExposure = EnhancedTonemapExposure;
+        env.TonemapAgxWhite = EnhancedTonemapAgxWhite;
+        env.TonemapAgxContrast = EnhancedTonemapAgxContrast;
     }
 
     // Shows the launchscreen (building it on first use) and wiring its Launch/Quit
