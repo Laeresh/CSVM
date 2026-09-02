@@ -1,12 +1,13 @@
 namespace CSVM.Bindings;
 
-/// <summary>What kind of hardware a <see cref="DeviceId"/> names. Keyboard and joypad are the two
-/// the game reads; <c>None</c> is the default-constructed value and names nothing.</summary>
+/// <summary>What kind of hardware a <see cref="DeviceId"/> names. Keyboard, joypad and mouse are the
+/// three the game reads; <c>None</c> is the default-constructed value and names nothing.</summary>
 public enum DeviceKind
 {
     None,
     Keyboard,
     Joypad,
+    Mouse,
 }
 
 /// <summary>Which physical device a binding is on, as a value that survives a replug and a
@@ -27,6 +28,10 @@ public readonly record struct DeviceId
     /// <summary>The one keyboard. There is no second keyboard identity: the platform reports a
     /// single key state whatever hardware produced it.</summary>
     public static DeviceId Keyboard => new(DeviceKind.Keyboard, string.Empty);
+
+    /// <summary>The one mouse, on the same reasoning as <see cref="Keyboard"/>: the platform reports
+    /// a single pointer state, so there is nothing to distinguish a second identity by.</summary>
+    public static DeviceId Mouse => new(DeviceKind.Mouse, string.Empty);
 
     public DeviceKind Kind { get; }
 
@@ -49,6 +54,7 @@ public readonly record struct DeviceId
     public override string ToString() => Kind switch
     {
         DeviceKind.Keyboard => "keyboard",
+        DeviceKind.Mouse => "mouse",
         DeviceKind.Joypad => $"pad:{Id}",
         _ => "none",
     };

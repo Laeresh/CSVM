@@ -90,6 +90,20 @@ public class BindingModelTests
     }
 
     [Fact]
+    public void AMouseButtonResolvesLikeAnyOtherDigitalControl()
+    {
+        var binding = new Binding(DeviceId.Mouse, BindingControl.Mouse(2));
+        var state = new FakeDevices();
+
+        Assert.False(binding.Resolve(state).Pressed);
+
+        state.MouseButtons.Add(2);
+        var read = binding.Resolve(state);
+        Assert.True(read.Pressed);
+        Assert.Equal(1f, read.Value);
+    }
+
+    [Fact]
     public void AHatDirectionResolvesIndependentlyOfTheOtherThreeOnTheSameHat()
     {
         var state = new FakeDevices();
@@ -176,6 +190,8 @@ public class BindingModelTests
 
         public HashSet<(DeviceId Device, int Index)> Buttons { get; } = new();
 
+        public HashSet<int> MouseButtons { get; } = new();
+
         public Dictionary<(DeviceId Device, int Index), float> Axes { get; } = new();
 
         public Dictionary<(DeviceId Device, int Index), HatDirection> Hats { get; } = new();
@@ -184,6 +200,9 @@ public class BindingModelTests
             device == DeviceId.Keyboard && Keys.Contains(keyCode);
 
         public bool IsButtonDown(DeviceId device, int button) => Buttons.Contains((device, button));
+
+        public bool IsMouseButtonDown(DeviceId device, int button) =>
+            device == DeviceId.Mouse && MouseButtons.Contains(button);
 
         public float AxisValue(DeviceId device, int axis) =>
             Axes.TryGetValue((device, axis), out float value) ? value : 0f;

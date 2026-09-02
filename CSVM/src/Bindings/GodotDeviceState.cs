@@ -33,6 +33,9 @@ public sealed class GodotDeviceState : IDeviceState
     public bool IsButtonDown(DeviceId device, int button) =>
         _registry.IndexOf(device) is { } index && Input.IsJoyButtonPressed(index, (JoyButton)button);
 
+    public bool IsMouseButtonDown(DeviceId device, int button) =>
+        device.Kind == DeviceKind.Mouse && Input.IsMouseButtonPressed((MouseButton)button);
+
     public float AxisValue(DeviceId device, int axis) =>
         _registry.IndexOf(device) is { } index ? Input.GetJoyAxis(index, (JoyAxis)axis) : 0f;
 

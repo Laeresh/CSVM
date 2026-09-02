@@ -37,7 +37,6 @@ public static class DefaultBindings
     /// keeps a migrating site from discovering a hole one call at a time.</summary>
     public static IReadOnlyList<InputAction> Unbound { get; } = new[]
     {
-        InputAction.FreeLook,
         InputAction.MenuJoin,
     };
 
@@ -132,9 +131,9 @@ public static class DefaultBindings
         b.Stick(InputAction.LookAimLeft, JoyAxis.RightX, -1, 0f);
         b.Stick(InputAction.LookAimRight, JoyAxis.RightX, 1, 0f);
 
-        // The first-person free look is the held right mouse button, and a mouse button is not one
-        // of the model's four control kinds. Binding it needs a fifth kind, not a default.
-        b.Leave(InputAction.FreeLook);
+        // The first-person free look is the held right mouse button (docs/controls.md), the same
+        // control the freecam look posture reads (SpectatorCamera).
+        b.Mouse(InputAction.FreeLook, MouseButton.Right);
         return b;
     }
 
@@ -233,6 +232,13 @@ public static class DefaultBindings
         {
             Track(action);
             Map.Add(action, new Binding(AnyPad, BindingControl.Axis((int)axis, sign, deadzone)));
+            return this;
+        }
+
+        public ContextBuilder Mouse(InputAction action, MouseButton button)
+        {
+            Track(action);
+            Map.Add(action, new Binding(DeviceId.Mouse, BindingControl.Mouse((int)button)));
             return this;
         }
 

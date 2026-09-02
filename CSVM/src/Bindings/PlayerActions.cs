@@ -26,8 +26,9 @@ public sealed class PlayerActions
     /// <summary>This player's keymap, editable in place by a rebinding screen.</summary>
     public ActionMap Map { get; }
 
-    /// <summary>Whether this seat reads the keyboard at all. False for a pad-only splitscreen
-    /// player, whose keyboard bindings then resolve false rather than being deleted.</summary>
+    /// <summary>Whether this seat reads the keyboard and mouse at all. False for a pad-only
+    /// splitscreen player, whose keyboard and mouse bindings then resolve false rather than being
+    /// deleted.</summary>
     public bool ReadsKeyboard { get; set; }
 
     /// <summary>The tick's resolved values. Reused every <see cref="Poll"/>, never a copy.
@@ -54,9 +55,10 @@ public sealed class PlayerActions
 
     public float Axis(InputAction positive, InputAction negative) => _snapshot.Axis(positive, negative);
 
-    // The pad-only seat's view of the tick: every keyboard device reads as idle, every other device
+    // The pad-only seat's view of the tick: keyboard and mouse read as idle, every other device
     // passes straight through. A filter rather than a second state, so the registry stays the only
-    // thing that talks to hardware.
+    // thing that talks to hardware. Mouse is silenced alongside the keyboard because both name the
+    // one desktop player's own hardware, the same reasoning DeviceId gives them a singleton identity.
     private sealed class MutedKeyboard : IDeviceState
     {
         public IDeviceState? Source { get; set; }
@@ -67,12 +69,16 @@ public sealed class PlayerActions
         public bool IsButtonDown(DeviceId device, int button) =>
             !Silent(device) && Source!.IsButtonDown(device, button);
 
+        public bool IsMouseButtonDown(DeviceId device, int button) =>
+            !Silent(device) && Source!.IsMouseButtonDown(device, button);
+
         public float AxisValue(DeviceId device, int axis) =>
             Silent(device) ? 0f : Source!.AxisValue(device, axis);
 
         public HatDirection HatState(DeviceId device, int hat) =>
             Silent(device) ? HatDirection.None : Source!.HatState(device, hat);
 
-        private static bool Silent(DeviceId device) => device.Kind == DeviceKind.Keyboard;
+        private static bool Silent(DeviceId device) =>
+            device.Kind == DeviceKind.Keyboard || device.Kind == DeviceKind.Mouse;
     }
 }

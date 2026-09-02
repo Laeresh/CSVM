@@ -283,6 +283,8 @@ public class ActionMapTests
 
         public bool IsButtonDown(DeviceId device, int button) => Buttons.Contains((device, button));
 
+        public bool IsMouseButtonDown(DeviceId device, int button) => false;
+
         public float AxisValue(DeviceId device, int axis) =>
             Axes.TryGetValue((device, axis), out float value) ? value : 0f;
 

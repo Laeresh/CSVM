@@ -11,6 +11,7 @@ public enum ControlKind
     Button,
     Axis,
     Hat,
+    Mouse,
 }
 
 /// <summary>The four directions of one hat, as flags so a device can report several at once (a
@@ -25,10 +26,11 @@ public enum HatDirection
     Left = 8,
 }
 
-/// <summary>One control on a device: a key, a button, one direction of one axis past a deadzone,
-/// or one direction of a hat. The tagged shape is deliberate. Four typed slots is what the
-/// original ships (`docs/org/input.md`), and it is why an axis cannot be bound there at all.
-/// ⚠ Build one through the four factories, never through the default value: they are the only
+/// <summary>One control on a device: a key, a button, a mouse button, one direction of one axis
+/// past a deadzone, or one direction of a hat. The tagged shape is deliberate. Four typed slots is
+/// what the original ships (`docs/org/input.md`), and it is why an axis cannot be bound there at
+/// all.
+/// ⚠ Build one through the five factories, never through the default value: they are the only
 /// place the per-kind invariants (a sign of exactly ±1, a deadzone under 1, exactly one hat
 /// direction) are enforced.</summary>
 public readonly record struct BindingControl
@@ -67,6 +69,12 @@ public readonly record struct BindingControl
     public static BindingControl Button(int index) =>
         new(ControlKind.Button, NonNegative(index, nameof(index)), 0, 0f, HatDirection.None);
 
+    /// <summary>One mouse button, held. The original carries one in bits 26-27 of every command word
+    /// (`FUN_00537150`, `docs/org/input.md`), the one input this model dropped until this factory
+    /// existed.</summary>
+    public static BindingControl Mouse(int index) =>
+        new(ControlKind.Mouse, NonNegative(index, nameof(index)), 0, 0f, HatDirection.None);
+
     /// <summary>One direction of one axis. The sign picks the half of the travel that fires, so a
     /// stick's two ends are two bindings and can drive two different actions.</summary>
     public static BindingControl Axis(int index, int sign, float deadzone)
@@ -95,6 +103,7 @@ public readonly record struct BindingControl
         ControlKind.Key => $"key:{Index}",
         ControlKind.Button => $"button:{Index}",
         ControlKind.Axis => $"axis:{Index}{(Sign < 0 ? "-" : "+")}@{Deadzone:0.###}",
+        ControlKind.Mouse => $"mouse:{Index}",
         _ => $"hat:{Index}:{Direction}",
     };
 

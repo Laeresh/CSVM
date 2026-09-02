@@ -25,6 +25,7 @@ public sealed class BindingStore
     public const int Version = 1;
 
     private const string KeyboardToken = "keyboard";
+    private const string MouseToken = "mouse";
     private const string PadPrefix = "pad:";
 
     // The relaxed encoder, because the default one turns the '+' an axis token carries its sign in
@@ -138,7 +139,12 @@ public sealed class BindingStore
     /// correct one row in a text editor.</summary>
     public static string Encode(Binding binding)
     {
-        string device = binding.Device.Kind == DeviceKind.Keyboard ? KeyboardToken : PadPrefix + binding.Device.Id;
+        string device = binding.Device.Kind switch
+        {
+            DeviceKind.Keyboard => KeyboardToken,
+            DeviceKind.Mouse => MouseToken,
+            _ => PadPrefix + binding.Device.Id,
+        };
         var c = binding.Control;
         return c.Kind switch
         {
@@ -151,6 +157,7 @@ public sealed class BindingStore
                 EnumName<JoyAxis>(c.Index),
                 c.Sign < 0 ? "-" : "+",
                 c.Deadzone),
+            ControlKind.Mouse => $"{device}/mouse:{EnumName<MouseButton>(c.Index)}",
             _ => $"{device}/hat:{c.Index}:{c.Direction}",
         };
     }
@@ -254,6 +261,12 @@ public sealed class BindingStore
             return true;
         }
 
+        if (text == MouseToken)
+        {
+            device = DeviceId.Mouse;
+            return true;
+        }
+
         if (text.StartsWith(PadPrefix, StringComparison.Ordinal) && text.Length > PadPrefix.Length)
         {
             device = DeviceId.Joypad(text[PadPrefix.Length..]);
@@ -283,6 +296,8 @@ public sealed class BindingStore
                 return TryIndex<JoyButton>(rest, out int button) && Made(BindingControl.Button(button), out control);
             case "axis":
                 return TryAxis(rest, out control);
+            case "mouse":
+                return TryIndex<MouseButton>(rest, out int mouseButton) && Made(BindingControl.Mouse(mouseButton), out control);
             default:
                 return false;
         }
