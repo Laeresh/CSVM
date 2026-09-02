@@ -141,16 +141,21 @@ internal sealed class PoseChannel
         out float duration)
     {
         float runTime = ev.Data.Num("run_time") ?? 0f;
+        bool live = !instant && runTime > 0f;
         int applied = 0;
         foreach (var t in _targets(ev, def, anchor))
         {
-            var tween = FromToMotion.Create(_rt, t, ev.Data, runTime);
+            // The docking hooks author a rotate-only swing and a scale-only grow as two
+            // same-tick sibling sequences on one node. Without this, the second would evict
+            // the first before it ever ticks; hand the still-open channel forward instead.
+            var carry = live ? _motions.LiveFromToMotion(t) : null;
+            var tween = FromToMotion.Create(_rt, t, ev.Data, runTime, carry);
             if (tween == null)
                 continue;
-            if (instant || runTime <= 0f)
-                tween.Seek(runTime); // RESET_STATE / zero-length: land on the end pose
-            else
+            if (live)
                 _motions.Add(tween, def, anchor);
+            else
+                tween.Seek(runTime); // RESET_STATE / zero-length: land on the end pose
             applied++;
         }
         duration = instant ? 0f : runTime;

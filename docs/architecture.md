@@ -1315,10 +1315,11 @@ visibility rationale on their declarations — read those before touching either
 
 ## src/Mech3/Anim/MotionSet.cs
 `AnimRuntime`'s live motions as a module: `Add` (owner stamp + `(Target, Channel)` eviction +
-`LaunchCount`), the per-frame `Tick` sweep, `DiscardFor`/`Reset`, and the two predicates the rest of
-the runtime asks — `OwesBounce` (the retirement hold `AnimRuntime.Retirable` consults) and
-`HasSpinOn` (the `Loop{-1}` spin re-assert guard). Never constructs a motion — `PoseChannel` builds
-them and hands them over. `Tick` drops a motion whose target node has been freed before touching it: a motion outlives the
+`LaunchCount`), the per-frame `Tick` sweep, `DiscardFor`/`Reset`, and the predicates the rest of
+the runtime asks — `OwesBounce` (the retirement hold `AnimRuntime.Retirable` consults),
+`HasSpinOn` (the `Loop{-1}` spin re-assert guard), and `LiveFromToMotion` (the target's still-live
+transform tween, so `PoseChannel` can carry an about-to-be-evicted channel into its replacement
+instead of losing it). Never constructs a motion — `PoseChannel` builds them and hands them over. `Tick` drops a motion whose target node has been freed before touching it: a motion outlives the
 node it drives (an airframe swap, a rig torn down), and writing a transform to a disposed object
 throws out of the whole runtime advance rather than losing one motion. `Node3D`-typed and otherwise
 never dereferenced: every other operation here is identity comparison, so the behaviour is
@@ -5100,7 +5101,7 @@ add and activate them (`Props`). All carry a rebased gamez index (`PointerBaseOf
 next multiple of 2500), which is what makes a compiled definition's cross-archive symbol table
 bind them instead of claiming a name with no node. Built for every mission that plays a cutscene
 (`WorldSession`'s intro, approach-trigger or mission-list gate), so every other session's node
-census is exactly what it was. `StageFlown` puts the FLOWN aircraft's own airframe subtree in the runtime's node table under the same rebase, run when the rigs are built and again after an airframe swap: that is what makes a hookup definition's per-airframe branches decidable, since each tests one `player_<airframe>` node's active bit and then poses that airframe's own hook, wing fold and mount offset. That rebased index runs no general RESET_STATE pass, because a chapter definition anchoring on a generic airframe node name must not re-pose a live aeroplane, so `StageFlown` follows it with `AnimRuntime.ParkDockingHook`: the RESET_STATE of every definition anchored on a `*_hook` group inside that model, which is what parks the hook ARMS collapsed. The archive's inactive bit parks the group and nothing else, and an arm left at the archive's own full length is drawn extended for the second before its scale motion starts and then collapses, which reads as a second hook swing. The pose half is
+census is exactly what it was. `StageFlown` puts the FLOWN aircraft's own airframe subtree in the runtime's node table under the same rebase, run when the rigs are built and again after an airframe swap: that is what makes a hookup definition's per-airframe branches decidable, since each tests one `player_<airframe>` node's active bit and then poses that airframe's own hook, wing fold and mount offset. That rebased index runs no general RESET_STATE pass, because a chapter definition anchoring on a generic airframe node name must not re-pose a live aeroplane, so `StageFlown` follows it with `AnimRuntime.ParkDockingHook`: the RESET_STATE of every definition anchored on a `*_hook` group inside that model, then every node that group's own `<x>_hook_extend` moves seeded from that definition's own FROM pose, which wins wherever a RESET_STATE omits a node or parks the wrong axis (five of eleven airframes do one or the other). The archive's inactive bit parks the group and nothing else, so without the seed an unparked node is drawn at its archive pose for the second before its own motion starts and then snaps, which reads as a second hook swing; a rotate-only and a scale-only FROM_TO on the same node in the same tick is `PoseChannel`/`FromToMotion`'s own case, carried forward rather than evicted unticked. The pose half is
 `Session/CutsceneController.cs`; the decode is
 `docs/formats/anim-definitions/cutscenes.md`.
 

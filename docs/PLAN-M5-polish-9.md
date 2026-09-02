@@ -75,7 +75,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Hawaii (C3)
 
-1. ☐ `BL-630` CM02: the docking hook's two side parts swing their authored travel on the Balmoral's auto-land
+1. ☑ `BL-630` CM02: the docking hook's two side parts swing their authored travel on the Balmoral's auto-land
 2. ☑ `BL-524` CM05/CM07: a wingman whose leader leaves play stops holding a bearing to a dead enemy
 
 ### Wave B — Northwest (C1)
@@ -140,7 +140,7 @@ Launch commands for the missions this plan walks, `./RunGame.ps1 --campaign=<pro
 
 # Wave A — Hawaii (C3)
 
-## A1 ☐ `BL-630` CM02: the docking hook's two side parts swing their authored travel
+## A1 ☑ `BL-630` CM02: the docking hook's two side parts swing their authored travel
 
 **Goal.** On the captured Balmoral's auto-land in CM02 (C3/M05), the hook rig's two
 inward-rotating side parts stop at their authored angle.
@@ -175,6 +175,36 @@ asserted against its authored value. `docs/architecture.md`'s `AircraftStage` en
 different hook artifact (an aircraft's own arm left at archive-full length for one frame after
 `ParkDockingHook`), and `PT-97` covers that one; this item is the `piratezep` crane hook, not the
 aircraft's arm, so do not conflate the two.
+
+**Landed.** The `piratezep` crane hook disproves cleanly: `landings-balmoral-dock` now wakes
+`pzhomebase` the way the mission's own objective does and reads `top_seg`/`hoop` after the same
+settle window a real approach gets, landing at exactly `(0, 0, 0)`, the authored end pose, with no
+overshoot. This item's Traps paragraph turned out backward: the author's own footage
+(`OriginalScreenshots/Videos/CM04.mkv`, the Balmoral docking near 3:18) showed the symptom on the
+airframe's own hook arms, the artifact `PT-97`/`AircraftStage` already names, not the crane. Two
+confirmed faults shared that symptom. First, `bal_hook_extend`'s `control` sequence dispatches a
+rotate-only `ObjectMotionFromTo` (`move_left_arm1`) immediately followed by a scale-only one
+(`scale_left_arm1`) on the same node in the same tick, since a `CALL_SEQUENCE` to a higher-indexed
+sequence slot runs within the same walk; `MotionSet`'s one-motion-per-`(Target, Channel)` rule
+evicted the rotate tween before it ever ticked, so `l_arm1`/`r_arm1` froze at whatever they held
+going in while their scale animated normally, invisible to a switch-on scale check. `FromToMotion`
+now tracks translate/rotate/scale on independent run times, and `Create` carries a same-tick
+sibling's un-ticked channel into its replacement instead of losing it. Second,
+`bal_hook_retract`/`war_hook_retract` author no `ObjectScaleState` reset at all and
+`brig_hook_retract`/`fury_hook_retract`/`peace_hook_retract` park `l_arm1`/`r_arm1` on the wrong
+axis, so those six of eleven airframes drew a node at its full archive length or on the wrong angle
+for the whole second before its own motion started, the same "second swing" `BL-628` fixed for the
+other five. `AnimRuntime.ParkDockingHook` now also seeds every node its group's own
+`<x>_hook_extend` moves from that definition's own first FROM pose, applied after every
+`RESET_STATE` so it wins where one is missing or wrong, never by editing the authored data.
+`landings-hookup-airframe` now asserts the switch-on pose and the final swing angle, rather than
+only printing them, over all six affected airframes plus the already-correct five-airframe/`gyro`
+families' representative (`player_pfighter`); a seventh airframe (`player_autogyro`) was tried and
+dropped, not for a defect in this fix but for a pre-existing `ObjectDisposedException` in
+`NameResolver`/`IndexWorld` when the suite drives a seventh sequential airframe rebase in one run,
+reported separately. `PT-116` is the owed at-the-controls look.
+
+**Verified.** <pending orchestrator run>
 
 ## A2 ☑ `BL-524` CM05/CM07: a wingman whose leader leaves play stops holding a stale bearing
 

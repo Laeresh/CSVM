@@ -606,27 +606,31 @@ player's hook is the aircraft archive's own inactive bit on the `<x>_hook` group
 airframes ship that bit clear, so the seven authoring no startup are parked exactly like the four
 that do.
 
-⚠ **What parks a hook's ARMS is `<x>_hook_retract`'s `RESET_STATE`, not the group's inactive bit.**
-Each extend definition activates its group and arm nodes in its `state` sequence at t=0 while its
-`control` sequence starts the arms' own scale motion one second later, and that motion's `from` is a
-collapsed scale (`pirate_hook_extend` takes `l_arm3` and `r_arm3` from `(1, 0, 0)`, `bal_hook_extend`
-takes `l_arm1` and `r_arm1` from `(1, 1, 0.5)`). Nothing writes a pose in that second: the sequence
-stepper holds its cursor on a start-gated event and calls no handler until the gate opens, the
-`OBJECT_MOTION_FROM_TO` handler writes `from` on its first dispatched tick, and
-`OBJECT_ACTIVE_STATE` writes no pose at all ([`../anim-definitions.md`](../anim-definitions.md), "A
-`from` pose is written on the event's first dispatched tick"). The arm therefore holds whatever posed
-it last, and what posed it is the matching retract's `RESET_STATE`, which bootstrap pass 1 applies to
-every loaded definition: `pirate_hook_retract` parks `l_arm3` and `r_arm3` at rotation `(0, 0, 0)`
-and scale `(1, 0, 0)`, the pose its extend starts from, and switches the group, both doors and both
-arms off. The aircraft archive's own `(1, 1, 1)` on those nodes is not what a docking shows.
-`OriginalScreenshots/Videos/CM02.mkv` is the check: over the docking cutscene's opening shot the arms
-are invisible above the mount for a second, grow over the next second, and only then swing out on the
-two-second rotate.
+⚠ **What parks a hook's ARMS is `<x>_hook_retract`'s `RESET_STATE`, where it is complete and right
+(neither always holds).** Each extend definition activates its group and arm nodes in its `state`
+sequence at t=0 while its `control` sequence starts the arms' own motions a moment later, and each
+motion's `from` is a collapsed pose (`pirate_hook_extend` takes `l_arm3` and `r_arm3` from
+`(1, 0, 0)`, `bal_hook_extend` takes `l_arm1`/`r_arm1` from `(1, 1, 0.5)` scale and `m_arm1`/`m_arm2`
+from a rotation of `0`). Nothing writes a pose before that motion fires: the sequence stepper holds
+its cursor on a start-gated event and calls no handler until the gate opens, the
+`OBJECT_MOTION_FROM_TO` handler writes `from` on its first dispatched tick, and `OBJECT_ACTIVE_STATE`
+writes no pose at all ([`../anim-definitions.md`](../anim-definitions.md), "A `from` pose is written
+on the event's first dispatched tick"). A node therefore holds whatever posed it last, which is
+usually the matching retract's `RESET_STATE`, bootstrap pass 1 applying it to every loaded
+definition: `pirate_hook_retract` parks `l_arm3`/`r_arm3` at rotation `(0, 0, 0)` and scale
+`(1, 0, 0)`, the pose its extend starts from, and switches the group, both doors and both arms off.
 
-An airframe whose retract poses no scale keeps the archive's pose for that second and does open its
-motion with a step. `bal_hook_retract` names only the two rotations, so the Balmoral's `l_arm1` and
-`r_arm1` sit at `(1, 1, 1)` against a `from` of `(1, 1, 0.5)`. That is the data, and it is a small
-squash rather than a collapse.
+**Five of eleven airframes' `RESET_STATE` does not cover every node its own extend swings.**
+`bal_hook_retract`/`war_hook_retract` author no `ObjectScaleState` at all, so `l_arm1`/`r_arm1` sit
+at the archive's own `(1, 1, 1)` against a `from` of `(1, 1, 0.5)`, and `m_arm1`/`m_arm2` are never
+reset at all. `brig_hook_retract`/`fury_hook_retract`/`peace_hook_retract` park `l_arm1`/`r_arm1` on
+the wrong axis (their own scale reset moves `y`, the extend definition's own `from` moves `z`).
+Every one of these is a full-length or wrongly-posed node held for the opening second, exactly the
+shape `OriginalScreenshots/Videos/CM04.mkv`'s Balmoral docking shows: over its opening shot the
+centre mast draws at archive length for a frame, vanishes, and only then grows and swings.
+`AnimRuntime.ParkDockingHook` closes the gap by seeding every node its group's own `<x>_hook_extend`
+moves from that definition's own first FROM pose, which wins wherever a `RESET_STATE` omits a node
+or disagrees with it, never by editing the authored `RESET_STATE` data itself.
 
 **All three therefore need the flown aeroplane's own subtree in the animation runtime's node
 table.** CSVM indexes it there when the flight rigs are built, and again after an airframe swap,
@@ -634,11 +638,20 @@ rebased onto the chapter's cross-archive base the same way the staged intro airc
 (`AircraftStage.StageFlown`); the docking-hook group is built for a human rig and parked at its
 archive-authored inactive bit (`Mech3/PlaneBuilder.cs`). ⚠ That rebased index deliberately runs no
 general `RESET_STATE` pass, since a chapter definition anchoring on a generic airframe node name must
-not re-pose a live aeroplane, so `StageFlown` applies the one scoped pass the arms need through
-`AnimRuntime.ParkDockingHook`: the `RESET_STATE` of every definition anchored on a `*_hook` group
-inside that model. ⚠ The airframe node's own visibility is that ACTIVE bit, so the flight rig writes
-its presence one node higher, on the shake pivot: an aircraft a cutscene holds `Inert` while posing
-it must not read as "no airframe at all".
+not re-pose a live aeroplane, so `StageFlown` applies the two scoped passes the arms need through
+`AnimRuntime.ParkDockingHook`. ⚠ The airframe node's own visibility is that ACTIVE bit, so the flight
+rig writes its presence one node higher, on the shake pivot: an aircraft a cutscene holds `Inert`
+while posing it must not read as "no airframe at all".
+
+⚠ **A rotate-only and a scale-only `FROM_TO` on the same node in the same tick is not two channels
+racing.** `bal_hook_extend`'s `control` sequence calls `move_left_arm1` (rotate) immediately
+followed by `scale_left_arm1` (scale), both on `l_arm1`, dispatched on the same `Advance` since a
+`CALL_SEQUENCE` a higher-indexed sequence slot answers runs within the same walk
+(`docs/org/sequences.md`). `MotionSet`'s one-motion-per-`(Target, Channel)` rule would otherwise
+evict the rotate tween before it ever ticks, leaving the arm's rotation frozen at whatever it held
+going in while its scale animates normally and reaches its authored end. A `.Scale` readback taken
+only at the end therefore reads correct; only the rotation shows the defect. `FromToMotion.Create`
+carries the evicted motion's own channel and run time into its replacement instead of losing it.
 
 #### Limits and readings
 

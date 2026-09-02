@@ -38,6 +38,9 @@ internal static class LandingApproachSuites
     private const string DockAnim = "hooked_to_klondike";
     private const string BalmoralPlane = "player_balmoral";
 
+    // The piratezep crane's own hook, woken separately from the airframe hookup above.
+    private const string HookHomebaseAnim = "pzhomebase";
+
     // The mission-completion code the docking ends on, which is the last thing the episode raises,
     // and the authored run time of the wing fold the branch waits out before raising it.
     private const int CompleteCode = 13;
@@ -60,6 +63,11 @@ internal static class LandingApproachSuites
 
     // How close a pose has to land on its authored value to count as that value.
     private const float PoseEpsilon = 1e-3f;
+
+    // How close a swung arm's Euler read-back has to land on its authored end angle. Looser
+    // than PoseEpsilon: GetEuler's decomposition of a composed rotate+scale basis carries more
+    // float noise than a plain position lerp does.
+    private const float SwingEpsilon = 1e-2f;
 
     // How far short of its authored end the wing fold is when the mission's own ending stops the
     // world: the fold turns 1.92 rad in 2.01 s and the branch that raises the code waits 2.0 s, so
@@ -151,7 +159,14 @@ internal static class LandingApproachSuites
     // What a landings suite does with the built world: the harness owns the build, the suite owns
     // the drive. The mission's own zrdr path comes with it, for the readers that are not the
     // objective script.
-    private static readonly string[] HookupPlanes = { "player_balmoral", "player_pfighter" };
+    private static readonly string[] HookupPlanes =
+    {
+        "player_balmoral", "player_pfighter", "player_warhawk",
+        "player_brigand", "player_fury", "player_peacemaker",
+    };
+
+    // The piratezep crane's own two inward-swinging side parts.
+    private static readonly string[] HookCraneParts = { "top_seg", "hoop" };
 
     private delegate void MissionDrive(TestContext ctx, TestWorld world, CampaignDirector director,
         ObjectiveScript script, string missionZrdr, StringBuilder report);
@@ -770,20 +785,29 @@ internal static class LandingApproachSuites
             report.AppendLine($"at switch-on '{node}': scale {at}, its motion starts from {from}");
         }
 
-        // The opening shot draws the arms for a whole second before their scale motion starts, so
-        // an arm still at the archive's full length here is drawn extended and then collapses when
-        // the motion reaches it, which reads as a second swing.
-        var parkedAt = ParkedScales(world, branchAnim);
-        foreach (var (node, _, at) in atSwitchOn)
+        // A node not parked at its own motion's FROM is drawn at the wrong pose for the whole
+        // second before that motion starts, reading as a second swing; sorted magnitudes are the
+        // honest comparison, since a rotated basis does not read its scale back axis-for-axis.
+        foreach (var (node, from, at) in atSwitchOn)
         {
-            if (!parkedAt.TryGetValue(node, out var authored))
-            {
-                continue;
-            }
+            ctx.Check(Near(SortedAxes(at), SortedAxes(from), SwingEpsilon),
+                $"'{node}' is drawn at the pose '{branchAnim}' authors as its motion's FROM, {from} (read {at})");
+        }
 
-            report.AppendLine($"parked '{node}': authored {authored}, drawn {at}");
-            ctx.Check(CollapsedLike(at, authored),
-                $"'{node}' is drawn at the collapsed pose its airframe's retract definition parks it at, {authored}, rather than the aircraft archive's own full length");
+        // Every arm the branch's own definition swings by rotate FROM_TO, read against the
+        // angle it authors for it, once the episode above has run to completion.
+        var rotated = new List<(string Node, Vector3 To)>();
+        foreach (var d in world.Runtime.DefsFor(branchAnim))
+        {
+            SampleRotatedMovers(d, rotated);
+        }
+
+        foreach (var (node, to) in rotated)
+        {
+            var live = NamedNode(model, node)?.Transform.Basis.GetEuler(EulerOrder.Yxz);
+            report.AppendLine($"swung '{node}': authored to {to}, live local rotation {live}");
+            ctx.Check(live is { } l && Near(l, to, SwingEpsilon),
+                $"'{node}' reaches the angle '{branchAnim}' authors for it, {to} (read {live})");
         }
 
         // One call site playing three times and three call sites playing once are different
@@ -887,6 +911,11 @@ internal static class LandingApproachSuites
         LandingApproachRuntime trigger, CutsceneController cutscene, FlightController rig,
         LandingApproach dock, StringBuilder report)
     {
+        // The crane's own hook is woken by an objective this suite does not otherwise drive.
+        // A real approach reaches the hookpoint minutes after capture; this settle window gives
+        // it the same head start.
+        var craneStarted = world.Runtime.Play(HookHomebaseAnim);
+        report.AppendLine($"'{HookHomebaseAnim}' started: {craneStarted.Count} definition(s)");
         for (float t = 0f; t < IntroSettleS; t += StepDt)
         {
             world.Runtime.Advance(StepDt);
@@ -894,6 +923,16 @@ internal static class LandingApproachSuites
         }
 
         report.AppendLine($"intro settled after {IntroSettleS:0}s, playing={cutscene.Playing}");
+        foreach (var node in HookCraneParts)
+        {
+            var live = world.Runtime.FindNodes(node) is { Count: > 0 } hits
+                ? hits[0].Transform.Basis.GetEuler(EulerOrder.Yxz)
+                : (Vector3?)null;
+            report.AppendLine($"crane '{node}' local rotation after the settle: {live}");
+            ctx.Check(live is { } l && Near(l, Vector3.Zero, SwingEpsilon),
+                $"'{node}' swings in to its authored rest, rather than stopping short or past it (read {live})");
+        }
+
         var fold = FoldOf(world, DockAnim, BalmoralPlane);
         report.AppendLine($"fold definition: '{fold?.Anim ?? "(none)"}'");
         ctx.Check(fold != null,
@@ -1598,47 +1637,6 @@ internal static class LandingApproachSuites
         return string.Empty;
     }
 
-    // The scales the airframe's own retract definition parks its arms at: every ObjectScaleState in
-    // the RESET_STATE of the definition rooted on the same hook group as the extend. An airframe
-    // whose retract poses no scale (the Balmoral) contributes nothing, which is the data.
-    private static Dictionary<string, Vector3> ParkedScales(TestWorld world, string extendAnim)
-    {
-        var parked = new Dictionary<string, Vector3>(StringComparer.OrdinalIgnoreCase);
-        string group = HookGroupOf(world, extendAnim);
-        if (group.Length == 0)
-        {
-            return parked;
-        }
-
-        foreach (var def in world.Runtime.ProgramDefs)
-        {
-            if (def.ResetState == null
-                || !string.Equals(def.Name, group, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            foreach (var ev in def.ResetState.Events)
-            {
-                if (ev.Kind == "ObjectScaleState" && ev.Data.Str("name") is { } name)
-                {
-                    parked[name] = ev.Data.Vec3("state");
-                }
-            }
-        }
-
-        return parked;
-    }
-
-    // A pose is parked when its most collapsed axis is as flat as the authored one. The arm's live
-    // basis is read back through a scale decomposition and its non-collapsed axes do not survive
-    // that round trip on a degenerate basis, so the flattest axis is the honest comparison; the
-    // runtime's own non-singular clamp is why the authored zero reads a hair above it.
-    private static bool CollapsedLike(Vector3 at, Vector3 authored) =>
-        Math.Abs(MinAxis(at) - MinAxis(authored)) < 0.05f;
-
-    private static float MinAxis(Vector3 v) => Math.Min(v.X, Math.Min(v.Y, v.Z));
-
     // What each of a hook definition's scaled movers is drawn at when that definition starts. The
     // arms are switched on by its state sequence and only scaled by a motion its control sequence
     // starts a second later, so this reads the pose the opening shot shows in between.
@@ -1656,6 +1654,26 @@ internal static class LandingApproachSuites
                 }
 
                 into.Add((name, scale.Vec3("from"), NamedNode(model, name)?.Scale ?? Vector3.Zero));
+            }
+        }
+    }
+
+    // Every distinct node a hook definition swings by rotate FROM_TO, with its authored end
+    // angle, so a run can compare the live pose reached against it.
+    private static void SampleRotatedMovers(AnimDefinition def, List<(string Node, Vector3 To)> into)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var seq in def.Sequences)
+        {
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Kind != "ObjectMotionFromTo" || ev.Data.Obj("rotate") is not { } rotate
+                    || ev.Data.Str("name") is not { } name || !seen.Add(name))
+                {
+                    continue;
+                }
+
+                into.Add((name, rotate.Vec3("to")));
             }
         }
     }
@@ -1712,6 +1730,15 @@ internal static class LandingApproachSuites
 
     private static bool Near(Vector3 a, Vector3 b, float epsilon = PoseEpsilon) =>
         (a - b).Length() <= epsilon;
+
+    // A vector's own components, ascending: the permutation-invariant read for a scale pulled
+    // back off a rotated basis, where which world axis a magnitude lands on is not the claim.
+    private static Vector3 SortedAxes(Vector3 v)
+    {
+        Span<float> a = stackalloc float[] { v.X, v.Y, v.Z };
+        a.Sort();
+        return new Vector3(a[0], a[1], a[2]);
+    }
 
     private static Node3D? NamedNode(Node3D root, string name)
     {

@@ -804,9 +804,27 @@ is a judgement on our own remake.
   - (b) one growth from nothing to full length over the next second, then one outward swing;
   - (c) no second swing and no collapse-then-regrow; if a repeat is still visible it is on the
     shared fork rather than the airframe branch, which the suite does not cover;
-  - (d) in a Balmoral, whether the arms' authored step from full to half scale at one second reads
-    like the original (its retract authors no scale, and no Balmoral docking is on film).
+  - (d) in a Balmoral or Warhawk auto-land, the centre mast (`m_arm1`) and both side arms
+    (`l_arm1`/`r_arm1`) hold no full-length or half-turned flash before their own growth starts;
+    `OriginalScreenshots/Videos/CM04.mkv`'s docking around 3:18 is the reference.
   *Blocks:* nothing tracks the outcome; a fail reopens the symptom as a new `BL` against the fork.
+
+- `PT-116` `[A/B: OriginalScreenshots/Videos/CM04.mkv, ~198 s to the cut]` **A Balmoral or
+  Warhawk's docking hook swings its full authored travel and parks with no flash** (`BL-630`).
+  Two faults shared this symptom: the flown airframe's own hook arms held whatever raw pose the
+  archive shipped through the opening second (`AnimRuntime.ParkDockingHook` now seeds every node
+  from its extend definition's own FROM pose), and a same-tick rotate-then-scale pair on one arm
+  node left the rotate half frozen (`FromToMotion` now carries it forward instead of losing it to
+  eviction). Fly CM02 (or CM04) to its auto-land in a Balmoral or a Warhawk and watch the hook bay
+  from the moment it opens.
+  *Look for:*
+  - (a) no arm drawn at full length or on the wrong angle for the opening second, the same tell
+    `PT-97` (d) names;
+  - (b) the two side arms and the centre mast swing smoothly to their final angle once, with no
+    freeze partway and no jump back toward where they started;
+  - (c) the crane bay's own two side parts (not the airframe's arms) swing in and settle with no
+    overshoot, over the whole approach rather than only the opening second.
+  *Blocks:* nothing tracks the outcome at the controls; a fail reopens the symptom as a new `BL`.
 
 ### Any chapter · the campaign export, then Instant Action
 
