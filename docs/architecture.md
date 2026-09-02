@@ -2019,10 +2019,15 @@ zero, since those two cancel between the eye and the panel. The projection is th
 world's exactly, computed from small numbers instead of chapter-scale ones. The viewport is
 transparent-backed on `HudLayers.CockpitPass`, so the world draws under the panel and the whiteout,
 the screen wash and the HUD still draw over it. Lighting is a copy of the world's sun, re-aimed by
-the inverse plane attitude each frame, plus the world environment duplicated with its background
-cleared. `GameSession.BuildCockpitPasses` builds one per `PlayerRig`, on that rig's own `HudParent`;
-`FlightController._Process` calls `Sync` beside the camera write, and `Sync` follows the interior's
-own `Visible` so `CockpitVisibility` keeps deciding which views show a cockpit.
+the inverse plane attitude each frame, plus a `Duplicate()` of the world Environment. In enhanced
+graphics mode the clone also copies every shadow setting off the live sun (mode, splits, blend,
+biases), clamping `DirectionalShadowMaxDistance` to the pass's own 100 m camera far plane rather
+than the zone's kilometre-scale value; `GameSession.BuildCockpitPasses` then registers the clone
+with `WeatherRig.RegisterExtraLighting` so a later zone change reaches it too, alongside the
+session sun. Original mode is untouched: the clone's `ShadowEnabled` mirrors the live sun's, which
+never turns on there. `GameSession.BuildCockpitPasses` builds one per `PlayerRig`, on that rig's own
+`HudParent`; `FlightController._Process` calls `Sync` beside the camera write, and `Sync` follows
+the interior's own `Visible` so `CockpitVisibility` keeps deciding which views show a cockpit.
 
 ## src/Flight/ImpactOutcome.cs
 "What should happen when this weapon hits this surface id" as a value — `EffectName` (the row's
@@ -4450,7 +4455,10 @@ since W, A, S and D are letters there and the combined axes would move the curso
 ## src/UI/SplitScreen.cs
 The splitscreen rig for 2–4 players (1P never constructs it, keeping that path untouched): black
 gutter backdrop, one `SubViewport` pane per player sharing the main `World3D`, plus the
-`PlayerColor`/`PlayerTag` identity table.
+`PlayerColor`/`PlayerTag` identity table. Sharing the main `World3D` means every pane also shares
+the one sun and WorldEnvironment, so enhanced graphics mode's lighting, shadows and per-zone updates
+reach every pane with no pane-local plumbing; each pane computes its own directional shadow splits
+off its own camera, and `PositionalShadowAtlasSize` is moot since no omni casts a shadow (B14).
 **The pinned 3D audio listener model (2026-08-15): every pane is a listener**
 (`AudioListenerEnable3D`). Godot 4.7 takes the per-channel MAXIMUM over all listener-enabled
 viewports of the `World3D` and culls `max_distance` per listener, so an emitter is heard at its
@@ -6542,6 +6550,11 @@ gate is a `zone_id` cull mask with no distance in it, `WorldLights` fades on its
 pair, the skydome is fitted from the camera's far plane, and `ZoneWeather.ClipFar` is parsed and
 logged but reaches no consumer (the camera far plane is `Launcher`'s fixed 40000 m, past every
 pushed fog far).
+`RegisterExtraLighting` takes a second (sun, env) pair — the cockpit overlay's own clones — and
+`ApplyEnhancedLighting` writes the same energies and colours onto every registered pair beside the
+session sun/env, so a zone crossing mid-flight reaches the interior pass too. The shadow max
+distance is deliberately excluded from that mirroring: a registered clone owns its own
+camera-relative distance, set once at registration (`CockpitOverlay`'s 100 m far plane).
 
 ## src/Session/LensFlareRig.cs
 The sun's lens flare: four screen-space sprites strung along the sun→screen-centre vector at

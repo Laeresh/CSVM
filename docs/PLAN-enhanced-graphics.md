@@ -94,7 +94,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ Authored SUNLIGHT drives the sun and ambient in enhanced mode
 13. ☑ Sun shadow maps
 14. ☑ LIGHT_STATE point lights as real OmniLight3D nodes
-15. ☐ Enhanced settings reach the cockpit interior pass and every splitscreen pane
+15. ☑ Enhanced settings reach the cockpit interior pass and every splitscreen pane
 
 ### Wave C — Post stack
 
@@ -600,7 +600,7 @@ steady-state (post warm-up) `[perf] window` lines: original `gpu_ms` 0.22-0.27, 
 0.63-0.90; enhanced `gpu_ms` 0.28-0.32, `render_cpu_ms` 0.90-1.06 (15 real omnis over Forward+ cost
 roughly 0.05 ms GPU time), in line with the item's evidence that the mechanism is cheap either way.
 
-## B15 ☐ Enhanced settings reach the cockpit pass and every splitscreen pane
+## B15 ☑ Enhanced settings reach the cockpit pass and every splitscreen pane
 
 **Goal.** The cockpit interior SubViewport and all splitscreen panes render with the same
 graphics mode and the same enhanced settings as the main world view.
@@ -626,6 +626,78 @@ mode: goldens zero movers.
 **⚠ Traps.** The cockpit pass composites PremultAlpha over the world pass
 (`CockpitOverlay.cs:167-175`); a tonemap difference between the two viewports shows up as a seam
 at the canopy edge, which is why C22 must re-run this item's verify.
+
+**As landed.** `CockpitOverlay.NewOverlay` copies its interior sun's `ShadowEnabled` off the live
+world sun rather than hardcoding `false`; by the time it runs, `WeatherRig.Build` has already
+applied the flown zone (`GameSession.BuildCockpitPasses` runs after `_weatherRig.Build`), so the
+copy is already the right zone's settings, with no ordering change needed. When the live sun's
+shadows are on, the clone also copies `DirectionalShadowMode`, all three splits,
+`DirectionalShadowBlendSplits`, `ShadowBias` and `ShadowNormalBias` verbatim, and sets its own
+`DirectionalShadowMaxDistance` to `Min(liveSun.DirectionalShadowMaxDistance, camera.Far)`: every
+zone's fog-far distance (4500-9400 m) exceeds the overlay camera's 100 m far plane, so the clamp
+always lands on 100 m, keeping the PSSM splits sized to the near-field panel geometry this pass
+actually draws rather than to a distance the pass never renders. `WeatherRig.RegisterExtraLighting`
+takes a second (sun, env) pair and `ApplyEnhancedLighting` writes the same `LightEnergy`,
+`LightColor`, `AmbientLightSource/Color/Energy` onto every registered pair beside the session sun
+and Environment (factored into the shared `ApplyEnhancedSunAndEnv`), deliberately excluding the
+shadow max distance since a registered clone's distance is camera-relative and set once.
+`GameSession.BuildCockpitPasses` registers each overlay's `Sun`/`Env` (two new accessors) with
+`_weatherRig` in enhanced mode, so a zone crossing mid-flight reaches the interior pass too — seen
+live in the splitscreen capture below, where camera state 1 fires mid-run and both panes' cockpit
+log lines pick up the new zone's `enhanced sun energy`/`shadows to` values.
+The consumer audit (`Grep` for `new DirectionalLight3D`/`new Godot.Environment`/`.Duplicate()`
+across `CSVM/src`) found one other Environment/sun consumer: `MeshLab` takes `_sun`/`_env` by
+reference from `GameSession` (no `Duplicate()`), so it already reads whatever the session's own
+objects hold; its separate `_labLight` for the viewer's "Scoped" lighting demo is an inspection
+tool outside this item's cockpit/splitscreen scope and untouched. Splitscreen needed no code
+change: every pane's `SubViewport.World3D` is explicitly set to the main viewport's
+(`SplitScreen.Init`), so the one session sun and WorldEnvironment are already shared, and each
+pane computes its own directional shadow map off its own camera — `PositionalShadowAtlasSize`
+(the omni/spot atlas) is moot since B14 keeps every omni's `ShadowEnabled` off.
+
+**Verified.** <pending orchestrator run>
+In the item's own worktree, `$env:CSVM_DATA_ROOT="Z:\CSVM"` set first throughout.
+`dotnet build CSVM/CSVM.sln`: clean, 0 warnings, 0 errors.
+`.\RunTests.ps1 -SkipEngine -SkipGoldens`: units PASS, 2796 passed of 2796, 0 failed.
+`.\RunTests.ps1 -Suite cockpit-overlay-pass -SkipUnits -SkipGoldens`: engine PASS, 1 suite run,
+engine errors clean. `.\RunTests.ps1 -Suite splitscreen-listeners -SkipUnits -SkipGoldens`: engine
+PASS, 1 suite run, engine errors clean. `.\RunTests.ps1 -Suite fog-state -SkipUnits -SkipGoldens`
+and `.\RunTests.ps1 -Suite sun-orientation -SkipUnits -SkipGoldens`: both engine PASS, 1 suite run
+each, engine errors clean (WeatherRig's registration list touches neither suite's assertions).
+`.\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only): PASS, 18 shot(s) hash-identical, zero
+movers, on an RTX 5080. `.\CheckCommentCaps.ps1 -Summary` and `.\CheckEncoding.ps1`: both clean
+over the whole tree.
+Twelve captures through `.\RunProbe.ps1` (absolute `--screenshot=` paths; a relative one resolves
+against the engine's own working directory and silently fails to save), each an original/enhanced
+pair, under `.scratch/waveB/`: C2's default freecam spawn (buildings), C1's and C4's default
+freecam spawns (the 2x fog push), C5's default freecam spawn (night city, unmoved), the aircraft
+at `--pos=-6420,25,-3260 --direction=1,0,-0.3` near C1's `docklight1`/`docklight2` (CAP-10's night
+version is not possible in day C1, so this is the closest live substitute — the omni's glare and
+lens-flare-like starburst are visible on both the aircraft and the water in enhanced mode, absent
+in original), and the splitscreen/cockpit pair
+(`--fly --players=2 --plane=player_bhawk,player_bhawk --chapter=C1 --view=cockpit --det --mute
+--frames=15`). All twelve runs report 0 `ERROR` lines in their `.err` stream. The splitscreen
+capture's log shows both panes' cockpit passes built (`cockpit: interior drawn in its own pass at
+the origin for 2 rig(s)`) and, mid-run, a camera-state zone change re-resolving the enhanced
+energies and shadow distance (`weather: camera state 1 -> fog zone 'zone1' — … enhanced sun energy
+1.28 (diffuse 1.2), ambient energy 0.45 (ambient 0.25), shadows to 3500 m`) with no unexpected
+lines following it — the registered cockpit clones picked up that change alongside the session sun.
+Visual check of both splitscreen images: pane 1 and pane 2 read at the same lighting level as each
+other in both modes, and the world outside the canopy in enhanced mode shows real hillside shading
+and building shadows that original mode does not, while the HUD (speed/altitude/throttle, the
+weapon readout, the gunsight) and the interior dashboard composite identically in placement and
+legibility between modes.
+Seam measurement (mean luminance, 0-255, 15x20 px patches either side of the left canopy strut's
+edge at x=280-295 world / x=310-325 strut, `System.Drawing`, `.scratch/waveB/seam.ps1`), both
+panes of the splitscreen capture: original mode pane 1 world 136.47 / strut 142.36 (delta 5.88),
+pane 2 world 176.00 / strut 163.20 (delta 12.80); enhanced mode pane 1 world 89.05 / strut 68.11
+(delta 20.94), pane 2 world 74.00 / strut 70.86 (delta 3.14). The deltas vary between panes in
+BOTH modes (different terrain sits behind the same screen-space patch at each pane's slightly
+different altitude), which is the control showing the variation is content, not a mode-introduced
+seam; a 4x-zoomed crop of the largest-delta edge (enhanced pane 1) shows a clean composite line
+with no banding or artifact at the boundary.
+Every montage and its exact command line is listed in the report; all are untracked `.scratch/`
+output, not committed.
 
 # Wave C — Post stack
 

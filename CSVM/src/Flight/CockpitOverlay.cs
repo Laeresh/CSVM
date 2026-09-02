@@ -42,6 +42,15 @@ public sealed partial class CockpitOverlay : CanvasLayer
     /// overlay world, at zero translation.</summary>
     public Node3D Interior => _interior;
 
+    /// <summary>This pass's own cloned sun, so <see cref="Session.WeatherRig.RegisterExtraLighting"/>
+    /// can keep it in step with future zone changes. Null when the caller passed no sun (a suite
+    /// rig with no lighting).</summary>
+    public DirectionalLight3D? Sun => _light;
+
+    /// <summary>This pass's own cloned Environment, for the same registration. Null when the
+    /// caller passed no Environment.</summary>
+    public Godot.Environment? Env => _view.World3D.Environment;
+
     /// <summary>Moves <paramref name="interior"/> into a private world under
     /// <paramref name="parent"/> and returns the pass drawing it, or null when the node has no
     /// parent to be taken from. <paramref name="sun"/> and <paramref name="env"/> are the main
@@ -141,8 +150,25 @@ public sealed partial class CockpitOverlay : CanvasLayer
                 Name = "interior_sun",
                 LightEnergy = sun.LightEnergy,
                 LightColor = sun.LightColor,
-                ShadowEnabled = false,
+                // Copied off the live sun, which by this point in the build already carries the
+                // flown zone's settings (WeatherRig.Build runs ahead of BuildCockpitPasses) —
+                // false in original mode, since the world sun's own flag never turns on there.
+                ShadowEnabled = sun.ShadowEnabled,
             };
+            if (sun.ShadowEnabled)
+            {
+                light.DirectionalShadowMode = sun.DirectionalShadowMode;
+                light.DirectionalShadowSplit1 = sun.DirectionalShadowSplit1;
+                light.DirectionalShadowSplit2 = sun.DirectionalShadowSplit2;
+                light.DirectionalShadowSplit3 = sun.DirectionalShadowSplit3;
+                light.DirectionalShadowBlendSplits = sun.DirectionalShadowBlendSplits;
+                light.ShadowBias = sun.ShadowBias;
+                light.ShadowNormalBias = sun.ShadowNormalBias;
+                // Clamped to this pass's own camera far plane: the world sun's distance is a
+                // zone's fog far (thousands of metres, always past 100 m), and passing it through
+                // would push every PSSM split past what this near-field pass ever renders.
+                light.DirectionalShadowMaxDistance = Mathf.Min(sun.DirectionalShadowMaxDistance, camera.Far);
+            }
         }
         return new CockpitOverlay(view, camera, interior, light, sun)
         {

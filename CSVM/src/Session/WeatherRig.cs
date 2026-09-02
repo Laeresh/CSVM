@@ -80,6 +80,10 @@ public sealed class WeatherRig
     // engaged and how hard, without a line every frame. Only the crossings of the 0/non-0 boundary
     // and moves of 0.05 or more are said out loud.
     private readonly Dictionary<int, float> _lastLoggedVolumeWhiteout = new();
+    // Extra (sun, env) pairs that mirror the session sun and Environment in enhanced mode — the
+    // cockpit overlay's own clones, registered once each is built, so a zone crossing mid-flight
+    // reaches the interior pass too rather than leaving it lit for the mission's first zone.
+    private readonly List<(DirectionalLight3D Sun, Godot.Environment? Env)> _extraLighting = new();
 
     private WeatherState? _weather;
     private string _activeZone;
@@ -175,6 +179,14 @@ public sealed class WeatherRig
     /// one.</summary>
     public static Vector2 FogRangeFor(Vector2 authored)
         => GraphicsMode.Enhanced ? authored * EnhancedFogRangeScale : authored;
+
+    /// <summary>Registers a second (sun, env) pair — a cockpit overlay's cloned copies — so every
+    /// future enhanced-mode zone change reaches it too, not only the zone live when it was built.
+    /// <paramref name="env"/> may be null (a suite rig with no Environment); the shadow max
+    /// distance is excluded, since a clone's camera has its own far plane to respect
+    /// (<c>CockpitOverlay</c>).</summary>
+    public void RegisterExtraLighting(DirectionalLight3D sun, Godot.Environment? env)
+        => _extraLighting.Add((sun, env));
 
     /// <summary>Loads the mission's weather.json and resolves the rendered zone, builds the
     /// per-rig domes via <paramref name="buildDomes"/> (needs the resolved zone), then applies
@@ -449,6 +461,22 @@ public sealed class WeatherRig
         return counts;
     }
 
+    // The energy/colour half of ApplyEnhancedLighting, shared by the session sun/env and every
+    // registered clone, so the two can never drift onto different formulas.
+    private static void ApplyEnhancedSunAndEnv(DirectionalLight3D sun, Godot.Environment? env,
+        float sunEnergy, Color sunColor, float ambientEnergy, Color ambientColor)
+    {
+        sun.LightEnergy = sunEnergy;
+        sun.LightColor = sunColor;
+        if (env == null)
+            return;
+        // ⚠ Take the ambient off the sky: AmbientSource.Sky reads the placeholder procedural sky,
+        // not the mission's authored ambient colour, and would ignore both values written here.
+        env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
+        env.AmbientLightColor = ambientColor;
+        env.AmbientLightEnergy = ambientEnergy;
+    }
+
     // Says out loud that one rig's in-volume whiteout engaged, and how hard — the
     // evidence a probe reads, since a curtain that never fires and one that fires at 0.02 look
     // the same in a night frame. Only the 0 ↔ non-0 crossings and moves of 0.05 or
@@ -686,21 +714,15 @@ public sealed class WeatherRig
     private void ApplyEnhancedLighting(WeatherState.ZoneWeather fog)
     {
         RenderingServer.GlobalShaderParameterSet("csky_world_light", 1f);
-        // Shadows end where this zone's haze does, never at a line in clear air. Taken off the
-        // AUTHORED far through the same push, not off the written range, so --no-fog (which parks
-        // that range at 1e8) still gets a usable distance; no weather.json keeps the fallback.
+        // Shadows end where this zone's haze does, off the AUTHORED far through the same push, not
+        // the written range, so --no-fog still gets a usable distance. The session sun only: a
+        // registered clone owns its own camera-relative max distance (RegisterExtraLighting).
         if (fog.FogFar > 0f)
             _sun.DirectionalShadowMaxDistance = FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).Y;
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
-        _sun.LightEnergy = sunEnergy;
-        _sun.LightColor = fog.SunColorDiffuse;
-        if (_env == null)
-            return;
-        // ⚠ Take the ambient off the sky: AmbientSource.Sky reads the placeholder procedural sky,
-        // not the mission's authored ambient colour, and would ignore both values written here.
-        _env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
-        _env.AmbientLightColor = fog.SunColorAmbient;
-        _env.AmbientLightEnergy = ambientEnergy;
+        ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, fog.SunColorDiffuse, ambientEnergy, fog.SunColorAmbient);
+        foreach (var (sun, env) in _extraLighting)
+            ApplyEnhancedSunAndEnv(sun, env, sunEnergy, fog.SunColorDiffuse, ambientEnergy, fog.SunColorAmbient);
     }
 
     // The per-rig whiteout overlays and the mission's precipitation field — the half of
