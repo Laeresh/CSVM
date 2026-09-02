@@ -821,6 +821,13 @@ loss. What the engine renders was decodable from the authored constants + oscill
   end below where it started, which only sinking through the sea satisfies. Read the DISPATCH for
   "did the event fire" and the RESTING POSITION for "did it end in the right place". A displacement
   answers neither, and it rewards whichever fault travels furthest.
+- **INSTR-40** — **A self-test whose rows all call helpers proves nothing about the entry point the
+  caller actually uses. Drive the entry point.** Measured on `CheckCommitContent.ps1`:
+  `-Root <tree>` exited 2 on a real comment-cap violation while
+  `-Command 'git -C <same tree> commit ...'`, the shape the hook passes, exited 0 before any check
+  ran, because the guard tested for a bare `git commit` and a worktree-scoped commit puts its
+  options between those two words. All 17 rows passed throughout, and none of them reached the
+  guard.
 
 ## SRC — sources and documents
 

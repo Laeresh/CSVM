@@ -106,8 +106,8 @@
     {
       "name": "c1-debris-rest",
       "frame": 360,
-      "hash": "ac23a4f7aba9003441ab0338de9011e4",
-      "exercises": "the column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer as the visible signal.",
+      "hash": "e003acfd62ee90b1fbc2914937ed703f",
+      "exercises": "the two-ray column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer as the visible signal, so a piece the column misses and lets run shows here.",
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
     {

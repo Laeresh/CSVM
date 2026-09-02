@@ -269,6 +269,13 @@ function Invoke-SelfTest {
         # A command that is not a commit must never pay for any of this.
         $skip = & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command 'git status'
         Assert-Row 'guard  a non-commit command exits early' ($LASTEXITCODE -eq 0)
+
+        # Every row above tests a helper. These two drive the script's own entry point, which is
+        # where the guard lives and where a -C-scoped commit used to exit 0 before any check ran.
+        & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command ('git -C ' + $wt + ' commit -m x') | Out-Null
+        Assert-Row 'guard  a -C-scoped commit is checked end to end' ($LASTEXITCODE -eq 2)
+        & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command 'git log --grep=commit' | Out-Null
+        Assert-Row 'guard  a subcommand merely naming commit is not one' ($LASTEXITCODE -eq 0)
     }
     finally {
         if (Test-Path -LiteralPath $wt) { git -C $main worktree remove --force $wt 2>&1 | Out-Null }
@@ -299,7 +306,9 @@ if ($ShowRoots) {
 
 if (-not $Root) {
     if (-not $Command) { exit 0 }
-    if ($Command -notmatch 'git\s+commit') { exit 0 }
+    # A commit names its tree BEFORE the subcommand, as "git -C <tree> commit", so testing for a
+    # bare "git commit" waves every worktree-scoped commit through with no check run at all.
+    if ($Command -notmatch '(?:^|[\s;|&])git(?:\s+\S+)*?\s+commit(?:\s|$)') { exit 0 }
     if ($env:CSVM_SKIP_CONTENT_CHECKS) {
         [Console]::Error.WriteLine('CSVM_SKIP_CONTENT_CHECKS is set: content checks skipped.')
         exit 0
