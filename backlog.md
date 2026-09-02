@@ -850,26 +850,66 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-669` `[Research]` **CM12's ace `hkfirebrand_9` is authored 79 m inside a hill, so it flies
-  inside the terrain from its wake and dies ramming a tile from below.** `C2/M01`'s `aiv.zrd`
-  authors it at `(-4517.72, 150.0, -6232.58)` with `deactivated` set, and `OBJECTIVE67`'s
-  `WAKEUP_ENEMIES` reactivates it in place. The terrain surface there is 228.92 m on tile `g35052`
-  (model 617, whose vertex bounds reproduce the node's own `model_bbox`), so it begins 78.9 m under
-  ground. It is the only CM12 roster block placed over land; the mission's other land placement,
-  `patrolboat_eg0` at `y 0.021`, sits 5 cm above its surface. Confirmed in the built world: an
-  aeroplane at that pose flown level descends 150 m to 16 m with no contact and no `agl=` reading at
-  all, the same pose at 250 m reads `agl=21` and crashes into `g35052/col` at `y 229`, and the same
-  pose at 150 m pulled up crashes into `g35052/col` at `y 229` from below. **The open question is
-  what the original does with an aircraft inside terrain**, since the authored pose is the same data
-  there and `FUN_00432010` preserves y; that decides whether the fix is a placement rule or a
-  collision one. `PT-107` gathers the at-the-controls half.
+- `BL-669` `[Research]` **CM12's ace `hkfirebrand_9` is authored under the terrain sheet, which is
+  harmless in the original and fatal here because we collide on the faces it culls.** `C2/M01`'s
+  `aiv.zrd` authors it at `(-4517.72, 150.0, -6232.58)` with `deactivated` set (slot 21), and
+  `OBJECTIVE67`'s `WAKEUP_ENEMIES` reactivates it in place. The terrain surface over that point is
+  228.92 m on tile `g35052` (model 617, whose vertex bounds reproduce the node's own `model_bbox`,
+  and whose collider the built world confirms at `y 229`), so the ace begins 78.9 m below it. It is
+  the only CM12 roster block placed over land; the mission's other land placement,
+  `patrolboat_eg0` at `y 0.021`, sits 5 cm above its surface. **Being below the sheet costs
+  nothing by itself:** terrain is a sheet with no underside, so the space under it is open, a
+  downward ray from the pose finds nothing, and `SweepProbes` registers only where the motion
+  crosses a face. **And the ace cannot fall there:** its authored range from the player is 3867 m,
+  so `WAKEUP_ENEMIES` puts it on the far-field plant, which computes no gravity and holds
+  `nose · (fd_speed · throttle + 5)`; a powered aircraft under the sheet stays where it is. What
+  ends it is the crossing on the way out. A level track along its authored yaw 120 meets the sheet
+  again 260 m out, about 5 s at the plant's 52.3 m/s hold, against the 55 s a mover would need to
+  close 2867 m to the far-field boundary, so the crossing is reached far-field and the plant flip is
+  not involved. **That crossing is a face taken from behind, and the original culls it:** all 37
+  polygons of `g35052` and all 23 of `tagged` clear `SHOW_BACKFACE`, so the original's ray test
+  returns no hit and the ace flies out; CSVM forces every world collider double-sided and reports
+  `AI ram into tagged/col`. The fix therefore belongs to `BL-678`, not to placement, and this entry
+  stays open only to confirm at the controls that nothing else about the ace is wrong once that
+  lands. `PT-107` gathers that half.
   ⚠ *Traps:* not tunnelling (`SweepCadence` carries the skipped step's origin, and `FUN_0048d7f0`
   accumulates into `obj+0x6B0` and subtracts it on the sweeping frame, so no span goes untested);
   not the 20 m floor (`DAT_0071c3f0` is absolute, correctly silent at 150 m, and the original has no
-  AGL floor either); not collider sidedness (`SceneBuilder.CollidersForMesh` already builds terrain
-  double-sided). Do not add a blanket spawn lift. `BL-457` is closed and was never this question.
-  *Cross-refs:* `BL-522`'s undecoded net-nearest snap `FUN_004b0f40`, whose activate branch re-bases
-  x and z through `FUN_00432010` but leaves y untouched.
+  AGL floor either); not the far-field boundary or its missing hysteresis, both decoded. Do not add
+  a blanket spawn lift. `BL-457` is closed and was never this question. A player-piloted rig at that
+  pose measures nothing about the ace: it is near-field by construction, so it is handed gravity the
+  ace never gets, and its descent is an artefact of the wrong plant.
+  *Cross-refs:* `BL-678` (the collision-side backface cull), `ace-wake-terrain` (the suite that
+  pins the pose, the sheet and the track), `BL-522`'s undecoded net-nearest snap `FUN_004b0f40`,
+  whose activate branch re-bases x and z through `FUN_00432010` but leaves y untouched.
+- `BL-678` `[Fidelity]` **The original backface-culls its collision test per polygon; CSVM forces
+  every world collider double-sided, so we take contacts the original does not have.**
+  *Evidence:* `FUN_0055c9c0`, the node mesh test, calls the ray-polygon routine as
+  `FUN_0055d6c0(param_2, &start, &end, verts, uVar17 & 0x3ff, uVar17 >> 10 & 1)`. Inside it, after
+  building the face normal from two edge cross products, the segment's END distance decides:
+  `if ((0.0 <= fVar14) && (param_6 == 0)) return 0;` culls the face outright, and only then does
+  the sign test `(((uint)fVar14 ^ (uint)fVar2) & 0x80000000) == 0` look for a crossing. `param_6`
+  is bit 10 of the packed word whose low ten bits are the vertex count, which is polygon flag bit 0,
+  documented in [`docs/formats/gamez.md`](docs/formats/gamez.md) as `unk2` / upstream
+  `SHOW_BACKFACE`. One flag governs both rendering and collision. CSVM sets
+  `BackfaceCollision = true` unconditionally in `SceneBuilder.CollidersForMesh`
+  (`CSVM/src/Mech3/SceneBuilder.cs:896`) and in `Clutter` (`CSVM/src/Mech3/Clutter.cs:1087`), on
+  the stated grounds that the source winding is inconsistent, and no query anywhere sets
+  `HitBackFaces` or `HitFromInside`, so every ray runs Godot's defaults where back faces hit.
+  *Census (C2):* 7656 of 12645 polygons (60.5 %) clear the flag, matching the install-wide figure
+  in [`docs/formats/gotchas.md`](docs/formats/gotchas.md); of terrain polygons specifically 2251 of
+  2325 (96.8 %) clear it, and both tiles CM12's ace meets are wholly single-sided (`g35052` 37/37,
+  `tagged` 23/23). *Why it matters at the controls:* an aircraft, a round or a probe approaching a
+  single-sided face from behind is stopped here and passes through in the original. `BL-669` is the
+  worked example, where it turns a harmless authored pose into a scripted death.
+  *Fix shape:* honour `poly.ShowBackface` on the collision shape, which the loader already decodes
+  (`GameZ.cs:481`), behind a census and an A/B rather than as a blanket flip.
+  ⚠ *Traps:* the render side shares the flag and is a separate known simplification, so a collision
+  fix must not silently change what draws; the 266 game-wide back-to-back pairs (one quad authored
+  as two opposite-wound polygons) make a naive per-face change collidable from both sides anyway;
+  weapon rays run the same test, so [`docs/org/weaponRay.md`](docs/org/weaponRay.md) is in scope;
+  and the change reaches every chapter, every aircraft and every clutter body, so it will move
+  goldens and suites and needs its own item.
 - `BL-443` `[Fidelity]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
   late.** `FUN_0048fc40` (call `0x48c883`) writes the delivered body-up G and the ramp reads it at
   `0x48ca1e` in the same tick, before the torques; `FlightModel.Step` rotates before it translates

@@ -609,38 +609,46 @@ single-sided collider premise; it is already double-sided. The ace's ram death d
 primary 3, so this is not an objective bug. `SweepCadence` is a faithful port of `FUN_0048d7f0`'s
 parity gate, so a change there needs the decode beside it.
 
-**Disproven.** The placement question the Approach puts first answers the whole item, and neither
-`AiModeMachine` nor `SweepCadence` is at fault, so nothing lands in either. `hkfirebrand_9` is
-authored at `(-4517.72, 150.0, -6232.58)` in `C2/M01`'s `aiv.zrd`, with `deactivated` (slot 21) set
-so `OBJECTIVE67`'s `WAKEUP_ENEMIES` puts it in play in place. The terrain surface at that x and z is
-**228.92 m**, on tile `g35052` (`x -5120..-4096`, `z -7168..-6144`, model 617, whose vertex bounds
-reproduce the node's own `model_bbox`), so the ace begins flying **78.9 m inside the hill**. It is
-the only roster block in the mission placed over land at all; every other aircraft spawns over open
-water, and the mission's one other land placement, `patrolboat_eg0` at `y 0.021`, sits within 5 cm
-of its surface. The built world agrees with the mesh read: an aeroplane placed at the ace's pose and
-flown level descends from 150 m through 16 m with no contact and no `agl=` field on any telemetry
-line, because there is no ground beneath a point that is under the surface; the same pose at 250 m
-reads `agl=21` and grazes then crashes into `g35052/col` at `y 229`; and the same pose at 150 m
-pulled up crashes into `g35052/col` at `y 229` from below, which is the reported death.
+**Disproven.** The item's own lead and its first replacement both died, and the defect turned out to
+be on a third mechanism that no line of this entry names. Nothing lands in `AiModeMachine` or
+`SweepCadence`; the fix belongs to `BL-678` and the finding to `BL-669`, with `PT-107` for the
+at-the-controls half. The suite `ace-wake-terrain` pins what was measured.
 
-Tunnelling is dead as an explanation. `SweepCadence.Advance` hands the skipped step's entry pose
-back as the sweep origin, and `SweepProbes` and `CenterRayContact` both run from that origin to this
-step's pose, so no span of motion goes untested. `FUN_0048d7f0` does the same: its parity gate
+The authored pose is real and is not the defect. `hkfirebrand_9` is authored at
+`(-4517.72, 150.0, -6232.58)` with `deactivated` (slot 21) set, so `OBJECTIVE67`'s `WAKEUP_ENEMIES`
+puts it in play in place. The terrain surface over that point is **228.92 m** on tile `g35052`
+(model 617, whose vertex bounds reproduce the node's own `model_bbox`, and whose collider the built
+world answers at `y 229`), so the ace begins 78.9 m below it, the only roster block in the mission
+placed over land at all. Being there costs nothing by itself. Terrain is a sheet with no underside,
+so the space below it is open air: a downward ray from the pose finds nothing, and `SweepProbes`
+registers only where the motion crosses a face. Nor can the ace fall, because its authored range
+from the player is 3867 m, which puts it on the far-field plant, and that branch computes no gravity
+at all and holds `nose · (fd_speed · throttle + 5)`.
+
+Tunnelling is dead. `SweepCadence.Advance` hands the skipped step's entry pose back as the sweep
+origin, and `SweepProbes` and `CenterRayContact` both run from that origin to this step's pose, so no
+span of motion goes untested. `FUN_0048d7f0` does the same: its parity gate
 (`((obj[0x1af] ^ frame) & 1) != 1`) adds the step's delta into the `obj+0x6B0` accumulator and
-returns, the sweeping frame subtracts that accumulator from the displacement it tests, and the tail
-resets it, so the original carries the skipped motion whole exactly as the port does. The 20 m floor
-is likewise not at fault: at 150 m it is correctly silent, and the oscillation the controls showed
-is the ace descending inside the hill until it crosses 20 m, climbing out, and diving again.
+returns, the sweeping frame subtracts it from the displacement it tests, and the tail resets it. The
+20 m floor is dead too: at 150 m it is correctly silent, and the original has no AGL floor either.
 
-What remains open is what the original does with an aircraft authored inside terrain, since the
-authored pose is the same data in both. The activation primitive `FUN_004b0f40` is more than the
-flag flip the objectives decode describes: on the activate branch it re-bases the vehicle's position
-through `FUN_00432010`, re-homes every collision probe in the `+0x6a4..+0x6a8` array onto it, clears
-the `+0x6B0` sweep accumulator and moves the scene node through `FUN_004d1d50`. That re-base
-preserves y, so it cannot lift the ace out of the hill by itself, and it is gated on `+0x2e4` and a
-match in the `DAT_0064f610` list, neither of which is decoded. This is the same "net-nearest snap
-the original skips" that `BL-522` records as undecoded. The finding is carried by `BL-669`, and
-`PT-107` gathers its at-the-controls half.
+The LOD transition is dead as well, on timing. A level track along the ace's authored yaw 120 meets
+the sheet again 260 m out, about 5 s at the plant's 52.3 m/s hold, where a mover would need 55 s to
+close the 2867 m from the wake range to the far-field boundary. The crossing is reached far-field,
+so the plant flip is not involved and needs no change; its missing hysteresis is decoded and stays.
+
+What is left is the crossing itself, and it is ours. That face is taken from behind, and the
+original culls exactly that: `FUN_0055c9c0` passes polygon flag bit 0 (`SHOW_BACKFACE`, bit 10 of
+the word whose low ten bits are the vertex count) to `FUN_0055d6c0`, which returns no hit when the
+segment's end lies on the front side and the flag is clear, before it ever tests for a crossing.
+All 37 polygons of `g35052` and all 23 of `tagged` clear that flag, and 96.8 % of C2's terrain
+polygons do (60.5 % of all its polygons). CSVM sets `BackfaceCollision = true` on every world
+collider, so the ace is stopped where the original lets it out, and `AI ram into tagged/col` is a
+contact the original never has.
+
+⚠ The descent readings this entry carried before, a player-piloted rig sinking from 150 m to 16 m,
+measured nothing about the ace: a human rig is near-field by construction, so it is handed gravity
+the far-field ace never gets. A powered aircraft on the far branch does not sink at all.
 
 **Verified.** <pending orchestrator run>
 

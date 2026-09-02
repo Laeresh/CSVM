@@ -956,19 +956,19 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   - (c) a boat that never fires at all, which is `BL-523`'s gunnery and not this item.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`.
 
-- `PT-107` `[Own]` **The ace `hkfirebrand_9` after `OBJECTIVE67` wakes it** (`BL-566`). The ace is
-  authored at `(-4518, 150, -6233)`, which is 78.9 m below the terrain surface there, so it starts
-  flying inside the hill. Nothing was changed, so this row records what the build does rather than
-  checking a fix. Fly on until the Hollywood Knight ambush wakes, then watch the ace on the map and
-  in the air.
+- `PT-107` `[Own]` **The ace `hkfirebrand_9` after `OBJECTIVE67` wakes it** (`BL-669`, `BL-678`).
+  The ace is authored at `(-4518, 150, -6233)`, 78.9 m below the terrain surface there. That is
+  harmless in the original, which culls the single-sided faces it climbs out through, and fatal
+  here, which collides on them. Nothing was changed, so this row records what the build does rather
+  than checking a fix. Fly on until the Hollywood Knight ambush wakes, then watch the ace.
   *Look for:*
-  - (a) whether the ace is ever visible in the air at all, or only ever inside the hill east of the
-    Goose's harbour leg;
-  - (b) the mode readout alternating pursue and avoid crash while it is in there;
-  - (c) it dying against the terrain without the player firing, and whether the mission still reads
-    correctly afterwards (the secondary counts group 2 as wiped).
-  *Blocks:* what the original does with an aircraft authored inside terrain, which decides whether
-  the fix is a placement rule or a collision one.
+  - (a) whether the ace is ever seen in the air at all, or dies against the hills east of the
+    Goose's harbour leg without the player firing;
+  - (b) how long after the ambush wakes that happens, and whether the player was anywhere near it;
+  - (c) whether the mission still reads correctly afterwards, since the secondary counts group 2 as
+    wiped either way.
+  *Blocks:* nothing; it is the at-the-controls half of `BL-669`, and re-flying it after `BL-678`
+  lands is what shows the ace surviving its own wake.
 
 ### CM13 (C2/M03) · the Pandora's dock
 

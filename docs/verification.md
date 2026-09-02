@@ -777,6 +777,19 @@ loss. What the engine renders was decodable from the authored constants + oscill
   must be named from footage, name it from geometry that the remake cannot have supplied, and when
   unsure put the frame in front of the author rather than resolving it from the repo.
 
+- **INSTR-35** — **A player-piloted rig cannot stand in for an AI aircraft, because the plant is
+  selected on range to the nearest human and a human rig is near-field by construction.**
+  `FlightModel.FarFieldPlant` is `UsesAiForcePath && NearestHumanDistSqM > FarFieldRangeM²`, and
+  `NearestHumanDistSqM` measures to the humans themselves, so a `--fly --pos=` probe parked at an
+  AI's pose reports zero range and flies the full aerodynamics with gravity, where the AI at that
+  same pose computes no lift, no drag, no thrust and no gravity and holds
+  `nose · (fd_speed · throttle + 5)`. Measured chasing CM12's ace: three player-rig probes at its
+  authored pose descended 150 m to 16 m and the descent was written up as the ace's behaviour, when
+  the ace 3.9 km from the player does not sink at all. The same trap sits on every AI-only term
+  (the AI ground blow, the AI wind, the skipped weathervane). Drive an AI rig with
+  `AiPilot.HoldingCourse` and a bound `HumanPositions` seam, and assert `FarFieldPlant` reads the
+  branch you meant before reading anything else off the run.
+
 ## SRC — sources and documents
 
 - **SRC-1** — **Validate whether bytes are meaningful before numeric sanity checks.**
