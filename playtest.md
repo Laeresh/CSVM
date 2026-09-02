@@ -903,6 +903,24 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   *Blocks:* what the original does with an aircraft authored inside terrain, which decides whether
   the fix is a placement rule or a collision one.
 
+### CM13 (C2/M03) · the Pandora's dock
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:12
+```
+
+- `PT-108` `[Own]` **Both landing cones draw once the dock finishes** (`BL-618`, disproven as
+  filed). `pzhomebase` already binds each cone to its own gamez node and switches both on; the
+  suite's earlier `cones 0/2` reading was its own drive window ending before the choreography's
+  13 s completion, not a resolver defect. Win the race so OBJECTIVE8 wakes the dock, then give it
+  time to finish deploying the hook.
+  *Look for:*
+  - (a) both cones under the Pandora's hull visibly drawing once the hook and hangar bay have
+    deployed;
+  - (b) either cone staying invisible, which means the disproof above does not hold at the
+    controls.
+  *Blocks:* nothing tracks the outcome; a missing cone reopens `BL-618`.
+
 ### CM18 (C4/M03) · the generator launches
 
 ```powershell

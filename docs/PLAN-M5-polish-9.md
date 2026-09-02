@@ -90,7 +90,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☐ `BL-635` CM11: the stunt planes carry the objective marker their roster blocks author
 22. ☐ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs
 23. ❌ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake (disproven: the ace is authored 79 m inside the hill, and the finding is recorded)
-24. ☐ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
+24. ❌ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
 25. ☐ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
 26. ☐ `BL-632` CM15: the capture cutscene frames its Balmoral
 
@@ -516,34 +516,45 @@ the original skips" that `BL-522` records as undecoded.
 
 **Verified.** <pending orchestrator run>
 
-## C24 ☐ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
+## C24 ❌ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
 
 **Goal.** A compiled animation that names a mech3ax dedup name such as `land_on~2` reaches the
 sibling the suffix identifies, so CM13's `pzhomebase` switches both of the Pandora's landing cones
 on and both draw.
 
-**Evidence (confidence: traced).** `zeppelin-hull-activation`
-(`CSVM/src/Testing/ZeppelinHullActivationSuites.cs`) records `cones 0/2` after `pzhomebase` has
-run for 12 s. C2's gamez carries four `land_on` nodes, two under `piratezep`; the extraction
-renames the second sibling `land_on~2`, and `CSVM/src/Mech3/Anim/NameResolver.cs` (`Resolve` at
-`:207`, `FindAll` at `:173`, the matcher and `ResolveScoped` chain documented in
-`docs/architecture.md`'s `NameResolver` entry) contains no handling of `~` at all, so the bare
-name is ambiguous and the suffixed one matches nothing. `BL-616`'s closing commit recorded this as
-the follower, not fixed.
+**Evidence (confidence: traced to code and a driven suite).** `NameResolver` already resolves this
+correctly and needs no change. `pzhomebase`'s compiled symbol table binds `land_on` and `land_on~2`
+to distinct gamez indices (3618 and 3615 in C2/M03, one under `pz_manual_land` and one under
+`pz_auto_land`), and `SymbolClaims`/`Targets` (`CSVM/src/Mech3/AnimRuntime.cs`) resolve each by
+that index alone, before any NAME-based matching runs; the `~` suffix is never interpreted, and
+does not need to be. `zeppelin-hull-activation`'s reported `cones 0/2` was the suite's own 12 s
+drive window ending before the choreography's real completion: `pzhomebase` gates both cone
+activations behind `pz_deploy_hook`'s `WAIT_FOR_COMPLETION`, whose longest track starts 3 s in and
+runs 10 s, so the cones are not due before t=13 s. Driving the same suite to 20 s shows both cones
+bound to their own distinct node and drawing together the instant the gate clears (`cones 2/2`).
+`BL-616`'s closing commit recorded the `~n` name as the open follower; that follower does not
+describe a real defect.
 
-**Approach.** In `NameResolver`, resolve a `~n` suffix scoped by the calling definition's own node
-list: `land_on` roots on `pz_manual_land` and `land_on~2` on `pz_auto_land`, so the suffix picks
-the nth sibling in the def's node order. Add a unit in `CSVM.Tests` over a hand-authored fixture
-with two same-named siblings, then flip `zeppelin-hull-activation`'s expectation to `cones 2/2`.
+**Outcome.** Disproven as filed. `CSVM/src/Mech3/Anim/NameResolver.cs` is unchanged: a `~n` dedup
+name is already routed through the compiled symbol table's per-index binding, never through the
+NAME matcher, so no sibling is ever picked ambiguously.
 
-**Model recommendation.** Medium: a bounded resolver rule with a fixture and a suite that already
-fails.
+**Landed.** `CSVM/src/Testing/ZeppelinHullActivationSuites.cs`: the drive window is long enough to
+reach `pzhomebase`'s own completion, and the cone count is now an assertion (`cones 2/2`) rather
+than a recorded-not-asserted line. `CSVM.Tests/NameResolverTests.cs`:
+`SymbolLookupResolvesADedupSuffixToItsOwnSibling`, a hand-authored fixture with two same-named
+siblings under different parents, locks in that `SymbolClaims` picks the sibling the compiled
+index names.
 
-**Verify.** The new unit; `zeppelin-hull-activation` at `cones 2/2`; the 8-chapter freecam
-regression with unchanged node counts; D31 looks at the Pandora's landing cones in CM13.
+**Verify.** The new unit; `zeppelin-hull-activation` at `cones 2/2`; D31 looks at the Pandora's
+landing cones in CM13. No resolver change lands, so the 8-chapter freecam regression does not
+apply.
 
-**⚠ Traps.** Stripping `~n` and taking the first hit is wrong; the suffix identifies which sibling.
-C24 shares the `Anim/` folder with A1 and C22 but is `NameResolver.cs` alone.
+**⚠ Traps.** Stripping `~n` and taking the first hit would still be wrong if a case ever turns up
+where the compiled index is not built; that fallback path was not exercised here. C24 shares the
+`Anim/` folder with A1 and C22 but is `NameResolver.cs` alone.
+
+**Verified.** <pending orchestrator run>
 
 ## C25 ☐ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
 

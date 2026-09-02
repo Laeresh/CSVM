@@ -102,6 +102,12 @@ loss. What the engine renders was decodable from the authored constants + oscill
   alone left the captured Balmoral hidden and the suite green, while playing the mission's own
   `ww_balmoral1` showed the wing walk's `913`/`914` pair bracketing it and putting that aeroplane
   back **19.25 s** later, which is the defect a player sees.
+- **DIAG-24** — **A fixed sim window shorter than a `CallAnimation` chain's own completion time
+  reads as an unresolved bind, not a slow clock.** Measured: CM13's `pzhomebase` gates its two
+  landing-cone activations behind `pz_deploy_hook`'s own `WAIT_FOR_COMPLETION`, a 3 s offset plus
+  a 10 s rotate, so they are not due before t=13 s; `zeppelin-hull-activation`'s 12 s window read
+  `cones 0/2` and looked like a name-resolution defect (`BL-618`) that a longer window disproves
+  outright, both cones bound to their own gamez index already and drawing together at t=13 s.
 
 ## SHOT — screenshots and pixel evidence
 
