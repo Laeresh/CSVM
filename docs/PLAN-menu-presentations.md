@@ -1242,7 +1242,9 @@ unit tests move a row and the composed plaque moves, so the read path can fail),
 (decoded pixels, never PNG bytes), **SHOT-9**/**SHOT-10** (windowed probes on the hidden desktop,
 absolute paths, every file checked present), **SHOT-32** (the briefing aid proves its frame alone).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The plan tree with D32 landed passed the complete `.\RunTests.ps1` (3000 units, 211
+engine suites across 4 shards with `campaign-layout-parity` among them, 18 goldens hash-identical,
+engine errors clean, 150.3s).
 
 **⚠ Traps.** Fixed chrome may migrate; dynamic content may not be serialized into extracted output.
 Patch-overlay precedence must match extraction, and no game asset enters git.
