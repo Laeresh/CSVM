@@ -683,9 +683,13 @@ map-edge extension) moves each built mesh instance onto its own node's `zone_id`
 camera-anchored copies gated by `Node3D.Visible` instead.
 `CollidersForMesh` splits a mesh's colliding geometry into one trimesh per surface class actually
 present (water/buildings/untagged, each polygon's own texture deciding), each also carrying
-`SurfaceIdMeta`, the original's numeric surface id for the bucket's dominant material. Each
-collider-bearing node registers with `WorldCollision`, which owns its `Disabled` flag from then
-on. A `GameZ.IsMarkerGizmo` mesh draws nothing but its Node3D is still built, since animations
+`SurfaceIdMeta`, the original's numeric surface id for the bucket's dominant material. A class
+splits again by SIDEDNESS, since `BackfaceCollision` is a whole-shape flag and the polygon's own
+`SHOW_BACKFACE` decides: the one-sided half is emitted with REVERSED winding, because the source's
+visible side is Godot's back face. Both halves go on ONE body, so body counts, names and metas are
+unchanged. Each collider-bearing node registers with `WorldCollision`, which owns its `Disabled`
+flag from then on. `CollisionSidedness` and `CollisionBackToBackPairs` are that split's census. A
+`GameZ.IsMarkerGizmo` mesh draws nothing but its Node3D is still built, since animations
 attach puffers and sounds to those nodes by name.
 A node the scene data flags as a mission structure carries `MissionStructureTeamMeta` (and
 `MissionStructureGasbagMeta` where it is a gasbag), the channel `DestructibleRegistry` reads a
@@ -908,7 +912,12 @@ frame, the engine defaults no chapter authors, and the weight list's sum-and-div
 changing a placement rule; the authored side stays in [formats/clutter.md](formats/clutter.md) and
 [formats/templates.md](formats/templates.md). The remake-only rules (no world grid, the fixed
 placement seed, the `seen` dedup, shared collision shapes) are comments on the members that hold
-them.
+them. ⚠ The solid decorations' shapes stay TWO-SIDED where the world's honour `SHOW_BACKFACE`, for
+two reasons: `AppendTriangles` does not alternate a strip's winding, so its triangles have no agreed
+front to be solid from; and whether the original's intersection database holds a stamped decoration
+at all is undecoded, since [org/weaponRay.md](org/weaponRay.md)'s per-node gates are gamez node
+flags. `SolidCollisionOneSidedTriangles` sizes what that leaves (C2 1439 of 1439, C5 3156 of 3738);
+only those two chapters build solid decorations.
 
 ## src/Mech3/ClutterTemplates.cs
 The chapter's `templates.zrd` (`ClutterTemplateSpec.Load`/`.Parse`): one `ClutterKindProps` per
@@ -1380,9 +1389,12 @@ see their doc comments in `Anim/MotionRuntime.cs` for the non-normalisation rule
 Contact is the DEFAULT and comes in the original's two tiers: `TryGroundColumn`, a vertical column
 through the body, unless `do_intersections` upgrades it to `TryContact`'s trajectory sweep (166
 events install-wide); `no_altitude` vetoes the column only, and `gunshell` alone authors it. That
-column reads DOWNWARD first and UPWARD only when nothing answers, because the original's query is a
-cell lookup at `(x, z)` whose answer does not depend on the body's height: a body that stepped past
-the surface is lifted back onto it rather than drifting to its watchdog. No mask wired
+column reads DOWNWARD from the body first and, when nothing answers, DOWNWARD again from a column's
+height above it, because the original's query is a cell lookup at `(x, z)` whose answer does not
+depend on the body's height: a body that stepped past the surface is lifted back onto it rather than
+drifting to its watchdog. ⚠ Both casts come from above deliberately: `SceneBuilder`'s colliders
+honour the polygon's own `SHOW_BACKFACE` and every water polygon in the install clears it, so a ray
+sent up from under a surface answers nothing at all. No mask wired
 means neither tier, which is the structural fallback every lab and 9 of the 14 goldens take;
 `c1-debris-rest` is the one golden that wires a mask and reaches the column tier, a killed
 `m_build03` piece resting with its landing's own spark puffer as the pixel-level tell. Both

@@ -9,12 +9,12 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>C2/M01's ace against the terrain it is authored inside, over the mission's own built
-/// world. The roster puts <c>hkfirebrand_9</c> below the surface, and the question the suite
-/// answers is which plant flies it there: the far-field branch computes no gravity, so a body
-/// under a hill holds its nose and leaves laterally, and a sweep that starts and ends inside the
-/// same solid crosses no face and reports nothing. Both halves are measured here rather than
-/// argued, because a near-field rig at the same pose falls out of the hill and reads as a
-/// different defect.</summary>
+/// world. The roster puts <c>hkfirebrand_9</c> below the surface, which costs nothing once the
+/// collider honours the polygon's own <c>SHOW_BACKFACE</c>: every face of the hill around it faces
+/// outward, so a body inside reaches all of them from behind and flies out. The far-field branch
+/// computes no gravity, so it also never sinks to the under-map backstop that used to teleport it
+/// back to its spawn. Both plants are flown, because a near-field rig at the same pose is handed
+/// gravity the ace never gets and reads as a different defect.</summary>
 internal static class AceWakeTerrainSuites
 {
     private const string Chapter = "C2";
@@ -36,11 +36,10 @@ internal static class AceWakeTerrainSuites
     [Suite("ace-wake-terrain",
         "CM12's ace pose against C2/M01's own built terrain: the roster authors hkfirebrand_9 " +
         "78.9 m under a surface at 228.92 m, the sheet has no underside so nothing lies below " +
-        "that pose, and its authored range from the player puts it on the far-field plant when " +
-        "OBJECTIVE67 wakes it. A level track along its authored nose meets the sheet again a few " +
-        "hundred metres out, reached in a handful of seconds against the minute a mover needs to " +
-        "close to the far-field boundary, so whatever that crossing costs is paid far-field and " +
-        "not at the plant flip")]
+        "that pose, and the surface over it answers nothing from below because every polygon of " +
+        "g35052 clears SHOW_BACKFACE. A level track along its authored nose meets no collider in " +
+        "8 km, and flown on either plant the ace leaves the hill with no contact, no crash and no " +
+        "descent to the under-map backstop")]
     internal static void AceWakeTerrain(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -79,7 +78,7 @@ internal static class AceWakeTerrainSuites
             Drive(ctx, planesGamez, texturesPath, plane, ace, player, wakeRangeM, report));
 
         ctx.WriteArtifact($"test-ace-wake-terrain-{Chapter}-{Mission}.txt", report.ToString());
-        ctx.Note($"{Chapter}/{Mission}: the ace is authored under the terrain sheet and meets it again far-field, before any approach can reach the boundary");
+        ctx.Note($"{Chapter}/{Mission}: the ace is authored under the terrain sheet and flies out of it, the surface over it being solid from above alone");
     }
 
     private static void Drive(TestContext ctx, GameZ planesGamez, string texturesPath, string plane,
@@ -113,18 +112,24 @@ internal static class AceWakeTerrainSuites
             ctx.Check(surfaceInto.EndsWith("/col", StringComparison.Ordinal),
                 $"the surface over the pose is a built world collider {surfaceInto}");
 
-            // Under-the-sheet test, used every leg: an upward ray from the aircraft. Terrain builds
-            // double-sided and no query here asks for anything but the defaults, so a body below the
-            // surface sees it overhead and one in open air does not.
+            // Under-the-sheet test, used every leg. ⚠ Read DOWN from above, never up from below:
+            // terrain is one-sided now, so an upward ray answers nothing whether or not there is a
+            // surface overhead, and would report every pose as open air.
             bool UnderSheet(Vector3 at)
             {
-                var up = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-                    at, at + (Vector3.Up * 4000f), CollisionLayers.World));
-                return up.Count > 0;
+                var column = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                    at with { Y = 4000f }, at with { Y = -4000f }, CollisionLayers.World));
+                return column.Count > 0 && column["position"].AsVector3().Y > at.Y;
             }
 
+            // The item's own contact: the ace is under the surface, and the surface above it answers
+            // nothing from behind, which is the test the original runs and CSVM used to fail.
+            var fromBelow = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                ace.Pos, ace.Pos with { Y = surfaceY + 50f }, CollisionLayers.World));
+            ctx.Same(0, fromBelow.Count,
+                $"the surface over the authored pose answers nothing from below (all of g35052 clears SHOW_BACKFACE)");
             ctx.Check(UnderSheet(ace.Pos),
-                $"the authored pose sits under the terrain sheet: an upward ray from it strikes terrain");
+                $"the authored pose sits under the terrain sheet: the column over it answers above the pose");
             ctx.Check(!UnderSheet(ace.Pos with { Y = surfaceY + 50f }),
                 $"the control 50 m above that surface is in open air");
 
@@ -200,17 +205,15 @@ internal static class AceWakeTerrainSuites
 
             report.AppendLine($"level track along the authored nose at {holdSpeed:0.0} m/s: "
                 + $"first clear of the sheet at {clearedAtM:0} m, first crossing at {crossedAtM:0} m");
-            ctx.Check(clearedAtM >= 0f || crossedAtM >= 0f,
-                $"a level track along the authored nose meets the sheet within {LevelTrackM:0} m clear={clearedAtM:0} crossed={crossedAtM:0}");
-
-            // The one number the item turns on: how long the ace is under the sheet against how long
-            // a human needs to close from the wake range to the boundary that hands it gravity.
-            float clearS = clearedAtM >= 0f ? clearedAtM / holdSpeed : float.PositiveInfinity;
-            float closeS = (wakeRangeM - 1000f) / holdSpeed;
-            report.AppendLine($"time to clear the sheet {clearS:0.0} s against {closeS:0.0} s "
-                + $"for a mover at {holdSpeed:0.0} m/s to close {wakeRangeM - 1000f:0} m to the boundary");
-            ctx.Check(clearS < closeS,
-                $"the ace reaches the sheet again long before anything could close to the far-field boundary track={clearS:0.0} s approach={closeS:0.0} s");
+            // The crossing on the way out is what used to end the ace, and the original culls it.
+            // Nothing along the whole track may answer now: a hill's faces all face outward, so a
+            // body inside one reaches every one of them from behind.
+            ctx.Check(crossedAtM < 0f,
+                $"the level track along the authored nose meets no collider over {LevelTrackM:0} m crossed_at={crossedAtM:0} m");
+            ctx.Check(clearedAtM >= 0f,
+                $"and it is out from under the sheet within that track clear={clearedAtM:0} m");
+            report.AppendLine($"a mover at {holdSpeed:0.0} m/s needs {(wakeRangeM - 1000f) / holdSpeed:0.0} s "
+                + $"to close {wakeRangeM - 1000f:0} m from the wake range to the far-field boundary");
 
             // --- The flown leg: the same wake on the real plant and the real control law, which is
             // what decides whether the level track above is the track it actually flies.
@@ -240,8 +243,14 @@ internal static class AceWakeTerrainSuites
                 + $"furthest {maxRangeM:0} m from the wake, grazes {grazes}, crashed {farRig.Crashed}");
             ctx.Check(farPlant.FarFieldPlant && !farRig.Crashed,
                 $"nothing ends the far-field ace over {LegSeconds} s under the sheet crashed={farRig.Crashed} grazes={grazes}");
-            ctx.Check(leftAt < 0 && grazes == 0,
-                $"under the sheet nothing registers: no contact and no crossing over {LegSeconds} s of flight below it");
+            ctx.Same(0, grazes,
+                $"the ace flies out of the hill with no contact at all over {LegSeconds} s");
+            ctx.Check(leftAt >= 0,
+                $"and comes out from under the surface rather than being held under it clear_at={(leftAt >= 0 ? leftAt / 60f : -1f):0.0} s");
+            // BL-669's own symptom: FlightController's under-map backstop respawns anything below
+            // y = 0, which is what the repeated teleport to the spawn point was.
+            ctx.Check(minY > 0f,
+                $"and never sinks to the under-map backstop that was teleporting it back min_y={minY:0} m");
 
             // ⚠ The far rig stays in the world and the sweep masks aircraft as well as world, so a
             // second rig built on the same pose would ram it. Retire it before the control leg.

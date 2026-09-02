@@ -117,6 +117,12 @@ public sealed class WorldBuilder
     /// <see cref="SceneBuilder.UndrawnPolygonCount"/>.</summary>
     public int UndrawnPolygonCount => _scene.UndrawnPolygonCount;
 
+    /// <summary>One-sided against two-sided collision faces per surface class, and the back-to-back
+    /// pairs among them; see <see cref="SceneBuilder.CollisionSidedness"/>.</summary>
+    public IReadOnlyDictionary<string, (int OneSided, int TwoSided)> CollisionSidedness => _scene.CollisionSidedness;
+
+    public int CollisionBackToBackPairs => _scene.CollisionBackToBackPairs;
+
     /// <summary>The overcast deck as a separate node so the caller can make it follow the
     /// player (see GameSession): the opaque overcast sheet tracks the plane and flips
     /// above/below at the cloud band, as in the original. A child of the world root at its

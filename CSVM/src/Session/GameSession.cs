@@ -1390,6 +1390,15 @@ public partial class GameSession : Node3D
         if (builder.OverlayPassSurfaceCount > 0 || builder.OverlayPassDeclinedCount > 0)
             GD.Print($"overlay passes: {builder.OverlayPassSurfaceCount} surface(s) built, "
                      + $"{builder.OverlayPassDeclinedCount} polygon(s) declined");
+        // The evidence that SHOW_BACKFACE reached the colliders: a build with collision on that
+        // reports no one-sided faces is back to the old blanket two-sided flag.
+        if (builder.CollisionSidedness.Count > 0)
+        {
+            var classes = builder.CollisionSidedness
+                .Select(kv => $"{(kv.Key.Length == 0 ? "default" : kv.Key)} {kv.Value.OneSided}/{kv.Value.OneSided + kv.Value.TwoSided}");
+            GD.Print($"collision sidedness: one-sided faces per class {string.Join(", ", classes)}; "
+                     + $"{builder.CollisionBackToBackPairs} back-to-back pair(s)");
+        }
         // C3's skydome cloud cards, and nothing else in the install: the tripwire if the
         // absent-and-undrawn rule ever reaches a chapter that ships the texture.
         if (builder.UndrawnPolygonCount > 0)

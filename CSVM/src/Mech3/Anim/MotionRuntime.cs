@@ -459,14 +459,14 @@ internal sealed class MotionRuntime : IAnimMotion
         if (!_complexGravity && to.Y >= from.Y)
             return false;
 
-        // The original's column is a query at (x, z), so its answer ignores the body's height and
-        // one already under a surface is lifted back onto it. ⚠ The upward read needs the collider
-        // to answer a ray reaching it from behind, which SceneBuilder's BackfaceCollision gives.
+        // The original's column is a query at (x, z), so a body already under a surface is lifted
+        // back onto it. ⚠ The second cast comes DOWN from above, never up from below: a one-sided
+        // collider answers nothing from behind, and every water polygon in the install is one.
         var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
             from, from + Vector3.Down * ColumnDepth, _contactMask));
         if (hit.Count == 0)
             hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-                from, from + Vector3.Up * ColumnDepth, _contactMask));
+                from + Vector3.Up * ColumnDepth, from, _contactMask));
         if (hit.Count == 0)
             return Watchdog(dt, next);
 

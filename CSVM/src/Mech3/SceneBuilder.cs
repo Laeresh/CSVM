@@ -301,7 +301,7 @@ void fragment() {
     private readonly Dictionary<(int Model, bool Force, bool ForceLit, bool ClutterFade), ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
-    private readonly Dictionary<int, List<(string? Surface, int SurfaceId, ConcavePolygonShape3D Shape)>> _colliderCache = new();
+    private readonly Dictionary<int, List<(string? Surface, int SurfaceId, List<ConcavePolygonShape3D> Shapes)>> _colliderCache = new();
     private readonly Dictionary<(float Size, float MaxPx, float Range), ShaderMaterial> _lightMaterialCache = new();
     // Billboard glow material for a flare sprite quad: always alpha-blended (the soft ramp
     // must never scissor into a hard star cutout), no night dimming (it's a light source).
@@ -401,6 +401,18 @@ void fragment() {
     public int FlaggedPolygonCount { get; private set; }
 
     public int ClearPolygonCount { get; private set; }
+
+    /// <summary>Collision faces built one-sided against two-sided, per surface class, counted per
+    /// BUILT MESH the way <see cref="FlaggedPolygonCount"/> is. One-sided is the polygon clearing
+    /// <c>SHOW_BACKFACE</c>, which the original's ray test culls from behind.
+    /// ⚠ Keep this census. A chapter reading zero one-sided faces is indistinguishable from the
+    /// old blanket two-sided flag, and only this count tells them apart.</summary>
+    public SortedDictionary<string, (int OneSided, int TwoSided)> CollisionSidedness { get; } = new();
+
+    /// <summary>Collidable back-to-back pairs: one quad authored twice over the same vertices in
+    /// opposite winding (docs/formats/gotchas.md). Both halves stay solid once sidedness is
+    /// honoured, each from its own front, so a pair loses nothing.</summary>
+    public int CollisionBackToBackPairs { get; private set; }
 
     /// <summary>The textured materials built here, each with its source texture name, so a
     /// caller can re-resolve and swap them without a rebuild. See <see cref="Repaint"/>.</summary>
@@ -681,7 +693,9 @@ void fragment() {
     // otherwise), but positions only — a collision shape carries no material/UV/normal data.
     // ⚠ Do not filter polygons here by texture alpha. The original's weapon ray reads no texture
     // at all (docs/org/weaponRay.md), so an alpha-cutout card is solid to it too.
-    private static void EmitCollisionFaces(GameZMesh mesh, GameZPolygon poly, Vector3 offset, List<Vector3> faces)
+    // `flip` reverses each triangle, which is what a one-sided shape needs (see CollidersForMesh).
+    private static void EmitCollisionFaces(GameZMesh mesh, GameZPolygon poly, Vector3 offset,
+        List<Vector3> faces, bool flip = false)
     {
         int n = poly.VertexIndices.Count;
         if (n < 3)
@@ -690,8 +704,8 @@ void fragment() {
         void Tri(int a, int b, int c)
         {
             faces.Add(Pos(a));
-            faces.Add(Pos(b));
-            faces.Add(Pos(c));
+            faces.Add(Pos(flip ? c : b));
+            faces.Add(Pos(flip ? b : c));
         }
         if (poly.TriangleStrip)
         {
@@ -708,6 +722,68 @@ void fragment() {
             for (int i = 1; i + 1 < n; i++)
                 Tri(0, i, i + 1);
         }
+    }
+
+    // One trimesh of a surface class's faces, skipped when that half is empty so a class present in
+    // one sidedness alone still costs one shape.
+    private static void AddShape(List<ConcavePolygonShape3D> into, List<Vector3> faces, bool backface)
+    {
+        if (faces.Count == 0)
+            return;
+        var shape = new ConcavePolygonShape3D { BackfaceCollision = backface };
+        shape.SetFaces(faces.ToArray());
+        into.Add(shape);
+    }
+
+    // One quad authored twice over the same corners in opposite winding: how the data gives a
+    // one-sided surface a front and a back. Matched on the corner SET rather than the loop, since
+    // a strip and a fan over the same corners are the same face, and separated by Newell normal.
+    private static int BackToBackPairs(GameZMesh mesh)
+    {
+        var byCorners = new Dictionary<string, List<Vector3>>();
+        foreach (var poly in mesh.Polygons)
+        {
+            if (poly.VertexIndices.Count < 3)
+                continue;
+            int[] corners = poly.VertexIndices.ToArray();
+            Array.Sort(corners);
+            string key = string.Join(",", corners);
+            if (!byCorners.TryGetValue(key, out var normals))
+                byCorners[key] = normals = new List<Vector3>();
+            normals.Add(NewellNormal(mesh, poly));
+        }
+
+        int pairs = 0;
+        foreach (var normals in byCorners.Values)
+        {
+            for (int i = 0; i < normals.Count; i++)
+            {
+                for (int j = i + 1; j < normals.Count; j++)
+                {
+                    if (normals[i].Dot(normals[j]) < 0f)
+                        pairs++;
+                }
+            }
+        }
+        return pairs;
+    }
+
+    // The polygon's own facing, summed around the whole loop rather than taken off one corner: a
+    // source polygon can carry a degenerate corner that a single cross product zeroes.
+    private static Vector3 NewellNormal(GameZMesh mesh, GameZPolygon poly)
+    {
+        var normal = Vector3.Zero;
+        int count = poly.VertexIndices.Count;
+        for (int i = 0; i < count; i++)
+        {
+            var a = mesh.Vertices[poly.VertexIndices[i]];
+            var b = mesh.Vertices[poly.VertexIndices[(i + 1) % count]];
+            normal += new Vector3(
+                (a.Y - b.Y) * (a.Z + b.Z),
+                (a.Z - b.Z) * (a.X + b.X),
+                (a.X - b.X) * (a.Y + b.Y));
+        }
+        return normal;
     }
 
     private static string Sanitize(string name)
@@ -828,13 +904,17 @@ void fragment() {
     private void AttachCollision(Node3D parent, int meshIndex)
     {
         bool tracked = false;
-        foreach (var (surface, surfaceId, shape) in CollidersForMesh(meshIndex))
+        foreach (var (surface, surfaceId, shapes) in CollidersForMesh(meshIndex))
         {
             // ⚠ Keep the per-class names rather than "col" for all of them. Sibling bodies Godot
             // cannot tell apart by the same requested name are renamed to an opaque
             // "@StaticBody3D@N", breaking ColliderOverlay's "col" check once a mesh splits in two.
             var body = new StaticBody3D { Name = surface != null ? $"col_{surface}" : "col" };
-            body.AddChild(new CollisionShape3D { Shape = shape });
+            // ⚠ A class's one-sided and two-sided halves share ONE body. Two bodies would collide
+            // with the naming rule above, and every meta, count and OwnerOf answer below is per
+            // surface class, not per shape.
+            foreach (var shape in shapes)
+                body.AddChild(new CollisionShape3D { Shape = shape });
             // Stamp the struck-surface class (water / buildings), so a weapon impact can pick the
             // right IMPACT variant. 'default' (terrain / anything unclassified) is the
             // common case and stamps nothing.
@@ -861,7 +941,7 @@ void fragment() {
     // different name space from the class string and the same body granularity. Cached per mesh.
     // ⚠ Do not collapse this to one area-weighted tag for the whole mesh. A coastal tile is mostly
     // beach by area, so its real water polygons lose that vote and read as dry ground to a weapon.
-    private List<(string? Surface, int SurfaceId, ConcavePolygonShape3D Shape)> CollidersForMesh(int meshIndex)
+    private List<(string? Surface, int SurfaceId, List<ConcavePolygonShape3D> Shapes)> CollidersForMesh(int meshIndex)
     {
         if (_colliderCache.TryGetValue(meshIndex, out var cached))
             return cached;
@@ -869,7 +949,7 @@ void fragment() {
         _meshPivotCache.TryGetValue(meshIndex, out var offset); // Vector3.Zero when this mesh has none
         // "" stands in for the untagged/default bucket: Dictionary<TKey> needs a non-null key.
         const string defaultTag = "";
-        var buckets = new Dictionary<string, List<Vector3>>();
+        var buckets = new Dictionary<string, (List<Vector3> OneSided, List<Vector3> TwoSided)>();
         var idCounts = new Dictionary<string, Dictionary<int, int>>();
         foreach (var poly in mesh.Polygons)
         {
@@ -878,31 +958,49 @@ void fragment() {
             string tag = ClassifySurface(material?.TextureName) ?? defaultTag;
             if (!buckets.TryGetValue(tag, out var faces))
             {
-                buckets[tag] = faces = new List<Vector3>();
+                buckets[tag] = faces = (new List<Vector3>(), new List<Vector3>());
                 idCounts[tag] = new Dictionary<int, int>();
             }
-            EmitCollisionFaces(mesh, poly, offset, faces);
+            // ⚠ The one-sided half is emitted REVERSED: the source's visible side is Godot's BACK
+            // face, while a shape without BackfaceCollision is solid along Godot's own face normals
+            // (docs/formats/gotchas.md). Unreversed it would be solid from behind alone.
+            EmitCollisionFaces(mesh, poly, offset,
+                poly.ShowBackface ? faces.TwoSided : faces.OneSided, flip: !poly.ShowBackface);
+            CountSidedness(tag, poly.ShowBackface);
             int id = material?.SoilId ?? 0;
             var counts = idCounts[tag];
             counts[id] = counts.GetValueOrDefault(id) + 1;
         }
-        var result = new List<(string?, int, ConcavePolygonShape3D)>();
+        CollisionBackToBackPairs += BackToBackPairs(mesh);
+        var result = new List<(string?, int, List<ConcavePolygonShape3D>)>();
         foreach (var (tag, faces) in buckets)
         {
-            if (faces.Count == 0)
+            // A polygon is solid from the side it is seen from and no other, the test the original
+            // runs (docs/org/weaponRay.md): the winding is not inconsistent, it is per polygon, and
+            // `world-ground-solid` is the tripwire for a down-wound tile a plane would fall through.
+            var shapes = new List<ConcavePolygonShape3D>();
+            AddShape(shapes, faces.OneSided, backface: false);
+            AddShape(shapes, faces.TwoSided, backface: true);
+            if (shapes.Count == 0)
                 continue;
-            // The source winding is inconsistent (why rendering culls nothing), so make the
-            // trimesh solid from both sides — otherwise raycasts pass through down-wound faces.
-            var shape = new ConcavePolygonShape3D { BackfaceCollision = true };
-            shape.SetFaces(faces.ToArray());
             int dominantId = idCounts[tag]
                 .OrderByDescending(kv => kv.Value)
                 .ThenBy(kv => kv.Key)
                 .First().Key;
-            result.Add((tag == defaultTag ? null : tag, dominantId, shape));
+            result.Add((tag == defaultTag ? null : tag, dominantId, shapes));
         }
         _colliderCache[meshIndex] = result;
         return result;
+    }
+
+    // The sidedness census, keyed by the same surface class the bodies are named for; "" is
+    // CollidersForMesh's untagged bucket, so the printed line and the body names agree.
+    private void CountSidedness(string tag, bool showBackface)
+    {
+        CollisionSidedness.TryGetValue(tag, out var seen);
+        CollisionSidedness[tag] = showBackface
+            ? (seen.OneSided, seen.TwoSided + 1)
+            : (seen.OneSided + 1, seen.TwoSided);
     }
 
     // Point-sprite lights: camera-facing soft radial glows, additive so they shine over whatever is

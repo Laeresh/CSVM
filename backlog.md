@@ -944,23 +944,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   downward ray from the pose finds nothing, and `SweepProbes` registers only where the motion
   crosses a face. **And the ace cannot fall there:** its authored range from the player is 3867 m,
   so `WAKEUP_ENEMIES` puts it on the far-field plant, which computes no gravity and holds
-  `nose · (fd_speed · throttle + 5)`. ⚠ **The "stays where it is" reading below is overturned** —
-  `ace-wake-terrain`'s own flown legs have it at `y 49` five seconds after a `y 150` spawn and 300 m
-  away, then back within 27 m of the authored pose, and at the controls the author saw it "teleport
-  to his start point multiple times" from 3 km away, having fired nothing. The writer is
-  `FlightController.cs:1752`'s under-map backstop (`Position.Y < UnderMapY` calling `Respawn()`,
-  `UnderMapY = 0f`), which emits no log line, so the loop is silent. It is a consequence of being
-  stuck, not a separate defect: `BL-678` removes the trigger. Give the backstop a log line when
-  `BL-678` lands. The rest of this paragraph stands. What
-  ends it is the crossing on the way out. A level track along its authored yaw 120 meets the sheet
-  again 260 m out, about 5 s at the plant's 52.3 m/s hold, against the 55 s a mover would need to
-  close 2867 m to the far-field boundary, so the crossing is reached far-field and the plant flip is
-  not involved. **That crossing is a face taken from behind, and the original culls it:** all 37
-  polygons of `g35052` and all 23 of `tagged` clear `SHOW_BACKFACE`, so the original's ray test
-  returns no hit and the ace flies out; CSVM forces every world collider double-sided and reports
-  `AI ram into tagged/col`. The fix therefore belongs to `BL-678`, not to placement, and this entry
-  stays open only to confirm at the controls that nothing else about the ace is wrong once that
-  lands. `PT-107` gathers that half.
+  `nose · (fd_speed · throttle + 5)`. What used to end it was the crossing on the way out: a level
+  track along its authored yaw 120 met the sheet again 260 m out, about 5 s at the plant's 52.3 m/s
+  hold, against the 55 s a mover would need to close 2867 m to the far-field boundary, so the
+  crossing was reached far-field and the plant flip was never involved. **That crossing is a face
+  taken from behind, and the original culls it:** all 37 polygons of `g35052` and all 23 of `tagged`
+  clear `SHOW_BACKFACE`, so the original's ray test returns no hit and the ace flies out. `BL-678`
+  landed that rule on the collider: `ace-wake-terrain` now flies the authored pose for 40 s on both
+  plants with no contact, no crash and no descent from `y 150`, and its level track meets nothing
+  over 8 km, so both the `AI ram into tagged/col` and the repeated teleport to the spawn are gone.
+  The teleport's writer was `FlightController`'s under-map backstop (`Position.Y < UnderMapY`
+  calling `Respawn()`, `UnderMapY = 0f`), silent at the time and now writing a rate-limited line
+  with a running reset count. This entry stays open only to confirm at the controls that nothing
+  else about the ace is wrong. `PT-107` gathers that half.
   ⚠ *Traps:* not tunnelling (`SweepCadence` carries the skipped step's origin, and `FUN_0048d7f0`
   accumulates into `obj+0x6B0` and subtracts it on the sweeping frame, so no span goes untested);
   not the 20 m floor (`DAT_0071c3f0` is absolute, correctly silent at 150 m, and the original has no
