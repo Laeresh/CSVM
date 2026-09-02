@@ -171,7 +171,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — Completion and release gate
 
-41. ☐ Complete Original top level, Options and every remaining transition
+41. ☑ Complete Original top level, Options and every remaining transition
 42. ☐ Enforce the required/optional Original asset manifest
 43. ☐ Complete typed launch and semantic return routing across every journey
 44. ☐ Run acceptance, enable Original normally and publish the Modern extension contract
@@ -1402,7 +1402,7 @@ state drives narration, but cue selection and transition timing remain presentat
 
 # Wave E — Completion and release gate
 
-## E41 ☐ Complete Original top level, Options and every remaining transition
+## E41 ☑ Complete Original top level, Options and every remaining transition
 
 **Goal.** Every A1 in-scope screen and edge is reachable and escapable in Original by mouse,
 keyboard and pad, including its presentation chooser and modal behaviour.
@@ -1425,8 +1425,82 @@ idiom the remaining screens' confirms should take.
 
 **Model recommendation.** high — broad integration and fidelity review.
 
-**Verify.** Machine-check 100% inventory coverage and run every transition forward/back with each
-input family. <TODO from A1: final journey matrix and capture debts.>
+What was built, row by row against the inventory. The machine check came first:
+`CSVM.Tests/OriginalCoverageTests.cs` drives `OriginalShell` from the top level to every
+`OriginalScreen` and back by three input families (pointer clicks at the rows' centres, keyboard
+cursor commands walking down and right, pad cursor commands walking up and left), requires every
+`ScriptToExe` edge of an in-scope section to carry an entry saying how Original realises it (driven,
+the wingman slot's row, drawn disabled, out of scope with its reason) and checks the entry against
+the shell, requires every exit to arrive typed, and fails any screen whose way back does not land on
+the top level with no open campaign, build or dialog; once over the fixture layout and once over the
+install's own. Read against the D33 shell its worklist was: the Options screen had no
+`[Preferences]` chrome and no `PF_B_MAINMENU` way back, the four Preferences page doors were not
+rows at all, and the inventory's Sell removed a plane on the press with a refusal as a text line
+rather than a messagebox (the check names those rows, so it cannot compile against that shell; the
+worklist is the check's table read against it). Closed: **Options** is composed over `[Preferences]` (`PF_LOGO`,
+`PF_BACKGROUND`, `PF_T_TITLE`, the four description rows in their authored colour, the four page
+doors at their corners drawn disabled, `PF_B_MAINMENU` as the way back) with the chooser as its
+content, two paper plaques (ORIGINAL or BUILT-IN, APPLY) in the slot under the doors at the doors'
+own pitch with a one-line description, and `OriginalPresentation` draws it in the page's own inks
+(`PaletteFor(PreferencesInks, Inks)`); the Game Options, Audio, Video, Controls and Keys pages are
+out of this plan, since no shared option exists behind them (the store carries the menu
+presentation alone), and their doors' disabled state is a remake state recorded for `CAP-51`.
+**Multiplayer** draws disabled and takes no input (network play; the 22 multiplayer scripts have no
+layout and no local counterpart), **Credits** the same (out of scope). **Quit** leaves on the press
+with no confirm, which is `MAINMENU.SCRIPT`'s own `terminate` on `mm_b_quit` (a decode, so the
+messagebox idiom is not applied to it). **The messagebox** is now one idiom over every screen
+(`Rows` are a standing dialog's answers, `Back` takes the declining one, `Compose` draws it over any
+page) in the words `MESSAGEBOX.SCRIPT` assigns by button mask (langui 100 OK, 102 Yes, 103 No,
+replacing the invented YES/NO), and the inventory's Sell goes through it: the sell path's own
+langui 700 question as the two-answer box, 701 or 704 as the one-answer refusal. Every other row
+of the census was already closed by B13 to D33 and is exercised by the check. Remake-only readings
+added or kept, each in the inventory: the chooser's placement and words, the page doors' disabled
+frame, and a two-button box opening on No where the script focuses its left button (Yes) for the
+plain `0x4` mask the campaign passes. That last one is a standing remake choice the orchestrator
+may want to put to the user: the decode now says the original's keyboard focus opens on Yes, and
+Original keeps No so a repeated press after a mistaken DELETE PLAYER cannot destroy a campaign.
+
+**Verify.** `dotnet build CSVM/CSVM.sln`; the whole `dotnet test` (3015, of which 2 are
+`OriginalCoverageTests`: the fixture run, 22 screens reached and left, 37 journeys by 3 families
+= 108 runs, 22 edges driven, 2 wingman-slot rows, 6 drawn disabled, 1 out of scope, 0 dead ends;
+and the `[ExtractedDataFact]` install run, 23 screens (the zoom needs the install's scrapbook
+rows), 111 runs, 22 driven, 2 slot rows, 6 disabled, 16 out of scope, 0 dead ends, the 46 edges
+whole; `OriginalShellTests` gains the Options composition over the fixture's new `[@Preferences@]`
+section and reads `PF_B_MAINMENU` as the way back; `OriginalHangarTests` answers the sell confirm
+both ways; `OriginalCampaignTests` unchanged in substance), then
+`.\RunTests.ps1 -Filter "menu,campaign" -SkipUnits -SkipGoldens` (56 suites, 56 passed, engine
+errors clean; `menu-original-hangar` now answers Yes to the sell box), `.\CheckCommentCaps.ps1
+-Summary` (all within cap) and `.\CheckEncoding.ps1` (no mojibake). Aids: Original gains
+`--menu=campaign-delete` (the two-player profile screen with the delete box standing), a `--menu=`
+value under `--presentation=original` and no flag, so the flag index is unchanged (`docs/cli.md`).
+Built-in unchanged: `mode`, `options`, `chapter`, `plane` and the twelve scratch-profile campaign
+aids at 1280x720, each one Godot run on the hidden desktop (`.scratch\e41-shots.ps1`), from the
+`mp-d33` worktree rebuilt at its commit `6d70d0e1` (the plan tip `a933d016` differs from it by a
+formatting-only change in `CampaignBoards.cs`) into `.scratch\e41-shots\builtin-before\` and from
+this tree into `.scratch\e41-shots\builtin-after\`, compared by decoded 32bpp pixels
+(`.scratch\e41-compare.ps1`): 16 of 16 identical, zero differing pixels, the user's plane store
+listed before and after with the same eight planes and no `options.json` written. Original: the
+top level with every door live, the Options screen over the Preferences chrome and the delete
+confirm (`--menu=campaign-delete`) at 1024x768 and 1920x1080 into `.scratch\e41-shots\original\`.
+What a pose cannot show: the pointer sits off the board, so no rollover or pressed frame is in
+any shot; the top level's shot shows Multiplayer and Credits in frame 0, which is what they draw,
+and the Options shot the four doors in frame 0 with ORIGINAL focused, so the toggle to BUILT-IN
+and the APPLY exit are the suites' to prove; the delete shot shows the box opened on No with the
+seeded box name behind it, and the Yes answer's deletion is `OriginalCampaignTests`' and the
+coverage check's. `docs/verification.md` rules that bit: **METHOD-6** (which binary each side
+used is named: `mp-d33` at `6d70d0e1` rebuilt for the run against this tree), **METHOD-3** (the
+plane store was listed before and after the runs and the compared aids read a scratch store or
+the unchanged user store), **METHOD-9** (the coverage check failed on its first run: two pointer
+journeys over the fixture clicked a corner pixel two invented plaques share and landed on the
+neighbour, so the click moved to the row's centre; a check that could not fail would have passed
+that), **SHOT-6**
+(decoded pixels, never PNG bytes), **SHOT-9**/**SHOT-10** (windowed probes on the hidden desktop,
+absolute paths, every file checked present), **SHOT-32** (a shot proves the frame it drew; the
+journeys are the check's), **SRC-7** (the answer words and Quit's behaviour are read off the
+scripts that act on them, `MESSAGEBOX.SCRIPT`'s `DI` assignments and `MAINMENU.SCRIPT`'s
+`terminate`; the chooser, the disabled doors and the box's opening focus are recorded remake-only).
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** “Looks complete” is not inventory coverage. A screen with no Back/recovery path is a
 dead end even if its launch action works.
@@ -1442,6 +1516,16 @@ were settled in Decisions 9–10; A1 identifies the concrete asset set.
 **Approach.** Generate or maintain the manifest from the decoded-layout inventory, validate structure
 without eagerly loading every bitmap, report actionable missing/unreadable entries, and connect the
 result to A3 resolution. Add a test-only fixture presentation for incomplete manifests.
+
+Handoff from E41: the coverage check measures every button strip it clicks off the PNG header
+(`OriginalCoverageTests.PngSize`), and every screen it reached over the install drew from art the
+layout names plus the three script-named pointer and font files, so the required set for the
+screens Original composes is the layout's `art` of the 22 built sections, `[Preferences]` included
+(its `PF_BackGround.png`, the four `PF_B_*` strips and `PC_B_ReturnMainMenu.png`; not
+`GN_B_ReturnToGame.Png`, which is the in-flight variant Original never draws), plus
+`MB_Background.png`, `MB_B_Icon.Png` and `MB_B_Buttons.Png` for the messagebox that now stands over
+any screen; the five Preferences pages' art and `CrimFlag.MPG` are not required by anything Original
+draws. `OriginalAvailability` still checks `[MainMenu]` alone.
 
 **Model recommendation.** medium — bounded validation once A1/A2 define the data.
 
@@ -1495,6 +1579,17 @@ deliverable were settled in Decisions 17, 24 and 29.
 comparisons, campaign regression and at-the-controls pass. Add Original to normal availability only
 after all required rows pass. Document presentation registration, features, input sources, options,
 audio, launch, return, asset policy and the explicit things Modern does not inherit from Original.
+
+Handoff from E41: the acceptance matrix's engine-free half already exists as
+`OriginalCoverageTests` (every screen by three input families, every in-scope edge, every exit),
+so the matrix should run that test's install case as its first row and then the driven suites
+`menu-original-tracer`, `menu-original-instant-action`, `menu-original-hangar`,
+`menu-original-campaign` and the Original half of `menu-player-setup-seats`; what none of them
+reach and the at-the-controls pass must: a flown launch and its return through `Launcher` for every
+mode in Original, the frame-deferred `SwitchPresentation` both ways, a real pad's join and walk, the
+sounds, and the pointer's rollover and pressed frames. The two remake choices the matrix should
+put to the user are the delete box opening on No against the script's Yes focus, and the Options
+chooser's placement on the Preferences page.
 
 **Model recommendation.** high — release gate and architectural audit require broad judgement.
 

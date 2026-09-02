@@ -967,6 +967,37 @@ public sealed partial class OriginalShell
         return null;
     }
 
+    // Sell asks first, the sell path's own two-button messagebox (langui 700 over the plane's
+    // short airframe name and its value, Yes and No), and a refused sale (a reward aircraft, the
+    // two-plane floor) comes back as the one-button box in the feature's words.
+    private void AskToSell()
+    {
+        if (_hangar == null || _inventoryIndex < 0 || _inventoryIndex >= _hangar.Saved.Count)
+        {
+            return;
+        }
+
+        var plane = _hangar.Saved[_inventoryIndex];
+        string question = _hangar.Strings.Format(700, _hangar.AirframeShortName(plane.Airframe), HangarEconomy.Price(plane).Total.Cost);
+        if (question.Length == 0)
+        {
+            question = $"Your {_hangar.AirframeShortName(plane.Airframe)} is worth ${HangarEconomy.Price(plane).Total.Cost}. Are you sure you want to sell it?";
+        }
+
+        RaiseDialog(Fill(question.Replace("<B>", string.Empty).Replace("<b>", string.Empty)), Yes(() =>
+        {
+            if (_hangar.DeleteSaved(plane.Name))
+            {
+                RefreshRosterFromStore();
+                return;
+            }
+
+            string refusal = _hangar.Message;
+            _hangar.ClearMessage();
+            RaiseDialog(refusal, Ok());
+        }), No());
+    }
+
     private MenuExit? ActivateHangar(OriginalRow row)
     {
         if (_hangar == null)
@@ -1040,12 +1071,7 @@ public sealed partial class OriginalShell
                 PurchaseNow();
                 return null;
             case InventorySellKey:
-                if (_inventoryIndex >= 0 && _inventoryIndex < _hangar.Saved.Count)
-                {
-                    _hangar.DeleteSaved(_hangar.Saved[_inventoryIndex].Name);
-                    RefreshRosterFromStore();
-                }
-
+                AskToSell();
                 return null;
             case InventoryDoneKey:
                 ShowHangarScreen(_hangarTab);
@@ -1505,11 +1531,6 @@ public sealed partial class OriginalShell
                     }
                 }
             }
-        }
-
-        if (hangar.Message.Length > 0 && screen.Widget("HA_T_PLANE") is { } refusal)
-        {
-            lines.Add(new BoardLine(hangar.Message, refusal.Int("X"), refusal.Int("Y") + 340f, 500f, HubTextFont, BoardInk.Heading));
         }
 
         IReadOnlyList<OriginalRow> widgets = rows;

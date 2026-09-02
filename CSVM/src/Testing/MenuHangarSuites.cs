@@ -78,7 +78,7 @@ internal static class MenuHangarSuites
         + "siblings a click and the keyboard reach out of order, a dropdown steps and picks through "
         + "the shared feature with the running total following, READY TO PURCHASE and Purchase Now "
         + "commit the scratch plane into the user's store and the shared roster, SELL PLANES opens "
-        + "the inventory whose Sell removes it again, CANCEL and Back leave no residue, and a switch "
+        + "the inventory whose Sell asks and then removes it again, CANCEL and Back leave no residue, and a switch "
         + "discards an open build")]
     internal static void MenuOriginalHangar(TestContext ctx)
     {
@@ -561,7 +561,18 @@ internal static class MenuHangarSuites
             $"picking it puts it in the box ({Row(shell, OriginalShell.InventoryPlanesKey)?.Label})");
         var sellButton = Row(shell, OriginalShell.InventorySellKey)!;
         Press(host, seat, Pointer(fit, sellButton.X + 5f, sellButton.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(store.Load(scratch) == null && IndexOf(hangar.Saved, scratch) < 0, $"Sell removes the plane from the store and the roster");
+        ctx.Check(shell.Dialog != null && shell.FocusedKey == OriginalShell.DialogNoKey && store.Load(scratch) != null,
+            $"Sell asks first with the two-answer messagebox opening on No ({shell.Dialog?.Message})");
+        var yes = Row(shell, OriginalShell.DialogYesKey);
+        ctx.Check(yes != null, $"whose Yes stands at the messagebox's left row");
+        if (yes == null)
+        {
+            return;
+        }
+
+        Press(host, seat, Pointer(fit, yes.X + 5f, yes.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Dialog == null && store.Load(scratch) == null && IndexOf(hangar.Saved, scratch) < 0,
+            $"Yes removes the plane from the store and the roster");
         ctx.Check(!Contains(setup.Roster, scratch), $"and from the shared aircraft roster");
         ctx.Check(hangar.Scratch.Name == "Other" && hangar.IsOpen, $"the open build is untouched ({hangar.Scratch.Name})");
         var done = Row(shell, OriginalShell.InventoryDoneKey)!;

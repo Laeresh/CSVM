@@ -20,6 +20,28 @@ MM_B_PREFERENCES=B,PM_B_Preferences.png,280,430,0,0,Preferences,0x1020,0,,,,,,
 MM_B_CREDITS=B,PM_B_Credits.png,280,480,0,0,Credits,0x1000,1,,,,,,
 MM_B_QUIT=B,PM_B_Quit.png,280,530,0,0,,0x1000,0,,,,,,
 
+;The Preferences page the Options screen is composed over: the shipped section's keys and edges on
+;invented lines and art, and the Credits page whose one edge is out of scope.
+[@Preferences@]
+V1=TCOLOR,0xFFFFDDC4
+PF_BACKGROUND=P,PP_Back.png,100,200,0,1,0,1,0
+PF_LOGO=P,PM_Logo.png,100,10,0,1,0,1,0
+PF_B_GAMEOPTIONS=B,PP_B_GameOptions.png,110,260,0,0,GameOptions,0x1000,0,,,,,,
+PF_B_AUDIO=B,PP_B_Audio.png,110,310,0,0,Audio,0x1000,0,,,,,,
+PF_B_VIDEO=B,PP_B_Video.png,110,360,0,0,Video,0x1000,0,,,,,,
+PF_B_CONTROLS=B,PP_B_Controls.png,110,410,0,0,ControlsPrefs,0x1000,0,,,,,,
+PF_B_MAINMENU=B,PP_B_ReturnMainMenu.png,460,500,0,0,,,,,,,,,
+PF_B_RETURNTOGAME=B,PP_B_ReturnToGame.png,455,505,0,0,,,,,,,,,
+PF_T_TITLE=T,IDS_PF_TITLE,120,220,50,200,28,0XFFC0BAAD,1
+PF_T_GODESC=T,IDS_PF_GO_DESC,340,270,0,310,40,<TCOLOR>,0
+PF_T_APDESC=T,IDS_PF_AUDIO_DESC,340,320,0,310,40,<TCOLOR>,0
+PF_T_VPDESC=T,IDS_PF_VIDEO_DESC,340,370,0,310,40,<TCOLOR>,0
+PF_T_CPDESC=T,IDS_PF_CONTROLS_DESC,340,420,0,310,40,<TCOLOR>,0
+
+[@Credits@]
+CR_BackGround=P,PC_Back.jpg,0,0,1,1,0,0,0
+CR_B_Exit=B,PC_B_Done.png,650,550,0,0,MainMenu,0x1000,1,,,,,,
+
 [@FlightCheck@]
 V1=PLAQUE,PM_B_Paper.png
 FC_B_CHANGEPLANE=B,<PLAQUE>,120,130,0,IDS_PM_CHANGEPLANE,PlaneSelection,0x1000,1,,,,,,,0xFF767676,0xFF133D77,0xFF374D6B,0xFF000000

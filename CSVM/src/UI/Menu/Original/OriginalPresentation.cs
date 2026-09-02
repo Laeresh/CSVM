@@ -48,14 +48,20 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the hangar's inventory.</summary>
     public const string PlaneInventoryAid = "plane-inventory";
 
+    /// <summary>The aid value that opens the two-player profile screen with DELETE PLAYER pressed,
+    /// the two-answer messagebox standing over it; Original's own, since Built-in's confirm is two
+    /// rows of the screen and not a box.</summary>
+    public const string CampaignDeleteAid = "campaign-delete";
+
     /// <summary>The campaign aid values Original shares with Built-in, each over the scratch
     /// profile store: the empty profile screen, the two-player one, the cabin, the table of
     /// contents, the book on the last mission flown, the briefing (with its seconds argument),
-    /// the flight check, ammo selection and plane selection.</summary>
+    /// the flight check, ammo selection and plane selection; plus Original's own
+    /// <see cref="CampaignDeleteAid"/>.</summary>
     public static readonly IReadOnlyList<string> CampaignAids = new[]
     {
         "campaign-empty", "campaign-roster", "campaign-cabin", "campaign-previous", "campaign-scrapbook",
-        "campaign-briefing", "campaign-flightcheck", "campaign-ammo", "campaign-planeselection",
+        "campaign-briefing", "campaign-flightcheck", "campaign-ammo", "campaign-planeselection", CampaignDeleteAid,
     };
 
     // The aids' scratch build carries this name, so the shots read the same on every machine; it
@@ -79,6 +85,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     private MenuSeatDevices? _devices;
     private IMenuHost? _host;
     private BoardPalette _palette = BoardPalette.Chalk;
+    private BoardPalette _preferencesPalette = BoardPalette.Chalk;
     private BoardPalette _paperPalette = BoardPalette.Paper;
     private BoardPalette _hangarPalette = BoardPalette.Paper;
     private bool _shown;
@@ -129,6 +136,19 @@ public sealed class OriginalPresentation : IMenuPresentation
         LabelActivate: ToColor(inks.LabelDepressed),
         Hint: ToColor(inks.Disabled));
 
+    /// <summary>The Options screen's palette: the Preferences page's authored description colour
+    /// for its text, its title colour for the heading, the paper plaque's label tail for the
+    /// chooser.</summary>
+    public static BoardPalette PaletteFor(OriginalPreferencesInks inks, OriginalInks labels) => new(
+        Row: ToColor(inks.Text),
+        Focus: ToColor(inks.Title),
+        Heading: ToColor(inks.Title),
+        Detail: ToColor(inks.Text),
+        LabelNormal: ToColor(labels.LabelNormal),
+        LabelRollover: ToColor(labels.LabelRollover),
+        LabelActivate: ToColor(labels.LabelDepressed),
+        Hint: ToColor(inks.Text));
+
     /// <summary>The Instant Action screen's palette: every text in the screen's own authored text
     /// colour over its paper background, the button labels in the paper buttons' own tail.</summary>
     public static BoardPalette PaletteFor(OriginalInstantActionInks inks) => new(
@@ -176,6 +196,7 @@ public sealed class OriginalPresentation : IMenuPresentation
                 stock: () => StockLoadouts.Load(),
                 dataRoot: _dataRoot);
             _palette = PaletteFor(_shell.Inks);
+            _preferencesPalette = PaletteFor(_shell.PreferencesInks, _shell.Inks);
             _paperPalette = PaletteFor(_shell.InstantActionInks);
             _hangarPalette = PaletteFor(_shell.HangarInks);
         }
@@ -449,6 +470,9 @@ public sealed class OriginalPresentation : IMenuPresentation
         _shell.OpenCampaignOver(CampaignAidProfiles.Store(seeded, progressed: value != "campaign-roster"));
         switch (value)
         {
+            case CampaignDeleteAid:
+                _shell.ShowDeleteConfirm(CampaignAidProfiles.Pilot);
+                break;
             case "campaign-cabin":
                 _shell.ShowCabin(CampaignAidProfiles.Pilot);
                 break;
@@ -525,10 +549,11 @@ public sealed class OriginalPresentation : IMenuPresentation
     {
         if (_shell != null && _view != null)
         {
-            // Paper pages write in authored black, the hub in its own inks, a campaign screen in
-            // the palette its shared board component takes under Built-in, and the rest in the
-            // file-wide inks over the dark top level.
+            // Paper pages write in authored black, the hub in its own inks, the Options screen in
+            // the Preferences page's, a campaign screen in the palette its shared board component
+            // takes under Built-in, and the rest in the file-wide inks over the dark top level.
             var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.HangarInventory ? _paperPalette
+                : _shell.Screen == OriginalScreen.Options ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette
                 : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)
                 : _palette;

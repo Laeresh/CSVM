@@ -37,6 +37,7 @@ own callbacks and economy are [`hangar.md`](hangar.md), the mission-end book
   - [What the shell is made of](#what-the-shell-is-made-of)
   - [`LAYOUT.CSV`'s own shape](#layoutcsvs-own-shape)
   - [The navigation graph the layout states](#the-navigation-graph-the-layout-states)
+  - [Coverage](#coverage)
   - [In scope and out of scope](#in-scope-and-out-of-scope)
   - [Screen by screen](#screen-by-screen)
   - [Menu audio](#menu-audio)
@@ -62,8 +63,8 @@ own callbacks and economy are [`hangar.md`](hangar.md), the mission-end book
 | Distinct art files `LAYOUT.CSV` names | **124** (122 present in the extraction, 2 absent) |
 | Distinct `IDS_*` symbols `LAYOUT.CSV` names | **152**, of which **149** resolve to text |
 | UI sound files | **8** |
-| Original screens in this plan's scope | **27** of the 34 single-player screens |
-| Layout-stated navigation edges in the original | **46** |
+| Original screens in this plan's scope | **27** of the 34 single-player screens (22 built; the 5 Preferences pages stand behind doors drawn disabled) |
+| Layout-stated navigation edges in the original | **46** (22 driven by Original, 2 realised as the wingman slot's row, 6 drawn disabled, 16 out of scope; see [Coverage](#coverage)) |
 
 ## Part 1: Built-in as it stands
 
@@ -416,6 +417,29 @@ first in the original's own chain.
 siblings, each reachable from it directly; there is no next-screen edge between Airframe and Engine
 in the data. Built-in walks them linearly, which is a divergence, not a decode.
 
+### Coverage
+
+`CSVM.Tests/OriginalCoverageTests.cs` is the machine check of this page against the Original
+presentation: it drives `OriginalShell` from the top level to every screen and back by three input
+families (pointer clicks on the rows' rectangles, keyboard cursor commands walking down and right,
+pad cursor commands walking up and left), once over the hand-authored fixture layout and once over
+the install's own `menu_layout.json` and art. Every `ScriptToExe` edge of an in-scope section must
+have an entry saying how Original realises it, and the entry is checked against the shell. The
+tally over the install: 23 screens (every `OriginalScreen`) reached and left with no open campaign,
+build or dialog behind; 37 journeys by 3 families; 46 edges of which **22 are driven** (the row is
+pressed and the target screen shows), **2 are realised as the wingman slot's row** (`FC_B_CHANGEPLANEW`
+and `FC_B_CHANGEAMMOW` are the pilot's plaques at the wingman's slot, present exactly when the
+mission flies a wingman), **6 are drawn disabled** (`MM_B_MULTIPLAYER`, `MM_B_CREDITS`, and the four
+`PF_B_*` page doors on the Options screen) and **16 are out of scope** (the eight ACCEPT/CANCEL
+returns of GameOptions, Audio, Video and ControlsPrefs, `CP_B_KEYS` and Keys' two returns,
+MomentoSelection's two returns and the cabin's `PC_B_CHANGEMOMENTO`, `IAWU_B_CONTINUE`,
+`CR_B_Exit`); 0 dead ends. The exits are checked too: Quit as a `QuitExit`, APPLY as a
+`PresentationSwitchExit`, FLY on Free Flight and Fly Mission on Instant Action as a `LaunchExit`,
+FLY MISSION as a `CampaignMissionExit`, and Purchase Now returning to the top level with the plane
+saved. Keyboard and pad share one semantic command vocabulary at the seat seam (Decision 25), so
+the two cursor families differ in the walk they take, not in the commands the shell sees; the
+device mapping behind them is the seats' own tests.
+
 ### In scope and out of scope
 
 Decision 5 puts everything `LaunchMenu` hosts in scope. Mapping that onto the original's 34
@@ -431,6 +455,13 @@ HardPoints, Paint, Purchase; MessageBox.
 savegame system here, and the `LOAD` branch is unreachable in the shipped build); Credits;
 MomentoSelection (deferred, `BL-463`); IA_WrapUp (a flight board, excluded by Decision 5).
 
+**Of the 27, five are in the census and out of this plan:** GameOptions, Audio, Video,
+ControlsPrefs and Keys. No shared option exists behind any of them (the options store carries the
+menu presentation alone), so Original composes Preferences itself as its Options screen and draws
+the four page doors disabled; a later plan that adds a shared option owns the page it belongs on.
+Multiplayer is network play with no local counterpart, so `MM_B_MULTIPLAYER` draws its disabled
+frame and takes no input; `MM_B_CREDITS` does the same, Credits being out of scope.
+
 ### Screen by screen
 
 Composition means an authored rectangle, art name or string id. Interaction means a decoded
@@ -438,20 +469,19 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 
 | Original screen | Built-in counterpart | Layout | Script decoded | Capture | Interaction evidence |
 |---|---|---|---|---|---|
-| MainMenu | Mode | 9 rows | this page | **none** | composition only; script text gives the six buttons and their targets, nothing about rollover, music or the flag movie. **Built as Original's top level** from the two panes and the six `B` rows with their four-frame strips; rows with no remake destination yet draw the disabled frame, Instant Action, Quit and Preferences (the Options door) react, and the movie's place is black |
+| MainMenu | Mode | 9 rows | this page | **none** | composition only; script text gives the six buttons and their targets, nothing about rollover, music or the flag movie. **Built as Original's top level** from the two panes and the six `B` rows with their four-frame strips: Campaign, Instant Action, Preferences (the Options screen) and Quit react, Multiplayer and Credits draw the disabled frame and take no input (out of scope), and the movie's place is black. Quit terminates on the press with no confirm, which is `MAINMENU.SCRIPT`'s own `terminate` on `mm_b_quit` |
 | (none: remake-only) | Free Flight, Chapter, Plane | none | none | none | **Original's Free Flight door and screen, of our design under Decision 11.** The door is a text button in the `FC_B_CHANGEPLANE` paper-plaque convention beside the button frame, level with Campaign; the screen is the logo over two text lists (the shared chapter roster and the shared aircraft roster, the eleven stock airframes then the saved custom planes in an eleven-row window) with BACK and FLY plaques, a seat strip under the chapters and each later seat's tag on its aircraft row. Nothing on it is decoded |
 | (none: remake-only) | Dogfight, Chapter, Plane | none | none | none | **Original's Dogfight door and screen, of our design under Decision 11.** The door sits under the Free Flight door in the same plaque convention; the screen is the Free Flight screen's shape over the Dogfight gate (a second seat must join and confirm before FLY stands). The original's Multiplayer is network play and ships no split-screen Dogfight, so nothing here is decoded |
 | (none: remake-only) | the join strip and per-seat picks | none | none | none | **Original's join flow, of our design.** Start on an unclaimed pad joins a seat on either sortie screen (the same gesture and pad bookkeeping as Built-in's, through `MenuSeatDevices`); the joined pad walks its own cursor on the aircraft column, selects and confirms with A, and leaves with B while browsing; seat 0's mouse, keyboard or pad picks the map and the aircraft and presses FLY, which is its own confirmation. The original has no join gesture |
-| (none: remake-only) | Options | none | none | none | **Original's minimal Options screen**, opened by the Preferences row until the decoded Preferences screens exist: the presentation toggle, APPLY, BACK, in the same plaque convention |
+| Preferences (as Options) | Options | 14 rows | this page | **none** | layout only for the composition; `PREFERENCES.SCRIPT` says the four page doors deactivate the screen (the layout carries their targets) and the fifth button is `pf_b_mainmenu` out of flight (`activate(@mainmenu@)`) or `pf_b_returntogame` in flight. **Built as Original's Options screen over the section's chrome**: `PF_LOGO`, `PF_BACKGROUND`, `PF_T_TITLE`, the four description rows in their authored colour, the four page doors at their corners drawn disabled (no shared option stands behind them), `PF_B_MAINMENU` as the way back, and the presentation chooser as the content, two paper plaques (ORIGINAL or BUILT-IN, APPLY) in the slot under the doors at the doors' own pitch with a one-line description in the description column. Remake-only: the chooser's placement and words, the disabled doors (a state the original never shows). `PF_B_RETURNTOGAME` is the in-flight variant and is not drawn; the pause board is out of scope |
 | (none: remake-only) | Mode's Build Custom Plane, the Instant Action pick's door | none | none | none | **Original's BUILD PLANE door and its wallet-free entry, of our design under Decision 11.** The door sits under the Dogfight door in the same plaque convention and opens the decoded name screen, as the cabin's `PC_B_PLANEX` edge does, over the saved-plane store with no wallet; the original reaches plane construction only from the cabin and the Instant Action screen's `IA_B_BUILD`, whose edge the layout does not state, so that button stays disabled. What the cabin path would supply and this door cannot (the wallet, the profile's ownership) is left out rather than invented: the hub shows no cash note, prices are never checked against funds, and the hub's READY and CANCEL wear the export strips the Instant Action stills show (`PX_B_ReadyToExport`, `PX_B_CancelExport`), without their $50000 figure, whose enforcement is undecoded |
-| Preferences | (none; Options is E41's addition) | 14 rows | no | **none** | layout only |
-| GameOptions | (none) | 13 rows | no | **none** | layout only; `BL-570` wants the difficulty row |
-| Audio | (none) | 19 rows | no | **none** | layout only; three preview loops are script-bound; `BL-455` |
-| Video | (none) | 31 rows | no | **none** | layout only |
-| ControlsPrefs | (none) | 12 rows | no | **none** | layout only |
-| Keys | (none) | 17 rows | no | `Keybinds Movement/Throttle/Targeting/Weapons/Views 1/Views 2/Other.png` | composition of all seven tabs; no interaction |
+| GameOptions | (none) | 13 rows | no | **none** | layout only; `BL-570` wants the difficulty row. **Out of this plan**: no shared option exists, so `PF_B_GAMEOPTIONS` draws disabled on Original's Options screen |
+| Audio | (none) | 19 rows | no | **none** | layout only; three preview loops are script-bound; `BL-455`. **Out of this plan**: `PF_B_AUDIO` draws disabled |
+| Video | (none) | 31 rows | no | **none** | layout only. **Out of this plan**: `PF_B_VIDEO` draws disabled |
+| ControlsPrefs | (none) | 12 rows | no | **none** | layout only. **Out of this plan**: `PF_B_CONTROLS` draws disabled, and Keys behind it is unreached |
+| Keys | (none) | 17 rows | no | `Keybinds Movement/Throttle/Targeting/Weapons/Views 1/Views 2/Other.png` | composition of all seven tabs; no interaction. **Out of this plan** with ControlsPrefs |
 | InstantAction | Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, Presets | 48 rows | [`instant-action.md`](../formats/instant-action.md) | **none** | option sets, the ace's control hiding and the paged enemy rows are script-proven; the screen itself has never been seen. **Built as Original's Instant Action screen** from the section's rows over the shared feature: `IA_BackGround`, the `T` rows, the contents list in its 14-row window with its own scroll arrows and slider, the dropdowns on their authored lines, the enemy rows paged by `IA_B_UP`/`IA_B_DOWN`, the radio pair, View Story, Fly Mission and Exit; Build Custom Plane and Weapon Loadout draw disabled until their Original screens exist. What the data does not settle is listed under Part 4 for `CAP-50` |
-| Campaign (profile) | `CampaignScreen.Roster` | 6 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | `Campaign Player Profile.png` | full: roster fill, name validator, all four exits. **Built as Original's profile screen** over the shared campaign feature and the shared board component: the name box pre-filled with the last player seated, `CM_B_START` / Enter in the box / a second click on the filled roster row starting, a first click filling the box, the list sub-script's own selection bar and pointer frame, the four refusals as the one-button messagebox, `CM_B_DELETEPLAYER` asking with langui 201 as the two-button box, `CM_B_CANCEL` leaving. Remake-only: YES and NO as the two answers' words, the caret |
+| Campaign (profile) | `CampaignScreen.Roster` | 6 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | `Campaign Player Profile.png` | full: roster fill, name validator, all four exits. **Built as Original's profile screen** over the shared campaign feature and the shared board component: the name box pre-filled with the last player seated, `CM_B_START` / Enter in the box / a second click on the filled roster row starting, a first click filling the box, the list sub-script's own selection bar and pointer frame, the four refusals as the one-button messagebox, `CM_B_DELETEPLAYER` asking with langui 201 as the two-button box whose answers read Yes and No (langui 102 and 103, the words `MESSAGEBOX.SCRIPT` gives a `0x4` box), `CM_B_CANCEL` leaving. Remake-only: the box opening on No (the script focuses its left button, Yes, for the plain `0x4` mask the campaign passes), the caret |
 | PassengerCabin | `Cabin` | 16 rows | same | `Campaign CAP-44 Cabin.png` | full for the six buttons; whether anything on the screen animates is open. **Built as Original's cabin**: the four plaques the board component draws, `PC_B_NEWMISSION` disabled once the campaign is complete, `PC_B_PLANEX` into the name screen over the profile's wallet with the cabin as the hangar's return, `PC_B_PREVIOUS` and `PC_B_RETURNMM` on their layout edges |
 | FlightCheck | `FlightCheck` | 25 rows | same | `Campaign Flight Check.png`, `… Change Plane Button.png` | full: both slots, four lists, the wingman gate, both plane-change rules. **Built as Original's flight check**: the paper plaques per crew slot hit-tested at their rows, `FC_B_RETURNBRIEF` rewinding a co-op walk, `FC_B_FLYMISSION` advancing to the next joined human's check or leaving as the feature's launch with every seat's devices; a joined seat drives its own check |
 | PlaneSelection | `PlaneSelection` | 27 rows | same | `… Change Plane.png`, `… Combo Box.png`, `… Unique Warning.png`, `… Export dialog.png` | full, including the rollover preview and the duplicate rule. **Built as Original's plane selection** through the shared page: the fields at their `D` rows with the open list's entries hit-tested under the box, a sideways step on the closed field, the 710 refusal and the 702 export message as Original's own messagebox. Remake-only: the rollover preview is not drawn (the page previews nothing on a highlight) |
@@ -460,7 +490,7 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 | ScrapBook_TOC | `PreviousMissions` | 8 rows | same | `Campaign CAP-41 Previous Mission 1/2.png` | full. **Built as Original's table of contents** through the shared page: the mission rows hit-tested inside the listbox's window, a click picking and a second click replaying, the buttons at their rows |
 | ScrapbookZoom | `ScrapbookZoom` | 83 rows | same | `Campaign Scrapbook CM02 Mission select….png` | full. **Built as Original's zoom** through the shared page: `SBZ_B_RETURN` and `SBZ_B_EXPORT`, the export's 705/706 as Original's messagebox |
 | (Briefing, a `zrdr` dialog, not a script) | `Briefing` | none | [`briefing.md`](../formats/briefing.md) | `Campaign Briefing.png` | full. **Built as Original's briefing**: the three `brief_button1` plaques at the dialog's own positions with their label-face states, the reveal advanced on the presentation's clock, the narration begun through the shared audio service on entry and again on REPLAY BRIEFING and ended on RETURN TO CABIN and GO TO FLIGHT CHECK |
-| Hangar | `HangarScreen.PlaneSelection` | 16 rows | [`hangar.md`](hangar.md) | `CustomPlane PlaneSelection.png` | callbacks and economy decoded; navigation only from the layout. **Built as Original's INVENTORY**, the hub's SELL PLANES destination (a remake reading: `PX_B_Sell` states no edge): `HA_BACKGROUND`, the title and prompt, `HA_D_PILOTPLANE` over the shared feature's saved planes, the picked plane's `HA_P_PILOTPLANE` frame, name, agility, armour, value (1258) and guns, `HA_B_SELLP` selling or deleting through the feature, `HA_B_EXPORTP` drawn disabled, `HA_B_DONE` back to the tab |
+| Hangar | `HangarScreen.PlaneSelection` | 16 rows | [`hangar.md`](hangar.md) | `CustomPlane PlaneSelection.png` | callbacks and economy decoded; navigation only from the layout. **Built as Original's INVENTORY**, the hub's SELL PLANES destination (a remake reading: `PX_B_Sell` states no edge): `HA_BACKGROUND`, the title and prompt, `HA_D_PILOTPLANE` over the shared feature's saved planes, the picked plane's `HA_P_PILOTPLANE` frame, name, agility, armour, value (1258) and guns, `HA_B_SELLP` asking first with the two-button messagebox (langui 700 over the short airframe name and the plane's value, Yes and No) and refusing as the one-button box (704 for a reward aircraft, 701 below the two-plane floor) before selling or deleting through the feature, `HA_B_EXPORTP` drawn disabled, `HA_B_DONE` back to the tab. The sell messagebox is the plane selection screen's own decoded path (`campaign-screens.md`), applied here to the remake's inventory |
 | PlaneName | `Name` | 8 rows | partly | **none** | the edit box's font and colours are authored; nothing about the validator here. **Built as Original's name screen**: `PN_E_NAME` fed by seat 0's typed characters under the shared feature's character set and 32-character cap, `PN_B_DEFAULT` (checked as authored) choosing the default configuration or a bare airframe, `PN_B_OK` live once a name stands with langui 203 shown until then, `PN_B_CANCEL` dropping the build; the original's `MaxChars` of 16 is not applied, the saved-plane index's 32 is |
 | PlaneConstruction | (no counterpart; Built-in has no hub) | 47 rows | [`hangar.md`](hangar.md) | `Campaign CAP-40 Plane Construction 1/2.png` | composition; the tab bar's own behaviour is unseen. **Built as Original's Plane Construction hub**: the background, the plane at the `PX_P_PLANE` corner (the airframe's blueprint, or the `PX_ICON` set tinted with the picked colours), PLANE NAME, PLANE COST as the running total, AIRFRAME, WEIGHT CAPACITY, CURRENT WEIGHT, the agility and armour words with their `PX_BarGraph` segments, the cash note over a wallet only, the six `PX_Tab` tabs as siblings with the standing one disabled, `PX_B_Sell`, `PX_B_Ready` and `PX_B_Cancel`. What the data does not settle is listed under Part 4 for `CAP-53` |
 | AirFrame | `Airframe` | 4 rows | [`hangar.md`](hangar.md) | none | the airframe stat table is decoded; the screen is four widgets over it. **Built as the hub's airframe tab**: `AF_D_AIRFRAME` picking through the shared feature and raising the langui 206 ask as a dialog, `AF_T_AIRFRAME` and `AF_S_AIRFRAMEDESC` following the focused airframe |
@@ -470,12 +500,12 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 | HardPoints | `Hardpoints` | 9 rows | same | none | as above. **Built as the hardpoints tab** over `HP_D_POINT0..1` |
 | Paint | `Paint` | 27 rows | same + [`rof.md`](../formats/rof.md) | 8 `CustomPlane Paint*.png` | composition well covered by the paint stills; the pattern pickers' behaviour is not. **Built as the paint tab**: `PT_D_PATTERN` over the wearable patterns, `PT_D_COLORS0..2` as swatches in an 18-row window, `PT_D_SHADES0..2`, `PT_D_DECALS0..2` as `PT_P_DECALS` tiles in a two-row window |
 | Purchase | `Purchase` | 29 rows | same | none | the purchase gate and cost are decoded from the executable. **Built as the hub's totals page**, READY TO PURCHASE's destination: the column heads, one line per priced component at the authored lines and text lists, the totals, `PUR_T_PROBLEMS` in the commit's words, `PUR_B_PURCHASE` live while the feature can commit |
-| MessageBox | (the `_error` line) | 16 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | two campaign dialogs | the `@globals@OR` parameter block and the button masks are decoded. **Built as Original's dialog** over the campaign screens: the `0x1` box on `MB_B_CENTER` for every refusal and notice, the `0x4` box on `MB_B_LEFT`/`MB_B_RIGHT` for the delete confirm, the answer under the pointer in its rollover frame, Back taking the declining answer |
+| MessageBox | (the `_error` line) | 16 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | two campaign dialogs | the `@globals@OR` parameter block and the button masks are decoded; the script also gives the buttons their words by mask, langui 100 (OK) on the `0x1` box and 102 and 103 (Yes, No) on the `0x4` pair, and its Escape takes the `0x4` box's right answer. **Built as Original's dialog over any screen**: the `0x1` box on `MB_B_CENTER` for every refusal and notice (the profile screen's four, the plane screen's 710 and 702, the zoom's 705 and 706, the inventory's 701 and 704), the `0x4` box on `MB_B_LEFT`/`MB_B_RIGHT` for the delete confirm and the sell confirm, the answers in the script's words, the answer under the pointer in its rollover frame, Back taking the declining answer; while a box stands its answers are the only rows. Remake-only: a `0x4` box opening on No where the script focuses the left button |
 
-⚠ **Built-in has no counterpart for Preferences, GameOptions, Audio, Video, ControlsPrefs, Keys or
-PlaneConstruction, and the original has no counterpart for Free Flight, Dogfight, the Chapter
-screen or the wave editor.** The two shells are not the same graph, which is what Decision 4
-already allows; what this row adds is the size of it.
+⚠ **Built-in has no counterpart for GameOptions, Audio, Video, ControlsPrefs, Keys or
+PlaneConstruction (its Options screen is Preferences' counterpart), and the original has no
+counterpart for Free Flight, Dogfight, the Chapter screen or the wave editor.** The two shells are
+not the same graph, which is what Decision 4 already allows; what this row adds is the size of it.
 
 ### Menu audio
 
@@ -600,8 +630,16 @@ and on a press. Everything else is remake-only until filmed. `CAP-49` must confi
 level: whether the movie (absent from the extraction) loops behind the buttons and what replaces
 it, whether the rollover frame appears on entering the plaque or on a delay, whether a press fires
 on the button-down or on the release, whether a disabled button ever draws, where `mm_t_title`
-sits, and whether any keyboard or pad focus exists at all (Original's keyboard and pad focus is a
-remake equivalence, not a decode). `CAP-52` must confirm, for the pointer and audio: which sound
+sits, that Quit ends the game on the press with no confirm (`MAINMENU.SCRIPT` terminates on
+`mm_b_quit`, which is what Original does), and whether any keyboard or pad focus exists at all
+(Original's keyboard and pad focus is a remake equivalence, not a decode). `CAP-51` must confirm,
+for the Preferences page itself: what the page shows before any door is pressed (Original draws the
+four doors, their four descriptions and RETURN TO MAIN MENU together, the layout placing them on
+one panel), whether a description follows the pointer or stands (Original draws all four at once),
+which button leads out of the page from the top level (Original draws `PF_B_MAINMENU`, the button
+the script picks out of flight), and whether the movie plays behind the page (Original's place for
+it is black, as on the top level). The chooser row is ours and the four doors' disabled frames are
+a state the original never shows. `CAP-52` must confirm, for the pointer and audio: which sound
 plays on a rollover and which on a press, whether a disabled button makes either, whether list rows
 make a rollover sound (Original plays none on a list row), which pointer bitmap shows over a
 button, over a list and over nothing, and where each bitmap's hotspot is (Original draws the
@@ -623,8 +661,10 @@ narration from its start (Original begins the wav again from the top) and whethe
 briefing by RETURN TO CABIN or GO TO FLIGHT CHECK cuts the voice (Original ends it and lifts the
 music duck); whether a mission's end starts any narration on the book (Original starts none);
 whether a scrap whose region column reads `0,0,0,0` is clickable on its picture (Original hit-tests
-the picture's bounds); what words the delete confirm's two buttons carry (Original writes YES and
-NO); and whether any keyboard or pad focus exists on these screens at all, and where Back lands
+the picture's bounds); which answer the delete confirm opens on (the script focuses the left
+button, Yes, for the plain `0x4` mask; Original opens on No, so a press that follows a mistaken
+DELETE PLAYER cannot be the one that destroys a campaign, a remake choice); and whether any
+keyboard or pad focus exists on these screens at all, and where Back lands
 (Original walks each screen back to the one that opened it and keeps the focus on the plaque that
 opened what is being left, a remake equivalence).
 

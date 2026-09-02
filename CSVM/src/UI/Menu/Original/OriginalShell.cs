@@ -19,7 +19,8 @@ public enum OriginalScreen
     /// <summary>The remake-only Dogfight screen: the Free Flight screen's shape over the Dogfight gate.</summary>
     Dogfight,
 
-    /// <summary>The remake-only minimal Options screen: the presentation chooser.</summary>
+    /// <summary>The Options screen: the decoded <c>[@Preferences@]</c> chrome with the
+    /// presentation chooser as its content.</summary>
     Options,
 
     /// <summary>The decoded <c>[@InstantAction@]</c> setup screen: the Table of Contents, the
@@ -127,17 +128,21 @@ public sealed record OriginalInks(
     MenuLayoutColor Disabled, MenuLayoutColor Active, MenuLayoutColor Rollover, MenuLayoutColor Depressed,
     MenuLayoutColor LabelNormal, MenuLayoutColor LabelRollover, MenuLayoutColor LabelDepressed);
 
+/// <summary>The colours the Options screen writes in, read off <c>[@Preferences@]</c>: its
+/// description rows' authored text colour and its title's.</summary>
+public sealed record OriginalPreferencesInks(MenuLayoutColor Text, MenuLayoutColor Title);
+
 /// <summary>
 /// The Original presentation's screen graph, engine-free: the decoded top level with the
-/// remake-only Free Flight, Dogfight and hangar doors, the two sortie screens over the shared
-/// player setup (their own partial file), the minimal Options screen, the decoded Instant Action
-/// screen (its own partial file), the decoded campaign screens over the shared campaign feature
-/// (their own partial file) and the decoded hangar screens over the shared hangar feature (their
-/// own partial file), driven by each seat's semantic commands and composed into a
-/// <see cref="ComposedBoard"/> in the authored 800x600 space. Seat 0's pointer arrives already
-/// mapped into that space; hovering a live row moves the focus onto it, so keyboard, pad and
-/// pointer share one cursor. Every rectangle and art name comes from the layout; the art's pixel
-/// size, which the layout does not carry, comes from the measurer the presentation injects.
+/// remake-only Free Flight, Dogfight and hangar doors, the sortie screens, the Options screen over
+/// the decoded Preferences chrome, and the decoded Instant Action, campaign and hangar screens over
+/// their shared features (each family its own partial file), driven by each seat's semantic
+/// commands and composed into a <see cref="ComposedBoard"/> in the authored 800x600 space. Seat
+/// 0's pointer arrives already mapped into that space; hovering a live row moves the focus onto
+/// it, so keyboard, pad and pointer share one cursor. A dialog (the original's messagebox) may
+/// stand over any screen, and while one does its answers are the only rows. Every rectangle and
+/// art name comes from the layout; the art's pixel size, which the layout does not carry, comes
+/// from the measurer the presentation injects.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -155,6 +160,23 @@ public sealed partial class OriginalShell
 
     /// <summary>The Options screen's apply button.</summary>
     public const string ApplyKey = "APPLY";
+
+    /// <summary>The Options screen's section in the layout, whose chrome it is composed over.</summary>
+    public const string PreferencesSection = "Preferences";
+
+    /// <summary>The Options screen's way back, <c>[@Preferences@]</c>'s own RETURN TO MAIN MENU.</summary>
+    public const string OptionsBackKey = "PF_B_MAINMENU";
+
+    /// <summary>The Preferences pages' four doors, drawn disabled: no shared option stands behind them.</summary>
+    public static readonly string[] PreferencesPageKeys = { "PF_B_GAMEOPTIONS", "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS" };
+
+    // The chooser's own words beside the decoded description rows, one line so they clear the
+    // RETURN TO MAIN MENU strip under them.
+    private const string ChooserDescription = "Menu presentation. APPLY restarts the menu.";
+    private const float ChooserGap = 8f;
+    private const float PreferencesTitleFont = 20f;
+    private const float PreferencesTextFont = 14f;
+    private const float ChooserFont = 12f;
 
     // The Free Flight door beside the button frame, level with the frame's first row. The frame
     // column is full, so the door stands in the clear left margin at the row pitch's height.
@@ -246,6 +268,7 @@ public sealed partial class OriginalShell
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
         Inks = ReadInks(layout, plaqueRow);
+        PreferencesInks = ReadPreferencesInks(layout, Inks);
         InstantActionInks = ReadInstantActionInks(layout);
         HangarInks = ReadHangarInks(layout);
         _activePointer = new BoardArt(BoardArtLibrary.Ui, PointerArt(layout, "activepointerz.png"));
@@ -262,8 +285,12 @@ public sealed partial class OriginalShell
     /// <summary>The colours the shell writes in.</summary>
     public OriginalInks Inks { get; }
 
-    /// <summary>The current screen's rows, in focus order.</summary>
-    public IReadOnlyList<OriginalRow> Rows => BuildRows();
+    /// <summary>The colours the Options screen writes in.</summary>
+    public OriginalPreferencesInks PreferencesInks { get; }
+
+    /// <summary>The current screen's rows, in focus order: a standing dialog's answers alone,
+    /// else the screen's own.</summary>
+    public IReadOnlyList<OriginalRow> Rows => _dialog != null ? DialogRows() : BuildRows();
 
     /// <summary>The focused row's index into <see cref="Rows"/>, or -1 when nothing can take focus.</summary>
     public int Focus => EnsureFocus(Rows);
@@ -430,11 +457,16 @@ public sealed partial class OriginalShell
         return new OriginalStep(cues, exit, changed);
     }
 
-    /// <summary>The screen as a composed board in the authored space, the pointer drawn last.</summary>
+    /// <summary>The screen as a composed board in the authored space, a standing dialog over it
+    /// and the pointer drawn last.</summary>
     public ComposedBoard Compose()
     {
         var rows = Rows;
         int focus = EnsureFocus(rows);
+        // Under a dialog the screen is drawn from its own rows with nothing focused; the dialog's
+        // answers are the rows the pointer and the cursor see.
+        var screenRows = _dialog == null ? rows : BuildRows();
+        int screenFocus = _dialog == null ? focus : -1;
         var backdrop = new List<BoardPicture>();
         var pictures = new List<BoardPicture>();
         var fills = new List<BoardFill>();
@@ -444,7 +476,7 @@ public sealed partial class OriginalShell
         var notes = new List<BoardNote>();
         var overlays = new List<BoardPanel>();
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
-        bool ownPage = _screen == OriginalScreen.InstantAction || IsHangarScreen || IsCampaignScreen;
+        bool ownPage = _screen is OriginalScreen.InstantAction or OriginalScreen.Options || IsHangarScreen || IsCampaignScreen;
         if (!ownPage && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
         {
             pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, logo.Art[0], logo.Frames), logo.Int("X"), logo.Int("Y")));
@@ -458,66 +490,31 @@ public sealed partial class OriginalShell
         switch (_screen)
         {
             case OriginalScreen.InstantAction:
-                ComposeInstantAction(rows, focus, backdrop, pictures, fills, lines, plaques, overlays);
+                ComposeInstantAction(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
                 break;
             case var _ when IsCampaignScreen:
                 ComposeCampaign(rows, focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
                 break;
             case var _ when IsHangarScreen:
-                ComposeHangar(rows, focus, backdrop, pictures, fills, lines, plaques, overlays);
+                ComposeHangar(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
                 break;
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:
                 ComposeSortie(rows, lines);
                 break;
             case OriginalScreen.Options:
-                lines.Add(new BoardLine("OPTIONS", OptionsX, OptionsTop - 44f, 0f, HeadingFont, BoardInk.Heading));
-                lines.Add(new BoardLine(
-                    "The menu restarts at the chosen presentation's top level; unfinished setup is discarded.",
-                    0f, FooterY, BoardFit.AuthoredWidth, FooterFont, BoardInk.Detail, -1, false, BoardJustify.Center));
+                ComposeOptions(pictures, lines);
                 break;
         }
 
-        for (int i = 0; !ownPage && i < rows.Count; i++)
+        if (!ownPage || _screen == OriginalScreen.Options)
         {
-            var row = rows[i];
-            if (!row.Visible)
-            {
-                continue;
-            }
+            ComposeRows(screenRows, screenFocus, fills, lines, plaques);
+        }
 
-            bool focused = i == focus;
-            bool pressed = i == _pressed;
-            switch (row.Kind)
-            {
-                case OriginalRowKind.Button when row.Art != null:
-                    int stripFrame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
-                    plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, i, stripFrame, string.Empty, BoardInk.LabelNormal));
-                    break;
-                case OriginalRowKind.TextButton:
-                    var ink = row.Enabled ? ComposedBoard.PlaqueInk(focused, pressed) : BoardInk.Detail;
-                    if (row.Art != null)
-                    {
-                        int plaqueFrame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
-                        plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, i, plaqueFrame, row.Label, ink));
-                    }
-                    else
-                    {
-                        fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 255, 255, 255, 0.6f, Border: true));
-                        lines.Add(new BoardLine(row.Label, row.X, row.Y + 4f, row.Width, RowFont, ink, i, false, BoardJustify.Center));
-                    }
-
-                    break;
-                default:
-                    if (IsPicked(row))
-                    {
-                        fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 255, 255, 255, 0.18f));
-                    }
-
-                    lines.Add(new BoardLine(row.Label, row.X + 6f, row.Y + 1f, row.Width - 12f, RowFont,
-                        focused ? BoardInk.RowFocused : BoardInk.Row, i));
-                    break;
-            }
+        if (_dialog != null && !IsCampaignScreen)
+        {
+            overlays.Add(ComposeDialog(rows, focus));
         }
 
         if (_pointer is { } at)
@@ -531,6 +528,32 @@ public sealed partial class OriginalShell
 
         return new ComposedBoard(pictures, strokes, lines, plaques, notes,
             backdrop: backdrop, fills: fills, overlays: overlays);
+    }
+
+    // Where the chooser stands on the Preferences page: the slot under the last page door, at
+    // the doors' own pitch, which the rows author and the panel has room for.
+    private static (float X, float Y) ChooserCorner(MenuLayoutScreen screen)
+    {
+        var first = screen.Widget(PreferencesPageKeys[0]);
+        var last = screen.Widget(PreferencesPageKeys[^1]);
+        var beforeLast = screen.Widget(PreferencesPageKeys[^2]);
+        if (first == null || last == null)
+        {
+            return (OptionsX, OptionsTop);
+        }
+
+        float pitch = beforeLast != null ? last.Int("Y") - beforeLast.Int("Y") : OptionsPitch;
+        return (first.Int("X"), last.Int("Y") + Math.Max(OptionsPitch, pitch));
+    }
+
+    private static OriginalPreferencesInks ReadPreferencesInks(MenuLayout layout, OriginalInks inks)
+    {
+        var screen = layout.Screen(PreferencesSection);
+        var description = screen?.Widget("PF_T_GODESC");
+        var title = screen?.Widget("PF_T_TITLE");
+        return new OriginalPreferencesInks(
+            description != null && description.TryColor("Color", out var text) ? text : inks.Disabled,
+            title != null && title.TryColor("Color", out var heading) ? heading : inks.Active);
     }
 
     private static OriginalInks ReadInks(MenuLayout layout, MenuLayoutWidget? plaque)
@@ -651,6 +674,105 @@ public sealed partial class OriginalShell
         return ordinal;
     }
 
+    // The rows of a screen that has no page of its own (the top level, the sortie screens, the
+    // Options screen): a decoded strip in its state frame, a paper plaque with its label (an
+    // outlined label where the plaque art is missing), and list text. Nothing is focused or
+    // pressed while a dialog stands over the screen.
+    private void ComposeRows(IReadOnlyList<OriginalRow> rows, int focus, List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques)
+    {
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            if (!row.Visible)
+            {
+                continue;
+            }
+
+            bool focused = i == focus;
+            bool pressed = focus >= 0 && i == _pressed;
+            switch (row.Kind)
+            {
+                case OriginalRowKind.Button when row.Art != null:
+                    int stripFrame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
+                    plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, i, stripFrame, string.Empty, BoardInk.LabelNormal));
+                    break;
+                case OriginalRowKind.TextButton:
+                    var ink = row.Enabled ? ComposedBoard.PlaqueInk(focused, pressed) : BoardInk.Detail;
+                    if (row.Art != null)
+                    {
+                        int plaqueFrame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
+                        plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, i, plaqueFrame, row.Label, ink));
+                    }
+                    else
+                    {
+                        fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 255, 255, 255, 0.6f, Border: true));
+                        lines.Add(new BoardLine(row.Label, row.X, row.Y + 4f, row.Width, RowFont, ink, i, false, BoardJustify.Center));
+                    }
+
+                    break;
+                default:
+                    if (IsPicked(row))
+                    {
+                        fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 255, 255, 255, 0.18f));
+                    }
+
+                    lines.Add(new BoardLine(row.Label, row.X + 6f, row.Y + 1f, row.Width - 12f, RowFont,
+                        focused ? BoardInk.RowFocused : BoardInk.Row, i));
+                    break;
+            }
+        }
+    }
+
+    // The Options screen's chrome, [@Preferences@]'s own: its logo and background panes, its title
+    // and the description beside each page door, plus the chooser's description in the same column
+    // and colour. The rows themselves (the four disabled doors, the chooser, APPLY and RETURN TO MAIN
+    // MENU) are drawn by the row loop. With no section the chooser stands alone over the top level's logo.
+    private void ComposeOptions(List<BoardPicture> pictures, List<BoardLine> lines)
+    {
+        var screen = _layout.Screen(PreferencesSection);
+        if (screen == null)
+        {
+            if (_layout.Screen(OriginalAvailability.MainMenuSection)?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
+            {
+                pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, logo.Art[0], logo.Frames), logo.Int("X"), logo.Int("Y")));
+            }
+
+            lines.Add(new BoardLine("OPTIONS", OptionsX, OptionsTop - 44f, 0f, HeadingFont, BoardInk.Heading));
+            lines.Add(new BoardLine(ChooserDescription, 0f, FooterY, BoardFit.AuthoredWidth, FooterFont, BoardInk.Detail, -1, false, BoardJustify.Center));
+            return;
+        }
+
+        foreach (string key in new[] { "PF_LOGO", "PF_BACKGROUND" })
+        {
+            if (screen.Widget(key) is { Art.Count: > 0 } pane)
+            {
+                pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, pane.Art[0], Math.Max(1, pane.Frames)), pane.Int("X"), pane.Int("Y")));
+            }
+        }
+
+        if (screen.Widget("PF_T_TITLE") is { } title)
+        {
+            lines.Add(new BoardLine(title.Text ?? "PREFERENCES", title.Int("X"), title.Int("Y"), title.Int("Width"), PreferencesTitleFont,
+                BoardInk.Heading, -1, false, title.Int("Justify") == 1 ? BoardJustify.Center : BoardJustify.Left));
+        }
+
+        MenuLayoutWidget? lastDescription = null;
+        foreach (string key in new[] { "PF_T_GODESC", "PF_T_APDESC", "PF_T_VPDESC", "PF_T_CPDESC" })
+        {
+            if (screen.Widget(key) is { } description)
+            {
+                lastDescription = description;
+                lines.Add(new BoardLine(description.Text ?? string.Empty, description.Int("X"), description.Int("Y"),
+                    description.Int("Width"), PreferencesTextFont, BoardInk.Row));
+            }
+        }
+
+        var (_, chooserY) = ChooserCorner(screen);
+        float descriptionX = lastDescription?.Int("X") ?? OptionsX;
+        float descriptionWidth = lastDescription?.Int("Width", 310) ?? 310;
+        lines.Add(new BoardLine(ChooserDescription, descriptionX, chooserY + 6f, descriptionWidth, ChooserFont, BoardInk.Row));
+    }
+
     private int EnsureFocus(IReadOnlyList<OriginalRow> rows)
     {
         int focus = _focus[(int)_screen];
@@ -677,6 +799,13 @@ public sealed partial class OriginalShell
         if (row.Kind != OriginalRowKind.ListRow)
         {
             cues.Add(OriginalCues.Click);
+        }
+
+        // A standing dialog takes the answer whatever screen it stands over.
+        if (_dialog != null)
+        {
+            AnswerDialog(row.Key);
+            return null;
         }
 
         switch (_screen)
@@ -727,6 +856,7 @@ public sealed partial class OriginalShell
                     case ApplyKey:
                         return new PresentationSwitchExit(new PresentationId(_choice));
                     case BackKey:
+                    case OptionsBackKey:
                         Open(OriginalScreen.TopLevel);
                         break;
                 }
@@ -737,11 +867,19 @@ public sealed partial class OriginalShell
         return null;
     }
 
-    // Back on a sortie screen first undoes seat 0's own pick, a stage at a time; browsing, it
-    // leaves the screen. On the Instant Action screen the first Back closes an open list; the
-    // next one leaves. The campaign and the hangar have their own graphs to walk back through.
+    // Back with a dialog standing takes its declining answer, the messagebox script's own Escape.
+    // On a sortie screen it first undoes seat 0's own pick, a stage at a time; browsing, it leaves
+    // the screen. On the Instant Action screen the first Back closes an open list; the next one
+    // leaves. The campaign and the hangar have their own graphs to walk back through. The top
+    // level quits outright, as MAINMENU.SCRIPT's Quit terminates with no confirm.
     private MenuExit? Back()
     {
+        if (_dialog is { } dialog)
+        {
+            AnswerDialog(dialog.Answers[dialog.Answers.Count - 1].Key);
+            return null;
+        }
+
         if (_screen == OriginalScreen.TopLevel)
         {
             return new QuitExit();
@@ -807,14 +945,49 @@ public sealed partial class OriginalShell
                 SortieRows(rows);
                 break;
             case OriginalScreen.Options:
-                string choice = _choice == PresentationId.Original.Value ? "MENU: ORIGINAL" : "MENU: BUILT-IN";
-                rows.Add(TextButton(PresentationKey, choice, OptionsX, OptionsTop, true, 0));
-                rows.Add(TextButton(ApplyKey, "APPLY", OptionsX, OptionsTop + OptionsPitch, true, 0));
-                rows.Add(TextButton(BackKey, "BACK", OptionsX, OptionsTop + (2 * OptionsPitch), true, 0));
+                BuildOptionsRows(rows);
                 break;
         }
 
         return rows;
+    }
+
+    // The Options screen over [@Preferences@]: the four page doors at their authored corners,
+    // disabled since no shared option stands behind them; the chooser and APPLY as paper plaques
+    // in the slot under them; and the section's own RETURN TO MAIN MENU. Without the section the
+    // chooser stands alone with a BACK plaque.
+    private void BuildOptionsRows(List<OriginalRow> rows)
+    {
+        string choice = _choice == PresentationId.Original.Value ? "ORIGINAL" : "BUILT-IN";
+        var screen = _layout.Screen(PreferencesSection);
+        if (screen == null)
+        {
+            rows.Add(TextButton(PresentationKey, choice, OptionsX, OptionsTop, true, 0));
+            rows.Add(TextButton(ApplyKey, "APPLY", OptionsX, OptionsTop + OptionsPitch, true, 0));
+            rows.Add(TextButton(BackKey, "BACK", OptionsX, OptionsTop + (2 * OptionsPitch), true, 0));
+            return;
+        }
+
+        foreach (string key in PreferencesPageKeys)
+        {
+            if (screen.Widget(key) is { } door)
+            {
+                rows.Add(Button(door, false));
+            }
+        }
+
+        var (x, y) = ChooserCorner(screen);
+        var plaque = PlaqueSize();
+        rows.Add(TextButton(PresentationKey, choice, x, y, true, 0));
+        rows.Add(TextButton(ApplyKey, "APPLY", x + plaque.Width + ChooserGap, y, true, 0));
+        if (screen.Widget(OptionsBackKey) is { } back)
+        {
+            rows.Add(Button(back, true));
+        }
+        else
+        {
+            rows.Add(TextButton(BackKey, "BACK", x, y + OptionsPitch, true, 0));
+        }
     }
 
     private OriginalRow Button(MenuLayoutWidget widget, bool enabled)

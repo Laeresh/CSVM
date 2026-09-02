@@ -394,20 +394,6 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
     }
 
-    // The shell over the fixture, a scripted seat, no extraction, and a private hangar and campaign
-    // feature over this test's scratch stores.
-    private OriginalShell Shell(out CampaignFeature campaign, out HangarFeature hangar)
-    {
-        var setup = new PlayerSetupFeature();
-        setup.SetRoster(OriginalPresentation.Roster(Array.Empty<CustomPlaneDef>()));
-        setup.Join(new ScriptedMenuSeat());
-        hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
-        campaign = new CampaignFeature(UiStrings.Empty, airframe => $"node{airframe}");
-        var store = _store;
-        return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
-            hangar: hangar, planes: _planes, campaign: campaign, profiles: () => store);
-    }
-
     private static void OpenCampaign(OriginalShell shell)
     {
         var row = shell.Rows.Single(r => r.Key == OriginalShell.CampaignKey);
@@ -434,4 +420,18 @@ public class OriginalCampaignTests : IDisposable
 
     private static MenuCommands Pointer(float x, float y, bool pressed = false, bool clicked = false) =>
         new() { Pointer = new MenuPointer(x, y, pressed, clicked) };
+
+    // The shell over the fixture, a scripted seat, no extraction, and a private hangar and campaign
+    // feature over this test's scratch stores.
+    private OriginalShell Shell(out CampaignFeature campaign, out HangarFeature hangar)
+    {
+        var setup = new PlayerSetupFeature();
+        setup.SetRoster(OriginalPresentation.Roster(Array.Empty<CustomPlaneDef>()));
+        setup.Join(new ScriptedMenuSeat());
+        hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
+        campaign = new CampaignFeature(UiStrings.Empty, airframe => $"node{airframe}");
+        var store = _store;
+        return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
+            hangar: hangar, planes: _planes, campaign: campaign, profiles: () => store);
+    }
 }

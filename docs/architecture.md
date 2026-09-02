@@ -247,7 +247,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/HangarFeature.cs` — the shared hangar: one scratch build over a `CustomPlaneStore` and an optional `IHangarWallet`, its three starts, the airframe pick with the defaults ask, the per-tab operations, the purchase gate in the original's words, the commit, the sale or deletion, the name rules and the discard; engine-free, walked by Built-in's `HangarFlow` and Original's hub alike.
 - `src/UI/Menu/MenuIdleSource.cs` — a seat's input source with no device behind it, "no device", idle every frame; what the screenshot aid seats extra players over.
 - `src/UI/MenuSeatDevices.cs` — the pad side of the shared player setup for any presentation: seat 0's claimed pad, the join gesture per pad, hotplug, and the flight binding a seat's source carries.
-- `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph, engine-free: the decoded top level plus the Free Flight, Dogfight and hangar doors, the two sortie screens over the shared player setup, the Options screen, the decoded Instant Action and hangar screens (their own partials), pointer hit-testing, column focus, cues, exits and the composed board.
+- `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph, engine-free: the decoded top level plus the Free Flight, Dogfight and hangar doors, the two sortie screens over the shared player setup, the Options screen over the decoded Preferences chrome, the decoded Instant Action, campaign and hangar screens (their own partials), the messagebox dialog over any screen, pointer hit-testing, column focus, cues, exits and the composed board.
 - `src/UI/Menu/Original/OriginalSeats.cs` — the shell's sortie screens (a `partial`): the aircraft window over the shared roster, every seat's cursor tagged on it, the seat strip, the hint, FLY as seat 0's confirmation and the launch, later seats' own frames.
 - `src/UI/Menu/Original/OriginalHangar.cs` — the shell's hangar (a `partial`) over the shared hangar feature: the decoded PLANE NAME screen, the Plane Construction hub with its six tab sections as siblings, the construction totals page and the INVENTORY, each composed from its layout section, with the defaults ask as a dialog and every dropdown's list under its box.
 - `src/UI/Menu/Original/OriginalPresentation.cs` — the Original presentation node: the shell drawn through `ComposedBoardView` on the board layer, every seat polled, the pointer mapped through `BoardFit`, pad joins scanned on the sortie screens, seat 0's text capture following the shell, the OS pointer hidden while shown.
@@ -7152,8 +7152,14 @@ composed from `[MainMenu]`'s `MM_LOGO` and `BFRAME` panes and its six `B` rows a
 corners with their four-frame strips (disabled, normal, rollover, depressed) plus the remake-only
 Free Flight, Dogfight and BUILD PLANE doors, text buttons in the paper-plaque convention beside
 the frame; the two remake-only sortie screens, Free Flight and Dogfight (`OriginalSeats.cs`, one
-`partial`); the remake-only minimal Options screen (the presentation toggle, APPLY, BACK), which
-the Preferences row opens until the decoded Preferences screens exist; the decoded Instant Action
+`partial`); the Options screen, which `MM_B_PREFERENCES` opens, composed over `[Preferences]`'s own
+chrome (`PF_LOGO`, `PF_BACKGROUND`, `PF_T_TITLE`, the four description rows in their authored
+colour, `PreferencesInks`) with the four page doors (`PreferencesPageKeys`) at their corners drawn
+disabled, since no shared option stands behind them, the presentation chooser as its content (the
+ORIGINAL/BUILT-IN toggle and APPLY as paper plaques in the slot under the doors at the doors' own
+pitch, `ChooserCorner`, with a one-line description in the description column) and the section's
+own `PF_B_MAINMENU` (`OptionsBackKey`) as the way back, the chooser standing alone with a BACK
+plaque when a layout has no such section; the decoded Instant Action
 screen, in its own partial file (`OriginalInstantAction.cs`, below), which `MM_B_INSTANTACTION`
 opens; the campaign's nine screens (the profile screen, the cabin, the table of contents, the
 briefing, the flight check, ammo selection, plane selection, the book and a scrap's zoom) in their
@@ -7161,8 +7167,16 @@ own partial file (`OriginalCampaign.cs`, below), which `MM_B_CAMPAIGN` opens; an
 nine screens (the name screen, the hub with one of six tabs, the totals page, the inventory) in
 their own partial file (`OriginalHangar.cs`, below), which the BUILD PLANE door and the cabin's
 PLANE CONSTRUCTION open. The enum keeps the campaign's members together and the hangar's last,
-which is what the two branches are read off. Rows the remake has no destination for yet
-(Multiplayer, Credits) draw frame 0 and take no input. The text
+which is what the two branches are read off. Multiplayer and Credits draw frame 0 and take no
+input: the first is network play with no local counterpart, the second is out of scope. Quit
+leaves as a `QuitExit` on the press with no confirm, `MAINMENU.SCRIPT`'s own `terminate`. The
+messagebox is one idiom over every screen (`Dialog`, raised by the campaign partial's
+`RaiseDialog`): while one stands its answers are the only rows, drawn at `[MessageBox]`'s own
+button rows through `CampaignBoards.Dialog`, in the words `MESSAGEBOX.SCRIPT` gives them (langui
+100 OK on the one-button box, 102 Yes and 103 No on the two-button pair), the two-button box
+opening on No, `Back` taking the declining answer, and every refusal and confirm goes through it:
+the profile screen's refusals and delete, the plane screen's and zoom's messages, and the
+inventory's Sell (the sell path's own langui 700 question, then 701 or 704 as a refusal). The text
 button convention is read off `FlightCheck.FC_B_CHANGEPLANE` (its paper strip and its four label
 colours); the list and heading inks are the file-wide `DISABLED`/`ACTIVE` colours (`Inks`).
 `Step(MenuCommands)` applies seat 0's frame: typed characters and Backspace feed the edit box
@@ -7185,12 +7199,17 @@ The Options screen's APPLY leaves as a `PresentationSwitchExit`. `Compose()` is 
 the passive one elsewhere), skipping rows outside their window; `ReturnToTopLevel` (every return
 and cold start) keeps the list cursors, resets every seat's pick through the setup and closes an
 open campaign. Not
-decoded, so recorded as remake-only design: the doors' placement, the sortie and Options screens,
-keyboard and pad focus (the original is pointer-driven), list rows taking focus under the pointer
-without a cue, and the pointer's hotspot at its top-left. Off-engine coverage:
+decoded, so recorded as remake-only design: the doors' placement, the sortie screens, the Options
+chooser's placement and words and the page doors' disabled state, keyboard and pad focus (the
+original is pointer-driven), a two-button box opening on No, list rows taking focus under the
+pointer without a cue, and the pointer's hotspot at its top-left. Off-engine coverage:
 `CSVM.Tests/OriginalShellTests.cs`, `OriginalSeatsTests.cs`, `OriginalInstantActionTests.cs`,
 `OriginalHangarTests.cs` and `OriginalCampaignTests.cs` over the invented
-`fixtures/menu-layout-original` layout.
+`fixtures/menu-layout-original` layout, and `OriginalCoverageTests.cs`, the inventory's machine
+check: every screen reached from the top level and left back to it by pointer, keyboard and pad
+with nothing left open, every in-scope `ScriptToExe` edge driven, drawn disabled or recorded out of
+scope, and every exit typed, once over the fixture and once over the install's own layout
+(`docs/org/menu-inventory.md`, Coverage).
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens over the shared player setup, the other half of the `partial`.
@@ -7380,9 +7399,10 @@ opens the book on the flown mission (`ShowScrapbook`), either landing on the pro
 logged warning when the profile cannot be read; a top-level show applies the `--menu=` aid
 (`free-flight`, `dogfight`, `instant-action`, `options`, the hangar's `plane-name`,
 `plane-construction`, `plane-paint`, `plane-purchase` and `plane-inventory`, each on a fresh build
-named Sample Plane that no aid commits, and the campaign aids it shares with Built-in over
+named Sample Plane that no aid commits, the campaign aids it shares with Built-in over
 `CampaignAidProfiles`' scratch store, `CampaignAids`, the briefing's seconds argument advanced in
-frame slices), seats the debug players once (device-less, the last one
+frame slices, and its own `campaign-delete`, the two-player profile screen with DELETE PLAYER
+pressed so the two-answer messagebox stands), seats the debug players once (device-less, the last one
 selected), primes every seat, syncs the pads and hides the OS pointer, since the shell draws the
 original's own. `Tick` syncs the pad roster, scans the join gesture while a sortie screen or the
 campaign's flight check is up (priming the edges on entering one), advances the briefing's reveal
@@ -7395,7 +7415,9 @@ steps the shell per seat, requests its cues through the host's audio, hands its 
 host, and ends the narration the frame the shell is no longer on the briefing. `Hide` takes the
 layer off screen, releases the text capture, ends any narration (a launch from the briefing's
 flight check ends the voice with it) and restores the OS pointer;
-`Deactivate` frees it. `PaletteFor(inks)` is the shell's inks as a `BoardPalette`; the Instant
+`Deactivate` frees it. `PaletteFor(inks)` is the shell's inks as a `BoardPalette`; the Options
+screen draws with `PaletteFor(preferencesInks, inks)`, the Preferences page's authored text and
+title colours with the paper plaque's label tail; the Instant
 Action screen and the hangar's inventory draw with `PaletteFor(instantActionInks)`, every text in
 the screen's authored black over its paper page and the labels in the paper buttons' tail, since
 the top level's white inks would not read on it; the hub draws with `PaletteFor(hangarInks)`, the

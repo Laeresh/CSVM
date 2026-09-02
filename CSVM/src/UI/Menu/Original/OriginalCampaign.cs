@@ -184,6 +184,20 @@ public sealed partial class OriginalShell
         return true;
     }
 
+    /// <summary>Names <paramref name="name"/> in the profile screen's box and presses DELETE PLAYER,
+    /// so the two-answer messagebox stands over the screen: the screenshot aid's door. Nothing
+    /// happens off the profile screen.</summary>
+    public void ShowDeleteConfirm(string name)
+    {
+        if (_screen != OriginalScreen.CampaignRoster || RosterEntry is not { } entry)
+        {
+            return;
+        }
+
+        entry.Set(name);
+        BeginDelete();
+    }
+
     /// <summary>Opens one of the screens past the cabin on the seated profile's next mission, the
     /// aids' door: the table of contents, the briefing, the flight check, ammo selection on the
     /// pilot's aircraft or plane selection on the pilot's slot. Nothing happens with nobody seated.</summary>
@@ -276,8 +290,61 @@ public sealed partial class OriginalShell
             ? entry
             : null;
 
-    private static OriginalDialogAnswer Ok(Action? run = null) =>
-        new(DialogOkKey, CampaignBoards.DialogCenterKey, "OK", run);
+    // The messagebox script's own answer words: it hands its buttons langui 100 (OK) for the
+    // one-button box and 102 and 103 (Yes, No) for the two-button pair, read here through
+    // whichever feature carries the string table.
+    private OriginalDialogAnswer Ok(Action? run = null) =>
+        new(DialogOkKey, CampaignBoards.DialogCenterKey, DialogWord(100, "OK"), run);
+
+    private OriginalDialogAnswer Yes(Action run) =>
+        new(DialogYesKey, CampaignBoards.DialogLeftKey, DialogWord(102, "Yes"), run);
+
+    private OriginalDialogAnswer No() =>
+        new(DialogNoKey, CampaignBoards.DialogRightKey, DialogWord(103, "No"), null);
+
+    private string DialogWord(int id, string fallback)
+    {
+        var strings = _campaign?.Strings ?? _hangar?.Strings;
+        string word = strings?.Text(id, fallback) ?? fallback;
+        return word.Length > 0 ? word : fallback;
+    }
+
+    // A standing dialog's answers, at the messagebox rows they draw on, whatever screen it stands over.
+    private List<OriginalRow> DialogRows()
+    {
+        var rows = new List<OriginalRow>();
+        if (_dialog is not { } dialog)
+        {
+            return rows;
+        }
+
+        foreach (var answer in dialog.Answers)
+        {
+            var (art, x, y) = CampaignBoards.DialogSlot(answer.LayoutKey, _campaignLayout);
+            var size = PlaqueSizeOf(art);
+            rows.Add(new OriginalRow(answer.Key, answer.Label, OriginalRowKind.Button, x, y, size.Width, size.Height, true, 0, art));
+        }
+
+        return rows;
+    }
+
+    // The standing dialog as the shared board component's messagebox panel, each answer in the
+    // frame and ink of its state under the cursor and the pointer.
+    private BoardPanel ComposeDialog(IReadOnlyList<OriginalRow> rows, int focus)
+    {
+        var dialog = _dialog!;
+        var buttons = new List<CampaignBoards.DialogButton>(dialog.Answers.Count);
+        for (int i = 0; i < dialog.Answers.Count; i++)
+        {
+            bool focused = i == focus;
+            bool held = i == _pressed;
+            buttons.Add(new CampaignBoards.DialogButton(
+                dialog.Answers[i].LayoutKey, dialog.Answers[i].Label,
+                ComposedBoard.PlaqueFrame(4, focused, held), ComposedBoard.PlaqueInk(focused, held)));
+        }
+
+        return CampaignBoards.Dialog(dialog.Message, buttons, _campaignLayout);
+    }
 
     private bool RosterHas(string name)
     {
@@ -407,27 +474,14 @@ public sealed partial class OriginalShell
         }
     }
 
-    // The rows of a campaign screen: a standing dialog's answers alone; else one row per page
-    // row at the rectangle the shared board component draws it at (a button's slot and strip, a
-    // field's box, a list row's slot), a row with no rectangle keeping its index unseen and unhit
-    // and a row the page refuses focus on disabled, then the open list's entries where a field is
-    // open.
+    // The rows of a campaign screen: one row per page row at the rectangle the shared board
+    // component draws it at (a button's slot and strip, a field's box, a list row's slot), a row
+    // with no rectangle keeping its index unseen and unhit and a row the page refuses focus on
+    // disabled, then the open list's entries where a field is open.
     private void BuildCampaignRows(List<OriginalRow> rows)
     {
         if (_flow == null)
         {
-            return;
-        }
-
-        if (_dialog is { } dialog)
-        {
-            foreach (var answer in dialog.Answers)
-            {
-                var (art, x, y) = CampaignBoards.DialogSlot(answer.LayoutKey, _campaignLayout);
-                var size = PlaqueSizeOf(art);
-                rows.Add(new OriginalRow(answer.Key, answer.Label, OriginalRowKind.Button, x, y, size.Width, size.Height, true, 0, art));
-            }
-
             return;
         }
 
@@ -668,12 +722,6 @@ public sealed partial class OriginalShell
             return null;
         }
 
-        if (_dialog != null)
-        {
-            AnswerDialog(row.Key);
-            return null;
-        }
-
         if (Entry(row.Key) != null)
         {
             HighlightComboEntry(row);
@@ -784,13 +832,13 @@ public sealed partial class OriginalShell
 
         RaiseDialog(
             _campaign.Strings.Text(201, "Are you sure you want to delete this player and all associated saved games?"),
-            new OriginalDialogAnswer(DialogYesKey, CampaignBoards.DialogLeftKey, "YES", () =>
+            Yes(() =>
             {
                 _campaign.DeletePlayer(name);
                 entry.Set(string.Empty);
                 _focus[(int)_screen] = 0;
             }),
-            new OriginalDialogAnswer(DialogNoKey, CampaignBoards.DialogRightKey, "NO", null));
+            No());
     }
 
     private void ActivateCabin(OriginalRow row)
@@ -881,19 +929,13 @@ public sealed partial class OriginalShell
         }
     }
 
-    // Back through the campaign's own graph: a dialog takes its declining answer, an open list
-    // closes, a guest's check retreats to the player before, and each screen returns to the one
-    // that opened it, the profile screen leaving the campaign.
+    // Back through the campaign's own graph: an open list closes, a guest's check retreats to the
+    // player before, and each screen returns to the one that opened it, the profile screen
+    // leaving the campaign.
     private void BackCampaign()
     {
         if (_flow == null || _campaign == null)
         {
-            return;
-        }
-
-        if (_dialog is { } dialog)
-        {
-            AnswerDialog(dialog.Answers[dialog.Answers.Count - 1].Key);
             return;
         }
 
@@ -981,19 +1023,9 @@ public sealed partial class OriginalShell
             lines.AddRange(board.Lines);
         }
 
-        if (_dialog is { } dialog)
+        if (_dialog != null)
         {
-            var buttons = new List<CampaignBoards.DialogButton>(dialog.Answers.Count);
-            for (int i = 0; i < dialog.Answers.Count; i++)
-            {
-                bool focused = i == focus;
-                bool held = i == _pressed;
-                buttons.Add(new CampaignBoards.DialogButton(
-                    dialog.Answers[i].LayoutKey, dialog.Answers[i].Label,
-                    ComposedBoard.PlaqueFrame(4, focused, held), ComposedBoard.PlaqueInk(focused, held)));
-            }
-
-            overlays.Add(CampaignBoards.Dialog(dialog.Message, buttons, _campaignLayout));
+            overlays.Add(ComposeDialog(rows, focus));
         }
     }
 

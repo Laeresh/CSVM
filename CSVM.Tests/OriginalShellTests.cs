@@ -205,20 +205,60 @@ public class OriginalShellTests
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.Options, shell.Screen);
         Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
-        Assert.Contains(shell.Compose().Plaques, p => p.Label == "MENU: ORIGINAL");
+        Assert.Equal(OriginalShell.PresentationKey, shell.FocusedKey);
+        Assert.Contains(shell.Compose().Plaques, p => p.Label == "ORIGINAL");
 
         shell.Step(Accept);
         Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
-        Assert.Contains(shell.Compose().Plaques, p => p.Label == "MENU: BUILT-IN");
+        Assert.Contains(shell.Compose().Plaques, p => p.Label == "BUILT-IN");
 
         shell.Step(Down);
+        Assert.Equal(OriginalShell.ApplyKey, shell.FocusedKey);
         var step = shell.Step(Accept);
         var exit = Assert.IsType<PresentationSwitchExit>(step.Exit);
         Assert.Equal(PresentationId.BuiltIn, exit.Requested);
 
         shell.Step(Down);
-        Assert.Equal(OriginalShell.BackKey, shell.FocusedKey);
+        Assert.Equal(OriginalShell.OptionsBackKey, shell.FocusedKey);
         shell.Step(Accept);
+        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+    }
+
+    [Fact]
+    public void TheOptionsScreenIsComposedOverThePreferencesChromeWithItsPageDoorsDisabled()
+    {
+        var shell = Shell(out _);
+        shell.Open(OriginalScreen.Options);
+
+        // The four decoded page doors at their authored corners, disabled; the chooser and APPLY
+        // in the slot under them at the doors' own pitch; the section's own RETURN TO MAIN MENU.
+        Assert.Equal(
+            new[] { "PF_B_GAMEOPTIONS", "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS", OriginalShell.PresentationKey, OriginalShell.ApplyKey, OriginalShell.OptionsBackKey },
+            shell.Rows.Select(r => r.Key));
+        Assert.Equal(new[] { false, false, false, false, true, true, true }, shell.Rows.Select(r => r.Enabled));
+        var chooser = shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey);
+        Assert.Equal((110f, 460f), (chooser.X, chooser.Y));
+        var apply = shell.Rows.Single(r => r.Key == OriginalShell.ApplyKey);
+        Assert.Equal((110f + 160f + 8f, 460f), (apply.X, apply.Y));
+        var back = shell.Rows.Single(r => r.Key == OriginalShell.OptionsBackKey);
+        Assert.Equal((460f, 500f, 240f, 50f), (back.X, back.Y, back.Width, back.Height));
+
+        var board = shell.Compose();
+        Assert.Equal(new[] { "PM_Logo.png", "PP_Back.png" }, board.Pictures.Select(p => p.Art.Name));
+        Assert.Equal((100f, 200f), (board.Pictures[1].X, board.Pictures[1].Y));
+        Assert.Contains(board.Lines, l => l.Text == "PREFERENCES" && l.X == 120f && l.Justify == BoardJustify.Center);
+        Assert.Contains(board.Lines, l => l.Text == "Change the audio settings." && l.X == 340f && l.Y == 320f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Menu presentation.", System.StringComparison.Ordinal) && l.X == 340f && l.Y == 466f);
+        Assert.Equal(0, board.Plaques.Single(p => p.Art.Name == "PP_B_Audio.png").Frame);
+        Assert.Equal(2, board.Plaques.Single(p => p.Label == "ORIGINAL").Frame);
+        Assert.Equal(new MenuLayoutColor(0xFF, 0xFF, 0xDD, 0xC4), shell.PreferencesInks.Text);
+        Assert.Equal(new MenuLayoutColor(0xFF, 0xC0, 0xBA, 0xAD), shell.PreferencesInks.Title);
+
+        // A click on RETURN TO MAIN MENU leaves; Back leaves too.
+        shell.Step(Pointer(back.X + 2f, back.Y + 2f, pressed: true, clicked: true));
+        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+        shell.Open(OriginalScreen.Options);
+        shell.Step(Back);
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
     }
 
@@ -294,6 +334,7 @@ public class OriginalShellTests
     {
         "PM_B_Paper.png" => (160, 112),
         _ when art.StartsWith("PM_B_", System.StringComparison.Ordinal) => (240, 200),
+        _ when art.StartsWith("PP_B_", System.StringComparison.Ordinal) => (240, 200),
         _ => null,
     };
 

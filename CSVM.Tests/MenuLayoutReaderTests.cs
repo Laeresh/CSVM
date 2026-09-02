@@ -178,11 +178,21 @@ public class MenuLayoutReaderTests
                 + "#define IDS_PX_B_HARDPOINTS 228\n#define IDS_PX_B_PAINT 229\n#define IDS_PUR_B_PURCHASE 230\n#define IDS_PS_B_SELL 231\n"
                 + "#define IDS_PS_B_EXPORT 232\n#define IDS_AF_TITLE 233\n#define IDS_PX_PLANECOST_TITLE 234\n#define IDS_PX_AIRFRAME_TITLE 235\n"
                 + "#define IDS_HA_TITLE 236\n#define IDS_PUR_TITLE 237\n#define IDS_PUR_TOTALS_TITLE 238\n#define IDS_PX_PLANENAME_TITLE 239\n"
-                + "#define IDS_PX_WEIGHTCAPACITY_TITLE 240\n#define IDS_PX_CURRENTWEIGHT_TITLE 241\n#define IDS_PX_CASH_TITLE 242\n",
+                + "#define IDS_PX_WEIGHTCAPACITY_TITLE 240\n#define IDS_PX_CURRENTWEIGHT_TITLE 241\n#define IDS_PX_CASH_TITLE 242\n"
+                + "#define IDS_PF_TITLE 250\n#define IDS_PF_GO_DESC 251\n#define IDS_PF_AUDIO_DESC 252\n"
+                + "#define IDS_PF_VIDEO_DESC 253\n#define IDS_PF_CONTROLS_DESC 254\n",
             Strings = new Dictionary<int, string>
             {
+                [100] = "OK",
+                [102] = "Yes",
+                [103] = "No",
                 [220] = "OK",
                 [221] = "Cancel",
+                [250] = "PREFERENCES",
+                [251] = "Change the difficulty level and default views.",
+                [252] = "Change the audio settings.",
+                [253] = "Change the video settings.",
+                [254] = "Configure the joystick, keyboard, and mouse.",
                 [222] = "PLANE NAME",
                 [223] = "Load Default Configuration",
                 [224] = "Airframe",
@@ -234,6 +244,9 @@ public class MenuLayoutReaderTests
                 "GRAPHICS/PH_Tab.png", "GRAPHICS/PH_B_ScrollBar.png", "GRAPHICS/PH_B_ScrollUp.png", "GRAPHICS/PH_B_ScrollDown.png",
                 "GRAPHICS/PH_B_DropUp.png", "GRAPHICS/PH_B_DropDown.png", "GRAPHICS/PH_Rule.png", "GRAPHICS/PH_Decals.tga",
                 "GRAPHICS/PH_B_Paper.png", "GRAPHICS/PH_Inventory.jpg", "GRAPHICS/PH_PlaneIcons.png", "GRAPHICS/PH_B_Done.png",
+                "GRAPHICS/PP_Back.png", "GRAPHICS/PP_B_GameOptions.png", "GRAPHICS/PP_B_Audio.png", "GRAPHICS/PP_B_Video.png",
+                "GRAPHICS/PP_B_Controls.png", "GRAPHICS/PP_B_ReturnMainMenu.png", "GRAPHICS/PP_B_ReturnToGame.png",
+                "GRAPHICS/PC_Back.jpg", "GRAPHICS/PC_B_Done.png",
             },
         };
         return MenuLayout.Parse(MenuLayoutDecoder.ToJson(MenuLayoutDecoder.Decode(input)));
