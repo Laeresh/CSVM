@@ -100,6 +100,7 @@
     "clutter-determinism": 0.557,
     "lens-flare-gates": 1.385,
     "sun-orientation": 0.036,
+    "sun-energy": 0.18,
     "tex-dropin": 0.008,
     "gltf-export": 0.571,
     "plane-shader-reuse": 0.680,

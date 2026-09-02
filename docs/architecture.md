@@ -3230,8 +3230,13 @@ because the mission's waves, ace and zeppelin cannot be put back in place.
 `ZoneWeather` records holding fog (`FOG_COLOR`/`FOG_RANGES`/`FOG_ALTITUDE`), `SUNLIGHT_*` →
 `WorldLight` (`SunIncidence` 0.46 / `MinWorldLight` 0.15, TUNE) and `SUNLIGHT_ORIENTATION` →
 `SunOrientation`, the same block's uncollapsed `SunDiffuse`/`SunAmbient` and their two colours
-(what the enhanced lighting drives a real sun from), plus the `CLOUD_COVER` whiteout band (`WhiteoutAmount` trapezoid), `WIND`, and
+(what both lighting arms drive the aircraft light from), plus the `CLOUD_COVER` whiteout band (`WhiteoutAmount` trapezoid), `WIND`, and
 precipitation → `PrecipData`. Schema + colours + zone names: weather.md.
+`DefaultDiffuse`/`DefaultAmbient` (1.5 / 0.5) are the install's modal day pair, public because both
+lighting mappings anchor a zone against them and the `NoFog` zone a weather-less mission gets is
+authored from them. They are deliberately not `WorldLightFactor`'s own 1/0 fallbacks, which belong
+to the faithful collapse and must not move; every shipped weather.json authors both keys, so
+neither fallback fires.
 **The original's weather/sky/fog/light runtime is written up in [org/weather.md](org/weather.md)** —
 the camera weather state machine, the `zone_id` visibility gate, the zone apply's edge trigger, the
 band flicker's two curves, and the sun/dome/deck rules. Read it before changing a weather mechanism.
@@ -5827,6 +5832,11 @@ threaded through the other path: `SetFocusMuted` owns the bus's mute FLAG (alt-t
 `ApplyMasterVolume` writes its VOLUME once per launch from `--volume=`, else the `audio.volume`
 config key. Separate properties, so neither disturbs the other — and unlike `--mute`, a zero volume
 still loads and plays everything, so the sound counters and log lines stay intact.
+`SetupLighting` builds the session's one `DirectionalLight3D` and `WorldEnvironment` at
+`WeatherRig.DefaultEnergies` and a hand-picked bearing, which is what a viewer, a menu or a
+mission with no weather.json flies under. A mission that has weather overwrites both the bearing
+and the energies per zone-apply (`WeatherRig.ApplyZone`), so these are defaults rather than the
+level every flight renders at.
 The default root is export-aware: editor (and editor-run builds) → the repo checkout
 (`res://`'s parent — `GlobalizePath("res://")` maps to disk only there), exported build → the
 exe's own directory; `CSVM_DATA_ROOT`/`--data-root=` override either.
@@ -7079,11 +7089,27 @@ written its zone): it writes only the fields the event carries onto the same fog
 next zone edge writes the zone back over it, the original's last-writer order. `FogGlobals` mirrors
 the last writes, since the renderer refuses to read a global back outside the editor. Proven by
 `CSVM.Tests/FogZoneStateTests.cs`, `DeckRegimeTests.cs`, `FlatColorTests.cs`,
-`FogVolumeWhiteoutTests.cs`, `BandFlickerTests.cs` and the `fog-state` suite. In enhanced graphics
-mode `ApplyZone` also drives the real sun and the Environment ambient from the zone's uncollapsed
-`SUNLIGHT_DIFFUSE`/`AMBIENT` and their colours (`EnhancedEnergies`, pinned by
-`CSVM.Tests/SunlightEnergyTests.cs`), and neutralises `csky_world_light` to 1.0 so the fullbright
-dimming does not land twice; original mode's path is unchanged. A zone whose authored `FOG_COLOR`
+`FogVolumeWhiteoutTests.cs`, `BandFlickerTests.cs` and the `fog-state` suite.
+
+`ApplyZone` drives the aircraft light from the zone's uncollapsed `SUNLIGHT_DIFFUSE`/`AMBIENT` in
+**both** graphics modes, through one arm each, both pinned by `CSVM.Tests/SunlightEnergyTests.cs`
+and wired-in by the `sun-energy` suite. The faithful arm (`FaithfulEnergies`,
+`ApplyFaithfulLighting`) scales each authored scalar against the install's modal day pair and caps
+it there, so the day missions keep the energies the launcher builds with (`DefaultEnergies`, 1.6
+sun / 0.9 ambient, both TUNE) and only a dimmer zone moves. That cap is the faithful path's own
+constraint rather than a copy of the enhanced factors: this pass has no tonemap, so an energy past
+the day level clips a plane to flat white. There is deliberately **no night gate** on this arm,
+because the faithful world light ignores `FOG_COLOR` too, and capping C5's plane would sink it
+below its own fullbright terrain.
+⚠ **The faithful ambient write reaches the Environment but the renderer ignores it**, measured:
+with `AmbientLightSource.Sky` at the default full sky contribution the ambient comes off the sky
+cubemap scaled by the background energy, not by `AmbientLightEnergy`, and zeroing that energy moves
+no golden pixel. Whether the faithful path should stop taking its ambient from the sky is an open
+rendering-design question; until it is settled the aircraft's ambient fill is the same procedural
+sky at night as by day, so only the sun half of this mapping is visible.
+
+The enhanced arm additionally neutralises `csky_world_light` to 1.0 so the fullbright
+dimming does not land twice. A zone whose authored `FOG_COLOR`
 is near-black is treated as a night zone (`IsNightZone`), which caps those two energies at the
 install's own night pair; every day zone is untouched. `WriteSkyColor` then paints the Environment's
 sky the zone's own `FOG_COLOR` as a flat panorama, so the water's specular reflects the mission's
@@ -7101,11 +7127,12 @@ pair, the skydome is fitted from the camera's far plane, and `ZoneWeather.ClipFa
 logged but reaches no consumer (the camera far plane is `Launcher`'s fixed 40000 m, past every
 pushed fog far).
 `RegisterExtraLighting` takes a second (sun, env) pair — the cockpit overlay's own clones — and
-`ApplyEnhancedLighting` writes the same energies and colours onto every registered pair beside the
-session sun/env, so a zone crossing mid-flight reaches the interior pass too. The shadow max
+both lighting arms write their energies onto every registered pair beside the session sun/env, so a
+zone crossing mid-flight reaches the interior pass too. `GameSession.BuildCockpitPasses` registers
+in both modes for that reason. The shadow max
 distance is deliberately excluded from that mirroring: a registered clone owns its own
-camera-relative distance, set once at registration (`CockpitOverlay`'s 100 m far plane). The
-energy mapping and the fog-range scale are both open TUNE judgements; see "Rendering: the
+camera-relative distance, set once at registration (`CockpitOverlay`'s 100 m far plane). Both
+energy mappings and the fog-range scale are open TUNE judgements; see "Rendering: the
 enhanced graphics mode" above.
 
 ## src/Session/LensFlareRig.cs
@@ -7174,7 +7201,10 @@ Process-wide, version-tolerant JSON persistence for `OptionsDef`, today the requ
 presentation (`menuPresentation`) and the requested graphics mode (`graphicsMode`): one file,
 `user://options.json`, independent of `Session/CampaignProfileStore.cs`; under `--run-tests`
 `UserOptions()` reads and writes an emptied scratch directory instead (`DirectoryOverride`), so no
-driven suite depends on or touches the player's file. Missing/malformed reads as
+driven suite depends on or touches the player's file. That directory is per process rather than
+shared: the shards start together, and one of them deleting a shared directory while a sibling was
+writing it threw out of `_Ready` and left that shard erroring in `_Process` until its timeout.
+Missing/malformed reads as
 empty, an unknown version invalidates the file, an unknown value drops only that field, and a field
 the file does not carry reads as never set. That last rule is why adding a field does not bump
 `Version`: an older file loads with everything it does have. The version moves only when an

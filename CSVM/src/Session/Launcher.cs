@@ -556,10 +556,8 @@ public partial class Launcher : Node3D
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
         // --run-tests reads and writes options in a fresh scratch directory, never the player's
-        // file: a suite driving an Options screen must open it on the shipped defaults whatever was
-        // last saved at the controls. Set before the first UserOptions() call below. One directory
-        // per process, since the shards start together and a shared one deleted by a sibling
-        // mid-write threw out of _Ready and left that shard erroring in _Process until its timeout.
+        // file: a driven Options screen must open on the shipped defaults. Set before the first
+        // UserOptions() call below, and per process rather than shared (docs/architecture.md).
         if (_spec.RunTests)
         {
             string scratchOptions = Path.Combine(Path.GetTempPath(), "CSVM", "run-tests-options",
@@ -1054,11 +1052,11 @@ public partial class Launcher : Node3D
     {
         _sun = new DirectionalLight3D
         {
-            // The default bearing only, hand-picked so the plane model reads in the viewer, the
-            // menu, and any mission with no weather.json. A flight with weather overwrites this
-            // per zone-apply (WeatherRig.ApplyZone).
+            // The defaults only, hand-picked so the plane model reads in the viewer, the menu, and
+            // any mission with no weather.json. A flight with weather overwrites the bearing and
+            // the energy per zone-apply (WeatherRig.ApplyZone), off the zone's authored SUNLIGHT.
             RotationDegrees = new Vector3(-45, 150, 0),
-            LightEnergy = 1.6f,
+            LightEnergy = WeatherRig.DefaultEnergies.Sun,
             // Off in the faithful path: the world is built fullbright and unshaded, so the only
             // thing a shadow pass reaches is one aircraft shadowing another, and the original's own
             // projected-blob shadow is not a shadow map either. Enhanced mode turns it on below.
@@ -1074,7 +1072,10 @@ public partial class Launcher : Node3D
             BackgroundMode = Godot.Environment.BGMode.Sky,
             Sky = new Sky { SkyMaterial = new ProceduralSkyMaterial() },
             AmbientLightSource = Godot.Environment.AmbientSource.Sky,
-            AmbientLightEnergy = 0.9f,
+            // ⚠ Inert as built, and measured so: with the ambient taken from the sky at full
+            // contribution the renderer ignores this energy. Zeroing it moves no golden pixel;
+            // WeatherRig.ApplyZone rewrites it per zone regardless (docs/architecture.md).
+            AmbientLightEnergy = WeatherRig.DefaultEnergies.Ambient,
         };
         // Enhanced mode alone: SSAO reads ambient light, which the faithful path never has, so
         // it has nothing to modulate there. The cockpit pass duplicates this Environment at build
