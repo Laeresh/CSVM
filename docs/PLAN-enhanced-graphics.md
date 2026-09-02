@@ -113,6 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 41. ☑ Shadows end before the fog ramp, not inside it
 42. ☑ C5 reads too bright in enhanced mode, its water a light grey
 43. ☐ The clutter building fade reaches as far as the pushed fog
+44. ☐ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
 
 ## Dependency and parallelism notes
 
@@ -1558,6 +1559,32 @@ Re-measure C5 at 4 panes with `--perf`, since more clutter instances draw.
 
 **Verify.** C5 and C2 horizon captures: clutter blocks reach the fog line; instance counts logged
 before and after. Goldens zero movers.
+
+## E44 ☐ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
+
+**Goal.** In enhanced mode the Environment's background and reflection source are the mission's
+own horizon dome (or a colour derived from it), so specular and any sky-sourced term read the
+authored sky rather than Godot's placeholder procedural gradient.
+
+**Evidence (confidence: traced).** E42 measured that the glossy water's specular comes off the
+Environment's background sky, which is a `ProceduralSkyMaterial` placeholder rather than the
+gamez dome `WorldBuilder.BuildHorizon` draws as geometry; under a night sky it had to be disabled
+outright, and it is the largest remaining reason C1B's night sea reads 56.6 against the
+original's 17.7. Day zones still reflect the placeholder's daylit gradient.
+
+**Approach.** Establish what the Environment's background is today in both modes and what the
+faithful path relies on (WorldBuilder forbids a colour-grading stage on the dome colour; the dome
+is geometry, so the background is likely never seen). In enhanced mode only, either (a) set the
+background to a colour sampled from the zone (the FOG_COLOR is the horizon colour the dome fades
+into; a sky-top colour may exist in the dome data) with `ReflectedLightSource` following it, or
+(b) render the dome into a `PanoramaSkyMaterial` at build time if a decoded dome texture exists
+per zone. Prefer (a) unless (b) is cheap and clearly better at the controls. Re-enable the night
+reflection source if the new sky makes it read right, keeping E42's cap.
+
+**Model recommendation.** high, a fidelity judgement over a decode.
+
+**Verify.** C1B and C5 night seas darker toward the original; C3 and C1 day water reflects a sky
+that matches the dome's colour; original mode untouched, goldens zero movers.
 
 ## Open judgements
 
