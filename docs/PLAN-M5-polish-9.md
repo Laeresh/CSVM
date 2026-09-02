@@ -81,7 +81,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Northwest (C1)
 
 11. ☑ `BL-597` CM08: the Pandora halts over the tanker and its sequence there plays
-12. ☐ `BL-666` CM09: a zeppelin killed by gasbags alone ends the mission one way or the other
+12. ❌ `BL-666` CM09: a zeppelin killed by gasbags alone ends the mission one way or the other (disproven: it already ends lost 32.6 s after the kill, and a suite now pins that)
 13. ☑ `BL-665` A woken roster block is re-placed where the script left it, not at its authored pose
 14. ❌ `BL-656` CM10: an attack balloon's marker never rests on the water before the wave arrives (disproven: the marker tracks its geometry, and the geometry itself dips; `BL-674`)
 
@@ -287,7 +287,7 @@ points". `PT-109` flies it at the controls.
 
 **Verified.** <pending orchestrator run>
 
-## B12 ☐ `BL-666` CM09: a zeppelin killed by gasbags alone ends the mission one way or the other
+## B12 ❌ `BL-666` CM09: a zeppelin killed by gasbags alone ends the mission one way or the other
 
 **Goal.** In CM09 (C1/M04) a `piratezep` kill by gasbag count reaches either the loss chain or
 the docking, whichever the original does, instead of leaving the mission ending in neither
@@ -320,6 +320,31 @@ ending.
 **⚠ Traps.** Do not touch the objective graph or `ObjectiveGraph.cs`; the gate rule is the
 original's mechanism and is correct. `BL-440`'s breakup runs on the same kill path; keep the
 breakup playing.
+
+**Disproven.** A gasbag-only `piratezep` kill already ends CM09, and it ends it lost. The new
+`campaign-cm09-gasbag-kill` suite drives the mission over its own collision world through the
+intro hold, kills three gasbags and nothing else, and reads the graph: OBJECTIVE26 completes 2.6 s
+after the kill, naps 27 for the authored 10 s, 27 completes on its wake, naps 41 for the authored
+20 s, and OBJECTIVE41's `INSTANTLOSS` ends the mission 32.6 s after the kill. No code changed in
+`ZeppelinRuntime.cs`.
+
+Three of the Evidence paragraph's claims were wrong. The loss chain is 3 then 6 rather than six,
+and it reads world node active bits rather than the runtime engine count, so driving
+`Motion.AliveEngines` to zero would have changed nothing. OBJECTIVE40 carries no
+`TICK_DEPENDS_ON_OBJ` at all (42 does), and nothing on the death path deactivates the `piratezep`
+node, so 40 does not retire and 42 is not gated off. And what makes the engines dark is not
+`killpzep` alone: gasbag N's left and right death definitions each destroy the two engines on
+their side of bay N, so the three gasbags that kill the hull darken all twelve engine `healthy`
+models on their own, whether or not the wreck ever reaches the water. `zeppelin-breakup` now reads
+those twelve nodes rather than only counting the six dispatches, which is what settled it.
+
+`BL-666` was never a `backlog.md` entry, only an id reserved in `PT-98`'s *Blocks:* clause for a
+symptom nobody had flown. There is no symptom, so the id stays unused and that clause is rewritten.
+What the measurement leaves open is the wait: 30 of the 32.6 s are the two authored naps, so a
+player who quits earlier sees a mission that ends in neither direction. `PT-115` puts that
+judgement at the controls.
+
+**Verified.** <pending orchestrator run>
 
 ## B13 ☑ `BL-665` A woken roster block is re-placed where the script left it
 

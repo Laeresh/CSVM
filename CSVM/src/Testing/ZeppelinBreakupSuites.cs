@@ -36,12 +36,30 @@ internal static class ZeppelinBreakupSuites
 
     private const float MovedM = 1f;
 
+    // The six engines breakupzep destroys, each behind its own -4 m water probe. Their destroy
+    // defs switch the engine's healthy model off, which is the node the mission's twelve-entry
+    // INACTIVE_COMPLETION_COUNT objectives read.
+    private static readonly string[] BreakupEngines =
+    {
+        "leng11", "leng21", "leng31", "reng11", "reng21", "reng31",
+    };
+
+    // The other six of the twelve. Only a burning gasbag's own death def reaches these: gasbag N's
+    // left and right halves each destroy the two engines on their side of bay N, so three gasbags
+    // down eventually darkens the whole bank whether the wreck reaches the water or not.
+    private static readonly string[] GasbagOnlyEngines =
+    {
+        "leng12", "leng22", "leng32", "reng12", "reng22", "reng32",
+    };
+
     [Suite("zeppelin-breakup",
         "the authored zeppelin breakup on C1/M04's piratezep: killing the hull starts killpzep, " +
         "whose main_altitude_check gate reads a downward NODE_UNDERCOVER probe of the decoded " +
         "65 m. The gate stays shut while the wreck is still high, opens as floatdown's -3.5 " +
         "descent brings it down, and rotatezep, breakupzep's six gasbag drops and the stop on " +
-        "floatdown all follow from it")]
+        "floatdown all follow from it. What the engine gates leave behind is read off the nodes " +
+        "themselves: all twelve engine healthy models lose their active bit, six from the " +
+        "breakup's own calls and six from the burning bays")]
     internal static void ZeppelinBreakup(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
@@ -107,6 +125,10 @@ internal static class ZeppelinBreakupSuites
         }
 
         var bagRest = bags.Select(b => b.Position).ToList();
+        int litAtStart = EnginesOut(runtime, host, BreakupEngines, null)
+            + EnginesOut(runtime, host, GasbagOnlyEngines, null);
+        ctx.Same(0, litAtStart,
+            $"the twelve engine healthy models are all switched ON before the kill off={litAtStart} of 12");
         report.AppendLine($"hull built at ({host.GlobalPosition.X:0},{host.GlobalPosition.Y:0},{host.GlobalPosition.Z:0})");
 
         // What the gate lets through, taken at the dispatch seam rather than inferred from poses:
@@ -234,6 +256,33 @@ internal static class ZeppelinBreakupSuites
 
         ctx.Same(6, engines,
             $"each engine's own -4 m NODE_UNDERCOVER opens and calls its destroy anim opened={engines} of 6");
-        ctx.Note($"gate opened {startY - openedY:0} m below the kill altitude ({gateTrue} true / {gateFalse} false); per-step trace in test-zeppelin-breakup.txt");
+
+        // A dispatched CALL_ANIMATION is not proof of its product: what an objective reads is the
+        // active bit the callee's own destroyit sequence writes, so read the node.
+        int dark = EnginesOut(runtime, host, BreakupEngines, report);
+        int burnt = EnginesOut(runtime, host, GasbagOnlyEngines, report);
+        ctx.Same(BreakupEngines.Length, dark,
+            $"each destroy anim's destroyit switches its engine's healthy model off off={dark} of {BreakupEngines.Length}");
+        ctx.Same(GasbagOnlyEngines.Length, burnt,
+            $"…and the burning gasbags take the other six down with them off={burnt} of {GasbagOnlyEngines.Length}");
+        ctx.Note($"gate opened {startY - openedY:0} m below the kill altitude ({gateTrue} true / {gateFalse} false); all {dark + burnt} engine healthy models switched off; per-step trace in test-zeppelin-breakup.txt");
+    }
+
+    // How many of the named engines have lost the active bit on their healthy model, walked the
+    // way the objective script walks it: the hull, then the engine, then healthy inside it.
+    private static int EnginesOut(AnimRuntime runtime, Node3D host, IReadOnlyList<string> engines,
+        StringBuilder? report)
+    {
+        int off = 0;
+        foreach (string engine in engines)
+        {
+            var node = runtime.FindNodes(engine, host).FirstOrDefault();
+            var healthy = node != null ? runtime.FindNodes("healthy", node).FirstOrDefault() : null;
+            off += healthy is { Visible: false } ? 1 : 0;
+            report?.AppendLine(
+                $"{engine}: healthy={(healthy == null ? "unresolved" : healthy.Visible ? "on" : "OFF")}");
+        }
+
+        return off;
     }
 }
