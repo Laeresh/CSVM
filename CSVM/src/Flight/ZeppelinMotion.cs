@@ -146,8 +146,11 @@ public sealed class ZeppelinMotion
         Follower.Update(Position);
         var to = Follower.CurrentTarget - Position;
         var flat = new Vector2(to.X, to.Z);
-        if (!Follower.Holding && Follower.StopsAt(Follower.CurrentIndex)
-            && to.Dot(Forward) < AiNetFollower.StopPointHoldM)
+        // ⚠ The glide keeps running once the follower reports the hold: dropping it there froze
+        // the hull on the 30 m sphere instead of settling it on the node. A follower still on its
+        // SEAT is the own-node law instead (FUN_004bf500), which keeps the hull where it stands.
+        if (Follower.StopsAt(Follower.CurrentIndex) && Follower.LegStartIndex >= 0
+            && (Follower.Holding || to.Dot(Forward) < AiNetFollower.StopPointHoldM))
         {
             Dock(to, dt);
             return;
@@ -181,8 +184,8 @@ public sealed class ZeppelinMotion
 
     // FUN_004bf360's inside-30 m branch: within the hold distance of a halting node ahead the
     // throttle is cut, the pitch holds, and the hull and its heading decay onto the node and the
-    // leg's own bearing at DockDecayPerS. What carries a hull that arrives a metre outside the
-    // follower's hold sphere the rest of the way, rather than leaving it stopped just short.
+    // leg's own bearing at DockDecayPerS. This is what carries the hull the rest of the way onto
+    // the node, in altitude as well as plan, rather than leaving it stopped a hold distance short.
     private void Dock(Vector3 toNode, float dt)
     {
         float keep = Mathf.Exp(-DockDecayPerS * dt);

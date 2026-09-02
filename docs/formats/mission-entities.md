@@ -133,8 +133,10 @@ over `FUN_00460410` = `exp(−x)`). The remake's `Dock` is that branch.
 The `net` a zeppelin flies is a patrol graph ([ai-nets.md](ai-nets.md)) walked by the shared
 `AiNetFollower`; a zeppelin observes its nodes' STOP-POINT flags, which an aircraft on the same
 net type does not. Two routines decode the halted state (`FUN_004bf9d0`'s own-node gate, called
-every step): `FUN_004bf500` levels the airship at an armed stop (commanded pitch 0, heading kept,
-speed 0) and `FUN_004bf360` ramps the throttle down from 250 m out to a full stop inside 30 m.
+every step): `FUN_004bf500` levels the airship at an armed stop it already sits ON (commanded
+pitch 0, heading kept, speed 0, and the pose left where it stands) and `FUN_004bf360` ramps the
+throttle down from 250 m out toward a halting node AHEAD, its inside-30 m branch decaying the
+pose onto that node at e^(−0.2·dt) rather than parking the hull on the 30 m sphere.
 **A structural dead end — the current node's only edge is the one just flown — holds the same way,
 unconditionally, ahead of and regardless of any authored stop-point id.** Some nets author their
 far node as an armed stop under an unaddressable id (id 0, which the script side rejects before it
@@ -145,6 +147,18 @@ the file authoring anything at that node. Without it a follower reaching an unar
 re-picks its only neighbour — the node it just left — and re-flies the route, which for a net whose
 nodes carry real altitude changes reads as the airship porpoising along its route and never
 levelling off at the end (`BL-529`).
+
+**A stop point can be a rendezvous with a moving vessel, so the hull has to rest on the node
+itself.** `Klondike1`, C1B/M03's `piratezep` route, ships two armed stops: node 5 (id 7) and
+node 7 (id 8) at (−6246, 93, −7651), which is the cargo point. `freighteraground`, the branch a
+destroyed powerhut takes (`freightersafe` is the other), runs the freighter's own `shipaground`
+script to (−6246, 0, −7572) directly under that node, and the Pandora's `pzep_cargo_point` hatch
+sits 33 m below its hull with a 54 m crane chain, which puts the hook on the beached deck.
+`OBJECTIVE11` completes on `DEDG [3, 0]`, the mission's four patrol boats, and releases id 7 while
+napping `OBJECTIVE17` by 70 s, which is the transit from node 5 to node 7; `OBJECTIVE17`'s
+`WAKE_ANIM [zepgetcargo]` is the sequence that plays there, the freighter's hold doors, the
+Pandora's cargo doors 8 s later, then the crane riding its chain down and up, looped 99 times
+until `pzep_stop_loading`. `OBJECTIVE21`/`22`/`23` release id 8 and the airship leaves.
 
 ### Broadside firing
 

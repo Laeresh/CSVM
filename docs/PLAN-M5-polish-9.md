@@ -80,7 +80,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Northwest (C1)
 
-11. ☐ `BL-597` CM08: the Pandora halts over the tanker and its sequence there plays
+11. ☑ `BL-597` CM08: the Pandora halts over the tanker and its sequence there plays
 12. ☐ `BL-666` CM09: a zeppelin killed by gasbags alone ends the mission one way or the other
 13. ☐ `BL-665` A woken roster block is re-placed where the script left it, not at its authored pose
 14. ☐ `BL-656` CM10: an attack balloon's marker never rests on the water before the wave arrives
@@ -219,7 +219,7 @@ lay-off rule; that search is done and recorded, and the answer is that the code 
 
 # Wave B — Northwest (C1)
 
-## B11 ☐ `BL-597` CM08: the Pandora halts over the tanker and its sequence there plays
+## B11 ☑ `BL-597` CM08: the Pandora halts over the tanker and its sequence there plays
 
 **Goal.** In CM08 (C1B/M03) the Pandora's armed stop lands over the tanker, and the sequence the
 original plays there (the hangar door opens, a figure descends on a rope and ascends again) starts.
@@ -254,6 +254,24 @@ node and the sequence's start; D31 flies CM08 to the hold.
 several unrelated commits. The decode commit is found with `git log -S "along-leg"` or
 `--grep="arrival radius"`. Do not move the arrival floor to make the stop land; it is decoded, so
 if the original halts on the node the difference is in how the hold is armed, not in the radius.
+
+**Landed.** The sequence is `zepgetcargo` (`extracted/C1B/M03/zrdr/pzep_getcargo.zrd`), called by
+`objectives.zrd`'s `OBJECTIVE17` `WAKE_ANIM ["zepgetcargo"]`: the freighter's hold doors, the
+Pandora's cargo doors 8 s later, then `activate_pzep_crane` riding the crane 54 m down its chain
+and back up, looped 99 times. `OBJECTIVE17` is dormant until `OBJECTIVE11` completes on
+`DEDG [3, 0]`, the mission's four patrol boats, which also releases `Klondike1` stop 7 and naps
+`OBJECTIVE17` by 70 s, the transit from node 5 to the cargo point at node 7. The stop the Pandora
+was missing was not the arrival radius, which an armed stop point never consults: the hull was
+parked on the follower's 30 m hold sphere because `ZeppelinMotion.Step` gated its dock glide on
+`!Follower.Holding`, and `Holding` latches the moment that sphere is crossed. The glide now runs
+through the hold, so the hull settles on the node in plan and in altitude, while a follower still
+on its SEAT keeps the own-node station-keep and holds the record's own pose. Measured on the real
+route: 29.9 m off node 7 before, 0.1 m after, at the node's own 93.4 m, which is 93 m over the
+freighter `freighteraground` beaches at (−6246, 0, −7572) and the drop a 54 m chain off a hatch
+33 m under the hull needs. Documented in `docs/formats/mission-entities.md` "Route ends and stop
+points". `PT-109` flies it at the controls.
+
+**Verified.** <pending orchestrator run>
 
 ## B12 ☐ `BL-666` CM09: a zeppelin killed by gasbags alone ends the mission one way or the other
 

@@ -2253,6 +2253,29 @@ usual.
 
 ## Missions, modes & campaign
 
+- `BL-670` `[Tuning]` **The invented `1.5 * turnCircle` arrival floor deforms zeppelin routes.**
+  *Evidence:* `ZeppelinRuntime.cs`'s `arrival = 1.5f * turnCircle`, where
+  `turnCircle = MaxSpeed / DegToRad(MaxRateYawDeg)`, is 515.7 m for CM08's Pandora
+  (`max_speed` 30, `max_rate_yaw` 5), not the 125 m the older paraphrase claimed. Measured: the
+  node walk advanced past node 4 while still 515 m short of it, so the hull flew 64 % of the
+  1443 m leg 3 to 4 and cut the corner; on the chain past the cargo point the legs are shorter
+  than the floor (7 to 8 is 628 m, 8 to 9 is 545 m, 9 to 10 is 640 m), so the walk advances
+  almost immediately at each node and the route is barely flown. *Fix shape:* the floor is
+  explicitly invented and only a floor, so it is tunable without touching a decode; measure what
+  radius lets the shortest shipped leg still be flown. *⚠ Traps:* it does not affect where an
+  armed stop parks the hull, which is the settling glide (`BL-597`), so a route that looks wrong
+  at a stop point is a different question. Do not confuse this floor with the aeroplane
+  executor's decoded along-leg test, which zeppelins do not use.
+  *Cross-refs:* `BL-597`'s closing commit, `docs/formats/mission-entities.md` "Steering".
+- `BL-671` `[Research]` **A holding zeppelin never levels its pitch, though the decode says it
+  should.** *Evidence:* `ZeppelinMotion` commands `desiredPitch = 0` while `Holding`, but
+  integrates it through `way = Speed / MaxSpeed`, which is zero at a stop, so the hull keeps
+  whatever pitch it arrived with. The original has the same speed scaling
+  (`docs/formats/mission-entities.md`), so this may be faithful rather than a defect. *Fix shape:*
+  decode whether `FUN_004bf500`'s station-keep levels the hull at zero speed before changing
+  anything; if it does not, the claim to correct is the documentation, not the code.
+  *⚠ Traps:* do not add a separate levelling term outside the speed factor to make a still hull
+  look right; that invents a law the original does not have.
 - `BL-501` `[Feature]` **Nothing exercises avoid-crash probing between aircraft flying one net in
   formation.** *Evidence:* flagged by G77, which fixed the branch draw that split CM02's three
   bombers and then measured them holding 82 m to 219 m apart on one route. That suite builds its
