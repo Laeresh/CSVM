@@ -33,7 +33,7 @@ internal static class MenuZoneSuites
             RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
         };
         ctx.Host.AddChild(view);
-        var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot);
+        var menu = MenuSuiteHost.Menu(ctx);
         view.AddChild(menu);
         try
         {

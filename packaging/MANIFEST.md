@@ -14,6 +14,7 @@ needs a matching entry in the script's `$ReleaseFiles`.
 | `Extract.ps1` | `packaging/Extract.ps1` | The thin dispatcher; contains no extraction logic |
 | `ExtractAssets.ps1` | repo root `ExtractAssets.ps1` | UNMODIFIED repo script — do not fork a package variant |
 | `ExtractRof.ps1` | repo root `ExtractRof.ps1` | UNMODIFIED repo script — do not fork a package variant |
+| `ExtractRof.MenuLayout.cs` | repo root `ExtractRof.MenuLayout.cs` | The menu-layout decoder `ExtractRof.ps1` `Add-Type`s from beside itself; without it the extraction fails on the friend's machine |
 | `tools\unzbd.exe` | `Z:\CSVM\tools\mech3ax\target\release\unzbd.exe` | The fork build (branch `cs-anim`), NOT the pinned v0.6.1 binary (Decision 5) |
 | `README.md` | `packaging/README.md` | User-reviewed before hand-off (standing rule: the user owns outward communication) |
 | `LICENSE` | `packaging/LICENSE` | GPL-3, byte-identical to repo root `LICENSE` |

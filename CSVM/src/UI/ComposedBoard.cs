@@ -160,6 +160,10 @@ public enum BoardButton
     CurrentMission,
 }
 
+/// <summary>An RGB multiply over a picture's own pixels, which is how the paint screen colours a
+/// white region mask: the mask carries the shape in its alpha, the tint is the picked colour.</summary>
+public readonly record struct BoardTint(byte R, byte G, byte B);
+
 /// <summary>One bitmap a board draws, and how many stacked frames it holds. A button strip is four
 /// frames (disabled, normal, rollover, depressed, in that order); everything else is one.</summary>
 public sealed record BoardArt(BoardArtLibrary Library, string Name, int Frames = 1);
@@ -167,10 +171,12 @@ public sealed record BoardArt(BoardArtLibrary Library, string Name, int Frames =
 /// <summary>A picture placed at its authored pixel position. <paramref name="Centered"/> is the
 /// briefing script's own <c>center</c> flag: the coordinate is the middle, not the top left.
 /// <paramref name="Scale"/> grows the art about its own middle and leaves its authored corner
-/// where it is, which is the <c>scale()</c> a scrapbook scrap takes under the pointer.</summary>
+/// where it is, which is the <c>scale()</c> a scrapbook scrap takes under the pointer.
+/// <paramref name="Tint"/> multiplies the pixels, null drawing them as authored.</summary>
 public sealed record BoardPicture(
     BoardArt Art, float X, float Y, int Frame = 0, bool Centered = false,
-    float Opacity = 1f, float Revs = 0f, float Width = 0f, float Height = 0f, float Scale = 1f);
+    float Opacity = 1f, float Revs = 0f, float Width = 0f, float Height = 0f, float Scale = 1f,
+    BoardTint? Tint = null);
 
 /// <summary>A straight connector line between two authored points in its authored colour, which
 /// is the briefing script's <c>Line</c> opcode and the only non-picture element any board draws.

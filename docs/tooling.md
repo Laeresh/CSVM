@@ -102,16 +102,27 @@ It writes every archive member at its archive path, decodes each custom `.BM` te
 = paint slots 1/2/3), and emits `ui_strings.json`, every UI string joined to its `RESOURCE.H`
 symbol. That last file is where the aircraft names and description text live.
 
-`-Raw` skips the decoding and the string table; `-Force` re-runs an up-to-date extraction;
-`-Source`/`-Dest` override the roots. The decode work is an inline C# type (`Add-Type`), so a full
-run is ~1.5 s.
+It also emits **`menu_layout.json`**, the decoded menu layout: `LAYOUT.CSV`'s 34 screen sections
+and 636 widget rows with their macros resolved and their `IDS_*` symbols joined to text, the 46
+navigation edges the layout states and no script does, each screen's script-created widget keys,
+the art the scripts name outside the layout, `SCRAPBOOK.CSV`, and the patch overlay's precedence.
+Runtime reads that file rather than the originals. The decoder is **`ExtractRof.MenuLayout.cs`**
+beside the script, `Add-Type`d from disk rather than inlined because `CSVM.Tests` compiles the same
+file and drives it against hand-authored fixtures; keeping one implementation is the point, so the
+file stays inside the C# 5 subset PowerShell 5.1's `Add-Type` accepts. Format:
+[formats/menu-layout.md](formats/menu-layout.md).
+
+`-Raw` skips the decoding, the string table and the menu layout; `-Force` re-runs an up-to-date
+extraction; `-Source`/`-Dest` override the roots. The `.BM` decode is an inline C# type
+(`Add-Type`), so a full run is ~3 s.
 
 Each run also merges its own `rof` field (script, date, `-Raw`) into the shared
 `VERSION.json` one level above `-Dest` — read-merge-write, so `ExtractAssets.ps1`'s fields
 survive — when `-Dest` follows the canonical `…\extracted\rof` layout; any other `-Dest` skips
 the stamp with a note rather than guessing where the shared file lives.
 
-Formats: [formats/rof.md](formats/rof.md), [formats/strings.md](formats/strings.md).
+Formats: [formats/rof.md](formats/rof.md), [formats/strings.md](formats/strings.md),
+[formats/menu-layout.md](formats/menu-layout.md).
 
 ## `packaging/Extract.ps1` — the friend-facing dispatcher
 

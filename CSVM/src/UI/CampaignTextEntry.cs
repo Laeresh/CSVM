@@ -1,21 +1,20 @@
 using System;
 using System.Text;
+using CSVM.UI.Menu;
 
 namespace CSVM.UI;
 
 /// <summary>
 /// A campaign screen's one-line text field, the original's <c>cm_e_name</c> edit box. The keyboard
 /// types into it and a pad drives the same buffer through an alphabet stepper, so the field needs
-/// no keyboard at all. What it accepts is the original's own rule: letters, digits and spaces
-/// (langui 707), at most <see cref="MaxLength"/> characters (langui 212). Restricting the alphabet
-/// this far is also what keeps <see cref="CSVM.Session.CampaignProfileStore.DirFor"/>'s
-/// sanitisation from ever having anything to change, since a profile name becomes a directory name.
+/// no keyboard at all. What it accepts is the campaign's own name rule
+/// (<see cref="CampaignFeature.AcceptsNameChar"/>, <see cref="CampaignFeature.MaxNameLength"/>),
+/// so a stepped or typed name is always one the feature would seat.
 /// </summary>
 public sealed class CampaignTextEntry
 {
-    /// <summary>The longest name the field holds. The original's roster is 24 slots of 33 bytes,
-    /// a 32-character name plus its terminator (docs/formats/campaign-screens.md).</summary>
-    public const int MaxLength = 32;
+    /// <summary>The longest name the field holds, <see cref="CampaignFeature.MaxNameLength"/>.</summary>
+    public const int MaxLength = CampaignFeature.MaxNameLength;
 
     // What the pad steps through, in the order the stepper walks it. Upper case then digits then
     // the space, all of which the accept rule already admits, so a stepped name is always valid.
@@ -33,26 +32,10 @@ public sealed class CampaignTextEntry
 
     /// <summary>Whether one character may be typed: the original's alphanumeric-and-space
     /// rule (langui 707).</summary>
-    public static bool Accepts(char c) => char.IsAsciiLetterOrDigit(c) || c == ' ';
+    public static bool Accepts(char c) => CampaignFeature.AcceptsNameChar(c);
 
     /// <summary>Whether a whole name is one the field would hold, empty names excluded.</summary>
-    public static bool Valid(string text)
-    {
-        if (text.Length == 0 || text.Length > MaxLength)
-        {
-            return false;
-        }
-
-        foreach (char c in text)
-        {
-            if (!Accepts(c))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    public static bool Valid(string text) => CampaignFeature.ValidName(text);
 
     /// <summary>Arms the field for typing.</summary>
     public void Arm() => Active = true;

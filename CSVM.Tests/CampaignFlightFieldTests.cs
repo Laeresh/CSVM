@@ -2,6 +2,7 @@ using System.IO;
 using CSVM.Mech3;
 using CSVM.Session;
 using CSVM.UI;
+using CSVM.UI.Menu;
 using Xunit;
 
 namespace CSVM.Tests;

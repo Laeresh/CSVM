@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.UI.Menu;
 
 namespace CSVM.UI;
 
@@ -100,11 +100,13 @@ public interface IHangarPage
 public sealed record HangarArt(TgaImage Image, string Caption);
 
 /// <summary>
-/// The Build Custom Plane flow: one scratch <see cref="CustomPlaneDef"/> walked through
-/// <see cref="Order"/>, with back/next navigation and a commit at the end. Engine-free, so the
-/// screen order, the cancel semantics and the scratch lifecycle test off engine; the launchscreen
-/// is only its renderer and input source. Nothing is written until <see cref="Commit"/> succeeds,
-/// which is what makes cancelling from any screen residue-free by construction.
+/// The Build Custom Plane flow, Built-in's walk of the shared <see cref="HangarFeature"/>: one
+/// scratch <see cref="CustomPlaneDef"/> walked through <see cref="Order"/>, with back/next
+/// navigation and a commit at the end. Engine-free, so the screen order, the cancel semantics and
+/// the scratch lifecycle test off engine; the launchscreen is only its renderer and input source.
+/// The rules, the store operations and the scratch plane itself are the feature's; this class owns
+/// the screen order, the cursor and the pages. Nothing is written until <see cref="Commit"/>
+/// succeeds, which is what makes cancelling from any screen residue-free by construction.
 /// </summary>
 public sealed class HangarFlow
 {
@@ -122,43 +124,41 @@ public sealed class HangarFlow
         HangarScreen.Purchase,
     };
 
-    // The four hangar zones in the record's own order, as the vehicle defs spell them.
-    private static readonly string[] ArmourZones = { "nose", "tail", "leftwing", "rightwing" };
-
-    private readonly CustomPlaneStore _store;
+    private readonly HangarFeature _feature;
     private readonly Dictionary<HangarScreen, IHangarPage> _pages = new();
 
-    // Each airframe's stock armour allocations in units, read once from the vehicle defs.
-    private readonly Dictionary<int, int[]> _stockArmour = new();
-
-    // Every name a commit would land on, by the store's own file identity: the whole build
-    // directory plus, over a campaign flow, the owned planes that were never built into it. Held
-    // rather than re-scanned because the name screen asks per frame.
-    private HashSet<string> _taken = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>Opens a flow over <paramref name="store"/>, reading its saved planes once for the
-    /// plane-selection screen. <paramref name="strings"/>, <paramref name="dataRoot"/>,
-    /// <paramref name="stockFits"/> and <paramref name="zrdrPath"/> may be null or empty; the
-    /// affected labels, art and defaults then simply fall back or load empty.
-    /// <paramref name="campaign"/> is null for both existing doors, keeping them wallet-free; only
-    /// the cabin's Plane Construction (B13) passes one.</summary>
+    /// <summary>Opens a flow over <paramref name="store"/> through a private feature, reading its
+    /// saved planes once for the plane-selection screen. <paramref name="strings"/>,
+    /// <paramref name="dataRoot"/>, <paramref name="stockFits"/> and <paramref name="zrdrPath"/>
+    /// may be null or empty; the affected labels, art and defaults then simply fall back or load
+    /// empty. <paramref name="campaign"/> is null for both existing doors, keeping them
+    /// wallet-free; only the cabin's Plane Construction passes one.</summary>
     public HangarFlow(CustomPlaneStore store, UiStrings strings, string? dataRoot = null,
-        StockLoadouts? stockFits = null, string? zrdrPath = null, HangarCampaignContext? campaign = null,
+        StockLoadouts? stockFits = null, string? zrdrPath = null, CampaignWallet? campaign = null,
         Random? nameRng = null)
+        : this(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => stockFits, zrdrPath),
+            store, dataRoot, campaign, nameRng)
     {
-        _store = store;
-        Strings = strings;
-        NameRng = nameRng ?? new Random();
-        DataRoot = dataRoot;
-        StockFits = stockFits;
-        ZrdrPath = zrdrPath;
-        Campaign = campaign;
-        Saved = Array.Empty<CustomPlaneDef>();
-        ReadRoster();
     }
 
+    /// <summary>Opens a flow over the shared <paramref name="feature"/>, which is opened on
+    /// <paramref name="store"/> funded by <paramref name="campaign"/> (null for a wallet-free door).
+    /// The launchscreen builds every flow this way, over the host's one feature.</summary>
+    public HangarFlow(HangarFeature feature, CustomPlaneStore store, string? dataRoot = null,
+        CampaignWallet? campaign = null, Random? nameRng = null)
+    {
+        _feature = feature ?? throw new ArgumentNullException(nameof(feature));
+        NameRng = nameRng ?? new Random();
+        DataRoot = dataRoot;
+        Campaign = campaign;
+        _feature.Open(store, campaign);
+    }
+
+    /// <summary>The shared feature this flow walks.</summary>
+    public HangarFeature Feature => _feature;
+
     /// <summary>The langui table the screens title and label themselves from.</summary>
-    public UiStrings Strings { get; }
+    public UiStrings Strings => _feature.Strings;
 
     /// <summary>The generator the PLANENAME screen rolls names from. Handed in rather than drawn
     /// here so the flow stays engine-free: the session's own stream (<c>Rng.PlaneName</c>) lives
@@ -171,40 +171,40 @@ public sealed class HangarFlow
 
     /// <summary>The stock-fit table the airframe-defaults ask reads its gun and hardpoint
     /// defaults back off, or null when the caller has none (those defaults then load empty).</summary>
-    public StockLoadouts? StockFits { get; }
+    public StockLoadouts? StockFits => _feature.StockFits;
 
     /// <summary>The zrdr scope <see cref="PlaneStats"/> reads vehicle defs from, for the stock
     /// armour allocations; null or unreadable reads as armour defaults of 0.</summary>
-    public string? ZrdrPath { get; }
+    public string? ZrdrPath => _feature.ZrdrPath;
 
     /// <summary>The campaign wallet this flow prices against, or null over the two existing doors
     /// (Instant Action's Build button, the top-level entry), which stay wallet-free by construction
     /// Non-null only when the cabin's Plane Construction opened this flow.</summary>
-    public HangarCampaignContext? Campaign { get; }
+    public CampaignWallet? Campaign { get; }
 
     /// <summary>The airframe whose defaults the pending ask (langui 206) offers, or null when
     /// none is showing. Raised only by an explicit confirm on an airframe row that is not already
     /// the pick (E49); the airframe page renders it as a two-row confirm.</summary>
-    public int? DefaultsAsk { get; private set; }
+    public int? DefaultsAsk => _feature.DefaultsAsk;
 
     /// <summary>String 206 with both names formatted in, captured when the ask was raised (so
     /// the plane-being-built name is the one it had then).</summary>
-    public string DefaultsAskText { get; private set; } = string.Empty;
+    public string DefaultsAskText => _feature.DefaultsAskText;
 
     /// <summary>The plane-selection roster: the store's saved planes over the two wallet-free
     /// doors, and the profile's own aircraft over a campaign flow (<see cref="Campaign"/>). Re-read
     /// only by <see cref="DeleteSaved"/>: the other writer is this flow's own commit, which ends
     /// it.</summary>
-    public IReadOnlyList<CustomPlaneDef> Saved { get; private set; }
+    public IReadOnlyList<CustomPlaneDef> Saved => _feature.Saved;
 
     /// <summary>The plane being built. Replaced outright when the plane-selection screen starts a
     /// new build or loads a saved one; edited in place by every screen after that.</summary>
-    public CustomPlaneDef Scratch { get; private set; } = new();
+    public CustomPlaneDef Scratch => _feature.Scratch;
 
     /// <summary>The saved plane this flow opened to edit, or null for a new build. The commit
     /// writes over that file by design, so it is the one name the PLANENAME screen must not warn
     /// about overwriting.</summary>
-    public string? EditingName { get; private set; }
+    public string? EditingName => _feature.EditingName;
 
     /// <summary>The screen showing.</summary>
     public HangarScreen Screen { get; private set; } = HangarScreen.PlaneSelection;
@@ -220,10 +220,10 @@ public sealed class HangarFlow
 
     /// <summary>The name the commit saved under, once <see cref="Exit"/> is
     /// <see cref="HangarExit.Built"/>.</summary>
-    public string? BuiltPlaneName { get; private set; }
+    public string? BuiltPlaneName => _feature.BuiltPlaneName;
 
     /// <summary>The refusal line a failed commit left, or "". Cleared by any navigation.</summary>
-    public string Message { get; private set; } = string.Empty;
+    public string Message => _feature.Message;
 
     /// <summary>The persistent second stats line every hangar screen shows under its heading
     /// the build's total price and its weight against the airframe's
@@ -231,22 +231,8 @@ public sealed class HangarFlow
     /// original's own word (langui 1227) when over. Which plane it prices is the page's to say
     /// (<see cref="IHangarPage.TotalsPlane"/>): the plane-selection screen prices the saved plane
     /// under the cursor, and "" hides the line where the focused row is not a plane at all.</summary>
-    public string TotalsLine
-    {
-        get
-        {
-            if (Page.TotalsPlane(RowInPage()) is not { } plane)
-            {
-                return string.Empty;
-            }
-
-            var bill = HangarEconomy.Price(plane);
-            string line = $"${bill.Total.Cost}   {bill.Total.Weight} / {bill.Capacity} lbs.";
-            return bill.Total.Weight > bill.Capacity
-                ? line + "   ⚠ " + Strings.Text(1227, "OVERWEIGHT")
-                : line;
-        }
-    }
+    public string TotalsLine =>
+        Page.TotalsPlane(RowInPage()) is { } plane ? _feature.TotalsLine(plane) : string.Empty;
 
     /// <summary>Whether <see cref="TotalsLine"/> is over capacity, so the shell can colour the
     /// flag as well as print it.</summary>
@@ -258,7 +244,7 @@ public sealed class HangarFlow
     /// starts false, so nothing reads as chosen before the pilot chooses (E49): the model still
     /// carries airframe 0 underneath, but no row is ticked and the first confirm is a pick rather
     /// than an advance. Loading a saved plane starts true.</summary>
-    public bool AirframeChosen { get; private set; }
+    public bool AirframeChosen => _feature.AirframeChosen;
 
     /// <summary>The heading string id for each screen, from the original's own tab labels.</summary>
     public static int TitleStringId(HangarScreen screen) => screen switch
@@ -283,60 +269,13 @@ public sealed class HangarFlow
         _ => screen.ToString(),
     };
 
-    /// <summary>D32's wing rule read backwards: the stock fit's authored pylons counted per
-    /// wing through <see cref="Loadout.PylonFillOrder"/>'s interleaved halves (pylons 1-4 one
-    /// wing, 5-8 the other).</summary>
-    public static (int Left, int Right) StockWingCounts(HardpointSpec? stock)
-    {
-        int left = 0, right = 0;
-        for (int i = 0; stock != null && i < Loadout.PylonFillOrder.Length; i++)
-        {
-            if (i >= stock.Count || i >= stock.Stock.Length
-                || string.Equals(stock.Stock[i], LoadoutChoice.None, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
+    /// <summary>The shared feature's <see cref="HangarFeature.StockWingCounts"/>, kept here for the
+    /// campaign pages that read it under this name.</summary>
+    public static (int Left, int Right) StockWingCounts(HardpointSpec? stock) => HangarFeature.StockWingCounts(stock);
 
-            if (Loadout.PylonFillOrder[i] <= 4)
-            {
-                left++;
-            }
-            else
-            {
-                right++;
-            }
-        }
-
-        return (left, right);
-    }
-
-    /// <summary>Writes an airframe's stock guns and per-wing hardpoint counts onto
-    /// <paramref name="def"/>, leaving every other field alone: stock caliber 30..70 is calibre row
-    /// 0..4 and a two-marker slot is the twin mount (the stored mapping read backwards), and the pylons
-    /// are split by <see cref="StockWingCounts"/>. Both the airframe-defaults arm here and the
-    /// campaign's EXPORT of a plane that has no build need this reading, and a second copy of it
-    /// would let the two disagree about what an airframe carries at rest.</summary>
-    public static void LoadStockWeapons(CustomPlaneDef def, LoadoutDef? fit)
-    {
-        ArgumentNullException.ThrowIfNull(def);
-        for (int slot = 0; slot < CustomPlaneDef.GunSlots; slot++)
-        {
-            def.Guns[slot] = default;
-        }
-
-        if (fit != null)
-        {
-            foreach (var gun in fit.Guns)
-            {
-                if (gun.Slot is >= 1 and <= CustomPlaneDef.GunSlots)
-                {
-                    def.Guns[gun.Slot - 1] = new GunChoice((gun.Caliber - 30) / 10, gun.Markers.Count >= 2);
-                }
-            }
-        }
-
-        (def.LeftHardpoints, def.RightHardpoints) = StockWingCounts(fit?.Hardpoints);
-    }
+    /// <summary>The shared feature's <see cref="HangarFeature.LoadStockWeapons"/>, kept here for
+    /// the campaign's EXPORT, which reads an airframe at rest under this name.</summary>
+    public static void LoadStockWeapons(CustomPlaneDef def, LoadoutDef? fit) => HangarFeature.LoadStockWeapons(def, fit);
 
     /// <summary>Moves the row cursor, wrapping like every other launchscreen list.</summary>
     public bool Move(int dir)
@@ -347,7 +286,7 @@ public sealed class HangarFlow
             return false;
         }
 
-        Message = string.Empty;
+        _feature.ClearMessage();
         Row = ((Row + dir) % count + count) % count;
         return true;
     }
@@ -360,7 +299,7 @@ public sealed class HangarFlow
             return false;
         }
 
-        Message = string.Empty;
+        _feature.ClearMessage();
         return Page.Step(ClampedRow(), dir);
     }
 
@@ -368,7 +307,7 @@ public sealed class HangarFlow
     /// screen. On the last screen the page commits, so nothing advances past it.</summary>
     public bool Accept()
     {
-        Message = string.Empty;
+        _feature.ClearMessage();
         int row = ClampedRow();
         if (Page.Accept(row))
         {
@@ -383,11 +322,12 @@ public sealed class HangarFlow
     /// <see cref="Commit"/>, that leaves no residue at all.</summary>
     public bool Back()
     {
-        Message = string.Empty;
+        _feature.ClearMessage();
         int at = Array.IndexOf(Order, Screen);
         if (at <= 0)
         {
             Exit = HangarExit.Cancelled;
+            _feature.Discard();
             return true;
         }
 
@@ -422,42 +362,12 @@ public sealed class HangarFlow
     /// money and records ownership. Returns whether the plane was saved.</summary>
     public bool Commit()
     {
-        if (string.IsNullOrWhiteSpace(Scratch.Name))
+        if (!_feature.Commit())
         {
-            Message = Strings.Text(203, "You must enter a name for your new plane.");
             return false;
         }
 
-        var bill = HangarEconomy.Price(Scratch);
-        if (bill.Verdict != PurchaseVerdict.Ok)
-        {
-            Message = Strings.Text(1182, "CAN'T PURCHASE:") + " " + (bill.Verdict == PurchaseVerdict.Overweight
-                ? Strings.Text(1227, "OVERWEIGHT")
-                : Strings.Text(1171, "No Engine Selected"));
-            return false;
-        }
-
-        if (Campaign is { } campaign)
-        {
-            if (!campaign.IsAirframeAvailable(Scratch.Airframe))
-            {
-                Message = Strings.Text(1182, "CAN'T PURCHASE:").TrimEnd() +
-                    " That airframe is not available yet.";
-                return false;
-            }
-
-            if (!campaign.CanAfford(bill.Total.Cost))
-            {
-                Message = Strings.Text(1182, "CAN'T PURCHASE:").TrimEnd() + " " +
-                    Strings.Text(1226, "INSUFFICIENT FUNDS");
-                return false;
-            }
-        }
-
-        _store.Save(Scratch);
-        BuiltPlaneName = Scratch.Name;
         Exit = HangarExit.Built;
-        Campaign?.Purchase(Scratch.Name, Scratch.Airframe, bill.Total.Cost);
         return true;
     }
 
@@ -468,29 +378,7 @@ public sealed class HangarFlow
     /// or below the two-plane floor. Cursor and scratch plane are untouched either way.</summary>
     public bool DeleteSaved(string name)
     {
-        bool gone;
-        if (Campaign is { } campaign)
-        {
-            if (campaign.IsSpecial(name))
-            {
-                Message = CannotSellText(name);
-                return false;
-            }
-
-            if (!campaign.CanSell(name))
-            {
-                Message = Strings.Text(701, "You must keep at least two planes in your hangar.");
-                return false;
-            }
-
-            gone = campaign.Sell(name);
-        }
-        else
-        {
-            gone = _store.Delete(name);
-        }
-
-        ReadRoster();
+        bool gone = _feature.DeleteSaved(name);
         ClampedRow();
         return gone;
     }
@@ -498,19 +386,12 @@ public sealed class HangarFlow
     /// <summary>The reward aircraft's own refusal, langui 704 with both of its arguments filled
     /// (the airframe's short name and the plane's). Read raw the string reaches the pilot with its
     /// <c>%1!s!</c> placeholders still in it, which is why it is composed here.</summary>
-    public string CannotSellText(string planeName)
-    {
-        int airframe = Campaign?.Profile.Planes
-            .FirstOrDefault(p => string.Equals(p.Name, planeName, StringComparison.OrdinalIgnoreCase))
-            ?.Airframe ?? 0;
-        string text = Strings.Format(704, AirframeShortName(airframe), planeName);
-        return text.Length > 0 ? text : $"This {AirframeShortName(airframe)}, {planeName}, cannot be sold.";
-    }
+    public string CannotSellText(string planeName) => _feature.CannotSellText(planeName);
 
     /// <summary>Whether a commit under this name would land on a plane that already exists: the
     /// whole build directory, plus a campaign flow's owned planes that were never built into it.
     /// Compared on the store's file identity, since two names can sanitise to one file.</summary>
-    public bool IsNameTaken(string name) => _taken.Contains(CustomPlaneStore.FileKey(name));
+    public bool IsNameTaken(string name) => _feature.IsNameTaken(name);
 
     /// <summary>Puts the cursor on a row, clamped into the page's current list. A page that
     /// changes how many rows it draws calls this so the cursor lands on something real.</summary>
@@ -523,27 +404,13 @@ public sealed class HangarFlow
     /// <summary>Starts a fresh build (the plane-selection screen's New Plane row) with nothing
     /// committed: no airframe is chosen, so the airframe screen opens on a plain list with no row
     /// ticked and no question asked (E49). The defaults ask waits for the pilot's own pick.</summary>
-    public void StartNewPlane()
-    {
-        Scratch = new CustomPlaneDef();
-        EditingName = null;
-        AirframeChosen = false;
-        DefaultsAsk = null;
-        DefaultsAskText = string.Empty;
-    }
+    public void StartNewPlane() => _feature.StartNewPlane();
 
     /// <summary>Starts from a saved plane, as a copy: editing and abandoning it must not touch
     /// what is on disk, so the store's own canonical serialisation is the deep copy. No
     /// defaults ask: the plane already is what its builder chose, and its airframe is already
     /// chosen, so the screen opens on that row ticked.</summary>
-    public void StartFromSaved(CustomPlaneDef saved)
-    {
-        Scratch = CustomPlaneStore.Deserialize(CustomPlaneStore.Serialize(saved)) ?? new CustomPlaneDef();
-        EditingName = saved.Name;
-        AirframeChosen = true;
-        DefaultsAsk = null;
-        DefaultsAskText = string.Empty;
-    }
+    public void StartFromSaved(CustomPlaneDef saved) => _feature.StartFromSaved(saved);
 
     /// <summary>The AIRFRAME screen's confirm on a row: picking an airframe that is not already
     /// the pick switches to it and raises the defaults ask, and returns true so the press stays on
@@ -552,16 +419,12 @@ public sealed class HangarFlow
     /// on the airframe the model was carrying underneath.</summary>
     public bool PickAirframe(int airframe)
     {
-        if (AirframeChosen && Scratch.Airframe == airframe)
+        if (!_feature.PickAirframe(airframe))
         {
             return false;
         }
 
-        int was = Scratch.Airframe;
-        Scratch.Airframe = airframe;
-        AirframeChosen = true;
-        NormalisePattern(airframe);
-        RaiseDefaultsAsk(airframe, was);
+        Row = 0;
         return true;
     }
 
@@ -570,12 +433,7 @@ public sealed class HangarFlow
     /// has none). The cursor moves onto the confirm rows.</summary>
     public void RaiseDefaultsAsk(int airframe, int previousAirframe)
     {
-        string plane = string.IsNullOrWhiteSpace(Scratch.Name) ? AirframeName(previousAirframe) : Scratch.Name;
-        string text = Strings.Format(206, AirframeName(airframe), plane);
-        DefaultsAskText = text.Length > 0 ? text
-            : $"Do you want the default armor, engine, and guns for this new airframe ({AirframeName(airframe)})?  " +
-              $"If you do not want to lose the changes you've made to the {plane} you were building, click Cancel.";
-        DefaultsAsk = airframe;
+        _feature.RaiseDefaultsAsk(airframe, previousAirframe);
         Row = 0;
     }
 
@@ -584,18 +442,12 @@ public sealed class HangarFlow
     /// happened when the ask was raised). The cursor lands back on the chosen airframe.</summary>
     public void AnswerDefaultsAsk(bool loadDefaults)
     {
-        if (DefaultsAsk is not { } airframe)
+        if (DefaultsAsk is null)
         {
             return;
         }
 
-        DefaultsAsk = null;
-        DefaultsAskText = string.Empty;
-        if (loadDefaults)
-        {
-            LoadAirframeDefaults(airframe);
-        }
-
+        _feature.AnswerDefaultsAsk(loadDefaults);
         Row = Scratch.Airframe;
     }
 
@@ -603,67 +455,22 @@ public sealed class HangarFlow
     /// picks and per-wing hardpoint counts read back off the airframe's stock fit, engine id 1
     /// (the stock Lvl-2 tier), armour the stock zone allocations in units. Paint and name are
     /// not the airframe's to default and stay as they are.</summary>
-    public void LoadAirframeDefaults(int airframe)
-    {
-        Scratch.Airframe = airframe;
-        Scratch.Engine = 1;
-        LoadStockWeapons(Scratch, StockFits?.ForModel(PlanePickerRoster.AirframeNode(airframe)));
-        int[] armour = StockArmourUnits(airframe);
-        Scratch.ArmourNose = armour[0];
-        Scratch.ArmourTail = armour[1];
-        Scratch.ArmourLeftWing = armour[2];
-        Scratch.ArmourRightWing = armour[3];
-        Scratch.Clamp();
-    }
+    public void LoadAirframeDefaults(int airframe) => _feature.LoadAirframeDefaults(airframe);
 
     /// <summary>The airframe's own name (langui 3000 + id).</summary>
-    public string AirframeName(int airframe) =>
-        Strings.Text(3000 + airframe, $"Airframe {airframe}");
+    public string AirframeName(int airframe) => _feature.AirframeName(airframe);
 
     /// <summary>The airframe's short name (langui 3020 + id, "Devastator" to 3005's "Hughes P21-J
     /// MKIII Devastator"), which is the form the sell strings take their %1 in.</summary>
-    public string AirframeShortName(int airframe) =>
-        Strings.Text(3020 + airframe, $"Airframe {airframe}");
+    public string AirframeShortName(int airframe) => _feature.AirframeShortName(airframe);
 
     /// <summary>The engine's name for an airframe (langui 3100 + airframe*6 + id), or the
     /// no-engine line for id 6.</summary>
-    public string EngineName(int airframe, int engine) =>
-        engine == CustomPlaneDef.EngineNone
-            ? Strings.Text(1171, "No Engine Selected")
-            : Strings.Text(3100 + (airframe * 6) + engine, $"Engine {engine}");
+    public string EngineName(int airframe, int engine) => _feature.EngineName(airframe, engine);
 
     /// <summary>One gun slot's pick as the original names it: the calibre's own name (langui
     /// 3310 + calibre), prefixed "(2) " when twinned (format 506), or None for an empty slot.</summary>
-    public string GunName(GunChoice gun)
-    {
-        if (gun.Calibre is not { } calibre)
-        {
-            return Strings.Text(1165, "None");
-        }
-
-        string name = Strings.Text(3310 + calibre, $".{30 + (calibre * 10)}-cal.");
-        if (!gun.Twin)
-        {
-            return name;
-        }
-
-        string prefix = Strings.Format(506, 2);
-        return (prefix.Length == 0 ? "(2)" : prefix.TrimEnd()) + " " + name;
-    }
-
-    // The roster and the taken-name set together, since the campaign's roster is ownership while
-    // the names a commit can collide with are still the whole build directory: a campaign plane
-    // must not silently overwrite an Instant Action build of the same name.
-    private void ReadRoster()
-    {
-        var stored = _store.List();
-        Saved = Campaign is { } campaign ? campaign.OwnedBuilds() : stored;
-        _taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var def in stored.Concat(Saved))
-        {
-            _taken.Add(CustomPlaneStore.FileKey(def.Name));
-        }
-    }
+    public string GunName(GunChoice gun) => _feature.GunName(gun);
 
     // The page for a screen, built on first sight and kept, so a page may hold state of its own.
     // Every screen's page is real and lives in its own file; the placeholder survives only as
@@ -689,62 +496,6 @@ public sealed class HangarFlow
         }
 
         return page;
-    }
-
-    // A pattern the picked airframe may not wear snaps to its first available one, carrying that
-    // pattern's own colour/shade defaults: a fresh scratch holds pattern 0 (blackhat), which most
-    // airframes' availability masks exclude, and the paint screen must never open on a paint job
-    // the plane cannot wear.
-    private void NormalisePattern(int airframe)
-    {
-        var tables = HangarPaintTables.Default;
-        if (tables.Available(Scratch.PaintPattern, airframe))
-        {
-            return;
-        }
-
-        for (int pattern = 0; pattern < HangarPaintTables.PatternCount; pattern++)
-        {
-            if (tables.Available(pattern, airframe))
-            {
-                Scratch.LoadPatternDefaults(pattern);
-                return;
-            }
-        }
-    }
-
-    // The airframe's stock zone allocations in units (the destroyable_parts armour pools / 5,
-    // docs/formats/vehicle.md), read through PlaneStats off the zrdr scope and cached. No
-    // reachable extraction reads as all zeros, the missing-data idiom every hangar source uses.
-    private int[] StockArmourUnits(int airframe)
-    {
-        if (_stockArmour.TryGetValue(airframe, out var units))
-        {
-            return units;
-        }
-
-        units = new int[ArmourZones.Length];
-        if (ZrdrPath is { } zrdr)
-        {
-            try
-            {
-                foreach (var part in PlaneStats.Load(zrdr, PlanePickerRoster.AirframeNode(airframe)).DestroyableParts)
-                {
-                    int zone = Array.IndexOf(ArmourZones, part.Name.ToLowerInvariant());
-                    if (zone >= 0)
-                    {
-                        units[zone] = (int)Math.Round(part.MaxArmor / CustomPlaneBuild.ArmourUnitScale);
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                // An unreadable extraction is the same as none; the zeros stand.
-            }
-        }
-
-        _stockArmour[airframe] = units;
-        return units;
     }
 
     // The focused row, kept inside the page's current list: a page whose row count shrank under
@@ -962,7 +713,7 @@ public sealed class HangarPlaneSelectionPage : HangarPage
     // The campaign's own detail lines: the wallet the buy row spends (langui 1149), an owned
     // plane's airframe and value (1258), and on the sell stage the refusal a press would meet
     // (704 for a reward aircraft, 701 for the two-plane floor) in place of that value.
-    private string CampaignDetail(HangarCampaignContext campaign, int row)
+    private string CampaignDetail(CampaignWallet campaign, int row)
     {
         if (_removing)
         {

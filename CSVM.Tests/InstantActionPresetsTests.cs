@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using CSVM.UI;
+using CSVM.UI.Menu;
 using Xunit;
 
 namespace CSVM.Tests;

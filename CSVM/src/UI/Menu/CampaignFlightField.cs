@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Session;
 
-namespace CSVM.UI;
+namespace CSVM.UI.Menu;
 
 /// <summary>
 /// One guest's aircraft on a co-op campaign sortie: the records the picker offers them, and which
@@ -43,9 +43,10 @@ public sealed class CampaignGuest
 /// The humans flying one campaign sortie, as the flight check walks them: how many joined, whose
 /// check is showing, and what each guest picked. The seated player is 0 and keeps the profile's own
 /// aircraft; players 1 and up are guests, who bring no profile and fly the session-scoped records
-/// <see cref="CampaignGuest"/> holds. Engine-free, so the no-duplicate and copy-not-reference rules
-/// test off engine. The sequence re-enters <see cref="CampaignScreen.FlightCheck"/> with a player
-/// index because <see cref="CampaignFlow.GoTo"/> returns to the existing page instance.
+/// <see cref="CampaignGuest"/> holds. Engine-free and presentation-neutral: the
+/// <see cref="CampaignFeature"/> owns one, so the no-duplicate and copy-not-reference rules are the
+/// same whichever presentation walks the checks, and a presentation re-enters its flight check
+/// screen with the player index this field reports.
 /// </summary>
 public sealed class CampaignFlightField
 {
@@ -54,10 +55,10 @@ public sealed class CampaignFlightField
     private const int StarterAirframe = 5;
 
     // The stock roster a guest picks from: the 11-airframe stat table's own ids 0-10, the same
-    // order stock_loadouts.json, PlanePickerRoster.AirframeNodes and the langui 3000 titles use.
+    // order stock_loadouts.json, the airframe node table and the langui 3000 titles use.
     private static readonly int StockAirframes = HangarEconomy.Airframes.Length;
 
-    private readonly CampaignFlow _flow;
+    private readonly CampaignFeature _feature;
     private readonly List<CampaignGuest> _guests = new();
 
     // Every stock record handed out, by reference: a screen resolving one plane's guns asks here
@@ -71,9 +72,9 @@ public sealed class CampaignFlightField
     private int _players = 1;
     private bool _locked;
 
-    internal CampaignFlightField(CampaignFlow flow) => _flow = flow;
+    internal CampaignFlightField(CampaignFeature feature) => _feature = feature;
 
-    /// <summary>How many humans are flying, 1 to <see cref="SplitScreen.MaxPlayers"/>.</summary>
+    /// <summary>How many humans are flying, 1 to <see cref="PlayerSetupFeature.MaxSeats"/>.</summary>
     public int Players => _players;
 
     /// <summary>Whose flight check is showing: 0 the seated player, 1 and up a guest.</summary>
@@ -97,7 +98,7 @@ public sealed class CampaignFlightField
     /// cannot leave the screen showing a check nobody is flying.</summary>
     public void SetPlayers(int players)
     {
-        _players = Math.Clamp(players, 1, SplitScreen.MaxPlayers);
+        _players = Math.Clamp(players, 1, PlayerSetupFeature.MaxSeats);
         Current = Math.Clamp(Current, 0, _players - 1);
         EnsureGuests();
     }
@@ -210,7 +211,7 @@ public sealed class CampaignFlightField
 
     private OwnedPlane? SeatedPlane()
     {
-        if (_flow.Profile is not { } profile || profile.Planes.Count == 0)
+        if (_feature.Profile is not { } profile || profile.Planes.Count == 0)
         {
             return null;
         }
@@ -241,9 +242,9 @@ public sealed class CampaignFlightField
     // starts over whenever the seated profile changed under them.
     private void EnsureGuests()
     {
-        if (!ReferenceEquals(_rosterProfile, _flow.Profile))
+        if (!ReferenceEquals(_rosterProfile, _feature.Profile))
         {
-            _rosterProfile = _flow.Profile;
+            _rosterProfile = _feature.Profile;
             _guests.Clear();
             _stock.Clear();
         }
@@ -303,5 +304,5 @@ public sealed class CampaignFlightField
     }
 
     private string AirframeTitle(int airframe) =>
-        _flow.Strings.Text(3000 + airframe, $"Airframe {airframe}");
+        _feature.Strings.Text(3000 + airframe, $"Airframe {airframe}");
 }

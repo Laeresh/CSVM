@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.UI.Menu;
 
 namespace CSVM.UI;
 
@@ -149,19 +149,19 @@ public interface ICampaignPage
 }
 
 /// <summary>
-/// The campaign's out-of-mission flow: the screens between the launchscreen and a mission, over one
-/// selected <see cref="CampaignProfileDef"/>. Engine-free, so the screen graph, the profile
-/// lifecycle and the cancel semantics test off engine; the launchscreen is only its renderer and
-/// input source. Screens are a stack rather than the hangar's fixed order, because the campaign's
-/// own navigation is a graph: the cabin opens a briefing, the briefing opens a flight check, and
-/// each of them returns to what opened it. A screen with no registered page draws a placeholder.
+/// Built-in's campaign screen graph: the screens between the launchscreen and a mission, walked
+/// as a stack over the shared <see cref="CampaignFeature"/>, which owns the profile, the seated
+/// player, the mission named and every write into the store. Engine-free, so the screen graph, the
+/// cursor and the cancel semantics test off engine; the launchscreen is only its renderer and input
+/// source. Screens are a stack rather than the hangar's fixed order, because the campaign's own
+/// navigation is a graph: the cabin opens a briefing, the briefing opens a flight check, and each
+/// of them returns to what opened it. A screen with no registered page draws a placeholder. The
+/// feature's state is read through the forwarding members here, so a page needs no second door.
 /// </summary>
 public sealed class CampaignFlow
 {
-    /// <summary>The roster's capacity: the original's profile block is 24 slots
-    /// (docs/formats/campaign-screens.md), which is the number langui 202 states when it refuses a
-    /// new player.</summary>
-    public const int MaxProfiles = 24;
+    /// <summary>The roster's capacity, <see cref="CampaignFeature.MaxProfiles"/>.</summary>
+    public const int MaxProfiles = CampaignFeature.MaxProfiles;
 
     // Which page draws which screen. THIS is the wave's mount point: a new screen lands as one
     // page file plus one line here, and nothing in the launchscreen changes.
@@ -183,108 +183,111 @@ public sealed class CampaignFlow
     // The screens entered, innermost last. Never empty: popping the last one ends the flow.
     private readonly List<CampaignScreen> _stack = new() { CampaignScreen.Roster };
 
-    // The mission read for MissionSeq, and which sequence that was. -2 is "not read for any", which
-    // no MissionSeq ever is: the cabin's own default is -1.
-    private CampaignMission? _mission;
-    private int _missionSeq = -2;
+    // The layout the boards read their chrome through, resolved from the data root on first use
+    // unless a caller handed one in (a unit test's fixture, a parity suite's fallback).
+    private CampaignLayout? _layout;
 
-    /// <summary>Opens a flow over <paramref name="store"/>, reading its roster once.
-    /// <paramref name="dataRoot"/> may be null; a page's art then simply loads none.
+    /// <summary>Opens a flow over <paramref name="store"/> through a private feature, reading its
+    /// roster once. <paramref name="dataRoot"/> may be null; a page's art then simply loads none.
     /// <paramref name="planes"/> is the hangar's build store the flight check and ammo screens
     /// read an owned plane's guns and hardpoints from; null (every off-engine caller) means no
     /// hangar build exists and each plane reads as its airframe's stock fit, which is also what
     /// the two profile-seeded starters are.</summary>
     public CampaignFlow(CampaignProfileStore store, UiStrings strings, string? dataRoot = null,
-        CustomPlaneStore? planes = null, StockLoadouts? stock = null)
+        CustomPlaneStore? planes = null, StockLoadouts? stock = null, CampaignLayout? layout = null)
+        : this(Opened(new CampaignFeature(strings, PlanePickerRoster.AirframeNode), store, planes, stock, dataRoot))
     {
-        Store = store;
-        Strings = strings;
-        DataRoot = dataRoot;
-        Planes = planes;
-        Stock = stock;
-        Field = new CampaignFlightField(this);
-        Roster = store.List();
+        _layout = layout;
+    }
+
+    /// <summary>Opens a flow over the shared <paramref name="feature"/>, which must already be
+    /// open on a store; the launchscreen builds every flow this way, over the host's one
+    /// feature. <paramref name="layout"/> is the chrome source a caller pins (a suite composing
+    /// the same screens twice); null reads the data root's own.</summary>
+    public CampaignFlow(CampaignFeature feature, CampaignLayout? layout = null)
+    {
+        _layout = layout;
+        Feature = feature ?? throw new ArgumentNullException(nameof(feature));
+        if (!feature.IsOpen)
+        {
+            throw new InvalidOperationException("The campaign feature must be opened on a store before a flow is built over it.");
+        }
+
         // The opening screen gets its own page's opening row too, not just the screens arrived at
         // later, or the roster would be the one screen that ignores the seam.
         Row = Page.OpeningRow;
         ClampedRow();
     }
 
+    /// <summary>The shared feature this flow walks: the profile, the mission and every write.</summary>
+    public CampaignFeature Feature { get; }
+
     /// <summary>The stock-loadout table (<c>stock_loadouts.json</c>) the flight check and ammo
     /// screens read an airframe's stock fit and the ordnance roster from, or null when the caller
     /// has none; a page loads the default itself only when it needs it, since the default path
     /// is <c>res://</c> and needs the engine.</summary>
-    public StockLoadouts? Stock { get; }
+    public StockLoadouts? Stock => Feature.Stock;
 
     /// <summary>The profile store this flow creates, reads and deletes through.</summary>
-    public CampaignProfileStore Store { get; }
+    public CampaignProfileStore Store => Feature.Store!;
 
     /// <summary>The hangar's build store (<c>user://Planes/</c>), or null when the caller has none.
     /// Pages never open the store themselves: that call needs the engine, and a page must stay
     /// constructible off it.</summary>
-    public CustomPlaneStore? Planes { get; }
+    public CustomPlaneStore? Planes => Feature.Planes;
 
     /// <summary>The langui table the screens label themselves from.</summary>
-    public UiStrings Strings { get; }
+    public UiStrings Strings => Feature.Strings;
 
     /// <summary>The humans flying this sortie: how many joined, whose flight check is showing, and
     /// what each guest picked. Solo until the shell says otherwise.</summary>
-    public CampaignFlightField Field { get; }
+    public CampaignFlightField Field => Feature.Field;
 
     /// <summary>The folder <c>extracted/</c> sits in, or null when the caller has none.</summary>
-    public string? DataRoot { get; }
+    public string? DataRoot => Feature.DataRoot;
+
+    /// <summary>The decoded menu layout the pages and <see cref="CampaignBoards"/> read the fixed
+    /// chrome through: the one under <see cref="DataRoot"/>, or the fallback with no root. Built-in's
+    /// alone; the feature carries no presentation geometry.</summary>
+    public CampaignLayout Layout => _layout ??= CampaignLayout.For(DataRoot);
 
     /// <summary>Every stored profile's name, re-read by <see cref="RefreshRoster"/>.</summary>
-    public IReadOnlyList<string> Roster { get; private set; }
+    public IReadOnlyList<string> Roster => Feature.Roster;
 
     /// <summary>The profile the player picked, or null while the roster screen is still open.</summary>
-    public CampaignProfileDef? Profile { get; private set; }
+    public CampaignProfileDef? Profile => Feature.Profile;
 
     /// <summary>The <c>cm_sequence.zrd</c> index (0..23) of the mission the briefing, flight check
     /// and ammo screens are about: the profile's next mission after Next Mission, any finished one
     /// after Previous Missions. -1 until the cabin sets it.</summary>
-    public int MissionSeq { get; private set; } = -1;
+    public int MissionSeq => Feature.MissionSeq;
 
     /// <summary>Whose aircraft the ammo screen edits: 0 the pilot's, 1 the wingman's (the flight
     /// check's two rows, <c>docs/formats/campaign-screens.md</c>). The flight check sets it before
     /// opening the ammo screen.</summary>
-    public int AmmoSlot { get; private set; }
+    public int AmmoSlot => Feature.AmmoSlot;
 
     /// <summary>Which crew slot the plane selection screen opens focused on, 0 the pilot's combo
     /// and 1 the wingman's.</summary>
-    public int PlaneSlot { get; private set; }
+    public int PlaneSlot => Feature.PlaneSlot;
 
     /// <summary>How many times the book has been opened through <see cref="OpenScrapbook"/>. The
     /// page watches this rather than <see cref="MissionSeq"/> alone, so reopening it on the mission
     /// it is already browsing still lands on that mission's spread 1, which is what the original's
     /// <c>uiData</c> 2405 mode 1 does however the book is reached.</summary>
-    public int ScrapbookEntry { get; private set; }
+    public int ScrapbookEntry => Feature.ScrapbookEntry;
 
     /// <summary>The scrap <see cref="CampaignScreen.ScrapbookZoom"/> is open on: the
     /// <c>SCRAPBOOK.CSV</c> mission slot, spread and item a scrapbook page's row named. Null
     /// until <see cref="SetScrapbookZoom"/> is called.</summary>
-    public (int Mission, int Spread, int Item)? ZoomTarget { get; private set; }
+    public (int Mission, int Spread, int Item)? ZoomTarget => Feature.ZoomTarget;
 
     /// <summary>The <c>cm_sequence.zrd</c> entry <see cref="MissionSeq"/> names, or null when the
-    /// data root, the file or the entry is unavailable. Read once per mission rather than once per
-    /// repaint, and here rather than on a page because more than one screen asks: the flight check
-    /// and the plane selection screen both draw a wingman only when this mission carries one.</summary>
-    public CampaignMission? Mission
-    {
-        get
-        {
-            if (_missionSeq != MissionSeq)
-            {
-                _missionSeq = MissionSeq;
-                _mission = ReadMission();
-            }
-
-            return _mission;
-        }
-    }
+    /// data root, the file or the entry is unavailable.</summary>
+    public CampaignMission? Mission => Feature.Mission;
 
     /// <summary>Whether this mission flies a wingman, its <c>cm_sequence</c> flag.</summary>
-    public bool MissionHasWingman => Mission?.Wingman ?? false;
+    public bool MissionHasWingman => Feature.MissionHasWingman;
 
     /// <summary>The screen showing.</summary>
     public CampaignScreen Screen => _stack[^1];
@@ -483,88 +486,56 @@ public sealed class CampaignFlow
     public void Request(CampaignExit job) => Exit = job;
 
     /// <summary>Back from a job the shell ran on the flow's behalf: the flow stands where it was,
-    /// its roster and profile re-read so a hangar purchase or sale shows on the cabin.</summary>
+    /// its profile re-read so a hangar purchase or sale shows on the cabin.</summary>
     public void Resume()
     {
         Exit = CampaignExit.None;
         Message = string.Empty;
-        if (Profile != null && Store.Load(Profile.Name) is { } fresh)
-        {
-            Profile = fresh;
-        }
+        Feature.Resume();
     }
 
     /// <summary>Names the mission the screens after the cabin are about.</summary>
-    public void SetMission(int seq) => MissionSeq = seq;
+    public void SetMission(int seq) => Feature.SetMission(seq);
 
     /// <summary>Points the ammo screen at the pilot's (0) or the wingman's (1) aircraft.</summary>
-    public void SetAmmoSlot(int slot) => AmmoSlot = slot;
+    public void SetAmmoSlot(int slot) => Feature.SetAmmoSlot(slot);
 
     /// <summary>Which crew slot's CHANGE PLANE press opened the plane selection screen, the
     /// original's <c>@globals@ZQ</c> of -1 and -2. The screen draws both slots either way; this
     /// only decides which of the two combos the cursor opens on.</summary>
-    public void SetPlaneSlot(int slot) => PlaneSlot = slot;
+    public void SetPlaneSlot(int slot) => Feature.SetPlaneSlot(slot);
 
     /// <summary>Where a scrapbook capture's file is for the seated profile, or null when there is
-    /// none on disk. A <c>Snap_</c> row resolves against the profile's own directory rather than
-    /// the asset library (<c>docs/formats/campaign-screens.md</c>, "The scrapbook"), which is the
-    /// one thing the book draws that no extraction holds.</summary>
-    public string? CapturePath(ScrapbookScrap scrap)
-    {
-        if (Profile is not { } profile)
-        {
-            return null;
-        }
-
-        string path = Path.Combine(Store.DirFor(profile.Name), scrap.FileName);
-        return File.Exists(path) ? path : null;
-    }
+    /// none on disk (<see cref="CampaignFeature.CapturePath"/>).</summary>
+    public string? CapturePath(ScrapbookScrap scrap) => Feature.CapturePath(scrap.FileName);
 
     /// <summary>Names the scrap <see cref="CampaignScreen.ScrapbookZoom"/> opens on.</summary>
-    public void SetScrapbookZoom(int mission, int spread, int item) => ZoomTarget = (mission, spread, item);
+    public void SetScrapbookZoom(int mission, int spread, int item) => Feature.SetScrapbookZoom(mission, spread, item);
 
     /// <summary>Opens the book on a mission's first spread, the original's <c>uiData</c> 2405 mode
     /// 1: the mission-end entry, the table of contents' VIEW SELECTED and both CURRENT MISSION
     /// bookmarks all take this door.</summary>
     public void OpenScrapbook(int seq)
     {
-        SetMission(seq);
-        ScrapbookEntry++;
+        Feature.EnterScrapbook(seq);
         GoTo(CampaignScreen.Scrapbook);
     }
 
     /// <summary>Takes the joined-player count from the shell, once a frame.</summary>
     public void SetPlayers(int players) => Field.SetPlayers(players);
 
-    /// <summary>The record the ammo screen is editing: a guest's own session-scoped aircraft while
-    /// their flight check is the screen showing, else the seated profile's plane for
-    /// <see cref="AmmoSlot"/>. Null when there is nothing to fit.</summary>
-    public OwnedPlane? AmmoTarget()
-    {
-        if (Field.Current > 0)
-        {
-            return Field.Plane(Field.Current);
-        }
-
-        if (Profile is not { } profile)
-        {
-            return null;
-        }
-
-        int at = AmmoSlot == 0 ? profile.SelectedPlane : profile.WingmanPlane;
-        return at >= 0 && at < profile.Planes.Count ? profile.Planes[at] : null;
-    }
+    /// <summary>The record the ammo screen is editing (<see cref="CampaignFeature.AmmoTarget"/>).</summary>
+    public OwnedPlane? AmmoTarget() => Feature.AmmoTarget();
 
     /// <summary>Seats the profile every screen after the roster reads, and opens the cabin.</summary>
     public void SelectProfile(CampaignProfileDef profile)
     {
-        Profile = profile;
-        Store.RecordLastPlayed(profile.Name);
+        Feature.SelectProfile(profile);
         GoTo(CampaignScreen.Cabin);
     }
 
     /// <summary>Re-reads the store's roster, after a profile was created or deleted.</summary>
-    public void RefreshRoster() => Roster = Store.List();
+    public void RefreshRoster() => Feature.RefreshRoster();
 
     /// <summary>Leaves a refusal on screen, in the original's own words where it has some.</summary>
     public void SetMessage(string message) => Message = message;
@@ -581,32 +552,32 @@ public sealed class CampaignFlow
         ClampedRow();
     }
 
-    // The sequence entry for MissionSeq. Absent data, an unreadable file or a sequence with no such
-    // entry all read as null: a screen then draws no wingman rather than refusing to open.
-    private CampaignMission? ReadMission()
+    /// <summary>Takes the standing dialog off the flow without answering it, for a presentation
+    /// that shows a page's dialog its own way and runs the answer itself; null when none stands.
+    /// Built-in never calls this: its dialogs are answered through <see cref="Accept"/> and
+    /// <see cref="Back"/>.</summary>
+    public CampaignModal? TakeModal()
     {
-        if (DataRoot is not { } root)
-        {
-            return null;
-        }
+        var modal = Modal;
+        Modal = null;
+        return modal;
+    }
 
-        try
-        {
-            string zrdrPath = SessionPaths.PreferUnzipped(Path.Combine(root, "extracted", "zrdr.zip"));
-            foreach (var mission in CampaignSequence.Load(zrdrPath))
-            {
-                if (mission.Seq == MissionSeq)
-                {
-                    return mission;
-                }
-            }
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or FileNotFoundException)
-        {
-            return null;
-        }
+    /// <summary>Takes the refusal line off the flow, for a presentation that shows a page's
+    /// refusal its own way; "" when none stands.</summary>
+    public string TakeMessage()
+    {
+        string message = Message;
+        Message = string.Empty;
+        return message;
+    }
 
-        return null;
+    // A private feature opened for the store-first constructor, so the two constructors chain.
+    private static CampaignFeature Opened(
+        CampaignFeature feature, CampaignProfileStore store, CustomPlaneStore? planes, StockLoadouts? stock, string? dataRoot)
+    {
+        feature.Open(store, planes, stock, dataRoot);
+        return feature;
     }
 
     // Answers a standing dialog, running whatever was to follow it. Both the confirm and the back

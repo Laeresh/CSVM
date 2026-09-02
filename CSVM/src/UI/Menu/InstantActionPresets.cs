@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace CSVM.UI;
+namespace CSVM.UI.Menu;
 
 /// <summary>
 /// The original's Instant Action Table of Contents: 19 named preset scenarios that fill the whole
@@ -10,10 +10,10 @@ namespace CSVM.UI;
 /// configuration and the sentinel rules are in docs/formats/instant-action.md, "Table of Contents
 /// presets". The table below is transcribed from that page by NAME rather than by the record's own
 /// dropdown indices, so it stays diffable against the decode and cannot be silently invalidated by
-/// a roster reordering — <see cref="Resolve"/> does the name-to-index step against
-/// <see cref="LaunchMenu"/>'s own rosters, which are the screen's single source of order.
-/// Presets fly STOCK airframes (a record's own two plane blocks are overwritten from the stock
-/// table at `0x00619f58`), so nothing here depends on the hangar.
+/// a roster reordering; <see cref="Resolve"/> does the name-to-index step against
+/// <see cref="InstantActionFeature"/>'s rosters, which are every presentation's single source of
+/// order. Presets fly STOCK airframes (a record's own two plane blocks are overwritten from the
+/// stock table at `0x00619f58`), so nothing here depends on the hangar.
 /// </summary>
 public static class InstantActionPresets
 {
@@ -103,28 +103,28 @@ public static class InstantActionPresets
     /// 3600 to 3618, and the list-fill callback writes the literal count at `0x0040c019`.</summary>
     public static IReadOnlyList<Preset> All => Table;
 
-    /// <summary>Turns preset <paramref name="index"/> into the cursor positions the setup screens
-    /// hold, resolved against <see cref="LaunchMenu"/>'s own rosters so a preset can never disagree
+    /// <summary>Turns preset <paramref name="index"/> into the cursor positions the setup holds,
+    /// resolved against <see cref="InstantActionFeature"/>'s rosters so a preset can never disagree
     /// with the list it is filling. The returned wave array is always <paramref name="waveSlots"/>
     /// long; slots the preset does not use carry 0 enemies and the substitution above. Throws
     /// <see cref="ArgumentException"/> on a name no roster holds, the same fail-loud policy
-    /// <see cref="LaunchMenu.AircraftFor"/> applies to wizard-only data.</summary>
+    /// <see cref="InstantActionFeature.AircraftFor"/> applies to wizard-only data.</summary>
     public static Applied Resolve(int index, int waveSlots)
     {
         if (index < 0 || index >= Table.Length)
             throw new ArgumentOutOfRangeException(nameof(index), index, $"there are {Table.Length} presets");
 
         var preset = Table[index];
-        int environmentIndex = IndexOf(LaunchMenu.EnvironmentNames(), preset.Environment, "environment", preset.Name);
-        string code = LaunchMenu.EnvironmentCodes()[environmentIndex];
+        int environmentIndex = IndexOf(InstantActionFeature.Environments, e => e.Name, preset.Environment, "environment", preset.Name);
+        string code = InstantActionFeature.Environments[environmentIndex].Code;
         // The mission-type cursor indexes the FILTERED roster for that environment (Stunt Flying is
         // dropped where disallow_missions bars it), not the four-row master list.
-        int missionTypeIndex = IndexOf(LaunchMenu.MissionTypeKeysFor(code), preset.MissionType, "mission type", preset.Name);
+        int missionTypeIndex = IndexOf(InstantActionFeature.MissionTypesFor(code), m => m.Key, preset.MissionType, "mission type", preset.Name);
 
-        var planes = LaunchMenu.PlaneNames();
-        int playerPlaneIndex = IndexOf(planes, preset.PlayerPlane, "player aircraft", preset.Name);
+        var planes = InstantActionFeature.Airframes;
+        int playerPlaneIndex = IndexOf(planes, p => p.Name, preset.PlayerPlane, "player aircraft", preset.Name);
         int? wingmanPlaneIndex = preset.WingmanPlane is { } wingman
-            ? IndexOf(planes, wingman, "wingman aircraft", preset.Name)
+            ? IndexOf(planes, p => p.Name, wingman, "wingman aircraft", preset.Name)
             : null;
 
         var waves = new AppliedWave[waveSlots];
@@ -133,24 +133,27 @@ public static class InstantActionPresets
             var wave = i < preset.Waves.Length
                 ? preset.Waves[i]
                 : new Wave(0, UnsetMilitia, UnsetAircraft, UnsetSkill);
-            int militiaIndex = IndexOf(LaunchMenu.MilitiaNames(), wave.Militia, "militia", preset.Name);
+            int militiaIndex = IndexOf(InstantActionFeature.Militias, m => m.Name, wave.Militia, "militia", preset.Name);
             waves[i] = new AppliedWave(
                 wave.Count,
                 militiaIndex,
-                IndexOf(LaunchMenu.AircraftFor(wave.Militia), wave.Aircraft, $"{wave.Militia} aircraft", preset.Name),
-                IndexOf(LaunchMenu.SkillKeys(), wave.Skill, "skill", preset.Name));
+                IndexOf(InstantActionFeature.AircraftFor(wave.Militia), a => a, wave.Aircraft, $"{wave.Militia} aircraft", preset.Name),
+                IndexOf(InstantActionFeature.Skills, s => s, wave.Skill, "skill", preset.Name));
         }
 
         return new Applied(environmentIndex, missionTypeIndex, playerPlaneIndex,
             preset.NumWingmen, wingmanPlaneIndex, waves);
     }
 
-    private static int IndexOf(string[] roster, string value, string what, string preset)
+    private static int IndexOf<T>(IReadOnlyList<T> roster, Func<T, string> name, string value, string what, string preset)
     {
-        int i = Array.IndexOf(roster, value);
-        if (i < 0)
-            throw new ArgumentException($"preset '{preset}': '{value}' is not a known {what}");
-        return i;
+        for (int i = 0; i < roster.Count; i++)
+        {
+            if (name(roster[i]) == value)
+                return i;
+        }
+
+        throw new ArgumentException($"preset '{preset}': '{value}' is not a known {what}");
     }
 
     /// <summary>One wave of a preset: how many enemies, which militia flies it, which of that

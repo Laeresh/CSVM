@@ -1,0 +1,81 @@
+using System.IO;
+using CSVM.Session;
+
+namespace CSVM.UI.Menu;
+
+/// <summary>
+/// The scratch profile store the campaign screenshot aids read, shared by both presentations so
+/// their shots show one player: under <c>%TEMP%\CSVM\menu-aid-profiles</c>, emptied on every open,
+/// and seeded with two profiles for the filled-roster shot. A progressed store additionally flies
+/// the first three missions, which is what puts rows on the previous-missions list and moves the
+/// cabin's Next Mission off the campaign's first entry. Nothing here can reach <c>user://Profiles</c>.
+/// </summary>
+public static class CampaignAidProfiles
+{
+    /// <summary>The one campaign <c>--menu=</c> value that is a player's door rather than a shot:
+    /// it opens the campaign over the presentation's own store (the player's <c>user://Profiles</c>
+    /// unless a suite set a scratch one) and never over this scratch store. Every other campaign
+    /// value opens a screen over <see cref="Store"/>. The store is the presentation's to choose,
+    /// so no <c>MenuReturnDestination</c> names one.</summary>
+    public const string PlayerDoor = "campaign";
+
+    /// <summary>The seeded player every aid seats.</summary>
+    public const string Pilot = "Zachary";
+
+    /// <summary>The second seeded player, the one the filled-roster shot lists beside the pilot.</summary>
+    public const string SecondPilot = "Nathan";
+
+    /// <summary>How many missions the progressed store has flown. Three gives the previous-missions
+    /// list a body and leaves the cabin's Next Mission somewhere other than the campaign's first
+    /// entry; raising it walks the briefing aid onto a longer narration than the repaint suite's
+    /// own 90-second window covers.</summary>
+    public const int MissionsFlown = 3;
+
+    // The completed-objective mask those runs record. Bit 0 alone would leave every scrapbook page
+    // blank, since the story scraps are gated on the objectives that unlock them, so the aid
+    // records a clean run: bits 0 to 12, the range the shipped rows' own gates use.
+    private const int CompletedMask = 0x1fff;
+
+    /// <summary>The store's directory.</summary>
+    public static string Directory => Path.Combine(Path.GetTempPath(), "CSVM", "menu-aid-profiles");
+
+    /// <summary>A fresh scratch store: emptied, then seeded with the two players when
+    /// <paramref name="seeded"/>, the first of them progressed through the first three missions
+    /// when <paramref name="progressed"/>.</summary>
+    public static CampaignProfileStore Store(bool seeded, bool progressed = false)
+    {
+        string dir = Directory;
+        try
+        {
+            if (System.IO.Directory.Exists(dir))
+            {
+                System.IO.Directory.Delete(dir, recursive: true);
+            }
+        }
+        catch (IOException)
+        {
+            // A leftover the aid cannot clear is not worth failing a screenshot over.
+        }
+
+        var store = new CampaignProfileStore(dir);
+        if (!seeded)
+        {
+            return store;
+        }
+
+        var first = CampaignProfileDef.NewProfile(Pilot);
+        if (progressed)
+        {
+            for (int seq = 0; seq < MissionsFlown; seq++)
+            {
+                CampaignProgression.Record(first, new MissionAttempt(
+                    seq, CompletedMask, 300_000 + (seq * 20_000), 400, 120,
+                    first.Planes[0].Airframe, first.Planes[0].Name));
+            }
+        }
+
+        store.Save(first);
+        store.Save(CampaignProfileDef.NewProfile(SecondPilot));
+        return store;
+    }
+}

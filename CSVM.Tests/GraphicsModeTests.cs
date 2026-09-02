@@ -5,11 +5,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The enhanced-lighting mode's two words and its CLI-beats-config resolution order. Mirrors
-/// <see cref="ClutterFadeTests"/>'s EffectsLevel coverage. The Config-backed fallback branch of
-/// <see cref="GraphicsMode.Resolve"/> is not exercised here: <c>Config</c> is process-wide static
-/// state shared with every other test class, so only the CLI-override path (which never reads it)
-/// is safe to assert without a test order dependency.
+/// The enhanced-lighting mode's two words and its flag-beats-saved-option-beats-config resolution
+/// order. Mirrors <see cref="ClutterFadeTests"/>'s EffectsLevel coverage. The Config-backed
+/// fallback branch of <see cref="GraphicsMode.Resolve"/> is not exercised here: <c>Config</c> is
+/// process-wide static state shared with every other test class, so only the layers above it
+/// (which never read it) are safe to assert without a test order dependency.
 /// </summary>
 public class GraphicsModeTests
 {
@@ -39,6 +39,35 @@ public class GraphicsModeTests
 
         Assert.False(GraphicsMode.Resolve("original"));
         Assert.False(GraphicsMode.Enhanced);
+    }
+
+    [Fact]
+    public void TheSavedOptionDecidesWhenNoFlagIsGiven()
+    {
+        Assert.True(GraphicsMode.Resolve(null, "enhanced"));
+        Assert.True(GraphicsMode.Enhanced);
+
+        Assert.False(GraphicsMode.Resolve(null, "original"));
+        Assert.False(GraphicsMode.Enhanced);
+    }
+
+    [Fact]
+    public void TheFlagBeatsTheSavedOption()
+    {
+        Assert.True(GraphicsMode.Resolve("enhanced", "original"));
+        Assert.True(GraphicsMode.Enhanced);
+
+        Assert.False(GraphicsMode.Resolve("original", "enhanced"));
+        Assert.False(GraphicsMode.Enhanced);
+    }
+
+    /// <summary>An empty saved option is "never set", not a request for anything, so it falls
+    /// through to the config layer exactly as a null one does.</summary>
+    [Fact]
+    public void AnEmptySavedOptionFallsThroughRatherThanDeciding()
+    {
+        GraphicsMode.Resolve("enhanced");
+        Assert.Equal(GraphicsMode.Resolve(null, null), GraphicsMode.Resolve(null, string.Empty));
     }
 
     [Fact]

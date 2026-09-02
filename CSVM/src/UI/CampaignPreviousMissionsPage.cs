@@ -11,8 +11,9 @@ namespace CSVM.UI;
 /// draws and the two tabs, computed from one mission's record
 /// (<c>docs/org/debrief.md#the-screen-is-the-scrapbook</c>). Row titles and the outcome text are
 /// literal strings rather than read off <c>ui_strings.json</c> at runtime, following
-/// <see cref="Flight.IaWrapupBoard"/>'s own precedent. Positions are <c>LAYOUT.CSV</c>'s
-/// <c>[@ScrapBook@]</c> <c>SB_T_*</c> rows. Wired into <see cref="CampaignFlow"/> as
+/// <see cref="Flight.IaWrapupBoard"/>'s own precedent. Positions are <c>[@ScrapBook@]</c>'s
+/// <c>SB_T_*</c> and <c>SB_KILL*</c> rows, read through the <see cref="CampaignLayout"/> a caller
+/// hands in with the shipped values as the fallback. Wired into <see cref="CampaignFlow"/> as
 /// <see cref="CampaignScreen.Scrapbook"/>'s <see cref="CampaignScrapbookPage"/>, which also draws
 /// spread 1's shipped scraps alongside this class's rows and stamps
 /// (<see cref="ScrapbookComposition"/>).
@@ -22,6 +23,7 @@ public static class CampaignScrapbookResults
     // LAYOUT.CSV [@ScrapBook@]: STATTITLEX/STATX are the title and value columns; SLINE0/SLINE1
     // are the outcome and heading rows; SLINE2/SLINE4/SLINE5/SLINE6 are the four drawn rows.
     // SLINE3, the cut Rockets Expended row, is not among them.
+    private const string Section = CampaignLayout.BookSection;
     private const float TitleX = 417f;
     private const float ValueX = 642f;
     private const float OutcomeY = 339f;
@@ -46,9 +48,9 @@ public static class CampaignScrapbookResults
     private const string CashEarnedTitle = "Cash Earned"; // langui 1206
     private const string PlanesDownedTitle = "Overall Planes Downed"; // langui 1207
 
-    // SB_killMARKERcombined.png: 22 frames of 70x100, the eleven airframes then the same eleven
-    // starred.
-    private static readonly BoardArt KillMarker = new(BoardArtLibrary.Ui, "SB_KILLMARKERCOMBINED.PNG", 22);
+    // SB_killMARKERcombined.png, the MARKER macro's own spelling: 22 frames of 70x100, the eleven
+    // airframes then the same eleven starred.
+    private static readonly BoardArt KillMarker = new(BoardArtLibrary.Ui, "SB_killMARKERcombined.png", 22);
 
     // SB_KILL0..SB_KILL10's top-left, LAYOUT.CSV [@ScrapBook@]. Not in reading order.
     private static readonly (float X, float Y)[] StampSlots =
@@ -121,73 +123,89 @@ public static class CampaignScrapbookResults
     }
 
     /// <summary>The stamp art, one <c>BoardPicture</c> per filled slot at its <c>SB_KILL</c>
-    /// position. ⚠ The eleven slots are not in reading order: <c>SB_KILL1</c> sits left of
-    /// and above <c>SB_KILL0</c>.</summary>
-    public static IReadOnlyList<BoardPicture> StampPictures(MissionResult result, bool bestToDate)
+    /// row. ⚠ The eleven slots are not in reading order: <c>SB_KILL1</c> sits left of and above
+    /// <c>SB_KILL0</c>.</summary>
+    public static IReadOnlyList<BoardPicture> StampPictures(
+        MissionResult result, bool bestToDate, CampaignLayout? layout = null)
     {
+        layout ??= CampaignLayout.Fallback;
         var pictures = new List<BoardPicture>();
         foreach (var stamp in Stamps(result, bestToDate))
         {
-            var (x, y) = StampSlots[stamp.Slot];
-            pictures.Add(new BoardPicture(KillMarker, x, y, stamp.Frame));
+            string key = $"SB_KILL{stamp.Slot}";
+            var (x, y) = layout.At(Section, key, StampSlots[stamp.Slot].X, StampSlots[stamp.Slot].Y);
+            pictures.Add(new BoardPicture(layout.Art(Section, key, KillMarker), x, y, stamp.Frame));
         }
 
         return pictures;
     }
 
-    /// <summary>The kill count drawn over each filled stamp, at its <c>SB_KILLTEXT</c>
-    /// position.</summary>
-    public static IReadOnlyList<BoardLine> StampLabels(MissionResult result, bool bestToDate)
+    /// <summary>The kill count drawn over each filled stamp, at its <c>SB_KILLTEXT</c> row.</summary>
+    public static IReadOnlyList<BoardLine> StampLabels(
+        MissionResult result, bool bestToDate, CampaignLayout? layout = null)
     {
+        layout ??= CampaignLayout.Fallback;
         var lines = new List<BoardLine>();
         foreach (var stamp in Stamps(result, bestToDate))
         {
-            var (x, y) = StampTextSlots[stamp.Slot];
+            var (x, y, width) = layout.Box(
+                Section, $"SB_KILLTEXT{stamp.Slot}",
+                StampTextSlots[stamp.Slot].X, StampTextSlots[stamp.Slot].Y, StampTextWidth);
             lines.Add(new BoardLine(
-                stamp.Count.ToString(CultureInfo.InvariantCulture), x, y, StampTextWidth, RowFont, BoardInk.Row));
+                stamp.Count.ToString(CultureInfo.InvariantCulture), x, y, width, RowFont, BoardInk.Row));
         }
 
         return lines;
     }
 
     /// <summary>The results card's own placeholder for a page whose mission has no recorded
-    /// attempt yet: langui 1219, at the outcome line's own position.</summary>
-    public static BoardLine NotYetFlown() =>
-        new(NotYetFlownText, TitleX, OutcomeY, 0, RowFont, BoardInk.Heading, Italic: true);
+    /// attempt yet: langui 1219, at the outcome line's own row.</summary>
+    public static BoardLine NotYetFlown(CampaignLayout? layout = null)
+    {
+        var (x, y) = (layout ?? CampaignLayout.Fallback).At(Section, "SB_T_COMPLETETITLE", TitleX, OutcomeY);
+        return new BoardLine(NotYetFlownText, x, y, 0, RowFont, BoardInk.Heading, Italic: true);
+    }
 
-    /// <summary>The outcome line, the heading and the four drawn rows (title then value), at
-    /// their <c>LAYOUT.CSV</c> positions. Time is <c>mm:ss</c> off milliseconds truncated the way
+    /// <summary>The outcome line, the heading and the four drawn rows (title then value), each at
+    /// its own <c>SB_T_*</c> row. Time is <c>mm:ss</c> off milliseconds truncated the way
     /// <c>FUN_00419630</c> writes it; the hit ratio is hits over shots as a percentage, truncated
     /// toward zero the way the screen's own <c>ftol</c> call does, not rounded.</summary>
-    public static IReadOnlyList<BoardLine> Rows(MissionResult result, bool bestToDate)
+    public static IReadOnlyList<BoardLine> Rows(MissionResult result, bool bestToDate, CampaignLayout? layout = null)
     {
+        layout ??= CampaignLayout.Fallback;
         var run = bestToDate ? result.Best : result.Latest;
         int totalSeconds = run.TimeMs / 1000;
         int minutes = totalSeconds / 60;
         int seconds = totalSeconds % 60;
         int hitRatio = run.Shots <= 0 ? 0 : run.Hits * 100 / run.Shots;
 
-        return new[]
+        var lines = new List<BoardLine>
         {
-            new BoardLine(
-                Won(result, bestToDate) ? MissionCompletedText : MissionFailedText,
-                TitleX, OutcomeY, 0, RowFont, BoardInk.Heading, Italic: true),
-            new BoardLine(ResultsHeadingText, TitleX, HeadingY, 0, RowFont, BoardInk.Heading, Italic: true),
-
-            new BoardLine(RunTimeTitle, TitleX, TimeY, 0, RowFont, BoardInk.Row, Italic: true),
-            new BoardLine($"{minutes:00}:{seconds:00}", ValueX, TimeY, 0, RowFont, BoardInk.Row, Italic: true),
-
-            new BoardLine(GunHitRatioTitle, TitleX, HitsY, 0, RowFont, BoardInk.Row, Italic: true),
-            new BoardLine($"{hitRatio}%", ValueX, HitsY, 0, RowFont, BoardInk.Row, Italic: true),
-
-            new BoardLine(CashEarnedTitle, TitleX, CashY, 0, RowFont, BoardInk.Row, Italic: true),
-            new BoardLine($"${run.Money}", ValueX, CashY, 0, RowFont, BoardInk.Row, Italic: true),
-
-            new BoardLine(PlanesDownedTitle, TitleX, PlanesY, 0, RowFont, BoardInk.Row, Italic: true),
-            new BoardLine(
-                PlanesDowned(result, bestToDate).ToString(CultureInfo.InvariantCulture),
-                ValueX, PlanesY, 0, RowFont, BoardInk.Row, Italic: true),
+            Heading(layout, "SB_T_COMPLETETITLE", Won(result, bestToDate) ? MissionCompletedText : MissionFailedText, OutcomeY),
+            Heading(layout, "SB_T_RESULTSTITLE", ResultsHeadingText, HeadingY),
         };
+        AddRow(lines, layout, "SB_T_TIMETITLE", RunTimeTitle, "SB_T_TIME", $"{minutes:00}:{seconds:00}", TimeY);
+        AddRow(lines, layout, "SB_T_HITTITLE", GunHitRatioTitle, "SB_T_HIT", $"{hitRatio}%", HitsY);
+        AddRow(lines, layout, "SB_T_CASHTITLE", CashEarnedTitle, "SB_T_CASH", $"${run.Money}", CashY);
+        AddRow(lines, layout, "SB_T_PLANESTITLE", PlanesDownedTitle, "SB_T_PLANES",
+            PlanesDowned(result, bestToDate).ToString(CultureInfo.InvariantCulture), PlanesY);
+        return lines;
+    }
+
+    private static BoardLine Heading(CampaignLayout layout, string key, string text, float fallbackY)
+    {
+        var (x, y) = layout.At(Section, key, TitleX, fallbackY);
+        return new BoardLine(text, x, y, 0, RowFont, BoardInk.Heading, Italic: true);
+    }
+
+    // One drawn row: its title at the title column's row and its value at the value column's.
+    private static void AddRow(
+        List<BoardLine> lines, CampaignLayout layout, string titleKey, string title, string valueKey, string value, float fallbackY)
+    {
+        var (titleX, titleY) = layout.At(Section, titleKey, TitleX, fallbackY);
+        var (valueX, valueY) = layout.At(Section, valueKey, ValueX, fallbackY);
+        lines.Add(new BoardLine(title, titleX, titleY, 0, RowFont, BoardInk.Row, Italic: true));
+        lines.Add(new BoardLine(value, valueX, valueY, 0, RowFont, BoardInk.Row, Italic: true));
     }
 
     /// <summary>One filled kill-stamp slot: <paramref name="Slot"/> is the <c>SB_KILL</c>/
@@ -205,23 +223,27 @@ public static class CampaignScrapbookResults
 /// MISSION and RETURN TO CABIN. A confirm on a row picks it and a second confirm on the row already
 /// picked is REPLAY MISSION's own press; the secondary press is VIEW SELECTED on whatever the cursor
 /// stands on. The forward page tab is this screen's own rather than the original's, which leaves the
-/// contents page with no arrow a pad can turn it forward by.
+/// contents page with no arrow a pad can turn it forward by. The list's box, row height and window
+/// are <c>SBTOC_L_TOCList</c>'s and the two headers <c>SBTOC_T_CHARACTER</c>'s and
+/// <c>SBTOC_T_MISSIONS</c>'s, read once when the page is built.
 /// </summary>
 public sealed class CampaignPreviousMissionsPage : CampaignPage
 {
-    // SBTOC_L_TOCList, the listbox row of LAYOUT.CSV's [@ScrapBook_TOC@]: X, Y, wrap width, the
-    // height of ONE row (not of the widget) and how many of them are on screen at once.
-    private const float ListX = 420f;
-    private const float ListY = 140f;
-    private const float ListWidth = 325f;
-    private const float RowHeight = 80f;
-    private const int VisibleRows = 4;
+    // SBTOC_L_TOCList, the listbox row of LAYOUT.CSV's [@ScrapBook_TOC@], as the fallback: X, Y,
+    // wrap width, the height of ONE row (not of the widget) and how many of them are on screen at
+    // once.
+    private const string Section = CampaignLayout.ContentsSection;
+    private const float FallbackListX = 420f;
+    private const float FallbackListY = 140f;
+    private const float FallbackListWidth = 325f;
+    private const int FallbackRowHeight = 80;
+    private const int FallbackVisibleRows = 4;
 
     // The row sub-script's own columns: the icon pane sits two pixels in, and its text column
     // starts a further 20 past the pane's width, at the three rows +10, +30 and +50 down the row.
-    private const float IconX = ListX + 2f;
+    private const float IconInset = 2f;
     private const float IconWidth = 80f;
-    private const float TextX = ListX + IconWidth + 20f;
+    private const float TextGap = 20f;
     private const float FirstLineY = 10f;
     private const float LinePitch = 20f;
 
@@ -264,10 +286,21 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     // in id order and then the card fan the not-yet-started career row takes.
     private static readonly BoardArt PlaneIcons = new(BoardArtLibrary.Ui, "FC_PlaneIcons.png", 12);
 
-    // The listbox's <SLIDER>, <UP> and <DOWN>: a 16x11 thumb and two four-frame 16x11 strips.
-    private static readonly BoardArt ScrollThumb = new(BoardArtLibrary.Ui, "CM_B_ScrollBar.png");
-    private static readonly BoardArt ScrollUp = new(BoardArtLibrary.Ui, "CM_B_ScrollUp.png", 4);
-    private static readonly BoardArt ScrollDown = new(BoardArtLibrary.Ui, "CM_B_ScrollDown.png", 4);
+    // The listbox's <SLIDER>, <UP> and <DOWN>: a 16x11 thumb and two four-frame 16x11 strips, the
+    // fallbacks under the L row's own three art columns.
+    private static readonly BoardArt FallbackScrollThumb = new(BoardArtLibrary.Ui, "CM_B_ScrollBar.png");
+    private static readonly BoardArt FallbackScrollUp = new(BoardArtLibrary.Ui, "CM_B_ScrollUp.png", 4);
+    private static readonly BoardArt FallbackScrollDown = new(BoardArtLibrary.Ui, "CM_B_ScrollDown.png", 4);
+
+    // The list's geometry and art, resolved once from the flow's layout.
+    private readonly float _listX;
+    private readonly float _listY;
+    private readonly float _listWidth;
+    private readonly float _rowHeight;
+    private readonly int _visibleRows;
+    private readonly BoardArt _scrollThumb;
+    private readonly BoardArt _scrollUp;
+    private readonly BoardArt _scrollDown;
 
     // The row a mission-row press marks as the one REPLAY MISSION and VIEW SELECTED act on. -1
     // until the player has picked one; the two buttons then fall back to the first finished
@@ -278,10 +311,18 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     // and back does not jump it to the top.
     private int _top;
 
-    /// <summary>Binds the page to its flow.</summary>
+    /// <summary>Binds the page to its flow and reads the list's row off the flow's layout.</summary>
     public CampaignPreviousMissionsPage(CampaignFlow flow)
         : base(flow)
     {
+        var layout = flow.Layout;
+        const string list = "SBTOC_L_TOCList";
+        (_listX, _listY, _listWidth) = layout.Box(Section, list, FallbackListX, FallbackListY, FallbackListWidth);
+        _rowHeight = layout.Int(Section, list, "ItemHeight", FallbackRowHeight);
+        _visibleRows = Math.Max(1, layout.Int(Section, list, "TotalDisplayed", FallbackVisibleRows));
+        _scrollThumb = layout.Art(Section, list, FallbackScrollThumb, "Slider");
+        _scrollUp = layout.Art(Section, list, FallbackScrollUp, "UpArrow");
+        _scrollDown = layout.Art(Section, list, FallbackScrollDown, "DownArrow");
     }
 
     /// <inheritdoc/>
@@ -305,19 +346,22 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     {
         get
         {
+            var layout = Flow.Layout;
             var seqs = Seqs();
             int top = Window(seqs.Count);
+            var (nameX, nameY, nameWidth) = layout.Box(Section, "SBTOC_T_CHARACTER", HeaderX, NameY, HeaderWidth);
+            var (headX, headY, headWidth) = layout.Box(Section, "SBTOC_T_MISSIONS", HeaderX, HeadingY, HeaderWidth);
             var lines = new List<BoardLine>
             {
-                new(Flow.Profile?.Name ?? string.Empty, HeaderX, NameY, HeaderWidth, NameFont,
-                    BoardInk.Heading, Justify: BoardJustify.Right),
-                new(Flow.Strings.Text(1131, "Previous Missions"), HeaderX, HeadingY, HeaderWidth,
-                    HeadingFont, BoardInk.Heading, Justify: BoardJustify.Right),
+                new(Flow.Profile?.Name ?? string.Empty, nameX, nameY, nameWidth, NameFont,
+                    BoardInk.Heading, Justify: layout.Justify(Section, "SBTOC_T_CHARACTER", BoardJustify.Right)),
+                new(Flow.Strings.Text(1131, "Previous Missions"), headX, headY, headWidth,
+                    HeadingFont, BoardInk.Heading, Justify: layout.Justify(Section, "SBTOC_T_MISSIONS", BoardJustify.Right)),
             };
 
-            for (int i = 0; i < VisibleRows && top + i < seqs.Count; i++)
+            for (int i = 0; i < _visibleRows && top + i < seqs.Count; i++)
             {
-                float y = ListY + (i * RowHeight) + FirstLineY;
+                float y = _listY + (i * _rowHeight) + FirstLineY;
                 foreach (string text in RowLines(seqs[top + i]))
                 {
                     lines.Add(new BoardLine(text, TextX, y, 0f, RowFont, BoardInk.Row, Italic: true));
@@ -338,20 +382,20 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
             var seqs = Seqs();
             int top = Window(seqs.Count);
             var pictures = new List<BoardPicture>();
-            for (int i = 0; i < VisibleRows && top + i < seqs.Count; i++)
+            for (int i = 0; i < _visibleRows && top + i < seqs.Count; i++)
             {
                 pictures.Add(new BoardPicture(
-                    PlaneIcons, IconX, ListY + (i * RowHeight), Airframe(seqs[top + i])));
+                    PlaneIcons, _listX + IconInset, _listY + (i * _rowHeight), Airframe(seqs[top + i])));
             }
 
-            if (seqs.Count > VisibleRows)
+            if (seqs.Count > _visibleRows)
             {
                 var (thumbY, thumbHeight) = Thumb(seqs.Count, top);
-                pictures.Add(new BoardPicture(ScrollUp, ScrollX, ListY, Frame: 1));
+                pictures.Add(new BoardPicture(_scrollUp, ScrollX, _listY, Frame: 1));
                 pictures.Add(new BoardPicture(
-                    ScrollDown, ScrollX, ListY + WindowHeight - ScrollButton, Frame: 1));
+                    _scrollDown, ScrollX, _listY + WindowHeight - ScrollButton, Frame: 1));
                 pictures.Add(new BoardPicture(
-                    ScrollThumb, ScrollX, thumbY, Width: ScrollWidth, Height: thumbHeight));
+                    _scrollThumb, ScrollX, thumbY, Width: ScrollWidth, Height: thumbHeight));
             }
 
             return pictures;
@@ -367,24 +411,24 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
             var seqs = Seqs();
             int top = Window(seqs.Count);
             var fills = new List<BoardFill>();
-            for (int i = 0; i < VisibleRows && top + i < seqs.Count; i++)
+            for (int i = 0; i < _visibleRows && top + i < seqs.Count; i++)
             {
                 if (Wash(top + i) is not { } wash)
                 {
                     continue;
                 }
 
-                float y = ListY + (i * RowHeight);
+                float y = _listY + (i * _rowHeight);
                 fills.Add(new BoardFill(
-                    ListX, y, ListWidth, RowHeight, WashRed, WashGreen, WashBlue, wash));
+                    _listX, y, _listWidth, _rowHeight, WashRed, WashGreen, WashBlue, wash));
                 fills.Add(new BoardFill(
-                    ListX, y, ListWidth, RowHeight, EdgeRed, EdgeGreen, EdgeBlue, Border: true));
+                    _listX, y, _listWidth, _rowHeight, EdgeRed, EdgeGreen, EdgeBlue, Border: true));
             }
 
-            if (seqs.Count > VisibleRows)
+            if (seqs.Count > _visibleRows)
             {
                 fills.Add(new BoardFill(
-                    ScrollX, ListY + ScrollButton, ScrollWidth, WindowHeight - (2f * ScrollButton),
+                    ScrollX, _listY + ScrollButton, ScrollWidth, WindowHeight - (2f * ScrollButton),
                     TrackRed, TrackGreen, TrackBlue));
             }
 
@@ -392,8 +436,26 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         }
     }
 
-    // How tall the four-row window is, which is where the scrollbar's lower arrow sits.
-    private static float WindowHeight => VisibleRows * RowHeight;
+    // How tall the window is, which is where the scrollbar's lower arrow sits.
+    private float WindowHeight => _visibleRows * _rowHeight;
+
+    // Where a row's text column starts: past the icon pane and its gap.
+    private float TextX => _listX + IconWidth + TextGap;
+
+    /// <summary>A mission row's rectangle inside the list window, for a presentation that
+    /// hit-tests the rows; null for a button row and for a mission row scrolled out of the
+    /// window.</summary>
+    public (float X, float Y, float Width, float Height)? RowBox(int row)
+    {
+        var seqs = Seqs();
+        int top = Window(seqs.Count);
+        if (row < 0 || row >= seqs.Count || row < top || row >= top + _visibleRows)
+        {
+            return null;
+        }
+
+        return (_listX, _listY + ((row - top) * _rowHeight), _listWidth, _rowHeight);
+    }
 
     /// <summary>A mission row draws no list text of its own: its three lines already stand at their
     /// authored positions inside the row.</summary>
@@ -569,11 +631,11 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     // on screen. A cursor parked on one of the three buttons leaves it where the list last stood.
     private int Window(int count)
     {
-        int last = Math.Max(0, count - VisibleRows);
+        int last = Math.Max(0, count - _visibleRows);
         int top = Math.Clamp(_top, 0, last);
         if (Flow.Row < count)
         {
-            top = Math.Clamp(Math.Clamp(top, Flow.Row - VisibleRows + 1, Flow.Row), 0, last);
+            top = Math.Clamp(Math.Clamp(top, Flow.Row - _visibleRows + 1, Flow.Row), 0, last);
         }
 
         _top = top;
@@ -585,9 +647,9 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     private (float Y, float Height) Thumb(int count, int top)
     {
         float track = WindowHeight - (2f * ScrollButton);
-        float height = Math.Max(ScrollButton, track * VisibleRows / count);
-        int last = Math.Max(1, count - VisibleRows);
-        return (ListY + ScrollButton + ((track - height) * top / last), height);
+        float height = Math.Max(ScrollButton, track * _visibleRows / count);
+        int last = Math.Max(1, count - _visibleRows);
+        return (_listY + ScrollButton + ((track - height) * top / last), height);
     }
 
     // The three lines uiData 2409 hands the row sub-script: the mission's short name, the area of
@@ -609,4 +671,3 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
             ? result.Best
             : null;
 }
-

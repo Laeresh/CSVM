@@ -247,4 +247,18 @@ public class SessionSpecParserTests
         Assert.True(a.HitchInjectAlloc);
         Assert.Equal(30, a.HitchInjectFrame);
     }
+
+    /// <summary>The two menu-presentation flags: absent by default, the override carries whatever
+    /// name follows the `=`, and force-Built-in is a plain boolean independent of it.</summary>
+    [Fact]
+    public void PresentationOverrideAndForceBuiltInReachTheSpec()
+    {
+        var bare = SessionSpec.Parse(new[] { "--fly" });
+        Assert.Null(bare.PresentationOverride);
+        Assert.False(bare.ForceBuiltInPresentation);
+
+        var s = SessionSpec.Parse(new[] { "--presentation=original", "--force-builtin" });
+        Assert.Equal("original", s.PresentationOverride);
+        Assert.True(s.ForceBuiltInPresentation);
+    }
 }

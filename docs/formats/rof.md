@@ -101,9 +101,11 @@ The campaign flow's scripts (`CAMPAIGN`, `PASSENGERCABIN`, `CAMPAIGNINTRO`, `FLI
 [campaign-screens.md](campaign-screens.md), which also maps every `@ctl@XX` script class onto its
 `LAYOUT.CSV` type letter.
 
-`LAYOUT.CSV` is a commented widget table: `ID=<type>,<art>,X,Y,Z,TabOrder,ResID,HelpID,…`,
-where `ResID` is the `IDS_*` string ID. Its header comments document the column meanings,
-which is how the widget types (`B`utton, `T`ext, `S`crolltext, `D`ropdown) were identified.
+`LAYOUT.CSV` is a commented widget table: `ID=<type>,<art>,X,Y,Z,ResID,…`, where `ResID` is the
+`IDS_*` string ID. Its header comments name the widget types (`B`utton, `T`ext, `S`crolltext,
+`D`ropdown) but do not reproduce the shipped field orders. The file, its two macro mechanisms, the
+per-type field orders and the decoded `menu_layout.json` extraction emits are in
+[menu-layout.md](menu-layout.md).
 
 ## Bitmap textures
 
@@ -220,8 +222,9 @@ RGBA and BGRA are indistinguishable on it.
 `ExtractRof.ps1` (repo root) unpacks both archives into `extracted\rof\`, writing every member
 at its archive path, and additionally decodes each `.BM` to `<name>.png` (shading map) and
 `<name>_mask.png` (R/G/B = slots 1/2/3). It also emits the string table — see
-[strings.md](strings.md). Run `.\ExtractRof.ps1`; `-Raw` skips the decoding, `-Force` re-runs
-an up-to-date extraction.
+[strings.md](strings.md) — and the decoded menu layout `menu_layout.json` — see
+[menu-layout.md](menu-layout.md). Run `.\ExtractRof.ps1`; `-Raw` skips the decoding, `-Force`
+re-runs an up-to-date extraction.
 
 ## Evidence & limits
 

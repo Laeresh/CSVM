@@ -156,9 +156,9 @@ user's `config.json` is isolated for free by resolving it after that block, the 
 override (`SessionSpec.GraphicsMode`) that bypasses `Config` outright and so survives `--det`,
 which is what lets a golden or a deterministic capture ask for the enhanced path on purpose (D32's
 optional enhanced goldens will use it). The menu plan's process-wide options store
-(`docs/PLAN-menu-presentations.md`, branch `menu-presentations`) is the intended future source of
-this key's user-facing value; `GraphicsMode.Enhanced` is the one resolved value every reader
-consults, so that layer can be slotted in later without touching them.
+(`docs/PLAN-menu-presentations.md`) is the user-facing source of this setting's value, ranked
+between the flag and the config key; `GraphicsMode.Enhanced` is the one resolved value every reader
+consults, so that layer landed without touching them.
 
 **Model recommendation.** medium, low effort — mechanical plumbing on a clear template.
 
@@ -1306,10 +1306,12 @@ census depends on that it had not carried before. `PROJECT_CONTEXT.md`'s flag-in
 unique `--` flags today (the day-to-day table 30 of them), and `CSVM/src/Utils/` holds 16 `.cs`
 files; both lines are updated to the measured counts.
 
-**The menu-plan handoff.** `docs/PLAN-menu-presentations.md` is not in this worktree, so the note
-for its authors lives here instead: the options menu exposes `graphics.mode` through the menu
-plan's own options store; every reader in this codebase consults the resolved
-`GraphicsMode.Enhanced` boolean only, so that layer slots in without touching them.
+**The menu-plan handoff.** The options menu exposes this setting through the menu plan's own
+options store, taken up there as landed work: `OptionsDef.graphicsMode` beside the menu
+presentation, a two-way row on each presentation's Options screen, and the saved word ranked
+between `--graphics=` and the config key in `GraphicsMode.Resolve`. Every reader in this codebase
+consults the resolved `GraphicsMode.Enhanced` boolean only, so that layer slotted in without
+touching them.
 
 **Final golden sweep.** `$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -SkipUnits -SkipEngine` on
 this tree: PASS, 18 shot(s) hash-identical, 44.4 s (budget 50.0 s), gpu NVIDIA GeForce RTX 5080 /
