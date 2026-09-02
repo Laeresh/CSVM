@@ -158,6 +158,7 @@
     "cutscene-handoff-unposed": 1.734,
     "hangar-door-wake": 2.292,
     "anim-clock-realtime": 0.004,
+    "render-poses": 0.012,
     "fog-state": 1.584,
     "campaign-submarine": 1.229,
     "campaign-roster": 8.875,

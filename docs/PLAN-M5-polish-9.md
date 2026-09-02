@@ -88,7 +88,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Hollywood (C2)
 
 21. ☐ `BL-635` CM11: the stunt planes carry the objective marker their roster blocks author
-22. ◐ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs
+22. ☑ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs (widened to `BL-676`: every simulation-driven pose is now render-interpolated, not only the player's aircraft)
 23. ❌ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake (disproven: the ace is authored 79 m inside the hill, and the finding is recorded)
 24. ❌ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
 25. ☑ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
@@ -450,7 +450,7 @@ these aircraft invents data the mission does not author. Two aircraft share the 
 on only one is not a pass. C21 edits `CampaignDirector.cs` and `ObjectiveSites.cs`, which B13 and
 B14 also edit; see the contention notes.
 
-## C22 ◐ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs
+## C22 ☑ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs
 
 **Goal.** In CM12 (C2/M01) the Spruce Goose flies its legs without visible jitter while the player
 formates on it.
@@ -492,7 +492,22 @@ attitude; the Goose's legs run at about 5 to 6 km from the origin, so float roun
 contributor to measure at non-zero heading, not an assumption. Any change to the script seed
 moves other scripted motion and may move goldens; baseline first.
 
-**Diagnosed; the fix is a separate item.** Both of the entry's leads are dead and so is the
+**Landed, widened to `BL-676`: every simulation-driven pose is now drawn between its last two
+simulation steps.** The Goose was one instance of a defect class. `CSVM/src/Utils/RenderPoses.cs`
+is the shared mechanism: a writer calls `Record(node)` after writing a pose, `Restore(tick)` opens
+every physics callback by putting the exact simulation pose back and rolling the pair once per
+tick, and `Draw()` (one caller, `GameSession._Process`) places each node between its last two poses
+at the frame's physics fraction. A subsystem that keeps its own coordinates rather than a node
+reads `Fraction` and interpolates its own pair, which is what carries a projectile round. Wired
+into the anim runtime's whole live motion set (`MotionSet.Tick`, so every motion class is covered
+by one call and a motion added later cannot forget it), zeppelins (`ZeppelinRuntime.Place`),
+surface vehicles (`SurfaceVehicle.WritePose`), scripted-path vehicles
+(`ScriptedPathVehicles.WritePose`), a held airframe on a taxi path (`FlightController.PlaceHeld`,
+which collapses its own pair and whose frame callback skips its own interpolation while held), and
+projectile rounds (`Projectile`'s `PrevPos` plus the render pass). Aircraft already had it and were
+the only thing that did.
+
+**Diagnosed first; the entry's own leads are dead.** Both of the entry's leads are dead and so is the
 re-seat mechanism the Approach was written to confirm. What is left is measured: the Goose's
 authored path is continuous, the runtime that plays it is clean per sim step, and the roughness
 is a render-rate defect. `AnimRuntime` advances scripted motion once per 60 Hz physics tick
@@ -513,16 +528,23 @@ it, no oscillation at any 0.667 s frame boundary and a unit rest scale throughou
 mission on a Realtime clock reports `phys_hz` at a 59.99 mean (58.5 to 61.7) against `fps` at a 97.9 mean
 (16.1 to 122.0), above 60 in 163 of 190 `--perf` windows. So the sim rate is steady and the
 render rate is not, and the two are not tied together for anything except the player's aeroplane.
-The fix is a render-pose pass over the live motion set, which `AnimLab` already implements for
-its own clock (`AnimLab.cs`, `_renderPoses` / `RestoreSimPoses` / `SnapshotSimPoses`); it lands in
-`MotionSet.cs` plus a caller in `GameSession._Process`, neither of which this item owns, and it
-is a session-wide behaviour change rather than a Goose fix. `AnimRuntime.RestOf` is untouched: the
+`AnimLab` already implemented exactly this for its own clock (`AnimLab.cs`, `_renderPoses` /
+`RestoreSimPoses` / `SnapshotSimPoses`) and was the template. `AnimRuntime.RestOf` is untouched: the
 original's decoded seed rule writes each frame's own cubic with absolute setters and reads nothing
 from the node, and every Goose frame carries an absolute translate and rotate, so the seed reaches
 only a channel no Goose script writes. The instrument is kept: naming a node in
 `CSVM_TRACE_SISCRIPT` logs `ScriptPlayback`'s per-step pose, dt, wall delta and drawn-frame count.
-`PT-114` carries the at-the-controls judgement, including the `--max-fps 60` A/B that discriminates
-this reading from any remaining pose question.
+`PT-114` carries the at-the-controls judgement over the Goose and a torpedo, including the
+`--max-fps 60` A/B that discriminates this reading from any remaining pose question.
+
+**What needs nothing, and why.** Turret barrels, propellers, control surfaces, `SpinMotion` targets
+and the shake pivot all write a local rotation with the origin untouched, and the aircraft ones sit
+under a node already drawn interpolated. Puffer particles and smoke are `TopLevel` world-space and
+integrated per rendered frame, with the 60 Hz spawn point smeared along the host's motion by
+`EmitBatches`. World sounds and world lights position an emitter and an `OmniLight3D` with no
+silhouette to step. Beeper tags write no node. Cutscene staging and the whole anim runtime move to
+the frame clock under `SimHeld`, so a cutscene was never affected. The weather dome tracks the
+camera with zero parallax and a deliberate one-frame lag.
 
 **The goose chain's branch is chosen by activation prerequisites, not by a call race.** The trace
 runs `free_the_goose` and then `path2_decelerate`, and `path2_continue` never starts, which is the
@@ -535,8 +557,7 @@ does diverge from the original and that is a real defect for other missions:** `
 advances a callee at t=0 inside the dispatch, while the original appends the callee at the tail of
 the action list its dispatcher walks (`FUN_004ed8c0` into `FUN_004d04e0`, the append at `004d050d`)
 and never runs a callee event during the caller's own tick, so a callee's `INVALIDATE_ANIMATION`
-cannot latch before the caller's later events. That belongs to `AnimRuntime.cs` and wants its own
-item and its own decode page.
+cannot latch before the caller's later events. That is filed as `BL-677` and no code here touches it.
 
 **Verified.** <pending orchestrator run>
 

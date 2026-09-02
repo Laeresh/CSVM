@@ -1288,6 +1288,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             return;
         }
+        // Before the advance, never after: a pose event that seeds a held value from a node's
+        // live transform must read the simulation pose, not the one the last frame drew.
+        RenderPoses.Restore();
         float dt = clock.PhysicsDt(delta);
         if (dt > 0f)
         {

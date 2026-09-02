@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3.Anim;
@@ -89,6 +90,11 @@ internal sealed class MotionSet
             }
 
             _motions[i].Tick(dt);
+            // Central, rather than in each motion class: every transform motion has the same
+            // render problem and the same answer, and one call here cannot be forgotten by a
+            // motion added later. Inert on any clock but the realtime one.
+            if (_motions[i].Channel == MotionChannel.Transform)
+                RenderPoses.Record(_motions[i].Target);
             if (!_motions[i].Finished)
                 continue;
             var done = _motions[i];

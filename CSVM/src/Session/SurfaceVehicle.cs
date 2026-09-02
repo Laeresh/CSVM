@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -182,6 +183,7 @@ public sealed class SurfaceVehicle
     {
         Body.GlobalPosition = new Vector3(position.X, _waterY, position.Z);
         Body.GlobalRotation = new Vector3(0f, Heading, 0f);
+        RenderPoses.Record(Body);
     }
 
     private void PlayWake()
