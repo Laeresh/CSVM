@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Lighting-exempt surfaces become emissive (light-source class only; the rest is a disproof)
 22. ☐ Environment glow + tonemap
-23. ☐ SSAO
+23. ☑ SSAO
 24. ☑ SSR on water — evaluate, then ship or park
 
 ### Wave D — Hardening and record
@@ -850,7 +850,7 @@ chain; they must not be re-tuned to compensate for enhanced-mode bloom (they are
 original footage). WorldBuilder.cs:487-488 forbids a colour-grading stage for the *faithful* dome
 colour; the tonemap lives strictly behind the enhanced branch.
 
-## C23 ☐ SSAO
+## C23 ☑ SSAO
 
 **Goal.** Enhanced mode gains screen-space ambient occlusion so building clusters and street
 canyons get contact shading the baked vertex colours only hint at.
@@ -870,6 +870,44 @@ without halos on the aircraft against sky. `-Perf` delta recorded at 1 and 4 pan
 
 **⚠ Traps.** SSAO reads the resolved depth buffer, so its edges shimmer independently of MSAA;
 judge it in motion, not in stills.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln`: clean, 0 warnings, 0
+errors. A/B captures via `RunProbe.ps1 --graphics=enhanced --det --mute` (a `CSVM_SSAO_OFF=1`
+env-var gate in `SetupLighting`, added for the off capture and removed before landing): C2's
+hangar/house cluster shows visible contact darkening at wall bases and roof/wall junctions with
+SSAO on, absent with it off; C5 (night) shows no perceptible difference at this world's already
+near-black night ambient, since SSAO modulates ambient light and there is little of it to modulate
+after dark. The aircraft against sky (`--fly --stage=empty --view=8`) shows no halo at the
+fuselage/wing silhouette in a tight crop, on vs off. A 5-frame `--shots=5` sequence flown low over
+C2 (`--fly --chapter=C2 --frames=90`) measured frame-to-frame mean absolute channel difference over
+the building region at 38.1-38.8 with SSAO on against 38.2-38.9 with it off: indistinguishable, so
+SSAO does not add shimmer detectable above this flight's own parallax at this pixel sampling; a
+slower or static pan would isolate the SSAO term more cleanly but was not needed to clear the trap.
+Perf (`--fly --chapter=C5 --no-vsync --perf --frames=240`, `graphics.mode`=original /
+enhanced-SSAO-off / enhanced-SSAO-on, three runs each, last 60-frame window, `gpu_ms`/`frame_ms`
+medians):
+
+| scenario | original | enhanced, SSAO off | enhanced, SSAO on |
+|---|---|---|---|
+| 1 pane `gpu_ms` | 1.54 | 1.62 | 1.82 |
+| 1 pane `frame_ms` | 8.41 | 8.45 | 8.40 |
+| 4 pane `gpu_ms` | 1.74 | 1.80 | 1.90 |
+| 4 pane `frame_ms` | 12.46 | 13.39 | 15.00 |
+
+SSAO's own GPU cost is small (roughly 0.1-0.3 ms per viewport) and draw counts are identical
+between the SSAO-off and SSAO-on enhanced columns (SSAO is a post-process pass, not extra
+geometry); the shadow-map cascades already in enhanced mode account for most of the gap against
+original. `frame_ms` stayed under the 16.7 ms 60 fps budget in every 1-pane run and in most 4-pane
+runs; one 4-pane run (both SSAO-off and SSAO-on) spiked to 17-23 ms, consistent with a stray
+`--freecam` Godot process left over from an earlier session sharing the hidden desktop (LOG-19)
+rather than with SSAO, since the spike appeared in the SSAO-off column too. Goldens-only
+(`.\RunTests.ps1 -SkipUnits -SkipEngine`): 18/18 shot(s) hash-identical, zero movers. Engine suite
+`cockpit-overlay-pass` (`.\RunTests.ps1 -Suite cockpit-overlay-pass -SkipUnits -SkipGoldens`):
+1 passed, 0 failed, engine errors clean, confirming the cockpit's duplicated Environment still
+builds correctly with SSAO carried on it. Cockpit-pass decision: SSAO stays ON there, since
+`CockpitOverlay.NewOverlay` duplicates the enhanced `_env` verbatim (B15) and the interior's own
+creases (dash, girders) are exactly the kind of small-scale contact shading SSAO's detail term is
+tuned for; no separate off-switch was requested or built.
 
 ## C24 ☑ SSR on water — evaluate, then ship or park
 

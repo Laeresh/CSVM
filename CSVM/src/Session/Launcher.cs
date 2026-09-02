@@ -88,6 +88,24 @@ public partial class Launcher : Node3D
     private const float EnhancedSsrFadeOut = 2.0f;
     private const float EnhancedSsrDepthTolerance = 0.2f;
 
+    // TUNE, judged at the controls on C2/C5. Godot's own default (1.0 m) reads a building's own
+    // trim but misses the wider contact shading a street canyon wants at this world's scale
+    // (buildings tens of metres tall, streets a similar width); this radius picks up a block's
+    // base and a hangar's corner without darkening open tarmac.
+    private const float EnhancedSsaoRadius = 2.5f;
+
+    // TUNE, judged at the controls: Godot's defaults (intensity 2.0, power 1.5) already read as
+    // grounded contact shading rather than a grey wash at this radius, so both are kept.
+    private const float EnhancedSsaoIntensity = 2.0f;
+    private const float EnhancedSsaoPower = 1.5f;
+
+    // TUNE, Godot defaults: detail keeps small-scale creases (window mullions, girders) from
+    // being swallowed by the coarse term above; horizon and sharpness are the denoise pair that
+    // keeps the depth-buffer edges from shimmering worse than the effect is worth.
+    private const float EnhancedSsaoDetail = 0.5f;
+    private const float EnhancedSsaoHorizon = 0.06f;
+    private const float EnhancedSsaoSharpness = 0.98f;
+
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
     // exists — the same empty list the pre-split root held after a teardown.
     private static readonly List<PlayerRig> NoRigs = new();
@@ -957,8 +975,20 @@ public partial class Launcher : Node3D
             AmbientLightSource = Godot.Environment.AmbientSource.Sky,
             AmbientLightEnergy = 0.9f,
         };
+        // Enhanced mode alone: SSAO reads ambient light, which the faithful path never has, so
+        // it has nothing to modulate there. The cockpit pass duplicates this Environment at build
+        // time (CockpitOverlay.NewOverlay), so its 100 m interior inherits the same settings.
         if (GraphicsMode.Enhanced)
+        {
+            _env.SsaoEnabled = true;
+            _env.SsaoRadius = EnhancedSsaoRadius;
+            _env.SsaoIntensity = EnhancedSsaoIntensity;
+            _env.SsaoPower = EnhancedSsaoPower;
+            _env.SsaoDetail = EnhancedSsaoDetail;
+            _env.SsaoHorizon = EnhancedSsaoHorizon;
+            _env.SsaoSharpness = EnhancedSsaoSharpness;
             EnableWaterReflections(_env);
+        }
         AddChild(new WorldEnvironment { Environment = _env });
     }
 

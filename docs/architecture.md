@@ -5524,6 +5524,11 @@ declares `shadows_disabled` in its shader. The front-culled world needs no `Doub
 the source's visible side is Godot's back face, which is the face the sun sees. `EnableWaterReflections`
 is the same mode gate on the Environment's SSR, for the one glossy population `SceneBuilder` builds;
 what it can and cannot reflect is measured in `docs/PLAN-enhanced-graphics.md` C24.
+`SetupLighting` also sets SSAO on the enhanced `_env` (radius 2.5, intensity 2.0, power 1.5, detail
+0.5, horizon 0.06, sharpness 0.98; all TUNE for this world's street-canyon scale). The faithful path
+never enables it, since SSAO reads ambient light and the unshaded path has none for it to modulate.
+`CockpitOverlay.NewOverlay` duplicates `_env` at build time, so the interior pass inherits the same
+settings automatically.
 Vsync resolves at the same `_Ready` site as the shader clock / `--perf` tick: `display.vsync`
 config key (default true) or `--no-vsync`, the flag always beating the key.
 The config read is unconditional even when the flag already decided, so the key still registers
