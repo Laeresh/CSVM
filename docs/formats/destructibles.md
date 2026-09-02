@@ -210,6 +210,10 @@ inside the definition's own subtree, falling back to `def+0x48` (the `NAME` anch
 name is absent or resolves to nothing ([../org/sequences.md](../org/sequences.md), "The two roots are
 different fields"). `FUN_005abb20` hangs the handler off a list on the node itself (`node+0xbc`), so
 several definitions can register on one object without displacing each other, each on its own node.
+The impact dispatcher `FUN_005abcf0` reads that list off the **struck** node alone: it takes the
+hit record's node (`hit+0x24`, written by `FUN_004c7f50` for whichever node's model the ray met) and
+returns 0 when `node+0xbc` is null. The original never walks a parent chain to find an owner, so a
+round on a piece that registered no handler does nothing at all to the group around it.
 
 > **A hit belongs to the definition whose animation root covers the piece that was struck**, not to
 > the definition that happens to name the group. Two destructible defs anchored on one node are told
@@ -284,6 +288,15 @@ node their own death then hides and a hit on the wreck must still find the pool 
 own-root claim outranks an anchor claim whichever order the two defs register in. `Instance.Anchor`
 stays the animation anchor, so `ANIM_HEALTH` evaluation, the objective marker layer and the AI
 target pool are unaffected by which node the hit resolves through.
+
+The anchor claim reaches only as far as the pool's own piece being in the world. While a live pool's
+damage node is switched off, a climb that arrives at that pool through its anchor alone answers with
+nothing, and the climb stops there rather than continuing up. C2B/M04's Gemini is the case: the
+deploy definition's `RESET_STATE` holds `gunback` and `gun1` inactive and `upper_br_door` shut, so
+the hatch is the only solid geometry over a stowed broadside cannon, and a round on it would
+otherwise drain the cannon's HP through `lbroad11`. Climbing on is worse than stopping, since the
+next claim up is the airship's gasbag. A destroyed pool is exempt: its own death hid the same node,
+and a hit on the wreck still belongs to it.
 
 Two death-sequence shapes the registry's per-instance state has to track beyond the swap above:
 

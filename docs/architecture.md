@@ -1535,9 +1535,12 @@ bootstrap, read by `ANIM_HEALTH` eval, escalated by `ApplyDamageStages`, damaged
 `Resolve(struck)` maps a raycast-hit node back to its instance, climbing to the nearest node a pool
 claims. A pool claims its own DAMAGE NODE (`Register`'s `damageNode`, which
 `AnimRuntime.DamageNodeOf` reads off the def's `ANIMATION_ROOT_NAME` inside that anchor) and its
-anchor only as a fallback, which is how two defs sharing one anchor are told apart; the rule and the
-`def+0x6c` decode behind it are in docs/formats/destructibles.md, "Which node takes the hit".
-Regression: the `campaign-balloon-death` suite. Schema: docs/formats/destructibles.md.
+anchor only as a fallback, which is how two defs sharing one anchor are told apart. That fallback
+answers only while the pool's own damage node stands in the world, so a round on the hatch over a
+stowed broadside cannon reaches no pool; the rule and the `def+0x6c` decode behind it are in
+docs/formats/destructibles.md, "Which node takes the hit" and "Remake node resolution".
+Regression: the `campaign-balloon-death` and `zeppelin-cannon-stowed` suites.
+Schema: docs/formats/destructibles.md.
 `Instance.Reseed(max)` re-seeds a pool from a mission record — the F18 zeppelin zones, where
 `zeppelins.json` hp beats the def's own `HEALTH` — and refuses once damaged, so a late wire-up
 cannot heal a fight in progress. `Instance.Team`, `Instance.Owner` and `Instance.Dormant` are what a mission

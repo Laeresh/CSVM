@@ -934,6 +934,28 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
     controls.
   *Blocks:* nothing tracks the outcome; a missing cone reopens `BL-618`.
 
+### CM14 (C2B/M04) · the Gemini's broadside cannons
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:13
+```
+
+- `PT-110` `[Own]` **A stowed broadside cannon takes no weapon damage, and the same cannon takes it
+  once deployed** (`BL-640`). The Gemini keeps all six left cannons behind shut hatches until the
+  two airships close to 1000 m and its `COMPLETED_ZEPCANNONS` arms them, and only then does a hatch
+  swing and the gun slide out. Fly abeam the Gemini's port side early, pick one `lbroad` hatch and
+  empty a long gun burst into it; then hold off until that cannon deploys against you and put the
+  same burst into the gun itself.
+  *Look for:*
+  - (a) the shut hatch taking hits with no smoke, no fire and no cannon death, so the objective
+    counter does not move;
+  - (b) the deployed gun dying to the same burst, with its fireball and the objective counter
+    stepping on;
+  - (c) how long the wait for the arming is, since the cannons are now immune until they deploy and
+    the mission's third primary wants five of the six.
+  *Blocks:* a stowed cannon that still dies reopens `BL-640`; a deployed one that will not die is a
+  new item.
+
 ### CM18 (C4/M03) · the generator launches
 
 ```powershell
