@@ -1028,6 +1028,21 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   - (c) the paratroopers still dropping and the letterbox/handoff unchanged from before.
   *Blocks:* nothing tracks the outcome; a fail reopens `BL-632`.
 
+- `PT-114` `[Own]` **The Spruce Goose reads smooth from the harbour leg** (`BL-627`). The authored
+  path and the runtime that plays it both measure clean, so what is left to judge is the picture:
+  the Goose's pose is written once per 60 Hz physics tick while the player's own aircraft, and
+  therefore the camera, is drawn between its last two sim poses every rendered frame. Blow the
+  Kowloon gate, then formate on the Goose and hold station beside it from the harbour leg out.
+  *Look for:*
+  - (a) the Goose stepping rather than gliding while the camera moves smoothly, worst when you are
+    close enough for the hull to fill the view;
+  - (b) whether capping the render rate to the physics rate removes it, which is the discriminator:
+    fly the same leg again under `--max-fps 60` and say whether it reads better, the same or worse;
+  - (c) the Goose slowing almost to a stop at the end of the first leg and picking up again, which
+    is the authored `path2_decelerate` waiting on the barge and not a defect.
+  *Blocks:* `BL-627`. A "smooth at 60, stepping at 120" answer is the confirmation that the fix is
+  render interpolation for scripted world nodes; "stepping at both" reopens the diagnosis.
+
 ### CM18 (C4/M03) · the generator launches
 
 ```powershell
