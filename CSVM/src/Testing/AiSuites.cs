@@ -2464,6 +2464,161 @@ internal static class AiSuites
         }
     }
 
+    // C22 (BL-459): a re-arm timer shared by every aircraft flying one airframe DEFINITION,
+    // not restarted on the frame the damaged loop goes silent.
+    [Suite("ai-engine-rearm",
+        "the damaged-engine loop waits out the shared per-definition re-arm timer instead of "
+        + "restarting on the frame it goes silent: nothing swaps below the 3 s floor, and a "
+        + "second aircraft on the SAME airframe def that only starts silent afterward inherits "
+        + "the first one's head start and swaps well short of its own 3 s; the healthy "
+        + "direction keeps restoring on the very same frame throughout")]
+    internal static void AiEngineRearm(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var textures = new TextureArchive(texturesPath);
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        ProjectilePool? pool = null;
+        FlightController? a = null, b = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            // The same per-def cache GameSession.BuildFlightRigs keeps, so two spawns of one
+            // airframe share the same PlaneStats object and, through it, one DamagedEngineTimer.
+            var aiCache = new Dictionary<string, PlaneStats>();
+            PlaneStats AiStatsFor(string plane, string? aiDef)
+            {
+                if (aiCache.TryGetValue(plane, out var cached))
+                    return cached;
+                var loaded = PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef);
+                aiCache[plane] = loaded;
+                return loaded;
+            }
+
+            var spec = SessionSpec.Parse(System.Array.Empty<string>());
+            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var inputs = new AircraftAssemblyResources
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                AiStatsFor = AiStatsFor,
+                PaintRng = new RandomNumberGenerator(),
+                ZrdrPath = ctx.ZrdrPath,
+                StockLoadouts = StockLoadouts.Load(),
+                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                Textures = textures,
+                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            };
+            var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs,
+                new FlightWorldBindings
+                {
+                    Projectiles = live,
+                    Gamez = planesGamez,
+                    Sounds = archive,
+                    SoundDefs = soundDefs,
+                    SoundGroups = soundGroups,
+                },
+                new HumanRosterBindings());
+
+            var posA = new Vector3(0f, 500f, 0f);
+            var posB = new Vector3(600f, 500f, 0f);
+            a = spawner.SpawnAi(new AiSpawn(ctx.PlaneName, posA, posA + Vector3.Forward,
+                AiPilot.HoldingCourse(posA, posA + Vector3.Forward), Team: InstantActionRuntime.EnemyTeam));
+            b = spawner.SpawnAi(new AiSpawn(ctx.PlaneName, posB, posB + Vector3.Forward,
+                AiPilot.HoldingCourse(posB, posB + Vector3.Forward), Team: InstantActionRuntime.EnemyTeam));
+
+            ctx.Check(a.EngineAudio != null && b.EngineAudio != null,
+                $"both AI aircraft built a real engine-audio component");
+            if (a.EngineAudio is not { } engineA || b.EngineAudio is not { } engineB)
+            {
+                return;
+            }
+            engineA.Listeners = () => new[] { posA };
+            engineB.Listeners = () => new[] { posB };
+
+            const float dt = 1f / 60f;
+            var drive = new EngineDrive(0.5f, 0f, 0f);
+            var damagedA = new List<string>();
+            var damagedB = new List<string>();
+            var healthyB = new List<string>();
+            bool wasThreshold = Utils.Log.ConsoleShows("sound", Utils.Log.Level.Debug);
+            try
+            {
+                Utils.Log.Configure("sound:debug");
+                using var sink = Utils.Log.PushConsoleSink(line =>
+                {
+                    if (!line.Contains("slot 0 -> "))
+                    {
+                        return;
+                    }
+                    bool damaged = line.Contains("snd_damagedengine");
+                    bool fromA = line.Contains(a.Name.ToString());
+                    if (damaged && fromA)
+                        damagedA.Add(line);
+                    else if (damaged)
+                        damagedB.Add(line);
+                    else if (!fromA)
+                        healthyB.Add(line);
+                });
+
+                // Below a quarter health: the mask goes nonzero this frame, and the original does
+                // not restart the damaged loop on the frame the swap is decided.
+                engineA.Update(dt, drive, 0.5f, 0.1f);
+                ctx.Check(damagedA.Count == 0,
+                    $"the damaged loop does not swap on the frame the damage is decided (got {damagedA.Count})");
+
+                // A alone, strictly under the 3 s floor: no possible drawn threshold is below it,
+                // so this is deterministic whatever the run's seed draws.
+                for (int i = 1; i < 174; i++)
+                {
+                    engineA.Update(dt, drive, 0.5f, 0.1f);
+                }
+                ctx.Check(damagedA.Count == 0,
+                    $"…and still not after {174 * dt:0.00} s of A alone, short of the 3 s floor (got {damagedA.Count})");
+
+                // B joins damaged now, inheriting A's 2.9 s head start on the SHARED timer. It
+                // must cross even the highest possible threshold (5 s) well inside its OWN 3 s
+                // floor, proof the timer is shared, not per-instance.
+                int bFrames = 0;
+                for (; bFrames < 180 && damagedB.Count == 0; bFrames++)
+                {
+                    engineB.Update(dt, drive, 0.5f, 0.1f);
+                }
+                ctx.Check(damagedB.Count == 1 && bFrames < 180,
+                    $"B swaps after only {bFrames * dt:0.00} s of its OWN ticking, short of the 3 s floor a fresh timer needs (lines={damagedB.Count})");
+                ctx.Check(damagedA.Count == 0,
+                    $"…and A, left untouched since its own 2.9 s, still has not swapped ({damagedA.Count})");
+
+                // The healthy direction is untouched: it restores on the very same frame, no
+                // re-arm wait. A hard cut, never the crossfade the plan's own trap rejects.
+                engineB.Update(dt, drive, 0.5f, 0.9f);
+                ctx.Check(healthyB.Count == 1,
+                    $"the healthy restore swaps back on the same frame, unaffected by the timer (got {healthyB.Count})");
+            }
+            finally
+            {
+                Utils.Log.Configure(wasThreshold ? "sound:debug" : "sound:info");
+            }
+        }
+        finally
+        {
+            a?.Free();
+            b?.Free();
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
     // The most recent one-shot player under a WorldSounds node.
     internal static AudioStreamPlayer3D? LastOneShotPlayer(WorldSounds sounds)
     {

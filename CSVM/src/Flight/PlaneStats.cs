@@ -80,6 +80,16 @@ public sealed class TurretMount
     public bool FirstPerson;
 }
 
+/// <summary>The damaged-engine re-arm timer's shared state: one instance per loaded airframe
+/// DEFINITION, the original's own field, not the instance. <see cref="PlaneStats"/>'s per-spawn
+/// clones carry this SAME reference forward rather than copying it. So every aircraft flying one
+/// airframe def reads and writes the same counter and the same drawn threshold.
+/// Decode: docs/formats/vehicle.md, "What makes an airframe damaged".</summary>
+public sealed class DamagedEngineTimer
+{
+    public float Elapsed;
+}
+
 /// <summary>
 /// Flight parameters for one player aircraft, pulled from the zrdr extraction:
 /// vehicle.json (per-plane 'dynamics' block, resolved through the 'kind_of'
@@ -310,6 +320,11 @@ public sealed class PlaneStats
     public float DamagedEnginePitchHi = 1f;
 
     public bool DamagedEnginePitchRandom;
+
+    /// <summary>The shared re-arm timer this airframe definition's damaged loop waits out
+    /// (<see cref="DamagedEngineTimer"/>). Set once here so every clone below carries the SAME
+    /// instance forward; do not reassign it in a <c>With*</c> method.</summary>
+    public DamagedEngineTimer DamagedTimer = new();
 
     /// <summary>The plane's damageable sections ('destroyable_parts', nearest def in
     /// the kind_of chain). Empty when the def has none (damage model disabled).</summary>

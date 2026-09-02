@@ -76,11 +76,10 @@ public sealed partial class AiEngineAudio : Node3D
 
     /// <summary>Per-frame drive, same arguments as <see cref="FlightAudio.Update"/> and called from
     /// the same place, so both paths run off the sim clock. Beyond the cull both slots stop; back
-    /// inside, they start again.</summary>
+    /// inside, a healthy loop starts again but a damaged one waits out the shared re-arm timer.</summary>
     public void Update(float dt, in EngineDrive drive, float speedFrac, float healthFrac,
         bool engineDead = false)
     {
-        _ = dt;
         SetEngineDamaged(EngineAudioCurves.EngineDamaged(healthFrac, engineDead));
         float distSq = NearestListenerDistanceSq();
         bool culled = distSq > EngineAudioCurves.CullDistanceSq;
@@ -98,7 +97,9 @@ public sealed partial class AiEngineAudio : Node3D
             _whine?.Stop();
             return;
         }
-        if (_engine != null)
+        // A damaged loop that stopped (this cull, or its stream ending) waits out the re-arm
+        // timer. One still playing skips straight to UpdateLoop below.
+        if (_engine != null && (!_engineDamaged || _engine.Playing || ArmDamagedLoop(_engine, dt)))
         {
             var (pitch, volume) = EngineAudioCurves.Engine(_stats, drive, _enginePitchMul);
             UpdateLoop(_engine, volume * (_engineDamaged ? _damagedVol : _engineVol), pitch);
@@ -177,9 +178,9 @@ public sealed partial class AiEngineAudio : Node3D
             : 0f;
     }
 
-    // The engine slot's damage swap, decided by the same helper the own-ship path uses so the two
-    // cannot drift. An AI rig has no selected view, so it never passes firstPerson and never reads
-    // cockpit_engine_sound.
+    // The engine slot's damage EDGE, decided by the same helper the own-ship path uses so the two
+    // cannot drift. Only the healthy direction swaps here. The damaged direction just silences the
+    // slot; Update's ArmDamagedLoop waits out the re-arm timer and swaps it back on.
     private void SetEngineDamaged(bool damaged)
     {
         damaged &= _damagedStream != null;
@@ -188,20 +189,35 @@ public sealed partial class AiEngineAudio : Node3D
             return;
         }
         _engineDamaged = damaged;
-        var (name, pitchMul) = EngineAudioCurves.EngineDefFor(
-            _stats, damaged, Rng.Stream(Rng.FlightAudio));
-        _enginePitchMul = pitchMul;
-        var stream = damaged ? _damagedStream : _engineStream;
-        if (stream == null)
+        if (damaged)
         {
+            _engine.Stop();
             return;
         }
+        var (name, pitchMul) = EngineAudioCurves.EngineDefFor(_stats, false, Rng.Stream(Rng.FlightAudio));
+        _enginePitchMul = pitchMul;
         bool wasPlaying = _engine.Playing;
         _engine.Stop();
-        _engine.Stream = stream;
+        _engine.Stream = _engineStream;
         if (wasPlaying)
             _engine.Play();
         Log.Debug("sound", $"ai engine {Aircraft()} slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
+    }
+
+    // Ticks the shared re-arm timer one frame. Once it fires, swaps the damaged stream onto the
+    // slot with a freshly drawn pitch multiplier and returns true.
+    private bool ArmDamagedLoop(AudioStreamPlayer3D engine, float dt)
+    {
+        var rng = Rng.Stream(Rng.FlightAudio);
+        if (!EngineAudioCurves.AdvanceDamagedRearm(_stats.DamagedTimer, dt, rng.Randf()))
+        {
+            return false;
+        }
+        var (name, pitchMul) = EngineAudioCurves.EngineDefFor(_stats, true, rng);
+        _enginePitchMul = pitchMul;
+        engine.Stream = _damagedStream;
+        Log.Debug("sound", $"ai engine {Aircraft()} slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
+        return true;
     }
 
     // RANGE is [full-volume distance, audible distance], mapped onto Godot's inverse-distance curve

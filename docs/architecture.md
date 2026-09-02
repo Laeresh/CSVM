@@ -2991,6 +2991,11 @@ Two flavours of one airframe: `Load` resolves everything down the player chain, 
   roster block's own `init_health`/`armor` override (aiv slots 7/66) to `VehicleHealth`/
   `VehicleArmor` before `WithEnemyDurability`; both arguments arrive already gated, so null always
   means unset, never an authored zero (`docs/org/vehicleDamage.md`).
+`DamagedTimer` (a `DamagedEngineTimer`, one mutable `Elapsed` field) is the damaged-engine
+re-arm timer's shared state (C22, `docs/formats/vehicle.md` "What makes an airframe damaged").
+⚠ Every `With*` method's `MemberwiseClone` carries the SAME reference forward from the cached
+def, on purpose: it is what makes every aircraft flying one airframe share one counter, as the
+original's own def field does. Do not reassign it in a new `With*` method.
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a
@@ -3298,6 +3303,9 @@ the swap's one-off pitch draw), `Engine` and `Whine` (each slot's pitch and gain
 per-frame routine for the player and every AI vehicle; the decode is in
 [formats/vehicle.md](formats/vehicle.md), "The engine audio's slots" and "What makes an airframe
 damaged". The damaged swap is a health-fraction gate, not a took-a-hit one.
+`AdvanceDamagedRearm` is C22's re-arm timer, pure and testable off a `DamagedEngineTimer` and a
+caller-drawn `u` rather than a live RNG (`DamagedPitchMul`'s own reason): only `AiEngineAudio`
+reaches it today, since the own-ship path is never culled and so never silences a playing loop.
 The engine slot's parameter is **not the throttle lever alone**: `DriveFrom` reads a turn rate off
 the two body axes perpendicular to the nose and a climb attitude off the orientation, and `Engine`
 adds them to each curve's NORMALISED parameter under a [0, 1.5] clamp before the curve maps it out.
@@ -3316,6 +3324,14 @@ cannot be screenshot-verified, so the `sound` log carries the whole observable: 
 aircraft at build naming what each slot resolved to (or that there was no archive at all), then one
 per cull transition and one per damaged-engine swap. The pair is what separates "silent past the
 cull" from "silent because the definition never resolved".
+On the healthy->damaged edge, `SetEngineDamaged` stops the slot-0 handle but does not swap it;
+`Update`'s `ArmDamagedLoop` is what waits out the shared re-arm timer
+(`PlaneStats.DamagedTimer`, `EngineAudioCurves.AdvanceDamagedRearm`) and performs the swap once it
+fires (docs/formats/vehicle.md, "What makes an airframe damaged"). ⚠ The timer sits on the
+airframe DEFINITION: `PlaneStats`'s per-spawn `With*` clones carry the SAME `DamagedTimer`
+reference forward from the cached def, so every aircraft flying one airframe shares one counter
+and one draw, and a damaged loop that is still playing never re-enters it. The damaged->healthy
+direction stays immediate. Proven by `ai-engine-rearm` and `EngineAudioModelTests`.
 
 ## src/Effects/Puffer.cs
 The original engine's billboard-particle emitter, data-driven from `PUFFER_STATE` blocks
