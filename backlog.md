@@ -1275,6 +1275,34 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   first. *Cross-refs:* `analysis/alpha-classification/FINDINGS.md`, which carries the decode and the
   install-wide census; the coastline commit that filed this (`git log --grep=SoftAlphaCoastline`).
 
+- `BL-683` `[Bug]` **The faithful path's aircraft ambient cannot be driven by the mission, because
+  `AmbientLightEnergy` never reaches the shader.** *Evidence (traced and measured):* the faithful
+  arm writes the zone's authored `SUNLIGHT_AMBIENT` onto the Environment, but
+  `AmbientLightSource.Sky` at full sky contribution makes Godot take the ambient off the sky
+  cubemap scaled by the background energy multiplier, so the value is inert. Taking the launcher's
+  0.9 to 0.0 left all 18 goldens byte-identical, while the same experiment on the sun, 1.6 to 0.5,
+  moved 7 ([`docs/verification.md`](docs/verification.md) `WORLD-32`). So an aircraft's fill light
+  is a daytime procedural sky at night as well as by day, and only the sun half of the authored
+  pair is visible. *Fix shape:* decide whether the faithful Environment should take a
+  mission-coloured ambient instead of a sky-sourced one, and what that does to the fullbright world
+  it sits in. *⚠ Traps:* this is a rendering-design question and not a bug to patch by turning the
+  energy up, since the energy is not read at all. Do not reach for `csky_world_light`, which is the
+  fullbright world's scalar and is `CAP-11`-calibrated on terrain, not on the aircraft. The sun half
+  is landed and works; only the ambient half is inert. *Cross-refs:* `BL-332`'s closing record in
+  `docs/PLAN-M5-polish-10.md` `B13`, `CAP-54`.
+
+- `BL-684` `[Bug]` **The cockpit pass's light copies the sun's energy and colour but never its
+  bearing, so the interior is lit from Godot's default direction in every mission.** *Evidence
+  (traced):* `CockpitOverlay.NewOverlay` clones the session sun's `LightEnergy`, `LightColor` and
+  shadow settings, and `WeatherRig.RegisterExtraLighting` mirrors the per-zone energies onto that
+  clone, but neither copies `Rotation`. The zone apply points the session sun at the mission's
+  `SUNLIGHT_ORIENTATION` and the clone keeps the launcher default, in both graphics modes.
+  *Fix shape:* mirror the bearing wherever the energies are already mirrored, so the interior and
+  the airframe agree about where the sun is. *⚠ Traps:* the interior draws in its own
+  origin-relative pass, so check the bearing in that pass's own basis rather than assuming the
+  world rotation transfers unchanged. Pre-existing and found while wiring the energy mirror, so it
+  is not a regression of that work. *Cross-refs:* `BL-332`'s closing record, `docs/org/weather.md`.
+
 ## Effects & animation runtime
 
 - `BL-674` `[Bug]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
@@ -1475,6 +1503,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   correct. Do not "fix" the flag to match the observed state.
   *Cross-refs:* [`docs/formats/anim-definitions.md`](docs/formats/anim-definitions.md) (the
   prerequisite's census and both parse paths).
+
+- `BL-682` `[Bug]` **`TemplateStage` keeps freed nodes as dictionary KEYS in two identity-keyed
+  maps, the same shape of fault the name resolver had.** *Evidence (traced):* `_slotOfNode`
+  (`TemplateStage.cs:144`, filled by `SlotOf` for every anchor it is asked about) and the inner
+  dictionaries of `_callerSlots` (`:228`) are keyed by the same `Node3DIdentity` comparer. Both
+  guard the ARGUMENT with `_isValid` and never the stored keys, and nothing sweeps them, so a freed
+  call-site anchor on a pooled runtime leaves a dead key. The pooled runtimes are the world-effects
+  stage and the per-player crash rigs. *Fix shape:* the sweep `NameResolver.DropFreed` already
+  implements, applied wherever a staged subtree is freed: rebuild the maps rather than removing
+  from them, since a `Remove` hashes the dead key that is the dereference being avoided.
+  *⚠ Traps:* **no failure is observed yet**, so this is a traced lead and not a symptom, and it must
+  not be "confirmed" by re-running a suite until it throws. Read a stale-row count directly, the way
+  `AnimRuntime.FreedNodeRows` does, because a fault needing a hash collision fires on a minority of
+  runs ([`docs/verification.md`](docs/verification.md) `INSTR-38`). Do not guard the comparer's
+  `Equals` with a liveness check and call it fixed: that turns a loud exception into a later lookup
+  answering with the wrong node. *Cross-refs:* `BL-679`'s closing record in
+  `docs/PLAN-M5-polish-10.md` `C24`, `docs/plans/PLAN-template-stage.md`.
 
 ## Audio
 
