@@ -3,16 +3,21 @@ using System;
 namespace CSVM.Utils;
 
 /// <summary>
-/// The opt-in enhanced-lighting mode's config key, modeled on <see cref="EffectsLevel"/>: a
+/// The opt-in enhanced-lighting mode's setting, modeled on <see cref="EffectsLevel"/>: a
 /// <c>graphics.*</c> word read once at launch and resolved to the single boolean scene builders
-/// consult. A future options-store layer (the menu plan's process-wide settings file) is the
-/// intended future source of this key's user-facing value; readers stay on <see cref="Enhanced"/>
-/// rather than on Config so that swap costs nothing here.
+/// consult. Its user-facing home is <see cref="OptionsStore"/>'s <c>graphicsMode</c> field, which
+/// both Options screens write; the <c>graphics.mode</c> config key stays under it as the
+/// hand-edited source. Readers take <see cref="Enhanced"/> rather than either, so the layering is
+/// this module's business alone.
 /// </summary>
 public static class GraphicsMode
 {
-    /// <summary>The config key: <c>"original"</c> or <c>"enhanced"</c>.</summary>
+    /// <summary>The config key, and the word both the flag and the saved option carry:
+    /// <c>"original"</c> or <c>"enhanced"</c>.</summary>
     public const string Key = "graphics.mode";
+
+    /// <summary>The opt-in word, the counterpart of <see cref="Default"/>.</summary>
+    public const string EnhancedWord = "enhanced";
 
     /// <summary>The shipped default: the faithful recreation, unchanged from every prior build.</summary>
     public const string Default = "original";
@@ -40,13 +45,16 @@ public static class GraphicsMode
         }
     }
 
-    /// <summary>Resolve <see cref="Enhanced"/> once: <paramref name="cliOverride"/> (from
-    /// <c>--graphics=</c>) wins outright when given, since it is asked for explicitly and must
-    /// survive a <c>--det</c> run's <see cref="Config.ClearOverrides"/>; otherwise the config key,
-    /// with the default rule EffectsLevel uses (an unknown word warns and falls back).</summary>
-    public static bool Resolve(string? cliOverride)
+    /// <summary>Resolve <see cref="Enhanced"/> once, in the order the presentation option uses:
+    /// <paramref name="cliOverride"/> (<c>--graphics=</c>), then <paramref name="savedOption"/>
+    /// (the Options screens' saved word), then the <see cref="Key"/> config key, then
+    /// <see cref="Default"/>. An unknown word at any layer warns and falls back.
+    /// ⚠ The caller passes no <paramref name="savedOption"/> under <c>--det</c>: it is one
+    /// machine's state, exactly what a deterministic capture must not depend on.</summary>
+    public static bool Resolve(string? cliOverride, string? savedOption = null)
     {
-        string mode = cliOverride ?? Config.GetString(Key, Default);
+        string mode = cliOverride
+            ?? (string.IsNullOrEmpty(savedOption) ? Config.GetString(Key, Default) : savedOption);
         if (!TryParse(mode, out bool enhanced))
         {
             Log.Warn("world", $"config {Key}={mode} is not original/enhanced; using {Default}");

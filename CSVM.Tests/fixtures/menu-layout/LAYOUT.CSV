@@ -1,0 +1,36 @@
+;Probe layout, hand-authored from docs/formats/menu-layout.md. Invented content only.
+;ID=B,ArtPath,X,Y,Z,ResID,ScriptToExe,ScriptPri,EndScript,Left,Top,Right,Bottom,Style,Checked,[colours]
+:a stray line with no equals sign, which the shipped file also has
+
+[GLOBALVARS]
+G1=DISABLED,0xFFBCBCBC
+G2=ACTIVE,0xFFFFFFFF
+G3=ROLLOVER,0xFFEEEEEE
+G4=DEPRESSED,0xFF000000
+G5=PROBE_UP,PR_B_ScrollUp.png
+G6=PROBE_DOWN,PR_B_ScrollDown.png
+G7=PROBE_BAR,PR_B_ScrollBar.png
+G8=ROWH,15
+
+[@ProbeMain@]
+V1=ROWH,20
+V2=TITLEY,44
+V3=PLAQUE,PR_B_Plaque.png
+
+PR_BACKGROUND=P,PR_BackGround.png,0,0,1,1,0,1,0
+PR_T_TITLE=T,IDS_PR_TITLE,120,<TITLEY>,0,200,20,0xFF102030,1
+PR_T_HINT	=T,,120,80,0,200,<ROWH>,0xFF102030,0
+PR_B_START=B,PR_B_Start.png,40,300,0,0,ProbeOptions,0x1000,1,,,,,,
+PR_B_QUIT=B,<PLAQUE>,40,340,0,IDS_PR_QUIT,,0x1020,0,,,,,,,<DISABLED>,<ACTIVE>,<ROLLOVER>,<DEPRESSED>
+PR_B_SOUND=B,PR_B_Check8States.png,40,380,0,IDS_PR_SOUND,,,,,,,,1,0
+PR_L_ITEMS=L,<PROBE_BAR>,<PROBE_UP>,<PROBE_DOWN>,60,120,0,300,<ROWH>,7
+PR_M_FLAG=M,ProbeFlag.MPG,0,0,0,250,250,0,0
+
+[@ProbeOptions@]
+V1=DROPX,90
+
+PO_BACKGROUND=P,PO_BackGround.png,0,0,1,1,0,1,0
+PO_D_QUALITY=D,<PROBE_BAR>,<PROBE_UP>,<PROBE_DOWN>,<PROBE_UP>,<PROBE_DOWN>,<DROPX>,200,0,144,<ROWH>,4
+PO_B_BACK=B,PR_B_Plaque.png,40,500,0,IDS_PR_MISSING,ProbeMain,0x1000,1,,,,,,,
+PO_T_RUNTIME=T,!,10,20,0,100,<NOSUCHMACRO>,0xFF000000,0
+PO_X_BOGUS=X,1,2,3

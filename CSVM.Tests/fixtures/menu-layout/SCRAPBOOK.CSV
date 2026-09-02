@@ -1,0 +1,5 @@
+;Probe scrapbook, hand-authored. Invented content only.
+[SCRAPBOOK]
+;Mission_Spread_Item=Objective,ResourceID,ImageName,ImageType,X,Y,Alpha,Width,Height,DrawOrder,"Left,Top,Right,Bottom",Zoom,ZoomX,ZoomY,TitleResID,TextResID
+1_2_3=0,0,PR_P_Scrap1,PJ,10,20,2,0,0,80,"11,22,33,44",A,120,30,IDS_PR_TITLE,IDS_PR_QUIT
+1_2_4=0,0,PR_P_Scrap2,P0,30,40,2,0,0,60,"0,0,0,0",M,0,0,0,0

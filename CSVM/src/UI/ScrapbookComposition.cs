@@ -39,6 +39,11 @@ public readonly record struct ScrapbookScrap(
 
     /// <summary>The inset image's file name for the zoom view.</summary>
     public string ZoomFileName => $"{ImageName}.{ZoomExtension}";
+
+    /// <summary>The row's own clickable region, the quoted <c>Left,Top,Right,Bottom</c> column, as
+    /// an authored rectangle; null when the row authors <c>0,0,0,0</c>, which a pointer-driven
+    /// presentation then answers with the picture's own bounds.</summary>
+    public (float X, float Y, float Width, float Height)? Region { get; init; }
 }
 
 /// <summary>One zoom family's three text boxes (title, caption, body), <c>LAYOUT.CSV</c>'s
@@ -295,7 +300,31 @@ public static class ScrapbookComposition
             zoom, zoomX, zoomY, caption, title, text)
         {
             ZoomExtension = ExtensionOf(imageType, 1),
+            Region = ParseRegion(fields[10]),
         };
+    }
+
+    // The clickable region as Left,Top,Right,Bottom; an all-zero or malformed field is no region.
+    private static (float X, float Y, float Width, float Height)? ParseRegion(string field)
+    {
+        var parts = field.Split(',');
+        if (parts.Length != 4)
+        {
+            return null;
+        }
+
+        var edges = new float[4];
+        for (int i = 0; i < 4; i++)
+        {
+            edges[i] = ParseFloat(parts[i]);
+        }
+
+        if (edges[2] <= edges[0] || edges[3] <= edges[1])
+        {
+            return null;
+        }
+
+        return (edges[0], edges[1], edges[2] - edges[0], edges[3] - edges[1]);
     }
 
     // 7_1_2 (SB_07_01_ilsanote) ships ZoomX/ZoomY blank despite a real Zoom letter; not traced

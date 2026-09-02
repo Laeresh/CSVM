@@ -5,6 +5,7 @@ using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
 using CSVM.UI;
+using CSVM.UI.Menu;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -15,14 +16,14 @@ namespace CSVM.Tests;
 /// price with the special-plane and two-plane floor refusals, and the two wallet-free doors (a
 /// null <see cref="HangarFlow.Campaign"/>) never consult any of it.
 /// </summary>
-public class HangarCampaignContextTests : IDisposable
+public class CampaignWalletTests : IDisposable
 {
     private readonly string _planesDir;
     private readonly string _profilesDir;
     private readonly CustomPlaneStore _planes;
     private readonly CampaignProfileStore _profiles;
 
-    public HangarCampaignContextTests()
+    public CampaignWalletTests()
     {
         _planesDir = Path.Combine(Path.GetTempPath(), "csvm-campaign-planes-" + Guid.NewGuid().ToString("N"));
         _profilesDir = Path.Combine(Path.GetTempPath(), "csvm-campaign-profiles-" + Guid.NewGuid().ToString("N"));
@@ -49,7 +50,7 @@ public class HangarCampaignContextTests : IDisposable
     public void BuyIsRefusedUnderFunds()
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
-        var campaign = new HangarCampaignContext(_profiles, profile, _planes);
+        var campaign = new CampaignWallet(_profiles, profile, _planes);
         var flow = new HangarFlow(_planes, UiStrings.Empty, campaign: campaign);
         flow.Accept(); // New Plane
         flow.Scratch.Airframe = 5; // Devastator: availability 1, so a fresh profile clears the threshold
@@ -71,7 +72,7 @@ public class HangarCampaignContextTests : IDisposable
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
         profile.Funds = 1_000_000;
-        var campaign = new HangarCampaignContext(_profiles, profile, _planes);
+        var campaign = new CampaignWallet(_profiles, profile, _planes);
         Assert.False(campaign.IsAirframeAvailable(2)); // Balmoral, availability 3
 
         var flow = new HangarFlow(_planes, UiStrings.Empty, campaign: campaign);
@@ -95,7 +96,7 @@ public class HangarCampaignContextTests : IDisposable
         var profile = CampaignProfileDef.NewProfile("Zachary");
         profile.Funds = 10_000;
         profile.MissionsCompleted = 20; // clears every airframe's threshold
-        var campaign = new HangarCampaignContext(_profiles, profile, _planes);
+        var campaign = new CampaignWallet(_profiles, profile, _planes);
 
         var flow = new HangarFlow(_planes, UiStrings.Empty, campaign: campaign);
         flow.Accept();
@@ -120,7 +121,7 @@ public class HangarCampaignContextTests : IDisposable
         var profile = CampaignProfileDef.NewProfile("Zachary");
         profile.Funds = 10_000;
         profile.MissionsCompleted = 20;
-        var campaign = new HangarCampaignContext(_profiles, profile, _planes);
+        var campaign = new CampaignWallet(_profiles, profile, _planes);
 
         var flow = new HangarFlow(_planes, UiStrings.Empty, campaign: campaign);
         flow.Accept();
@@ -147,7 +148,7 @@ public class HangarCampaignContextTests : IDisposable
     public void SellIsRefusedAtTheTwoPlaneFloor()
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
-        var campaign = new HangarCampaignContext(_profiles, profile, _planes);
+        var campaign = new CampaignWallet(_profiles, profile, _planes);
 
         Assert.False(campaign.CanSell("Gypsy Magic"));
         Assert.False(campaign.Sell("Gypsy Magic"));
@@ -163,7 +164,7 @@ public class HangarCampaignContextTests : IDisposable
         var profile = CampaignProfileDef.NewProfile("Zachary");
         profile.Planes.Add(new OwnedPlane { Name = "Jumping Jane", Airframe = 2, Special = true });
         profile.Planes.Add(new OwnedPlane { Name = "Extra", Airframe = 10 });
-        var campaign = new HangarCampaignContext(_profiles, profile, _planes);
+        var campaign = new CampaignWallet(_profiles, profile, _planes);
 
         Assert.True(campaign.IsSpecial("Jumping Jane"));
         Assert.False(campaign.CanSell("Jumping Jane"));
@@ -249,7 +250,7 @@ public class HangarCampaignContextTests : IDisposable
         var profile = CampaignProfileDef.NewProfile("Zachary");
         profile.Planes.Add(new OwnedPlane { Name = "Spare", Airframe = 10 });
         _planes.Save(new CustomPlaneDef { Name = "Spare", Airframe = 10, Engine = 0 });
-        var campaign = new HangarCampaignContext(_profiles, profile, _planes);
+        var campaign = new CampaignWallet(_profiles, profile, _planes);
         var flow = new HangarFlow(_planes, UiStrings.Empty, campaign: campaign);
         int price = campaign.SellPrice("Spare");
         Assert.True(price > 0);
@@ -344,7 +345,7 @@ public class HangarCampaignContextTests : IDisposable
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
         profile.Funds = 10_000;
-        var campaign = new HangarCampaignContext(_profiles, profile, _planes);
+        var campaign = new CampaignWallet(_profiles, profile, _planes);
 
         campaign.Purchase("Gypsy Magic", 7, 500);
 
@@ -387,5 +388,5 @@ public class HangarCampaignContextTests : IDisposable
     }
 
     private HangarFlow CampaignFlow(CampaignProfileDef profile) =>
-        new(_planes, UiStrings.Empty, campaign: new HangarCampaignContext(_profiles, profile, _planes));
+        new(_planes, UiStrings.Empty, campaign: new CampaignWallet(_profiles, profile, _planes));
 }

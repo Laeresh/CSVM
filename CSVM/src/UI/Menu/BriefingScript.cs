@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Mech3;
 
-namespace CSVM.UI;
+namespace CSVM.UI.Menu;
 
 /// <summary>The reveal script's opcode vocabulary, censused across all 24 mission states
 /// (docs/formats/briefing.md). No other opcode occurs, so an unknown one is a reader bug.</summary>

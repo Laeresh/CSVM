@@ -35,8 +35,8 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
     // authored ZoomX/ZoomY.
     private const float GrimeX = 40f;
     private const float GrimeY = 16f;
-    private const float GrimeInsetX = GrimeX + 10f;
-    private const float GrimeInsetY = GrimeY + 8f;
+    private const float GrimeInsetDx = 10f;
+    private const float GrimeInsetDy = 8f;
 
     private static readonly BoardArt GrimeFrame =
         new(BoardArtLibrary.Ui, "DZ_ZOOMgrimeframe.png");
@@ -79,9 +79,11 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
             {
                 if (Flow.CapturePath(scrap) is { } path)
                 {
-                    pictures.Add(new BoardPicture(GrimeFrame, GrimeX, GrimeY));
+                    var (grimeX, grimeY) = Flow.Layout.At(CampaignLayout.ZoomSection, "SBZ_GRIME", GrimeX, GrimeY);
                     pictures.Add(new BoardPicture(
-                        new BoardArt(BoardArtLibrary.Loose, path), GrimeInsetX, GrimeInsetY));
+                        Flow.Layout.Art(CampaignLayout.ZoomSection, "SBZ_GRIME", GrimeFrame), grimeX, grimeY));
+                    pictures.Add(new BoardPicture(
+                        new BoardArt(BoardArtLibrary.Loose, path), grimeX + GrimeInsetDx, grimeY + GrimeInsetDy));
                 }
 
                 return pictures;
@@ -94,20 +96,28 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
         }
     }
 
-    /// <inheritdoc/>
+    /// <summary>The scrap's words at the zoom family's three boxes, the decoded layout's
+    /// <c>SBZ_T_*</c> rows first and <c>LAYOUT.CSV</c>'s own read of the same rows where the
+    /// layout is absent.</summary>
     public override IReadOnlyList<BoardLine> Captions
     {
         get
         {
-            if (Scrap() is not { } scrap || ScrapbookComposition.ZoomFamily(Flow.DataRoot, scrap.Zoom) is not { } family)
+            if (Scrap() is not { } scrap)
+            {
+                return Array.Empty<BoardLine>();
+            }
+
+            var family = Flow.Layout.ZoomFamily(scrap.Zoom) ?? ScrapbookComposition.ZoomFamily(Flow.DataRoot, scrap.Zoom);
+            if (family is not { } boxes)
             {
                 return Array.Empty<BoardLine>();
             }
 
             var lines = new List<BoardLine>();
-            AddIfPresent(lines, Words(scrap.TitleKey), family.TitleX, family.TitleY, family.TitleWidth, TitleFont, BoardInk.Heading);
-            AddIfPresent(lines, Words(scrap.CaptionKey), family.CaptionX, family.CaptionY, family.CaptionWidth, BodyFont, BoardInk.Row);
-            AddIfPresent(lines, Words(scrap.TextKey), family.TextX, family.TextY, family.TextWidth, BodyFont, BoardInk.Row);
+            AddIfPresent(lines, Words(scrap.TitleKey), boxes.TitleX, boxes.TitleY, boxes.TitleWidth, TitleFont, BoardInk.Heading);
+            AddIfPresent(lines, Words(scrap.CaptionKey), boxes.CaptionX, boxes.CaptionY, boxes.CaptionWidth, BodyFont, BoardInk.Row);
+            AddIfPresent(lines, Words(scrap.TextKey), boxes.TextX, boxes.TextY, boxes.TextWidth, BodyFont, BoardInk.Row);
             return lines;
         }
     }

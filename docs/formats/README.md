@@ -76,6 +76,8 @@ in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries)
 ### Presentation and UI
 
 - [hud.md](hud.md), [rof.md](rof.md), [strings.md](strings.md), and [briefing.md](briefing.md).
+- [menu-layout.md](menu-layout.md) — `LAYOUT.CSV`, the authored widget geometry of every
+  single-player menu screen, and the decoded `menu_layout.json` extraction emits from it.
 - [campaign-screens.md](campaign-screens.md) — the campaign GUI scripts: profile, cabin, chapter
   intro, flight check, and ammo selection.
 - [cinemas.md](cinemas.md) — the shipped `.mpg` cinemas, their container and codecs, and how CSVM

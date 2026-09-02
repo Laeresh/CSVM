@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Session;
+using CSVM.UI.Menu;
 
 namespace CSVM.UI;
 
@@ -32,11 +33,14 @@ internal readonly record struct PlaneRow(PlaneRowKind Kind, int Slot = 0);
 public sealed class CampaignPlaneSelectionPage : CampaignPage
 {
     // The two crew slots, and the layout's own y for each block: PS_D_PILOTPLANE at 132 against
-    // PS_D_WINGPLANE at 350, every other widget of the pair the same 218 pixels apart.
+    // PS_D_WINGPLANE at 350, every other widget of the pair the same 218 pixels apart. ⚠ Except
+    // PS_T_WINGPLANE, authored at 323; the wingman's plane line is pinned at the pilot's 106 + 218.
     private const int Slots = 2;
     private const float SlotDrop = 218f;
 
-    // The authored geometry of one crew slot's block, the pilot's row of [@PlaneSelection@].
+    // The authored geometry of one crew slot's block, the pilot's rows of [@PlaneSelection@], as
+    // the fallback under each row read; the wingman's rows are the same keys with a W.
+    private const string Section = CampaignLayout.PlaneSelectionSection;
     private const float ComboX = 138f;
     private const float ComboY = 132f;
     private const float ComboWidth = 271f;
@@ -54,7 +58,14 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     private const float WeaponsX = 578f;
     private const float WeaponsWidth = 160f;
 
-    // The screen's own chrome, at PS_T_TITLE and PS_T_MISSIONINFO.
+    // The screen's own chrome, at PS_T_TITLE and PS_T_MISSIONINFO. ⚠ The title is drawn
+    // left-justified where its row says centred in its 190; the justification is pinned.
+    private const float TitleX = 132f;
+    private const float TitleY = 36f;
+    private const float TitleWidth = 190f;
+    private const float MissionX = 136f;
+    private const float MissionY = 70f;
+    private const float MissionWidth = 500f;
     private const float TitleFont = 20f;
     private const float BodyFont = 12f;
 
@@ -99,10 +110,15 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
         : base(flow)
     {
         _wingmanOverride = wingman;
+        var layout = flow.Layout;
         for (int slot = 0; slot < Slots; slot++)
         {
+            string key = slot == 0 ? "PS_D_PILOTPLANE" : "PS_D_WINGPLANE";
+            var (x, y, width) = layout.Box(Section, key, ComboX, ComboY + (slot * SlotDrop), ComboWidth);
             _combos[slot] = new CampaignCombo(
-                ComboX, ComboY + (slot * SlotDrop), ComboWidth, ItemHeight, ItemsDisplayed);
+                x, y, width,
+                layout.Int(Section, key, "ItemHeight", (int)ItemHeight),
+                layout.Int(Section, key, "TotalDisplayed", ItemsDisplayed));
         }
     }
 
@@ -139,20 +155,22 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
         : "↑↓  Choose       ←→  Change       Enter / A  Select       Esc / B  Back";
 
     /// <summary>Each crew slot's aircraft silhouette, the airframe's own frame of the icon
-    /// sheet, at the authored positions of <c>PS_P_PILOTPLANE</c> and <c>PS_P_WINGPLANE</c>.</summary>
+    /// sheet, at <c>PS_P_PILOTPLANE</c> and <c>PS_P_WINGPLANE</c>.</summary>
     public override IReadOnlyList<BoardPicture> Pictures
     {
         get
         {
             Fill();
+            var layout = Flow.Layout;
+            var fallback = new BoardArt(BoardArtLibrary.Ui, "FC_PlaneIcons.Png", SilhouetteFrames);
             var pictures = new List<BoardPicture>(Slots);
             for (int slot = 0; slot < ActiveSlots; slot++)
             {
                 if (PlaneFor(slot) is { } plane)
                 {
-                    pictures.Add(new BoardPicture(
-                        new BoardArt(BoardArtLibrary.Ui, "FC_PlaneIcons.Png", SilhouetteFrames),
-                        SilhouetteX, SilhouetteY + (slot * SlotDrop), plane.Airframe));
+                    string key = slot == 0 ? "PS_P_PILOTPLANE" : "PS_P_WINGPLANE";
+                    var (x, y) = layout.At(Section, key, SilhouetteX, SilhouetteY + (slot * SlotDrop));
+                    pictures.Add(new BoardPicture(layout.Art(Section, key, fallback), x, y, plane.Airframe));
                 }
             }
 
@@ -161,32 +179,41 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     }
 
     /// <summary>The screen's title and mission line, each slot's heading and named aircraft, its
-    /// four ratings and its gun and hardpoint list, all at their authored widgets.</summary>
+    /// four ratings and its gun and hardpoint list, each at its own <c>PS_T_*</c> or
+    /// <c>PS_A_*</c> row.</summary>
     public override IReadOnlyList<BoardLine> Captions
     {
         get
         {
             Fill();
+            var layout = Flow.Layout;
+            var (titleX, titleY, titleWidth) = layout.Box(Section, "PS_T_TITLE", TitleX, TitleY, TitleWidth);
+            var (missionX, missionY, missionWidth) = layout.Box(Section, "PS_T_MISSIONINFO", MissionX, MissionY, MissionWidth);
             var lines = new List<BoardLine>
             {
-                new("PLANE SELECTION", 132, 36, 190, TitleFont, BoardInk.Heading),
-                new(Title, 136, 70, 500, 15, BoardInk.Detail, Italic: true),
+                new("PLANE SELECTION", titleX, titleY, titleWidth, TitleFont, BoardInk.Heading),
+                new(Title, missionX, missionY, missionWidth, 15, BoardInk.Detail, Italic: true),
             };
             for (int slot = 0; slot < ActiveSlots; slot++)
             {
                 float drop = slot * SlotDrop;
-                lines.Add(new BoardLine(
-                    slot == 0 ? "PILOT" : "WINGMAN", ComboX, HeadingY + drop, 94, 15, BoardInk.Heading));
+                var (headX, headY, headWidth) = layout.Box(
+                    Section, slot == 0 ? "PS_T_PILOT" : "PS_T_WINGMAN", ComboX, HeadingY + drop, 94f);
+                lines.Add(new BoardLine(slot == 0 ? "PILOT" : "WINGMAN", headX, headY, headWidth, 15, BoardInk.Heading));
                 if (PlaneFor(slot) is not { } plane)
                 {
                     continue;
                 }
 
+                // The wingman's plane line keeps the pilot's row dropped by 218 (see SlotDrop).
+                var (nameX, nameY, nameWidth) = layout.Box(
+                    Section, slot == 0 ? "PS_T_PILOTPLANE" : "PS_T_WINGPLANE", PlaneNameX, PlaneNameY + drop, 400f);
                 lines.Add(new BoardLine(
-                    SlotLabel(plane), PlaneNameX, PlaneNameY + drop, 400, BodyFont, BoardInk.Row));
-                AddRatings(lines, plane, drop);
-                lines.Add(new BoardLine(
-                    WeaponList(plane), WeaponsX, RatingY + drop, WeaponsWidth, BodyFont, BoardInk.Row));
+                    SlotLabel(plane), nameX, slot == 0 ? nameY : PlaneNameY + drop, nameWidth, BodyFont, BoardInk.Row));
+                AddRatings(lines, plane, slot);
+                var (weaponsX, weaponsY, weaponsWidth) = layout.Box(
+                    Section, slot == 0 ? "PS_A_PLANEWEAPONSP" : "PS_A_PLANEWEAPONSW", WeaponsX, RatingY + drop, WeaponsWidth);
+                lines.Add(new BoardLine(WeaponList(plane), weaponsX, weaponsY, weaponsWidth, BodyFont, BoardInk.Row));
             }
 
             return lines;
@@ -449,8 +476,7 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     }
 
     // The script's permit test on 10015: the change is allowed when the two combos differ or when
-    // only one crew slot is active. ⚠ Compared by name, CampaignFlightField.KeyOf's rule for a
-    // profile aircraft, since two of them may share an airframe and flying that pair is legal.
+    // only one crew slot is active; the seated pair's rule is the feature's, compared by name.
     // ⚠ A guest's own answer comes from the field, never from a second copy of the rule: the field
     // compares a stock entry by airframe and a profile copy by name, and it is the only thing that
     // knows what the other humans on the sortie took.
@@ -461,46 +487,21 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
             return Flow.Field.Taken(Player, pick);
         }
 
-        if (ActiveSlots < 2)
-        {
-            return false;
-        }
-
-        var planes = (Flow.Profile ?? EmptyProfile).Planes;
-        int other = _combos[slot == 0 ? 1 : 0].Selected;
-        return pick >= 0 && pick < planes.Count && other >= 0 && other < planes.Count
-            && planes[pick].Name == planes[other].Name;
+        return ActiveSlots >= 2 && Flow.Feature.SeatedPairClashes(pick, _combos[slot == 0 ? 1 : 0].Selected);
     }
 
-    // EXPORT: the plane and the loadout the campaign fitted it with, into the build store the
-    // Instant Action and multiplayer pickers list, then the original's own words for it.
-    // ⚠ Refused for a stock record. It is named for its airframe, so a write under that name would
-    // land on any hangar plane sharing it (CampaignFlightField.IsStock, and why a guest's check
-    // draws no EXPORT at all).
+    // EXPORT: the plane and the loadout the campaign fitted it with, into the build store, which is
+    // the feature's write, then the original's own words for it. A guest gets no EXPORT row, and
+    // the feature refuses a stock record on its own.
     private bool Export(int slot)
     {
-        if (PlaneFor(slot) is not { } plane || Flow.Planes is not { } store || Guest != null
-            || Flow.Field.IsStock(plane) || string.IsNullOrWhiteSpace(plane.Name))
+        if (PlaneFor(slot) is not { } plane || Guest != null || !Flow.Feature.ExportPlane(plane))
         {
             return false;
         }
 
-        // ⚠ An existing record IS the build: export sets its loadout and leaves paint, armour and
-        // engine alone. A starter or a granted aircraft has none, so one is created over the
-        // flight check's own build-or-stock resolution rather than exporting an unarmed airframe.
-        var def = store.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane) ?? StockBuild(plane);
-        def.SetLoadout(plane.Ammo, plane.Ordnance);
-        store.Save(def);
         Flow.RaiseModal(ExportedText(AirframeTitle(plane.Airframe)));
         return true;
-    }
-
-    private CustomPlaneDef StockBuild(OwnedPlane plane)
-    {
-        var def = new CustomPlaneDef { Name = plane.Name, Airframe = plane.Airframe };
-        HangarFlow.LoadStockWeapons(
-            def, Flow.Stock?.ForModel(PlanePickerRoster.AirframeNode(plane.Airframe)));
-        return def;
     }
 
     // langui 702 with the airframe's title in its one placeholder. The fallback carries the same
@@ -514,8 +515,9 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
               "Instant Action missions.";
     }
 
-    // ACCEPT: the two picks into the profile, and the profile to disk. A guest's ACCEPT moves their
-    // own session-scoped pick instead and writes nothing at all, keeping the profile unchanged.
+    // ACCEPT: the two picks into the profile and the profile to disk, the feature's write. A guest's
+    // ACCEPT moves their own session-scoped pick instead and writes nothing at all, keeping the
+    // profile unchanged.
     private void Commit()
     {
         if (Guest != null)
@@ -530,13 +532,7 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
             return;
         }
 
-        profile.SelectedPlane = _combos[0].Selected;
-        if (HasWingman)
-        {
-            profile.WingmanPlane = _combos[1].Selected;
-        }
-
-        Flow.Store.Save(profile);
+        Flow.Feature.CommitPlanes(_combos[0].Selected, HasWingman ? _combos[1].Selected : null);
         _opened[0] = profile.SelectedPlane;
         _opened[1] = profile.WingmanPlane;
     }
@@ -558,16 +554,20 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
         return at >= 0 && at < roster.Count ? roster[at] : null;
     }
 
-    // The four rating lines, at PS_T_TOPSPEEDP and its three neighbours.
-    private void AddRatings(List<BoardLine> lines, OwnedPlane plane, float drop)
+    // The four rating lines, at PS_T_TOPSPEEDP and its three neighbours (the W rows for the wingman).
+    private void AddRatings(List<BoardLine> lines, OwnedPlane plane, int slot)
     {
         var ratings = PlaneRatings.For(plane.Airframe, FitOf(plane));
         string[] labels = { "TOP SPEED:", "ARMOR:", "AGILITY:", "OFFENSE:" };
+        string[] keys = { "PS_T_TOPSPEED", "PS_T_ARMOR", "PS_T_AGILITY", "PS_T_OFFENSE" };
+        string crew = slot == 0 ? "P" : "W";
+        float drop = slot * SlotDrop;
         for (int i = 0; i < labels.Length; i++)
         {
+            var (x, y, width) = Flow.Layout.Box(
+                Section, keys[i] + crew, RatingX, RatingY + drop + (i * RatingPitch), RatingWidth);
             lines.Add(new BoardLine(
-                $"{labels[i]}   {RatingWord(ratings[i])}",
-                RatingX, RatingY + drop + (i * RatingPitch), RatingWidth, BodyFont, BoardInk.Row));
+                $"{labels[i]}   {RatingWord(ratings[i])}", x, y, width, BodyFont, BoardInk.Row));
         }
     }
 

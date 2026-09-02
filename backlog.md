@@ -465,8 +465,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the game-options screen: `IDS_GO_DIFFICULTY_TITLE` "Difficulty" with
   `IDS_GO_DIFFICULTY_DESC` "Select the difficulty level for a solo campaign", over the three
   `IDS_DIFFICULTY` rows Normal / Hard / Hardest (`rof/ui_strings.json` ids 109-111).
-  *Fix shape:* a row on the options screen writing the same 0/1/2 the flag parses, persisted with the
-  rest of the profile so it survives a launch, with the flag continuing to win for a scripted run.
+  *Fix shape:* a row on each presentation's options screen writing the same 0/1/2 the flag parses,
+  persisted so it survives a launch, with the flag continuing to win for a scripted run. Original's
+  row belongs on its Game Options page: an entry in that page's option table (title, control kind,
+  description, store field) plus the store field itself, drawn as a dropdown over the three
+  `IDS_DIFFICULTY` words, which is the control the original's own row takes. The page's third
+  authored row stands empty for it, and putting it back at the original's own first position is a
+  reorder of the table. Either way the plate holds three rows and this fills the last free one, so
+  a fourth option after it owns the taller-plate or paged-rows choice.
   *⚠ Traps:* it is a campaign-scope setting, not a per-mission one, and Instant Action does not read
   it: an IA wave's own skill stands in for that spawn, which is a different control the wizard
   already owns. Do not wire the menu row into the IA path or a wave will fly at two difficulties.
@@ -2212,7 +2218,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   buy without limit.** *Evidence:* found while landing the campaign Plane Construction screen
   (`git log --grep=BL-634`). The original's profile holds 25 plane records and its free-slot finder
   reserves six of them (`FUN_004111f0`), refusing a purchase past that with langui 204
-  `IDS_PN_TOOMANYPLANES`. Nothing in the remake caps a campaign purchase: `HangarCampaignContext.Purchase`
+  `IDS_PN_TOOMANYPLANES`. Nothing in the remake caps a campaign purchase: `CampaignWallet.Purchase`
   debits and records with no count check, so a wealthy profile grows its inventory past anything the
   original would accept. *Fix shape:* the refusal belongs beside the two that already exist, the
   reward-aircraft one and the two-plane floor, so the shape is a third gate reading
