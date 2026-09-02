@@ -1713,7 +1713,10 @@ observation outside this item: `--menu=campaign-roster` draws the cabin (its has
 `campaign-cabin`'s before and after), since the aid's walk seats the profile before its switch;
 Built-in's own behaviour, preserved under Decision 16 and left for the backlog.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The plan tree with E43 landed passed the complete `.\RunTests.ps1` (3024 units, the
+new seam fact among them, 213 engine suites across 4 shards with `menu-launch-return` among them,
+18 goldens hash-identical, engine errors clean, 147.4s). The Launcher's flown leg remains owed at
+the controls, as the Verify paragraph states.
 
 **⚠ Traps.** A semantic destination is not a shared concrete screen id. Presentations never hide
 themselves and construct `GameSession` directly.
