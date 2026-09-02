@@ -143,7 +143,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☐ `BL-419` The sonic ground burst reads as one flat ring on the terrain
 22. ☐ `BL-459` A damaged engine's loop waits out the original's re-arm delay before it restarts
-23. ☐ `BL-433` Numpad `+`/`−` drive the chase camera's zoom
+23. ☑ `BL-433` Numpad `+`/`−` drive the chase camera's zoom
 24. ☐ `BL-679` A staged airframe leaves no stale node behind in the name resolver
 
 ### Wave D — Closing sortie
@@ -493,7 +493,38 @@ airframe def shares one counter and one draw. Port that sharing or record why no
 give each aircraft its own. A looped `snd_damagedengine` that is still playing never reaches the
 timer. Rejected already: treating the delay as a crossfade, because the transition is a hard cut.
 
-## C23 ☐ `BL-433` Numpad `+`/`−` drive the chase camera's zoom
+## C23 ☑ `BL-433` Numpad `+`/`−` drive the chase camera's zoom
+
+**Landed.** Numpad `+` and `−` now drive the chase camera's zoom. `CameraController.UpdateZoom`
+reads `Key.KpAdd`/`Key.KpSubtract` directly, the same convention `ActiveView`/`BackActive` already
+use, moving a target at the decoded 2/s and clamping it to `[0, 1]`; the shown value chases that
+target at the decoded 1.5/s through `HeadLook.Approach`, the same smoothing law the head-look
+angles already use. A private `EffectiveRadius` property subtracts `shown · Dist` (the plane's own
+authored base distance, not the dynamic radius) from the existing dynamic chase radius, floored at
+zero, and `Chase`, `FixedView`, `BackView` and `PadLook` all read it in place of the raw radius, so
+the trim reaches the ordinary chase pose, every numbered fixed view and the look-behind alike,
+matching the architecture's existing rule that those poses share one number.
+`FlightController` calls `UpdateZoom` only from its ordinary per-frame camera branch, never while
+the weapon lab's held-airframe orbit is active: `OrbitInput` reads the same two keys for that
+orbit's own dolly, and the two branches are already mutually exclusive on `Held`, so no new gating
+was needed beyond placing the call correctly. The centre key's zero-the-zoom behaviour stays out of
+scope, filed at `BL-435`.
+
+No CLI mechanism can simulate a held keyboard key here (`--hold=` scripts the flight stick, not the
+keyboard), so the rate/clamp/smoothing law is asserted engine-free in
+`CSVM.Tests/CameraControllerZoomTests.cs` instead: the 2/s target rate in both directions, both
+keys cancelling, the `[0, 1]` clamp at both ends, and the shown value's exponential catch-up at
+1.5/s against a closed-form value. Two probes confirm the wiring without a physical key: an
+unpressed run's chase breadcrumb reads `zoom=0.000` throughout with the dynamic radius unchanged
+from before this item, and a pinned `--view=6` run's `dist=` sequence matches the unpinned chase's
+`d=` sequence frame for frame, so `--view=`'s precedence is untouched. The interactive feel at both
+ends of the clamp is `D31`'s own line for this item.
+
+**Verified.** The full `.\RunTests.ps1` battery on this worktree: build clean, units 3081 passed 0
+failed, engine 230 suites passed 0 failed with errors clean across 4 shards, goldens 18 of 18
+hash-identical (none moved), 202.8 s total, exit 0.
+
+**Original approach (kept for reference).**
 
 **Goal.** Holding numpad `+` or `−` moves the chase camera in and out at the original's rate, and the
 head-look centre key zeroes that same zoom.
