@@ -20,15 +20,15 @@ public readonly record struct FlightRosterBuild(int MeshInstances, string Summar
 /// <c>NodeName</c> is the identity the spawned node takes, and a caller that has an authored one
 /// must pass it: <c>primary_target</c> and <c>rating_biases</c> are written against the roster
 /// block's own name, so a spawn left on the fallback <c>ai{n}_{plane}</c> can match neither
-/// (BL-401).
-/// <c>PilotName</c> is the block's slot-20 key, the readout's name (docs/org/targeting.md).</summary>
+/// (BL-401). <c>PilotName</c> is the block's slot-20 key, the readout's name (docs/org/targeting.md).
+/// <c>InitHealth</c>/<c>Armor</c> override the hull pools pre-difficulty-scale (docs/org/vehicleDamage.md).</summary>
 public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector3 LookAt, AiPilot Pilot,
     PaintScheme? Scheme = null, int? Team = null, bool Inert = false, bool ShippedSkins = false,
     string? AiDef = null, LoadoutChoice? Fit = null, int? AttackRating = null, bool Nitro = false,
     AiSkillVector? RosterSkills = null, string? NodeName = null, string? PilotName = null,
     // Overrides the session difficulty for this one spawn, which is all an Instant Action wave's
     // skill is (Flight.Difficulty); null takes the session's.
-    int? Difficulty = null);
+    int? Difficulty = null, float? InitHealth = null, float? Armor = null);
 
 /// <summary>The session's aircraft set: builds the human field in deterministic player order and
 /// introduces AI aircraft later for missions, waves, and generators. The roster is the assembly
@@ -47,6 +47,7 @@ public sealed class FlightRoster
     private readonly List<FlightController> _ai = new();
     private readonly IReadOnlyList<FlightController> _aiView;
     private readonly Dictionary<FlightController, AiSubscriptions> _aiSubscriptions = new();
+    private readonly CrashRigQueue _crashRigs = new();
     private IReadOnlyList<PlayerRig> _humans = Array.Empty<PlayerRig>();
     private Action<List<AimCandidate>>? _targetSubParts;
     private Action<List<AimCandidate>>? _targetObjectives;
@@ -92,8 +93,12 @@ public sealed class FlightRoster
             _players = new HumanFlightAdapter(policy, liveries, starts, worldEffects!, worldRoot,
                 aircraft, world, human);
         _aiAssembler = new AiFlightAssembler(policy, liveries, worldEffects, worldRoot,
-            aircraft, world, human.RigCount);
+            aircraft, world, human.RigCount, _crashRigs);
     }
+
+    /// <summary>How many mid-flight AI introductions are still owed their crash rig. Zero on any
+    /// frame no aeroplane joined on and the frames after it have been pumped.</summary>
+    public int PendingCrashRigs => _crashRigs.PendingRigs;
 
     public IReadOnlyList<PlayerRig> Humans => _humans;
 
@@ -240,10 +245,25 @@ public sealed class FlightRoster
         }
     }
 
+    /// <summary>Advances one deferred crash rig by one step, called once a frame by the session
+    /// that owns this roster. ⚠ The FIRST call is also what starts the deferral, so aeroplanes built
+    /// before a session's first frame keep their rigs built in place: there is no frame to spare
+    /// during a build, and those are the aircraft the first drawn frame shows. A session that never
+    /// calls this stays correct, since every reader of a rig builds it
+    /// (<see cref="FlightController.EnsureCrashRig"/>).</summary>
+    public void PumpDeferredCrashRigs()
+    {
+        _crashRigs.GoLive();
+        _crashRigs.Pump();
+    }
+
     /// <summary>Releases the roster's non-node membership and controller bindings. The session
     /// subtree still owns and frees the aircraft nodes atomically.</summary>
     public void ClearMembership()
     {
+        // Dropped rather than finished: these controllers are on their way out of the tree, and a
+        // rig built onto one now would stage a subtree that is freed in the same teardown.
+        _crashRigs.Discard();
         foreach (var rig in _humans)
         {
             if (rig.Controller is { } controller)
@@ -429,6 +449,9 @@ public sealed class FlightRoster
     private void RemoveController(FlightController controller)
     {
         RemoveSubscriptions(controller);
+        // Before the detach, because a rollback's controller is freed here and a rig still queued
+        // against it would be built onto a node on its way out.
+        _crashRigs.Drop(controller);
         controller.DetachRosterBindings(_world.Projectiles);
         controller.GetParent()?.RemoveChild(controller);
         controller.QueueFree();

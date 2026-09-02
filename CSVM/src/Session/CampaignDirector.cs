@@ -150,12 +150,14 @@ public sealed class CampaignDirector
     /// <c>taxiPath</c> here; <c>START_TAXI</c> releases it.</summary>
     public ScriptedPathVehicles? Paths => _paths;
 
-    /// <summary>The spawned roster, by block name, empty until <see cref="BuildRoster"/> has run.
+    /// <summary>The spawned roster, by block name, empty until <see cref="BuildRoster"/> has run,
+    /// plus every generator launch under its launch name (<see cref="RegisterGeneratorLaunch"/>).
     /// The player's own block is not in it, nor is a surface vehicle (<see cref="Vessels"/>).</summary>
     public IReadOnlyDictionary<string, FlightController> Roster => _roster;
 
     /// <summary>The roster's surface vehicles, by block name: the <c>mode ship</c> blocks a
-    /// <see cref="RosterInputs.SpawnSurface"/> built. Generator launches are not in it.</summary>
+    /// <see cref="RosterInputs.SpawnSurface"/> built, plus a ship generator's hulls under their
+    /// launch names.</summary>
     public IReadOnlyDictionary<string, SurfaceVehicle> Vessels => _vessels;
 
     /// <summary>The story position being flown.</summary>
@@ -522,6 +524,34 @@ public sealed class CampaignDirector
     /// with no roster spawned. Exposed so a suite can assert the count against the world it built
     /// rather than infer it from which objective fired.</summary>
     internal int? GroupLiveCount(int group) => _world?.GroupLiveCount(group, null);
+
+    /// <summary>Books a generator launch into the roster under its launch name, carrying its
+    /// template's group the way the original's spawn copies it onto the new vehicle. The
+    /// <c>DEDG</c> walk, the <c>TRAVELERS</c> group form and the <c>SET_AI_*</c> lookups then see
+    /// it. ⚠ C5/M04's Miles is group 5's only member: an unbooked launch reads the group as wiped
+    /// out the moment he leaves the Dante, and that objective is the fuse on the instant loss.</summary>
+    internal void RegisterGeneratorLaunch(string launchName, LaunchedVehicle launched,
+        RosterSpawnPlan template)
+    {
+        if (launched.Aircraft is { } rig)
+        {
+            _roster[launchName] = rig;
+            _rosterPlans[launchName] = template;
+            rig.Group = template.Group;
+            rig.Downed += (_, killer) => CreditKill(template, killer);
+        }
+        else if (launched.Vessel is { } vessel)
+        {
+            _vessels[launchName] = vessel;
+            _rosterPlans[launchName] = template;
+        }
+        else
+        {
+            return;
+        }
+        GD.Print($"campaign: launch '{launchName}' ({template.Name}) booked into the roster " +
+                 $"team={template.Team?.ToString() ?? "-"} group={template.Group}");
+    }
 
     private static CampaignMission? MissionFor(string zrdrPath, int seq)
     {

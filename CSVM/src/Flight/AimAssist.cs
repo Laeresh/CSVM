@@ -489,11 +489,11 @@ public sealed class AimCandidateSet
         Ordnance.Add(Make(position, velocity, team, live: true, source, coneOverride));
 
     /// <summary>Every registered destructible that is not already destroyed, as structure
-    /// candidates. A pool carrying <see cref="DestructibleRegistry.Instance.Team"/> uses it; a pool
+    /// candidates. A pool carrying <see cref="DestructibleRegistry.Instance.Team"/> uses it; one
     /// carrying none falls through to <see cref="AimAssist.NeutralTeam"/> and is nobody's target,
-    /// the original's own rule (docs/org/targeting.md "World objects are in the same space, and are
-    /// normally neutral"). Skipped: an anchor outside the tree or hidden in it (a switched-off
-    /// subtree is out of the world, as <see cref="TurretController.Alive"/> reads) and a dormant pool.</summary>
+    /// the original's own rule for a world object no data owns (docs/org/targeting.md). Skipped: an
+    /// anchor outside the tree or hidden in it (a switched-off subtree is out of the world, as
+    /// <see cref="TurretController.Alive"/> reads) and a dormant pool.</summary>
     public void AddStructures(DestructibleRegistry registry)
     {
         foreach (var inst in registry.All)

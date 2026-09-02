@@ -191,23 +191,35 @@ public sealed class WorldEffectsFactory
         int effectRoots = 0, slot0Roots = 0;
         for (int slot = 0; slot < depth; slot++)
         {
-            var pool = new Node3D { Name = $"pool{slot}" };
-            pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
-            crashRoot.AddChild(pool);
-            int at = slot;
-            int built = BuildEffectStage(gamez, worldScene, pool,
-                rootNames.Where(r => pools.CrashSlotsFor(r) > at), planesGamez, planesScene);
-            foreach (var child in pool.GetChildren())
-            {
-                if (child is Node3D copy)
-                    copy.Visible = false;
-            }
+            int built = StageCrashSlot(gamez, worldScene, crashRoot, rootNames, pools, slot,
+                planesGamez, planesScene);
             if (slot == 0)
                 slot0Roots = built;
             effectRoots += built;
         }
 
         return (effectRoots, slot0Roots);
+    }
+
+    /// <summary>One pool slot of the stage above, appended in ascending slot order — the unit a
+    /// frame-budgeted caller stages at a time. Returns the copies this slot took.</summary>
+    public static int StageCrashSlot(GameZ gamez, SceneBuilder worldScene, Node3D crashRoot,
+        IReadOnlyList<string> rootNames, Utils.EffectPools pools, int slot,
+        GameZ? planesGamez = null, SceneBuilder? planesScene = null)
+    {
+        var pool = new Node3D { Name = $"pool{slot}" };
+        pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
+        crashRoot.AddChild(pool);
+        int at = slot;
+        int built = BuildEffectStage(gamez, worldScene, pool,
+            rootNames.Where(r => pools.CrashSlotsFor(r) > at), planesGamez, planesScene);
+        foreach (var child in pool.GetChildren())
+        {
+            if (child is Node3D copy)
+                copy.Visible = false;
+        }
+
+        return built;
     }
 
     /// <summary>The crash rig's sealed template stage — pooled, relocating called templates,
@@ -287,146 +299,22 @@ public sealed class WorldEffectsFactory
     public void BuildFlightCrashRuntime(FlightController controller, PlaneBuilder planeBuilder,
         string planeName, GameZ gamez, SceneBuilder worldScene, TextureArchive textures,
         AnimProgram crashProgram, bool verbose, WorldSounds? worldSounds = null,
-        GameZ? planesGamez = null)
-    {
-        // The crash root: the def's `player` anim-root anchor, in the plane model's frame so the
-        // wreck (built relative to the plane root) lands at the plane. Effect templates position
-        // by AT_NODE global, so this transform doesn't affect them.
-        var crashRoot = new Node3D { Name = "player" };
-        crashRoot.SetMeta(AnimRuntime.NameMeta, "player");
-        if (controller.PlaneModel != null)
-            crashRoot.Transform = controller.PlaneModel.Transform;
+        GameZ? planesGamez = null) =>
+        BeginFlightCrashRuntime(controller, planeBuilder, planeName, gamez, worldScene, textures,
+            crashProgram, verbose, worldSounds, planesGamez).Finish();
 
-        // The family this plane's crash indexes: player_crash_* for a human rig, ai_crash_* for an
-        // AI plane — the original's own vehicle split (EffectCatalogue.CrashDefTableFor). Built
-        // before the stage derivation, because the root closure is over THIS family's defs.
-        var crashDefs = EffectCatalogue.CrashDefTableFor(crashProgram, controller.IsHumanPiloted,
-            planeName);
-
-        // The other slot on the death path (org/vehicleDamage.md): the self-named destroy def,
-        // played when health reaches zero while the *_crash_* family above waits for ground contact.
-        var destroyAnim = EffectCatalogue.DestroyAnimFor(controller.IsHumanPiloted, planeName);
-        if (destroyAnim != null && crashProgram.ByAnimName(destroyAnim).Count == 0)
-        {
-            Log.Warn("anim", $"crash rig '{planeName}': no destroy def '{destroyAnim}' in this chapter's program — a kill will leave no wreck");
-            destroyAnim = null;
-        }
-
-        // Effect-template roots, one instance per player; an unresolved anchor throws, naming
-        // the def instead of silently playing nothing.
-        // ⚠ Parent the crash root first: `player` is the defs' own anchor, and an unparented scope reports the whole rig unanchorable.
-        controller.AddChild(crashRoot);
-        // The second source, asked only for a root this chapter's gamez has none of: the destroy
-        // def's `chuteman` lives in planes.zbd. Same reference on the empty stage, where the
-        // session gamez IS the plane source, so the alt arm never fires there.
-        var altGamez = planesGamez != null && !ReferenceEquals(planesGamez, gamez) ? planesGamez : null;
-        var altScene = altGamez != null ? PlanesScene(altGamez, textures) : null;
-        var rootNames = CrashStageRootNames(crashProgram, gamez, controller, crashDefs, destroyAnim,
-            altGamez);
-        // ⚠ Both kinds' roots, resolved HERE and not at the check below: once the templates are
-        // staged, a staged root answers InScope instead of Stage and drops out of the derivation.
-        var bothKindsRoots = BothRigKindsStageRoots(crashProgram, gamez, controller, planeName,
-            altGamez);
-        // Staged in pool slots: a single shared copy would be relocated onto every new tear,
-        // discarding the previous panel's burst mid-flight. Sizes come from effect_pools.json's
-        // crash section; AnimRuntime.AssignCallerSlot pins each call anchor to its own slot.
-        var (effectRoots, slot0Roots) = StageCrashTemplates(gamez, worldScene, crashRoot,
-            rootNames, _pools, altGamez, altScene);
-
-        // The plane's destroyed wreck (pieceN meshes), built hidden; the crash def shows + flings it.
-        // ⚠ Keep the whole rig one name scope: a crash def spans this subtree and the plane model's
-        // (`healthy`), and only the bind's rig-wide fallback tier resolves both off one context node.
-        var destroyed = planeBuilder.BuildDestroyed(planeName);
-        var restPoses = new List<(Node3D, Transform3D)>();
-        if (destroyed != null)
-        {
-            destroyed.Visible = false;
-            crashRoot.AddChild(destroyed);
-            // Every wreck node's rest pose, so respawn can re-home the flung pieces (a RESET_STATE
-            // re-poses only what it names, and the pieces have no reset event).
-            CollectRestPoses(destroyed, restPoses);
-        }
-
-        // Scoped crash runtime: no ambient start, puffers via the session textures, non-portable
-        // crash-def node ptrs resolved by name.
-        // ⚠ The emitter factory parents at the world root, not the crash root — see its own doc.
-        var crashRuntime = AnimRuntime.ForCrashRig(
-            NewCrashTemplateStage(_spec.DebugAnim),
-            Rng.NewIntSeed(Rng.Crash),
-            new PufferEmitterFactory(textures, _worldRoot, _ambience), _spec.DebugAnim);
-        // ⚠ Deliberately asymmetric, do not "fix" into one branch: an AI kill's boom is its crash
-        // def's own authored Sound events, played positionally, while own-ship crash audio has one
-        // owner in FlightAudio.Crash(). Letting a human rig play here would double it.
-        crashRuntime.SoundHandledElsewhere = controller.IsHumanPiloted;
-        crashRuntime.Sounds = controller.IsHumanPiloted ? null : worldSounds;
-        // Surface-hugging sub-effects (water-splash rings/spray, dirt-burst dust) level to world
-        // axes instead of inheriting impact attitude. Set once; these defs only ever play from a
-        // crash sequence, so no per-crash toggle is needed.
-        crashRuntime.LevelPlacedTemplateNames =
-            new HashSet<string>(EffectCatalogue.CrashSurfaceLevelAnimNames, StringComparer.OrdinalIgnoreCase);
-        // The parachute levels for a different reason: its template is authored at identity in the
-        // planes gamez, and only OUR staging hangs the copy under the crash root, so the placing
-        // call would freeze the tumbling wreck's attitude into a man under a canopy.
-        crashRuntime.LevelPlacedTemplateNames.UnionWith(EffectCatalogue.BailoutAnimNames);
-        // A stage anchor this airframe lacks is a SOFT failure: the call lands on the airframe root
-        // and still draws, so nothing else reports it (docs/org/vehicleDamage.md's anchor census).
-        crashRuntime.AnchorWarnAnimNames =
-            new HashSet<string>(EffectCatalogue.DamageStageAnims, StringComparer.OrdinalIgnoreCase);
-        crashRuntime.AnchorWarnLabel = planeName;
-        // Wreck pieces with `do_intersections: true` stay in the world; handing the mask over arms
-        // their collider sweep. Only Fly-mode goldens exercise it, and none captures a completed
-        // landing — analysis/object-motion-goldens/FINDINGS.md.
-        if (_spec.BuildsCollision)
-        {
-            crashRuntime.ContactMask = CollisionLayers.World;
-            // Ground-def pieces author no `water` branch of their own; bound anyway so a piece's
-            // BOUNCE reads a real struck surface rather than a guess.
-            crashRuntime.SurfaceIsWater = body => ProjectilePool.SurfaceIsWater(body as Node);
-        }
-        // Bind only the closure of names that play ON this aircraft (CrashRigAnimNames), never the
-        // full ~800-def world program — its ~150 generic-named defs would mis-anchor onto this
-        // plane's parts and run their reset states on it.
-        crashRuntime.Bind(controller,
-            crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(crashDefs, destroyAnim)));
-        controller.AddChild(crashRuntime);
-        controller.DestroyDef = destroyAnim;
-        // Which of the two families owns the landing, asked of the data rather than of who is
-        // flying: a def that takes the hull over also authors its own bounce sequences.
-        controller.DestroyDefFliesWreck = EffectCatalogue.FliesOwnHull(crashProgram, destroyAnim);
-        // The plane model's built visibility, so respawn can undo the crash def's healthy/markers
-        // hides (its RESET_STATE only restores dontmove). Captured pristine, before any crash.
-        var planeVis = new List<(Node3D, bool)>();
-        if (controller.PlaneModel != null)
-            CollectVisibility(controller.PlaneModel, planeVis);
-        // One call for the whole rig, so it cannot be half-bound. The anchor is the context node
-        // both families play against: the ai_crash_* NAME `kestrel` resolves nowhere in a rig, so
-        // Play falls back to it, the node the original's own caller supplies (org/vehicleDamage.md).
-        controller.BindCrashRig(crashRuntime, crashDefs, crashRoot, restPoses, planeVis);
-        // Phase 2 of the damage-visuals setup: the sink and the stops, which need a live rig
-        // runtime and so cannot be wired where the object is built.
-        WireDamageStages(controller, crashProgram);
-        // Every emitter the rig's defs name is built here, off the frame that plays it, so a crash
-        // or a damage stage finds its puffers and materials already made.
-        var warmMark = StartupProfile.Mark();
-        var warmed = controller.PlaneModel is { } model
-            ? crashRuntime.PrewarmEmitters(model, crashRoot)
-            : crashRuntime.PrewarmEmitters(crashRoot);
-        StartupProfile.Record("emitters", warmMark);
-        double warmMs = Stopwatch.GetElapsedTime(warmMark).TotalMilliseconds;
-        Log.Info("anim", $"crash rig '{planeName}': pre-warmed {warmed.Built} emitter(s) in {warmMs:0} ms ({warmed.SelfHosted} call-site hosted, {warmed.Unhosted} unhosted here)");
-        if (slot0Roots != rootNames.Count)
-            Log.Warn("anim", $"crash rig '{planeName}': staged {slot0Roots} of {rootNames.Count} template root(s) the bound defs anchor on — the rest built nothing from this chapter's gamez, so their defs play nothing");
-        // ⚠ Both kinds' roots, never this rig's alone: one crash section sizes two families that
-        // stage different roots, so a per-rig test warns on every correct entry the other owns.
-        // What survives is the real drift, a key naming a root neither kind stages.
-        foreach (var unknown in _pools.UnknownCrashRoots(bothKindsRoots))
-        {
-            Log.Warn("anim", $"effect pools: crash root '{unknown}' is staged by no rig kind — it sizes nothing");
-        }
-        if (verbose)
-            GD.Print($"data-crash: {effectRoots} effect template cop(ies) over {_pools.CrashDepthFor(rootNames)} pool slot(s) "
-                     + $"+ {restPoses.Count} wreck node(s) — crash runtime bound (scoped, no auto-start)");
-    }
+    /// <summary>The same build as <see cref="BuildFlightCrashRuntime"/>, opened rather than run: the
+    /// returned handle carries it out in ordered steps, so a caller holding a frame budget can
+    /// spread it and one without a budget calls <see cref="CrashRigBuild.Finish"/>.
+    /// ⚠ The crash stream is drawn from HERE, at the request, not at the step that makes the
+    /// runtime: a deferred rig has to take its seed in the order its aircraft were introduced, or a
+    /// kill landing between two pending rigs would reorder the stream.</summary>
+    public CrashRigBuild BeginFlightCrashRuntime(FlightController controller, PlaneBuilder planeBuilder,
+        string planeName, GameZ gamez, SceneBuilder worldScene, TextureArchive textures,
+        AnimProgram crashProgram, bool verbose, WorldSounds? worldSounds = null,
+        GameZ? planesGamez = null) =>
+        new CrashRigBuild(this, controller, planeBuilder, planeName, gamez, worldScene, textures,
+            crashProgram, verbose, worldSounds, planesGamez);
 
     // Every template root either rig kind stages, for the pool-config drift check alone. Derived
     // the same way the live one is, so a root this rig does not stage still counts as known.
@@ -451,9 +339,12 @@ public sealed class WorldEffectsFactory
     // threshold plays its authored def. This is phase 2 of a setup split across two files:
     // HumanFlightAdapter.BuildDamageVisuals is phase 1 and runs for every rig, while this half
     // exists only where a crash runtime does.
-    private static void WireDamageStages(FlightController controller, AnimProgram crashProgram)
+    // ⚠ The runtime comes in rather than off the controller: a deferred rig is still armed while
+    // this runs, and the property that answers for it forces the build it is part of.
+    private static void WireDamageStages(FlightController controller, AnimRuntime rigRuntime,
+        AnimProgram crashProgram)
     {
-        if (controller.Visuals is not { } visuals || controller.CrashRuntime is not { } rigRuntime)
+        if (controller.Visuals is not { } visuals)
             return;
         var planeModel = controller.PlaneModel;
         // This closure also arbitrates node ownership against other per-frame systems:
@@ -641,5 +532,293 @@ public sealed class WorldEffectsFactory
         foreach (var unknown in _pools.UnknownRoots(roots))
             Log.Warn("anim", $"effect pools: '{unknown}' is not an effect stage root — it sizes nothing");
         return effects;
+    }
+
+    /// <summary>One per-plane crash rig, mid-build. The four steps are the build's own natural
+    /// joints (template stage, wreck subtree, runtime bind, emitter pre-warm), each ending on a
+    /// state a later step reads and nothing outside this class does, so a caller may run them on
+    /// four frames or on one.
+    /// ⚠ A rig is unreachable until <see cref="Finish"/> has returned: nothing here half-binds the
+    /// controller, and <c>BindCrashRig</c> stays one call in the third step. A holder that lets an
+    /// aircraft be shot at while its rig is open owes it a forcing call on the damage path.</summary>
+    public sealed class CrashRigBuild
+    {
+        private readonly WorldEffectsFactory _factory;
+        private readonly FlightController _controller;
+        private readonly PlaneBuilder _planeBuilder;
+        private readonly string _planeName;
+        private readonly GameZ _gamez;
+        private readonly SceneBuilder _worldScene;
+        private readonly TextureArchive _textures;
+        private readonly AnimProgram _crashProgram;
+        private readonly bool _verbose;
+        private readonly WorldSounds? _worldSounds;
+        private readonly GameZ? _planesGamez;
+        private readonly int _crashSeed;
+        private readonly List<(Node3D, Transform3D)> _restPoses = new();
+
+        private Phase _phase;
+        private int _slot;
+        private int _depth;
+        private Node3D? _crashRoot;
+        private SurfaceDefTable? _crashDefs;
+        private string? _destroyAnim;
+        private IReadOnlyList<string>? _rootNames;
+        private List<string>? _bothKindsRoots;
+        private int _effectRoots;
+        private int _slot0Roots;
+        private GameZ? _altGamez;
+        private SceneBuilder? _altScene;
+        private AnimRuntime? _crashRuntime;
+
+        internal CrashRigBuild(WorldEffectsFactory factory, FlightController controller,
+            PlaneBuilder planeBuilder, string planeName, GameZ gamez, SceneBuilder worldScene,
+            TextureArchive textures, AnimProgram crashProgram, bool verbose,
+            WorldSounds? worldSounds, GameZ? planesGamez)
+        {
+            _factory = factory;
+            _controller = controller;
+            _planeBuilder = planeBuilder;
+            _planeName = planeName;
+            _gamez = gamez;
+            _worldScene = worldScene;
+            _textures = textures;
+            _crashProgram = crashProgram;
+            _verbose = verbose;
+            _worldSounds = worldSounds;
+            _planesGamez = planesGamez;
+            _crashSeed = Rng.NewIntSeed(Rng.Crash);
+        }
+
+        // The build's own joints. Staging repeats, one authored pool slot a step, because that is
+        // the only phase whose size is data-driven: an airframe with a dozen slots would otherwise
+        // put the whole stage on one frame.
+        private enum Phase
+        {
+            Prepare,
+            StageSlots,
+            Wreck,
+            Bind,
+            Prewarm,
+            Complete,
+        }
+
+        /// <summary>Whether the rig is bound and pre-warmed, i.e. nothing is left to step.</summary>
+        public bool Done => _phase == Phase.Complete;
+
+        /// <summary>Carries out the next step and answers <see cref="Done"/>. Idempotent once
+        /// complete, so a forcing caller racing a pump cannot build the rig twice.</summary>
+        public bool Step()
+        {
+            // Every phase advances BEFORE its work runs: a step that re-entered this build would
+            // otherwise repeat itself rather than carry on from the next one.
+            switch (_phase)
+            {
+                case Phase.Prepare:
+                    _phase = Phase.StageSlots;
+                    Prepare();
+                    break;
+                case Phase.StageSlots:
+                    if (_slot >= _depth)
+                    {
+                        _phase = Phase.Wreck;
+                        break;
+                    }
+                    int slot = _slot++;
+                    if (_slot >= _depth)
+                        _phase = Phase.Wreck;
+                    StageOneSlot(slot);
+                    break;
+                case Phase.Wreck:
+                    _phase = Phase.Bind;
+                    BuildWreck();
+                    break;
+                case Phase.Bind:
+                    _phase = Phase.Prewarm;
+                    BindRuntime();
+                    break;
+                case Phase.Prewarm:
+                    _phase = Phase.Complete;
+                    PrewarmEmitters();
+                    break;
+                default:
+                    break;
+            }
+            return Done;
+        }
+
+        /// <summary>Runs every remaining step in place. The whole build for a caller with no frame
+        /// budget, and the forcing call for a holder whose aircraft needs its rig now.</summary>
+        public void Finish()
+        {
+            while (!Done)
+            {
+                Step();
+            }
+        }
+
+        private void Prepare()
+        {
+            // The crash root: the def's `player` anim-root anchor, in the plane model's frame so the
+            // wreck (built relative to the plane root) lands at the plane. Effect templates position
+            // by AT_NODE global, so this transform doesn't affect them.
+            var crashRoot = new Node3D { Name = "player" };
+            crashRoot.SetMeta(AnimRuntime.NameMeta, "player");
+            if (_controller.PlaneModel != null)
+                crashRoot.Transform = _controller.PlaneModel.Transform;
+            _crashRoot = crashRoot;
+
+            // The family this plane's crash indexes: player_crash_* for a human rig, ai_crash_* for
+            // an AI plane — the original's own vehicle split (EffectCatalogue.CrashDefTableFor).
+            // Built before the stage derivation, because the root closure is over THIS family's defs.
+            _crashDefs = EffectCatalogue.CrashDefTableFor(_crashProgram, _controller.IsHumanPiloted,
+                _planeName);
+
+            // The other slot on the death path (org/vehicleDamage.md): the self-named destroy def,
+            // played when health reaches zero while the *_crash_* family waits for ground contact.
+            _destroyAnim = EffectCatalogue.DestroyAnimFor(_controller.IsHumanPiloted, _planeName);
+            if (_destroyAnim != null && _crashProgram.ByAnimName(_destroyAnim).Count == 0)
+            {
+                Log.Warn("anim", $"crash rig '{_planeName}': no destroy def '{_destroyAnim}' in this chapter's program — a kill will leave no wreck");
+                _destroyAnim = null;
+            }
+
+            // Effect-template roots, one instance per player; an unresolved anchor throws, naming
+            // the def instead of silently playing nothing.
+            // ⚠ Parent the crash root first: `player` is the defs' own anchor, and an unparented scope reports the whole rig unanchorable.
+            _controller.AddChild(crashRoot);
+            // The second source, asked only for a root this chapter's gamez has none of: the destroy
+            // def's `chuteman` lives in planes.zbd. Same reference on the empty stage, where the
+            // session gamez IS the plane source, so the alt arm never fires there.
+            var altGamez = _planesGamez != null && !ReferenceEquals(_planesGamez, _gamez) ? _planesGamez : null;
+            var altScene = altGamez != null ? _factory.PlanesScene(altGamez, _textures) : null;
+            _rootNames = CrashStageRootNames(_crashProgram, _gamez, _controller, _crashDefs,
+                _destroyAnim, altGamez);
+            // ⚠ Both kinds' roots, resolved HERE and not at the check below: once the templates are
+            // staged, a staged root answers InScope instead of Stage and drops out of the derivation.
+            _bothKindsRoots = BothRigKindsStageRoots(_crashProgram, _gamez, _controller, _planeName,
+                altGamez);
+            // Staged in pool slots: a single shared copy would be relocated onto every new tear,
+            // discarding the previous panel's burst mid-flight. Sizes come from effect_pools.json's
+            // crash section; AnimRuntime.AssignCallerSlot pins each call anchor to its own slot.
+            _altGamez = altGamez;
+            _altScene = altScene;
+            _depth = _factory._pools.CrashDepthFor(_rootNames);
+        }
+
+        private void StageOneSlot(int slot)
+        {
+            int built = StageCrashSlot(_gamez, _worldScene, _crashRoot!, _rootNames!,
+                _factory._pools, slot, _altGamez, _altScene);
+            if (slot == 0)
+                _slot0Roots = built;
+            _effectRoots += built;
+        }
+
+        private void BuildWreck()
+        {
+            // The plane's destroyed wreck (pieceN meshes), built hidden; the crash def shows + flings it.
+            // ⚠ Keep the whole rig one name scope: a crash def spans this subtree and the plane model's
+            // (`healthy`), and only the bind's rig-wide fallback tier resolves both off one context node.
+            var destroyed = _planeBuilder.BuildDestroyed(_planeName);
+            if (destroyed != null)
+            {
+                destroyed.Visible = false;
+                _crashRoot!.AddChild(destroyed);
+                // Every wreck node's rest pose, so respawn can re-home the flung pieces (a
+                // RESET_STATE re-poses only what it names, and the pieces have no reset event).
+                CollectRestPoses(destroyed, _restPoses);
+            }
+        }
+
+        private void BindRuntime()
+        {
+            // Scoped crash runtime: no ambient start, puffers via the session textures, non-portable
+            // crash-def node ptrs resolved by name.
+            // ⚠ The emitter factory parents at the world root, not the crash root — see its own doc.
+            var crashRuntime = AnimRuntime.ForCrashRig(
+                NewCrashTemplateStage(_factory._spec.DebugAnim),
+                _crashSeed,
+                new PufferEmitterFactory(_textures, _factory._worldRoot, _factory._ambience),
+                _factory._spec.DebugAnim);
+            _crashRuntime = crashRuntime;
+            // ⚠ Deliberately asymmetric, do not "fix" into one branch: an AI kill's boom is its crash
+            // def's own authored Sound events, played positionally, while own-ship crash audio has one
+            // owner in FlightAudio.Crash(). Letting a human rig play here would double it.
+            crashRuntime.SoundHandledElsewhere = _controller.IsHumanPiloted;
+            crashRuntime.Sounds = _controller.IsHumanPiloted ? null : _worldSounds;
+            // Surface-hugging sub-effects (water-splash rings/spray, dirt-burst dust) level to world
+            // axes instead of inheriting impact attitude. Set once; these defs only ever play from a
+            // crash sequence, so no per-crash toggle is needed.
+            crashRuntime.LevelPlacedTemplateNames =
+                new HashSet<string>(EffectCatalogue.CrashSurfaceLevelAnimNames, StringComparer.OrdinalIgnoreCase);
+            // The parachute levels for a different reason: its template is authored at identity in the
+            // planes gamez, and only OUR staging hangs the copy under the crash root, so the placing
+            // call would freeze the tumbling wreck's attitude into a man under a canopy.
+            crashRuntime.LevelPlacedTemplateNames.UnionWith(EffectCatalogue.BailoutAnimNames);
+            // A stage anchor this airframe lacks is a SOFT failure: the call lands on the airframe root
+            // and still draws, so nothing else reports it (docs/org/vehicleDamage.md's anchor census).
+            crashRuntime.AnchorWarnAnimNames =
+                new HashSet<string>(EffectCatalogue.DamageStageAnims, StringComparer.OrdinalIgnoreCase);
+            crashRuntime.AnchorWarnLabel = _planeName;
+            // Wreck pieces with `do_intersections: true` stay in the world; handing the mask over arms
+            // their collider sweep. Only Fly-mode goldens exercise it, and none captures a completed
+            // landing — analysis/object-motion-goldens/FINDINGS.md.
+            if (_factory._spec.BuildsCollision)
+            {
+                crashRuntime.ContactMask = CollisionLayers.World;
+                // Ground-def pieces author no `water` branch of their own; bound anyway so a piece's
+                // BOUNCE reads a real struck surface rather than a guess.
+                crashRuntime.SurfaceIsWater = body => ProjectilePool.SurfaceIsWater(body as Node);
+            }
+            // Bind only the closure of names that play ON this aircraft (CrashRigAnimNames), never the
+            // full ~800-def world program — its ~150 generic-named defs would mis-anchor onto this
+            // plane's parts and run their reset states on it.
+            crashRuntime.Bind(_controller,
+                _crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(_crashDefs!, _destroyAnim)));
+            _controller.AddChild(crashRuntime);
+            _controller.DestroyDef = _destroyAnim;
+            // Which of the two families owns the landing, asked of the data rather than of who is
+            // flying: a def that takes the hull over also authors its own bounce sequences.
+            _controller.DestroyDefFliesWreck = EffectCatalogue.FliesOwnHull(_crashProgram, _destroyAnim);
+            // The plane model's built visibility, so respawn can undo the crash def's healthy/markers
+            // hides (its RESET_STATE only restores dontmove). Captured pristine, before any crash.
+            var planeVis = new List<(Node3D, bool)>();
+            if (_controller.PlaneModel != null)
+                CollectVisibility(_controller.PlaneModel, planeVis);
+            // One call for the whole rig, so it cannot be half-bound. The anchor is the context node
+            // both families play against: the ai_crash_* NAME `kestrel` resolves nowhere in a rig, so
+            // Play falls back to it, the node the original's own caller supplies (org/vehicleDamage.md).
+            _controller.BindCrashRig(crashRuntime, _crashDefs, _crashRoot, _restPoses, planeVis);
+            // Phase 2 of the damage-visuals setup: the sink and the stops, which need a live rig
+            // runtime and so cannot be wired where the object is built.
+            WireDamageStages(_controller, crashRuntime, _crashProgram);
+        }
+
+        private void PrewarmEmitters()
+        {
+            // Every emitter the rig's defs name is built here, off the frame that plays it, so a crash
+            // or a damage stage finds its puffers and materials already made.
+            var crashRuntime = _crashRuntime!;
+            var warmMark = StartupProfile.Mark();
+            var warmed = _controller.PlaneModel is { } model
+                ? crashRuntime.PrewarmEmitters(model, _crashRoot!)
+                : crashRuntime.PrewarmEmitters(_crashRoot!);
+            StartupProfile.Record("emitters", warmMark);
+            double warmMs = Stopwatch.GetElapsedTime(warmMark).TotalMilliseconds;
+            Log.Info("anim", $"crash rig '{_planeName}': pre-warmed {warmed.Built} emitter(s) in {warmMs:0} ms ({warmed.SelfHosted} call-site hosted, {warmed.Unhosted} unhosted here)");
+            if (_slot0Roots != _rootNames!.Count)
+                Log.Warn("anim", $"crash rig '{_planeName}': staged {_slot0Roots} of {_rootNames.Count} template root(s) the bound defs anchor on — the rest built nothing from this chapter's gamez, so their defs play nothing");
+            // ⚠ Both kinds' roots, never this rig's alone: one crash section sizes two families that
+            // stage different roots, so a per-rig test warns on every correct entry the other owns.
+            // What survives is the real drift, a key naming a root neither kind stages.
+            foreach (var unknown in _factory._pools.UnknownCrashRoots(_bothKindsRoots!))
+            {
+                Log.Warn("anim", $"effect pools: crash root '{unknown}' is staged by no rig kind — it sizes nothing");
+            }
+            if (_verbose)
+                GD.Print($"data-crash: {_effectRoots} effect template cop(ies) over {_factory._pools.CrashDepthFor(_rootNames)} pool slot(s) "
+                         + $"+ {_restPoses.Count} wreck node(s) — crash runtime bound (scoped, no auto-start)");
+        }
     }
 }

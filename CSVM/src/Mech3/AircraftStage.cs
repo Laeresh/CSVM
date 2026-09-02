@@ -216,7 +216,10 @@ public sealed class AircraftStage
 
         Flown = planeModel;
         runtime.IndexRebasedStage(planeModel, PointerBase);
-        Log.Info("world", $"aircraft stage: flown '{AnimRuntime.NameOf(planeModel)}' indexed at base {PointerBase}");
+        // The archive parks the hook GROUP off, not its arms; what parks those is the airframe's
+        // own retract RESET_STATE, which the rebased index deliberately does not run.
+        int parked = runtime.ParkDockingHook(planeModel);
+        Log.Info("world", $"aircraft stage: flown '{AnimRuntime.NameOf(planeModel)}' indexed at base {PointerBase}, hook parked by {parked} definition(s)");
     }
 
     // Every built node's stamped archive index shifted into the chapter's cross-archive block. The

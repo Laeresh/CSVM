@@ -341,6 +341,7 @@ public sealed class FlightHud
             Gauges.NitroInstalled = state.NitroInstalled;
             Gauges.NitroBoosting = state.NitroBoosting;
             Gauges.NitroChargeFrac = state.NitroChargeFrac;
+            Gauges.HeadingDeg = state.HeadingDeg;
             (Gauges.HorizonPitchRad, Gauges.HorizonRollRad) = GaugeCluster.HorizonAngles(state.Attitude);
         }
         // Feeds the weapon gauges (if built) and the text readout (if built) — both draw from the

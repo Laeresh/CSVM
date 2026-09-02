@@ -689,6 +689,10 @@ public partial class GameSession : Node3D
         }
         // The startup line goes out on the frame that proves the first one was drawn.
         _startup?.Frame();
+        // One step of one deferred crash rig. A mid-flight AI introduction leaves its rig unbuilt
+        // so the launch frame carries only what puts the aeroplane in the world; this is where the
+        // rest of it lands, on the frames after.
+        _flightRoster?.PumpDeferredCrashRigs();
         // Entities switched off as unplaced but since moved off the world origin are put back: a
         // motion starting is the proof a definition owns them. ⚠ Do not defer this once instead of
         // polling, and keep it on wall time: an OnCall definition can start its motion at any time.
@@ -1468,9 +1472,9 @@ public partial class GameSession : Node3D
         _worldRoot!.AddChild(labCam);
         _spectator = labCam;
 
-        // Optional stage prop: --plane= parks that aircraft at the mission spawn
-        // point. No FlightController — in the Fortune Hunters livery like every other
-        // aircraft (--paint= picks another, --paint=none the bare shipped skins).
+        // Optional stage prop: --plane= parks that aircraft at the mission spawn point, in the
+        // Fortune Hunters livery and with no FlightController. It carries its docking-hook group
+        // and is indexed, or a hook definition resolves nothing and plays placeless.
         if (_spec.PlaneNames.Count > 0)
         {
             long mark = StartupProfile.Mark();
@@ -1480,7 +1484,7 @@ public partial class GameSession : Node3D
             var parkedBuilder = new PlaneBuilder(planesGamez, state.Textures,
                 scheme: _liveryResolver.SchemeFor(0, state.ZrdrPath, _liveryResolver.NewPaintRng(),
                     _liveryResolver.PatternsForPlane(planesGamez, _spec.PlaneName)),
-                patterns: _liveryResolver.Patterns);
+                patterns: _liveryResolver.Patterns, dockingHook: true);
             var parked = parkedBuilder.Build(_spec.PlaneName);
             StartupProfile.Record("plane", mark);
             state.MeshInstances += parkedBuilder.MeshInstanceCount;
@@ -1490,6 +1494,9 @@ public partial class GameSession : Node3D
             {
                 parked.LookAtFromPosition(spawnPos, spawnLook, Vector3.Up);
             }
+            // Indexed the way the effect stage is, since the bootstrap indexed the world before
+            // this prop existed; the RESET_STATE tail is what parks its hook arms.
+            session.Runtime.IndexStage(parked);
             state.What += $" + parked '{_spec.PlaneName}'";
             // The parked prop hangs beside the world content, outside the selection/node-lab walk,
             // so register it as an extra pick root or neither a click nor the lab tree reaches it.
@@ -2024,6 +2031,13 @@ public partial class GameSession : Node3D
         // generator spawn sites: those cache-check the same field, so this only moves WHEN the
         // runtime is first built, not whether it is built twice.
         var surfaceVehicleRuntime = EnsureSurfaceVehicles(state);
+        // The pool holds the session's live rosters (aircraft, world emplacements), and the hulls
+        // are the rest of the engine's VehicleList. A turret gunner sees this pool and nothing
+        // else, so without it a gun's candidate list is the aircraft half of the pool alone.
+        projectiles.SurfaceVehicles = surfaceVehicleRuntime;
+        // The same reasoning for the third pool: a gun standing beside a hostile mission structure
+        // has nothing else to see it through.
+        projectiles.Structures = state.WorldRuntime?.Destructibles;
         var worldBindings = new FlightWorldBindings
         {
             Ambience = _ambience,
@@ -2526,8 +2540,10 @@ public partial class GameSession : Node3D
                                      $"'{hull.Def}', which this stage cannot build: the launch builds nothing");
                             return default;
                         }
-                        return new LaunchedVehicle(null, generatorSurface.Spawn(hull, pos, look - pos,
-                            EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(hull.Name), ordinal)));
+                        string hullName = EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(hull.Name), ordinal);
+                        var hullLaunch = new LaunchedVehicle(null, generatorSurface.Spawn(hull, pos, look - pos, hullName));
+                        _campaign?.RegisterGeneratorLaunch(hullName, hullLaunch, hull);
+                        return hullLaunch;
                     case GeneratorLaunch.Airframe:
                         // ⚠ shippedSkins: a generated aircraft is the mission's enemy, so it
                         // keeps its own textures rather than the player militia's default.
@@ -2536,10 +2552,13 @@ public partial class GameSession : Node3D
                             NodeName: EnemyGenerators.LaunchName(_spec.GeneratorsPlane, ordinal)));
                 }
                 var template = plan!;
-                var launched = flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(template, pos, look, pilot,
-                    EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(template.Name), ordinal)));
+                string launchName = EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(template.Name), ordinal);
+                var launched = flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(template, pos, look, pilot, launchName));
                 CampaignRosterPlan.ApplyPlan(pilot, template, generatorActiveDist);
                 RegisterAiVoice(launched, template.AccentId);
+                // The mission script counts and commands the launch by this name, so the campaign
+                // roster must hold it or a DEDG over its group reads the group as empty.
+                _campaign?.RegisterGeneratorLaunch(launchName, launched, template);
                 return launched;
             }
 

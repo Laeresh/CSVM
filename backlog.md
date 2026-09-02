@@ -86,6 +86,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
+- `BL-668` `[Bug]` **A downed zeppelin's wreck sinks 400 m under the sea and four gasbags fall
+  through the water.** *Evidence:* the `zeppelin-breakup` suite's artifact records the wreck at
+  rest at y = −411 with the water surface at y = 0, and gasbags 1 to 4 falling about 1228 m
+  through the water while 5 and 6 land on it after 4 to 5 m. That is `MotionRuntime`'s contact and
+  bounce handling of a large untimed gravity body, independent of the `NodeUndercover` gate that
+  now lets the breakup play. *Fix shape:* find why the contact tier reads the water for two
+  gasbags and not the other four, and what stops the hull. *⚠ Traps:* `floatdown`'s descent is not
+  ended by the `StopSequence` (`docs/org/sequences.md`); the contact tier is what ends it, so a fix
+  belongs there, not in the sequence runner. *Cross-refs:* `PLAN-M5-polish-8.md` B13, `BL-440`
+  (closed), `docs/architecture.md`'s `ZeppelinRuntime.cs` entry.
+
 - `BL-060` `[Feature]` **Improve on the original crash — the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
   User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the
   faithful data-driven crash, so it was preserved on that branch rather than deleted. **The A/B playtest
@@ -503,6 +514,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   one deployed. *Cross-refs:* `BL-639`, `docs/org/weaponRay.md`.
 
 ## Weapons & combat
+
+- `BL-667` `[Bug]` **The zeppelin cannons' own scan still reads the aircraft half of the
+  VehicleList.** *Evidence:* `ZeppelinRuntime.Cannons.cs` fills its candidate set with
+  `ProjectilePool.CollectAircraft`, while the decoded turret picker (`FUN_0041f9c0`,
+  `docs/org/targeting.md` "What a turret's candidate set holds") walks the whole `VehicleList`,
+  hulls included; `TurretController` was widened to `CollectVehicleList` and the cannons were not.
+  *Fix shape:* the same one-call swap, with a suite placing a hostile hull under a zeppelin cannon
+  and no aircraft in the scene. *⚠ Traps:* the turret and ordnance pools of the picker stay
+  unscanned on purpose; do not widen further here. *Cross-refs:* `PLAN-M5-polish-8.md` B12,
+  `turret-vessel-targets` (the pattern suite).
 
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
   (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research
@@ -2353,6 +2374,27 @@ usual.
   the audio half of (b)), `BL-389` (splitscreen weapon mix, same playtest family).
 
 ## Missions, modes & campaign
+
+- `BL-665` `[Bug]` **A woken roster block is re-placed at its authored pose, not where the script
+  left it.** *Evidence:* `CampaignDirector.BuildRoster` stores `spawn.Position` in `_rosterPlans`
+  while placing the rig at a world node of the block's name where one exists, and
+  `World.WakeupEnemies` re-places a woken block at the stored authored pose. A mission whose script
+  animates a deactivated block into place before waking it would have it jump back on the wake. No
+  shipped C1/M04 block has a world node, so the path is latent there; other missions have not been
+  censused. *Fix shape:* store the placed pose (or re-read the node) at the wake rather than the
+  plan's authored one. *⚠ Traps:* a block placed by pose and never animated must land exactly where
+  it does today. *Cross-refs:* `PLAN-M5-polish-8.md` A1, whose `campaign-cm09-docking` suite drives
+  the wake.
+
+- `BL-666` `[Bug]` **A zeppelin killed by gasbags alone leaves CM09 with no loss and no docking.**
+  *Evidence:* the survivor-count kill (fewer than four of six gasbags) hides `piratezep` without
+  losing six engines, so the 26/27/41 loss chain never fires, while OBJECTIVE40 (gated on the hull
+  through `TICK_DEPENDS_ON_OBJ`) retires and 42 stays gated off. The mission then ends in neither
+  direction. *Fix shape:* decide from the original whether a gasbag kill is meant to reach the loss
+  chain or the docking, then route the hull's death through that path. *⚠ Traps:* the gate rule in
+  `docs/formats/objectives.md` ("a gate whose own condition reads true is a chain that stops for
+  good") is the mechanism; do not touch the graph. *Cross-refs:* `PLAN-M5-polish-8.md` A1, `BL-440`
+  (the breakup the same kill plays).
 
 - `BL-501` `[Feature]` **Nothing exercises avoid-crash probing between aircraft flying one net in
   formation.** *Evidence:* flagged by G77, which fixed the branch draw that split CM02's three

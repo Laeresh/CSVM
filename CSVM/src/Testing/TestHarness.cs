@@ -877,18 +877,7 @@ public sealed class TestContext
         // collidable world first; the suites that want one back rebuild it.
         if (collision)
         {
-            var evicted = new List<string>();
-            foreach (var (key, w) in _worlds)
-            {
-                if (w.Collision)
-                    evicted.Add(key);
-            }
-            foreach (var key in evicted)
-            {
-                var w = _worlds[key];
-                _worlds.Remove(key);
-                DisposalSeconds += TimeDestroy(w);
-            }
+            EvictCollidableWorlds();
         }
         var world = BuildWorld(chapter, collision, mission ?? Mission);
         if (defaultMission && chapter == Chapter)
@@ -921,6 +910,27 @@ public sealed class TestContext
         WorldBuildSeconds = 0;
         DisposalSeconds = 0;
         WorldsBuilt = 0;
+    }
+
+    /// <summary>Destroys every cached collidable world. A suite that builds its own physics lab
+    /// under the host without a world calls this first: the cache keeps the default chapter's
+    /// collidable world standing across suites, and its sea collider sits at the origin, so a
+    /// splash or a ray fired there reads the previous suite's scenery. The same rule a collidable
+    /// build applies before it opens its own space.</summary>
+    internal void EvictCollidableWorlds()
+    {
+        var evicted = new List<string>();
+        foreach (var (key, w) in _worlds)
+        {
+            if (w.Collision)
+                evicted.Add(key);
+        }
+        foreach (var key in evicted)
+        {
+            var w = _worlds[key];
+            _worlds.Remove(key);
+            DisposalSeconds += TimeDestroy(w);
+        }
     }
 
     internal void ReleaseWorlds()

@@ -48,6 +48,10 @@ internal static class OrdnanceSuites
         ctx.Check(Mathf.IsEqualApprox(full, 200f) && Mathf.IsEqualApprox(radius, 30f),
             $"wep_14 authors HEALTH_DAMAGE 200 and IMPACT_PROXIMITY 30 (the data this lab is scaled to)");
 
+        // The lab stands at the origin in the host's one physics space, where a cached collidable
+        // chapter world's sea collider also stands; without this the splash count depends on which
+        // suite ran before.
+        ctx.EvictCollidableWorlds();
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         var bodies = new List<StaticBody3D>();
@@ -103,8 +107,13 @@ internal static class OrdnanceSuites
                 ctx.Check(Mathf.Abs(dealt - expected) < 1f,
                     $"at {f:0.00}R the splash is {dealt:0.#} against the curve's {expected:0.#} (a linear curve would give {linear:0.#})");
             }
+            // Named, because a fourth body here is a collider another suite left under the shared
+            // host near the origin, and the name says which suite to look at.
+            string splashed = string.Join(", ", recorded.Where(r => r.Body != plate)
+                .Select(r => r.Body is Node n && GodotObject.IsInstanceValid(n) ? n.GetPath().ToString() : "<freed>")
+                .Distinct());
             ctx.Check(recorded.Count(r => r.Body != plate) == 3,
-                $"the three targets and nothing else took splash (dealt to {recorded.Count(r => r.Body != plate)} bodies)");
+                $"the three targets and nothing else took splash (dealt to {recorded.Count(r => r.Body != plate)} bodies: {splashed})");
             foreach (var b in curve) { b.Body.Free(); bodies.Remove(b.Body); }
 
             // --- cover. The same target with nothing in the way, then a wall between.
