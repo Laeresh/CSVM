@@ -1848,8 +1848,9 @@ engine suites across 4 shards, 18 goldens hash-identical, engine errors clean, 1
 tally the item's own gate reported. The user decided the three queued choices: Original stays
 normally selectable, the two-answer box follows the script with Yes focused, and the Options
 chooser's description moves above its plaques; with those three applied the tree passed the
-complete battery again (3026 units, 213 engine suites, 18 goldens hash-identical, 168.7s). The
-at-the-controls rows remain owed.
+complete battery again (3026 units, 213 engine suites, 18 goldens hash-identical, 168.7s), and with
+main merged in and the graphics mode option landed it passed once more (3059 units, 221 engine
+suites, 18 goldens hash-identical, 163.4s). The at-the-controls rows remain owed.
 
 **What the user must do at the controls.** The nine owed rows above, in that order, each over
 `.\RunDev.ps1` and never against a real profile (copy one first) or the real extraction (copy
