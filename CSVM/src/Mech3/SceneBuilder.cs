@@ -223,6 +223,17 @@ void fragment() {
     // distance leaves the authored +-49 range intact at that scale and cannot approach the near
     // plane. No unscaled surface comes near it (49 levels is 0.0098), so scale 1 is untouched.
     private const float MaxScaledBias = 0.25f;
+    // Enhanced mode only: how far above 1.0 a surface the original draws as a light source (a glow
+    // flare, a street lamp, a flame) writes its colour, so the glow pass has something to bloom.
+    // TUNE, judged at the controls: above 1.0 is what triggers the bloom at all, and the value
+    // decides how far it spreads. ⚠ Only the light-source arms take it; the general `lighting:
+    // false` population is not emissive (docs/org/vertexLighting.md).
+    private const float EmissiveScale = 1.5f;
+    // ⚠ Format the scale invariantly; a comma decimal separator emits shader text that will not
+    // compile. Godot discards EMISSION on an `unshaded` material and the glow pass reads the HDR
+    // colour buffer, so these arms reach it by scaling the colour rather than by writing EMISSION.
+    private static readonly string EmissiveLiteral =
+        EmissiveScale.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
 
     // ⚠ Process-wide, not per builder: Godot compiles a Shader the first time a material takes it,
     // and each generated text is a pure function of its key, so a per-builder memo made every later
@@ -1567,6 +1578,8 @@ void fragment() {
         // darker at night — it's what lights the scene), and neither is a model the artists
         // authored `lighting: false`. Clouds ride the world brightness.
         string lightTerm = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light";
+        if (glow && GraphicsMode.Enhanced)
+            lightTerm = $"col.rgb * {EmissiveLiteral}";
         sb.AppendLine(fogged
             ? $"    ALBEDO = mix({lightTerm}, csky_fog_color, fog_amt);"
             : $"    ALBEDO = {lightTerm};");
@@ -1651,6 +1664,8 @@ void fragment() {{
             sb.AppendLine(@"    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
         string cylLight = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light";
+        if (glow && GraphicsMode.Enhanced)
+            cylLight = $"col.rgb * {EmissiveLiteral}";
         sb.AppendLine(fogged
             ? $"    ALBEDO = mix({cylLight}, csky_fog_color, fog_amt);"
             : $"    ALBEDO = {cylLight};");

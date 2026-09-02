@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Post stack
 
-21. ☐ Lighting-exempt surfaces become emissive
+21. ☑ Lighting-exempt surfaces become emissive (light-source class only; the rest is a disproof)
 22. ☐ Environment glow + tonemap
 23. ☐ SSAO
 24. ☐ SSR on water — evaluate, then ship or park
@@ -702,7 +702,7 @@ output, not committed.
 
 # Wave C — Post stack
 
-## C21 ☐ Lighting-exempt surfaces become emissive
+## C21 ☑ Lighting-exempt surfaces become emissive
 
 **Goal.** Surfaces the original exempts from lighting (lit windows, signs, other fullbright
 overlays) stay fullbright in enhanced mode and additionally write EMISSION, so they read as light
@@ -717,6 +717,42 @@ which flag set exactly identifies the emissive population — the model-level `l
 per-texture exemption, or both — and whether C21 shares plumbing with BL-322 rather than
 duplicating it. Re-verify BL-322 still open.>`
 
+**Census result: neither flag identifies the emissive population, and one proper subset does.**
+Counted over each chapter's placed models, joined to the textures they draw (`.scratch/c21/census.ps1`
+over the extraction JSON; the table is now in `docs/org/vertexLighting.md`):
+
+| Chapter | placed models | `lighting: false` | of which the light-source class | of which the general (bias-shader) arm |
+|---|---|---|---|---|
+| C5 (night city) | 2,851 | 232 models / 603 nodes | 99 models / 448 nodes | 120 models / 137 nodes |
+| C1 (day) | 2,237 | 421 models / 1,106 nodes | 124 models / 760 nodes | 276 models / 285 nodes |
+
+The light-source class is model type `Facade` + facade mode `Spherical` minus the cloud sprites,
+which is `SceneBuilder.IsGlowSpriteMesh` and the original's own camera-facing flare classification.
+Its members in both chapters are only flares, lamps, railway signals, muzzle tips, explosion sprites
+and the moon: `poleflare` (246 C5 nodes), `flare_red`, `flare_green`, `light_flare`, `oil_liteflare`
+(39 C1 nodes), `rr_litegreen`/`rr_litered`, `dock_liteflare`, `hangar_flare1`, `bigflare01/02`,
+`beflare5`, `moon1`. The general arm's is heterogeneous and half non-luminous: C1's cloud deck (144
+`cloudlayer` nodes), both skydome textures, the baked ground-shadow decals (`lkshad3`, `lkshad6`,
+`sootstn`), the tree and bush cards, hangar interior skins, the zeppelin's passenger figures and the
+destroyed-building skin, beside genuinely self-lit `bowlsign`, `hotel_*`, `rasign`, `lite_out`,
+`flaglite01`, tracers and muzzle flashes. Scaling that whole arm would make a cloud deck, a skydome
+and a baked shadow glow.
+
+The per-texture exemption is gate 2 of `docs/org/vertexLighting.md`, the alpha bit, and it is the
+same byte BL-322 is blocked on. It is not plumbed: `TextureArchive` classifies alpha from the
+decoded PNG pixels and nothing reads the extractor's `alpha` field. That field IS present in the
+extraction output (`extracted/<chapter>/texture/manifest.json` and the matching `.zip`), which
+`vertexLighting.md` previously recorded as absent, so BL-322 needs a manifest reader rather than an
+extractor change. C21 plumbs nothing: gate 2 governs the FAITHFUL path (BL-322, BL-613) and its own
+exempted set mixes the lit-window and signage overlays with the baked shadow decals, the fog
+gradients and the cloud sprites, so plumbing it would not identify the emissive population either.
+Both backlog items were re-verified open and are untouched.
+
+So the item lands on the light-source class alone, and the "lit windows and signs" half is a
+recorded disproof: C5's lit windows are not separable surfaces where they matter most. They are
+bright texels inside the `lighting: true` wall textures, so no per-surface rule, plumbed or not, can
+hold them at their authored brightness.
+
 **Approach.** In the enhanced shader variant, the exempt arm sets `EMISSION = ALBEDO` (scale TUNE)
 and keeps ALBEDO out of the diffuse-lit path, so a lit window neither darkens at night nor doubles
 under the sun. Original mode text unchanged.
@@ -730,6 +766,63 @@ the walls around them go dark. Original-mode goldens zero movers.
 **⚠ Traps.** Do not conflate this exemption with BL-613's alpha-texture sun-term exemption; they
 are different decoded rules. EMISSION above 1.0 is the glow trigger in C22; keep the scale a named
 TUNE, not a magic number.
+
+**Verified.** <pending orchestrator run>
+
+The landed change is 15 lines in `CSVM/src/Mech3/SceneBuilder.cs`: a `private const float
+EmissiveScale = 1.5f` TUNE with an invariant-culture `EmissiveLiteral` beside it, and one branch in
+each of `GetBillboardShader` and `GetCylindricalShader` that, in enhanced mode and on the `glow` arm
+only, emits `col.rgb * 1.5` where the arm previously emitted `col.rgb`. `GetBiasShader` is
+untouched, for the census reason above.
+
+**The route is a colour scale, not EMISSION, and that was measured rather than assumed.** Both arms
+are `render_mode unshaded`, and Godot 4.7 discards EMISSION there. A throwaway variant emitting
+`EMISSION = col.rgb * 3.0;` and no colour scale rendered `w_lightglow` at mean luminance 132.84 over
+the 120x120 halo rect, pixel-for-pixel the same as emitting nothing (132.84); the colour scale over
+the same rect reads 146.86. The glow pass reads the HDR colour buffer, so the scale is what reaches
+it. The experiment switch was removed before finishing.
+
+Commands and results, all from the worktree with `$env:CSVM_DATA_ROOT="Z:\CSVM"`:
+`dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
+`.\RunTests.ps1 -Suite plane-shader-reuse -SkipUnits -SkipGoldens`: PASS, 1 suite run of 200
+(non-zero), engine errors clean, 0 unexpected lines.
+`.\RunTests.ps1 -SkipUnits -SkipEngine`: PASS, 18 shot(s) hash-identical, zero movers (50.5 s,
+awareness-only over the 50.0 s budget).
+
+Original-mode byte identity used B11's method rebuilt as a throwaway: a static enumerator in
+`SceneBuilder`'s constructor, armed by `CSVM_SCRATCH_SHADER_DUMP`, walking every reachable key of all
+three generators and writing each key's `Shader.Code`. The baseline came from the committed tree
+before the edit. `dump_orig_before.txt` and `dump_orig_after.txt` are both 12,996,256 bytes and
+SHA-256 `B96DA68E61BE449B179A7647AC0B23F46BBCA45938D1F84D10B5C6198403951F`, identical.
+`dump_enh_before.txt` is 12,579,488 bytes / `50DC662C95FC9091FCCFCD62AD79D3CC11FD0BE8742E818A9BFDB1C3521236C7`
+and `dump_enh_after.txt` 12,580,064 bytes / `653CE30B7990A2900A3999A248193CFC838BA4FCAADA8933BCCB67296C918B9D`,
+so the instrument was seen able to fail. The instrument was deleted before finishing.
+
+Captures are `.\RunProbe.ps1 ... --det --mute` runs under `.scratch/c21/`, with labelled montages
+beside them. C5's freecam default is frame-identical between the pre-C21 and post-C21 ORIGINAL
+builds (0 of 921,600 pixels) and moves 12 pixels between the two ENHANCED builds, all of them inside
+the flare sprites, which is the scope of the change stated as a measurement.
+
+| Sample | original | enhanced |
+|---|---|---|
+| C5 `w_lightglow` poleflare halo, 120x120 at 380,110 | mean 132.84, max 177.4 | mean 146.86, max 211.0 |
+| C1 `gen_flare_yellow` refinery flare halo, 160x160 at 560,220 | mean 141.53, max 251.4 | mean 161.81, max 255.0 |
+| C5 street-level lit window, 8x8 at 92,544 | mean 109.76 | mean 162.94 |
+| C5 street-level brick beside it, 8x8 at 124,544 | mean 12.81 | mean 23.94 |
+| C1 `des_on` DESERT sign panel, 180x60 at 470,150 | mean 138.43 | mean 138.43 |
+
+The window and wall rows are the disproof as a measurement: enhanced mode scales both by about the
+same factor (x1.48 and x1.87), so the window does not hold its authored brightness, because it is
+texels in a lit wall texture rather than an exempt surface. The sign row is the general
+`lighting: false` arm, unchanged in both modes by design.
+
+**Contract for C22.** The pixels that exceed 1.0 in the HDR colour buffer are exactly the glow-arm
+sprites: `GetGlowMaterial`'s camera-facing flares (C5 448 nodes, C1 760) and the flare/fire/flame
+cylindrical facades, each writing `col.rgb * 1.5` before the fog mix, so a fully fogged sprite still
+falls back to fog colour and cannot bloom. Nothing else in the world exceeds 1.0, so a
+`GlowHdrThreshold` of 1.0 blooms the light sources and nothing else. Where a flare's core was already
+saturated the scale shows only in its falloff (C1's max clips at 255), which is what the tonemap in
+C22 is expected to recover.
 
 ## C22 ☐ Environment glow + tonemap
 

@@ -190,6 +190,37 @@ to the material build, and treating `alpha != None` on a textured surface as "do
 a substitute for the field: it distinguishes `Full` from `None` but loses the 1 to 10 `Simple`
 textures per chapter, which carry the bit too.
 
+The field is available where the extraction output is: each chapter's `texture.zip` and its
+unpacked sibling carry a `manifest.json` listing every texture's `alpha` as `None` / `Simple` /
+`Full`. Nothing in CSVM reads that file, so plumbing gate 2 is a reader to write, not a decode to
+find.
+
+### What the model's `lighting` bit selects, and what it does not
+
+The bit is a lighting exemption, and the shipped data uses it for two disjoint reasons: a surface
+that is self-luminous, and a surface authored at a fixed brightness for some other reason. Counted
+over each chapter's placed models, joined to the textures they draw:
+
+| Chapter | `lighting: false` models | of which the original's camera-facing light-source class |
+|---|---|---|
+| C5 | 232 of 2,851 | 99 models, 448 nodes |
+| C1 | 421 of 2,237 | 124 models, 760 nodes |
+
+The light-source class (model type `Facade`, facade mode `Spherical`, minus the cloud sprites) holds
+only flares, lamps, railway signals, muzzle tips, explosion sprites and the moon in both chapters.
+The remainder of the `lighting: false` population does not: it also holds C1's cloud deck (144
+nodes of `cloudlayer`), both skydome textures, the baked ground-shadow decals (`lkshad3`, `lkshad6`,
+`sootstn`), the tree and bush cards, hangar interior skins and the zeppelin's passenger figures,
+beside genuinely self-lit signs (`bowlsign`, the `hotel_*` letters, `rasign`, `lite_out`,
+`flaglite01`).
+
+⚠ **Neither gate identifies "the surfaces that emit light".** Gate 1's population is half
+non-luminous, as above; gate 2's exempted set (listed earlier on this page) mixes the lit-window and
+signage overlays with the baked shadow decals, the fog gradients and the cloud sprites. C5's lit
+windows are also not separable surfaces at all where they matter most: they are bright texels inside
+the `lighting: true` wall textures, so nothing per-surface can hold them at their authored
+brightness.
+
 ⚠ **The rule cuts both ways and is not a brightness knob.** It exempts a large, named family, and
 the surfaces the world's calibration was measured on (terrain, building skins, water) are *not* in
 it. Applying it cannot raise a `cblock` or a `wtr` surface, and anything that does is a different

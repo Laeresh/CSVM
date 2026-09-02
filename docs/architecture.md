@@ -557,7 +557,11 @@ takes (`docs/verification.md` PERF-22). Each of the three keys also carries `Gra
 as its own bit. In enhanced mode `GetBiasShader`'s world arm for a surface authored `lighting: true`
 drops `unshaded` and shades off the decoded normals (pre-negated for `cull_front`) as a matte
 material, keeping the gamma modulate and the fog while dropping the `csky_world_light` multiply and
-the LIGHT_STATE spill; `lighting: false` surfaces and both billboard generators stay fullbright. Format/decode:
+the LIGHT_STATE spill; `lighting: false` surfaces and both billboard generators stay fullbright. In
+enhanced mode the two billboard generators' `glow` arm (the original's own camera-facing light-source
+class, plus the flare/fire/flame cylindrical facades) additionally scales its colour by
+`EmissiveScale` so the pixels exceed 1.0 for the glow pass; those arms are `unshaded`, where Godot
+discards EMISSION, so the scale is applied to the colour. Format/decode:
 docs/formats/gamez.md, docs/formats/world-structure.md, docs/formats/gotchas.md.
 
 ## src/Mech3/ZoneGate.cs
