@@ -479,6 +479,17 @@ clusters they delegate to.
 - `src/Session/LadderSwitch.cs` — the original's rope-ladder switch as an engine-free rule and state machine: the ladder is wanted when the aircraft's own up axis is within 45 degrees of world up and the player is inside an active `pickups.zrd` sensor, and the switch starts `drop_ladder` or `retract_ladder` to match, one transition at a time, holding a transient state until the definition's own `CALLBACK 123` settles it. A mission that authors neither definition flips the state silently, so no per-mission table exists. `Holder` is the co-op half, engine-free for the same reason the rest is: the incumbent human keeps the switch for as long as they qualify and only once they stop is the field asked, first qualifier in player order winning. ⚠ A single owner rather than "any human qualifies", because the transient states mean two humans drifting through one sensor under an "any" rule would thrash the drop against the retract; the incumbent is asked first precisely so a second qualifier changes nothing. Decode: `docs/org/ladderSwitch.md`.
 - `src/Session/LadderSwitchRuntime.cs` — `LadderSwitch` flown against the built world: every frame outside a cutscene it reads each flying human's attitude and position against the mission's pickup sensors, resolves the one holder through `LadderSwitch.Holder`, and starts the ladder definitions as mission triggers, so the drop's `OBJECT_ADD_CHILD` can materialize the library rope ladder. A holder that has stopped qualifying with nobody to take over is what retracts the ladder, and the same pass finding a replacement is what stops that retraction ever starting. It takes the runtime's `CALLBACK` host slot and chains to the cutscene host behind it, which is where the original registers the switch on each definition. Bound with the landings trigger, story missions only.
 
+### `src/Bindings/` — the input binding model
+
+What a binding is, and how one resolves against hardware. Named actions and the map that holds
+them, and the registry that resolves a device identity to a live pad, sit on top of these types.
+
+- `src/Bindings/DeviceId.cs` — which device a binding is on, as a stable value: the one keyboard, or a joypad named by its hardware string rather than by a connection index.
+- `src/Bindings/BindingControl.cs` — the tagged control: a key, a button, one signed half of an axis past a deadzone, or one direction of a hat, built through four validating factories.
+- `src/Bindings/Binding.cs` — one control on one named device, plus `ControlValue`, the held/how-far pair every resolution returns.
+- `src/Bindings/IDeviceState.cs` — the tick's raw hardware state addressed by device identity; the seam that keeps resolution engine-free, answering false for an absent device.
+- `src/Bindings/BindingSet.cs` — the bindings one action holds, ORed together the way the original ORs its four slots, with the deepest deflection winning the analogue read.
+
 ### Session root and tests
 
 - `src/Pads.cs` — single owner of "which gamepads exist": the phantom-device policy (span every pad) plus the `--no-pads` switch.
@@ -8013,3 +8024,45 @@ Original passes seat 0 on `PlayerPlane`'s node. Off-engine coverage:
 `CSVM.Tests/InstantActionFeatureTests.cs`, which also checks `LaunchMenu`'s public rosters against
 the feature's; the characterization of Built-in's journey over it is `menu-instant-action-journey`
 (`src/Testing/MenuInstantActionSuites.cs`).
+
+## src/Bindings/DeviceId.cs
+
+Which device a binding sits on, as a value: `DeviceKind` plus, for a joypad, the hardware string
+its platform reports. `Keyboard` is a singleton because the platform reports one key state whatever
+produced it; `Joypad` takes the stable string and refuses a blank one. The default value is
+`DeviceKind.None` and names nothing, which is what a binding read from a file with a missing device
+becomes. Turning an identity into a live joypad index belongs to the device registry, not here.
+
+## src/Bindings/BindingControl.cs
+
+The tagged control half of a binding: `ControlKind` picks which of `Key`, `Button`, `Axis` and `Hat`
+the numeric members mean, and the four static factories are the only way to build one, because they
+are where the per-kind invariants live. `HatDirection` is a flags enum so a device can report a
+diagonal, while a binding names exactly one direction. `Deadzone` is both the noise gate and the
+digital threshold; the model carries no second number for the two jobs. The original's four fixed
+typed slots and its reasons are decoded in `docs/org/input.md`.
+
+## src/Bindings/Binding.cs
+
+`Binding` is a device identity plus a control, and `Resolve` is the whole read: it reaches hardware
+only through `IDeviceState`, so the model is exercised without an engine. `ControlValue` is the
+held/how-far pair, with `Pressed` true exactly when `Value` is above zero, which is what lets an
+axis drive an action written as digital and a button drive one written as analogue. Structural
+equality is what a rebinding screen compares when it takes a control off its previous owner.
+
+## src/Bindings/IDeviceState.cs
+
+The tick's raw hardware state, addressed by device identity rather than connection index: keys,
+buttons, axis travel with no deadzone applied, and a hat's full direction flags. Every member
+answers for an absent device instead of throwing, which is how an unplugged pad silences its
+actions without the map losing the rows. The live implementation over Godot is the device
+registry's.
+
+## src/Bindings/BindingSet.cs
+
+The bindings one action holds. `Resolve` ORs them, which is the original's four-slots rule
+(`FUN_00537530`, `docs/org/input.md`) without its four fixed slots, and takes the deepest deflection
+any of them reports so a half-pressed trigger cannot beat a held button on the same action. `Add`
+drops a duplicate rather than rejecting it, `Remove` is the losing half of the steal rule, and
+`Clone` gives an editing screen something it can throw away. It owns no action name and no device
+lookup. Coverage: `CSVM.Tests/BindingModelTests.cs`.

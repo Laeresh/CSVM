@@ -132,7 +132,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the model
 
-1. ☐ The binding model: device identity, tagged control, binding list
+1. ☑ The binding model: device identity, tagged control, binding list
 2. ☐ `InputAction` and `ActionMap`: named actions resolved per player
 3. ☐ The device registry: enumeration, stable identity, hot-plug
 
@@ -173,7 +173,32 @@ A1. D33 is the closing item and depends on everything.
 
 # Wave A — the model
 
-## A1 ☐ The binding model: device identity, tagged control, binding list
+## A1 ☑ The binding model: device identity, tagged control, binding list
+
+**Landed.** `CSVM/src/Bindings/`, namespace `CSVM.Bindings`, five files: `DeviceId` (kind plus a
+stable hardware string, no connection index in the type), `BindingControl` (the four-way tag, built
+only through `Key`/`Button`/`Axis`/`Hat` factories that hold the invariants), `Binding` (a device
+and a control, with `Resolve`), `IDeviceState` (this tick's raw hardware, addressed by identity,
+contracted to answer for an absent device rather than throw), and `BindingSet` (the list an action
+owns, ORing its members).
+
+Three calls the plan left open, settled here: the namespace is `CSVM.Bindings` and the type is
+`BindingControl`, because `CSVM.Input` makes `Input.IsKeyPressed` resolve to the namespace at every
+future call site and a bare `Control` collides with `Godot.Control`; the deadzone doubles as the
+digital threshold, so `Pressed` holds exactly when `Value` is above zero and a second number is
+D32's to add if it needs one; and a set's analogue read takes the deepest deflection rather than the
+first, so a half-pressed trigger cannot beat a fully held button on the same action. The plan's
+"an action owns a `List<Binding>`" became `BindingSet` rather than a bare list, because the OR rule
+and the duplicate policy need a home both the map and a screen can reach.
+
+**Verified.** `CSVM.Tests/BindingModelTests.cs`, 12 facts over a fake `IDeviceState`, covering the
+three cases the plan named plus device identity silencing the same button on another pad, sign
+selecting the half of travel, cross-driving in both directions, deepest-deflection combining, an
+absent device leaving the binding in place, and factory rejection. Complete `.\RunTests.ps1` in the
+item's worktree: PASS, exit 0, 3085 units, 230 engine suites, 18 goldens hash-identical, 0 build
+warnings (188.5s total, over the 180s budget, which is awareness only).
+
+**Original approach (kept for reference).**
 
 **Goal.** One type describes any binding the game can hold: a keyboard key, a pad button, a signed
 axis past a deadzone, or a hat direction, on a named device. An action holds a list of them and
@@ -198,8 +223,8 @@ shape wrong is the expensive failure this plan exists to avoid.
 
 **Verify.** Unit tests over resolution alone, no engine: an action with three bindings fires on any
 one; an axis at 0.4 with deadzone 0.5 does not fire and at 0.6 does; a hat direction resolves
-independently of the other three directions on the same hat. <TODO: name the test file and the
-`RunTests.ps1 -UnitFilter` expression once the suite layout is picked.>
+independently of the other three directions on the same hat. `CSVM.Tests/BindingModelTests.cs`, run
+with `.\RunTests.ps1 -UnitFilter "FullyQualifiedName~BindingModelTests" -SkipEngine -SkipGoldens`.
 
 **⚠ Traps.** Do not model a binding as "key or button" with a nullable device. The whole point is
 that device identity is part of the binding, and a nullable field is how the ceiling creeps back in.
