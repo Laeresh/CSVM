@@ -178,7 +178,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — defaults and persistence
 
 21. ☑ Persist the map: a versioned format, per player
-22. ☐ `docs/controls.md` becomes the shipped-defaults record
+22. ☑ `docs/controls.md` becomes the shipped-defaults record
 
 ### Wave D — the screen
 
@@ -816,7 +816,52 @@ deliberately-unbound list, no hat default, one control per action inside a conte
 **⚠ Traps.** ⚠ PowerShell 5.1 corrupts UTF-8 in BOM-less files. If any script touches this format,
 pass `-Encoding utf8` on both ends and keep the script itself ASCII (`CLAUDE.md`).
 
-## C22 ☐ `docs/controls.md` becomes the shipped-defaults record
+## C22 ☑ `docs/controls.md` becomes the shipped-defaults record
+
+**Landed.** `docs/controls.md`'s opening states that the listed keys and buttons are the shipped
+defaults, that the set is data in `DefaultBindings.cs` as one `ActionMap` per `InputContext`, that
+per-player rebinding is being built and these are the starting point it resets to, and that the
+debug overlays and lab panels sit outside the action set on purpose. It also states the per-context
+rule with the three controls that prove it (`W`, `P`, `Space` each mean different things in flight,
+on a board and in the free camera), because a reader who takes the page as one flat keymap reads
+those three rows as contradictions.
+
+Six places where the page and the shipped table disagreed, resolved by reading both:
+
+1. **The `I` row claimed a pad default the table does not hold.** `TargetNearest` is keyboard `I`
+   alone; the pad reaches it by holding d-pad up past 250 ms, which is `TargetNextEnemy`'s binding
+   dispatched by hold length inside the consumer. The code is right, and the page said "D-pad ↑
+   (hold 250 ms)" in a column that otherwise means "this action's pad binding". Both target rows now
+   say that d-pad up is the pad's one targeting binding and where the split happens.
+2. **The menu table hid its own defaults**, because it was written with two columns and several rows
+   carried three cells, so a renderer dropped the text after the pad letter. It now has an `Input` /
+   `Pad` / `Does` shape like the flight table.
+3. **Four menu defaults were undocumented**: the `W`/`S`/`A`/`D` aliases beside the arrows, numpad
+   `Enter` beside `Enter`, the loadout key (`L`, pad `Y`), and the contents list (`P`, pad `X`). The
+   code is right: they are real shipped bindings a player can press today.
+4. **`MenuLeft`/`MenuRight` had no row at all**, so the horizontal steppers on a board were
+   undocumented. The code is right.
+5. **The freecam table omitted boost and slow** (`Shift`/`Ctrl` and the two triggers past half
+   travel), which is the whole reason `CameraDollyIn`/`CameraDollyOut` are separate actions at
+   deadzone 0. The code is right, and both readings of the trigger pair are now stated together.
+6. **The chase-camera zoom (`numpad +`/`−`) is not a bindable action**, and the page listed it beside
+   rows that are. `CameraController.UpdateZoom` and `FlightController.OrbitInput` poll the two keys
+   directly. That is deliberate (the weapon-lab orbit sums two key pairs, which an action read cannot
+   express) and the row now says the pair is outside the default table.
+
+**Verified.** Every row of the page read against `DefaultBindings.cs` binding for binding, in all
+three contexts. Flight's 35 actions, Menu's 10 and Camera's 15 each have a row or a stated reason not
+to. Three things that look like discrepancies and are not, checked and left alone: the numpad snap
+cluster's `Kp1`/`Kp2`/`Kp3` drive `LookDown` while the page calls `Kp2` "Look Back", which agrees
+because `HeadLook.SnapTargets` reads the pair as a compass direction rather than a pitch, so a held
+`Kp2` resolves to dead astern at level; `CycleStuntTarget` on d-pad up beside `TargetNextEnemy`, both
+documented and both shipped; and the `F13` onward debug block, whose ordering follows the physical
+rows of the author's keypad and is not a mistake to tidy.
+
+This item touches only `docs/`, so the complete `.\RunTests.ps1` landing gate does not apply and was
+not run. `.\CheckCommitContent.ps1` passes against the item's worktree.
+
+**Original approach (kept for reference).**
 
 **Goal.** The doc says "these are the defaults", not "these are the bindings".
 
