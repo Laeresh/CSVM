@@ -101,10 +101,17 @@ The original's command map is decoded in full at [`docs/org/input.md`](org/input
   as 2400 raw bytes under `HKEY_CURRENT_USER\SOFTWARE\Microsoft\Microsoft Games\Crimson Skies\1.0`
   with no version field (`FUN_005bdc89`, `FUN_005bd900`).
 
-On our side, the survey that this plan needs and does not yet have is the polling census:
-<TODO: count and locate every `Input.IsKeyPressed` / `IsJoyButtonPressed` / `GetAxis` call under
-`CSVM/src`, grouped by file, and record the total here. `BL-296` says "about a dozen" in
-`FlightController` plus `MenuInput` and `SpectatorCamera`; that number has not been checked.>
+On our side, the polling census, taken during A2 over `Input.IsKeyPressed`, `IsJoyButtonPressed`,
+`GetJoyAxis` and `IsMouseButtonPressed` under `CSVM/src`: **84 occurrences in 6 files**. The real
+sites are `FlightController.cs` (34), `MenuInput.cs` (33) and `SpectatorCamera.cs` (14);
+`Launcher.cs` holds 1, and the two hits under `Bindings/` are the interface and its own
+documentation.
+
+⚠ **`BL-296`'s "about a dozen bindings in `FlightController`" undercounts by roughly three times**,
+and the same entry's three-file list is complete only because `Launcher.cs`'s single site is
+incidental. Wave B is therefore larger than its Evidence lines assumed: B12 (`MenuInput`, 33) is
+comparable in size to B11's `FlightController` (34), not the small follow-up the wave ordering
+implies.
 
 ## Ground rules
 
@@ -133,7 +140,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the model
 
 1. ☑ The binding model: device identity, tagged control, binding list
-2. ☐ `InputAction` and `ActionMap`: named actions resolved per player
+2. ☑ `InputAction` and `ActionMap`: named actions resolved per player
 3. ☐ The device registry: enumeration, stable identity, hot-plug
 
 ### Wave B — the migration
@@ -232,7 +239,37 @@ Do not use a Godot `InputEvent` as the stored type: `InputMap` is app-global and
 per-player bindings (`BL-296`'s own trap), so the per-player layer stays ours whatever sits
 underneath.
 
-## A2 ☐ `InputAction` and `ActionMap`: named actions resolved per player
+## A2 ☑ `InputAction` and `ActionMap`: named actions resolved per player
+
+**Landed.** Four files in `CSVM/src/Bindings/`: `InputAction` (58 members, every one traceable to a
+poll site that exists today), `ActionMap` (one seat's `Dictionary<InputAction, BindingSet>`, with
+`Assign` returning the action that lost the control, `TryFindOwner`, `Clone`, `Resolve`),
+`ActionSnapshot` (`Held`/`Value`/`Axis`, array-backed and reused each tick so resolution allocates
+nothing at 60 Hz, fillable only through `internal` members so nothing outside the assembly can forge
+a tick), and `PlayerActions` (the seam a polling site holds).
+
+Calls the plan left open, settled here: "the same control" is not `Binding` equality but a
+comparison of device, kind, index and an axis's sign or a hat's direction, deliberately ignoring the
+deadzone, so re-binding an already-bound axis adjusts it in place rather than stacking a copy; the
+keyboard gate lives on the seat (`PlayerActions.ReadsKeyboard`) rather than in the map, so a pad-only
+seat keeps its keyboard defaults and simply does not read them; the snapshot is reused rather than
+immutable, and `Current` is documented as live; and the debug and lab keys (`F13`-`F18`, the viewer
+and weapon-lab panels) are deliberately outside `InputAction`, because putting them in the enum
+would put them in D31's rebinding screen.
+
+**Verified.** `CSVM.Tests/ActionMapTests.cs`, 17 facts over a fake device state, covering the steal
+across two actions, the snapshot answering identically twice in one tick, per-player isolation, the
+deadzone-adjust case, the two halves of one axis staying independent, and the pad-only seat. Run
+with `.\RunTests.ps1 -UnitFilter "FullyQualifiedName~ActionMapTests" -SkipEngine -SkipGoldens`.
+Complete `.\RunTests.ps1` in the item's worktree: PASS, exit 0, 3102 units, 230 engine suites, 18
+goldens hash-identical, 0 build warnings.
+
+⚠ **This item does not finish the per-player routing.** The plan's Evidence line conflated two
+things: `UseKeyboard` is a gate and is implemented here, but `PadDevices` is a device *selection*
+(which pad identities a seat may read) and belongs to the device registry. B11 cannot complete a
+seat's routing on `PlayerActions` alone.
+
+**Original approach (kept for reference).**
 
 **Goal.** `actions.Held(InputAction.FireGuns)` replaces `Input.IsKeyPressed(...)` at the call site,
 resolved through the calling player's own map.
@@ -248,7 +285,11 @@ a snapshot the consumers read, so two sites asking the same question in one tick
 
 **Model recommendation.** high. It is the seam every other item plugs into.
 
-**Verify.** Unit tests over a synthetic device state. <TODO: exact filter expression.>
+**Verify.** Unit tests over a synthetic device state, `CSVM.Tests/ActionMapTests.cs`, run with
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~ActionMapTests" -SkipEngine -SkipGoldens`. The three
+facts that must be there: assigning a control to a second action takes it off the first and reports
+which one lost it; a snapshot polled once answers the same twice in a tick while the fake hardware
+changes underneath; and the same control on two players' maps resolves to each player's own action.
 
 **⚠ Traps.** **Not an event bus.** `BL-296` is explicit: fire is a held control on the 60 Hz fixed
 tick, edge detection stays in the consumers (`FireControl` never changes, it consumes `FireInputs`
