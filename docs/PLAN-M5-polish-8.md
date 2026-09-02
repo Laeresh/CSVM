@@ -86,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Closing sortie
 
-31. ☐ At-the-controls pass over every landed item that owes a judgement
+31. ◐ At-the-controls pass over every landed item that owes a judgement
 
 ## Dependency and parallelism notes
 
@@ -1065,7 +1065,7 @@ orchestrator.
 
 # Wave D — Closing sortie
 
-## D31 ☐ At-the-controls pass over the landed items
+## D31 ◐ At-the-controls pass over the landed items
 
 **Goal.** Every landed item whose acceptance needs eyes or a judgement gets both, and every
 finding becomes a fix, a follow-up `BL`, or a recorded verdict. The checks are `playtest.md`'s
@@ -1110,6 +1110,21 @@ judgement work.
 **Verify.** Every code item's plan section carries a **Verified.** line naming what was seen; any
 overturned reading is recorded in the item it overturns.
 
+**Flown.** All eleven rows were flown on main from the author's own session
+(`.scratch/logs/game-20260902-204358.out`), beside `PLAN-M5-polish-9`'s rows in the same sitting.
+`PT-97`, `PT-98`, `PT-99`, `PT-105` and `PT-106` passed and retired; `PT-86`'s burst passed and its
+shake magnitude moved onto `BL-266` as the third source of one modelling gap rather than a new item.
+Four rows were answered by disproving the row rather than the build: `PT-100`'s lifeboat gun asked
+for something no shipped `ai.zrd` pattern gives the original either, its "turrets shoot at player"
+is a no-`TEAM` `bbtur` behaving correctly, and `PT-101`(a)/(b) is unflyable because C2 carries no
+turret node at all. What those three did surface is real and is now `BL-687`: a `mode ship` hull
+gets no AI object, so it cannot fire the gun its def authors. `PT-104` failed on direction and is
+fixed. **Still owed: `PT-102`**, flown against a description that was wrong — `cargozep1` launches
+allied Furies on `M3Allies`, not enemy Black Swans — so `B14`'s acceptance needs the corrected row
+re-flown.
+
 **⚠ Traps.** A live symptom is evidence about the build that was running: confirm which build and
 worktree flew before minting anything. The sim clock can lag wall time on physics-bound late-C2
-missions; check the hitch lines before blaming an authored rate.
+missions; check the hitch lines before blaming an authored rate. ⚠ **The author's sortie logs are
+`game-*.out`, not `fly-*.log`** — the latter are suite output, and reading them for a controls
+report answers a question nobody asked.

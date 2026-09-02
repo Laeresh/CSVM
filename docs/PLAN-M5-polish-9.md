@@ -96,7 +96,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Closing sortie
 
-31. ☐ At-the-controls pass in mission order over every landed item that owes a judgement
+31. ◐ At-the-controls pass in mission order over every landed item that owes a judgement
 
 ## Dependency and parallelism notes
 
@@ -898,7 +898,7 @@ included, and is out of this item's scope.
 
 # Wave D — Closing sortie
 
-## D31 ☐ At-the-controls pass in mission order over every landed item that owes a judgement
+## D31 ◐ At-the-controls pass in mission order over every landed item that owes a judgement
 
 **Goal.** Every landed item whose acceptance needs eyes gets them, in mission order, and every
 finding becomes a same-day fix, a follow-up `BL`, or a recorded verdict. Each landed code item
@@ -923,6 +923,20 @@ judgement work.
 
 **Verify.** Every code item's plan section carries a **Verified.** line naming what was seen; any
 overturned reading is recorded in the item it overturns.
+
+**Flown.** All eleven rows were flown on main in one sitting with `PLAN-M5-polish-8`'s, from the
+author's own session (`.scratch/logs/game-20260902-204358.out`). `PT-109`, `PT-110`, `PT-111`,
+`PT-112`, `PT-113`, `PT-114`, `PT-115` and `PT-116` passed and retired, closing `BL-597`, `BL-627`
+and `BL-676` at the controls; `PT-113`(b)'s log line, which the author did not check, reads
+`wingman_2 lost its leader 'devastator_2' and takes its net 'M4Bravo2#27'` once per lost leader.
+`PT-108` is struck rather than answered: both of CM13's "landing cones" carry `model_index: -1`, so
+neither can ever be seen drawing, here or in the original, and the author's "these should never be
+visible to the player" is the correct reading. Three rows passed but surfaced defects beside them,
+all now filed: the marker faults behind `PT-112` and `PT-117` are one cause with CM02's double
+bracket (`BL-688`), CM15's unpainted cutscene Balmoral is `BL-690`, and CM13's flight check is
+`BL-689`. **Still owed: `PT-107`**, whose (a) confirmed the ace underground from the engine's own
+line (`roster 'hkfirebrand_9' ... terrain=229 (-79 above it)`, the only such aircraft in the
+session) and which re-flies once `BL-678` lands.
 
 **⚠ Traps.** A live symptom is evidence about the build that was running: confirm which build and
 worktree flew before minting anything, and check for testing worktrees left over from run 8. The

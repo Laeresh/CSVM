@@ -182,6 +182,15 @@ last. Contention rules for parallel worktrees:
   `docs/controls.md`) are disjoint** from each other and from everything above.
 - **Scheduling, not files:** `B11` and `B12` land only after `PLAN-M5-polish-8`'s and
   `PLAN-M5-polish-9`'s `D31` sorties have been flown (Decision 4). Waves A and C are unaffected.
+  **That gate is discharged:** all of `PT-86` and `PT-97` to `PT-117` were flown in one sitting, so
+  `B11` and `B12` are free to land. Both those `D31` items stay open for one re-fly each
+  (`PT-102` corrected, `PT-107` after `B11`), which is not a hold on this wave.
+- **`B11` carries a rider.** The CM12 ace was seen teleporting back to its authored pose repeatedly.
+  The writer is `FlightController.cs:1752`'s under-map backstop, `Position.Y < UnderMapY` calling
+  `Respawn()`, and it emits no log line at all, which is why a whole sortie's worth of teleports went
+  undiagnosed. `B11` removes the trigger (the ace stops being stuck in geometry it should fly out
+  of), so this is not its own item — but give the backstop a log line in the same change, or the next
+  aircraft to fall through the world will be just as silent.
 
 ---
 
