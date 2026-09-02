@@ -458,7 +458,33 @@ motion in would put a delta into a type whose whole contract is a held-and-how-f
 
 # Wave B — the migration
 
-## B11 ☐ Census the polling sites, then migrate `FlightController`
+## B11 ☑ Census the polling sites, then migrate `FlightController`
+
+**Landed.** `FlightController` resolves every attitude, weapon, targeting and view control through
+`InputContext.Flight`. The census counted wrapper calls rather than raw polls: the file reached the
+hardware at four reads behind `KeyDown` / `KeyAxis` / `PadPressed` / `PadAxis`, and the work was the
+two rules those wrappers carried that the seam did not, the `UseKeyboard` gate and
+`Pads.For(PadDevices)`.
+
+One `ActionMap` carries three `PlayerActions` readers over it, full, keyboard-muted and pad-muted,
+because A2's one-profile-polled-once shape does not survive `ReadKeyboard`: the keyboard and pad
+halves of one attitude action take different processing, a `StickRamp` ramp against a `StickCurve`
+curve, and are then summed and clamped, so a single OR-ed read would delete both silently. `PollInput`
+is idempotent per rendered frame, since input is read from `_Process`, `SimStep`, `EndPhotoMode` and
+`LandingApproachRuntime` and no one caller owns the site.
+
+Two behaviour changes are recorded rather than hidden: a three or four key tie on one attitude axis
+reads zero where the old count difference gave a sign, which follows from the OR-ed default set; and
+pad `X` stopped cycling the stunt target, which B15 answered by putting `CycleStuntTarget` on `D-pad
+Up`.
+
+**Verified.** `FlightBindingMappingTests`, 77 facts, each asserting an action resolves from the
+control the old code polled. A `--det` baseline taken in the item's worktree before the first edit
+over the two scripted runs below, seven PNGs md5-identical after the change and again after the
+pad-list caching. Complete `.\RunTests.ps1` in the item's worktree, exit 0, 3214 units, 230 engine
+suites, 18 goldens hash-identical.
+
+**Original approach (kept for reference).**
 
 **Goal.** No raw input poll remains in `FlightController`, and the aeroplane flies identically.
 
@@ -499,7 +525,29 @@ keymap: `L` is *reserved and deliberately unbound* for Track Target (`BL-399`), 
 `F13`-`F17` follow the physical rows of the author's keypad rather than a contiguous block. Do not
 tidy either while migrating.
 
-## B12 ☐ Migrate `MenuInput`
+## B12 ☑ Migrate `MenuInput`
+
+**Landed.** Twenty-five of `MenuInput`'s controls resolve through `InputContext.Menu`. Three of the
+file's rules had no expression in the landed seam and needed design rather than the mechanical
+fan-out this item was written as. A menu seat reads a set of pads while a binding names one device,
+so a seat-local placeholder identity answers for the set over `Pads.For`. The pad-only twins come
+from a second `PlayerActions` with `ReadsKeyboard` false over the same map. Text entry clones the map
+and drops every keyboard binding whose key is typeable, which reproduces the alias rule as a rule
+rather than a hard-coded list, so it keeps holding after a rebind.
+
+Nine sites stay raw and are meant to. `ScanActivePad` and `JoinPressed` both ask which device
+produced an input, and a seat's bindings OR across every pad it holds, so the resolved boolean cannot
+say which one fired. That is the same reason C21 leaves `MenuJoin` unbound. The typing sweep has no
+named action by design.
+
+**Verified.** `MenuInputBindingTests`, 46 facts. Each migrated control is asserted to resolve its
+action **and no other menu action**, which is the wrong-mapping failure B14's gate cannot see.
+Complete `.\RunTests.ps1` in the item's worktree, exit 0, 3184 units, 230 engine suites, 18 goldens
+hash-identical. B14 later added the `--det` pair this item landed without, over the four probes in
+its own section: the menu and freecam shots are md5-identical across this item's before and after
+trees.
+
+**Original approach (kept for reference).**
 
 **Goal.** Menu navigation resolves through the same seam.
 
@@ -538,7 +586,35 @@ not starve it before reusing the same resolver here.
 seat holds, so the answer is unrecoverable from an action. C21 already leaves `MenuJoin` unbound for
 this reason; `LastActivePad` is the same question and gets the same treatment.
 
-## B13 ☐ Migrate `SpectatorCamera` and whatever the census turns up
+## B13 ☑ Migrate `SpectatorCamera` and whatever the census turns up
+
+**Landed.** Every polled key and pad read in the freecam resolves through `InputContext.Camera`. The
+seven raw `Input` reads are gone from the camera's logic and live only inside the seat's device
+state, which is where a seat's hardware read belongs.
+
+The mouse does not move. Free-look there is an `InputEventMouseButton` toggling a field with
+`InputEventMouseMotion` doing the pan, the wheel is a discrete event with no held state, and the `F`
+and pad `X` target key are events on purpose per `BL-279`, because a polled edge fires behind a host
+that already consumed the key. Converting any of them to a poll would change when free-look starts
+and stops relative to the frame, which is the inverse of `BL-296`'s trap.
+
+Two `PlayerActions` sit over one shared `ActionMap`, one fed a keyboard-only device view and one a
+pad-only view, because this camera gives a key and a stick bound to the same action different rates
+and sums them. One merged read would have to pick a rate and would drop the sum, sending keyboard
+look fifty per cent faster. The seat placeholder answers for itself and nothing else, so a real
+hardware identity from a loaded profile cannot be silently served by the seat's whole pad set.
+
+Three deviations were recorded rather than hidden, and B15 answered two of them: the deadzone rescale
+in `Binding.Resolve` is removed, and the orbit dolly has its own actions at deadzone 0 rather than
+inheriting the digital boost threshold. Opposed-key edge cases are the third and stand.
+
+**Verified.** `SpectatorBindingsTests`, 29 facts, including that every axis pair here is the
+symmetric subtract-both form, so `ActionSnapshot.Axis` is correct for this file where `MenuInput`'s
+negative-priority form made it wrong there. Complete `.\RunTests.ps1` in the item's worktree, exit 0,
+3166 units, 230 engine suites, 18 goldens hash-identical. B14 later added this item's missing `--det`
+pair, md5-identical across its before and after trees on all eleven shots.
+
+**Original approach (kept for reference).**
 
 **Goal.** The last raw polls are gone.
 
