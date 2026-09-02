@@ -655,7 +655,8 @@ change: every pane's `SubViewport.World3D` is explicitly set to the main viewpor
 pane computes its own directional shadow map off its own camera — `PositionalShadowAtlasSize`
 (the omni/spot atlas) is moot since B14 keeps every omni's `ShadowEnabled` off.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the Wave B tree: 2796 units, 200 engine suites
+(errors clean), 18 goldens hash-identical, all passing in 145.3 s.
 In the item's own worktree, `$env:CSVM_DATA_ROOT="Z:\CSVM"` set first throughout.
 `dotnet build CSVM/CSVM.sln`: clean, 0 warnings, 0 errors.
 `.\RunTests.ps1 -SkipEngine -SkipGoldens`: units PASS, 2796 passed of 2796, 0 failed.
