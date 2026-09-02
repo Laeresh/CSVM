@@ -39,9 +39,10 @@ This plan runs beside [`PLAN-menu-presentations.md`](PLAN-menu-presentations.md)
 it owns: no `LaunchMenu`, no menu screens, no campaign board chrome. It also runs beside the open
 closing sorties of [`PLAN-M5-polish-8.md`](PLAN-M5-polish-8.md) and
 [`PLAN-M5-polish-9.md`](PLAN-M5-polish-9.md), and that is a scheduling constraint rather than a file
-one: see Decision 4. First alternates if an item here dies early: `BL-405` (a census that probably
-closes as no-change), `BL-673` (latent, small), `BL-391` (an audio level the author has already
-reported), `BL-614` (the general form of a walk `C21`'s neighbourhood measured).
+one: see Decision 4. `A2` died at dispatch and its named first alternate `BL-405` was promoted into
+its place as `C25`. Remaining alternates if another item dies early: `BL-673` (latent, small),
+`BL-391` (an audio level the author has already reported), `BL-614` (the general form of a walk
+`C21`'s neighbourhood measured).
 
 ## Milestone goal
 
@@ -85,11 +86,12 @@ in its own entry. None of them is blame; each is a place a session would otherwi
 | 2 | CM10's attack-balloon marker is placed wrongly and needs an offset or an altitude floor (`BL-656`). | `PLAN-M5-polish-9` `B14` disproved it: the marker tracks its geometry correctly and the geometry itself dips to the water. The anchor rule is the original's (`FUN_004cf2c0`, the midpoint of the node's active bounding box). The remainder is `BL-674`, an alternate here, and any fix that adds a constant to the marker is wrong by construction. |
 | 3 | C5's lit facades are dim because the original exempts them from the world light (`BL-322`). | `PLAN-M5-polish-6` `A2` decoded the exemption and refuted the premise. `cblock1` to `7`, `bldg1` to `4` and `bldgtrim1` all ship storage flags `0xa5`, no alpha bit, so the original modulates them exactly as we do. What survives is the narrower rule `B12` implements, applied to the overlays drawn on top rather than to the facades themselves. |
 | 4 | `BL-535`'s repeat-burst cost sits two bursts before the pool wrap, and `EnsureOpacityPath`'s shader scan is the bottleneck. | `PLAN-M5-polish-6` `B13` measured both away. The cost lands exactly at the wrap, and the scan is under 0.1 ms. `C21` inherits the corrected reading, and the general form of the walk is `BL-614`, an alternate here. |
-| 5 | Our puffer blend verdict can be corrected by deleting the darkness rule (`BL-335`). | Its own entry records that deleting it alone makes the reported case worse, because `fire_n_smoke` dies on an unflagged sprite and reaches the right answer by the wrong route. `BL-335` is not in this run; `B12` must not be extended toward it opportunistically, because the blend rule needs a different header field and the depth sort is a separate delta again. |
+| 5 | The zeppelin cannons' candidate set is too narrow and should be widened to the turret picker's whole `VehicleList` (`BL-667`, this plan's own `A2` as written). | Four read-only lenses killed it at dispatch. The broadside is not a turret and runs no candidate scan: it walks the record's authored `targets` node-name list, and the one `CollectAircraft` call only resolves the literal name `player` behind an `IsHumanPiloted` filter. Its mirror image, "a broadside should only target other zeppelins", is equally false and has now been refuted three times (`BL-517`, `BL-567`, and this pass): what keeps shipped broadsides off the player is the `COMPLETED_ZEPCANNONS` engage flag. See `A2`. |
+| 6 | Our puffer blend verdict can be corrected by deleting the darkness rule (`BL-335`). | Its own entry records that deleting it alone makes the reported case worse, because `fire_n_smoke` dies on an unflagged sprite and reaches the right answer by the wrong route. `BL-335` is not in this run; `B12` must not be extended toward it opportunistically, because the blend rule needs a different header field and the depth sort is a separate delta again. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | `A2`, `A3`, `B11`, `B12`, `B13`, `C22`, `C24` | Confirm the trace, then implement. Each names a decoded function or a measured census. |
+| **Traced to an exact mechanism in code, with the data that proves it** | `A3`, `B11`, `B12`, `B13`, `C22`, `C24`, `C25` | Confirm the trace, then implement. Each names a decoded function or a measured census. `C25` is the exception in one respect: its mechanism is decoded but the data question it turns on is not, so its first step is a census and its likely outcome is a disproof. |
 | **Direction sound, magnitude a judgement call** | `A1`, `C23` | The behaviour is settled and the number is not. `A3`'s replacement radius and `B13`'s energy mapping are TUNE and belong in the author's hands, not in a fitted constant. |
 | **Leads only, no mechanism yet** | `C21` | Budget for investigation. The reference footage is exact and our behaviour is measured, but which part of the anim runtime produces the difference is unidentified, and this may end in a decode rather than a fix. |
 
@@ -130,7 +132,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Airships
 
 1. ☐ `BL-668` A downed zeppelin's wreck rests on the sea, and its gasbags stop falling through it
-2. ☐ `BL-667` The zeppelin cannons' own scan reads the whole VehicleList, hulls included
+2. ❌ `BL-667` The zeppelin cannons' own scan reads the whole VehicleList, hulls included (disproven: the broadside runs no candidate scan, it walks the record's authored `targets` names, and the proposed swap is a no-op behind an `IsHumanPiloted` filter; `BL-681` filed for the real gap)
 3. ☐ `BL-670` A zeppelin on a scripted route flies its short legs instead of cutting them
 
 ### Wave B — What a surface is: collision and light
@@ -145,6 +147,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☐ `BL-459` A damaged engine's loop waits out the original's re-arm delay before it restarts
 23. ☐ `BL-433` Numpad `+`/`−` drive the chase camera's zoom
 24. ☐ `BL-679` A staged airframe leaves no stale node behind in the name resolver
+25. ☐ `BL-405` Mounted ordnance tracks the aim before it launches, or the census closes it
 
 ### Wave D — Closing sortie
 
@@ -217,40 +220,74 @@ not have, and it would hide whichever tier is answering wrongly. `BL-639` (the G
 burning out) is blocked on `CAP-47` and is a different question about the same ship; do not fold it
 in.
 
-## A2 ☐ `BL-667` The zeppelin cannons' own scan reads the whole VehicleList, hulls included
+## A2 ❌ `BL-667` The zeppelin cannons' own scan reads the whole VehicleList, hulls included
 
-**⚠ This item's fix shape is under challenge and is not dispatched.** The author's reading is that
-the broadside cannons are not turrets and should acquire only other zeppelins, which would make the
-widening below the wrong change. Four read-only lenses (the remake code, the decode docs, the
-shipped weapon defs, and this project's own record) are settling it. Do not start this item until
-the verdict is written into this section; whichever way it goes, the section is rewritten before any
-code is touched.
+**Closed ❌ disproven, no code.** The entry's premise is a misreading of one call site, and the fix
+it proposed is a strict no-op whose own acceptance test could not have gone green. The item was
+challenged at the plan's own dispatch, and four independent read-only lenses (the remake code, the
+decode, the shipped data, and this project's record) each landed on the same answer.
 
-**Goal.** A zeppelin's broadside cannons acquire a hostile hull under them, the way the original's
-turret picker does, instead of seeing only aircraft.
+**What is actually true.** `ZeppelinRuntime.Cannons.cs` is the **broadside battery**, not a turret
+module. It calls itself the broadside half of `ZeppelinRuntime` (`:11`), binds the record's
+`left_cannons`/`right_cannons` node lists (`:157`), plays the authored hatch deploy and retract
+anims (`:241`, `:246`), and fires the hardcoded `wep_28` cannonball (`:21`). Its geometry is a
+broadside and not a traverse: `ZeppelinBroadside.SideNormal` builds a lateral vector by side flag
+and `TargetSide` gates on `dot(toTarget, sideNormal) > 0.707`
+(`CSVM/src/Flight/ZeppelinBroadside.cs:110-143`), with the lateral sign re-derived from the built
+cannon X positions so a mirrored import cannot fire the wrong side (`Cannons.cs:187-198`). Cadence
+is the record's `cannon_fire_delay` per cannon, nothing like a turret `FIRE_RATE`, and there is no
+yaw or pitch node, no traverse and no `DETECTION_RANGE`.
+[`docs/formats/turrets.md`](formats/turrets.md) states the separation outright: the broadside is a
+separate system with its own arc and fire logic, and `WAKEUP_ZEP_TURRETS` and `COMPLETED_ZEPCANNONS`
+are different script ops for a reason.
 
-**Evidence (confidence: traced).** `CSVM/src/Session/ZeppelinRuntime.Cannons.cs:341` fills its
-candidate set with `_pool!.CollectAircraft(_aircraftScan)`, confirmed unchanged in this session. The
-decoded turret picker (`FUN_0041f9c0`, `docs/org/targeting.md`, "What a turret's candidate set
-holds") walks the whole `VehicleList`, hulls included. `TurretController` was widened to the
-list-walking form and the cannons were not: `CSVM/src/Flight/Projectile.cs:793` is the wider
-`CollectAircraft` plus `SurfaceVehicles?.CollectVehicles` pair that the widened callers use.
+**Why the fix shape was wrong.** The broadside runs **no candidate scan at all**, so there is no
+candidate set to widen. `ResolveTarget` walks the record's authored `targets` node-**name** list and
+takes the first live one (`Cannons.cs:311-313` into `ZeppelinBroadside.FirstLiveTarget`,
+`ZeppelinBroadside.cs:163-174`). The decode agrees: `FUN_004bd8d0` resolves each `targets` name
+through the general node lookup at load and `FUN_004bfe00` walks those stored pairs in authored
+order ([`docs/formats/mission-entities.md`](formats/mission-entities.md)). The single
+`CollectAircraft` call at `Cannons.cs:341` sits inside `NearestHumanAircraft`, reached only when the
+authored name is literally `player` (`:318-322`), and the very next loop rejects anything whose
+`Source` is not `FlightController { IsHumanPiloted: true }` (`:346`). Hulls carry
+`Source = vessel`, never a `FlightController`, so every hull the widened collect added would be
+discarded one line later. The proposed suite, a hostile hull under a cannon with no aircraft in the
+scene, would have stayed red under the entry's own fix.
 
-**Approach.** The same one-call swap the turret took, from `CollectAircraft` to the vehicle-list
-form at `Projectile.cs:793`, plus a suite in the `turret-vessel-targets` pattern placing a hostile
-hull under a zeppelin cannon with no aircraft in the scene.
+**Why the cited precedent does not carry.** Zeppelin AA turrets are a wholly separate path that
+zeppelins already own: `ZeppelinRuntime.FanTeamsOntoTurrets` fans the record team onto
+`TurretEmplacementRuntime` (`ZeppelinRuntime.cs:120-141`), whose emplacements are `TurretController`
+instances, and `TurretController.AcquireTarget` is the widened one
+(`CSVM/src/Flight/TurretController.cs:631-633`). The widening was never withheld from the broadside;
+it landed on a different mechanism. `FUN_0041f9c0` is the turret picker and the broadside is not
+among its callers.
 
-**Model recommendation.** medium, low effort. The change is one call and one suite, and the
-surrounding decode is already written down.
+**The zeppelin-only reading is also not the original's rule.** No team, side or ally field is read
+anywhere in the broadside chain, and no `DAMAGES_ZEPPELIN` gate sits on this path: that gate lives
+in the AI pilot's and the player's weapon-**slot selection**, and the broadside selects no weapon at
+all, it hardcodes `wep_28` by name. Between 15 and 18 of the roughly 47 cannon-bearing records
+author `targets` containing `player` (the two counts come from different lenses and the exact figure
+is not settled; the conclusion does not turn on it), C3/M03's Pandora among them. What is true is the
+observable outcome: only three shipped missions author `COMPLETED_ZEPCANNONS` (C2B/M04, C4/M05,
+C5/M04) and every record they engage names another zeppelin, so **no shipped broadside ever fires on
+the player**. That is the engage flag doing the work, not a target-class filter, and
+`Cannons.cs:309-310` already says so in a comment. `CAP-46` confirmed the behaviour at the controls
+of the original.
 
-**Verify.** The new suite red before the swap and green after, then
-`.\RunTests.ps1 -Suite turret-vessel-targets -SkipUnits -SkipGoldens` and the new suite's own name.
-A CM14 flight for the eyes. Full `.\RunTests.ps1` before landing.
+**Follow-up filed, not fixed here.** One real divergence surfaced. `ResolveOne` handles exactly two
+cases, the literal name `player` and a name matched against the zeppelin roster, and warns
+`unresolved` for anything else (`Cannons.cs:315-336`); the original resolves **any** world node name
+through the general table and aims at a pair whose zeppelin half is 0 by world position. A record
+naming a surface hull's node would work in the original and not here. No shipped record does, so it
+is currently unobservable, and it is a name-resolution gap rather than a candidate-set gap. Filed as
+`BL-681`.
 
-**⚠ Traps.** The turret and ordnance pools of the picker stay unscanned on purpose; do not widen
-further than the vehicle list. A cannon that now acquires a hull must still respect the
-`DAMAGES_ZEPPELIN` gate and the stowed-hatch carve-out `PLAN-M5-polish-9` `C25` landed for
-`BL-640`, so re-run that item's suite as well.
+**⚠ Do not re-open this as "broadsides should only shoot zeppelins".** The claim has now been
+tested three times: `BL-517` was closed disproven, `BL-567`'s controls report was refuted by the
+decode, and this pass refuted it again from four directions. That is evidence with a date on it, not
+a prohibition: if a capture of the original ever shows a broadside firing on the player under a
+script that authors `COMPLETED_ZEPCANNONS` on a `targets [player]` record, the decode is what would
+have to give. Nothing shipped puts that case on the screen.
 
 ## A3 ☐ `BL-670` A zeppelin on a scripted route flies its short legs instead of cutting them
 
@@ -559,6 +596,44 @@ stale entry which will also answer a later lookup with the wrong node, turning a
 silent wrong answer. The liveness delegate at `NameResolver.cs:67` exists for the resolver's own
 sweep and is not the place to paper over this.
 
+## C25 ☐ `BL-405` Mounted ordnance tracks the aim before it launches, or the census closes it
+
+**Goal.** Either a mounted rocket visibly follows the aim its launcher has already computed, the way
+the original's animated mount slews, or the shipped data is shown not to author such a mount
+anywhere and the item closes with that census as its result.
+
+**Evidence (confidence: traced mechanism, undecided data).** The mount model is decoded
+([`docs/org/aiPilot/aiWeapons.md`](org/aiPilot/aiWeapons.md), "`gun_pitch`/`gun_yaw` clamp the
+mount"): `FUN_004b7670` rotates the desired lead into the vehicle frame, clamps each axis into its
+authored band, and writes the result as the mount's actual aim (`+0x48` to `+0x50`); a mount
+carrying an animated node (`+0x34`/`+0x38`) slews toward that direction through `FUN_00460840`
+instead of snapping to it. Our pylons do not move at all: `PylonOrdnance` parents the body to the
+pylon marker at identity and never touches it again (`PylonOrdnance.cs:46-49`). An AI round leaves
+along a launch direction up to the traverse limit off the pylon axis
+(`AiRocketeer.LaunchDirWorld`), so the mounted body and the round it becomes point different ways at
+the launch instant.
+
+**Approach.** **Settle the data question first, before writing anything.** The slewing mechanism is
+decoded; whether any shipped aircraft authors an animated node on the mount its ordnance hangs from
+is not. Census the shipped vehicle defs for that node. If none authors one, the original's rocket
+body does not visibly track either, and this item closes on the census with no code, which is a
+success. Only if the census says yes: the pylon marker takes the clamped direction the fire decision
+already computes, with the mounted body riding it as it does today, and `FUN_00460840`'s rate is
+read so ours slews where the original slews rather than snapping.
+
+**Model recommendation.** medium. The census is mechanical and the decode is already written down;
+the judgement is confined to reading the census honestly rather than building the feature anyway.
+
+**Verify.** If it closes on the census: the census itself, per shipped airframe, recorded in the
+landing commit. If it lands as code: an AI rocket launch filmed from outside at a traverse limit,
+showing the body pointing where the round leaves. Full `.\RunTests.ps1` either way.
+
+**⚠ Traps.** A fixed forward gun has no animated node and reaches the clamped direction the same
+frame; if the ordnance mounts are the same, there is nothing to build. Do not add a slew because it
+looks better: that invents motion the original does not have. Ours would snap where the original
+slews unless the rate is read too, so a half-port is worse than no port. `BL-404` (whether the
+player's rocket gets a direction at all) is a separate open question and is not in scope.
+
 ---
 
 # Wave D — Closing sortie
@@ -583,8 +658,11 @@ theme-spread. The checks each item owes:
 - `B13`: the matched C1B night and C1C day aircraft poses, judged against the original.
 - `C21`: a weapon-lab sonic burst on flat ground, and the same def in the air.
 - `C23`: the chase zoom's feel at both ends of the clamp.
-- `A2`, `C22`, `C24`: instrument checks rather than judgements, confirmed from logs and suites, and
-  listed here only so the sitting can confirm nothing regressed.
+- `C25`: only if the census landed code rather than closing the item; an AI rocket launch seen from
+  outside at a traverse limit.
+- `C22`, `C24`: instrument checks rather than judgements, confirmed from logs and suites, and listed
+  here only so the sitting can confirm nothing regressed. `A2` owes nothing at the controls; it
+  closed as a disproof.
 
 `<TODO: mint the PT ids for these rows with ./New-ItemId.ps1 -Kind PT -Count <n> when the wave opens,
 and write them into playtest.md; do not hand-number them.>`
