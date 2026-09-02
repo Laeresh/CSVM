@@ -6624,9 +6624,10 @@ stops mirroring the placeholder procedural sky; every day zone is untouched.
 Enhanced mode also pushes the fog out. `FogRangeFor` scales a zone's authored near/far by
 `EnhancedFogRangeScale` (2.0, TUNE) and is identity in original mode; both fog-range writers
 (`ApplyZone` and `ApplyFogState`) go through it, so a FOG_STATE edge cannot snap the haze back to
-the authored distance mid-flight. The same scaled far then drives the one session sun's
-`DirectionalShadowMaxDistance`, so shadows end where that zone's haze does rather than at a line in
-clear air. Nothing else scales: the whiteout and cloud band read CLOUD_COVER altitudes, the zone
+the authored distance mid-flight. The scaled NEAR (where the ramp starts, not the far edge of the
+haze) then drives the one session sun's `DirectionalShadowMaxDistance`, with `DirectionalShadowFadeStart`
+fading the last cascade out before that distance, so a shadow is gone before the ramp begins rather
+than running through it. Nothing else scales: the whiteout and cloud band read CLOUD_COVER altitudes, the zone
 gate is a `zone_id` cull mask with no distance in it, `WorldLights` fades on its own 900/1500 m
 pair, the skydome is fitted from the camera's far plane, and `ZoneWeather.ClipFar` is parsed and
 logged but reaches no consumer (the camera far plane is `Launcher`'s fixed 40000 m, past every

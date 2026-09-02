@@ -110,7 +110,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — At-the-controls findings from the Wave C montages
 
-41. ☐ Shadows end before the fog ramp, not inside it
+41. ☑ Shadows end before the fog ramp, not inside it
 42. ☑ C5 reads too bright in enhanced mode, its water a light grey
 43. ☐ The clutter building fade reaches as far as the pushed fog
 
@@ -1344,7 +1344,7 @@ mixed into the fog ramp, C5 too bright with light-grey water, and unique buildin
 past the clutter fade. Each is an enhanced-mode-only change; original mode and the 18 goldens stay
 byte-identical, proved per item as before.
 
-## E41 ☐ Shadows end before the fog ramp, not inside it
+## E41 ☑ Shadows end before the fog ramp, not inside it
 
 **Goal.** In enhanced mode the sun's shadows fade out before the fog ramp begins, so a shadow is
 never seen dissolving into haze.
@@ -1362,6 +1362,53 @@ split fractions still put the near cascades where the aircraft's shadow lives.
 
 **Verify.** C1 and C4 horizon captures: no shadow visible inside the ramp; the hangar and
 aircraft shadows unchanged near the camera. Goldens zero movers.
+
+**Verified.** <pending orchestrator run>
+
+`dotnet build CSVM/CSVM.sln`: clean, 0 warnings, 0 errors.
+`$env:CSVM_DATA_ROOT="Z:\CSVM"; .\RunTests.ps1 -Suite fog-state -SkipUnits -SkipGoldens`: engine
+PASS, 1 suite run of 200, engine errors clean, 0 unexpected lines.
+`.\RunTests.ps1 -Suite sun-orientation -SkipUnits -SkipGoldens`: engine PASS, 1 suite run of 200,
+engine errors clean. `.\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only): PASS, 18 shot(s)
+hash-identical, zero movers.
+
+An 8-chapter `--freecam` fog census (`--graphics=enhanced --det --mute --frames=5
+--screenshot=...`, reading each session's own `weather [...]: ... shadows to N m` line) gives the
+real per-zone pushed-near distances the rule now resolves to: C1/C1B/C1C/C2B/C3/C4 (authored near
+1000 m) at 2000 m, C2 (authored near 2100 m) at 4200 m, C5 (authored near 1500 m) at 3000 m. The
+smallest, 2000 m, is never close to the aircraft's own shadow range (a few metres to a few hundred),
+so no floor clamp was added; the same log line read 8000 m for C1's zone2 before the change and
+2000 m after, confirming the rule moved from the pushed FAR to the pushed NEAR.
+
+Captures (before on the committed tree, after on this edit, both `--graphics=enhanced --det
+--mute`), under `.scratch/e41/`: C1 and C4 default freecam horizons, the C2 hangar/house cluster,
+the `c1-waterfall` golden pose (`--pos=-7720,60,-3380 --lookat=-7868,40,-3449`, ~164 m from the
+cliff), and the same cliff viewed from ~3009 m out (`--pos=-5162,406,-2186`, same `--lookat`,
+`--no-fog` added to separate the shadow term from atmospheric haze per SHOT-4). All runs reported 0
+engine ERROR lines (one WARNING about a late `snd_police` SOUND_NODE at the off-mission scripted
+pose, present identically before and after, is the same unrelated noise other items in this plan
+recorded at the same pose).
+
+The wide horizon and hangar-cluster captures are pixel-identical before/after (0 of 300+ sampled
+pixels differ): at C1/C4/C2's default freecam distance and this fog opacity, the shadow contrast
+the fix removes is already crushed by the haze in a plain screenshot, so SHOT-3 applies and the
+census log line above is the state-log evidence for the change itself. The `c1-waterfall` pose is
+also pixel-identical (mean luma 45.37 before and after over a 60x60 near-camera patch), confirming
+the aircraft/hangar-scale shadow at close range is unchanged, matching this pose's golden hash
+staying unmoved. The `--no-fog` far-cliff pose is NOT identical: with the haze term removed, the
+shadow's edge visibly recedes at ~3009 m (past the new 2000 m cutoff for that zone, inside the old
+8000 m one), and the strongest-diff 20x20 patch on the water brightens from mean luma 70.95 to
+75.46 as the shadow lifts off it.
+
+| pose | distance from feature | mean luma before | mean luma after |
+|---|---|---|---|
+| `c1-waterfall` (near-camera cliff shadow) | ~164 m | 45.37 | 45.37 |
+| far-cliff, `--no-fog` (mid-ramp water patch) | ~3009 m | 70.95 | 75.46 |
+
+Montages: `montage_c1_horizon.png`, `montage_c4_horizon.png`, `montage_c2_buildings.png`,
+`montage_waterfall_near.png`, `montage_farcliff_nofog.png`, under
+`.claude/worktrees/eg-e41/.scratch/e41/` and copied to
+`.claude/worktrees/enhanced-graphics/.scratch/e41/`.
 
 ## E42 ☑ C5 reads too bright in enhanced mode, its water a light grey
 

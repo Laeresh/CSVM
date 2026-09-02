@@ -63,10 +63,15 @@ public partial class Launcher : Node3D
     private const float MasterVolumeFloor = 0.0001f;
 
     // TUNE, and the FALLBACK only: a flown mission overwrites this per zone from its own pushed-out
-    // fog far (WeatherRig.ApplyEnhancedLighting), so shadows end where that zone's haze does. This
-    // value is what a session with no weather.json gets, and it sits in the middle of the pushed
-    // range the shipped zones resolve to.
-    private const float EnhancedShadowMaxDistance = 6000f;
+    // fog near (WeatherRig.ApplyEnhancedLighting), so shadows end where that zone's haze ramp
+    // begins. This value is what a session with no weather.json gets, and it sits in the middle of
+    // the pushed-near range the shipped zones resolve to (2000-4200 m).
+    private const float EnhancedShadowMaxDistance = 3000f;
+
+    // TUNE, paired with the distance above and judged the same way (WeatherRig.ApplyEnhancedLighting
+    // sets the flown-mission copy). Fades the last cascade out before this fallback distance rather
+    // than cutting at a hard edge.
+    private const float EnhancedShadowFadeStart = 0.8f;
 
     // TUNE, judged at the controls, and the pair trades against each other: lower values put
     // dithered acne over every terrain triangle at C1's 25° sun, higher ones dissolve a hangar's
@@ -74,9 +79,9 @@ public partial class Launcher : Node3D
     private const float EnhancedShadowBias = 0.05f;
     private const float EnhancedShadowNormalBias = 1.25f;
 
-    // TUNE. Fractions of the distance above, tighter than Godot's 0.1/0.2/0.5 because the shadows
-    // a player reads are the aircraft's own and the buildings it passes, all inside the first few
-    // hundred metres; the outer cascades only have to carry a skyline into the haze.
+    // TUNE. Fractions of EnhancedShadowMaxDistance, tighter than Godot's 0.1/0.2/0.5 because the
+    // shadows a player reads are the aircraft's own and the buildings it passes, all inside the
+    // first few hundred metres; the outer cascades only have to carry a skyline into the haze.
     private const float EnhancedShadowSplit1 = 0.06f;
     private const float EnhancedShadowSplit2 = 0.17f;
     private const float EnhancedShadowSplit3 = 0.42f;
@@ -1026,6 +1031,7 @@ public partial class Launcher : Node3D
         sun.ShadowEnabled = true;
         sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits;
         sun.DirectionalShadowMaxDistance = EnhancedShadowMaxDistance;
+        sun.DirectionalShadowFadeStart = EnhancedShadowFadeStart;
         sun.DirectionalShadowSplit1 = EnhancedShadowSplit1;
         sun.DirectionalShadowSplit2 = EnhancedShadowSplit2;
         sun.DirectionalShadowSplit3 = EnhancedShadowSplit3;

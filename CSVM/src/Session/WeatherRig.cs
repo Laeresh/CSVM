@@ -50,6 +50,11 @@ public sealed class WeatherRig
     // ApplyZone.
     private const float EnhancedFogRangeScale = 2f;
 
+    // TUNE, judged at the controls. The last shadow cascade fades out over this fraction of the
+    // sun's DirectionalShadowMaxDistance rather than cutting at a hard edge, so a shadow reads as
+    // dissolving into the coming haze instead of vanishing the frame before it starts.
+    private const float EnhancedShadowFadeStart = 0.8f;
+
     // ⚠ TUNE, and the FALLBACK only — a mission that authors CLOUD_COVER colours overrides it
     // (WeatherState.WhiteoutColor). It holds because the three reachable-band chapters that author
     // nothing measure right at this value: the original's C1 in-cloud interior reads 248 against
@@ -475,7 +480,7 @@ public sealed class WeatherRig
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
         return $"; enhanced sun energy {sunEnergy:0.00} (diffuse {fog.SunDiffuse:0.##}), "
                + $"ambient energy {ambientEnergy:0.00} (ambient {fog.SunAmbient:0.##}), "
-               + $"shadows to {FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).Y:0} m"
+               + $"shadows to {FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).X:0} m"
                + (IsNightZone(fog) ? "; night zone, energies capped" : string.Empty);
     }
 
@@ -747,11 +752,14 @@ public sealed class WeatherRig
     private void ApplyEnhancedLighting(WeatherState.ZoneWeather fog)
     {
         RenderingServer.GlobalShaderParameterSet("csky_world_light", 1f);
-        // Shadows end where this zone's haze does, off the AUTHORED far through the same push, not
-        // the written range, so --no-fog still gets a usable distance. The session sun only: a
-        // registered clone owns its own camera-relative max distance (RegisterExtraLighting).
+        // Shadows end where this zone's haze BEGINS, off the AUTHORED near, so a shadow fades out
+        // before the ramp rather than mixing with it (docs/architecture.md). The session sun only:
+        // a registered clone owns its own camera-relative distance (RegisterExtraLighting).
         if (fog.FogFar > 0f)
-            _sun.DirectionalShadowMaxDistance = FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).Y;
+        {
+            _sun.DirectionalShadowMaxDistance = FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).X;
+            _sun.DirectionalShadowFadeStart = EnhancedShadowFadeStart;
+        }
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
         bool night = IsNightZone(fog);
         ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, fog.SunColorDiffuse, ambientEnergy, fog.SunColorAmbient, night);
