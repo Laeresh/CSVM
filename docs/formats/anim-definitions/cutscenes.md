@@ -404,8 +404,12 @@ resolves the anchor directly, and the definition's own `Initial` sequence carrie
 `cargozep2`, moves it through the shot, and hands it back to the world root, with no separate
 caller involved. `balmoral` is aircraft-archive node **2381** (a parentless `Object3d`, model-less,
 five children), ships ACTIVE and authors no `RESET_STATE`, the same base state `piratefighter`
-ships in. `AircraftStage` now stages it beside `piratefighter`, built ACTIVE and rebased the same
-way, which is what lets the drop's own reparent find a node instead of a null binding.
+ships in. Unlike `piratefighter`, no OTHER mission's own script ever names `balmoral`, so
+`AircraftStage` stages it under a switched-off holder rather than at the world root: own `Visible`
+matching the archive's ACTIVE state, rebased the same way, but drawn nowhere until the drop's own
+`OBJECT_ADD_CHILD` reparents it out from under that holder. A build that stages it at the world
+root directly, the way `piratefighter` is, finds the node the drop needs but also draws an idle
+Balmoral at the archive's build origin in every other mission that stages an aircraft.
 
 ## `CALLBACK`: the dispatch chain
 

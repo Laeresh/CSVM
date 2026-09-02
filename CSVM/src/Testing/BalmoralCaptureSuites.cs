@@ -16,6 +16,15 @@ internal static class BalmoralCaptureSuites
     private const string DropAnim = "drop_paratroopers";
     private const string DropZeppelin = "cargozep2";
 
+    // C3/M01: a mission that stages an aircraft (its own chuteman drop-off needs one) but never
+    // names 'balmoral' in any of its own definitions, the same position dropoff-chuteman-stage
+    // and IntroAircraftSuites drive.
+    private const int OtherMissionSeq = 0;
+
+    // A few seconds of that mission's own bootstrap and start anims, long enough for anything
+    // that might incidentally reach the node to have had its chance.
+    private const int OtherMissionDriveFrames = 300;
+
     private const float StepDt = 1f / 60f;
 
     // The camera's own SI-script shot and the 6 s OBJECT_MOTION_FROM_TO run concurrently; the
@@ -62,6 +71,78 @@ internal static class BalmoralCaptureSuites
 
         ctx.WriteArtifact($"test-cm15-capture-{chapter}-{folder}.txt", report.ToString());
         ctx.Note($"drove {chapter}/{folder}'s '{DropAnim}' and watched the Balmoral through the shot");
+    }
+
+    /// <summary>Drives C3/M01, a mission with no <c>balmoral</c> definition at all, over its BUILT
+    /// world: the staged node ships ACTIVE, so it must sit under a switched-off holder rather than
+    /// the world root, or it draws at the archive's own build origin in every mission that stages
+    /// an aircraft, never posed and never asked for. Regression cover for a hash the
+    /// unconditionally-visible staging moved once already.</summary>
+    [Suite("campaign-balmoral-hidden",
+        "nothing draws at the world origin when no definition asks for it, over C3/M01's BUILT "
+        + "world: that mission stages an aircraft (its own chuteman drop-off needs one) but never "
+        + "names 'balmoral', so the archive's own ACTIVE node must stay undrawn under its "
+        + "switched-off holder through the mission's own bootstrap and start anims, at the "
+        + "position it was built at")]
+    internal static void Cm15BalmoralHidden(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), OtherMissionSeq)
+            ?? throw new SuiteSkippedException($"cm_sequence carries no story position {OtherMissionSeq}");
+        string chapter = mission.ChapterFolder.ToUpperInvariant();
+        string folder = mission.MissionFolder.ToUpperInvariant();
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder);
+        ctx.RequireData(missionZrdr, $"{chapter}/{folder} zrdr");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(ctx.PlanesGamezPath, $"aircraft archive");
+
+        var report = new StringBuilder();
+        report.AppendLine($"seq {OtherMissionSeq} -> {chapter}/{folder}");
+        ctx.CutsceneRoots = true;
+        try
+        {
+            ctx.WithWorld(chapter, collision: false, folder, world => DriveHidden(ctx, world, report));
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+        }
+
+        ctx.WriteArtifact($"test-cm15-balmoral-hidden-{chapter}-{folder}.txt", report.ToString());
+        ctx.Note($"drove {chapter}/{folder} and confirmed 'balmoral' stays undrawn there");
+    }
+
+    private static void DriveHidden(TestContext ctx, TestWorld world, StringBuilder report)
+    {
+        if (world.Session.Aircraft is not { Balmoral: { } balmoral })
+        {
+            ctx.Check(false,
+                $"the world build staged the archive's '{AircraftStage.BalmoralNode}' node here too");
+            return;
+        }
+
+        ctx.Check(world.Session.Program.ByAnimName(DropAnim).Count == 0,
+            $"{world.Chapter} compiles no '{DropAnim}' definition, so nothing here ever names '{AircraftStage.BalmoralNode}'");
+
+        var startAt = balmoral.GlobalPosition;
+        int drawn = 0;
+        for (int i = 0; i < OtherMissionDriveFrames; i++)
+        {
+            world.Runtime.Advance(StepDt);
+            if (balmoral.IsVisibleInTree())
+            {
+                drawn++;
+            }
+        }
+
+        var endAt = balmoral.GlobalPosition;
+        report.AppendLine($"'{AircraftStage.BalmoralNode}' over {OtherMissionDriveFrames} frame(s): "
+            + $"drawn {drawn}, started at {startAt}, ended at {endAt}");
+
+        ctx.Check(drawn == 0,
+            $"'{AircraftStage.BalmoralNode}' is never drawn over the mission's own bootstrap and start anims (drawn {drawn} frame(s))");
+        ctx.Check(startAt.IsEqualApprox(endAt),
+            $"and stays exactly where it was built ({startAt} -> {endAt}), reparented by nothing");
     }
 
     private static void Drive(TestContext ctx, TestWorld world, StringBuilder report)

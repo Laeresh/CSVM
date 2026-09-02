@@ -20,18 +20,6 @@ internal static class ZeppelinCannonStowedSuites
     private const string DeployAnim = "deploy_gmzep_lbroad11";
     private const float Dt = 1f / 60f;
 
-    // A suite gets no physics flush, so a body an animation moved is still queried at its old pose
-    // (docs/verification.md INSTR-24). Push the whole cannon's transforms before every ray.
-    private static void SyncColliders(Node3D root)
-    {
-        root.ForceUpdateTransform();
-        foreach (var child in root.GetChildren())
-        {
-            if (child is Node3D node)
-                SyncColliders(node);
-        }
-    }
-
     [Suite("zeppelin-cannon-stowed",
         "a stowed broadside cannon takes no weapon damage through its shut hatch (BL-640): on " +
         "C2B/M04's Gemini the deploy def's RESET_STATE holds lbroad11's gunback and gun1 " +
@@ -179,5 +167,17 @@ internal static class ZeppelinCannonStowedSuites
 
         ctx.WriteArtifact("test-zeppelin-cannon-stowed.txt", report.ToString());
         ctx.Note($"C2B/M04's {Hull}: {Cannon} is immune behind its shut hatch and dies once deployed");
+    }
+
+    // A suite gets no physics flush, so a body an animation moved is still queried at its old pose
+    // (docs/verification.md INSTR-24). Push the whole cannon's transforms before every ray.
+    private static void SyncColliders(Node3D root)
+    {
+        root.ForceUpdateTransform();
+        foreach (var child in root.GetChildren())
+        {
+            if (child is Node3D node)
+                SyncColliders(node);
+        }
     }
 }
