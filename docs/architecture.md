@@ -240,7 +240,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/MenuFeatureSet.cs` — the host-owned feature registry, fetched by concrete type; `DiscardTransient()` is everything a presentation switch discards.
 - `src/UI/Menu/MenuCommands.cs` — per-seat semantic menu commands plus `IMenuInputSource`, the device-neutral seam keyboard, mouse and pad feed and a later HOTAS/HOSAS source plugs into.
 - `src/UI/Menu/IMenuAudio.cs` — the shared menu audio contract: presentations request cues and narration; the service owns lookup, playback, volume and session handoff.
-- `src/UI/Menu/MenuExit.cs` — the one typed menu exit `Launcher` consumes: `LaunchExit`, `CampaignMissionExit`, `QuitExit`, `PresentationSwitchExit`; presentations never build sessions.
+- `src/UI/Menu/MenuExit.cs` — the one typed menu exit `Launcher` consumes: `LaunchExit`, `CampaignMissionExit`, `QuitExit`, `OptionsApplyExit`; presentations never build sessions.
 - `src/UI/Menu/MenuReturnDestination.cs` — semantic return destinations (top level, cabin, debrief) that each presentation maps into its own screen graph.
 - `src/UI/Menu/MenuLayout.cs` — the runtime reader of `extracted/rof/menu_layout.json`: screens, widgets with typed field access through the artifact's own kind table, navigation edges, script-named assets; engine-free.
 - `src/UI/Menu/PlayerSetupFeature.cs` — the shared player setup: seats claimed by input-source identity, the aircraft roster (`MenuAircraft`), each seat's cursor, two-stage pick and fit, the launch gate per mode, the `MenuSeatChoice` list; device-neutral and engine-free.
@@ -497,8 +497,9 @@ clusters they delegate to.
 ## Rendering: the enhanced graphics mode (a documented divergence)
 
 Enhanced graphics mode is an opt-in [Divergence] in the BL-555 sense: a deliberate, recorded
-departure from the original, never presented as the original's own behaviour. It is gated by
-`graphics.mode` (`original`/`enhanced`, default `original`, `src/Utils/GraphicsMode.cs`) or by an
+departure from the original, never presented as the original's own behaviour. It is gated by the
+saved `graphicsMode` option both Options screens write, under it the `graphics.mode` config key
+(`original`/`enhanced`, default `original`, `src/Utils/GraphicsMode.cs`), and over both an
 explicit `--graphics=` flag (`docs/cli.md`) that survives `--det`, so a golden or a deterministic
 capture can ask for the enhanced path on purpose while every ordinary `--det` run, including the
 full golden sweep, stays on `original`.
@@ -547,9 +548,12 @@ wave-less water planes are all TUNE: judged at the controls against captures, no
 decoded rule. `docs/plans/PLAN-enhanced-graphics.md`'s Open judgements list is where the user's at-the-controls
 pass tracks them.
 
-The options menu exposes `graphics.mode` through the menu plan's own options store
-(`docs/PLAN-menu-presentations.md`); every reader in this codebase consults the resolved
-`GraphicsMode.Enhanced` boolean only, so that layer can be slotted in later without touching them.
+Both Options screens expose the mode as a two-way row saved into the menu plan's options store
+(`docs/menu-presentations.md`); every reader in this codebase consults the resolved
+`GraphicsMode.Enhanced` boolean only, so neither the store nor the screens reach any of them. The
+saved word changes on Apply and the world takes it on the next start, since the shader memos and
+the Environment are built from the value resolved once at launch, which is why each screen's
+description line says so.
 
 ## CSVM.Tests/
 The xUnit project `dotnet test` runs (net8.0, `ProjectReference` to `CSVM.csproj`): engine-free
@@ -4214,11 +4218,13 @@ and the store's customs) beside this screen's own `PickerPlane` list, so a saved
 both. The cabin's FLY MISSION (`FlyCampaignMission`) leaves the same way as
 a `CampaignMissionExit` (profile, story position, one seat choice per joined human with its stock
 node, joined pads, stored fit and hangar build). Back on the Mode screen leaves as a `QuitExit`.
-The Mode screen's last row is the Options door (`OptionsRow`, `--menu=options`): a two-row screen
-whose first row steps the menu presentation between Built-in and Original (Left/Right or Accept)
-and whose second row, "Apply and restart the menu", leaves as a `PresentationSwitchExit` carrying
-the choice; the launcher persists it and restarts the menu. The stepper opens on the saved
-request, read from `OptionsStore`, so it shows back what was asked for rather than what is active.
+The Mode screen's last row is the Options door (`OptionsRow`, `--menu=options`): a three-row screen
+whose first row steps the menu presentation between Built-in and Original (Left/Right or Accept),
+whose second steps the graphics mode between Original and Enhanced the same way, and whose third,
+"Apply and restart the menu", leaves as an `OptionsApplyExit` carrying both; the launcher persists
+them and restarts the menu. The steppers open on the saved options, read from `OptionsStore`, so
+each shows back what was asked for rather than what is active. The graphics row's description says
+it takes effect on the next start, since `GraphicsMode` resolves once at launch.
 This door is the one Built-in change the presentation work makes; every other Built-in screen,
 control, payload, aid and return keeps its behaviour.
 The Chapter screen and the aircraft screen's drawing (the split panes, the join strip with each
@@ -5800,12 +5806,14 @@ absences as their own `ui` line, and is asked again on every switch so a repaire
 and logged as one `ui`
 line with the requested and active ids and the fallback reason; an unknown, blank or unavailable
 request falls back to Built-in rather than crashing, and a fallback never rewrites the saved
-request. A `PresentationSwitchExit` is acted on one frame later (`_pendingSwitch`, the exit
-arrives inside the presentation's own tick): `SwitchPresentation` saves the request through
-`OptionsStore`, calls `Deactivate` (freeing the presentation and discarding transient feature
-state), re-selects with the saved request in place of any `--presentation=` override (the force
-flag still wins) and shows the top level. Nothing here gates a presentation on anything but
-registration and availability: a saved `original` request selects Original on a cold start with
+request. An `OptionsApplyExit` is acted on one frame later (`_pendingApply`, the exit
+arrives inside the presentation's own tick): `ApplyOptions` saves both the presentation request and
+the graphics word through `OptionsStore`, calls `Deactivate` (freeing the presentation and
+discarding transient feature state), re-selects with the saved request in place of any
+`--presentation=` override (the force flag still wins) and shows the top level. This is the only
+writer of the options file anywhere in the codebase, which is what keeps a driven Options screen
+in a test or a suite from writing the player's own. Nothing here gates a presentation on anything
+but registration and availability: a saved `original` request selects Original on a cold start with
 no flag, so Original's normal exposure is the two Options choosers' toggle plus `OptionsStore`'s
 accepted token set, and the whole contract a further presentation registers against is
 [`docs/menu-presentations.md`](menu-presentations.md). `ShowMenu(destination)` shows the host at a semantic
@@ -7066,19 +7074,25 @@ is unchanged. `MapEdgeExtender`'s own clutter continuation shares this same glob
 without its own code.
 
 ## src/Utils/GraphicsMode.cs
-The opt-in enhanced-lighting mode's config key, `graphics.mode` (`original`/`enhanced`, default
-`original`), resolved once by `Launcher._Ready` beside `EffectsLevel` into the single boolean
-`GraphicsMode.Enhanced` every later scene builder reads, rather than each reader querying `Config`
-itself — a future options-store layer (the menu plan's process-wide settings file) is the intended
-future source of the user-facing value, and this indirection is what lets that land without
-touching the readers. `--graphics=original|enhanced` (`docs/cli.md`) beats the config key outright,
-including under `--det`: `--det`'s `Config.ClearOverrides` (`Launcher.cs`) drops a `graphics.mode`
-config override the same way it drops `EffectsLevel`'s, since the resolution runs after that block,
-while an explicit `--graphics=` is carried on `SessionSpec` and never touches `Config`, so it
-survives `--det` and is the mechanism a golden or a deterministic capture uses to pin the mode on
-purpose. An unknown word on either source warns and falls back to `original`. Announced on the
-`[world] graphics mode:` launch line beside the clutter-fade line. The whole mode is written up as
-a divergence in "Rendering: the enhanced graphics mode" above.
+The opt-in enhanced-lighting mode's setting (`original`/`enhanced`, default `original`), resolved
+once by `Launcher._Ready` beside `EffectsLevel` into the single boolean `GraphicsMode.Enhanced`
+every later scene builder reads, rather than each reader querying a source itself. That
+indirection is what lets the sources be layered without touching a reader. The order mirrors
+`PresentationResolution`'s: `--graphics=original|enhanced` (`docs/cli.md`) beats the saved
+`graphicsMode` option (`OptionsStore`, written by both Options screens), which beats the
+`graphics.mode` config key, which beats the default. `Launcher._Ready` loads the saved option and
+hands it to `Resolve`, so no reader gains a second source.
+
+`--det` drops both machine-state layers and leaves the flag. `--det`'s `Config.ClearOverrides`
+(`Launcher.cs`) drops a `graphics.mode` config override the same way it drops `EffectsLevel`'s,
+since the resolution runs after that block, and `Launcher._Ready` passes no saved option at all
+under `--det`, since `user://options.json` is one machine's state and a golden that depended on it
+would move the day its owner used the Options screen. An explicit `--graphics=` is carried on
+`SessionSpec` and never touches either, so it survives `--det` and is the one mechanism a golden or
+a deterministic capture uses to pin the mode on purpose. An unknown word at any layer warns and
+falls back to `original`. Announced on the `[world] graphics mode:` launch line beside the
+clutter-fade line. The whole mode is written up as a divergence in "Rendering: the enhanced
+graphics mode" above.
 
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
@@ -7086,11 +7100,15 @@ the native window handle. Fully static, one call site in `Launcher._Ready` right
 predicate drives both window hiding (scripted run) and focus request (interactive run).
 
 ## src/Utils/OptionsStore.cs
-Process-wide, version-tolerant JSON persistence for `OptionsDef`, today just the requested menu
-presentation: one file, `user://options.json`, independent of `Session/CampaignProfileStore.cs`.
-Missing/malformed reads as empty, an unknown version invalidates the file, an unknown value drops
-only that field. `Save` writes a sibling temp file then renames it over the real one, the first
-store here to need an atomic write rather than a direct one.
+Process-wide, version-tolerant JSON persistence for `OptionsDef`, today the requested menu
+presentation (`menuPresentation`) and the requested graphics mode (`graphicsMode`): one file,
+`user://options.json`, independent of `Session/CampaignProfileStore.cs`. Missing/malformed reads as
+empty, an unknown version invalidates the file, an unknown value drops only that field, and a field
+the file does not carry reads as never set. That last rule is why adding a field does not bump
+`Version`: an older file loads with everything it does have. The version moves only when an
+existing field changes meaning or shape. `Save` writes a sibling temp file then renames it over the
+real one, the first store here to need an atomic write rather than a direct one. `Launcher` is its
+only writer (`ApplyOptions`), so no presentation, test or suite writes the player's own file.
 
 ## src/Utils/PresentationResolution.cs
 The requested-versus-active menu presentation resolver: force-Built-in → CLI override → saved
@@ -7349,11 +7367,13 @@ handoff into a launching session. The host implementation is `MenuAudioService`
 The one typed menu exit, handed to `IMenuHost.Exit` and consumed by `Launcher`: `LaunchExit`
 (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
-`PresentationSwitchExit` (the `PresentationId` an Options screen applied; the consumer persists
-it, ends the active presentation and shows the selected one at its top level). A custom plane
-arrives as its resolved `CustomPlaneDef`, never a store name, so the consumer reads no store.
-Presentations never construct sessions. `LaunchMenu` produces the first three and the switch,
-`OriginalShell` the launch, the campaign launch, the quit and the switch, and `Launcher.OnMenuExit`
+`OptionsApplyExit` (the `PresentationId` and the graphics-mode word an Options screen applied; the
+consumer persists both, ends the active presentation and shows the selected one at its top level).
+Both values ride the exit rather than being saved by the screen that took them, so the options file
+keeps exactly one writer and no presentation driven through Apply can write the player's own. A
+custom plane arrives as its resolved `CustomPlaneDef`, never a store name, so the consumer reads no
+store. Presentations never construct sessions. `LaunchMenu` produces the first three and the apply,
+`OriginalShell` the launch, the campaign launch, the quit and the apply, and `Launcher.OnMenuExit`
 consumes them all; the return side is `MenuReturnDestination` alone, the `--menu=` aid reaching
 only the cold start. `CSVM.Tests/MenuNamespaceDependencyTests.cs` scans the compiled metadata so
 nothing under `CSVM.UI` names `GameSession`, `Launcher` or `LauncherContext`; `menu-launch-return`
@@ -7529,7 +7549,13 @@ screen closes an open list, in the hangar closes a list or the ask, returns from
 or the inventory to the tab, else cancels the build, in the campaign walks its own graph back
 (below), then leaves for the top level, and quits from the top level. `StepSeat(index, frame)` is
 a later seat's frame, which on the campaign's flight check drives that seat's own check.
-The Options screen's APPLY leaves as a `PresentationSwitchExit`. `Compose()` is the screen as a
+The Options screen over `[@Preferences@]` is the four page doors drawn disabled, two paper plaques
+side by side in the slot under them (the presentation chooser, then the graphics chooser), APPLY a
+plaque's height below them and the section's own RETURN TO MAIN MENU; two description lines above
+the plaques name them in that order and say the graphics choice takes effect on the next start.
+The graphics plaque opens on the saved word, read through the optional options reader the
+presentation hands the shell, and APPLY leaves as an `OptionsApplyExit` carrying both choices; the
+shell itself writes nothing. `Compose()` is the screen as a
 `ComposedBoard` with the pointer as the last overlay (the active pointer bitmap over a live row,
 the passive one elsewhere), skipping rows outside their window; `ReturnToTopLevel` (every return
 and cold start) keeps the list cursors, resets every seat's pick through the setup and closes an

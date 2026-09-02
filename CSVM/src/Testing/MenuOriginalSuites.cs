@@ -33,7 +33,8 @@ internal static class MenuOriginalSuites
         + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
         + "FLY leaves as one LaunchExit, the return re-enters the top level, a switch to Built-in "
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
-        + "Original fresh, Built-in's Options route emits the switch exit, the force flag recovers "
+        + "Original fresh, Built-in's Options route steps both choices and emits the apply exit "
+        + "carrying them, the force flag recovers "
         + "and a missing layout falls back with the request kept")]
     internal static void MenuOriginalTracer(TestContext ctx)
     {
@@ -228,7 +229,8 @@ internal static class MenuOriginalSuites
     }
 
     // Built-in's Options route: the last Mode row opens Options, Right steps the presentation to
-    // Original, the second row's Accept leaves as the switch exit the launcher acts on.
+    // Original, Right on the row under it steps the graphics mode, and the apply row's Accept
+    // leaves as the one exit the launcher persists both choices from.
     private static void BuiltInOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, List<MenuExit> exits)
     {
         var menu = (host.Active as BuiltInPresentation)?.Menu;
@@ -240,20 +242,27 @@ internal static class MenuOriginalSuites
         Press(host, seat, Up);
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow, $"Up from Free Flight wraps onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 2,
-            $"Accept opens the Options screen with its two rows ({menu.ShownScreen}, {menu.ShownRowCount})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 3,
+            $"Accept opens the Options screen with its three rows ({menu.ShownScreen}, {menu.ShownRowCount})");
         string before = menu.ShownRowText;
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText != before && menu.ShownRowText.StartsWith("Menu presentation: ", System.StringComparison.Ordinal),
             $"Right steps the presentation row ({before} -> {menu.ShownRowText})");
         string chosen = menu.ShownRowText.EndsWith("Original", System.StringComparison.Ordinal) ? "original" : "built-in";
         Press(host, seat, Down);
+        string beforeGraphics = menu.ShownRowText;
+        Press(host, seat, Right);
+        ctx.Check(menu.ShownRowText != beforeGraphics && menu.ShownRowText.StartsWith("Graphics: ", System.StringComparison.Ordinal),
+            $"Right steps the graphics row under it ({beforeGraphics} -> {menu.ShownRowText})");
+        string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
+        Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(exits.Count == 2 && exits[1] is PresentationSwitchExit,
-            $"Apply leaves through the host as a PresentationSwitchExit ({exits.Count}, {exits[^1].GetType().Name})");
-        if (exits.Count == 2 && exits[1] is PresentationSwitchExit sw)
+        ctx.Check(exits.Count == 2 && exits[1] is OptionsApplyExit,
+            $"Apply leaves through the host as an OptionsApplyExit ({exits.Count}, {exits[^1].GetType().Name})");
+        if (exits.Count == 2 && exits[1] is OptionsApplyExit applied)
         {
-            ctx.Check(sw.Requested.Value == chosen, $"carrying the stepped choice ({sw.Requested})");
+            ctx.Check(applied.Presentation.Value == chosen && applied.Graphics == graphics,
+                $"carrying both stepped choices ({applied.Presentation}, {applied.Graphics})");
         }
 
         ctx.Check(!host.Shown, $"and the presentation is hidden for the launcher to act (shown={host.Shown})");

@@ -2,6 +2,7 @@ using System.Linq;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
+using CSVM.Utils;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -196,7 +197,7 @@ public class OriginalShellTests
     }
 
     [Fact]
-    public void TheOptionsScreenTogglesThePresentationAndAppliesItAsASwitchExit()
+    public void TheOptionsScreenTogglesBothChoicesAndAppliesThemAsOneExit()
     {
         var shell = Shell(out _);
         shell.Step(Down);
@@ -205,6 +206,7 @@ public class OriginalShellTests
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.Options, shell.Screen);
         Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
+        Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
         Assert.Equal(OriginalShell.PresentationKey, shell.FocusedKey);
         Assert.Contains(shell.Compose().Plaques, p => p.Label == "ORIGINAL");
 
@@ -213,15 +215,42 @@ public class OriginalShellTests
         Assert.Contains(shell.Compose().Plaques, p => p.Label == "BUILT-IN");
 
         shell.Step(Down);
+        Assert.Equal(OriginalShell.GraphicsKey, shell.FocusedKey);
+        shell.Step(Accept);
+        Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
+        Assert.Contains(shell.Compose().Plaques, p => p.Label == "ENHANCED");
+
+        shell.Step(Down);
         Assert.Equal(OriginalShell.ApplyKey, shell.FocusedKey);
         var step = shell.Step(Accept);
-        var exit = Assert.IsType<PresentationSwitchExit>(step.Exit);
-        Assert.Equal(PresentationId.BuiltIn, exit.Requested);
+        var exit = Assert.IsType<OptionsApplyExit>(step.Exit);
+        Assert.Equal(PresentationId.BuiltIn, exit.Presentation);
+        Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
 
         shell.Step(Down);
         Assert.Equal(OriginalShell.OptionsBackKey, shell.FocusedKey);
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+    }
+
+    /// <summary>Opening the screen shows back the saved word, not what this process resolved: a
+    /// flag or the config key can have decided the running mode, and the row owes the player the
+    /// choice their own Apply saved. The store is a scratch one; the shell never writes it.</summary>
+    [Fact]
+    public void TheGraphicsRowOpensOnTheSavedWord()
+    {
+        var saved = new OptionsDef { GraphicsMode = GraphicsMode.EnhancedWord };
+        var shell = Shell(out _, () => saved);
+        shell.Open(OriginalScreen.Options);
+
+        Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
+        Assert.Contains(shell.Compose().Plaques, p => p.Label == "ENHANCED");
+
+        // A file that never set the field opens the row on the shipped default.
+        saved.GraphicsMode = null;
+        shell.Open(OriginalScreen.TopLevel);
+        shell.Open(OriginalScreen.Options);
+        Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
     }
 
     [Fact]
@@ -230,17 +259,23 @@ public class OriginalShellTests
         var shell = Shell(out _);
         shell.Open(OriginalScreen.Options);
 
-        // The four decoded page doors at their authored corners, disabled; the chooser and APPLY
-        // in the slot under them at the doors' own pitch, a line under the slot's description; the
-        // section's own RETURN TO MAIN MENU.
+        // The four decoded page doors at their authored corners, disabled; the two choosers side
+        // by side in the slot under them at the doors' own pitch, under the slot's two description
+        // lines, with APPLY a plaque's height below them; the section's own RETURN TO MAIN MENU.
         Assert.Equal(
-            new[] { "PF_B_GAMEOPTIONS", "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS", OriginalShell.PresentationKey, OriginalShell.ApplyKey, OriginalShell.OptionsBackKey },
+            new[]
+            {
+                "PF_B_GAMEOPTIONS", "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS",
+                OriginalShell.PresentationKey, OriginalShell.GraphicsKey, OriginalShell.ApplyKey, OriginalShell.OptionsBackKey,
+            },
             shell.Rows.Select(r => r.Key));
-        Assert.Equal(new[] { false, false, false, false, true, true, true }, shell.Rows.Select(r => r.Enabled));
+        Assert.Equal(new[] { false, false, false, false, true, true, true, true }, shell.Rows.Select(r => r.Enabled));
         var chooser = shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey);
-        Assert.Equal((110f, 478f), (chooser.X, chooser.Y));
+        Assert.Equal((110f, 490f), (chooser.X, chooser.Y));
+        var graphics = shell.Rows.Single(r => r.Key == OriginalShell.GraphicsKey);
+        Assert.Equal((110f + 160f + 8f, 490f), (graphics.X, graphics.Y));
         var apply = shell.Rows.Single(r => r.Key == OriginalShell.ApplyKey);
-        Assert.Equal((110f + 160f + 8f, 478f), (apply.X, apply.Y));
+        Assert.Equal((110f, 490f + 28f + 8f), (apply.X, apply.Y));
         var back = shell.Rows.Single(r => r.Key == OriginalShell.OptionsBackKey);
         Assert.Equal((460f, 500f, 240f, 50f), (back.X, back.Y, back.Width, back.Height));
 
@@ -249,9 +284,12 @@ public class OriginalShellTests
         Assert.Equal((100f, 200f), (board.Pictures[1].X, board.Pictures[1].Y));
         Assert.Contains(board.Lines, l => l.Text == "PREFERENCES" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Change the audio settings." && l.X == 340f && l.Y == 320f);
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Menu presentation.", System.StringComparison.Ordinal) && l.X == 340f && l.Y == 460f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Menu presentation,", System.StringComparison.Ordinal) && l.X == 340f && l.Y == 460f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Graphics takes effect", System.StringComparison.Ordinal) && l.X == 340f && l.Y == 472f);
         Assert.Equal(0, board.Plaques.Single(p => p.Art.Name == "PP_B_Audio.png").Frame);
-        Assert.Equal(2, board.Plaques.Single(p => p.Label == "ORIGINAL").Frame);
+        // Both choosers read ORIGINAL on a fresh screen: the focused one draws its focus frame,
+        // its neighbour the enabled resting frame.
+        Assert.Equal(new[] { 2, 1 }, board.Plaques.Where(p => p.Label == "ORIGINAL").Select(p => p.Frame));
         Assert.Equal(new MenuLayoutColor(0xFF, 0xFF, 0xDD, 0xC4), shell.PreferencesInks.Text);
         Assert.Equal(new MenuLayoutColor(0xFF, 0xC0, 0xBA, 0xAD), shell.PreferencesInks.Title);
 
@@ -319,14 +357,16 @@ public class OriginalShellTests
         Assert.Equal(new MenuLayoutColor(0xFF, 0xFF, 0xFF, 0xFF), shell.Inks.LabelNormal);
     }
 
-    // Seat 0 is a scripted source; the roster is the eleven stock airframes with no customs.
-    private static OriginalShell Shell(out FreeFlightFeature free)
+    // Seat 0 is a scripted source; the roster is the eleven stock airframes with no customs. No
+    // options reader by default, so the Options screen opens on the defaults and no test can reach
+    // the player's own user://options.json.
+    private static OriginalShell Shell(out FreeFlightFeature free, System.Func<OptionsDef>? options = null)
     {
         free = new FreeFlightFeature();
         var setup = new PlayerSetupFeature();
         setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()));
         setup.Join(new ScriptedMenuSeat());
-        return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), free, setup, Measure);
+        return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), free, setup, Measure, options: options);
     }
 
     // The fixture's strips: every button strip 240x200 (four 50-pixel frames), the paper plaque

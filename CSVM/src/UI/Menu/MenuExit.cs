@@ -17,7 +17,7 @@ public sealed record MenuSeatChoice(
 /// <summary>
 /// The one typed way any presentation leaves the menu, handed to <see cref="IMenuHost.Exit"/> and
 /// consumed by <c>Launcher</c>. A presentation names what it wants (<see cref="LaunchExit"/>,
-/// <see cref="CampaignMissionExit"/>, <see cref="QuitExit"/>, <see cref="PresentationSwitchExit"/>)
+/// <see cref="CampaignMissionExit"/>, <see cref="QuitExit"/>, <see cref="OptionsApplyExit"/>)
 /// and never constructs a session, hides itself or reads the launch machinery. The hierarchy is
 /// closed: only these four exist.
 /// </summary>
@@ -31,10 +31,13 @@ public abstract record MenuExit
 /// <summary>The player backed out of the top level: the host quits the process.</summary>
 public sealed record QuitExit : MenuExit;
 
-/// <summary>The player applied a presentation choice in Options: the consumer persists the
-/// request, ends the active presentation, re-selects, and shows the selected presentation at its
-/// top level. Unfinished setup is discarded on the way; the choice is the only thing carried.</summary>
-public sealed record PresentationSwitchExit(PresentationId Requested) : MenuExit;
+/// <summary>The player applied an Options screen: the consumer persists every choice it carries,
+/// then ends the active presentation, re-selects on <paramref name="Presentation"/>, and shows the
+/// selected presentation at its top level. <paramref name="Graphics"/> is a
+/// <see cref="Utils.GraphicsMode"/> word, saved and no more; the mode resolves once at launch.
+/// ⚠ Both ride the exit rather than being saved by the screen that took them, so the options file
+/// keeps exactly one writer and no driven screen can write the player's own.</summary>
+public sealed record OptionsApplyExit(PresentationId Presentation, string Graphics) : MenuExit;
 
 /// <summary>A non-campaign launch: the chapter, one <see cref="MenuSeatChoice"/> per joined seat
 /// in seat order, the picked <see cref="MenuMode"/>, and, for Instant Action only, the wizard's

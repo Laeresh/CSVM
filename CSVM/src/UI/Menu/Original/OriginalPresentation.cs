@@ -195,7 +195,8 @@ public sealed class OriginalPresentation : IMenuPresentation
                 campaign: host.Features.TryGet<CampaignFeature>(out var campaign) ? campaign : null,
                 profiles: () => CampaignProfiles ?? CampaignProfileStore.UserProfiles(),
                 stock: () => StockLoadouts.Load(),
-                dataRoot: _dataRoot);
+                dataRoot: _dataRoot,
+                options: () => OptionsStore.UserOptions().Load());
             _palette = PaletteFor(_shell.Inks);
             _preferencesPalette = PaletteFor(_shell.PreferencesInks, _shell.Inks);
             _paperPalette = PaletteFor(_shell.InstantActionInks);

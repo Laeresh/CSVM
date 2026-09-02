@@ -90,7 +90,7 @@ public class OriginalCoverageTests : IDisposable
         new("defaults-ask", OriginalScreen.HangarAirframe, Then(Hub, OriginalShell.AirframeDropKey, OriginalShell.AirframeDropKey + ":1"), new[] { OriginalShell.AskCancelKey, OriginalShell.CancelBuildKey },
             Expect: new[] { OriginalShell.AskOkKey, OriginalShell.AskCancelKey }),
         new("quit", null, new[] { "MM_B_QUIT" }, Array.Empty<string>(), Exit: typeof(QuitExit)),
-        new("apply-presentation", null, new[] { "MM_B_PREFERENCES", OriginalShell.ApplyKey }, Array.Empty<string>(), Exit: typeof(PresentationSwitchExit)),
+        new("apply-options", null, new[] { "MM_B_PREFERENCES", OriginalShell.ApplyKey }, Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
         new("free-flight-launch", null, new[] { OriginalShell.FreeFlightKey, "C1", OriginalShell.AirframeKey(0), OriginalShell.FlyKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
         new("instant-action-launch", null, new[] { "MM_B_INSTANTACTION", OriginalShell.FlyMissionKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
         new("campaign-launch", null, Then(Cabin, "NextMission", "GoToFlightCheck", "FlyMission"), Array.Empty<string>(), Exit: typeof(CampaignMissionExit)),
@@ -187,13 +187,13 @@ public class OriginalCoverageTests : IDisposable
     }
 
     [Fact]
-    public void TheOptionsChoosersDescriptionClearsBothPlaquesOverTheFixture()
+    public void TheOptionsChoosersDescriptionClearsEveryPlaqueOverTheFixture()
     {
         ChooserDescriptionClearsThePlaques(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null);
     }
 
     [ExtractedDataFact]
-    public void TheOptionsChoosersDescriptionClearsBothPlaquesOverTheInstall()
+    public void TheOptionsChoosersDescriptionClearsEveryPlaqueOverTheInstall()
     {
         string dataRoot = TestData.DataRoot!;
         var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
@@ -593,23 +593,45 @@ public class OriginalCoverageTests : IDisposable
         return 1;
     }
 
-    // The chooser's description and its two plaques share one slot under the page doors, and a
-    // plaque is wide enough to reach the description column, so the two must not share a line.
-    // The authored space scales uniformly, so disjoint here is disjoint at every window size.
+    // The choosers' description lines and their three plaques share one slot under the page doors,
+    // and a plaque is wide enough to reach the description column, so no plaque may share a line
+    // with either description line, and no two plaques may overlap each other. The authored space
+    // scales uniformly, so disjoint here is disjoint at every window size.
     private void ChooserDescriptionClearsThePlaques(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
     {
         var shell = Fresh(layout, measure, dataRoot, out _, out _);
         shell.Open(OriginalScreen.Options);
-        var description = shell.Compose().Lines.Single(l => l.Text.StartsWith("Menu presentation.", StringComparison.Ordinal));
-        foreach (string key in new[] { OriginalShell.PresentationKey, OriginalShell.ApplyKey })
+        var lines = shell.Compose().Lines
+            .Where(l => l.Text.StartsWith("Menu presentation,", StringComparison.Ordinal)
+                || l.Text.StartsWith("Graphics takes effect", StringComparison.Ordinal))
+            .ToArray();
+        Assert.Equal(2, lines.Length);
+        string[] keys = { OriginalShell.PresentationKey, OriginalShell.GraphicsKey, OriginalShell.ApplyKey, OriginalShell.OptionsBackKey };
+        foreach (string key in keys)
         {
             var plaque = Row(shell, key)!;
-            bool clear = description.Y + description.Size <= plaque.Y
-                || plaque.Y + plaque.Height <= description.Y
-                || description.X + description.Width <= plaque.X
-                || plaque.X + plaque.Width <= description.X;
-            Assert.True(clear, $"{key} at ({plaque.X}, {plaque.Y}, {plaque.Width}, {plaque.Height}) covers " +
-                $"the description at ({description.X}, {description.Y}, {description.Width}, {description.Size})");
+            foreach (var description in lines)
+            {
+                bool clear = description.Y + description.Size <= plaque.Y
+                    || plaque.Y + plaque.Height <= description.Y
+                    || description.X + description.Width <= plaque.X
+                    || plaque.X + plaque.Width <= description.X;
+                Assert.True(clear, $"{key} at ({plaque.X}, {plaque.Y}, {plaque.Width}, {plaque.Height}) covers " +
+                    $"'{description.Text}' at ({description.X}, {description.Y}, {description.Width}, {description.Size})");
+            }
+        }
+
+        for (int i = 0; i < keys.Length; i++)
+        {
+            for (int j = i + 1; j < keys.Length; j++)
+            {
+                var a = Row(shell, keys[i])!;
+                var b = Row(shell, keys[j])!;
+                bool clear = a.X + a.Width <= b.X || b.X + b.Width <= a.X
+                    || a.Y + a.Height <= b.Y || b.Y + b.Height <= a.Y;
+                Assert.True(clear, $"{keys[i]} at ({a.X}, {a.Y}, {a.Width}, {a.Height}) overlaps " +
+                    $"{keys[j]} at ({b.X}, {b.Y}, {b.Width}, {b.Height})");
+            }
         }
     }
 

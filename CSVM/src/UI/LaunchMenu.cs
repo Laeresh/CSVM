@@ -151,10 +151,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string _dataRoot = "";
     private Screen _screen = Screen.Mode;
     private int _modeIndex, _chapterIndex;
-    // The Options screen's cursor and the presentation its first row would apply, seeded from the
-    // saved request when the screen opens so it shows back what was asked for, not what is active.
+    // The Options screen's cursor and the two choices its stepper rows would apply, seeded from
+    // the saved options when the screen opens so it shows back what was asked for, not what is
+    // active: availability can make Built-in active, and the graphics mode a running process
+    // resolved is the one the process started under.
     private int _optionsIndex;
     private string _presentationChoice = PresentationId.BuiltIn.Value;
+    private string _graphicsChoice = GraphicsMode.Default;
     // The Table of Contents' list cursor and the first visible row of its 14-row window; the
     // applied preset itself is the feature's.
     private int _presetCursor, _presetTop;
@@ -1306,10 +1309,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The presentation row is a two-way stepper; the apply row has nothing to step.
+                // Both choice rows are two-way steppers; the apply row has nothing to step.
                 if (_optionsIndex == 0)
                 {
                     TogglePresentationChoice();
+                    return true;
+                }
+
+                if (_optionsIndex == 1)
+                {
+                    ToggleGraphicsChoice();
                     return true;
                 }
 
@@ -1379,11 +1388,15 @@ public sealed partial class LaunchMenu : CanvasLayer
                 {
                     TogglePresentationChoice();
                 }
+                else if (_optionsIndex == 1)
+                {
+                    ToggleGraphicsChoice();
+                }
                 else
                 {
-                    // The launcher persists the request and restarts the menu; the screen stays
+                    // The launcher persists both choices and restarts the menu; the screen stays
                     // standing for the host to hide.
-                    _host.Exit(new PresentationSwitchExit(new PresentationId(_presentationChoice)));
+                    _host.Exit(new OptionsApplyExit(new PresentationId(_presentationChoice), _graphicsChoice));
                 }
 
                 break;
@@ -2252,12 +2265,15 @@ public sealed partial class LaunchMenu : CanvasLayer
             ? $"✓  {_roster[_slots[0].PlaneIndex].Name} selected"
             : "";
 
-    // Opens the Options screen on the saved request, so the stepper shows back what the player
-    // asked for even when availability made Built-in the active presentation.
+    // Opens the Options screen on the saved options, so each stepper shows back what the player
+    // asked for even when availability made Built-in the active presentation, or when the running
+    // process resolved a graphics mode from a flag or the config key instead.
     private void OpenOptions()
     {
         _optionsIndex = 0;
-        _presentationChoice = OptionsStore.UserOptions().Load().MenuPresentation ?? PresentationId.BuiltIn.Value;
+        var saved = OptionsStore.UserOptions().Load();
+        _presentationChoice = saved.MenuPresentation ?? PresentationId.BuiltIn.Value;
+        _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
     }
 
     private void TogglePresentationChoice() =>
@@ -2265,8 +2281,16 @@ public sealed partial class LaunchMenu : CanvasLayer
             ? PresentationId.BuiltIn.Value
             : PresentationId.Original.Value;
 
+    private void ToggleGraphicsChoice() =>
+        _graphicsChoice = _graphicsChoice == GraphicsMode.EnhancedWord
+            ? GraphicsMode.Default
+            : GraphicsMode.EnhancedWord;
+
     private string PresentationChoiceLabel() =>
         _presentationChoice == PresentationId.Original.Value ? "Original" : "Built-in";
+
+    private string GraphicsChoiceLabel() =>
+        _graphicsChoice == GraphicsMode.EnhancedWord ? "Enhanced" : "Original";
 
     // What this screen is, the middle band's first line.
     private string Heading()
@@ -2646,7 +2670,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Mode => Modes.Length + 3, // + the trailing campaign, hangar and options rows
         Screen.Hangar => _hangar?.Page.RowCount ?? 1,
         Screen.Campaign => _campaign?.Page.RowCount ?? 1,
-        Screen.Options => 2, // the presentation stepper and the apply row
+        Screen.Options => 3, // the presentation and graphics steppers, then the apply row
         Screen.Chapter => CurrentChapters.Length,
         Screen.Presets => InstantActionPresets.All.Count,
         Screen.Environment => InstantActionFeature.Environments.Count,
@@ -2693,9 +2717,12 @@ public sealed partial class LaunchMenu : CanvasLayer
                 : index == Modes.Length + 1 ? HangarRow : OptionsRow,
             Screen.Hangar => _hangar?.Page.RowText(index) ?? "",
             Screen.Campaign => _campaign?.Page.RowText(index) ?? "",
-            Screen.Options => index == 0
-                ? $"Menu presentation: {PresentationChoiceLabel()}"
-                : "Apply and restart the menu",
+            Screen.Options => index switch
+            {
+                0 => $"Menu presentation: {PresentationChoiceLabel()}",
+                1 => $"Graphics: {GraphicsChoiceLabel()}",
+                _ => "Apply and restart the menu",
+            },
             Screen.Chapter => CurrentChapters[index].Name,
             Screen.Presets => InstantActionPresets.All[index].Name,
             Screen.Environment => InstantActionFeature.Environments[index].Name,
@@ -2981,12 +3008,15 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Mode => focus < Modes.Length ? Modes[focus].Detail
             : focus == Modes.Length ? "Fly the story: pick a player, then the cabin."
             : focus == Modes.Length + 1 ? "Build a plane in the hangar and fly it."
-            : "Choose which menu presentation draws the menus.",
+            : "Choose which presentation draws the menus, and the graphics mode.",
         Screen.Hangar => _hangar?.Page.Detail(focus) ?? "",
         Screen.Campaign => _campaign?.Page.Detail(focus) ?? "",
-        Screen.Options => focus == 0
-            ? "Built-in needs no extracted menu art; Original draws the original's own screens from it."
-            : "Saves the choice and restarts the menu at its top level; unfinished setup is discarded.",
+        Screen.Options => focus switch
+        {
+            0 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
+            1 => "Original is the faithful world; Enhanced lights it. Takes effect on the next start.",
+            _ => "Saves both choices and restarts the menu at its top level; unfinished setup is discarded.",
+        },
         Screen.Presets => PresetDetail(focus),
         Screen.Chapter => $"Region {CurrentChapters[focus].Code}",
         Screen.Environment => $"Region {InstantActionFeature.Environments[focus].Code}",

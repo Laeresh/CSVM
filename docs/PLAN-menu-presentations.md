@@ -530,9 +530,9 @@ seat 0's pointer into the authored space; `PointerSeat` wraps the Built-in seat 
 E42 replacing the last of those with the derived manifest) and enters
 `MenuHost.Select` through the new `Availability` delegate, a failure selecting Built-in with the
 reason and leaving the saved request alone. Switching is a fourth typed exit,
-`PresentationSwitchExit`, produced by Built-in's new Options door (the Mode screen's sixth row,
+`OptionsApplyExit`, produced by Built-in's new Options door (the Mode screen's sixth row,
 `--menu=options`, the one Built-in change) and by Original's Options screen, consumed by
-`Launcher.SwitchPresentation` one frame later: save through `OptionsStore`, `Deactivate`
+`Launcher.ApplyOptions` one frame later: save through `OptionsStore`, `Deactivate`
 (discarding transient feature state), re-select from the saved request with the force flag still
 winning and any `--presentation=` override dropped, `Show(TopLevel)`. Cues resolve through
 `MenuCueTable` to `MOUSEOVER.WAV` and `MOUSECLICK.WAV` under the rof tree, played by
@@ -558,7 +558,7 @@ the door opens Free Flight, keyboard frames pick Hollywood and the Bloodhawk and
 whose Accept leaves as one `LaunchExit` with the presentation hidden, the return re-enters the top
 level with the airframe pick dropped and a debrief return maps there too, `Deactivate` from
 mid-setup discards the feature's pick and the saved request re-selects Built-in on its Mode screen
-(six rows), Built-in's Options route emits a `PresentationSwitchExit` through the host, the saved
+(six rows), Built-in's Options route emits a `OptionsApplyExit` through the host, the saved
 request re-selects a fresh Original, the force flag beats an Original override keeping the request,
 and a data root with no layout selects Built-in with a reason naming `menu_layout.json` and the
 request kept. `menu-free-flight-journey` has one edit: the Mode screen's row count is six and the
@@ -586,7 +586,7 @@ remake-only until CAP-49 and CAP-52 are filmed, in `docs/org/menu-inventory.md`)
 
 What this did not prove: the harness runs a suite before any session builds, so no engine suite
 lets `Launcher` fly an Original launch and return, nor perform the frame-deferred
-`SwitchPresentation`; both are the same `OnMenuExit`/`ShowMenu` path the campaign debrief and
+`ApplyOptions`; both are the same `OnMenuExit`/`ShowMenu` path the campaign debrief and
 the failed-build return take, and the switch's three host calls are what the tracer performs by
 hand. Sound is not heard by a suite: the cue table resolves and the service loads the wavs, which
 the log records at debug level. The real switch and the sounds are exercised at the controls:
@@ -1548,7 +1548,7 @@ a `[MainMenu]` section, then the manifest. `StampSchema` is `ExtractionStamp.Sch
 schema the decoded layout's first reader raised, so a tree extracted before that decode is refused
 with the re-extract instruction (the loaders' own check on that stamp only warns); the landed
 extractor re-stamps an existing tree without re-extracting it. `Launcher.OriginalAvailable` asks on
-every process start and every `SwitchPresentation`, so a repaired tree is seen without a state reset,
+every process start and every `ApplyOptions`, so a repaired tree is seen without a state reset,
 and logs the optional absences as their own line. The presentation's own `Measure` logs one line per
 art name it cannot read and keeps the row's fallback rectangle, which is what an optional absence
 degrades to.
@@ -1622,7 +1622,7 @@ yet carry.
 
 What was found by reading, then built. The launch side was already whole: `LaunchMenu` leaves
 through `IMenuHost.Exit` alone (`FireLaunch` for the three modes, `FlyCampaignMission`, Back on
-Mode as `QuitExit`, Options' apply as `PresentationSwitchExit`), `OriginalShell` the same four
+Mode as `QuitExit`, Options' apply as `OptionsApplyExit`), `OriginalShell` the same four
 through `OriginalPresentation.Tick`, and `Launcher.OnMenuExit` is the one consumer; no launch
 callback remained on `LaunchMenu`, and no presentation names `GameSession`, `Launcher` or
 `LauncherContext` (now enforced by a metadata scan, below). The return side had one leak: the
@@ -1665,7 +1665,7 @@ Dogfight and the cabin's FLY MISSION leave as `LaunchExit`/`CampaignMissionExit`
 `Shown` already false when the sink runs; every `Show(TopLevel)` afterwards lands on Mode or the
 Original top level with the cursors and seats kept and the picks dropped; `Show(DebriefReturn)`
 lands on the book over the saved profile and `Show(CabinReturn)` on the cabin; Back on Mode and
-Quit leave as `QuitExit`, Options' apply as `PresentationSwitchExit`; a third Original process on
+Quit leave as `QuitExit`, Options' apply as `OptionsApplyExit`; a third Original process on
 `--menu=campaign` opens the profile screen over the presentation's store, not the scratch aid
 store; and Original refused at `Select` runs Built-in on Mode with `Requested` still Original,
 launches, and re-shows the same instance on the return with availability restored, since a return
@@ -1739,7 +1739,7 @@ so the matrix should run that test's install case as its first row and then the 
 `menu-original-tracer`, `menu-original-instant-action`, `menu-original-hangar`,
 `menu-original-campaign` and the Original half of `menu-player-setup-seats`; what none of them
 reach and the at-the-controls pass must: a flown launch and its return through `Launcher` for every
-mode in Original, the frame-deferred `SwitchPresentation` both ways, a real pad's join and walk, the
+mode in Original, the frame-deferred `ApplyOptions` both ways, a real pad's join and walk, the
 sounds, and the pointer's rollover and pressed frames. The two remake choices E41 left open are
 settled: a two-answer box opens on Yes, the left button `MESSAGEBOX.SCRIPT` focuses, and the
 Options chooser's one-line description stands above its two plaques inside the same slot.
@@ -1749,7 +1749,7 @@ the matrix must run are the ones `OriginalManifestTests` pins off engine, over t
 rather than a fixture: complete, missing-required (the fallback line and the request kept),
 corrupt-required, missing-optional (the degraded line and the screen still drawn), a stamp below
 `StampSchema`, and a required file restored while the process is up, which only the switch through
-`SwitchPresentation` re-checks and no test drives at the controls. The recovery pass belongs on a
+`ApplyOptions` re-checks and no test drives at the controls. The recovery pass belongs on a
 scratch data root copy, never on the user's tree.
 
 Handoff from E43: the launch and return half of the matrix is `menu-launch-return` (every exit
@@ -1771,8 +1771,8 @@ return. Every campaign row runs over a scratch profile copy, never the user's st
 **The exposure finding, the item's main result.** Original is already normally selectable, and
 has been since the Options route landed: Built-in's Options screen (the Mode screen's sixth row,
 `LaunchMenu.OpenOptions`/`TogglePresentationChoice`) reads the saved request from
-`OptionsStore.UserOptions()` and toggles it between `original` and `built-in`, its APPLY leaves as a
-`PresentationSwitchExit`, `Launcher.SwitchPresentation` saves that token through `OptionsStore`
+`OptionsStore.UserOptions()` and toggles it between `original` and `built-in`, its APPLY leaves as an
+`OptionsApplyExit`, `Launcher.ApplyOptions` saves that token through `OptionsStore`
 (whose accepted set already lists `original`) and re-selects, and `Launcher.BuildMenuHost` reads
 the saved request on every cold start with no flag. Nothing between the store and the host asks
 whether Original is "exposed": `MenuHost.Select` gates on registration and the availability
@@ -1820,7 +1820,7 @@ Every row a machine can run was run; every row only a human can run reads owed.
 | Comment caps and encoding | `.\CheckCommentCaps.ps1 -Summary`; `.\CheckEncoding.ps1` | all within cap; no mojibake |
 | Built-in's pixel identity | `.scratch\e44-shots.ps1` for `mode`, `chapter`, `plane`, `selected`, `options`, `loadboard`, `loadboard-campaign` and the twelve scratch-profile campaign aids at 1280x720, compared by decoded 32bpp pixels (`.scratch\e44-compare.ps1`) against `mp-e43\.scratch\e43-shots\builtin-after\` | 19 of 19 identical, zero differing pixels, the user's plane store holding the same eight planes before and after; with B11 to E43's own comparisons (each identical over the same store, `mode` moving once at B13 by the added Options row, the one intended Built-in change) this closes the chain across the plan |
 | Original's wide, tall and 4:3 shots | the same script with `--presentation=original` for `top`, `free-flight`, `dogfight`, `instant-action`, `options`, the five `plane-*` aids, `campaign-empty`, `campaign-roster`, `campaign-cabin`, `campaign-previous`, `campaign-scrapbook`, `campaign-briefing:24`, `campaign-flightcheck`, `campaign-ammo`, `campaign-planeselection` and `campaign-delete` at 800x600, 1280x720, 1920x1080 and 600x750, into `.scratch\e44-shots\original\` | 80 of 80 present, every run's log reading `menu presentation active=original requested=original`; `.scratch\e44-shots\NOTES.txt` says what each pose cannot show (the pointer off the board, so no rollover, pressed or pointer-bitmap frame; no sound; opening states only) |
-| Switching both ways through both Options screens, at the host's sink | `menu-original-tracer`, `menu-launch-return` and the coverage check's `apply-presentation` journey (rows above) | proven to the `PresentationSwitchExit` and the re-selection from the saved request; the frame-deferred `Launcher.SwitchPresentation` itself is owed at the controls |
+| Switching both ways through both Options screens, at the host's sink | `menu-original-tracer`, `menu-launch-return` and the coverage check's `apply-options` journey (rows above) | proven to the `OptionsApplyExit` and the re-selection from the saved request; the frame-deferred `Launcher.ApplyOptions` itself is owed at the controls |
 | Missing-asset recovery, six cases over a scratch data root | `.scratch\e44-recovery.ps1`: a copy of `extracted\VERSION.json`, `rof`, `zrdr`, `planes`, `rimage` and `soundsl` under `.scratch\e44-scratch-root`, one windowed probe of Original's top level per case with `--data-root=<copy> --presentation=original --menu --screenshot=` | complete: `active=original requested=original`; `MM_B_CAMPAIGN.PNG` moved out: `active=built-in requested=original reason='original' is not available: the Original asset manifest (schema 1) refuses 1 of 95 required files: MainMenu.MM_B_CAMPAIGN names MM_B_Campaign.png (not there)`; a ten-byte file at that name: the same line ending `(shorter than a PNG header)`; `GN_B_RETURNTOGAME.PNG` moved out: `active=original` and the degraded line reading `3 of 67 optional files`, the third naming `Preferences.PF_B_RETURNTOGAME`; the copy's stamp set to schema 1: `active=built-in requested=original reason=... the extraction tree is stamped schema=1 and this build reads schema=2 or later; re-run ExtractAssets.ps1 and ExtractRof.ps1`; everything restored: `active=original requested=original`. The user's tree was never written to; the copy is whole afterwards |
 | Each mode (Free Flight, Instant Action, Dogfight) to FLY and the pause board's Exit, in each presentation | `.\RunDev.ps1`, then `.\RunDev.ps1 --presentation=original` | **owed at the controls**: expect that presentation's top level (Built-in's Mode with its chapter and airframe cursors where they were and nothing selected; Original's top level with its list cursors kept and the pick dropped) |
 | A campaign mission flown to its end, won and lost, over a copied profile | copy one directory of `user://Profiles` to a new name first; `.\RunDev.ps1`, Campaign, that player, Next Mission, GO TO FLIGHT CHECK, FLY MISSION, the mission's end (once won, once lost); the same under `--presentation=original` | **owed at the controls**: expect the scrapbook on that mission with RETURN TO CABIN focused, then RETURN TO CABIN, Back to the roster and out |
@@ -1857,14 +1857,28 @@ at-the-controls rows remain owed.
 to the user are answered. The delete and sell confirms open on Yes, the left button
 `MESSAGEBOX.SCRIPT` focuses for the plain `0x4` mask, which makes the box a decode rather than a
 remake reading; Back still takes the declining answer, so a mistaken DELETE PLAYER still has a way
-out. The Options chooser keeps its slot under the four disabled page doors, with its one-line
-description moved onto the slot's first line above the two plaques, since a plaque is wide enough
-to reach the description column and covered its first words at every window size. And Decision 29's
+out. The Options choosers keep their slot under the four disabled page doors, with the description
+moved onto the slot's first lines above the plaques, since a plaque is wide enough to reach the
+description column and covered its first words at every window size. And Decision 29's
 gate stays open: Original remains normally selectable through both Options screens while the rows
 above are owed. One Built-in quirk outside this plan, reported by D31 and E43 and left for the
 backlog under Decision 16: `--menu=campaign-roster` draws the cabin rather than the roster in
 Built-in, because the aid walker seats the seeded profile before branching on the aid's name;
 Original's `campaign-roster` is the profile screen itself.
+
+**The graphics option, handed over by the enhanced-graphics plan and landed here.** That plan
+resolves `graphics.mode` once at launch into `GraphicsMode.Enhanced` and left the menu exposure to
+this plan's options store, which is where it now lives: `OptionsDef` carries `graphicsMode` beside
+`menuPresentation` with the same version-tolerant rules, `Launcher._Ready` hands the saved word to
+`GraphicsMode.Resolve` under the `--graphics=` flag and over the config key, and both Options
+screens carry a two-way row for it beside the presentation row. Built-in's Options screen is three
+rows (presentation, graphics, apply); Original's chooser slot is two plaques side by side with
+APPLY under them and two description lines above. The fourth exit is `OptionsApplyExit`, carrying
+both choices, since the graphics word needs saving and nothing else, and keeping every write in
+`Launcher.ApplyOptions` leaves the options file with exactly one writer. `--det` reads no saved
+option at all, so a golden capture never depends on the machine's options file. The mode takes
+effect on the next start, which both descriptions say: the shader memos and the Environment are
+built from the value resolved at launch, and this plan does not rebuild them under a live menu.
 
 **⚠ Traps.** Two presentations prove replaceability only if shared features have no dependency on
 either. Do not add a token Modern screen; the extension contract is the deliverable.

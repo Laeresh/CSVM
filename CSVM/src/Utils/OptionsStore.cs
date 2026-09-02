@@ -6,11 +6,14 @@ using System.Text.Json;
 
 namespace CSVM.Utils;
 
-/// <summary>One process-wide option: today, only the requested menu presentation. A missing field
-/// means "never set"; the caller, not this def, decides what that falls back to.</summary>
+/// <summary>The process-wide options: the requested menu presentation and the requested graphics
+/// mode. A missing field means "never set"; the caller, not this def, decides what that falls back
+/// to.</summary>
 public sealed class OptionsDef
 {
     public string? MenuPresentation { get; set; }
+
+    public string? GraphicsMode { get; set; }
 }
 
 /// <summary>
@@ -24,7 +27,11 @@ public sealed class OptionsDef
 public sealed class OptionsStore
 {
     /// <summary>The schema version written into every file. A file claiming a version this reader
-    /// does not know is treated as malformed rather than half-read.</summary>
+    /// does not know is treated as malformed rather than half-read.
+    /// ⚠ A field added to <see cref="OptionsDef"/> does not bump this: a missing field already
+    /// reads as "never set", so a file written before the field existed loads with every other
+    /// field intact. Bump it only when an existing field changes meaning or shape, which is the
+    /// one case a reader cannot recover from by reading what is there.</summary>
     public const int Version = 1;
 
     private const string FileName = "options.json";
@@ -36,6 +43,15 @@ public sealed class OptionsStore
     {
         PresentationResolution.BuiltIn,
         "original",
+    };
+
+    // The only graphics words this option accepts, the pair GraphicsMode.TryParse knows. Kept as
+    // strings for the same reason the presentations are: the resolved value is a boolean owned by
+    // the module that reads it, not a type this store carries.
+    private static readonly HashSet<string> ValidGraphicsModes = new(StringComparer.Ordinal)
+    {
+        GraphicsMode.Default,
+        GraphicsMode.EnhancedWord,
     };
 
     private static readonly JsonWriterOptions WriterOptions = new() { Indented = true };
@@ -65,15 +81,8 @@ public sealed class OptionsStore
         {
             w.WriteStartObject();
             w.WriteNumber("version", Version);
-            if (def.MenuPresentation is { } presentation)
-            {
-                w.WriteString("menuPresentation", presentation);
-            }
-            else
-            {
-                w.WriteNull("menuPresentation");
-            }
-
+            Write(w, "menuPresentation", def.MenuPresentation);
+            Write(w, "graphicsMode", def.GraphicsMode);
             w.WriteEndObject();
         }
 
@@ -81,9 +90,10 @@ public sealed class OptionsStore
     }
 
     /// <summary>The def a JSON text describes, or null when the text is not valid JSON, not an
-    /// object, or not <see cref="Version"/>. An unknown <c>menuPresentation</c> value is dropped
-    /// like a missing one rather than invalidating the whole file — only the version gate does
-    /// that.</summary>
+    /// object, or not <see cref="Version"/>. An unknown value in any field is dropped like a
+    /// missing one rather than invalidating the whole file, and a field the file does not carry
+    /// at all reads as never set, so a file written before a field existed still loads. Only the
+    /// version gate rejects a whole file.</summary>
     public static OptionsDef? Deserialize(string json)
     {
         try
@@ -100,13 +110,11 @@ public sealed class OptionsStore
                 return null;
             }
 
-            string? presentation = root.TryGetProperty("menuPresentation", out var p)
-                && p.ValueKind == JsonValueKind.String
-                && ValidPresentations.Contains(p.GetString() ?? string.Empty)
-                    ? p.GetString()
-                    : null;
-
-            return new OptionsDef { MenuPresentation = presentation };
+            return new OptionsDef
+            {
+                MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
+                GraphicsMode = Read(root, "graphicsMode", ValidGraphicsModes),
+            };
         }
         catch (JsonException)
         {
@@ -145,4 +153,26 @@ public sealed class OptionsStore
         File.WriteAllText(temp, Serialize(def), new UTF8Encoding(false));
         File.Move(temp, path, overwrite: true);
     }
+
+    // A never-set field is written as an explicit null rather than left out, so the file names
+    // every option the build knows and a reader can tell "not set" from "written by an older
+    // build" by eye.
+    private static void Write(Utf8JsonWriter w, string name, string? value)
+    {
+        if (value is { } set)
+        {
+            w.WriteString(name, set);
+        }
+        else
+        {
+            w.WriteNull(name);
+        }
+    }
+
+    private static string? Read(JsonElement root, string name, HashSet<string> valid) =>
+        root.TryGetProperty(name, out var field)
+        && field.ValueKind == JsonValueKind.String
+        && valid.Contains(field.GetString() ?? string.Empty)
+            ? field.GetString()
+            : null;
 }

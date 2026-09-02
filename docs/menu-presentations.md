@@ -83,8 +83,8 @@ consulted.
 
 A switch is three host calls in order: `Deactivate()` (ends the instance and calls
 `Features.DiscardTransient()`), `Select(...)` (re-resolves from the saved request), then
-`Show(TopLevel)`. `Launcher.SwitchPresentation` performs them one frame after the
-`PresentationSwitchExit` that asked for them, after saving the request.
+`Show(TopLevel)`. `Launcher.ApplyOptions` performs them one frame after the
+`OptionsApplyExit` that asked for them, after saving every choice it carries.
 
 ## The shared features
 
@@ -143,9 +143,25 @@ view draws with.
 
 `OptionsStore` (`CSVM/src/Utils/OptionsStore.cs`) is the one process-wide options file,
 `user://options.json`, independent of any profile: version-tolerant (an unknown version invalidates
-the file, an unknown value drops only that field), read as empty when missing or malformed, written
-atomically. Its one field today is `menuPresentation`, and the store accepts only the tokens it
-lists (`built-in`, `original`); a token outside that set reads as never set.
+the file, an unknown value drops only that field, a field the file does not carry reads as never
+set), read as empty when missing or malformed, written atomically. Its fields are
+`menuPresentation` (`built-in`, `original`) and `graphicsMode` (`original`, `enhanced`); a value
+outside a field's set reads as never set.
+
+**An option is a store field plus a row in each presentation's Options screen.** Adding one means
+a nullable field on `OptionsDef` with its accepted-value set, the two writes in `Serialize` and
+`Deserialize`, a row in Built-in's Options screen and one in Original's Preferences chooser slot,
+a value on `OptionsApplyExit`, and the line in `Launcher.ApplyOptions` that saves it. The store's
+`Version` does not move for a new field: a missing field already reads as never set, so a file
+written before the field existed loads with everything it does have, and the version gate is
+reserved for a field whose meaning or shape changed. Whichever module consumes the option decides
+what "never set" falls back to and where the saved value sits among its other sources; for the
+graphics mode that is `GraphicsMode.Resolve`, where the `--graphics=` flag beats the saved option,
+which beats the `graphics.mode` config key (`docs/cli.md`).
+
+A screen never writes the store. Both values ride the exit and `Launcher.ApplyOptions` is the only
+writer, so the options file has exactly one, and no test or suite that drives an Options screen
+through Apply can write the player's own file.
 
 `PresentationResolution` (`CSVM/src/Utils/PresentationResolution.cs`) fixes the precedence:
 `--force-builtin`, then `--presentation=<token>`, then the saved request, then Built-in. Availability
@@ -164,11 +180,13 @@ never re-selects.
 
 Every presentation exposes Options, since a player must be able to leave a presentation from inside
 it. Built-in's is the Mode screen's Options row (`--menu=options`); Original's is its Preferences
-page (`--menu=options` under `--presentation=original`). Both offer the same saved option, read it
-from the store on entry, and leave through a `PresentationSwitchExit` carrying the chosen token.
-Both choosers toggle between the two shipped tokens, so a third presentation extends the choosers
-as well as the registry (checklist below). The startup recovery is `--force-builtin`, which beats
-everything and rewrites nothing.
+page (`--menu=options` under `--presentation=original`). Both offer the same saved options, read
+them from the store on entry, and leave through an `OptionsApplyExit` carrying every choice. Both
+presentation choosers toggle between the two shipped tokens, so a third presentation extends the
+choosers as well as the registry (checklist below); both graphics choosers toggle between
+`original` and `enhanced` and say in their description line that the choice takes effect on the
+next start, since the mode is resolved once at launch and applying it rebuilds nothing. The
+startup recovery is `--force-builtin`, which beats everything and rewrites nothing.
 
 ## Audio
 
@@ -199,7 +217,7 @@ consumed by `Launcher.OnMenuExit`. The hierarchy is closed:
 | `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
 | `CampaignMissionExit` | the profile name, the `cm_sequence` position, one `MenuSeatChoice` per joined human | the same, over the campaign's story position |
 | `QuitExit` | nothing | quit the process |
-| `PresentationSwitchExit` | the requested `PresentationId` | save the request, then the three-call switch one frame later |
+| `OptionsApplyExit` | the requested `PresentationId` and the graphics-mode word | save both, then the three-call switch one frame later |
 
 `MenuSeatChoice` is the plane node, the pad devices the seat claimed, the fit and, for a saved
 custom plane, its resolved `CustomPlaneDef`; the consumer never reads a store. The features build
@@ -352,10 +370,10 @@ In order. Each step names the file it touches and the test that proves it.
    each with a way back that lands on the top level with no open campaign, build or dialog behind
    it. Write a coverage test in `OriginalCoverageTests`' shape: every screen reached and left by
    every input family the presentation supports, every exit typed.
-6. **Expose Options.** A screen that reads the saved request from `OptionsStore`, offers every
-   registered token, and leaves through `PresentationSwitchExit`. Generalise the two shipped
-   choosers from their two-token toggle to the registered set at the same time, so a switch into
-   and out of the new presentation works from both of them.
+6. **Expose Options.** A screen that reads the saved options from `OptionsStore`, offers every
+   registered token and every option the store carries, and leaves through `OptionsApplyExit`.
+   Generalise the two shipped presentation choosers from their two-token toggle to the registered
+   set at the same time, so a switch into and out of the new presentation works from both of them.
 7. **Register it.** One `registry.Register(PresentationId.<Name>, () => new <Name>Presentation(...))`
    in `Launcher.BuildMenuHost`, reading `_menuAid` for the cold start's aid as the two shipped
    factories do.

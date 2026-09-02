@@ -226,9 +226,9 @@ public partial class Launcher : Node3D
     // The decoded menu layout the Original presentation composes from, loaded once by the
     // availability check and handed to every Original instance the registry creates.
     private MenuLayout? _originalLayout;
-    // A presentation switch the Options route asked for, acted on at the top of the next frame:
-    // the exit arrives inside the active presentation's own tick, which is no place to free it.
-    private PresentationId? _pendingSwitch;
+    // An Options apply, acted on at the top of the next frame: the exit arrives inside the active
+    // presentation's own tick, which is no place to free it.
+    private OptionsApplyExit? _pendingApply;
     // The --menu= aid, held for the cold start alone: the first presentation created reads it and
     // the first ShowMenu consumes it, so no return from flight and no switch re-enters its screen.
     private string? _menuAid;
@@ -555,10 +555,11 @@ public partial class Launcher : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
-        // Resolved after the --det block above, so a user config's graphics.mode is dropped by
-        // ClearOverrides the same way EffectsLevel's is; --graphics= bypasses Config outright and
-        // survives it. Ahead of the clutter fade below, which needs it to follow the pushed fog.
-        bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode);
+        // After the --det block, so ClearOverrides has dropped a config graphics.mode; ahead of the
+        // clutter fade, which needs the mode to follow the pushed fog. ⚠ --det reads no saved
+        // option either: options.json is one machine's state (docs/cli.md's --graphics bullet).
+        string? savedGraphics = _spec.Det ? null : OptionsStore.UserOptions().Load().GraphicsMode;
+        bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedGraphics);
         Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={(graphicsEnhanced ? "enhanced" : "original")}");
         // The graphics EffectsLevel's one global: the clutter fade's squared distance scale, 0 when
         // the fade is off. Enhanced mode pushes the fade out by the fog range's own factor (the
@@ -836,11 +837,11 @@ public partial class Launcher : Node3D
             OpenDebrief(debrief.Profile, debrief.Result);
         }
 
-        // A presentation switch from Options, one frame after the exit that asked for it.
-        if (_pendingSwitch is { } requested)
+        // An Options apply, one frame after the exit that asked for it.
+        if (_pendingApply is { } applied)
         {
-            _pendingSwitch = null;
-            SwitchPresentation(requested);
+            _pendingApply = null;
+            ApplyOptions(applied);
         }
 
         // Last in the frame, where the build used to happen anyway: the launchscreen and the boards
@@ -1242,21 +1243,26 @@ public partial class Launcher : Node3D
         return (at.X, at.Y);
     }
 
-    // The Options route's switch: persist the request, end the active presentation (discarding
-    // every feature's transient state), re-select with the saved request in place of any
-    // session override, and show the selected presentation at its top level. The force flag
-    // still wins, since it is the recovery path.
-    private void SwitchPresentation(PresentationId requested)
+    // The Options route's apply, the one writer of the options file: persist every choice the
+    // screen took, then end the active presentation (discarding every feature's transient state),
+    // re-select with the saved request in place of any session override, and show the selected
+    // presentation at its top level. The force flag still wins, since it is the recovery path.
+    // ⚠ The graphics word is saved and nothing more. GraphicsMode resolves once at launch, so the
+    // choice reaches the world on the next start; do not rebuild the world here.
+    private void ApplyOptions(OptionsApplyExit applied)
     {
         if (_menuHost == null)
         {
             return;
         }
 
+        var requested = applied.Presentation;
         var store = OptionsStore.UserOptions();
         var options = store.Load();
         options.MenuPresentation = requested.Value;
+        options.GraphicsMode = applied.Graphics;
         store.Save(options);
+        Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics}");
         _menuHost.Deactivate();
         string? reason = _menuHost.Select(_spec.ForceBuiltInPresentation, null, requested.Value);
         string why = reason == null ? "" : $" reason={reason}";
@@ -1307,8 +1313,8 @@ public partial class Launcher : Node3D
             case QuitExit:
                 GetTree().Quit();
                 break;
-            case PresentationSwitchExit switchExit:
-                _pendingSwitch = switchExit.Requested;
+            case OptionsApplyExit applied:
+                _pendingApply = applied;
                 break;
         }
     }

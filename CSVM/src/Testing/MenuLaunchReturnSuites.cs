@@ -124,9 +124,11 @@ internal static class MenuLaunchReturnSuites
             run.Show(MenuReturnDestination.TopLevel);
             WalkTo(run, menu, LaunchMenu.OptionsRow);
             run.Press(Accept);
+            // Past the presentation and graphics steppers onto the third row, the apply row.
+            run.Press(Down);
             run.Press(Down);
             run.Press(Accept);
-            ctx.Check(run.Expect<PresentationSwitchExit>() != null, $"Options' apply row leaves as one PresentationSwitchExit");
+            ctx.Check(run.Expect<OptionsApplyExit>() != null, $"Options' apply row leaves as one OptionsApplyExit");
             ctx.Check(run.HiddenAtEveryExit, $"the host had hidden the presentation before every one of the {run.Exits.Count} exits reached the sink");
         }
         finally

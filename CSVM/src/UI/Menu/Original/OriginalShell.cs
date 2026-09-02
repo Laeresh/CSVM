@@ -158,6 +158,9 @@ public sealed partial class OriginalShell
     /// <summary>The Options screen's presentation toggle.</summary>
     public const string PresentationKey = "PRESENTATION";
 
+    /// <summary>The Options screen's graphics-mode toggle.</summary>
+    public const string GraphicsKey = "GRAPHICS";
+
     /// <summary>The Options screen's apply button.</summary>
     public const string ApplyKey = "APPLY";
 
@@ -170,13 +173,17 @@ public sealed partial class OriginalShell
     /// <summary>The Preferences pages' four doors, drawn disabled: no shared option stands behind them.</summary>
     public static readonly string[] PreferencesPageKeys = { "PF_B_GAMEOPTIONS", "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS" };
 
-    // The chooser's own words on the slot's first line, above the two plaques rather than beside
-    // them: the plaques are wide enough to reach the description column at every window size.
-    private const string ChooserDescription = "Menu presentation. APPLY restarts the menu.";
+    // The choosers' own words on the slot's first lines, above the plaques rather than beside them:
+    // a plaque is wide enough to reach the description column at every window size. Two short lines
+    // rather than one long one, each well inside the page's 310-pixel description box, so neither
+    // wraps into the row of plaques standing under them. The first line names the two plaques in
+    // the order they stand, since both read ORIGINAL until one of them is stepped.
+    private const string ChooserDescription = "Menu presentation, then graphics mode.";
+    private const string ChooserRestartNote = "Graphics takes effect on the next start.";
     private const float ChooserGap = 8f;
 
-    // The description's line box inside the chooser's slot, which the plaques stand under.
-    private const float ChooserLine = 18f;
+    // The two description lines' box inside the chooser's slot, which the plaques stand under.
+    private const float ChooserLine = 30f;
     private const float PreferencesTitleFont = 20f;
     private const float PreferencesTextFont = 14f;
     private const float ChooserFont = 12f;
@@ -223,6 +230,7 @@ public sealed partial class OriginalShell
     private readonly BoardArt? _plaque;
     private readonly BoardArt _activePointer;
     private readonly BoardArt _passivePointer;
+    private readonly Func<CSVM.Utils.OptionsDef>? _options;
     private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
     private readonly Dictionary<string, (int Width, int Height)?> _sizes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -232,6 +240,7 @@ public sealed partial class OriginalShell
     private (float X, float Y)? _pointer;
     private int _pickedChapter = -1;
     private string _choice = PresentationId.Original.Value;
+    private string _graphics = CSVM.Utils.GraphicsMode.Default;
 
     /// <summary>A shell over <paramref name="layout"/> and the shared features. <paramref name="measure"/>
     /// answers an art name with its strip's pixel size (null when the file is not there),
@@ -252,7 +261,10 @@ public sealed partial class OriginalShell
         CampaignFeature? campaign = null,
         Func<CSVM.Session.CampaignProfileStore>? profiles = null,
         Func<CSVM.Flight.StockLoadouts?>? stock = null,
-        string? dataRoot = null)
+        string? dataRoot = null,
+        // Reads the saved options the Options screen shows back; null opens it on the defaults,
+        // which is what an engine-free test wants. The shell never writes them.
+        Func<CSVM.Utils.OptionsDef>? options = null)
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _free = free ?? throw new ArgumentNullException(nameof(free));
@@ -267,6 +279,7 @@ public sealed partial class OriginalShell
         _profiles = profiles;
         _stock = stock;
         _dataRoot = dataRoot;
+        _options = options;
         _campaignLayout = CampaignLayout.Over(layout);
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
@@ -318,6 +331,9 @@ public sealed partial class OriginalShell
     /// <summary>The presentation the Options screen would apply.</summary>
     public string PresentationChoice => _choice;
 
+    /// <summary>The graphics mode word the Options screen would apply.</summary>
+    public string GraphicsChoice => _graphics;
+
     /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
     public (float X, float Y)? Pointer => _pointer;
 
@@ -338,6 +354,13 @@ public sealed partial class OriginalShell
         _screen = screen;
         _hover = -1;
         _pressed = -1;
+        if (screen == OriginalScreen.Options && _options?.Invoke() is { } saved)
+        {
+            // What was asked for, not what this process resolved: a flag or the config key can
+            // have decided the running graphics mode, and the screen still owes the player back
+            // the word their own Apply saved.
+            _graphics = saved.GraphicsMode ?? CSVM.Utils.GraphicsMode.Default;
+        }
     }
 
     /// <summary>Applies one frame of one seat's commands. The pointer, when present, is in
@@ -728,10 +751,11 @@ public sealed partial class OriginalShell
     }
 
     // The Options screen's chrome, [@Preferences@]'s own: its logo and background panes, its title
-    // and the description beside each page door, plus the chooser's description in the same column
-    // and colour, on the first line of the chooser's own slot. The rows themselves (the four disabled
-    // doors, the chooser, APPLY and RETURN TO MAIN MENU) are drawn by the row loop. With no section
-    // the chooser stands alone over the top level's logo.
+    // and the description beside each page door, plus the choosers' two description lines in the
+    // same column and colour, on the first lines of the choosers' own slot. The rows themselves
+    // (the four disabled doors, the two choosers, APPLY and RETURN TO MAIN MENU) are drawn by the
+    // row loop. With no section the choosers stand alone over the top level's logo, and the two
+    // description lines run together as the one centred footer line that layout has room for.
     private void ComposeOptions(List<BoardPicture> pictures, List<BoardLine> lines)
     {
         var screen = _layout.Screen(PreferencesSection);
@@ -743,7 +767,8 @@ public sealed partial class OriginalShell
             }
 
             lines.Add(new BoardLine("OPTIONS", OptionsX, OptionsTop - 44f, 0f, HeadingFont, BoardInk.Heading));
-            lines.Add(new BoardLine(ChooserDescription, 0f, FooterY, BoardFit.AuthoredWidth, FooterFont, BoardInk.Detail, -1, false, BoardJustify.Center));
+            lines.Add(new BoardLine($"{ChooserDescription} {ChooserRestartNote}", 0f, FooterY,
+                BoardFit.AuthoredWidth, FooterFont, BoardInk.Detail, -1, false, BoardJustify.Center));
             return;
         }
 
@@ -776,6 +801,7 @@ public sealed partial class OriginalShell
         float descriptionX = lastDescription?.Int("X") ?? OptionsX;
         float descriptionWidth = lastDescription?.Int("Width", 310) ?? 310;
         lines.Add(new BoardLine(ChooserDescription, descriptionX, slotY, descriptionWidth, ChooserFont, BoardInk.Row));
+        lines.Add(new BoardLine(ChooserRestartNote, descriptionX, slotY + ChooserFont, descriptionWidth, ChooserFont, BoardInk.Row));
     }
 
     private int EnsureFocus(IReadOnlyList<OriginalRow> rows)
@@ -858,8 +884,13 @@ public sealed partial class OriginalShell
                             ? PresentationId.BuiltIn.Value
                             : PresentationId.Original.Value;
                         break;
+                    case GraphicsKey:
+                        _graphics = _graphics == CSVM.Utils.GraphicsMode.EnhancedWord
+                            ? CSVM.Utils.GraphicsMode.Default
+                            : CSVM.Utils.GraphicsMode.EnhancedWord;
+                        break;
                     case ApplyKey:
-                        return new PresentationSwitchExit(new PresentationId(_choice));
+                        return new OptionsApplyExit(new PresentationId(_choice), _graphics);
                     case BackKey:
                     case OptionsBackKey:
                         Open(OriginalScreen.TopLevel);
@@ -958,18 +989,22 @@ public sealed partial class OriginalShell
     }
 
     // The Options screen over [@Preferences@]: the four page doors at their authored corners,
-    // disabled since no shared option stands behind them; the chooser and APPLY as paper plaques
-    // in the slot under them, a line below the slot's description; and the section's own RETURN TO
-    // MAIN MENU. Without the section the chooser stands alone with a BACK plaque.
+    // disabled since no shared option stands behind them; the two choosers side by side as paper
+    // plaques in the slot under them, under the slot's description, with APPLY on its own line
+    // below them; and the section's own RETURN TO MAIN MENU. APPLY drops to the second line rather
+    // than taking a third column because the page's RETURN plaque stands in the right half of the
+    // slot's own band. Without the section the choosers stand alone with a BACK plaque.
     private void BuildOptionsRows(List<OriginalRow> rows)
     {
         string choice = _choice == PresentationId.Original.Value ? "ORIGINAL" : "BUILT-IN";
+        string graphics = _graphics == CSVM.Utils.GraphicsMode.EnhancedWord ? "ENHANCED" : "ORIGINAL";
         var screen = _layout.Screen(PreferencesSection);
         if (screen == null)
         {
             rows.Add(TextButton(PresentationKey, choice, OptionsX, OptionsTop, true, 0));
-            rows.Add(TextButton(ApplyKey, "APPLY", OptionsX, OptionsTop + OptionsPitch, true, 0));
-            rows.Add(TextButton(BackKey, "BACK", OptionsX, OptionsTop + (2 * OptionsPitch), true, 0));
+            rows.Add(TextButton(GraphicsKey, graphics, OptionsX, OptionsTop + OptionsPitch, true, 0));
+            rows.Add(TextButton(ApplyKey, "APPLY", OptionsX, OptionsTop + (2 * OptionsPitch), true, 0));
+            rows.Add(TextButton(BackKey, "BACK", OptionsX, OptionsTop + (3 * OptionsPitch), true, 0));
             return;
         }
 
@@ -984,15 +1019,17 @@ public sealed partial class OriginalShell
         var (x, slotY) = ChooserCorner(screen);
         var plaque = PlaqueSize();
         float y = slotY + ChooserLine;
+        float applyY = y + plaque.Height + ChooserGap;
         rows.Add(TextButton(PresentationKey, choice, x, y, true, 0));
-        rows.Add(TextButton(ApplyKey, "APPLY", x + plaque.Width + ChooserGap, y, true, 0));
+        rows.Add(TextButton(GraphicsKey, graphics, x + plaque.Width + ChooserGap, y, true, 0));
+        rows.Add(TextButton(ApplyKey, "APPLY", x, applyY, true, 0));
         if (screen.Widget(OptionsBackKey) is { } back)
         {
             rows.Add(Button(back, true));
         }
         else
         {
-            rows.Add(TextButton(BackKey, "BACK", x, y + OptionsPitch, true, 0));
+            rows.Add(TextButton(BackKey, "BACK", x, applyY + OptionsPitch, true, 0));
         }
     }
 

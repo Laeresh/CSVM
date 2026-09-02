@@ -5,17 +5,20 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The persistence contract: a missing file reads as empty, a valid file round-trips, an
-/// unknown version or malformed JSON invalidates the whole file, an unknown presentation value is
-/// dropped without invalidating the file, and a save is atomic against an interrupted write.</summary>
+/// <summary>The persistence contract: a missing file reads as empty, a valid file round-trips
+/// every option, an unknown version or malformed JSON invalidates the whole file, an unknown value
+/// in a field is dropped without invalidating the file, a file written before a field existed
+/// still loads its other fields, and a save is atomic against an interrupted write.</summary>
 public class OptionsStoreTests
 {
     [Fact]
     public void Load_MissingFile_ReadsAsEmpty()
     {
         var store = new OptionsStore(TestData.TempDir());
+        var def = store.Load();
 
-        Assert.Null(store.Load().MenuPresentation);
+        Assert.Null(def.MenuPresentation);
+        Assert.Null(def.GraphicsMode);
     }
 
     [Fact]
@@ -25,6 +28,53 @@ public class OptionsStoreTests
         store.Save(new OptionsDef { MenuPresentation = "original" });
 
         Assert.Equal("original", store.Load().MenuPresentation);
+    }
+
+    [Fact]
+    public void RoundTrip_PreservesBothOptionsIndependently()
+    {
+        var store = new OptionsStore(TestData.TempDir());
+        store.Save(new OptionsDef { MenuPresentation = "built-in", GraphicsMode = "enhanced" });
+        var def = store.Load();
+
+        Assert.Equal("built-in", def.MenuPresentation);
+        Assert.Equal("enhanced", def.GraphicsMode);
+
+        // The graphics word alone, with the presentation never set: the two fields do not depend
+        // on each other, so an options file can carry either one.
+        store.Save(new OptionsDef { GraphicsMode = "original" });
+        def = store.Load();
+
+        Assert.Null(def.MenuPresentation);
+        Assert.Equal("original", def.GraphicsMode);
+    }
+
+    [Fact]
+    public void Load_UnknownGraphicsValue_DropsOnlyThatField()
+    {
+        var dir = TestData.TempDir();
+        File.WriteAllText(Path.Combine(dir, "options.json"),
+            "{\"version\": 1, \"menuPresentation\": \"original\", \"graphicsMode\": \"raytraced\"}",
+            new UTF8Encoding(false));
+        var def = new OptionsStore(dir).Load();
+
+        Assert.Equal("original", def.MenuPresentation);
+        Assert.Null(def.GraphicsMode);
+    }
+
+    /// <summary>A file written before the graphics field existed: the version does not move for a
+    /// field added beside the others, so the older file still loads and reads the missing field as
+    /// never set rather than being thrown away whole.</summary>
+    [Fact]
+    public void Load_FileWithoutTheGraphicsField_KeepsTheFieldsItHas()
+    {
+        var dir = TestData.TempDir();
+        File.WriteAllText(Path.Combine(dir, "options.json"),
+            "{\"version\": 1, \"menuPresentation\": \"original\"}", new UTF8Encoding(false));
+        var def = new OptionsStore(dir).Load();
+
+        Assert.Equal("original", def.MenuPresentation);
+        Assert.Null(def.GraphicsMode);
     }
 
     [Fact]

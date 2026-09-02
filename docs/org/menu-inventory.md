@@ -434,7 +434,7 @@ mission flies a wingman), **6 are drawn disabled** (`MM_B_MULTIPLAYER`, `MM_B_CR
 returns of GameOptions, Audio, Video and ControlsPrefs, `CP_B_KEYS` and Keys' two returns,
 MomentoSelection's two returns and the cabin's `PC_B_CHANGEMOMENTO`, `IAWU_B_CONTINUE`,
 `CR_B_Exit`); 0 dead ends. The exits are checked too: Quit as a `QuitExit`, APPLY as a
-`PresentationSwitchExit`, FLY on Free Flight and Fly Mission on Instant Action as a `LaunchExit`,
+`OptionsApplyExit`, FLY on Free Flight and Fly Mission on Instant Action as a `LaunchExit`,
 FLY MISSION as a `CampaignMissionExit`, and Purchase Now returning to the top level with the plane
 saved. Keyboard and pad share one semantic command vocabulary at the seat seam (Decision 25), so
 the two cursor families differ in the walk they take, not in the commands the shell sees; the
