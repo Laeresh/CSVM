@@ -394,6 +394,19 @@ C3/M01 has one), switched off until the drop's own `CALL_ANIMATION` reparents an
 mid-mission drop in a mission with no intro of its own is not staged by this path; see
 `docs/architecture.md`'s `AircraftStage` entry.
 
+### C2/M05's `balmoral` is the same gap, with no intermediate call
+
+CM15's capture cutscene, `balmoral-drop_paratroopers` (`anim_root_name: "balmoral"`, node list
+`cargozep2`, `balmoral`, `camera1`), reached the same unstaged-symbol gap without going through a
+`chuteman`-style redirect: the definition is rooted on `balmoral` itself, so `PlayMissionTrigger`
+resolves the anchor directly, and the definition's own `Initial` sequence carries the
+`OBJECT_ADD_CHILD`/`OBJECT_MOTION_FROM_TO`/`OBJECT_DELETE_CHILD` triple that reparents it onto
+`cargozep2`, moves it through the shot, and hands it back to the world root, with no separate
+caller involved. `balmoral` is aircraft-archive node **2381** (a parentless `Object3d`, model-less,
+five children), ships ACTIVE and authors no `RESET_STATE`, the same base state `piratefighter`
+ships in. `AircraftStage` now stages it beside `piratefighter`, built ACTIVE and rebased the same
+way, which is what lets the drop's own reparent find a node instead of a null binding.
+
 ## `CALLBACK`: the dispatch chain
 
 | stage | where | what happens |

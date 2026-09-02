@@ -62,13 +62,14 @@
     "ai-voice": 0.488,
     "ai-net-follow": 0.510,
     "zeppelin-motion": 0.157,
-    "zeppelin-pandora-dead-end": 0.193,
+    "zeppelin-pandora-dead-end": 2.046,
     "zeppelin-scripted-pose": 3.0,
     "zeppelin-launch": 0.773,
     "zeppelin-damage": 3.190,
     "zeppelin-breakup": 10.800,
     "zeppelin-broadside": 3.427,
     "zeppelin-cannon-burnout": 8.890,
+    "zeppelin-cannon-stowed": 1.330,
     "zeppelin-hull-activation": 2.800,
     "damage-stages": 0.067,
     "damage-hd": 1.089,
@@ -146,6 +147,7 @@
     "generator-launch-climb-out": 4.0,
     "wingman-station": 5.289,
     "wingman-engage": 1.161,
+    "wingman-lost-leader": 0.430,
     "campaign-objectives-hud": 2.126,
     "campaign-cutscene": 1.531,
     "cutscene-letterbox": 2.055,
@@ -192,6 +194,7 @@
     "mission-radio": 1.825,
     "campaign-zeppelin-wakeup": 1.745,
     "campaign-squad-wakeup": 5.154,
+    "campaign-roster-wake-node": 3.128,
     "campaign-blacke-search": 6.027,
     "campaign-set-ai-net": 5.002,
     "campaign-surface-vehicles": 4.57,
@@ -215,6 +218,7 @@
     "campaign-coop-death": 3.03,
     "campaign-coop-attempt": 1.32,
     "campaign-coop-cutscene-fullscreen": 0.16,
-    "campaign-cm09-docking": 24.4
+    "campaign-cm09-docking": 24.4,
+    "campaign-cm15-capture": 3.110
   }
 }

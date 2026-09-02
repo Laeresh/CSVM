@@ -102,6 +102,12 @@ loss. What the engine renders was decodable from the authored constants + oscill
   alone left the captured Balmoral hidden and the suite green, while playing the mission's own
   `ww_balmoral1` showed the wing walk's `913`/`914` pair bracketing it and putting that aeroplane
   back **19.25 s** later, which is the defect a player sees.
+- **DIAG-24** — **A fixed sim window shorter than a `CallAnimation` chain's own completion time
+  reads as an unresolved bind, not a slow clock.** Measured: CM13's `pzhomebase` gates its two
+  landing-cone activations behind `pz_deploy_hook`'s own `WAIT_FOR_COMPLETION`, a 3 s offset plus
+  a 10 s rotate, so they are not due before t=13 s; `zeppelin-hull-activation`'s 12 s window read
+  `cones 0/2` and looked like a name-resolution defect (`BL-618`) that a longer window disproves
+  outright, both cones bound to their own gamez index already and drawing together at t=13 s.
 
 ## SHOT — screenshots and pixel evidence
 
@@ -502,6 +508,7 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **WORLD-27** — **`--play-anim` proves a definition RUNS; it says nothing about whether the game ever reaches it.** The anim lab starts a def the way bootstrap pass 3 starts a startanim, bypassing every gate in front of it, a `WeaponHit` def's damage routing above all. CM10's `lifefall11` played all eight of its motions in the lab while no shot in the mission could reach it, because a second pool on the same anchor owned the hit. Drive the real entry point (`--debug-damage=node=…,kill` for a destructible) before concluding the definition is at fault.
 - **WORLD-28** — **A suite world with no `ContactMask` wired silently poses every untimed `OBJECT_MOTION` at rest, so half a death can be invisible to it.** A launch with no `RUN_TIME` ends only at a contact tier, and no mask means no tier, so `HandleMotion` seeks it to t=0 instead of adding it. CM10's lifeboat drop reads 0.0 m fallen that way and 6.2 m with `collision: true` plus `runtime.ContactMask = CollisionLayers.World`; a real session wires the mask and the harness does not, so a suite that must see such a launch wires it itself.
 - **WORLD-29** — **A term you meant to redirect can leave instead, and the frame looks like a win either way: prove the new source arrives with a control colour.** Setting the Environment's background to a colour and its reflected light source to that background gives Godot no radiance map at all, so the water's specular vanished; the day sea darkened toward the original and read as a success. A pure-red sky rendered byte-identically to the fog-grey one, which is what caught it. The reflection needs a `Sky` resource (a flat `PanoramaSkyMaterial` is enough), and under one the red control tints the water red.
+- **WORLD-30** — **`Wake(n)` fires only that objective's wake verbs synchronously; `ADD_OBJECTIVE_TARGET` applies through its own completion, one `Step()` later when nothing else gates it.** CM10's OBJECTIVE10 gates on nothing once awake, so `Wake(10)` alone leaves its site unoffered until the next `Step()` completes it and applies the target. The gap is real in isolation but invisible in play, since both happen inside one Step call at normal frame rates.
 
 ## SHELL — Windows, PowerShell, and processes
 
@@ -538,6 +545,15 @@ loss. What the engine renders was decodable from the authored constants + oscill
   after-the-fix probe log showed the same reader files still loading as the before probe, with the
   gate line absent from both, until `--no-incremental` produced a real ~8 s rebuild and the gate
   showed up in the log.
+- **SHELL-17** — **A census script must not name its accumulator after one of its own parameters:
+  PowerShell variable names are case-insensitive, so `$nodes = @()` under `param([string]$Nodes)`
+  writes the empty array into the TYPED parameter, which coerces it to `""` and turns every
+  later `+=` into string concatenation.** The count then reads 1 whatever the data holds, and an
+  empty census is indistinguishable from a correct one that found nothing. Measured while sampling
+  terrain heights out of a chapter's `nodes.json`: the scan reported "terrain nodes: 1" and every
+  sample point answered "no terrain triangle", while the same parse inlined at the prompt found
+  231. Give the accumulator a name no parameter shares, and assert the census count against an
+  independent count of the same records before reading any result off it.
 
 ## INSTR — building instruments
 

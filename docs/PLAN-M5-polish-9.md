@@ -76,23 +76,23 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Hawaii (C3)
 
 1. ☐ `BL-630` CM02: the docking hook's two side parts swing their authored travel on the Balmoral's auto-land
-2. ☐ `BL-524` CM05/CM07: a wingman whose leader leaves play stops holding a bearing to a dead enemy
+2. ☑ `BL-524` CM05/CM07: a wingman whose leader leaves play stops holding a bearing to a dead enemy
 
 ### Wave B — Northwest (C1)
 
-11. ☐ `BL-597` CM08: the Pandora halts over the tanker and its sequence there plays
+11. ☑ `BL-597` CM08: the Pandora halts over the tanker and its sequence there plays
 12. ☐ `BL-666` CM09: a zeppelin killed by gasbags alone ends the mission one way or the other
-13. ☐ `BL-665` A woken roster block is re-placed where the script left it, not at its authored pose
-14. ☐ `BL-656` CM10: an attack balloon's marker never rests on the water before the wave arrives
+13. ☑ `BL-665` A woken roster block is re-placed where the script left it, not at its authored pose
+14. ❌ `BL-656` CM10: an attack balloon's marker never rests on the water before the wave arrives (disproven: the marker tracks its geometry, and the geometry itself dips; `BL-674`)
 
 ### Wave C — Hollywood (C2)
 
 21. ☐ `BL-635` CM11: the stunt planes carry the objective marker their roster blocks author
 22. ◐ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs
-23. ☐ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake
-24. ☐ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
-25. ☐ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
-26. ☐ `BL-632` CM15: the capture cutscene frames its Balmoral
+23. ❌ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake (disproven: the ace is authored 79 m inside the hill, and the finding is recorded)
+24. ❌ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
+25. ☑ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
+26. ☑ `BL-632` CM15: the capture cutscene frames its Balmoral
 
 ### Wave D — Closing sortie
 
@@ -176,7 +176,7 @@ different hook artifact (an aircraft's own arm left at archive-full length for o
 `ParkDockingHook`), and `PT-97` covers that one; this item is the `piratezep` crane hook, not the
 aircraft's arm, so do not conflate the two.
 
-## A2 ☐ `BL-524` CM05/CM07: a wingman whose leader leaves play stops holding a stale bearing
+## A2 ☑ `BL-524` CM05/CM07: a wingman whose leader leaves play stops holding a stale bearing
 
 **Goal.** In CM05 (C3/M04) and CM07 (C1/M02), a friendly wingman whose leader is shot down and
 whose own target then dies no longer flies out of the mission on its last pursuit bearing; it does
@@ -217,9 +217,23 @@ hand-off is itself unsettled. Do not add a leash constant. Do not re-decode the 
 lay-off rule; that search is done and recorded, and the answer is that the code is unreachable.
 `BL-523`'s promotion gate is a different question and stays in the backlog.
 
+**Landed.** A wingman whose leader leaves play inherits that leader's own patrol net, which the
+author chose over the three options put to them: it uses only authored data, a candidate always
+exists (every one of the 53 escort blocks names a netted leader), and it needs no invented
+constant. `CampaignDirector.TakeLostLeadersNets` runs each `Step` over the roster and hands such a
+pilot the net its leader is walking, through the same `SeatOnNet` body `SET_AI_NET` uses, so the
+escort buffer is dropped and the machine's gates are re-baselined the way a scripted net
+assignment does. A leader that flies no net, which is every player-led escort, leaves its wingman
+exactly as it was and says so once. The behaviour reaches 32 wingmen in 17 of the 53 shipped
+missions, the netless blocks whose `primary_target` is a netted `devastator`; the other 21 escort
+the player and are untouched. `AiPilot` itself is unchanged: its netless arm still projects the
+orders it was left with, which is what makes the hand-off necessary and is pinned as such.
+
+**Verified.** <pending orchestrator run>
+
 # Wave B — Northwest (C1)
 
-## B11 ☐ `BL-597` CM08: the Pandora halts over the tanker and its sequence there plays
+## B11 ☑ `BL-597` CM08: the Pandora halts over the tanker and its sequence there plays
 
 **Goal.** In CM08 (C1B/M03) the Pandora's armed stop lands over the tanker, and the sequence the
 original plays there (the hangar door opens, a figure descends on a rope and ascends again) starts.
@@ -255,6 +269,24 @@ several unrelated commits. The decode commit is found with `git log -S "along-le
 `--grep="arrival radius"`. Do not move the arrival floor to make the stop land; it is decoded, so
 if the original halts on the node the difference is in how the hold is armed, not in the radius.
 
+**Landed.** The sequence is `zepgetcargo` (`extracted/C1B/M03/zrdr/pzep_getcargo.zrd`), called by
+`objectives.zrd`'s `OBJECTIVE17` `WAKE_ANIM ["zepgetcargo"]`: the freighter's hold doors, the
+Pandora's cargo doors 8 s later, then `activate_pzep_crane` riding the crane 54 m down its chain
+and back up, looped 99 times. `OBJECTIVE17` is dormant until `OBJECTIVE11` completes on
+`DEDG [3, 0]`, the mission's four patrol boats, which also releases `Klondike1` stop 7 and naps
+`OBJECTIVE17` by 70 s, the transit from node 5 to the cargo point at node 7. The stop the Pandora
+was missing was not the arrival radius, which an armed stop point never consults: the hull was
+parked on the follower's 30 m hold sphere because `ZeppelinMotion.Step` gated its dock glide on
+`!Follower.Holding`, and `Holding` latches the moment that sphere is crossed. The glide now runs
+through the hold, so the hull settles on the node in plan and in altitude, while a follower still
+on its SEAT keeps the own-node station-keep and holds the record's own pose. Measured on the real
+route: 29.9 m off node 7 before, 0.1 m after, at the node's own 93.4 m, which is 93 m over the
+freighter `freighteraground` beaches at (−6246, 0, −7572) and the drop a 54 m chain off a hatch
+33 m under the hull needs. Documented in `docs/formats/mission-entities.md` "Route ends and stop
+points". `PT-109` flies it at the controls.
+
+**Verified.** <pending orchestrator run>
+
 ## B12 ☐ `BL-666` CM09: a zeppelin killed by gasbags alone ends the mission one way or the other
 
 **Goal.** In CM09 (C1/M04) a `piratezep` kill by gasbag count reaches either the loss chain or
@@ -289,7 +321,7 @@ ending.
 original's mechanism and is correct. `BL-440`'s breakup runs on the same kill path; keep the
 breakup playing.
 
-## B13 ☐ `BL-665` A woken roster block is re-placed where the script left it
+## B13 ☑ `BL-665` A woken roster block is re-placed where the script left it
 
 **Goal.** A deactivated roster block that a mission's script placed or moved before its wake
 appears at that pose on the wake, not at its authored one.
@@ -321,7 +353,18 @@ before and after).
 shipped mission with such a node, the item still lands as a latent fix, and its Landed line says
 so.
 
-## B14 ☐ `BL-656` CM10: an attack balloon's marker never rests on the water
+**Landed.** `CampaignDirector` keeps a `_rosterPlacedPose` dictionary beside `_rosterPlans`, filled
+in `BuildRoster`'s spawn loop with the pose the rig is actually placed at (the node override where
+`FindNodes` resolves one, the authored spawn otherwise). `World.WakeupEnemies` re-places a woken
+block from that placed pose, falling back to the plan's authored pose for a name with no placed
+entry (a generator launch, which this item does not touch). The census, `CampaignRosterPlan.Build`
+run over all 24 shipped missions' rosters checking each deactivated block's name against
+`GameZ.IsLibraryRoot`, finds none names a placed world node: this lands as a latent fix, and no
+shipped mission shows the symptom today.
+
+**Verified.** <pending orchestrator run>
+
+## B14 ❌ `BL-656` CM10: an attack balloon's marker never rests on the water
 
 **Goal.** In CM10 (C1/M05) the objective marker for an attack balloon appears on the balloon from
 the first frame it is offered, never on the water beneath it.
@@ -352,6 +395,27 @@ the balloon; D31 watches a wave arrive in CM10 with the marker already in frame.
 **⚠ Traps.** Do not reintroduce a node-origin fallback or an upward offset; both were removed on
 decoded evidence, and the balloons descend as they attack, so no constant is right at two
 altitudes.
+
+**Disproven.** `SiteAnchor`/`CollectMeshBoxes` already implements the original's own rule
+(`docs/org/targeting.md`, "Where a mission structure is": the midpoint of the node's active
+bounding box) and reads `lifesaver11`'s live geometry with no staleness, from the tick its wave
+wakes through its whole SiScript entrance. `lifesaverNM` and its inner `lifesaver` node do start
+inactive while `lifeballoon` and `lifeboat` are active under them, matching the evidence, but
+`CollectMeshBoxes` never reads `Visible` or `flags.active` at all (its own comment says hidden
+parts are walked on purpose), so the merge already spans both the lifeboat and the balloon from
+world build onward. A 70-second, per-tick drive through the shipped `OBJECTIVE10` wake trigger
+never once finds the anchor outside the group's own currently built mesh bounds (worst margin
+13 m over 700 sampled ticks). What the original report saw is wave 1's own scripted entrance: it
+carries the whole assembly, lifeboat and balloon together, from a hidden altitude down past the
+water before the rise sequence lifts it to attack height, and the anchor correctly tracks that
+live pass, reading about 11.7 m above the group's own current base throughout, matching the
+decoded midpoint formula rather than a stale merge. Neither candidate fix would change this: the
+flagged node's own `child_bbox`, transformed only by its own unmoving transform, is the same
+value `CollectMeshBoxes` already produces at rest, and deferring the offer would not move a
+reading that is already live and correct. `campaign-balloon-marker` now also drives the shipped
+wake trigger directly and asserts this invariant.
+
+**Verified.** <pending orchestrator run>
 
 # Wave C — Hollywood (C2)
 
@@ -476,7 +540,7 @@ item and its own decode page.
 
 **Verified.** <pending orchestrator run>
 
-## C23 ☐ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake
+## C23 ❌ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake
 
 **Goal.** In CM12 (C2/M01) the ace, once OBJECTIVE67 wakes it, never flies inside the hills and
 never dies by ramming a tile from below.
@@ -499,8 +563,9 @@ Whether that point is already under our terrain is unmeasured.
 
 **Approach.** Answer the placement question first: sample the terrain height at the authored
 spawn with a `--freecam --pos=` capture and a downward probe (add a `--dump-` height read if none
-exists). If the spawn is under ground, that is `BL-457`'s spawn-placement question and this item
-records it and stops. If not, reproduce the dive headless with the AI trace on and log the sweep
+exists). If the spawn is under ground, this item records it and stops. (The plan named `BL-457` as
+that question's home; `BL-457` is closed and was never about spawn placement, so the finding is
+recorded as `BL-669`.) If not, reproduce the dive headless with the AI trace on and log the sweep
 parity, the aircraft's height above the tile surface and the probe result on the frames around
 the crossing, to show whether the crossing lands on a skipped sweep frame. The fix then belongs to
 the contact test at the crossing (a second sweep on the skipped parity when the step is longer
@@ -519,36 +584,82 @@ single-sided collider premise; it is already double-sided. The ace's ram death d
 primary 3, so this is not an objective bug. `SweepCadence` is a faithful port of `FUN_0048d7f0`'s
 parity gate, so a change there needs the decode beside it.
 
-## C24 ☐ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
+**Disproven.** The placement question the Approach puts first answers the whole item, and neither
+`AiModeMachine` nor `SweepCadence` is at fault, so nothing lands in either. `hkfirebrand_9` is
+authored at `(-4517.72, 150.0, -6232.58)` in `C2/M01`'s `aiv.zrd`, with `deactivated` (slot 21) set
+so `OBJECTIVE67`'s `WAKEUP_ENEMIES` puts it in play in place. The terrain surface at that x and z is
+**228.92 m**, on tile `g35052` (`x -5120..-4096`, `z -7168..-6144`, model 617, whose vertex bounds
+reproduce the node's own `model_bbox`), so the ace begins flying **78.9 m inside the hill**. It is
+the only roster block in the mission placed over land at all; every other aircraft spawns over open
+water, and the mission's one other land placement, `patrolboat_eg0` at `y 0.021`, sits within 5 cm
+of its surface. The built world agrees with the mesh read: an aeroplane placed at the ace's pose and
+flown level descends from 150 m through 16 m with no contact and no `agl=` field on any telemetry
+line, because there is no ground beneath a point that is under the surface; the same pose at 250 m
+reads `agl=21` and grazes then crashes into `g35052/col` at `y 229`; and the same pose at 150 m
+pulled up crashes into `g35052/col` at `y 229` from below, which is the reported death.
+
+Tunnelling is dead as an explanation. `SweepCadence.Advance` hands the skipped step's entry pose
+back as the sweep origin, and `SweepProbes` and `CenterRayContact` both run from that origin to this
+step's pose, so no span of motion goes untested. `FUN_0048d7f0` does the same: its parity gate
+(`((obj[0x1af] ^ frame) & 1) != 1`) adds the step's delta into the `obj+0x6B0` accumulator and
+returns, the sweeping frame subtracts that accumulator from the displacement it tests, and the tail
+resets it, so the original carries the skipped motion whole exactly as the port does. The 20 m floor
+is likewise not at fault: at 150 m it is correctly silent, and the oscillation the controls showed
+is the ace descending inside the hill until it crosses 20 m, climbing out, and diving again.
+
+What remains open is what the original does with an aircraft authored inside terrain, since the
+authored pose is the same data in both. The activation primitive `FUN_004b0f40` is more than the
+flag flip the objectives decode describes: on the activate branch it re-bases the vehicle's position
+through `FUN_00432010`, re-homes every collision probe in the `+0x6a4..+0x6a8` array onto it, clears
+the `+0x6B0` sweep accumulator and moves the scene node through `FUN_004d1d50`. That re-base
+preserves y, so it cannot lift the ace out of the hill by itself, and it is gated on `+0x2e4` and a
+match in the `DAT_0064f610` list, neither of which is decoded. This is the same "net-nearest snap
+the original skips" that `BL-522` records as undecoded. The finding is carried by `BL-669`, and
+`PT-107` gathers its at-the-controls half.
+
+**Verified.** <pending orchestrator run>
+
+## C24 ❌ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
 
 **Goal.** A compiled animation that names a mech3ax dedup name such as `land_on~2` reaches the
 sibling the suffix identifies, so CM13's `pzhomebase` switches both of the Pandora's landing cones
 on and both draw.
 
-**Evidence (confidence: traced).** `zeppelin-hull-activation`
-(`CSVM/src/Testing/ZeppelinHullActivationSuites.cs`) records `cones 0/2` after `pzhomebase` has
-run for 12 s. C2's gamez carries four `land_on` nodes, two under `piratezep`; the extraction
-renames the second sibling `land_on~2`, and `CSVM/src/Mech3/Anim/NameResolver.cs` (`Resolve` at
-`:207`, `FindAll` at `:173`, the matcher and `ResolveScoped` chain documented in
-`docs/architecture.md`'s `NameResolver` entry) contains no handling of `~` at all, so the bare
-name is ambiguous and the suffixed one matches nothing. `BL-616`'s closing commit recorded this as
-the follower, not fixed.
+**Evidence (confidence: traced to code and a driven suite).** `NameResolver` already resolves this
+correctly and needs no change. `pzhomebase`'s compiled symbol table binds `land_on` and `land_on~2`
+to distinct gamez indices (3618 and 3615 in C2/M03, one under `pz_manual_land` and one under
+`pz_auto_land`), and `SymbolClaims`/`Targets` (`CSVM/src/Mech3/AnimRuntime.cs`) resolve each by
+that index alone, before any NAME-based matching runs; the `~` suffix is never interpreted, and
+does not need to be. `zeppelin-hull-activation`'s reported `cones 0/2` was the suite's own 12 s
+drive window ending before the choreography's real completion: `pzhomebase` gates both cone
+activations behind `pz_deploy_hook`'s `WAIT_FOR_COMPLETION`, whose longest track starts 3 s in and
+runs 10 s, so the cones are not due before t=13 s. Driving the same suite to 20 s shows both cones
+bound to their own distinct node and drawing together the instant the gate clears (`cones 2/2`).
+`BL-616`'s closing commit recorded the `~n` name as the open follower; that follower does not
+describe a real defect.
 
-**Approach.** In `NameResolver`, resolve a `~n` suffix scoped by the calling definition's own node
-list: `land_on` roots on `pz_manual_land` and `land_on~2` on `pz_auto_land`, so the suffix picks
-the nth sibling in the def's node order. Add a unit in `CSVM.Tests` over a hand-authored fixture
-with two same-named siblings, then flip `zeppelin-hull-activation`'s expectation to `cones 2/2`.
+**Outcome.** Disproven as filed. `CSVM/src/Mech3/Anim/NameResolver.cs` is unchanged: a `~n` dedup
+name is already routed through the compiled symbol table's per-index binding, never through the
+NAME matcher, so no sibling is ever picked ambiguously.
 
-**Model recommendation.** Medium: a bounded resolver rule with a fixture and a suite that already
-fails.
+**Landed.** `CSVM/src/Testing/ZeppelinHullActivationSuites.cs`: the drive window is long enough to
+reach `pzhomebase`'s own completion, and the cone count is now an assertion (`cones 2/2`) rather
+than a recorded-not-asserted line. `CSVM.Tests/NameResolverTests.cs`:
+`SymbolLookupResolvesADedupSuffixToItsOwnSibling`, a hand-authored fixture with two same-named
+siblings under different parents, locks in that `SymbolClaims` picks the sibling the compiled
+index names.
 
-**Verify.** The new unit; `zeppelin-hull-activation` at `cones 2/2`; the 8-chapter freecam
-regression with unchanged node counts; D31 looks at the Pandora's landing cones in CM13.
+**Verify.** The new unit; `zeppelin-hull-activation` at `cones 2/2`; D31 looks at the Pandora's
+landing cones in CM13. No resolver change lands, so the 8-chapter freecam regression does not
+apply.
 
-**⚠ Traps.** Stripping `~n` and taking the first hit is wrong; the suffix identifies which sibling.
-C24 shares the `Anim/` folder with A1 and C22 but is `NameResolver.cs` alone.
+**⚠ Traps.** Stripping `~n` and taking the first hit would still be wrong if a case ever turns up
+where the compiled index is not built; that fallback path was not exercised here. C24 shares the
+`Anim/` folder with A1 and C22 but is `NameResolver.cs` alone.
 
-## C25 ☐ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
+**Verified.** <pending orchestrator run>
+
+## C25 ☑ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
 
 **Goal.** In CM14 (C2B/M04) a round fired at a Gemini broadside cannon whose hatch is shut does
 not damage the cannon; a deployed cannon takes damage as before.
@@ -586,7 +697,31 @@ elsewhere. The `deploy_gmzep_lbroadNN` animations are the mission's progress cou
 `BL-629`'s routing fix chose between two definitions on one anchor; it is a precedent for the walk,
 not this bug. `BL-639` (the gasbag burn-out) stays blocked on `CAP-47`.
 
-## C26 ☐ `BL-632` CM15: the capture cutscene frames its Balmoral
+**Landed.** A round that meets a shut hatch damages nothing. `DestructibleRegistry.Resolve` now
+tells an own-damage-node claim from an anchor-fallback claim, and a climb that arrives at a live
+pool through its anchor alone, while that pool's own damage node is switched off, answers with
+nothing and stops climbing rather than passing the hit up to the airship's gasbag. A destroyed pool
+is exempt, so a hit on a wreck still finds the pool that owns it. The definition's activation is
+untouched, and no door state is read anywhere.
+
+What a round actually strikes was established before anything was changed. `gunback`'s and `gun1`'s
+colliders are already gone while stowed, since the deploy definition's `RESET_STATE` switches both
+off and `WorldCollision` derives every collider from visibility, and `frame` never had one
+(`intersect_surface` is clear on it in the gamez). The hatch is the only solid geometry left, and
+`Resolve` climbed `upper_br_door` → `lbroad11` to the cannon's pool: 30 rounds into a shut hatch
+destroyed a HEALTH 60 cannon. So this was the attribution walk, not a stray collider. The original
+says the same thing in its own briefing text, `MSG_BRF_HWM4_OBJ3`: "Destroy the GEMINI by shooting
+the open cannon hatches."
+
+The pacing moves, in the direction the data authors. The six `deploy_gmzep_lbroadNN` INVALID states
+feed a 1/3/5 objective ladder ending in PRIMARY 3, and the Gemini's cannons now cannot be hurt until
+they deploy, which needs `OBJECTIVE25`'s `COMPLETED_ZEPCANNONS` (the two airships closing to 1000 m)
+and the player inside the firing arc. No mission `startanims` deploys them early, so before that
+gate the cannons are immune where they were previously killable through their hatches.
+
+**Verified.** <pending orchestrator run>
+
+## C26 ☑ `BL-632` CM15: the capture cutscene frames its Balmoral
 
 **Goal.** In CM15 (C2/M05) the capture cutscene shows the Balmoral it is filmed around.
 
@@ -617,6 +752,32 @@ episode; D31 flies CM15 to the capture.
 **⚠ Traps.** Do not close this against `BL-625`'s cockpit-view fix; that is presentation code and
 cannot reach an NPC actor that was never staged. `BL-633` fixed the same definition's other
 defect (the pilot left on the world root) and its change must survive.
+
+**Landed.** `balmoral` is aircraft-archive node 2381 (a parentless `Object3d`, model-less, five
+children, shipped ACTIVE, no `RESET_STATE`), the same archive `piratefighter`/`chuteman` come
+from, confirmed absent from `planes.zip`'s node table under no other name and absent from C2's own
+chapter gamez entirely. `AircraftStage` now stages it beside `piratefighter`, built ACTIVE and
+rebased the same way, so the drop's own `OBJECT_ADD_CHILD`/`OBJECT_MOTION_FROM_TO`/
+`OBJECT_DELETE_CHILD` triple (authored inside `drop_paratroopers` itself, no intermediate caller)
+finds a node instead of a null binding. The `campaign-cm15-capture` suite drives that definition
+over C2/M05's built world and reads it drawn, reparented onto `cargozep2`, moved off the archive's
+own origin and inside the cutscene camera's frustum through the shot (best 1.7 deg off axis), then
+handed back to the world root. Neither `BL-596`'s nor `BL-621`'s shape applied directly: the actor
+is not a roster-spawned vehicle (`RosterMarkers.cs`'s resolution never enters this def, which is
+started by `PlayMissionTrigger` and reaches its anchor through the general name index the moment
+`AircraftStage` puts a node under that name), and the site-naming distinction `BL-621` decoded does
+not arise here since the drop's own `OBJECT_ADD_CHILD` always names its site (`cargozep2`)
+explicitly. `BL-633`'s guard is unexercised by this change: `CutsceneController.cs` was not
+touched, and the `cutscene-handoff-unposed` suite's own numbers are what would show a regression.
+
+**Evidence correction.** No suite named or shaped `chuteopen` exists for C2/M05, checked directly:
+neither `hooked_to_klondike` (the mission's other cutscene, also compiled for C3/M05 under the
+same shared name) nor its `cutscenes/chuteopen/` SI-script trio (`chutemanparent`/`pilot`/`stamp`)
+is driven by any suite in `CSVM/src/Testing/`. The plan's "the chuteopen suites cover the
+mission's other cutscene" does not hold; that cutscene remains unverified by any suite, mine
+included, and is out of this item's scope.
+
+**Verified.** <pending orchestrator run>
 
 # Wave D — Closing sortie
 

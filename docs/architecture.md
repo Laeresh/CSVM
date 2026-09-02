@@ -1535,9 +1535,12 @@ bootstrap, read by `ANIM_HEALTH` eval, escalated by `ApplyDamageStages`, damaged
 `Resolve(struck)` maps a raycast-hit node back to its instance, climbing to the nearest node a pool
 claims. A pool claims its own DAMAGE NODE (`Register`'s `damageNode`, which
 `AnimRuntime.DamageNodeOf` reads off the def's `ANIMATION_ROOT_NAME` inside that anchor) and its
-anchor only as a fallback, which is how two defs sharing one anchor are told apart; the rule and the
-`def+0x6c` decode behind it are in docs/formats/destructibles.md, "Which node takes the hit".
-Regression: the `campaign-balloon-death` suite. Schema: docs/formats/destructibles.md.
+anchor only as a fallback, which is how two defs sharing one anchor are told apart. That fallback
+answers only while the pool's own damage node stands in the world, so a round on the hatch over a
+stowed broadside cannon reaches no pool; the rule and the `def+0x6c` decode behind it are in
+docs/formats/destructibles.md, "Which node takes the hit" and "Remake node resolution".
+Regression: the `campaign-balloon-death` and `zeppelin-cannon-stowed` suites.
+Schema: docs/formats/destructibles.md.
 `Instance.Reseed(max)` re-seeds a pool from a mission record — the F18 zeppelin zones, where
 `zeppelins.json` hp beats the def's own `HEALTH` — and refuses once damaged, so a late wire-up
 cannot heal a fight in progress. `Instance.Team`, `Instance.Owner` and `Instance.Dormant` are what a mission
@@ -2709,10 +2712,11 @@ the pose onto the world node, and `ResumeAt` re-seats it in place after a script
 The stop-point half is the decoded approach (`FUN_004bf360`): full speed until the along-facing
 range to a halting node falls under 250 m, then linearly down to zero; inside the follower's
 30 m (`Dock`) the throttle is cut, the pitch holds, and the hull and heading decay onto the node
-and the leg's bearing at e^(−0.2·dt), which is what closes the last metre onto the hold sphere.
-Once the follower is `Holding`, a station-keep: pitch commanded to 0 and heading kept, both
-frozen by the speed factor at speed 0. Pinned by `ZeppelinMotionTests` + the `zeppelin-motion`
-and `zeppelin-pandora-dead-end` suites.
+and the leg's bearing at e^(−0.2·dt), which settles it ON the node in plan and in altitude. A
+follower still on its SEAT (`LegStartIndex` −1) takes the own-node law (`FUN_004bf500`) instead,
+a station-keep on the record's own pose: pitch commanded to 0 and heading kept, both frozen by
+the speed factor at speed 0. Pinned by `ZeppelinMotionTests` + the `zeppelin-motion` and
+`zeppelin-pandora-dead-end` suites.
 
 ## src/Flight/AiPilot.cs
 The non-player `FlightModel` driver: standing orders in (heading in the mission-data
@@ -2731,7 +2735,9 @@ original's laws build,
 an evasive maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks),
 and an optional `Escort` (`AiEscort`) which, whenever its leader is in play, takes the dispatch
 away from all of those but stunned and avoid crash, the original's own `mode wingman` fork,
-one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. Pure over
+one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. A leader
+that leaves play drops the pilot to the netless arm, which projects the orders it was left with
+and so holds them; `CampaignDirector` is what re-seats such a pilot, on the lost leader's net. Pure over
 the model state and its own fields, seeded randomness only, so a fixed-dt run is deterministic
 (`AiPilotTests`). The original's own steering law is `AiControlLaw`; this class is only its driver
 (docs/org/aiPilot.md). `Stun(seconds)` is the AI stun's entry (`FUN_004200d0`, reached by a
@@ -5078,7 +5084,9 @@ that state and parents it under the airship, while C1/M04's `pfighter11`..`pfigh
 on SI scripts, so a prop built switched off leaves that intro's wingman out of the launch and the
 dive; a bodiless `player` marker the flown aircraft is posed onto; `chuteman`'s parachutist
 subtree (`chutemanparent` → `pilot`/`stamp`), switched off (the shared `chuteman.zrd` RESET_STATE)
-until a mid-mission drop's own definition (e.g. C3/M01's `tdchute`) reparents and activates it; and
+until a mid-mission drop's own definition (e.g. C3/M01's `tdchute`) reparents and activates it;
+`balmoral`, built ACTIVE the same way `piratefighter` is, since C2/M05's capture drop is rooted on
+it and reparents it onto the placed `cargozep2` for its own shot before handing it back; and
 `FigureNodes` (`rope_ladder`, `pickup_cpilot`) under a switched-off holder rather than switched off
 themselves, because nothing ever activates the wing-walking pilot: it is the capture's own
 `OBJECT_ADD_CHILD` into the shot that draws him, which is what the original gets from a library
@@ -6005,7 +6013,11 @@ that way and always has.
 mission" contract `InstantActionDirector.TryCreate` has. `Attach(WorldInputs)` arms the graph once
 every runtime a directive can touch is up, applies the chapter's persist log and hands the world's
 `DangerZoneRibbons` to every roster pilot; `Step(dt)` is
-called from BOTH of `GameSession`'s drive paths. Every graph transition is one
+called from BOTH of `GameSession`'s drive paths. Each step also walks the roster for a wingman
+whose escort leader has left play and seats it on that leader's own patrol net
+(`TakeLostLeadersNets` through `SeatOnNet`, the body `SET_AI_NET` shares), since a netless escort
+holds the orders its last pursuit wrote once its leader is gone; a leader flying no net, which is
+every player-led escort, leaves its wingman untouched and is reported once. Every graph transition is one
 `[campaign] objective N woke|napped|completed|killed|slept|expired [by M] [for Ns] at Ts` line
 through `Log.Info`, so the file sink carries the chain a sortie report is about. `WireScoredShooter`
 registers the scripted player's aircraft into `ProjectilePool.ScoredShooters`, deferred into `Step`
@@ -6043,7 +6055,8 @@ woken definition may stage library roots), both sound-group directives through
 a named net, and the airship holds or leaves), and, over the spawned roster, `DEDG`
 (`GroupLiveCount`: not-crashed members of the block group, a parked one counting as alive) and
 `WAKEUP_ENEMIES`, one directive over two deactivated flags: an inert named aircraft re-activated at
-its spawn pose, or a dormant `ZeppelinRuntime` record put into the world.
+its PLACED pose (a world node of the block's name where one exists, its authored spawn otherwise,
+never a stale copy of the plan), or a dormant `ZeppelinRuntime` record put into the world.
 `SET_AI_NET` / `SET_AI_TEAM` / `SET_AI_ATTACK_RADIUS` share one lookup by roster block name
 (`Commanded`) and write the follower, the team and the attack range over the spawned roster; their
 zeppelin arm has no seam here, so an unmatched name is always reported.

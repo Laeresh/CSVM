@@ -86,6 +86,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
+- `BL-672` `[Fidelity]` **The remake attributes a weapon hit by climbing the node-parent chain;
+  the original attributes it only to the struck node's own handler.** *Evidence:* `FUN_005abcf0`
+  reads the hit record's struck node at `+0x24`, reads that node's handler at `+0xbc`, and returns
+  0 when it is null. There is no parent walk at all. `DestructibleRegistry.Resolve` instead climbs
+  to the nearest node a pool claims, which is the deliberate remake rule recorded in
+  `docs/formats/destructibles.md` under "Remake node resolution". Two visible consequences: a round
+  on the Gemini's *open* hatch still damages the cannon behind it, where the original's
+  `upper_br_door` registers no handler and the hit does nothing; and a round on `turret`
+  (model 865, under `gunback`) damages the cannon where the original ignores it. *Fix shape:*
+  decide whether the climb is kept as a deliberate forgiveness or narrowed to the decode. Narrowing
+  it needs `Probes.cs`'s deep-descendant walk-up assertion rewritten first, which is why it is not
+  a small change. *⚠ Traps:* the climb is what makes most destructibles hittable at all, so do not
+  narrow it without a per-chapter census of which pools stop answering. `BL-640`'s stowed-cannon
+  fix already carves out the one case that mattered (a fallback claim to a live pool whose damage
+  node is hidden), so this entry is the remaining, wider question, not that one again.
+  *Cross-refs:* `BL-640`'s closing commit, `docs/formats/destructibles.md` "Which node takes the
+  hit".
+- `BL-673` `[Bug]` **`AnimRuntime.DamageAt` never consults `Instance.Dormant`, so a deactivated
+  hull's pools can still be damaged by script.** *Evidence:* a deactivated zeppelin's pools
+  (C2B/M04's Gemini ships `deactivated: 1`) are correctly refused as AI *targets*, but a scripted
+  `DamageAt` reaches them anyway. Not reachable by weapon fire today, because a dormant hull's
+  colliders are off, so this is latent rather than a live symptom. *Fix shape:* have `DamageAt`
+  read `Dormant` the way the target scan already does, and add a unit that damages a dormant pool
+  and asserts nothing happens. *⚠ Traps:* a pool that is dormant at mission start and woken later
+  must still take damage after the wake, so the read has to be live rather than captured at build.
 - `BL-668` `[Bug]` **A downed zeppelin's wreck sinks 400 m under the sea and four gasbags fall
   through the water.** *Evidence:* the `zeppelin-breakup` suite's artifact records the wreck at
   rest at y = −411 with the water surface at y = 0, and gasbags 1 to 4 falling about 1228 m
@@ -825,6 +850,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
+- `BL-669` `[Research]` **CM12's ace `hkfirebrand_9` is authored 79 m inside a hill, so it flies
+  inside the terrain from its wake and dies ramming a tile from below.** `C2/M01`'s `aiv.zrd`
+  authors it at `(-4517.72, 150.0, -6232.58)` with `deactivated` set, and `OBJECTIVE67`'s
+  `WAKEUP_ENEMIES` reactivates it in place. The terrain surface there is 228.92 m on tile `g35052`
+  (model 617, whose vertex bounds reproduce the node's own `model_bbox`), so it begins 78.9 m under
+  ground. It is the only CM12 roster block placed over land; the mission's other land placement,
+  `patrolboat_eg0` at `y 0.021`, sits 5 cm above its surface. Confirmed in the built world: an
+  aeroplane at that pose flown level descends 150 m to 16 m with no contact and no `agl=` reading at
+  all, the same pose at 250 m reads `agl=21` and crashes into `g35052/col` at `y 229`, and the same
+  pose at 150 m pulled up crashes into `g35052/col` at `y 229` from below. **The open question is
+  what the original does with an aircraft inside terrain**, since the authored pose is the same data
+  there and `FUN_00432010` preserves y; that decides whether the fix is a placement rule or a
+  collision one. `PT-107` gathers the at-the-controls half.
+  ⚠ *Traps:* not tunnelling (`SweepCadence` carries the skipped step's origin, and `FUN_0048d7f0`
+  accumulates into `obj+0x6B0` and subtracts it on the sweeping frame, so no span goes untested);
+  not the 20 m floor (`DAT_0071c3f0` is absolute, correctly silent at 150 m, and the original has no
+  AGL floor either); not collider sidedness (`SceneBuilder.CollidersForMesh` already builds terrain
+  double-sided). Do not add a blanket spawn lift. `BL-457` is closed and was never this question.
+  *Cross-refs:* `BL-522`'s undecoded net-nearest snap `FUN_004b0f40`, whose activate branch re-bases
+  x and z through `FUN_00432010` but leaves y untouched.
 - `BL-443` `[Fidelity]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
   late.** `FUN_0048fc40` (call `0x48c883`) writes the delivered body-up G and the ramp reads it at
   `0x48ca1e` in the same tick, before the torques; `FlightModel.Step` rotates before it translates
@@ -1237,6 +1282,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   billboard-axis half), `docs/org/textures.md` (the storage-flag bits).
 
 ## Effects & animation runtime
+
+- `BL-674` `[Bug]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
+  during its scripted entrance.** *Evidence:* driving C1/M05's shipped `OBJECTIVE10` wake and
+  sampling the assembly every 0.1 s for 70 s traces its world Y from 990 m (the hidden entrance
+  altitude) to -0.26 m at about t = 57.3 s, then climbing again at the `rise` sequence's authored
+  3.33 units per second. The objective marker follows it down, which is the symptom `BL-656` was
+  filed on; that item is disproven because the marker is tracking the geometry correctly, and the
+  geometry is what goes to the water. The motion is the entrance's own SiScript-to-`rise` handoff,
+  so it lives in the animation runtime (`PoseChannel.cs`, `FromToMotion.cs`, `ScriptPlayback.cs`),
+  not in `ObjectiveSites.cs`. *Fix shape:* first decide whether the original does this at all, by
+  watching a CM10 wave arrive in footage or at the controls; a balloon that dips to the sea on its
+  way in may be authored. Only if it does not, find whether the handoff between the entrance script
+  and `rise` drops an altitude the original keeps. *⚠ Traps:* do not add an altitude floor to the
+  assembly, and do not offset the marker upward; both were removed on decoded evidence and the
+  balloons descend as they attack, so no constant is right at two altitudes. The anchor rule itself
+  is the original's (`FUN_004cf2c0`, midpoint of the node's active bounding box) and is correct.
+  *Cross-refs:* `BL-656`'s closing commit, `PT-111`, `docs/org/targeting.md` "Where a mission
+  structure is".
 
 - `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
   flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
@@ -2253,6 +2316,29 @@ usual.
 
 ## Missions, modes & campaign
 
+- `BL-670` `[Tuning]` **The invented `1.5 * turnCircle` arrival floor deforms zeppelin routes.**
+  *Evidence:* `ZeppelinRuntime.cs`'s `arrival = 1.5f * turnCircle`, where
+  `turnCircle = MaxSpeed / DegToRad(MaxRateYawDeg)`, is 515.7 m for CM08's Pandora
+  (`max_speed` 30, `max_rate_yaw` 5), not the 125 m the older paraphrase claimed. Measured: the
+  node walk advanced past node 4 while still 515 m short of it, so the hull flew 64 % of the
+  1443 m leg 3 to 4 and cut the corner; on the chain past the cargo point the legs are shorter
+  than the floor (7 to 8 is 628 m, 8 to 9 is 545 m, 9 to 10 is 640 m), so the walk advances
+  almost immediately at each node and the route is barely flown. *Fix shape:* the floor is
+  explicitly invented and only a floor, so it is tunable without touching a decode; measure what
+  radius lets the shortest shipped leg still be flown. *⚠ Traps:* it does not affect where an
+  armed stop parks the hull, which is the settling glide (`BL-597`), so a route that looks wrong
+  at a stop point is a different question. Do not confuse this floor with the aeroplane
+  executor's decoded along-leg test, which zeppelins do not use.
+  *Cross-refs:* `BL-597`'s closing commit, `docs/formats/mission-entities.md` "Steering".
+- `BL-671` `[Research]` **A holding zeppelin never levels its pitch, though the decode says it
+  should.** *Evidence:* `ZeppelinMotion` commands `desiredPitch = 0` while `Holding`, but
+  integrates it through `way = Speed / MaxSpeed`, which is zero at a stop, so the hull keeps
+  whatever pitch it arrived with. The original has the same speed scaling
+  (`docs/formats/mission-entities.md`), so this may be faithful rather than a defect. *Fix shape:*
+  decode whether `FUN_004bf500`'s station-keep levels the hull at zero speed before changing
+  anything; if it does not, the claim to correct is the documentation, not the code.
+  *⚠ Traps:* do not add a separate levelling term outside the speed factor to make a still hull
+  look right; that invents a law the original does not have.
 - `BL-501` `[Feature]` **Nothing exercises avoid-crash probing between aircraft flying one net in
   formation.** *Evidence:* flagged by G77, which fixed the branch draw that split CM02's three
   bombers and then measured them holding 82 m to 219 m apart on one route. That suite builds its
@@ -2440,10 +2526,11 @@ usual.
   has a netless friendly patrol, and the original has no netless-patrol and no leaderless-wingman
   branch at all: `FUN_0041d1f0` indexes -1 on an unresolved net with no guard, `FUN_0041e760`
   dereferences its leader at `+0x2fc` with no null check, and `FUN_0049c880`, which would release a
-  wingman onto the chapter's first net, has no callers. The remaining fly-away path in CSVM is
-  `AiPilot.FlyPatrol`'s netless arm reading `TargetHeadingDeg` and `TargetAltitude` after
-  `FlyPursuit` has overwritten them, so a pilot with no net and no leader holds the last bearing to
-  a dead target. The take-off hand-off is settled (`BL-594`'s closing commit): a launch is released 300 m
+  wingman onto the chapter's first net, has no callers. The netless fly-away that remained,
+  `AiPilot.FlyPatrol`'s netless arm holding the pair `FlyPursuit` last wrote, is closed on the host
+  side: a wingman whose leader leaves play is seated on that leader's own net
+  (`CampaignDirector.TakeLostLeadersNets`), so no campaign pilot reaches that arm with a dead
+  quarry's bearing. The take-off hand-off is settled (`BL-594`'s closing commit): a launch is released 300 m
   past its last waypoint at 53 m/s, climbing, and lives; the net-nearest snap the original skips
   (`FUN_004b0f40`) stays undecoded.
   *Cross-refs:* `BL-524`, `docs/org/aiPilot.md`, `BL-522`'s closing commit (`git log --grep=BL-522`).
@@ -2528,6 +2615,24 @@ usual.
 
 ## Tooling, platform & docs
 
+- `BL-675` `[Research]` **A `--campaign=<profile>:<n>` run launched through `RunProbe.ps1` from an
+  agent worktree reported no such profile, though the profile exists.** *Evidence:* a probe run
+  answered `--campaign=Gab: no such profile, flying without a mission` from
+  `CampaignDirector.TryCreate`, and repeated it against a fresh copy of the same profile. The store
+  is `CampaignProfileStore.UserProfiles()`, `user://Profiles/` globalized, and `user://` resolves by
+  the project name alone (`project.godot` sets `config/name="CSVM"`, and no custom user dir is set),
+  so a worktree should reach the same directory as the main checkout. That directory does hold the
+  profile, and a sibling agent's worktree run created a profile there in the same period, so the
+  store is reachable from a worktree at least for writing. **The cause is therefore not established
+  and the symptom is not reliably reproduced.** *Fix shape:* reproduce deliberately from a worktree
+  with nothing else running, print the globalized `user://` path at startup, and compare it against
+  the main checkout's. If they differ, the launch is picking up a different project name or user
+  dir; if they match, the fault is in the load rather than the path. *⚠ Traps:* do not "fix" this by
+  pointing the store at an absolute path; `user://` is what makes the release build's profiles land
+  in the right place. A `--campaign=` probe writes mission results back into the profile it names,
+  so any repro copies a profile under a new name and deletes the copy afterwards. *Impact:* while it
+  stands, an agent cannot take a screenshot deep inside a campaign mission from a probe, so items
+  whose verification wants one fall back to an engine suite plus an at-the-controls `PT-` row.
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled
   SDL (3.2.28 up to Godot 4.7.1) hard-freezes the engine when a >255-button DirectInput device

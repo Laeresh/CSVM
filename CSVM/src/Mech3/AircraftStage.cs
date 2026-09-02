@@ -6,10 +6,10 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The aircraft-archive subtrees a story-mission intro or a chuteman-carrying cutscene animates,
-/// staged into a chapter world so the animation runtime's node table can reach them:
-/// <c>piratefighter</c> as a prop with no pilot, a bodiless <c>player</c> the flown aircraft
-/// follows, and <c>chuteman</c>'s parachutist subtree. All three come from the shared aircraft
+/// The aircraft-archive subtrees a story-mission intro or a mid-mission cutscene animates, staged
+/// into a chapter world so the animation runtime's node table can reach them: <c>piratefighter</c>
+/// as a prop with no pilot, a bodiless <c>player</c> the flown aircraft follows, <c>chuteman</c>'s
+/// parachutist subtree, and <c>balmoral</c>, a drop's own actor. All come from the shared aircraft
 /// archive rather than the chapter gamez, so their compiled pointers are rebased onto the
 /// chapter's own pointer space (<see cref="PointerBaseOf"/>).
 /// Decode: docs/formats/anim-definitions/cutscenes.md.
@@ -33,6 +33,12 @@ public sealed class AircraftStage
     /// (the shared <c>chuteman</c> def's own <c>RESET_STATE</c>), the same base state
     /// <see cref="PropNode"/> ships in.</summary>
     public const string ChuteNode = "chuteman";
+
+    /// <summary>The aircraft-archive node C2/M05's capture drop is rooted on: a parentless wrapper
+    /// its own definition reparents onto <c>cargozep2</c> and moves for the shot, then returns to
+    /// the world root, the same self-contained shape <see cref="PropNode"/>'s SI scripts pose it
+    /// with. Ships ACTIVE, like <see cref="PropNode"/>.</summary>
+    public const string BalmoralNode = "balmoral";
 
     /// <summary>The block a chapter's pointer base is rounded up to. Measured over all eight
     /// chapters; no site in the executable computing it has been traced, so a ninth chapter's base
@@ -75,6 +81,11 @@ public sealed class AircraftStage
     /// called animation (e.g. C3/M01's <c>tdchute</c>) is what reparents and activates it. Null
     /// when the archive carries no such node.</summary>
     public Node3D? Chuteman { get; private set; }
+
+    /// <summary>The staged <see cref="BalmoralNode"/> subtree, drawn in the archive's own shipped
+    /// state like <see cref="Prop"/>: C2/M05's capture drop is rooted on it and poses it directly.
+    /// Null when the archive carries no such node.</summary>
+    public Node3D? Balmoral { get; private set; }
 
     /// <summary>The staged <see cref="FigureNodes"/> subtrees, by gamez name. They hang under a
     /// holder that is switched off, which is what a library root the chapter's walk never reaches
@@ -150,6 +161,19 @@ public sealed class AircraftStage
             stage.Chuteman = builtChute;
         }
 
+        // ⚠ Drawn in the archive's own shipped state (ACTIVE), same as PropNode: the capture
+        // drop's own OBJECT_ADD_CHILD/OBJECT_MOTION_FROM_TO pair reparents and moves it, with no
+        // other definition switching it on.
+        if (planesGamez.FindByName(BalmoralNode) is { } balmoral
+            && scene.BuildSubtree(balmoral, collisionSkip: _ => true) is { } builtBalmoral)
+        {
+            builtBalmoral.Transform = Transform3D.Identity;
+            Rebase(builtBalmoral, pointerBase);
+            AnimRuntime.SetSubtreeActive(builtBalmoral, balmoral.Active);
+            worldRoot.AddChild(builtBalmoral);
+            stage.Balmoral = builtBalmoral;
+        }
+
         foreach (string propName in PropNodes)
         {
             if (planesGamez.FindByName(propName) is not { } propNode
@@ -190,13 +214,14 @@ public sealed class AircraftStage
         string marked = stage.PlayerMarker != null ? PlayerNode : $"no {PlayerNode}";
         string staged = stage.Prop != null ? PropNode : $"no {PropNode}";
         string chuted = stage.Chuteman != null ? ChuteNode : $"no {ChuteNode}";
+        string balmoraled = stage.Balmoral != null ? BalmoralNode : $"no {BalmoralNode}";
         string figures = stage._figures.Count > 0
             ? string.Join(", ", stage._figures.Keys)
             : "no figures";
         string props = stage._props.Count > 0
             ? string.Join(", ", stage._props.Keys)
             : "no props";
-        Log.Info("world", $"aircraft stage: base {pointerBase} over {chapterNodeCount} chapter node(s), {marked}, {staged}, {chuted}, {figures}, {props}, {stage.MeshInstances} mesh instances");
+        Log.Info("world", $"aircraft stage: base {pointerBase} over {chapterNodeCount} chapter node(s), {marked}, {staged}, {chuted}, {balmoraled}, {figures}, {props}, {stage.MeshInstances} mesh instances");
         return stage;
     }
 

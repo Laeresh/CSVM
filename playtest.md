@@ -557,6 +557,19 @@ reasons that have nothing to do with any of these checks.
   hull is a fault; a boat mid-turn is led less, which is not one.
   *Blocks:* nothing; it confirms a landed item on screen.
 
+- `PT-109` `[Own]` **The Pandora halts over the beached freighter and cranes its cargo**
+  (`BL-597`). Klondike1's node 7 is the cargo point, and the hull now settles on the node itself
+  rather than a hold distance short of it. Getting there is the mission's own chain: destroy the
+  power hut so the freighter runs aground instead of sailing on, then sink all four patrol boats,
+  which completes the second primary and releases the Pandora from its first stop.
+  *Look for:* the airship arriving over the wreck and stopping with the ship under it rather than
+  short of or past it, and about 70 s after the last boat goes down the freighter's hold doors
+  swinging open, the Pandora's cargo doors following, and the crane riding its chain down to the
+  deck and back up. Judge the hover point by eye against the hull below it.
+  ⚠ Nothing starts until group 3 is empty. A Pandora sitting 2 km up the route with no sequence is
+  the authored wait, not a fault; check the boats first.
+  *Blocks:* `BL-597`'s acceptance.
+
 ### AI flight — external view, own build (F52 AI arm)
 
 - `PT-54` `[Own]` **AI plant A/B against the old plant.** Fly the new AI force path, then relaunch flipping AI aircraft back onto the player plant
@@ -821,6 +834,29 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   *Blocks:* nothing tracks the outcome. The write and the read are pinned by unit tests either
   side, but no scripted run crosses the menu boundary between them, so a fail mints a new `BL`.
 
+### CM05 (C3/M04) and CM07 (C1/M02) · the escorts after a leader is lost
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:4
+./RunGame.ps1 --campaign=<profile>:6
+```
+
+- `PT-113` `[Own]` **A wingman whose leader is shot down picks up that leader's patrol route**
+  (`BL-524`, closed). CM05 pairs `wingman_2` with `devastator_1` on `M4Bravo#11` and `wingman_3`
+  with `devastator_2` on `M4Charlie#12`; CM07 pairs `wingman_2` and `wingman_3` with
+  `devastator_2` and `devastator_3` on `M2Bravo#26` and `M2Charlie#25`. Fly until one of those
+  leaders is destroyed, then keep the surviving wingman in sight, above all after its own target
+  dies, which is the moment it used to leave on a fixed bearing.
+  *Look for:*
+  - (a) the survivor turning onto its lost leader's circuit and staying in the mission area,
+    rather than shrinking into the distance on one heading at one altitude;
+  - (b) `campaign: 'wingman_2' lost its leader 'devastator_1' and takes its net 'M4Bravo#11'` in
+    `.scratch/logs/fly-*.log`, once per lost leader rather than every frame;
+  - (c) the survivor still fighting from the inherited route: it engages what comes into range
+    instead of flying a patrol past a fight.
+  *Blocks:* nothing tracks the outcome; a wingman that still flies out of the mission reopens
+  `BL-524`, and one that holds its net while enemies shoot at it is `BL-523`, not this.
+
 ### CM09 (C1/M04) · to the docking
 
 ```powershell
@@ -874,6 +910,19 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   *Blocks:* nothing tracks the outcome; a gun firing on the wrong side mints a new `BL` against
   the structure-team decode.
 
+- `PT-111` `[Own]` **A wave-1 attack balloon's marker stays legible as the wave arrives, never
+  reading as parked on the water** (`BL-656`, disproven). The marker already tracks the group's
+  live geometry with no staleness; the wave's own scripted entrance dives from a hidden altitude
+  to a low pass over the water, roughly 11-14 m under the marker, before climbing to attack
+  height, and that low pass is the one moment worth eyeballing. Watch OBJECTIVE10 wake (the first
+  attack-balloon site to appear) through its whole entrance.
+  *Look for:*
+  - (a) the marker sits visibly above the water throughout, including at the low pass;
+  - (b) nothing reads as the marker resting on or under the water surface;
+  - (c) the marker's motion looks continuous through the dive and the climb, with no snap or jump.
+  *Blocks:* nothing tracks the outcome; a marker that does read as resting on the water reopens
+  `BL-656` against the entrance flight's own authored path rather than against `ObjectiveSites.cs`.
+
 ### CM12 (C2/M01) · the patrol boats and the Spruce Goose
 
 ```powershell
@@ -903,6 +952,78 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
     is the authored `path2_decelerate` waiting on the barge and not a defect.
   *Blocks:* `BL-627`. A "smooth at 60, stepping at 120" answer is the confirmation that the fix is
   render interpolation for scripted world nodes; "stepping at both" reopens the diagnosis.
+
+- `PT-107` `[Own]` **The ace `hkfirebrand_9` after `OBJECTIVE67` wakes it** (`BL-566`). The ace is
+  authored at `(-4518, 150, -6233)`, which is 78.9 m below the terrain surface there, so it starts
+  flying inside the hill. Nothing was changed, so this row records what the build does rather than
+  checking a fix. Fly on until the Hollywood Knight ambush wakes, then watch the ace on the map and
+  in the air.
+  *Look for:*
+  - (a) whether the ace is ever visible in the air at all, or only ever inside the hill east of the
+    Goose's harbour leg;
+  - (b) the mode readout alternating pursue and avoid crash while it is in there;
+  - (c) it dying against the terrain without the player firing, and whether the mission still reads
+    correctly afterwards (the secondary counts group 2 as wiped).
+  *Blocks:* what the original does with an aircraft authored inside terrain, which decides whether
+  the fix is a placement rule or a collision one.
+
+### CM13 (C2/M03) · the Pandora's dock
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:12
+```
+
+- `PT-108` `[Own]` **Both landing cones draw once the dock finishes** (`BL-618`, disproven as
+  filed). `pzhomebase` already binds each cone to its own gamez node and switches both on; the
+  suite's earlier `cones 0/2` reading was its own drive window ending before the choreography's
+  13 s completion, not a resolver defect. Win the race so OBJECTIVE8 wakes the dock, then give it
+  time to finish deploying the hook.
+  *Look for:*
+  - (a) both cones under the Pandora's hull visibly drawing once the hook and hangar bay have
+    deployed;
+  - (b) either cone staying invisible, which means the disproof above does not hold at the
+    controls.
+  *Blocks:* nothing tracks the outcome; a missing cone reopens `BL-618`.
+
+### CM14 (C2B/M04) · the Gemini's broadside cannons
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:13
+```
+
+- `PT-110` `[Own]` **A stowed broadside cannon takes no weapon damage, and the same cannon takes it
+  once deployed** (`BL-640`). The Gemini keeps all six left cannons behind shut hatches until the
+  two airships close to 1000 m and its `COMPLETED_ZEPCANNONS` arms them, and only then does a hatch
+  swing and the gun slide out. Fly abeam the Gemini's port side early, pick one `lbroad` hatch and
+  empty a long gun burst into it; then hold off until that cannon deploys against you and put the
+  same burst into the gun itself.
+  *Look for:*
+  - (a) the shut hatch taking hits with no smoke, no fire and no cannon death, so the objective
+    counter does not move;
+  - (b) the deployed gun dying to the same burst, with its fireball and the objective counter
+    stepping on;
+  - (c) how long the wait for the arming is, since the cannons are now immune until they deploy and
+    the mission's third primary wants five of the six.
+  *Blocks:* a stowed cannon that still dies reopens `BL-640`; a deployed one that will not die is a
+  new item.
+
+### CM15 (C2/M05) · the paratrooper drop
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:14
+```
+
+- `PT-112` `[Own]` **The capture cutscene shows the Balmoral it is filmed around** (`BL-632`,
+  closed). The archive's `balmoral` node was never staged, so the drop played with the shot
+  composed on empty air; `AircraftStage` now stages it and the suite reads it framed through the
+  shot, but the suite drives the definition directly rather than through the mission's own
+  objective chain. Fly the mission through to the paratrooper drop (past `cargozep2`, the cargo
+  zeppelin the fighters patrol around).
+  *Look for:*
+  - (a) the Balmoral itself visible in the shot, not an empty frame over the zeppelin;
+  - (b) it moving through the shot rather than sitting parked;
+  - (c) the paratroopers still dropping and the letterbox/handoff unchanged from before.
+  *Blocks:* nothing tracks the outcome; a fail reopens `BL-632`.
 
 ### CM18 (C4/M03) · the generator launches
 
