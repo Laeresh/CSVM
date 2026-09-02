@@ -6717,7 +6717,8 @@ Runs a mission's zeppelins (M4 F17 motion + F18 damage + F19 broadside, behind
 `ZeppelinDef` whose world node and net resolve has its hull node switched ON (the record is the
 activation: C2 ships `piratezep` with its gamez active bit clear and no mission `.gw` sets it back,
 so without this CM13 docks with a Pandora nothing draws), gets a `ZeppelinMotion` on B5's `AiNetFollower`
-(arrival radius widened per record to clear the turning circle, and the only follower that
+(arrival radius floored at `ArrivalFloorM`, a flat TUNE constant below the shortest shipped
+zeppelin leg so a short leg is flown rather than skipped at once, and the only follower that
 observes stop points), is placed at its authored
 position/yaw/pitch, and the NODE is flown kinematically — no FlightController.
 One writer per transform channel: a hull an animation motion drives (`MotionSet.DrivesTransform`,

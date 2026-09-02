@@ -131,7 +131,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☐ `BL-668` A downed zeppelin's wreck rests on the sea, and its gasbags stop falling through it
 2. ☐ `BL-667` The zeppelin cannons' own scan reads the whole VehicleList, hulls included
-3. ☐ `BL-670` A zeppelin on a scripted route flies its short legs instead of cutting them
+3. ☑ `BL-670` A zeppelin on a scripted route flies its short legs instead of cutting them
 
 ### Wave B — What a surface is: collision and light
 
@@ -252,7 +252,36 @@ further than the vehicle list. A cannon that now acquires a hull must still resp
 `DAMAGES_ZEPPELIN` gate and the stowed-hatch carve-out `PLAN-M5-polish-9` `C25` landed for
 `BL-640`, so re-run that item's suite as well.
 
-## A3 ☐ `BL-670` A zeppelin on a scripted route flies its short legs instead of cutting them
+## A3 ☑ `BL-670` A zeppelin on a scripted route flies its short legs instead of cutting them
+
+**Landed.** `ZeppelinRuntime.cs:69-75`'s per-instance floor (`1.5 * turnCircle`, up to 515.7 m for
+CM08's Pandora) is replaced with `ZeppelinRuntime.ArrivalFloorM`, a flat 50 m TUNE constant with
+no decoded mechanism behind it. A campaign
+census (`CSVM.Tests/ZeppelinsTests.cs`'s new `TheArrivalFloorClearsEveryShippedZeppelinLeg`) walks
+every mission that ships a `ZeppelinDef` (58 records, the reader's own install-wide census),
+across all 8 chapters plus Instant Action, and measures the horizontal length of every edge on
+every net a zeppelin flies: 678 edges. The shortest is 143.9 m (C4/M04's `M4Piratezep`, edge 0-5),
+comfortably above the new 50 m floor, so no shipped leg advances the walk before the hull is
+meaningfully underway. 50 m was chosen with margin under that measured minimum, not fitted to it:
+it also clears C1/IA1's `IAZep` edge 4-5 (413.7 m), the leg the OLD 515.7 m floor would have
+skipped outright, which is what the test catches when the floor is set back to the old worst-case
+value.
+
+A headless `--fly --chapter=C1B --mission=M03 --zeppelins --det` probe (`RunProbe.ps1`, the `zep:`
+log lines) flew CM08's Pandora over the same 1443 m leg (node 3 to node 4) the plan's Evidence cites:
+it now captures node 4 at roughly (-5630,-4990), about 1246 m along the 1443 m leg, around 86% flown
+against the old floor's 64%. The suite `zeppelin-pandora-dead-end` (real Klondike1 data, stops
+released the way the mission's objectives would) still shows every one of the route's 12 edges
+walked end to end, the cargo point settled to within 0.1 m at its own altitude, and the pitch never
+exceeding the steepest leg's slope. The settling glide (`BL-597`, `PLAN-M5-polish-9` `B11`) is
+unaffected, since an armed stop point bypasses the arrival-radius test entirely, and this suite is
+that item's own cargo-point check, re-run clean.
+
+**Verified.** The complete `.\RunTests.ps1`: build clean, 3074 of 3074 units passed, 230 of 230
+engine suites passed with engine errors clean across 4 shards, and all 18 golden shots
+hash-identical, in 227.2 s (over the 180 s budget, awareness only). No golden moved.
+
+**Original approach (kept for reference).**
 
 **Goal.** A zeppelin walking an authored node chain flies each leg to its node, including the legs
 shorter than the arrival radius, instead of advancing the walk almost immediately at each one.

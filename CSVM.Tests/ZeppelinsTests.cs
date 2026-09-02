@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using CSVM.Mech3;
+using CSVM.Session;
+using Godot;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -226,6 +228,51 @@ public class ZeppelinsTests
         Assert.Equal(new[] { "player" }, zep.Targets);
         Assert.Empty(zep.CannonHealth);
         Assert.False(zep.Deactivated);   // the key is authored 0 here — the value decides
+    }
+
+    // BL-670: the arrival floor has to clear every shipped zeppelin leg, campaign and
+    // Instant Action alike. Otherwise a short leg advances the walk before the hull is
+    // underway (docs/formats/mission-entities.md, "Steering").
+    [ExtractedDataFact]
+    public void TheArrivalFloorClearsEveryShippedZeppelinLeg()
+    {
+        float shortest = float.MaxValue;
+        foreach (var (chapter, mission) in Missions())
+        {
+            var missionZrdr = SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission);
+            List<ZeppelinDef> defs;
+            try
+            {
+                defs = Zeppelins.Load(missionZrdr);
+            }
+            catch (FileNotFoundException)
+            {
+                continue;   // 3 MP dirs ship no zeppelins file at all
+            }
+            if (defs.Count == 0)
+            {
+                continue;
+            }
+            var nets = AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
+            foreach (var def in defs)
+            {
+                var net = AiNets.ByName(nets, def.Net);
+                Assert.NotNull(net);
+                foreach (var (a, b) in net!.Edges)
+                {
+                    var leg = net.Nodes[b].Position - net.Nodes[a].Position;
+                    float horiz = new Vector2(leg.X, leg.Z).Length();
+                    Assert.True(ZeppelinRuntime.ArrivalFloorM < horiz,
+                        $"{chapter}/{mission} net={def.Net} edge {a}-{b} is {horiz:0.#} m, " +
+                        $"no wider than the {ZeppelinRuntime.ArrivalFloorM} m arrival floor");
+                    shortest = Mathf.Min(shortest, horiz);
+                }
+            }
+        }
+
+        // The campaign's own shortest leg, C4/M04's M4Piratezep: re-measure it here rather
+        // than trust the number staying true as extraction or mission data drifts.
+        Assert.Equal(143.9f, shortest, 1);
     }
 
     private static IEnumerable<(string Chapter, string Mission)> Missions()
