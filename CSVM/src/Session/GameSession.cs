@@ -2526,8 +2526,10 @@ public partial class GameSession : Node3D
                                      $"'{hull.Def}', which this stage cannot build: the launch builds nothing");
                             return default;
                         }
-                        return new LaunchedVehicle(null, generatorSurface.Spawn(hull, pos, look - pos,
-                            EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(hull.Name), ordinal)));
+                        string hullName = EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(hull.Name), ordinal);
+                        var hullLaunch = new LaunchedVehicle(null, generatorSurface.Spawn(hull, pos, look - pos, hullName));
+                        _campaign?.RegisterGeneratorLaunch(hullName, hullLaunch, hull);
+                        return hullLaunch;
                     case GeneratorLaunch.Airframe:
                         // ⚠ shippedSkins: a generated aircraft is the mission's enemy, so it
                         // keeps its own textures rather than the player militia's default.
@@ -2536,10 +2538,13 @@ public partial class GameSession : Node3D
                             NodeName: EnemyGenerators.LaunchName(_spec.GeneratorsPlane, ordinal)));
                 }
                 var template = plan!;
-                var launched = flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(template, pos, look, pilot,
-                    EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(template.Name), ordinal)));
+                string launchName = EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(template.Name), ordinal);
+                var launched = flightRoster.SpawnAi(CampaignRosterPlan.SpawnFor(template, pos, look, pilot, launchName));
                 CampaignRosterPlan.ApplyPlan(pilot, template, generatorActiveDist);
                 RegisterAiVoice(launched, template.AccentId);
+                // The mission script counts and commands the launch by this name, so the campaign
+                // roster must hold it or a DEDG over its group reads the group as empty.
+                _campaign?.RegisterGeneratorLaunch(launchName, launched, template);
                 return launched;
             }
 
