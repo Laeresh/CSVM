@@ -180,9 +180,18 @@ of Wave B. A3 is independent of A2 and can run beside it once A1 lands, but both
 new namespace, so give them separate files and a stated boundary (A2 owns the map and resolution,
 A3 owns device enumeration and identity).
 
-Wave B is a fan-out: B11, B12 and B13 touch disjoint files and can run in parallel worktrees once A2
-lands. B14 is a gate, not a change, and runs after all three. **File contention:** B11 is the large
-one (`FlightController`) and must not run in parallel with any other item that touches it.
+⚠ **C21 runs before Wave B, not after it.** As written this plan had Wave B migrating polling sites
+onto a map that nothing populates, which would have made each migrating item hand-author its seat's
+bindings at the call site and C21 then lift the same defaults out again. A2's report names the
+dependency directly: a polling site needs an `IDeviceState` (A3, landed) *and* a populated map. The
+default set is C21's, so C21 is promoted ahead of the migration and Wave B consumes it. C22 still
+follows C21, and the wave letters stay as they are, since the IDs are cross-references rather than an
+order.
+
+Wave B is then a fan-out: B11, B12 and B13 touch disjoint files and can run in parallel worktrees.
+B14 is a gate, not a change, and runs after all three. **File contention:** B11 is the large one
+(`FlightController`, 34 sites) and must not run in parallel with any other item that touches it.
+B12's `MenuInput` (33 sites) is very nearly as large, so do not schedule it as a quick follow-up.
 
 C21 depends on A1 and A3 (it serializes device identity) but not on Wave B. C22 is documentation and
 depends on C21 landing the real default set. D31 depends on A2, A3 and C21. D32 depends on D31 and
