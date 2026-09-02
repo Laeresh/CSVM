@@ -101,7 +101,9 @@ whole set. Take a baseline before either starts, keep them in separate worktrees
 re-pin in front of the author. Two further items can move a narrower band and must not be assumed
 safe: `B13` changes the light every aircraft is lit by, so the plane-bearing shots are in scope, and
 `C21` reaches the particle path, so the particle shots are. An unchanged hash after any of these is
-not evidence until you have seen the shot able to move.
+not evidence until you have seen the shot able to move. `A1` moved one as well, `c1-debris-rest`,
+which its own manifest entry names as the column-tier shot; that pin is open in front of the author
+and every later item's baseline has to be taken against the tree that carries it.
 
 ## Ground rules
 
@@ -129,7 +131,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Airships
 
-1. ☐ `BL-668` A downed zeppelin's wreck rests on the sea, and its gasbags stop falling through it
+1. ☑ `BL-668` A downed zeppelin's wreck rests on the sea, and its gasbags stop falling through it
 2. ☐ `BL-667` The zeppelin cannons' own scan reads the whole VehicleList, hulls included
 3. ☐ `BL-670` A zeppelin on a scripted route flies its short legs instead of cutting them
 
@@ -160,7 +162,8 @@ last. Contention rules for parallel worktrees:
   and contact machinery in `Mech3/Anim/MotionRuntime.cs`. They can run in parallel, but all three
   are judged by the same `zeppelin-breakup` suite and the same CM08 and CM14 flights, so land them
   in listed order and re-run that suite after each.
-- **`B11` and `B12` are the run's only golden-movers.** Never run them in one worktree, and never
+- **`B11` and `B12` are the run's only PLANNED golden-movers**, and `A1` moved `c1-debris-rest`
+  before either of them ran. Never run `B11` and `B12` in one worktree, and never
   re-pin from a tree carrying both: a moved shot must be attributable to one of them. `B11` reaches
   `Mech3/SceneBuilder.cs` and `Mech3/Clutter.cs`; `B12` reaches the material path in
   `Mech3/SceneBuilder.cs` as well, so the two contend on that one file and must be sequenced rather
@@ -180,7 +183,91 @@ last. Contention rules for parallel worktrees:
 
 # Wave A — Airships
 
-## A1 ☐ `BL-668` A downed zeppelin's wreck rests on the sea, and its gasbags stop falling through it
+## A1 ☑ `BL-668` A downed zeppelin's wreck rests on the sea, and its gasbags stop falling through it
+
+**Landed.** `MotionRuntime.TryGroundColumn` now reads the body's whole column instead of only what
+is under it: the downward ray runs as before and, only when it answers nothing, a second ray runs
+upward over the same `ColumnDepth`. The original's column is a cell query at `(x, z)` whose answer
+does not depend on the body's height, and whose landing test `y + stepY < height` lifts a body that
+is already beneath a surface back onto it. A single downward ray cannot express that: a body that
+overshoots a surface within one step goes blind and never contacts it again. Nothing is clamped and
+no constant is tuned; both tiers, the landing response and the watchdog are untouched.
+
+**Verified.** The wreck comes to rest at y = 0.0 against the sea at y = 0, where it used to stop at
+y = −411.2. All six gasbags stop between y = 0.0 and y = −5.6 instead of two of them, and the run
+now dispatches 6 `huge_splash` and 6 `huge_ripple` where it dispatched 2 of each. The column
+watchdog fires for none of the seven bodies, where it previously ended five of them. Full
+`.\RunTests.ps1` on the landed tree: 3,073 units, 230 engine suites and 17 of the 18 goldens green
+with engine errors clean, and one golden moved and left UNPINNED, which is the run's exit 1.
+
+**⚠ One golden moved and is UNPINNED.** `c1-debris-rest`,
+`ac23a4f7aba9003441ab0338de9011e4` → `e003acfd62ee90b1fbc2914937ed703f`. It is the manifest's own
+column-tier shot, so it is the shot most able to move. The change is 13,846 pixels, 1.50 % of the
+frame, inside one box at x 970..1144, y 191..299 with a maximum channel delta of 183: the spark
+puffers on one resting debris piece sit a few pixels differently and its smoke plume is a slightly
+different shape. Nothing structural moved, and the shot's own log is otherwise identical on both
+sides (7,064 gamez nodes, 3,433 mesh instances, 1,995 colliders, 14 live motions). With the second
+ray disabled the same tree reproduces the pinned hash exactly, so the move is attributable to this
+change alone. The before and after captures and their crops are in the branch's `.scratch/`
+(`a1-debris-before.png`, `a1-debris-after.png`, `a1-crop-*.png`).
+
+**The same defect reached CM10's lifeboat.** `lifefallNM` throws `lifeboat` straight down at 1 m/s
+from a hull already floating at y = 0.00, so it owes `bounce_sequence.water`. It used to sink 6.18 m
+in the first second and never reach the branch at all; it now stops on the sea and calls
+`med_splash` plus its own `lboat_destructionNM`. `PLAN-M5-polish-9` `B14`'s reading that the CM10
+balloon geometry itself dips to the water is untouched by this: what changed is only that a body at
+the water stays there.
+
+**The diagnosis, which was the deliverable.** The defs cannot explain the split: `floatdown` on
+`piratezep` and `break1` to `break6` on `gasbag1` to `gasbag6` all author `do_intersections: false`,
+`no_altitude: false` and no `run_time`, so all seven bodies take the DEFAULT column tier with the
+15 s column watchdog behind it, and the six gasbag events are identical to each other in every
+field but their node and their `bounce_sequence.water` branch. What differed was arrival time.
+
+- **The hull** does contact the sea, three times, at 105.8, 21.5 and 4.65 m/s with the decoded 0.2
+  restitution between them. The third contact is survivable on the energy test (21.6 ≥ 3.5², the
+  gravity it is falling under), so it parks the hull 7.7 cm above the surface with 0.93 m/s still
+  on it. Two frames later the hull is 3 cm under the water, the downward ray answers nothing from
+  there, and the watchdog freezes it 411 m down.
+- **Gasbags 1 to 4** never get a crossing frame at all. The step the column tests is built from the
+  gasbag's own ballistic origin through the CURRENT parent transform at both ends, so
+  `to.Y − from.Y` carries only their 0.27 m local fall and not the 3.8 m the hull descends in the
+  same frame. Their world height therefore steps +1.03 → −2.76, +2.99 → −0.80, +0.37 → −0.63 and
+  +3.20 → −0.57 straight past the test, and the ray is blind from the next frame on.
+- **Gasbags 5 and 6** are not different bags. They reach the water after the hull's own contact has
+  cut the parent frame's descent from about 113 m/s to about 1 m/s, so their world step is 1.0 m
+  against the same 0.3 m local step and `from.Y` lands inside the window where the surface is still
+  below `from` and above `to`: 0.05 → −0.26 and 0.34 → −0.01. They are the two that arrived late.
+
+The original has the same one-frame blind spot in its own step and does not care, because its query
+answers with the surface height whatever the body's `y`. That is the single divergence, and it is
+the one the fix closes.
+
+**Tests.** `ground-contact` gained case `1b2`, a column body started 25 m UNDER the surface with the
+column below it asserted empty first: it lifts back onto the surface instead of running out at
+−2,085 m. `zeppelin-breakup` gained the wreck's and the six gasbags' resting heights, and its
+`huge_splash` check is now `Same(6, …)`. Its gasbag drop check moved off displacement onto the
+dispatched `ObjectMotion` event, because the old "moved more than 1 m" proxy passed on the defect
+and failed on the fix (see `docs/verification.md` `INSTR-38`). `campaign-balloon-death` now wires
+`SurfaceIsWater` as a real session does and asserts the lifeboat's water branch and its resting
+height, replacing a "still dropping" check that scored sinking as the healthy answer. All the new
+checks were shown red on the unfixed tree and green after.
+
+**Still owed.** The CM14 (C2B/M04, `./RunGame.ps1 --campaign=<profile>:13`) kill over water belongs
+to `D31`: the wreck should be seen floating rather than read off an artifact.
+
+**Docs.** `docs/org/objectMotion.md`'s divergence table (the column is now two rays; the per-step
+admission test is no longer inert; the roughly 4 cm band around a surface where neither ray answers
+is recorded as measured), `docs/architecture.md`'s `src/Mech3/Anim/` entry, and
+`docs/verification.md` `INSTR-38`.
+
+**⚠ For whoever runs `B11`.** The upward half of this column relies on a collider answering a ray
+that reaches it from behind, which today it does because `SceneBuilder` sets `BackfaceCollision`
+unconditionally. `B11` makes that flag per polygon. If a water or terrain polygon clears
+`SHOW_BACKFACE`, `zeppelin-breakup`'s resting checks are what will catch it, and the answer is a
+column that casts downward from above rather than upward from below, not a re-pin.
+
+### Original approach (kept for reference)
 
 **Goal.** A zeppelin killed over water settles on the surface and stays visible there, with every
 gasbag coming to rest on the water rather than sinking through it.

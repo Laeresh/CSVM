@@ -431,9 +431,9 @@ internal sealed class MotionRuntime : IAnimMotion
         return float.IsFinite(t) ? t : 0f;
     }
 
-    // The default contact tier: casts straight down and ends the flight once the next step would
-    // put the body under whatever is there (docs/org/objectMotion.md, "Contact is the default").
-    // ⚠ Departs from the decode on purpose: a downward ray instead of a cell-record pick, and
+    // The default contact tier: reads the body's own column and ends the flight once the next step
+    // would put it under whatever is there (docs/org/objectMotion.md, "Contact is the default").
+    // ⚠ Departs from the decode on purpose: a pair of rays instead of a cell-record pick, and
     // `intersect_surface` colliders without the original's `altitude_surface` filter — see that
     // page's divergence table for why. ⚠ No ArmDistance/ArmSeconds epsilon, unlike the sweep: a
     // launch climbs before it falls, so it cannot contact what it left on its first frame.
@@ -453,14 +453,20 @@ internal sealed class MotionRuntime : IAnimMotion
         var parent = (Target.GetParent() as Node3D)?.GlobalTransform ?? Transform3D.Identity;
         var from = parent * BallisticOrigin(_t);
         var to = parent * BallisticOrigin(next);
-        // A descending step admits the test, `complex` widens it to every step. Inert here — a
-        // downward column only ever reports surfaces at or below `from` — but the original needs
-        // it, since its cell query can return a surface above the body.
+        // A descending step admits the test, `complex` widens it to every step. It decides here
+        // too, since the column read below can answer with a surface above the body, exactly as
+        // the original's cell query does.
         if (!_complexGravity && to.Y >= from.Y)
             return false;
 
+        // The original's column is a query at (x, z), so its answer ignores the body's height and
+        // one already under a surface is lifted back onto it. ⚠ The upward read needs the collider
+        // to answer a ray reaching it from behind, which SceneBuilder's BackfaceCollision gives.
         var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
             from, from + Vector3.Down * ColumnDepth, _contactMask));
+        if (hit.Count == 0)
+            hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                from, from + Vector3.Up * ColumnDepth, _contactMask));
         if (hit.Count == 0)
             return Watchdog(dt, next);
 

@@ -1338,8 +1338,11 @@ expression and `TumbleAxis` the tumble's; `ProjectilePool`'s gun-casing ejection
 `gunshell` event through both (INSTR-3), because two spellings of the maths is how they disagree —
 see their doc comments in `Anim/MotionRuntime.cs` for the non-normalisation rule.
 Contact is the DEFAULT and comes in the original's two tiers: `TryGroundColumn`, a vertical column
-under the body, unless `do_intersections` upgrades it to `TryContact`'s trajectory sweep (166 events
-install-wide); `no_altitude` vetoes the column only, and `gunshell` alone authors it. No mask wired
+through the body, unless `do_intersections` upgrades it to `TryContact`'s trajectory sweep (166
+events install-wide); `no_altitude` vetoes the column only, and `gunshell` alone authors it. That
+column reads DOWNWARD first and UPWARD only when nothing answers, because the original's query is a
+cell lookup at `(x, z)` whose answer does not depend on the body's height: a body that stepped past
+the surface is lifted back onto it rather than drifting to its watchdog. No mask wired
 means neither tier, which is the structural fallback every lab and 9 of the 14 goldens take;
 `c1-debris-rest` is the one golden that wires a mask and reaches the column tier, a killed
 `m_build03` piece resting with its landing's own spark puffer as the pixel-level tell. Both

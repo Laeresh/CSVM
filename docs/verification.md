@@ -806,6 +806,13 @@ loss. What the engine renders was decodable from the authored constants + oscill
   airframes. Compare sorted magnitudes, or compare the whole basis, and never assert
   `Scale.X == authored.X` on anything that also rotates. The same caution applies to reading a
   rotation back off a node whose scale is non-uniform.
+- **INSTR-38** — **A "did it move" distance is scored by the defect, so it passes hardest on the
+  worst behaviour.** `zeppelin-breakup` asked each gasbag to move more than 1 m from its rest pose,
+  which all six cleared while four of them were falling 1,228 m through the sea; a gasbag that stops
+  on the water moves 0.5 m and fails the same check. `campaign-balloon-death` asked its lifeboat to
+  end below where it started, which only sinking through the sea satisfies. Read the DISPATCH for
+  "did the event fire" and the RESTING POSITION for "did it end in the right place". A displacement
+  answers neither, and it rewards whichever fault travels furthest.
 
 ## SRC — sources and documents
 

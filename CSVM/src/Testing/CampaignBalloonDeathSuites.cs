@@ -23,6 +23,12 @@ internal static class CampaignBalloonDeathSuites
     private const string BoatNode = "lifeboat";
     private const string BalloonAnim = "lifefall";
     private const string BoatAnim = "lboat_destruction";
+
+    // The two branches lifefallNM's lifeboat launch names, and which one fires says what the drop
+    // struck. The water arm calls med_splash and the boat's own destruction pool; the dry default
+    // calls that pool alone.
+    private const string BoatBounce = "boat_explode";
+    private const string BoatWetBounce = "boat_explode_water:";
     private const float BalloonHealth = 60f;
     private const float BoatHealth = 40f;
 
@@ -41,14 +47,16 @@ internal static class CampaignBalloonDeathSuites
     /// <summary>CM10 (C1/M05)'s attack balloons over its BUILT world. Each <c>lifesaverNM</c> group
     /// carries the balloon's own <c>lifefallNM</c> pool and the lifeboat's <c>lboat_destructionNM</c>
     /// pool, so the suite asserts which one a hit on each half reaches, then kills a balloon through
-    /// the hit path and reads the burst off the world: the envelope falls, the six pieces fly, and
-    /// the objective's own <c>healthy_balloon</c> ends hidden.</summary>
+    /// the hit path and reads the burst off the world: the envelope falls, the six pieces fly, the
+    /// objective's own <c>healthy_balloon</c> ends hidden, and the lifeboat's downward launch stops
+    /// on the sea it already floats on and takes its <c>boat_explode_water</c> branch.</summary>
     [Suite("campaign-balloon-death",
         "CM10's attack balloons as destructibles over C1/M05's BUILT world: each lifesaver "
         + "group node carries two weapon-hit pools, the balloon's lifefallNM at 60 HP and the "
         + "lifeboat's lboat_destructionNM at 40, so a hit on the envelope reaches the balloon's "
         + "own pool on all nine sites, and killing one flies its six bursting pieces, drops the "
-        + "envelope and leaves healthy_balloon hidden for the objective graph")]
+        + "envelope, leaves healthy_balloon hidden for the objective graph, and lands the lifeboat's "
+        + "own downward launch on the sea it already floats on, where it takes the water branch")]
     internal static void CampaignBalloonDeath(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -201,10 +209,17 @@ internal static class CampaignBalloonDeathSuites
         // The lifeboat's drop is an untimed launch only a contact tier can end, so without the mask
         // a real session wires it is posed at rest and the boat half of the death is unobservable.
         uint maskWas = runtime.ContactMask;
+        var waterWas = runtime.SurfaceIsWater;
         runtime.ContactMask = CollisionLayers.World;
+        // The branch a landing picks is read off the surface it struck, so the sea has to be
+        // recognisable here as a real session makes it. Without this the boat takes its dry
+        // default over water and the suite cannot tell the two branches apart.
+        runtime.SurfaceIsWater = body => ProjectilePool.SurfaceIsWater(body as Node);
+        var fired = new List<string>();
         bool landed;
         try
         {
+            runtime.OnEventDispatched = d => fired.Add($"{d.Sequence}:{d.EventKind}({d.EventName})");
             landed = runtime.DamageAt(envelope, BalloonHealth + 1f);
             for (float t = 0f; t < DeathSeconds; t += Step)
             {
@@ -213,6 +228,8 @@ internal static class CampaignBalloonDeathSuites
         }
         finally
         {
+            runtime.OnEventDispatched = null;
+            runtime.SurfaceIsWater = waterWas;
             runtime.ContactMask = maskWas;
         }
 
@@ -230,12 +247,22 @@ internal static class CampaignBalloonDeathSuites
         }
 
         float fell = balloonRest - balloon.GlobalPosition.Y;
+        float boatNow = boat.GlobalPosition.Y;
+        var bounces = fired.FindAll(f => f.StartsWith(BoatBounce, StringComparison.Ordinal));
         report.AppendLine($"killed: pieces flew [{string.Join(", ", travels)}]; balloon fell {fell:0.0} m; "
-            + $"boat fell {boatRest - boat.GlobalPosition.Y:0.0} m; '{BalloonNode}' visible={envelope.Visible}");
+            + $"boat y {boatRest:0.00} -> {boatNow:0.00}; bounce [{string.Join(", ", bounces)}]; "
+            + $"'{BalloonNode}' visible={envelope.Visible}");
         ctx.Same(Pieces.Length, moved,
             $"every bursting piece leaves its rest pose, so the death is flown rather than swapped");
         ctx.Check(fell > 0.5f, $"and the balloon itself falls out of the sky rather than hanging where it died (fell {fell:0.0} m)");
-        ctx.Check(boat.GlobalPosition.Y < boatRest - 0.5f, $"with the lifeboat still dropping under it");
+
+        // The lifeboat's launch is a 1 m/s throw straight DOWN from a hull that already floats, so
+        // it meets water at once and owes bounce_sequence.water. A distance fallen answers nothing
+        // here: sinking through the sea travels furthest (docs/verification.md INSTR-38).
+        ctx.Check(bounces.Exists(f => f.StartsWith(BoatWetBounce, StringComparison.Ordinal)),
+            $"the lifeboat's drop strikes water and takes its {BoatWetBounce} branch fired=[{string.Join(", ", bounces)}]");
+        ctx.Check(Mathf.Abs(boatNow - boatRest) < 1f,
+            $"…leaving it afloat where it was rather than sinking through the sea (y {boatRest:0.00} -> {boatNow:0.00})");
         ctx.Check(!envelope.Visible,
             $"and '{BalloonNode}' ends hidden, which is what retires the site's own objective");
     }
