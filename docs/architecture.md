@@ -7262,8 +7262,7 @@ presentation (`menuPresentation`) and the requested graphics mode (`graphicsMode
 `user://options.json`, independent of `Session/CampaignProfileStore.cs`; under `--run-tests`
 `UserOptions()` reads and writes an emptied scratch directory instead (`DirectoryOverride`), so no
 driven suite depends on or touches the player's file. That directory is per process rather than
-shared: the shards start together, and one of them deleting a shared directory while a sibling was
-writing it threw out of `_Ready` and left that shard erroring in `_Process` until its timeout.
+shared, because concurrent shards start together and race for one.
 Missing/malformed reads as
 empty, an unknown version invalidates the file, an unknown value drops only that field, and a field
 the file does not carry reads as never set. That last rule is why adding a field does not bump
