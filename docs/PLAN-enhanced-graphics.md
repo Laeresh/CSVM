@@ -767,7 +767,8 @@ the walls around them go dark. Original-mode goldens zero movers.
 are different decoded rules. EMISSION above 1.0 is the glow trigger in C22; keep the scale a named
 TUNE, not a magic number.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged C21 + C23 + C24 tree: 2796 units, 200
+engine suites (errors clean), 18 goldens hash-identical, all passing in 139.2 s.
 
 The landed change is 15 lines in `CSVM/src/Mech3/SceneBuilder.cs`: a `private const float
 EmissiveScale = 1.5f` TUNE with an invariant-culture `EmissiveLiteral` beside it, and one branch in
@@ -871,7 +872,9 @@ without halos on the aircraft against sky. `-Perf` delta recorded at 1 and 4 pan
 **⚠ Traps.** SSAO reads the resolved depth buffer, so its edges shimmer independently of MSAA;
 judge it in motion, not in stills.
 
-**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln`: clean, 0 warnings, 0
+**Verified.** The complete `.\RunTests.ps1` on the merged C21 + C23 + C24 tree: 2796 units, 200
+engine suites (errors clean), 18 goldens hash-identical, all passing in 139.2 s. During the item:
+`dotnet build CSVM/CSVM.sln`: clean, 0 warnings, 0
 errors. A/B captures via `RunProbe.ps1 --graphics=enhanced --det --mute` (a `CSVM_SSAO_OFF=1`
 env-var gate in `SetupLighting`, added for the off capture and removed before landing): C2's
 hangar/house cluster shows visible contact darkening at wall bases and roof/wall junctions with
@@ -954,7 +957,8 @@ recorded verdict either way. Original-mode goldens zero movers.
 **⚠ Traps.** A disproof here is a valid landing (ground rules); do not tune SSR past its
 screen-space physics to force a ship.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the merged C21 + C23 + C24 tree: 2796 units, 200
+engine suites (errors clean), 18 goldens hash-identical, all passing in 139.2 s.
 
 The landed change is a `water` bit on `GetBiasShader`'s key (16384, next free bit now 32768) fed
 from `ClassifySurface(texName) == "water"` through `BiasMaterial`, plus two TUNE constants
