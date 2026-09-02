@@ -798,6 +798,14 @@ loss. What the engine renders was decodable from the authored constants + oscill
   that is provably inert in `--det`, and a detached worktree at the merge commit, with none of that
   change present, produced the same `be23e13d…`. Attribution costs one `git worktree add --detach
   <merge-commit>` and one golden stage. Do it before you touch `manifest.json`.
+- **INSTR-37** — **`Node3D.Scale` does not read back axis for axis off a basis carrying real
+  rotation, so a per-axis scale assertion fails on a rotated node while the pose is correct.**
+  Godot decomposes the basis, and a 90-degree-class rotation composed with a non-uniform scale
+  redistributes the factors across axes: an authored `(1, 0.25, 1)` on a rotated hook arm reads
+  back as `(1, 1, 0.25)`. Measured on `landings-hookup-airframe`'s switch-on check across six
+  airframes. Compare sorted magnitudes, or compare the whole basis, and never assert
+  `Scale.X == authored.X` on anything that also rotates. The same caution applies to reading a
+  rotation back off a node whose scale is non-uniform.
 
 ## SRC — sources and documents
 
