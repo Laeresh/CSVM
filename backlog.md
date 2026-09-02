@@ -2083,6 +2083,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   marker style and one keybinding cover both, and the stunt modes stop needing a private marker at
   all. `BL-400`'s curated non-aircraft list and `BL-351`'s class-cycling generalisation are the
   neighbouring pieces of the same HUD, so whoever takes this should read all three together.
+  ⚠ **The one thing that does not unify: stunt markers are per player, never shared.** Each pilot
+  has their own set, so in splitscreen each pane shows and cycles its own and a pick made in one
+  pane must not move another's. Folding the marker into the targeting HUD's objective class must
+  therefore keep the per-pane selection the targeting HUD already has (`TargetSelection.Current` is
+  per player), and must not promote the stunt marker to a session-wide objective the way a mission
+  objective is shared. A unification that makes every pane agree has broken the feature.
   ⚠ Trap: the original's own `targets.zrd` cycle is decoded in `docs/org/targeting.md` and is the
   reference for what belongs in a cycle; do not invent a class the original has no equivalent of.
   ⚠ Until this lands, `CycleStuntTarget` shares `D-pad Up` with `TargetNextEnemy` as an interim,
