@@ -83,7 +83,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ `BL-597` CM08: the Pandora halts over the tanker and its sequence there plays
 12. ☐ `BL-666` CM09: a zeppelin killed by gasbags alone ends the mission one way or the other
 13. ☑ `BL-665` A woken roster block is re-placed where the script left it, not at its authored pose
-14. ☐ `BL-656` CM10: an attack balloon's marker never rests on the water before the wave arrives
+14. ❌ `BL-656` CM10: an attack balloon's marker never rests on the water before the wave arrives (disproven: the marker tracks its geometry, and the geometry itself dips; `BL-674`)
 
 ### Wave C — Hollywood (C2)
 
@@ -350,7 +350,7 @@ shipped mission shows the symptom today.
 
 **Verified.** <pending orchestrator run>
 
-## B14 ☐ `BL-656` CM10: an attack balloon's marker never rests on the water
+## B14 ❌ `BL-656` CM10: an attack balloon's marker never rests on the water
 
 **Goal.** In CM10 (C1/M05) the objective marker for an attack balloon appears on the balloon from
 the first frame it is offered, never on the water beneath it.
@@ -381,6 +381,27 @@ the balloon; D31 watches a wave arrive in CM10 with the marker already in frame.
 **⚠ Traps.** Do not reintroduce a node-origin fallback or an upward offset; both were removed on
 decoded evidence, and the balloons descend as they attack, so no constant is right at two
 altitudes.
+
+**Disproven.** `SiteAnchor`/`CollectMeshBoxes` already implements the original's own rule
+(`docs/org/targeting.md`, "Where a mission structure is": the midpoint of the node's active
+bounding box) and reads `lifesaver11`'s live geometry with no staleness, from the tick its wave
+wakes through its whole SiScript entrance. `lifesaverNM` and its inner `lifesaver` node do start
+inactive while `lifeballoon` and `lifeboat` are active under them, matching the evidence, but
+`CollectMeshBoxes` never reads `Visible` or `flags.active` at all (its own comment says hidden
+parts are walked on purpose), so the merge already spans both the lifeboat and the balloon from
+world build onward. A 70-second, per-tick drive through the shipped `OBJECTIVE10` wake trigger
+never once finds the anchor outside the group's own currently built mesh bounds (worst margin
+13 m over 700 sampled ticks). What the original report saw is wave 1's own scripted entrance: it
+carries the whole assembly, lifeboat and balloon together, from a hidden altitude down past the
+water before the rise sequence lifts it to attack height, and the anchor correctly tracks that
+live pass, reading about 11.7 m above the group's own current base throughout, matching the
+decoded midpoint formula rather than a stale merge. Neither candidate fix would change this: the
+flagged node's own `child_bbox`, transformed only by its own unmoving transform, is the same
+value `CollectMeshBoxes` already produces at rest, and deferring the offer would not move a
+reading that is already live and correct. `campaign-balloon-marker` now also drives the shipped
+wake trigger directly and asserts this invariant.
+
+**Verified.** <pending orchestrator run>
 
 # Wave C — Hollywood (C2)
 

@@ -1283,6 +1283,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
+- `BL-674` `[Bug]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
+  during its scripted entrance.** *Evidence:* driving C1/M05's shipped `OBJECTIVE10` wake and
+  sampling the assembly every 0.1 s for 70 s traces its world Y from 990 m (the hidden entrance
+  altitude) to -0.26 m at about t = 57.3 s, then climbing again at the `rise` sequence's authored
+  3.33 units per second. The objective marker follows it down, which is the symptom `BL-656` was
+  filed on; that item is disproven because the marker is tracking the geometry correctly, and the
+  geometry is what goes to the water. The motion is the entrance's own SiScript-to-`rise` handoff,
+  so it lives in the animation runtime (`PoseChannel.cs`, `FromToMotion.cs`, `ScriptPlayback.cs`),
+  not in `ObjectiveSites.cs`. *Fix shape:* first decide whether the original does this at all, by
+  watching a CM10 wave arrive in footage or at the controls; a balloon that dips to the sea on its
+  way in may be authored. Only if it does not, find whether the handoff between the entrance script
+  and `rise` drops an altitude the original keeps. *⚠ Traps:* do not add an altitude floor to the
+  assembly, and do not offset the marker upward; both were removed on decoded evidence and the
+  balloons descend as they attack, so no constant is right at two altitudes. The anchor rule itself
+  is the original's (`FUN_004cf2c0`, midpoint of the node's active bounding box) and is correct.
+  *Cross-refs:* `BL-656`'s closing commit, `PT-111`, `docs/org/targeting.md` "Where a mission
+  structure is".
+
 - `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
   flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
   traced the same day and **fully decoded 2026-08-13**. The decode is
