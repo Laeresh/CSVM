@@ -114,7 +114,10 @@ public sealed class MenuInput
     // buttons get.
     private readonly bool[] _textPrev = new bool[TextKeys.Length];
 
-    // This seat's hardware, as the binding model addresses it.
+    // This seat's hardware, as the binding model addresses it. Deliberately not exposed: it answers
+    // for SeatPads and nothing else, so a rebinding screen capturing a Flight or Camera control
+    // through it would read every pad as false. A screen builds its own reader per context
+    // (SeatCaptureDevices) from the identity that context's rows sit on.
     private readonly SeatDeviceState _devices;
 
     // The seat read three ways on one tick: keyboard live, keyboard minus the typeable keys, and
@@ -148,12 +151,6 @@ public sealed class MenuInput
         _padOnly = new PlayerActions(map, false);
         _live = _keys;
     }
-
-    /// <summary>This seat's hardware as the binding model addresses it, refreshed by every
-    /// <see cref="Poll"/>. A rebinding screen captures through this rather than through the seat's
-    /// semantic commands, because a captured control has to carry this seat's own pad identity
-    /// (<see cref="SeatPads"/>) and a semantic command hides the device on purpose.</summary>
-    public IDeviceState Devices => _devices;
 
     /// <summary>This seat's live menu keymap, the object a rebinding screen edits. Editing it moves
     /// the bindings this poller reads on its next frame, since the readers hold the map itself; call

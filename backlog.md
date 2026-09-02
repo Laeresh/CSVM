@@ -632,8 +632,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   itself rather than from watching a play session. *Fix shape:* a `PrevSelectable` backward scan
   with the same empty-slot skipping, plus a second binding per selector, which is where this stops
   being a two-line change: the flight keymap has no spare paired keys and the pad's D-pad is
-  already spent on the two forward steps. `BL-296`'s per-player ActionMap is the natural home for
-  the four named actions if it lands first.
+  already spent on the two forward steps. The seam is built and the four named actions belong in it:
+  `InputAction` gains a reverse member per selector, `DefaultBindings` authors it, and the rebinding
+  screen is what finds a player their second pair, so the key space that blocked this is no longer
+  the blocker (`CSVM/src/Bindings/`, `docs/controls.md`).
   ⚠ Traps: (a) **The cycle sequence is settled and must not be re-derived**: the selector walks the
   hardpoints in physical mount order (`Loadout.PylonStepOrder`, `FireControl`'s `pylonStepOrder`),
   which is NOT the order the list is built in (`Loadout.PylonFillOrder`, 1,5,2,6,3,7,4,8, which says
@@ -648,27 +650,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   mixed fits make the direction matter, so this item's value went up when that shipped;
   `BL-296` (ActionMap/rebinding seam), `git log --grep=BL-062` for what settled the
   per-hardpoint half.
-
-- `BL-398` `[Feature]` **A rebindable keymap — the real answer to targeting's key placement, not a
-  targeting-specific fix.** *Evidence:* the player-targeting plan's own out-of-scope call (a),
-  2026-08-15: every one of the original's eleven targeting keys collides with our WASD +
-  `Shift`/`Ctrl`-throttle flight scheme — the full collision audit is in `docs/org/targeting.md` —
-  so that plan ships a curated default set on free keys (`T` `Y` `U` `I` `O` + `L`, `D-pad Up`
-  tap/hold) instead of mirroring the original's letter-per-class layout (`E`/`W`/`R` plain/
-  `Shift`/`Ctrl`). A rebind layer is what actually resolves key placement; targeting is only the
-  feature that hit the wall hardest, because it is eleven keys deep into an already-full keymap.
-  *Fix shape:* `BL-296`'s per-player `ActionMap` seam, if it lands first.
-  **Decoded** (`docs/org/input.md`): the original's own map is one 32-bit word per command id
-  (`FUN_00537090`), packing four fixed binding slots (two keyboard control codes, one joystick
-  button, one mouse button) that `FUN_00537530` ORs together; a keyboard code is a raw DIK scancode
-  plus `0x100`/`0x200`/`0x400` Alt/Ctrl/Shift bits, and the 64 shipped defaults are emitted by code
-  at `FUN_004936c0`, not held in a table. Two rules are worth reusing: an action carries several
-  bindings at once, and reassigning a control steals it from its previous owner rather than
-  double-binding (`FUN_005371d0`, `FUN_00535fb0`). ⚠ The encoding is not: there is exactly one
-  joystick pointer in the program (`DAT_0075c1e0`), buttons are hardcoded 1-10 (`FUN_00536c40`),
-  and axes and hats are unbindable. Our binding must be a stable device identity plus a tagged
-  control (button, signed axis with deadzone, hat direction) held in a list, not a scancode in a
-  typed slot, so the ceiling is not inherited.
 
 - `BL-693` `[Tuning]` `[Owed-playtest]` **The rebinding screen's three axis-capture constants are
   picked, not measured.** *Evidence:* `ControlCapture.RestBand` **0.25**, `MoveThreshold` **0.6** and
@@ -688,6 +669,44 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (0.5) and Camera Dolly Out (0) rather than stacking a third reading. Raising or lowering these
   numbers does not change that, and must not be used to try to.
   *Cross-refs:* `BL-296`, `docs/org/input.md`, `docs/org/targeting.md`, `docs/controls.md`.
+
+- `BL-696` `[Feature]` **The Original presentation has no way into the rebinding screen, so the
+  keymap is editable in Built-in alone.** *Evidence (traced):* `PF_B_CONTROLS` draws disabled
+  (`CSVM/src/UI/Menu/Original/OriginalShell.cs:178`), and the two pages behind it are decoded and
+  unbuilt: `ControlsPrefs` (12 rows, layout only) and `Keys` behind `CP_B_KEYS` (17 rows, the
+  composition of all seven category tabs, with `KB_B_ACCEPTCHANGES` / `KB_B_CANCELCHANGES` returning
+  to `ControlsPrefs`) — `docs/org/menu-inventory.md`:392-394, :482-483. Both were put out of scope of
+  the menu plan because no shared option stood behind them; `ControlsFeature` is now that option, so
+  the reason has expired. The feature, the capture, the staged Accept/Cancel, the steal rule and the
+  persistence are all shared and built, so what is missing is the presentation's screen graph alone.
+  *Fix shape:* the two pages over the extracted artwork, the seven tabs, the two control columns, the
+  three buttons, and `PF_B_CONTROLS` wired live.
+  *⚠ Traps:* **The seven tabs are the original's action groups, not this port's three input
+  contexts.** Movement, Throttle, Weapons, Targeting, Views 1, Views 2 and Other have no home for the
+  menu and free-camera actions, which the original does not bind at all, so a faithful tab strip
+  strands two contexts and needs a decision rather than a mapping. **Control A and Control B are
+  positions in a four-slot row, not two fields** (`docs/org/input.md`), and this port holds an
+  unbounded list: Built-in shows four and appends "+N more", while two authored columns would hide
+  bindings, which is the trap `BL-398`'s screen was written against.
+  *Cross-refs:* `BL-296`, `BL-398`, `docs/org/menu-inventory.md`, `docs/org/input.md`,
+  `docs/menu-presentations.md`.
+
+- `BL-697` `[Bug]` **Only player 1's keymap can be reached, because the rebinding screen registers
+  the seats that have joined and seats join at aircraft select.** *Evidence (traced):* `OpenControls`
+  registers one seat per entry of `_slots` (`CSVM/src/UI/LaunchMenu.cs:2338-2350`), and `_slots`
+  mirrors `PlayerSetupFeature`'s joined seats, which are claimed with the pad Start gesture on the
+  aircraft pick. The screen is reached from Options, off the main menu, where seat 0 is the only
+  seat, so the Player stepper offers player 1 alone and no other player's file can be edited. Player
+  2's keymap is written by `BindingStore` and read at launch by `LaunchBindings`, so the data path is
+  whole and only the way in is missing.
+  *Fix shape:* let the screen take the join gesture itself, so a pad pressing Start there claims the
+  next free player for editing, or reach the screen from where seats already exist.
+  *⚠ Traps:* **A seat with no pad is not the same as a seat with a pad that has not joined.** Capture
+  needs a pad to press and reads the seat's own pad list, so registering four seats up front would
+  offer three players nothing to capture with. **Which pad a press came from is a raw device read,
+  not an action** (`B12`'s nine deliberately raw sites, and why `MenuJoin` is unbound), so the join
+  here cannot be resolved through the seat's own bindings.
+  *Cross-refs:* `BL-296`, `BL-398`, `BL-375`.
 
 - `BL-399` `[Feature]` **Track Target's camera behaviour — `L` is reserved, the camera itself is
   undecided.** *Evidence:* the player-targeting plan's out-of-scope call (b), 2026-08-15: the
@@ -1555,6 +1574,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `egen: 'cargozep1' spawn #1: 'bsfury_eg0' dropped ... patrolling net 'M3Allies'`. This item and
   `PT-102` both described enemy Black Swans, which is what made CM18 read as a mission mix-up at the
   controls; the count is right and the side is not.
+  ⚠ **The player-visible consequence, reported at the controls:** "all Black Swan plane are spawned
+  at the start mostly underground" and "they are not available to shoot down because they should
+  spawn with capturing the cargozep and start from it. not sitting on where they could be attacked".
+  All ten launches land at the generator's `cargobay` origin `(-3840,558,-2543)`, about 81 m below
+  the moored hull at `(-3840,639,-2624)`, and every one of them happens inside the opening cutscene,
+  so they are gone before the tiedowns are cut. `AiGeneratorRuntime` takes
+  `gen.Origin.GlobalPosition` with no clearance term, and the free-run is this item's own cause, so
+  the placement is a symptom of it rather than a separate defect. The authored `min_altitude` 250 is
+  absolute world Y and is already matched correctly; do not re-read it as height above terrain.
+  ⚠ **CM18 pays the spawn cost ten times, not twice.** `PLAN-M5-polish-8`'s `B14` attributes the
+  mission's stalls to two launches; the sortie shows `ai_spawn` hitches at 68.90, 68.41, 70.05 and
+  69.13 ms among ten, with a separate unattributed 290 ms frame beside them. Whatever this item
+  decides about the credit rule changes how often that cost is paid.
   [`docs/formats/mission-entities/enemy-generators.md`](formats/mission-entities/enemy-generators.md)
   ("Capacity rule and limit") records that the literal decoded rule blocks every shipped generator on
   its first tick, and that the data does **not** establish that 0 means unlimited, which is exactly
@@ -1974,13 +2006,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     `nitro` as `frequency 4.0, damp 3.0, sawtooth 1, magnitude 0.05`, read unchanged, and
     `PlaneShake` renders it as a sawtooth under an envelope — the same envelope-versus-random-walk
     mismatch as (a) and (d), which is why this is a clause here and not its own item.
-    ⚠ **Do not wire a number yet:** two repo sources contradict each other on which triple is
+    **Judged at the controls, and the answer settles the shape rather than the scale:** "Janky at
+    the beginning (larger but very fast) and then too small but still very fast." That is three
+    facts at once — the opening kick is too big, the decay to too-small is too quick, and the RATE
+    is wrong for the whole duration. A magnitude constant cannot produce that; it is the sawtooth
+    standing in for a random walk, which reads as a fast regular buzz where the original wanders.
+    So the mechanism is the fix here, exactly as in (a) and (d), and the factor-of-two ambiguity in
+    the magnitude is secondary — do not spend another pass on it before the walk lands.
+    ⚠ **Still do not wire a number:** two repo sources contradict each other on which triple is
     position and which is velocity (`docs/org/shakes.md`:168-173 against
     `analysis/gun-wobble-shake/FINDINGS.md`:168-182, which says the reverse twice), and the
     `sawtooth 1` branch constant coincides with the authored `frequency` of 4.0, which is exactly
-    the coincidence the trap below warns about. Settle the triple first, then ask the author whether
-    the wobble reads too big or too small, and whether the original's engage moves the nose or only
-    the roll — one word from the controls outranks another pass over the binary here.
+    the coincidence the trap below warns about.
+    *Still unanswered:* whether the original's engage moves the nose or only the roll.
   - **(fidelity) judge the port, then dial.** Playtest owed: fly the merged build and judge
     `GunBuzzKickScale` (1.0 default = faithful step) against the original clip before touching it.
     Two honest caveats: the random-walk **decay model (τ≈80 ms) is an engineering guess, not a
@@ -2130,19 +2168,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* re-review `MarkerHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
   against it rather than in isolation. *Cross-refs:* `BL-449`, whose landing prompted this wording.
 
-- `BL-296` `[Feature]` **Per-player ActionMap: named actions over the raw key/pad polling, as the
-  rebinding seam.** Every control is hard-polled today (`Input.IsKeyPressed`/`IsJoyButtonPressed`
-  scattered across `FlightController` (~a dozen bindings), `MenuInput`, `SpectatorCamera`), with
-  per-player device routing via `PadDevices`/`UseKeyboard`; `docs/controls.md` is the binding
-  record. The shape (decided with BL-295, 2026-08-06): a named-action indirection — helpers like
-  `FirePressed()` become `actions.Held(Action.FireGuns)` resolved by a per-player `ActionMap`
-  (player 1 keyboard+pad, others pad-only), persistable so a rebinding UI can edit it later. Godot's
-  built-in `InputMap` supports runtime rebinding but is app-global, so the per-player layer stays
-  ours either way. ⚠ *Traps:* NOT an event/message bus — fire is a held control on the 60 Hz
-  fixed-tick sim, edge detection lives in the consumers (`FireControl`), and events would break
-  scripted `--det`/`--hold` runs; the polling *sites* are the seam, `FireControl` itself never
-  changes (it consumes `FireInputs` booleans). Update `docs/controls.md` when this lands.
-
 - `BL-351` `[Feature]` **Generalise the targeting HUD: target-cycling keybindings for the
   original's target classes.** Requested 2026-08-14 alongside M4 H22 (which extends the VS
   targeting elements to AI enemy planes but picks the target automatically). The original ships
@@ -2150,8 +2175,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   non-aircraft (ground/sea vehicles, turrets, zeppelins). Wanted: the same class-cycling on our
   targeting HUD — per pane in splitscreen, reusing the VS/H22 drawing elements unchanged, only
   the selection source generalises. Ground work: pull the original's exact bindings and cycle
-  order from its input config/manual before designing ours; wire through whatever input seam
-  exists when this lands (`BL-296`'s ActionMap if it has landed, hard polling if not).
+  order from its input config/manual before designing ours; wire through the named-action seam,
+  which is built: a class-cycle action per class in `InputAction`, authored in `DefaultBindings` and
+  rebindable, with the selection source generalising behind it (`CSVM/src/Bindings/`).
   *How you'd know it worked:* in a session with AI planes, a zeppelin and turrets, the target
   key cycles hostile aircraft; the non-aircraft key walks the zeppelin and turrets; each pane
   tracks its own pick. Depends on H22's target-tracking plumbing; `docs/controls.md` gains the
@@ -2804,6 +2830,68 @@ usual.
   `piratefighter`, whose `devastator`/`wingman` defs *do* author `paint_pattern player_fortune`,
   which is the better-founded half of the same item.
   *Cross-refs:* `BL-632`, `PT-112`.
+
+- `BL-694` `[Bug]` **CM14 becomes unwinnable when the Gemini is killed before its cannon bays are,
+  because the wreck comes to rest low enough to put the surviving bays under the sea.** *Evidence
+  (traced, and reproduced twice at the controls with the two outcomes side by side):* the mission's
+  third primary is the only route to a win. `OBJECTIVE13` is
+  `IDENTITY [PRIMARY, 3, MSG_BRF_HWM4_OBJ3]` gated on `ANIM_STATE COMPLETION_COUNT 5` over the six
+  `deploy_gmzep_lbroad11..32` in `INVALID`
+  (`extracted/C2B/M04/zrdr/objectives.zrd.json:755`); completing it naps `OBJECTIVE33`, which wakes
+  `OBJECTIVE14`, which naps `OBJECTIVE32` `INSTANTWIN`. Nothing else wakes any of the three. Failing
+  it loses nothing either — `OBJECTIVE22` `INSTANTLOSS` is woken only by `OBJECTIVE21`, three of the
+  *player's own* `piratezep` gasbags gone — so the mission simply never ends.
+  Only `destroy_gmzep_lbroadNN-gunback` (activation `WeaponHit`, health 60) writes those `INVALID`
+  states, and `killgmzep` invalidates only `gmzep_rocksleft`/`gmzep_rocksright`, so no zeppelin death
+  credits the objective. The gasbag kill is reachable independently: `geminizep` authors five healthy
+  zones with `num_healthy_required 3`, so three torpedoes kill it with every cannon untouched.
+  The two logged runs are the proof, and they differ only in order.
+  **Won:** `lbroad21` destroyed then `objective 11 completed` one line later, `lbroad31` destroyed
+  then `objective 12 completed`, the Gemini killed, and the last bay then shot on a floating wreck
+  the author put "a meter above the water level".
+  **Blocked:** no cannon destroyed at all, gasbags 2, 3 and 1 killed, `geminizep DESTROYED —
+  survivors 2 < required 3`, `objective 11` woken at 72.1 s and never completed, and no mission end
+  of any kind in the rest of the log.
+  The author's own account of the difference: "the wreck sank under water blocking the mission
+  because only the cannons count", and asked whether rounds reach a submerged gun, "stops at
+  surface" — which `Projectile.SurfaceIsWater` confirms, water being a real collider.
+  *Fix shape:* not settled, and the choice matters. The wreck's rest is the contact tier parking the
+  body's ORIGIN on what it lands on, which is decoded behaviour
+  ([`docs/org/objectMotion.md`](org/objectMotion.md):40 — `FUN_004cf200` hands the column query the
+  flying node's origin, with no bounding-box term), so raising the rest height is not obviously
+  right. The authored route is `killgmzep/breakunder`, which switches `underneath` inactive.
+  ⚠ **Do not make a gasbag kill credit primary 3.** `MSG_BRF_HWM4_OBJ3` reads "Destroy the GEMINI by
+  shooting the open cannon hatches", and the original's own death def credits nothing, so crediting
+  it would invent a win condition.
+  *⚠ Traps:* **`killgmzep` has never run under test.** `CSVM/src/Testing/ZeppelinBreakupSuites.cs:11,22`
+  pins C1/M04 and `piratezep` only, asserts six bags where the Gemini has five, and would fail its
+  12-of-12 engine check on a 14-engine hull, so a green suite is no evidence about this ship. There
+  is also no recovery for a player already in this state: `--debug-objective=N` drives `INACTIVEn`
+  conditions only and cannot satisfy an `ANIM_STATE` objective, and the campaign's four-attempt skip
+  offer needs four RECORDED failures, which an unwinnable-and-unlosable mission never produces.
+  *Open question for whoever takes this:* in the winning run `objective 13` completed with only TWO
+  bays destroyed. Two destroys invalidate four `deploy_*` defs and the objective is authored to need
+  five, so something else supplied the fifth; find it before changing any counting.
+  *Cross-refs:* `BL-695` (the same ladder crediting with no cannon touched at all), `BL-639`,
+  `BL-640`, `BL-668`, `CAP-55`, `PT-103`.
+
+- `BL-695` `[Bug]` **CM14's cannon-hatch ladder can complete with no Gemini cannon destroyed at
+  all.** *Evidence (traced from a sortie log):* on one CM14 run the whole primary ladder completed
+  without a single `[anim] damage:` line on any `lbroadNN` node anywhere in the mission window, and
+  with the Gemini still alive at the end (`engines 9/14`, never `DESTROYED`); the mission was Won at
+  208.7 s through `hooked_to_klondike`. The six `lbroad11..32` guns deploy normally in that window,
+  so the nodes exist and are reachable. The completions track the hull's ENGINE count rather than
+  its hatches: `objective 12` (authored `COMPLETION_COUNT 3`) completes on the line after
+  `geminizep' engines 11/14`, the third engine kill, and `objective 13` (`COMPLETION_COUNT 5`) on
+  the line after `engines 9/14`, the fifth. Ten `wep_07` FLAK launches and five engine kills over the
+  window, no hatch damage.
+  This is the mirror of `BL-694`: the same gate, credited by the wrong destructible set. A second
+  logged run shows the ladder working correctly off real hatch kills, so the fault is conditional
+  rather than constant, and finding what distinguishes the two runs is the first step.
+  *⚠ Traps:* do not "fix" this by tightening the count before `BL-694`'s open question is answered —
+  that run completed `objective 13` on four invalidations where five are authored, and the two
+  anomalies may share a cause. Neither should be changed on its own.
+  *Cross-refs:* `BL-694`, `BL-639`, `PT-103`.
 
 ## Tooling, platform & docs
 
