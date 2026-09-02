@@ -701,7 +701,11 @@ controls: `.\RunDev.ps1 --presentation=original`, Instant Action, a contents row
 the pause board's Exit must re-enter Original's top level with the setup kept; and Built-in's own
 wizard flown once end to end.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The plan tree with C21 and C22 merged (thirteen conflicting files resolved as the
+union of both items, every hunk of each side checked present) passed the complete `.\RunTests.ps1`
+(2943 units, 207 engine suites across 4 shards, 18 goldens hash-identical, engine errors clean,
+142.6s). The four representative Original launches reach the launcher's sink; a built world from
+them is owed at the controls.
 
 **⚠ Traps.** Shared feature state does not imply a shared wizard. Preserve the ace skip in Built-in;
 Original follows its own evidenced navigation.
@@ -835,7 +839,10 @@ Original's Free Flight and Dogfight screens, the joined pad walking, selecting a
 Back unjoining it, FLY launching two seats with each pad flying its own pane, and a pad
 unplugged mid-setup leaving its seat.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The plan tree with C21 and C22 merged passed the complete `.\RunTests.ps1` (2943 units,
+207 engine suites across 4 shards with both player-setup suites among them, 18 goldens
+hash-identical, engine errors clean, 142.6s). The hardware pass with a real pad remains owed at the
+controls, as the Verify paragraph states.
 
 **⚠ Traps.** A menu input source is not synonymous with a pad. Presentation-specific join gestures
 must converge on one shared roster and launch gate. The Plane screen lists `user://` custom
