@@ -172,9 +172,38 @@ public class MenuLayoutReaderTests
                 + "#define IDS_PI_VIEW 203\n#define IDS_PI_TABLE 204\n#define IDS_PI_TABLEINSTR 205\n"
                 + "#define IDS_PI_STORYINSTR 206\n#define IDS_PI_PILOT 207\n#define IDS_PI_WINGMEN 208\n"
                 + "#define IDS_PI_PLANE 209\n#define IDS_PI_MISSION 210\n#define IDS_PI_ENV 211\n"
-                + "#define IDS_PI_ENEMY 212\n#define IDS_PI_CONTINUED 213\n#define IDS_PI_GOBACK 214\n",
+                + "#define IDS_PI_ENEMY 212\n#define IDS_PI_CONTINUED 213\n#define IDS_PI_GOBACK 214\n"
+                + "#define IDS_OK 220\n#define IDS_CANCEL 221\n#define IDS_PN_TITLE 222\n#define IDS_PN_DEFAULTLOADOUT 223\n"
+                + "#define IDS_PX_B_AIRFRAME 224\n#define IDS_PX_B_ENGINE 225\n#define IDS_PX_B_ARMOR 226\n#define IDS_PX_B_GUNS 227\n"
+                + "#define IDS_PX_B_HARDPOINTS 228\n#define IDS_PX_B_PAINT 229\n#define IDS_PUR_B_PURCHASE 230\n#define IDS_PS_B_SELL 231\n"
+                + "#define IDS_PS_B_EXPORT 232\n#define IDS_AF_TITLE 233\n#define IDS_PX_PLANECOST_TITLE 234\n#define IDS_PX_AIRFRAME_TITLE 235\n"
+                + "#define IDS_HA_TITLE 236\n#define IDS_PUR_TITLE 237\n#define IDS_PUR_TOTALS_TITLE 238\n#define IDS_PX_PLANENAME_TITLE 239\n"
+                + "#define IDS_PX_WEIGHTCAPACITY_TITLE 240\n#define IDS_PX_CURRENTWEIGHT_TITLE 241\n#define IDS_PX_CASH_TITLE 242\n",
             Strings = new Dictionary<int, string>
             {
+                [220] = "OK",
+                [221] = "Cancel",
+                [222] = "PLANE NAME",
+                [223] = "Load Default Configuration",
+                [224] = "Airframe",
+                [225] = "Engine",
+                [226] = "Armor",
+                [227] = "Guns",
+                [228] = "Hardpoints",
+                [229] = "Paint",
+                [230] = "Purchase Now",
+                [231] = "Sell",
+                [232] = "Export",
+                [233] = "1) SELECT AN AIRFRAME",
+                [234] = "PLANE COST:  $%1!d!",
+                [235] = "AIRFRAME: %1!s!",
+                [236] = "INVENTORY",
+                [237] = "7) CONSTRUCTION TOTALS",
+                [238] = "Totals",
+                [239] = "PLANE NAME:",
+                [240] = "[CSB11I]WEIGHT CAPACITY:\n %1!d! lbs.",
+                [241] = "[CSB11I]CURRENT WEIGHT:\n %1!d! lbs.",
+                [242] = "$$$ on Hand:",
                 [200] = "Change Plane",
                 [201] = "Weapons",
                 [202] = "Fly",
@@ -200,6 +229,11 @@ public class MenuLayoutReaderTests
                 "GRAPHICS/PI_B_Build.png", "GRAPHICS/PI_B_Paper.png", "GRAPHICS/PI_B_Radio.png",
                 "GRAPHICS/PI_B_Up.png", "GRAPHICS/PI_B_Down.png", "GRAPHICS/PI_B_ScrollBar.png",
                 "GRAPHICS/PI_B_ScrollUp.png", "GRAPHICS/PI_B_ScrollDown.png",
+                "GRAPHICS/PH_Back.jpg", "GRAPHICS/PH_NamePanel.png", "GRAPHICS/PH_B_OkCancel.png", "GRAPHICS/PH_B_Check8.png",
+                "GRAPHICS/PH_Bar.png", "GRAPHICS/PH_B_Cancel.png", "GRAPHICS/PH_B_Ready.png", "GRAPHICS/PH_B_Sell.png",
+                "GRAPHICS/PH_Tab.png", "GRAPHICS/PH_B_ScrollBar.png", "GRAPHICS/PH_B_ScrollUp.png", "GRAPHICS/PH_B_ScrollDown.png",
+                "GRAPHICS/PH_B_DropUp.png", "GRAPHICS/PH_B_DropDown.png", "GRAPHICS/PH_Rule.png", "GRAPHICS/PH_Decals.tga",
+                "GRAPHICS/PH_B_Paper.png", "GRAPHICS/PH_Inventory.jpg", "GRAPHICS/PH_PlaneIcons.png", "GRAPHICS/PH_B_Done.png",
             },
         };
         return MenuLayout.Parse(MenuLayoutDecoder.ToJson(MenuLayoutDecoder.Decode(input)));

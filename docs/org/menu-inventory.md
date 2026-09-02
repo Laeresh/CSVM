@@ -443,6 +443,7 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 | (none: remake-only) | Dogfight, Chapter, Plane | none | none | none | **Original's Dogfight door and screen, of our design under Decision 11.** The door sits under the Free Flight door in the same plaque convention; the screen is the Free Flight screen's shape over the Dogfight gate (a second seat must join and confirm before FLY stands). The original's Multiplayer is network play and ships no split-screen Dogfight, so nothing here is decoded |
 | (none: remake-only) | the join strip and per-seat picks | none | none | none | **Original's join flow, of our design.** Start on an unclaimed pad joins a seat on either sortie screen (the same gesture and pad bookkeeping as Built-in's, through `MenuSeatDevices`); the joined pad walks its own cursor on the aircraft column, selects and confirms with A, and leaves with B while browsing; seat 0's mouse, keyboard or pad picks the map and the aircraft and presses FLY, which is its own confirmation. The original has no join gesture |
 | (none: remake-only) | Options | none | none | none | **Original's minimal Options screen**, opened by the Preferences row until the decoded Preferences screens exist: the presentation toggle, APPLY, BACK, in the same plaque convention |
+| (none: remake-only) | Mode's Build Custom Plane, the Instant Action pick's door | none | none | none | **Original's BUILD PLANE door and its wallet-free entry, of our design under Decision 11.** The door sits under the Dogfight door in the same plaque convention and opens the decoded name screen, as the cabin's `PC_B_PLANEX` edge does, over the saved-plane store with no wallet; the original reaches plane construction only from the cabin and the Instant Action screen's `IA_B_BUILD`, whose edge the layout does not state, so that button stays disabled. What the cabin path would supply and this door cannot (the wallet, the profile's ownership) is left out rather than invented: the hub shows no cash note, prices are never checked against funds, and the hub's READY and CANCEL wear the export strips the Instant Action stills show (`PX_B_ReadyToExport`, `PX_B_CancelExport`), without their $50000 figure, whose enforcement is undecoded |
 | Preferences | (none; Options is E41's addition) | 14 rows | no | **none** | layout only |
 | GameOptions | (none) | 13 rows | no | **none** | layout only; `BL-570` wants the difficulty row |
 | Audio | (none) | 19 rows | no | **none** | layout only; three preview loops are script-bound; `BL-455` |
@@ -459,16 +460,16 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 | ScrapBook_TOC | `PreviousMissions` | 8 rows | same | `Campaign CAP-41 Previous Mission 1/2.png` | full |
 | ScrapbookZoom | `ScrapbookZoom` | 83 rows | same | `Campaign Scrapbook CM02 Mission select….png` | full |
 | (Briefing, a `zrdr` dialog, not a script) | `Briefing` | none | [`briefing.md`](../formats/briefing.md) | `Campaign Briefing.png` | full |
-| Hangar | `HangarScreen.PlaneSelection` | 16 rows | [`hangar.md`](hangar.md) | `CustomPlane PlaneSelection.png` | callbacks and economy decoded; navigation only from the layout |
-| PlaneName | `Name` | 8 rows | partly | **none** | the edit box's font and colours are authored; nothing about the validator here |
-| PlaneConstruction | (no counterpart; Built-in has no hub) | 47 rows | [`hangar.md`](hangar.md) | `Campaign CAP-40 Plane Construction 1/2.png` | composition; the tab bar's own behaviour is unseen |
-| AirFrame | `Airframe` | 4 rows | [`hangar.md`](hangar.md) | none | the airframe stat table is decoded; the screen is four widgets over it |
-| Engine | `Engine` | 4 rows | same | none | as above |
-| Armor | `Armour` | 14 rows | same | none | as above |
-| Guns | `Guns` | 14 rows | same | none | as above |
-| HardPoints | `Hardpoints` | 9 rows | same | none | as above |
-| Paint | `Paint` | 27 rows | same + [`rof.md`](../formats/rof.md) | 8 `CustomPlane Paint*.png` | composition well covered by the paint stills; the pattern pickers' behaviour is not |
-| Purchase | `Purchase` | 29 rows | same | none | the purchase gate and cost are decoded from the executable |
+| Hangar | `HangarScreen.PlaneSelection` | 16 rows | [`hangar.md`](hangar.md) | `CustomPlane PlaneSelection.png` | callbacks and economy decoded; navigation only from the layout. **Built as Original's INVENTORY**, the hub's SELL PLANES destination (a remake reading: `PX_B_Sell` states no edge): `HA_BACKGROUND`, the title and prompt, `HA_D_PILOTPLANE` over the shared feature's saved planes, the picked plane's `HA_P_PILOTPLANE` frame, name, agility, armour, value (1258) and guns, `HA_B_SELLP` selling or deleting through the feature, `HA_B_EXPORTP` drawn disabled, `HA_B_DONE` back to the tab |
+| PlaneName | `Name` | 8 rows | partly | **none** | the edit box's font and colours are authored; nothing about the validator here. **Built as Original's name screen**: `PN_E_NAME` fed by seat 0's typed characters under the shared feature's character set and 32-character cap, `PN_B_DEFAULT` (checked as authored) choosing the default configuration or a bare airframe, `PN_B_OK` live once a name stands with langui 203 shown until then, `PN_B_CANCEL` dropping the build; the original's `MaxChars` of 16 is not applied, the saved-plane index's 32 is |
+| PlaneConstruction | (no counterpart; Built-in has no hub) | 47 rows | [`hangar.md`](hangar.md) | `Campaign CAP-40 Plane Construction 1/2.png` | composition; the tab bar's own behaviour is unseen. **Built as Original's Plane Construction hub**: the background, the plane at the `PX_P_PLANE` corner (the airframe's blueprint, or the `PX_ICON` set tinted with the picked colours), PLANE NAME, PLANE COST as the running total, AIRFRAME, WEIGHT CAPACITY, CURRENT WEIGHT, the agility and armour words with their `PX_BarGraph` segments, the cash note over a wallet only, the six `PX_Tab` tabs as siblings with the standing one disabled, `PX_B_Sell`, `PX_B_Ready` and `PX_B_Cancel`. What the data does not settle is listed under Part 4 for `CAP-53` |
+| AirFrame | `Airframe` | 4 rows | [`hangar.md`](hangar.md) | none | the airframe stat table is decoded; the screen is four widgets over it. **Built as the hub's airframe tab**: `AF_D_AIRFRAME` picking through the shared feature and raising the langui 206 ask as a dialog, `AF_T_AIRFRAME` and `AF_S_AIRFRAMEDESC` following the focused airframe |
+| Engine | `Engine` | 4 rows | same | none | as above. **Built as the engine tab** over `EN_D_ENGINE` (six engines then None) |
+| Armor | `Armour` | 14 rows | same | none | as above. **Built as the armor tab** over `AR_D_POINT0..3` (None then 5 to 60 units in fives) |
+| Guns | `Guns` | 14 rows | same | none | as above. **Built as the guns tab** over `GN_D_GUN0..3` (the eleven-row cycle) with the airframe's slot titles |
+| HardPoints | `Hardpoints` | 9 rows | same | none | as above. **Built as the hardpoints tab** over `HP_D_POINT0..1` |
+| Paint | `Paint` | 27 rows | same + [`rof.md`](../formats/rof.md) | 8 `CustomPlane Paint*.png` | composition well covered by the paint stills; the pattern pickers' behaviour is not. **Built as the paint tab**: `PT_D_PATTERN` over the wearable patterns, `PT_D_COLORS0..2` as swatches in an 18-row window, `PT_D_SHADES0..2`, `PT_D_DECALS0..2` as `PT_P_DECALS` tiles in a two-row window |
+| Purchase | `Purchase` | 29 rows | same | none | the purchase gate and cost are decoded from the executable. **Built as the hub's totals page**, READY TO PURCHASE's destination: the column heads, one line per priced component at the authored lines and text lists, the totals, `PUR_T_PROBLEMS` in the commit's words, `PUR_B_PURCHASE` live while the feature can commit |
 | MessageBox | (the `_error` line) | 16 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | two campaign dialogs | the `@globals@OR` parameter block and the button masks are decoded |
 
 ⚠ **Built-in has no counterpart for Preferences, GameOptions, Audio, Video, ControlsPrefs, Keys or
@@ -575,6 +576,13 @@ Each of these is a divergence a reader could mistake for a decode, so each is na
   gives Original a Dogfight door under the Free Flight door, a Dogfight screen in the Free Flight
   screen's shape, and Built-in's own join gesture (Start on a free pad) with the seats, picks and
   gate shared through the player-setup feature; all marked remake-only in the census above.
+- **Original's BUILD PLANE door and its wallet-free hub entry have no original screen behind them.**
+  The original reaches plane construction from the cabin (`PC_B_PLANEX`, to `PlaneName`) and from
+  the Instant Action screen's `IA_B_BUILD`, whose edge no layout row states; the remake-only rule
+  under Decision 11 gives Original a door under the Dogfight door that opens the same name screen
+  with no wallet, the hub then wearing the export strips the Instant Action stills show and no cash
+  note, and `IA_B_BUILD` stays disabled until its destination is evidenced. Marked remake-only in
+  the census above.
 
 ### What the Original presentation implements from the data, and what the captures must confirm
 
@@ -619,6 +627,31 @@ the Player/Wingman radio hides at zero wingmen and what WEAPON LOADOUT opens (Or
 radio and draws the button disabled); and whether keyboard or pad input reaches the screen at all
 (Original walks the widgets in two columns and steps a dropdown's value sideways, a remake
 equivalence).
+
+The plane-construction screens are built from what the layout and the stills evidence: the
+`[@PlaneConstruction@]` chrome and the six tab sections at their authored positions over
+`PX_BackGround`, the seven `0x1100` edges as a tab bar (every tab a sibling, `PX_B_Ready` to
+Purchase), the `PX_Tab` strip's four frames and its `ColorDisabled`/`ColorActive` label tail, a
+dropdown's box `Width` wide and `ItemHeight` high with `TotalDisplayed` as its window and its
+`DropUp`/`DropDown` arrows, the `PX_ICON_<airframe>_<pattern>_0..3` layers as the plate and three
+region masks (the paint composite the stills show), `PT_P_DECALS`' fifty frames as the decal
+tiles, the cabin's `PC_B_PLANEX` edge to `PlaneName` first, the `PN_B_DEFAULT` box authored
+checked, langui 203 as the name screen's refusal and 206 as the airframe-switch ask, and the
+economy and paint tables (`hangar.md`). Everything else is remake-only until filmed. `CAP-53` must
+confirm: whether a tab is ever disabled (Original disables only the standing tab, drawn in its
+`ColorDisabled` frame); where the running total shows (Original writes it into `PX_T_PLANECOST`
+over the blueprint and updates it on every pick); whether leaving a tab commits or the whole build
+commits at Purchase (Original commits only on `PUR_B_PURCHASE`, and CANCEL drops every pick); what
+SELL PLANES does (Original opens the `[@Hangar@]` INVENTORY with Sell, a disabled Export and Done
+back to the tab); what Load Default Configuration loads (Original starts the build on the
+Devastator with its stock engine, guns, hardpoints and armour when checked, on a bare airframe when
+cleared); whether the airframe switch asks with string 206 as a message box (Original raises it as
+a dialog over the page with OK and Cancel); how an opened dropdown lists and scrolls (Original
+lists under the box in the row's `TotalDisplayed` window with the list's own arrows); whether the
+Instant Action path's hub reads READY TO EXPORT and shows `$$$ on $50000` (Original wears the
+export strips on the wallet-free door and shows no figure, since no decode says what the $50000
+gates); and whether keyboard or pad input reaches the hub at all (Original walks the page's rows
+then the tab bar and steps a dropdown's value sideways, a remake equivalence).
 - **Built-in's Chapter screen is ours.** The original picks a map through Instant Action's
   environment dropdown; there is no standalone chapter list.
 - **The original's plane construction is a tab bar; Built-in's is a linear nine-screen walk.**

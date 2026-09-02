@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using CSVM.Flight;
+using CSVM.Mech3;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
@@ -31,6 +33,11 @@ internal static class MenuSuiteHost
         host.Features.Add(new FreeFlightFeature());
         host.Features.Add(InstantActionFeature.ForDataRoot(dataRoot));
         host.Features.Add(new PlayerSetupFeature());
+        // The hangar reads its labels and stock defaults the way the launcher wires them: the langui
+        // table, the stock fits on first need and the zrdr scope the data root carries.
+        string zrdr = SessionPaths.PreferUnzipped(System.IO.Path.Combine(dataRoot, "extracted", "zrdr.zip"));
+        host.Features.Add(new HangarFeature(UiStrings.TryLoad(dataRoot) ?? UiStrings.Empty,
+            PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), zrdr));
     }
 
     /// <summary>A launchscreen over a bare host, for a suite that drives the screens and reads

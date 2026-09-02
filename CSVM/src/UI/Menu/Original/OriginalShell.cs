@@ -3,11 +3,13 @@ using System.Collections.Generic;
 
 namespace CSVM.UI.Menu.Original;
 
-/// <summary>The Original presentation's screens. The top level and the Instant Action screen are
-/// decoded; the others are remake-only screens composed in the decoded chrome's conventions.</summary>
+/// <summary>The Original presentation's screens. The top level, the Instant Action screen and the
+/// hangar's screens are decoded; the others are remake-only screens composed in the decoded
+/// chrome's conventions. The hangar's members sit last, from <see cref="PlaneName"/> on, which is
+/// what the shell reads its hangar branch off.</summary>
 public enum OriginalScreen
 {
-    /// <summary>The main menu: the decoded <c>[@MainMenu@]</c> rows plus the Free Flight and Dogfight doors.</summary>
+    /// <summary>The main menu: the decoded <c>[@MainMenu@]</c> rows plus the Free Flight, Dogfight and hangar doors.</summary>
     TopLevel,
 
     /// <summary>The remake-only Free Flight screen: a chapter list, the aircraft list, the seats, BACK and FLY.</summary>
@@ -22,6 +24,33 @@ public enum OriginalScreen
     /// <summary>The decoded <c>[@InstantAction@]</c> setup screen: the Table of Contents, the
     /// dropdowns, the paged enemy rows, the radio pair and its buttons.</summary>
     InstantAction,
+
+    /// <summary>The decoded <c>[@PlaneName@]</c> screen: the edit box, the defaults box, OK and Cancel.</summary>
+    PlaneName,
+
+    /// <summary>The Plane Construction hub with the <c>[@AirFrame@]</c> tab on its page.</summary>
+    HangarAirframe,
+
+    /// <summary>The hub with the <c>[@Engine@]</c> tab.</summary>
+    HangarEngine,
+
+    /// <summary>The hub with the <c>[@Armor@]</c> tab.</summary>
+    HangarArmor,
+
+    /// <summary>The hub with the <c>[@Guns@]</c> tab.</summary>
+    HangarGuns,
+
+    /// <summary>The hub with the <c>[@HardPoints@]</c> tab.</summary>
+    HangarHardpoints,
+
+    /// <summary>The hub with the <c>[@Paint@]</c> tab.</summary>
+    HangarPaint,
+
+    /// <summary>The hub with the <c>[@Purchase@]</c> totals page, READY TO PURCHASE's destination.</summary>
+    HangarPurchase,
+
+    /// <summary>The <c>[@Hangar@]</c> inventory, SELL PLANES' destination.</summary>
+    HangarInventory,
 }
 
 /// <summary>How a row draws and reacts.</summary>
@@ -40,8 +69,12 @@ public enum OriginalRowKind
     /// sideways step picks the next value.</summary>
     Dropdown,
 
-    /// <summary>One button of a decoded radio pair, drawn from an eight-state strip.</summary>
+    /// <summary>One button of a decoded radio pair, or a checkbox, drawn from an eight-state strip.</summary>
     Radio,
+
+    /// <summary>A decoded edit box: its label is the text typed so far, and the seat's typed
+    /// characters feed it while its screen shows.</summary>
+    TextField,
 }
 
 /// <summary>One interactive element of a screen in authored 800x600 pixels: what it is, where it
@@ -67,9 +100,10 @@ public sealed record OriginalInks(
 
 /// <summary>
 /// The Original presentation's screen graph, engine-free: the decoded top level with the
-/// remake-only Free Flight and Dogfight doors, the two sortie screens over the shared player
-/// setup (their own partial file), the minimal Options screen and the decoded Instant Action
-/// screen (its own partial file), driven by each seat's semantic commands and composed into a
+/// remake-only Free Flight, Dogfight and hangar doors, the two sortie screens over the shared
+/// player setup (their own partial file), the minimal Options screen, the decoded Instant Action
+/// screen (its own partial file) and the decoded hangar screens over the shared hangar feature
+/// (their own partial file), driven by each seat's semantic commands and composed into a
 /// <see cref="ComposedBoard"/> in the authored 800x600 space. Seat 0's pointer arrives already
 /// mapped into that space; hovering a live row moves the focus onto it, so keyboard, pad and
 /// pointer share one cursor. Every rectangle and art name comes from the layout; the art's pixel
@@ -144,12 +178,12 @@ public sealed partial class OriginalShell
     private int _pickedChapter = -1;
     private string _choice = PresentationId.Original.Value;
 
-    /// <summary>A shell over <paramref name="layout"/> and the shared Free Flight, player setup
-    /// and Instant Action features. <paramref name="measure"/> answers an art name with its
-    /// strip's pixel size, or null when the file is not there; <paramref name="flightDevices"/>
-    /// answers a seat with the devices its launch binds (none when omitted); the chapters default
-    /// to <see cref="OriginalRosters"/>; a shell given no Instant Action feature configures a
-    /// private one over the built-in defaults, for a test that reads the other screens.</summary>
+    /// <summary>A shell over <paramref name="layout"/> and the shared features. <paramref name="measure"/>
+    /// answers an art name with its strip's pixel size, or null when the file is not there;
+    /// <paramref name="flightDevices"/> answers a seat with its launch's devices (none when omitted);
+    /// the chapters default to <see cref="OriginalRosters"/>; no Instant Action feature means a
+    /// private one over the built-in defaults; the hangar door stands only when both
+    /// <paramref name="hangar"/> and the store <paramref name="planes"/> it opens over are given.</summary>
     public OriginalShell(
         MenuLayout layout,
         FreeFlightFeature free,
@@ -157,7 +191,9 @@ public sealed partial class OriginalShell
         Func<string, (int Width, int Height)?> measure,
         Func<PlayerSeat, IReadOnlyList<int>>? flightDevices = null,
         IReadOnlyList<OriginalChapter>? chapters = null,
-        InstantActionFeature? instantAction = null)
+        InstantActionFeature? instantAction = null,
+        HangarFeature? hangar = null,
+        CSVM.Flight.CustomPlaneStore? planes = null)
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _free = free ?? throw new ArgumentNullException(nameof(free));
@@ -166,10 +202,13 @@ public sealed partial class OriginalShell
         _flightDevices = flightDevices ?? (_ => Array.Empty<int>());
         _chapters = chapters ?? OriginalRosters.Chapters;
         _instantAction = instantAction ?? new InstantActionFeature(_ => Mech3.InstantAction.Defaults());
+        _hangar = hangar;
+        _planes = planes;
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
         Inks = ReadInks(layout, plaqueRow);
         InstantActionInks = ReadInstantActionInks(layout);
+        HangarInks = ReadHangarInks(layout);
         _activePointer = new BoardArt(BoardArtLibrary.Ui, PointerArt(layout, "activepointerz.png"));
         _passivePointer = new BoardArt(BoardArtLibrary.Ui, PointerArt(layout, "passivepointerz.png"));
         for (int i = 0; i < _focus.Length; i++)
@@ -237,7 +276,7 @@ public sealed partial class OriginalShell
         ArgumentNullException.ThrowIfNull(commands);
         var cues = new List<string>();
         MenuExit? exit = null;
-        bool changed = false;
+        bool changed = TypeName(commands);
         var rows = Rows;
         int focus = EnsureFocus(rows);
 
@@ -272,7 +311,7 @@ public sealed partial class OriginalShell
                 rows = Rows;
                 focus = EnsureFocus(rows);
             }
-            else if (pointer.Clicked && over < 0 && CloseInstantActionDropdown())
+            else if (pointer.Clicked && over < 0 && (CloseInstantActionDropdown() || CloseHangarDropdown()))
             {
                 // A click off an open list closes it and picks nothing.
                 changed = true;
@@ -290,8 +329,14 @@ public sealed partial class OriginalShell
         if (commands.MoveX != 0)
         {
             // On the Instant Action screen a sideways step on a dropdown or a radio changes its
-            // value; anywhere else it crosses columns.
+            // value, in the hangar it steps a dropdown or walks the tab bar; anywhere else it
+            // crosses columns.
             if (_screen == OriginalScreen.InstantAction && StepInstantActionValue(rows, focus, commands.MoveX))
+            {
+                rows = Rows;
+                focus = EnsureFocus(rows);
+            }
+            else if (IsHangarScreen && StepHangarSideways(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
@@ -331,7 +376,8 @@ public sealed partial class OriginalShell
         var plaques = new List<BoardPlaque>();
         var overlays = new List<BoardPanel>();
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
-        if (_screen != OriginalScreen.InstantAction && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
+        bool ownPage = _screen == OriginalScreen.InstantAction || IsHangarScreen;
+        if (!ownPage && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
         {
             pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, logo.Art[0], logo.Frames), logo.Int("X"), logo.Int("Y")));
         }
@@ -346,6 +392,9 @@ public sealed partial class OriginalShell
             case OriginalScreen.InstantAction:
                 ComposeInstantAction(rows, focus, backdrop, pictures, fills, lines, plaques, overlays);
                 break;
+            case var _ when IsHangarScreen:
+                ComposeHangar(rows, focus, backdrop, pictures, fills, lines, plaques, overlays);
+                break;
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:
                 ComposeSortie(rows, lines);
@@ -358,7 +407,7 @@ public sealed partial class OriginalShell
                 break;
         }
 
-        for (int i = 0; _screen != OriginalScreen.InstantAction && i < rows.Count; i++)
+        for (int i = 0; !ownPage && i < rows.Count; i++)
         {
             var row = rows[i];
             if (!row.Visible)
@@ -570,6 +619,9 @@ public sealed partial class OriginalShell
                     case DogfightKey:
                         Open(OriginalScreen.Dogfight);
                         break;
+                    case HangarKey:
+                        OpenHangar();
+                        break;
                     case "MM_B_INSTANTACTION":
                         OpenInstantAction();
                         break;
@@ -586,6 +638,8 @@ public sealed partial class OriginalShell
                 return ActivateSortie(row);
             case OriginalScreen.InstantAction:
                 return ActivateInstantAction(row);
+            case var _ when IsHangarScreen:
+                return ActivateHangar(row);
             case OriginalScreen.Options:
                 switch (row.Key)
                 {
@@ -627,6 +681,11 @@ public sealed partial class OriginalShell
             return null;
         }
 
+        if (IsHangarScreen)
+        {
+            return BackHangar();
+        }
+
         Open(OriginalScreen.TopLevel);
         return null;
     }
@@ -639,6 +698,7 @@ public sealed partial class OriginalShell
             case OriginalScreen.TopLevel:
                 rows.Add(TextButton(FreeFlightKey, "FREE FLIGHT", DoorX, DoorY, true, 0));
                 rows.Add(TextButton(DogfightKey, "DOGFIGHT", DoorX, DogfightDoorY, true, 0));
+                rows.Add(TextButton(HangarKey, "BUILD PLANE", DoorX, HangarDoorY, _hangar != null && _planes != null, 0));
                 var main = _layout.Screen(OriginalAvailability.MainMenuSection);
                 foreach (string key in TopLevelButtons)
                 {
@@ -651,6 +711,9 @@ public sealed partial class OriginalShell
                 break;
             case OriginalScreen.InstantAction:
                 BuildInstantActionRows(rows);
+                break;
+            case var _ when IsHangarScreen:
+                BuildHangarRows(rows);
                 break;
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:

@@ -30,12 +30,13 @@ public class OriginalShellTests
 
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
         Assert.Equal(
-            new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey, "MM_B_CAMPAIGN", "MM_B_INSTANTACTION", "MM_B_MULTIPLAYER", "MM_B_PREFERENCES", "MM_B_CREDITS", "MM_B_QUIT" },
+            new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey, OriginalShell.HangarKey, "MM_B_CAMPAIGN", "MM_B_INSTANTACTION", "MM_B_MULTIPLAYER", "MM_B_PREFERENCES", "MM_B_CREDITS", "MM_B_QUIT" },
             shell.Rows.Select(r => r.Key));
         Assert.Equal(OriginalShell.FreeFlightKey, shell.FocusedKey);
         // The decoded rows with no remake destination yet are disabled; Instant Action,
-        // Preferences (the Options door) and Quit react.
-        Assert.Equal(new[] { true, true, false, true, false, true, false, true }, shell.Rows.Select(r => r.Enabled));
+        // Preferences (the Options door) and Quit react. The hangar door stands only over a
+        // saved-plane store, which this shell has none of.
+        Assert.Equal(new[] { true, true, false, false, true, false, true, false, true }, shell.Rows.Select(r => r.Enabled));
         // A decoded button's rectangle is its authored corner and its measured strip's frame.
         var quit = shell.Rows.Single(r => r.Key == "MM_B_QUIT");
         Assert.Equal((280f, 530f, 240f, 50f), (quit.X, quit.Y, quit.Width, quit.Height));
@@ -58,7 +59,7 @@ public class OriginalShellTests
         step = shell.Step(Pointer(290f, 290f));
         Assert.Equal("MM_B_QUIT", shell.FocusedKey);
         Assert.Empty(step.Cues);
-        Assert.Equal(2, shell.Hover);
+        Assert.Equal(3, shell.Hover);
     }
 
     [Fact]
@@ -268,7 +269,7 @@ public class OriginalShellTests
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(), _ => null);
 
         var rows = shell.Rows;
-        Assert.Equal(new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey }, rows.Select(r => r.Key));
+        Assert.Equal(new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey, OriginalShell.HangarKey }, rows.Select(r => r.Key));
         var board = shell.Compose();
         Assert.Empty(board.Plaques);
         Assert.Contains(board.Lines, l => l.Text == "FREE FLIGHT");

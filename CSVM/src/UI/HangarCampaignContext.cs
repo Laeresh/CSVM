@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Session;
+using CSVM.UI.Menu;
 
 namespace CSVM.UI;
 
@@ -18,7 +19,7 @@ namespace CSVM.UI;
 /// when it grants one: the original's class-2 record, which its sell handler refuses (langui 704
 /// <c>IDS_PS_SPECIALPLANE</c>).</para>
 /// </summary>
-public sealed class HangarCampaignContext
+public sealed class HangarCampaignContext : IHangarWallet
 {
     private readonly CampaignProfileStore _store;
     private readonly CustomPlaneStore _planes;
@@ -51,6 +52,10 @@ public sealed class HangarCampaignContext
     /// <c>FUN_00410120</c> makes (<c>DAT_0064b678 + 1</c> against the threshold).</summary>
     public bool IsAirframeAvailable(int airframe) =>
         Profile.MissionsCompleted + 1 >= HangarEconomy.Airframes[airframe].Availability;
+
+    /// <summary>The airframe of the named owned plane, or null when the profile does not own it.</summary>
+    public int? OwnedAirframe(string planeName) =>
+        Profile.Planes.FirstOrDefault(p => string.Equals(p.Name, planeName, StringComparison.OrdinalIgnoreCase))?.Airframe;
 
     /// <summary>Whether the named owned plane is an unsellable reward aircraft.</summary>
     public bool IsSpecial(string planeName) =>

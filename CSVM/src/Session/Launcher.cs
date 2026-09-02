@@ -1004,6 +1004,8 @@ public partial class Launcher : Node3D
         // Before the seat: the host lends the setup feature's seat list once the feature is in,
         // so seat 0 has to be joined through it.
         host.Features.Add(new PlayerSetupFeature());
+        host.Features.Add(new HangarFeature(UiStrings.TryLoad(_dataRoot) ?? UiStrings.Empty,
+            PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), _zrdrPath));
         host.AddSeat(seat);
         string? saved = OptionsStore.UserOptions().Load().MenuPresentation;
         string? reason = host.Select(_spec.ForceBuiltInPresentation, _spec.PresentationOverride, saved);

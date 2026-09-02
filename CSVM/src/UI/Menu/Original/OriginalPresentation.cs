@@ -31,6 +31,25 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the Instant Action screen.</summary>
     public const string InstantActionAid = "instant-action";
 
+    /// <summary>The aid value that opens the hangar's name screen on a fresh build.</summary>
+    public const string PlaneNameAid = "plane-name";
+
+    /// <summary>The aid value that opens the Plane Construction hub on its airframe tab.</summary>
+    public const string PlaneConstructionAid = "plane-construction";
+
+    /// <summary>The aid value that opens the hub's paint tab on a Fury in Fortune Hunters colours.</summary>
+    public const string PlanePaintAid = "plane-paint";
+
+    /// <summary>The aid value that opens the hub's construction totals page.</summary>
+    public const string PlanePurchaseAid = "plane-purchase";
+
+    /// <summary>The aid value that opens the hangar's inventory.</summary>
+    public const string PlaneInventoryAid = "plane-inventory";
+
+    // The aids' scratch build carries this name, so the shots read the same on every machine; it
+    // is never committed by an aid.
+    private const string AidPlaneName = "Sample Plane";
+
     private readonly Node _parent;
     private readonly string _dataRoot;
     private readonly MenuLayout _layout;
@@ -45,6 +64,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     private IMenuHost? _host;
     private BoardPalette _palette = BoardPalette.Chalk;
     private BoardPalette _paperPalette = BoardPalette.Paper;
+    private BoardPalette _hangarPalette = BoardPalette.Paper;
     private bool _shown;
     private bool _joiningOpen;
 
@@ -93,18 +113,23 @@ public sealed class OriginalPresentation : IMenuPresentation
         LabelActivate: ToColor(inks.LabelDepressed),
         Hint: ToColor(inks.Text));
 
+    /// <summary>The plane-construction screens' palette: the right page's authored black text with
+    /// the title colour for headings, the tab bar's white labels with the standing tab in its
+    /// disabled colour, the left page's white through the dialog ink.</summary>
+    public static BoardPalette PaletteFor(OriginalHangarInks inks) => new(
+        Row: ToColor(inks.Text),
+        Focus: ToColor(inks.Title),
+        Heading: ToColor(inks.Title),
+        Detail: ToColor(inks.TabCurrent),
+        LabelNormal: ToColor(inks.TabLabel),
+        LabelRollover: ToColor(inks.TabLabel),
+        LabelActivate: ToColor(inks.TabDepressed),
+        Hint: ToColor(inks.Text));
+
     /// <summary>The roster both presentations pick from: the eleven stock airframes, then the
     /// saved customs, each flying its airframe's stock node.</summary>
-    public static IReadOnlyList<MenuAircraft> Roster(IReadOnlyList<CustomPlaneDef> customs)
-    {
-        var stock = new List<(string Name, string Node)>(OriginalRosters.Airframes.Count);
-        foreach (var airframe in OriginalRosters.Airframes)
-        {
-            stock.Add((airframe.Name, airframe.Node));
-        }
-
-        return PlayerSetupFeature.BuildRoster(stock, customs, PlanePickerRoster.AirframeNode);
-    }
+    public static IReadOnlyList<MenuAircraft> Roster(IReadOnlyList<CustomPlaneDef> customs) =>
+        OriginalRosters.Roster(customs);
 
     public void Activate(IMenuHost host, MenuReturnDestination destination)
     {
@@ -115,9 +140,12 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             _devices = new MenuSeatDevices(_player1, setup);
             _shell = new OriginalShell(_layout, host.Features.Get<FreeFlightFeature>(), setup, Measure, _devices.FlightPads,
-                instantAction: host.Features.Get<InstantActionFeature>());
+                instantAction: host.Features.Get<InstantActionFeature>(),
+                hangar: host.Features.TryGet<HangarFeature>(out var hangar) ? hangar : null,
+                planes: CustomPlaneStore.UserPlanes());
             _palette = PaletteFor(_shell.Inks);
             _paperPalette = PaletteFor(_shell.InstantActionInks);
+            _hangarPalette = PaletteFor(_shell.HangarInks);
         }
 
         if (_layer == null)
@@ -159,6 +187,31 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case InstantActionAid:
                     _shell.OpenInstantAction();
                     break;
+                case PlaneNameAid:
+                    _shell.OpenHangar();
+                    break;
+                case PlaneConstructionAid:
+                    _shell.OpenHangarTab(OriginalScreen.HangarAirframe, AidPlaneName);
+                    break;
+                case PlanePaintAid:
+                    // The same pose as Built-in's paint aid: a Fury in Fortune Hunters colours with
+                    // a nose decal chosen, so the two presentations' shots show one plane.
+                    _shell.OpenHangarTab(OriginalScreen.HangarPaint, AidPlaneName);
+                    if (host.Features.TryGet<HangarFeature>(out var paint) && paint.IsOpen)
+                    {
+                        paint.PickAirframe(7);
+                        paint.AnswerDefaultsAsk(true);
+                        paint.SetPattern(4);
+                        paint.SetDecal(0, 40);
+                    }
+
+                    break;
+                case PlanePurchaseAid:
+                    _shell.OpenHangarTab(OriginalScreen.HangarPurchase, AidPlaneName);
+                    break;
+                case PlaneInventoryAid:
+                    _shell.OpenHangarTab(OriginalScreen.HangarInventory, AidPlaneName);
+                    break;
             }
         }
 
@@ -199,6 +252,9 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         var size = _view.GetViewportRect().Size;
         var fit = BoardFit.For(size.X, size.Y);
+        // Text capture is set before the poll: the name screen's letters must be text, not
+        // cursor aliases, for the frame that reads them.
+        _host.Seats[0].CapturingText = _shell.CapturingText;
         // The seat list is live and a Back can shorten it mid-loop, so the count is re-read.
         for (int i = 0; i < _host.Seats.Count; i++)
         {
@@ -230,6 +286,8 @@ public sealed class OriginalPresentation : IMenuPresentation
             changed |= step.Changed;
         }
 
+        // And again after the frame, so a screen change this frame is what the next poll reads.
+        _host.Seats[0].CapturingText = _shell.CapturingText;
         if (changed)
         {
             Redraw();
@@ -242,6 +300,12 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (_layer != null)
         {
             _layer.Visible = false;
+        }
+
+        // Off screen nothing types, so a seat left capturing on the name screen is released.
+        if (_host is { Seats.Count: > 0 } host)
+        {
+            host.Seats[0].CapturingText = false;
         }
 
         Input.MouseMode = Input.MouseModeEnum.Visible;
@@ -298,9 +362,12 @@ public sealed class OriginalPresentation : IMenuPresentation
     {
         if (_shell != null && _view != null)
         {
-            // The Instant Action screen is a paper page with authored black text; the other
-            // screens write in the file-wide inks over the dark top level.
-            var palette = _shell.Screen == OriginalScreen.InstantAction ? _paperPalette : _palette;
+            // The Instant Action screen and the inventory are paper pages with authored black
+            // text, the hub writes in its own inks, and the other screens write in the file-wide
+            // inks over the dark top level.
+            var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.HangarInventory ? _paperPalette
+                : _shell.IsHangarScreen ? _hangarPalette
+                : _palette;
             _view.Show(_shell.Compose(), palette, string.Empty, string.Empty);
         }
     }

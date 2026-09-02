@@ -13,9 +13,8 @@ namespace CSVM.UI;
 /// </summary>
 public sealed class HangarNamePage : HangarPage
 {
-    /// <summary>The longest name the screen writes: the original's saved-plane name index is
-    /// 33-byte records (docs/formats/paint.md), so 32 characters plus its terminator.</summary>
-    public const int MaxLength = 32;
+    /// <summary>The longest name the screen writes, the shared feature's rule.</summary>
+    public const int MaxLength = Menu.HangarFeature.MaxNameLength;
 
     /// <summary>The name itself, which is also what typing edits.</summary>
     public const int NameRow = 0;
@@ -28,10 +27,6 @@ public sealed class HangarNamePage : HangarPage
 
     /// <summary>Rolls both words at once.</summary>
     public const int RerollRow = 3;
-
-    // Beyond letters and digits: the separators a plane name uses. Every one is legal in a
-    // filename, which is what keeps the store's own sanitisation from rewriting a typed name.
-    private const string Punctuation = " -'";
 
     private readonly Random _rng;
     private int _adjective;
@@ -52,11 +47,10 @@ public sealed class HangarNamePage : HangarPage
     /// pilot's own, so the steppers describe nothing until one is pressed.</summary>
     public bool Freeform => _freeform;
 
-    /// <summary>Whether the character can be typed into a name. Public so the filename-safety of
-    /// the whole set is one assertion rather than a walk over the keyboard.</summary>
-    public static bool Accepts(char c) =>
-        (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
-        || Punctuation.IndexOf(c) >= 0;
+    /// <summary>Whether the character can be typed into a name, the shared feature's rule. Public
+    /// so the filename-safety of the whole set is one assertion rather than a walk over the
+    /// keyboard.</summary>
+    public static bool Accepts(char c) => Menu.HangarFeature.AcceptsNameChar(c);
 
     /// <summary>Rolls a name onto a plane that has none, so a pad reaches the build press without
     /// naming anything by hand. A plane that already carries a name keeps it: arriving here must
@@ -208,19 +202,8 @@ public sealed class HangarNamePage : HangarPage
     // build must not silently overwrite.
     private bool Taken(string name) => Flow.IsNameTaken(name);
 
-    // Whether saving would land on somebody else's file. The plane being edited is not somebody
-    // else: a flow opened from a saved plane is meant to write back over it, and a warning that
-    // fires on every such edit is one nobody reads by the time it matters.
-    private bool Overwrites()
-    {
-        if (string.IsNullOrWhiteSpace(Scratch.Name) || !Taken(Scratch.Name))
-        {
-            return false;
-        }
-
-        return !string.Equals(
-            CustomPlaneStore.FileKey(Scratch.Name),
-            CustomPlaneStore.FileKey(Flow.EditingName ?? string.Empty),
-            StringComparison.OrdinalIgnoreCase);
-    }
+    // Whether saving would land on somebody else's file, the shared feature's rule: the plane
+    // being edited is not somebody else, and a warning that fires on every edit is one nobody
+    // reads by the time it matters.
+    private bool Overwrites() => Flow.Feature.Overwrites();
 }

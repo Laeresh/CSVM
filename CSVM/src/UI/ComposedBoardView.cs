@@ -243,7 +243,9 @@ public sealed partial class ComposedBoardView : Control
             span = grown;
         }
 
-        var tint = new Color(1f, 1f, 1f, Mathf.Clamp(picture.Opacity, 0f, 1f));
+        var tint = picture.Tint is { } rgb
+            ? new Color(rgb.R / 255f, rgb.G / 255f, rgb.B / 255f, Mathf.Clamp(picture.Opacity, 0f, 1f))
+            : new Color(1f, 1f, 1f, Mathf.Clamp(picture.Opacity, 0f, 1f));
         if (picture.Revs == 0f)
         {
             DrawTextureRectRegion(texture, new Rect2(at, span), frame, tint);

@@ -161,7 +161,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Extract Instant Action into a typed shared feature
 22. ☑ Extract shared player setup and deliver Dogfight in both presentations
-23. ☐ Separate hangar features from composition and deliver its Original screens
+23. ☑ Separate hangar features from composition and deliver its Original screens
 
 ### Wave D — Campaign convergence
 
@@ -848,7 +848,7 @@ controls, as the Verify paragraph states.
 must converge on one shared roster and launch gate. The Plane screen lists `user://` custom
 planes, so a shot of it is only comparable against a baseline taken over the same store.
 
-## C23 ☐ Separate hangar features from composition and deliver its Original screens
+## C23 ☑ Separate hangar features from composition and deliver its Original screens
 
 **Goal.** Hangar rules and scratch-plane lifecycle are presentation-neutral, while Built-in and
 Original compose and navigate them independently.
@@ -872,9 +872,125 @@ and `Compose` branches, and `_focus` is sized from the enum.
 
 **Model recommendation.** high — wide feature surface with persistence and dynamic preview art.
 
-**Verify.** Run all hangar unit suites, compare every existing Built-in aid, execute both doors and
-the campaign-wallet path, then complete Original mouse/keyboard/pad journeys. <TODO: exact aid list
-and evidence gaps from A1.>
+**Verify.** Characterization first, on the pre-extraction code: the engine suite
+`menu-hangar-journey` (`CSVM/src/Testing/MenuHangarSuites.cs`) drives a real `LaunchMenu` through
+`Drive`/`Shown*` from both doors (the Mode screen's `Build Custom Plane` row, returning to Mode, and
+the Instant Action plane pick's trailing row under the ace duel, returning to Plane), through plane
+selection, the airframe list (the first confirm picks and raises the langui 206 ask as two rows,
+Cancel keeps the picks and lands on the ticked row, the second confirm advances), engine (opening
+on the standing pick, a pick then an advance), armor, guns and hardpoints (the stepper), paint (ten
+rows, the pattern stepping only onto wearable patterns, a preview composed), the name screen (a
+rolled name, the adjective stepper, typing through the page as the key handler does) and the
+purchase review (the totals row detailing `TotalsLine`, Purchase Now last), commits a scratch plane
+named `Scratch <8 hex>` into the user's store (the plane pick then opens with the cursor on it),
+edits it from the plane list and cancels with its file byte for byte unchanged, opens the
+`hangar`/`airframe`/`defaults`/`name`/`paint` aids, opens the campaign wallet door through
+`--menu=campaign-hangar` over the aid's scratch profile (INVENTORY, Buy a New Plane over `$$$ on
+Hand:`, the sale stage listing every owned plane, Back resuming the cabin), drops an open build on
+`DiscardTransient`, and deletes the scratch plane through the two-stage list; it passed green before
+the extraction and, with no edit at all, after it. The scratch plane is the only write into
+`user://Planes/`, checked absent before the run and removed in `finally`.
+
+The landed shape: `HangarFeature` (`CSVM/src/UI/Menu/HangarFeature.cs`, engine-free, in the host's
+feature set) owns one build at a time: `Open(store, wallet)` over a `CustomPlaneStore` and an
+optional `IHangarWallet` (the interface `HangarCampaignContext` implements), the roster `Saved`,
+the scratch plane's three starts (`StartNewPlane`, `StartDefaultPlane` on the Devastator's stock
+configuration, `StartFromSaved` as a copy), `PickAirframe` with the defaults ask
+(`DefaultsAsk`/`DefaultsAskText`/`AnswerDefaultsAsk`/`LoadAirframeDefaults`), the per-tab
+operations (`SetEngine`, `SetArmour`, `SetGun` over the eleven-row gun cycle, `SetHardpoints`,
+`SetPattern` over `WearablePatterns`, `SetColour`, `SetShade`, `SetDecal`), the gate `Refusal`
+in the original's words with `CanCommit` and `Bill`, `Commit` (save, then the wallet's purchase),
+`DeleteSaved` (delete, or the wallet's sale with its two refusals), `IsNameTaken` over the whole
+build directory, `Overwrites`, the label helpers (`AirframeName`, `EngineName`, `GunName`,
+`GunCycleName`, `ArmourLabel`, `HardpointsLabel`, `PatternLabel`, `TotalsLine`, `CannotSellText`),
+the name rules (`AcceptsNameChar`, `MaxNameLength`) and `Discard`, which drops the build and
+touches nothing saved. `HangarFlow` keeps its whole surface and its nine-screen order and delegates
+every rule and every store operation to the feature (`Feature`), constructed by `LaunchMenu` over
+the host's one instance and by its old constructor over a private one for the unit tests;
+`HangarFlow.LoadStockWeapons` and `StockWingCounts` forward to the feature for the campaign pages.
+Original: `OriginalHangar.cs` (another `partial` of `OriginalShell`) adds a BUILD PLANE door
+under the Dogfight door (remake-only) opening the decoded `[@PlaneName@]` screen (the edit box fed
+by the seat's typed characters while `CapturingText`, the `MP_B_CheckBox8States` Load Default
+Configuration box, OK refusing an empty name with langui 203, Cancel), then the Plane Construction
+hub composed from `[@PlaneConstruction@]` (the background, the plane as the focused airframe's
+blueprint on the airframe tab and the paint composite of the `PX_ICON_<af>_<pattern>_0..3` set
+tinted through `BoardPicture.Tint` elsewhere, PLANE NAME, PLANE COST, AIRFRAME, WEIGHT
+CAPACITY, CURRENT WEIGHT reading Pending before a pick, the agility and armour words with their
+`PX_BarGraph` segments, the cash note only over a wallet) with one of the six tab sections on its
+right page (`AF_D_AIRFRAME`, `EN_D_ENGINE`, `AR_D_POINT0..3`, `GN_D_GUN0..3`, `HP_D_POINT0..1`,
+`PT_D_PATTERN`, `PT_D_COLORS0..2` as swatches, `PT_D_SHADES0..2`, `PT_D_DECALS0..2` as tiles off
+`PT_P_DECALS`, each a `Dropdown` row at its authored box whose Accept opens the list under it in the
+row's `TotalDisplayed` window with the `DropUp`/`DropDown` arrows, a sideways step picking the next
+value), the six `PX_Tab` tabs with the standing one disabled, `PX_B_Sell` into the `[@Hangar@]`
+INVENTORY (`HA_D_PILOTPLANE` over `Saved`, `HA_B_SELLP` through `DeleteSaved`, `HA_B_EXPORTP`
+disabled, `HA_B_DONE`), `PX_B_Ready` into the `[@Purchase@]` totals page (`PUR_B_PURCHASE` live
+while `CanCommit`, the problems text in the commit's words) and `PX_B_Cancel`; the wallet-free door
+wears `PX_B_ReadyToExport`/`PX_B_CancelExport` when the extraction has them. A commit calls
+`SetRoster` from the store, so the new plane is offered without a return to the top level; a
+cancel, Back off the name screen or a tab, and a presentation switch drop the scratch plane through
+`Discard`. `OriginalPresentation` sets seat 0's `CapturingText` from the shell around every frame,
+draws the hub in `PaletteFor(HangarInks)` and the inventory in the paper palette, and takes the
+aids `plane-name`, `plane-construction`, `plane-paint`, `plane-purchase` and `plane-inventory`
+(`docs/cli.md`, no flag added, the flag index untouched). `IA_B_BUILD` on the Instant Action
+screen stays disabled: the decode names no edge for it.
+
+Checked: `dotnet build CSVM/CSVM.sln`, the whole `dotnet test` (2967, of which 12 are
+`HangarFeatureTests`: the roster and the bare start, the default configuration, the copy from a
+saved plane, the ask and both answers, the gate's three refusals then the commit, overweight, a
+fake wallet's funds and availability refusals and its purchase, ownership versus taken names, the
+sale's two refusals and the deletion, the paint rules, the dropdown labels, and `Discard`; 12 are
+`OriginalHangarTests` over the fixture layout, extended with the nine hangar sections under the
+shipped keys on invented lines: the door and the name screen's typing and OK gate, both answers of
+the defaults box, the ask as a dialog, the tabs as siblings with a dropdown stepping and picking,
+the keyboard onto and along the bar, the windowed colour list and the decal tiles, the totals
+page committing into a scratch store and the roster, the disabled Purchase Now with its reason,
+the two cancels leaving no residue, the inventory's sell, the chrome's composition, and the
+feature's discard; `MenuNamespaceDependencyTests` green with the feature and the wallet interface
+in the shared namespace), then
+`.\RunTests.ps1 -Suite "menu-hangar-journey,menu-original-hangar,menu-free-flight-journey,menu-player-setup-journey,menu-player-setup-seats,menu-instant-action-journey,menu-original-instant-action,menu-host-tracer,menu-original-tracer,menu-zone-layout,menu-screenshot-key,campaign-briefing-repaint,hangar-door-wake,landings-hangar-drop-gate,campaign-hangar-handover" -SkipUnits -SkipGoldens`
+(15 suites, 15 passed, engine errors clean), `.\CheckCommentCaps.ps1 -Summary` and
+`.\CheckEncoding.ps1`. `menu-original-hangar` drives Original through a real `MenuHost` over the
+install's layout: the door, the name screen at its authored box with seat 0 capturing text, OK onto
+the default configuration, Paint then Engine by click out of order, a sideways step changing the
+engine with the running total following, the seven-row list, the keyboard onto the tab bar and along
+it past the standing tab, READY TO PURCHASE and Purchase Now committing the scratch plane into the
+user's store and the shared roster, SELL PLANES and the inventory's Sell removing it again, CANCEL
+and `Deactivate` leaving no residue. Mechanical edits to existing suites and tests:
+`MenuSuiteHost.AddFeatures` registers the `HangarFeature` (strings, stock fits on first need and
+the data root's zrdr scope, as `Launcher.BuildMenuHost` does); `menu-original-tracer` counts nine
+top-level rows; `OriginalShellTests` gains the door in the row lists and its disabled state, and one
+hover index moves by one; `MenuLayoutReaderTests.OriginalLayout` defines the hangar strings and
+lists the fixture's invented art. Shots: rebuilt, then `.\RunProbe.ps1 --menu=<aid> --screenshot=<abs path>`
+for `hangar`, `name`, `airframe`, `defaults` and `paint` from a second worktree checked out at the
+plan branch's tip and built there (the before) and from this tree (the after), into
+`.scratch\c23-before\` and `.scratch\c23-after\`, compared by decoded 32bpp pixels (SHA-256 over
+the rows, `CompareShots.ps1`): all five 1280x720 shots identical, zero differing pixels, over the
+same `user://` store, which the suites left as they found it. Original shots through a sized
+launcher (Godot's `--resolution WxH` ahead of the `--`, `RunSizedProbe.ps1`) with
+`--presentation=original --menu=plane-name|plane-construction|plane-paint|plane-purchase|plane-inventory`
+and the top level with the three doors, at 1024x768 and 1920x1080, into `.scratch\c23-shots\`.
+What a pose cannot show: the pointer sits off the board, the typed name arrives between frames, an
+open list and the defaults ask are states a click reaches, the running total moves only on a pick,
+and Purchase Now's press ends the screen; behaviour is pinned by the driven suites.
+`docs/verification.md` rules that bit: **METHOD-6** (which binary each side used: the before shots
+from a worktree at the plan branch's tip, built there, the after shots from this tree),
+**METHOD-3** (the store was checked for the scratch name before the run and for its absence after),
+**SHOT-6** (decoded pixels, never PNG bytes), **SHOT-9**/**SHOT-10** (windowed probes on the hidden
+desktop, absolute paths, files checked present), **SHOT-32** (a shot proves the frame it drew),
+**SRC-7** (no layout row or script edge describes the top-level door, the export wording on the
+wallet-free door or `IA_B_BUILD`'s destination, so the first two are recorded as remake-only and
+the third stays disabled).
+
+What this did not prove: `CAP-53` is not filmed, so whether a tab is ever disabled, where the
+running total shows, whether leaving a tab commits, what SELL PLANES does and what Load Default
+Configuration loads are remake readings the capture must confirm (the exact list is in
+`playtest.md`'s `CAP-53` row and `docs/org/menu-inventory.md`, Part 4); the mouse over Original's
+hub is driven only by scripted pointer frames; the campaign wallet door is exercised in Built-in
+alone, since Original has no cabin until Wave D; and no real pad or keyboard typed on the name
+screen. The hardware pass is owed at the controls: `.\RunDev.ps1 --presentation=original`, BUILD
+PLANE, a name typed, the tabs clicked and walked from the pad, a plane bought and sold.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Cancelling remains residue-free by dropping the scratch plane; do not replace that with
 an undo path. Presentation switching also discards the scratch flow without committing.
@@ -894,6 +1010,15 @@ primitives and authored geometry no longer form the cross-presentation contract.
 from Built-in campaign composition. Preserve stack and modal semantics where they belong to the
 campaign use case; leave screen geometry and input choreography presentation-side. Keep temporary
 adapters so screenshots do not change.
+
+Handoff from C23: the campaign cabin's PLANE CONSTRUCTION plugs into `HangarFeature.Open(store,
+wallet)` with a `HangarCampaignContext` as the `IHangarWallet` over the seated profile, which is
+what Built-in's `OpenCampaignHangar` already hands `HangarFlow`; an Original cabin opens the same
+feature through `OriginalShell.OpenHangar`'s path (the name screen first, as the decoded
+`PC_B_PLANEX` edge says), with `_hangarReturn` naming the cabin screen so CANCEL and a commit land
+back on it, and the hub then shows `PX_T_CASHTITLE`/`PX_T_CASH` over the wallet and the
+`PX_B_ReadyToPurchase`/`PX_B_CancelPurchase` strips it authors. The INVENTORY's `HA_B_EXPORTP`
+stays disabled until the campaign's EXPORT is a feature operation.
 
 **Model recommendation.** max — largest domain/presentation separation and campaign persistence risk.
 

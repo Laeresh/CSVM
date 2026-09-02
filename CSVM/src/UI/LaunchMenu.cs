@@ -189,6 +189,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // OpenHangar, so cancelling always lands back where the pilot pressed.
     private HangarFlow? _hangar;
     private Screen _hangarReturn = Screen.Mode;
+    // The shared hangar feature every flow here walks: the host's one instance, so a switch of
+    // presentation discards the same scratch plane Original would have been editing.
+    private HangarFeature _hangarFeature = null!;
     // The page's narration count as last acted on: the host's audio service is asked to begin the
     // narration whenever it moves and to end it the moment the briefing stops showing.
     private int _narrationStarts;
@@ -381,6 +384,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             _free = host.Features.Get<FreeFlightFeature>(),
             _ia = host.Features.Get<InstantActionFeature>(),
             _setup = host.Features.Get<PlayerSetupFeature>(),
+            _hangarFeature = host.Features.Get<HangarFeature>(),
             _player1 = player1,
             Layer = HudLayers.Board,
             Visible = false,
@@ -1487,7 +1491,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private void OpenHangar(Screen returnTo)
     {
         _hangarReturn = returnTo;
-        _hangar = new HangarFlow(CustomPlaneStore.UserPlanes(), HangarStrings(), _dataRoot, Fits, _zrdrPath,
+        _hangar = new HangarFlow(_hangarFeature, CustomPlaneStore.UserPlanes(), _dataRoot,
             nameRng: Rng.NewSystemRandom(Rng.PlaneName));
         _screen = Screen.Hangar;
         _error = "";
@@ -1951,7 +1955,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         var planes = CustomPlaneStore.UserPlanes();
         _hangarReturn = Screen.Campaign;
-        _hangar = new HangarFlow(planes, HangarStrings(), _dataRoot, Fits, _zrdrPath,
+        _hangar = new HangarFlow(_hangarFeature, planes, _dataRoot,
             new HangarCampaignContext(flow.Store, profile, planes), Rng.NewSystemRandom(Rng.PlaneName));
         _screen = Screen.Hangar;
         _error = "";
