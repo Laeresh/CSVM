@@ -86,6 +86,13 @@ public partial class Launcher : Node3D
     private const float EnhancedShadowSplit2 = 0.17f;
     private const float EnhancedShadowSplit3 = 0.42f;
 
+    // TUNE. Screen-space reflection on the glossy water arm: the step count buys reflection length
+    // along the ray, the fades hide where a ray runs off the screen or past the depth buffer.
+    private const int EnhancedSsrMaxSteps = 64;
+    private const float EnhancedSsrFadeIn = 0.15f;
+    private const float EnhancedSsrFadeOut = 2.0f;
+    private const float EnhancedSsrDepthTolerance = 0.2f;
+
     // TUNE, judged at the controls on C2/C5. Godot's own default (1.0 m) reads a building's own
     // trim but misses the wider contact shading a street canyon wants at this world's scale
     // (buildings tens of metres tall, streets a similar width); this radius picks up a block's
@@ -1018,15 +1025,16 @@ public partial class Launcher : Node3D
             _env.SsaoDetail = EnhancedSsaoDetail;
             _env.SsaoHorizon = EnhancedSsaoHorizon;
             _env.SsaoSharpness = EnhancedSsaoSharpness;
+            EnableWaterReflections(_env);
             EnableGlowAndTonemap(_env);
         }
         AddChild(new WorldEnvironment { Environment = _env });
     }
 
-    // Enhanced mode alone: the sky is the mission's own colour, not Godot's procedural gradient.
-    // The dome is gamez geometry drawn over the background, so this is normally unseen; every
-    // enhanced surface is matte, so what it feeds today is ambient light alone.
-    // WeatherRig.WriteSkyColor writes the flown zone's own FOG_COLOR over the default here.
+    // Enhanced mode alone: the sky a reflection reads is the mission's own colour, not Godot's
+    // procedural gradient. The dome is gamez geometry drawn over the background, so this is
+    // normally unseen; what it feeds is the glossy water's specular. WeatherRig.WriteSkyColor
+    // writes the flown zone's own FOG_COLOR over the default here on every zone apply.
     // ⚠ Do not leave the ambient on the sky: enhanced mode drives it from the zone's authored
     // SUNLIGHT_AMBIENT, and a flat sky would override that with one colour.
     private void UseMissionSky(Godot.Environment env)
@@ -1052,6 +1060,19 @@ public partial class Launcher : Node3D
         sun.DirectionalShadowBlendSplits = true;
         sun.ShadowBias = EnhancedShadowBias;
         sun.ShadowNormalBias = EnhancedShadowNormalBias;
+    }
+
+    // Screen-space reflection, for the one glossy population in the world: the water surfaces
+    // SceneBuilder.ClassifySurface names. Every other enhanced surface is matte, so nothing else
+    // can reflect. ⚠ SSR reflects only what the camera already draws; content off-screen or behind
+    // the near plane has no reflection at all.
+    private void EnableWaterReflections(Godot.Environment env)
+    {
+        env.SsrEnabled = true;
+        env.SsrMaxSteps = EnhancedSsrMaxSteps;
+        env.SsrFadeIn = EnhancedSsrFadeIn;
+        env.SsrFadeOut = EnhancedSsrFadeOut;
+        env.SsrDepthTolerance = EnhancedSsrDepthTolerance;
     }
 
     // Enhanced mode alone: with a lit world, sun, shadows and real light energy feeding the HDR
