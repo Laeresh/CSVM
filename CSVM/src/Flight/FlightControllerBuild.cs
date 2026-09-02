@@ -51,6 +51,20 @@ public partial class FlightController
 {
     private bool _constructionBound;
 
+    /// <summary>This seat's live flight keymap, the object all three of its readers resolve through.
+    /// Exposed so a suite can read what the seat is actually flying; change it in place through
+    /// <see cref="LoadSavedKeymap"/>, never by replacing the reference.</summary>
+    public Bindings.ActionMap FlightKeymap => _bindings.Map(Bindings.InputContext.Flight);
+
+    /// <summary>Puts this seat on the keymap its player saved, so it flies what the rebinding screen
+    /// wrote. Anything the file does not carry, or this build cannot read, stays at that action's
+    /// shipped default, and under the launch gate no file is read at all
+    /// (<see cref="Bindings.LaunchBindings"/>). A human rig calls it from <see cref="Bind"/> once
+    /// <see cref="PlayerIndex"/> is known; an AI rig never reads a player's file.</summary>
+    public void LoadSavedKeymap() =>
+        FlightKeymap.Fill(Bindings.LaunchBindings.Map(
+            PlayerIndex + 1, Bindings.InputContext.Flight, default, readsKeyboard: true));
+
     /// <summary>Consumes one complete assembly result before this controller joins the tree. A
     /// second bind or a bind after attachment is a construction error.</summary>
     internal void Bind(FlightControllerBuild build)
@@ -77,6 +91,10 @@ public partial class FlightController
         PadDevices = build.PadDevices;
         AllowPause = build.AllowPause;
         Inert = build.Inert;
+        // After PlayerIndex, which names the file, and only for a seat a person flies: an AI rig
+        // would otherwise read a player's keymap once per aircraft in the mission.
+        if (build.IsHumanPiloted)
+            LoadSavedKeymap();
         if (build.Team is { } team)
             Team = team;
 

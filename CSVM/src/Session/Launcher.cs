@@ -569,7 +569,13 @@ public partial class Launcher : Node3D
 
             Directory.CreateDirectory(scratchOptions);
             OptionsStore.DirectoryOverride = scratchOptions;
+            CSVM.Bindings.BindingStore.DirectoryOverride = scratchOptions;
         }
+
+        // Which keymap a seat is built on, resolved before the first seat exists. Both flags close
+        // the door for the same reason: a run whose result is compared against a committed golden
+        // must not depend on the keymap saved at whoever's machine ran it (verification.md, DET-8).
+        CSVM.Bindings.LaunchBindings.Configure(_spec.Det || _spec.RunTests);
 
         // After the --det block, so ClearOverrides has dropped a config graphics.mode; ahead of the
         // clutter fade, which needs the mode to follow the pushed fog. ⚠ --det reads no saved
@@ -1201,7 +1207,10 @@ public partial class Launcher : Node3D
         _menuAudio = new MenuAudioService(_music, wav => _musicArchive?.Find(wav, false, warn: false),
             Path.Combine(_rofPath, "ASSETS", "SOUNDS"));
         AddChild(_menuAudio);
-        var builtInSeat = new BuiltInSeat(new MenuInput { Keyboard = true });
+        var seatInput = new MenuInput { Keyboard = true };
+        // Seat 0 is player 1, so it navigates on the menu keymap that player saved.
+        seatInput.LoadSavedKeymap(1);
+        var builtInSeat = new BuiltInSeat(seatInput);
         var seat = new PointerSeat(builtInSeat, MousePosition, () => Input.IsMouseButtonPressed(MouseButton.Left));
         var registry = new PresentationRegistry();
         // The factories read the aid when they run, which is inside a Show: the cold start's

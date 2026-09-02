@@ -248,6 +248,16 @@ public sealed class MenuInput
     /// </summary>
     public void RebindsApplied() => _typingStale = true;
 
+    /// <summary>Puts this seat on the menu keymap <paramref name="player"/> saved, in place, so the
+    /// map this poller's readers hold is the one that changed. Anything the file does not carry
+    /// stays at its shipped default, and under the launch gate no file is read at all
+    /// (<see cref="LaunchBindings"/>). Called once the seat knows which player it is.</summary>
+    public void LoadSavedKeymap(int player)
+    {
+        Map.Fill(LaunchBindings.Map(player, InputContext.Menu, SeatPads, readsKeyboard: true));
+        RebindsApplied();
+    }
+
     /// <summary>Reads this player's devices and fills the result fields.</summary>
     public void Poll(float dt)
     {

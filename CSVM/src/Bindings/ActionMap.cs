@@ -101,6 +101,25 @@ public sealed class ActionMap
         return owners;
     }
 
+    /// <summary>Replaces this map's contents with <paramref name="source"/>'s, in place, so every
+    /// reader already holding this object reads the new keymap without being rebuilt. A polling site
+    /// hands the same map to two or three <see cref="PlayerActions"/>, and swapping the reference
+    /// would leave those readers on the map the seat was constructed with.
+    /// ⚠ <see cref="Add"/> rather than <see cref="Assign"/>: the shipped set deliberately puts one
+    /// control on two actions, and a steal on the way in would silently undo the second.</summary>
+    public void Fill(ActionMap source)
+    {
+        System.ArgumentNullException.ThrowIfNull(source);
+        if (ReferenceEquals(source, this))
+            return;
+        Clear();
+        foreach (var pair in source._sets)
+        {
+            foreach (var binding in pair.Value.Bindings)
+                Add(pair.Key, binding);
+        }
+    }
+
     /// <summary>An independent copy, for a screen whose edits may be cancelled.</summary>
     public ActionMap Clone()
     {
