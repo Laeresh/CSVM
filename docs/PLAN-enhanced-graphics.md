@@ -115,6 +115,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 43. ☑ The clutter building fade reaches as far as the pushed fog
 44. ☑ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
 45. ☐ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
+46. ☐ The water mirror strength, measured against the original's water, or the water bit parked
+47. ☐ Day chapters read brighter than the original overall; the energy mapping re-anchored on frames
 
 ## Dependency and parallelism notes
 
@@ -1745,6 +1747,48 @@ fade with the fog, which this gives for free.
 structure (sample the sun-side and shade-side of one fogged hill, the two means converge to the
 fog colour); the near world unchanged. Original-mode every-key dump identical; goldens zero
 movers.
+
+## E46 ☐ The water mirror strength, measured against the original's water, or the water bit parked
+
+**Goal.** Enhanced-mode water reads close to the original's water luminance by day and by night,
+with whatever reflection survives that constraint; if no roughness/specular pair gets there, the
+water bit is parked and C24's verdict re-recorded.
+
+**Evidence (confidence: traced).** With E44 the reflection reads the authored fog colour, and the
+day water is brighter than before (C1 lake 96 against the original's 36; C3 sea 105 against 82)
+because the authored overcast is bright and the water arm's roughness 0.1 / specular 0.5 mirrors
+it in full. The user's complaint is the grey water; C24's open judgement is the hard mirror.
+
+**Approach.** Sweep the water arm's `WaterRoughness` and `WaterSpecular` (and SSR on/off) on the
+C1 lake, C3 sea and C1B night sea poses, tabulating water luminance against the original at each
+setting; pick the pair whose water lands nearest the original in all three while keeping a visible
+shoreline reflection at sea level, or park the bit if none does. The pair stays a named TUNE.
+
+**Model recommendation.** medium, a measurement sweep with one judgement.
+
+**Verify.** The three poses' water within a stated distance of the original; goldens zero movers.
+
+## E47 ☐ Day chapters read brighter than the original overall; the energy mapping re-anchored on frames
+
+**Goal.** An enhanced day frame's overall level matches the original's within a stated margin,
+so the lit world adds shading rather than brightness.
+
+**Evidence (confidence: direction-sound).** B12 anchored `SunEnergyPerDiffuse` and
+`AmbientEnergyPerAuthored` on the launcher's hardcoded 1.6 / 0.9, which lit only the aircraft;
+now that the world takes the same energies on top of its baked vertex colours, the day frames
+read brighter than the original (E44's C1 cliff 93 against 62; C4's far ridges washed before the
+tonemap). The night side is handled by E42's cap.
+
+**Approach.** Measure the mean luminance of matched original and enhanced frames across the eight
+chapters' default freecam poses (sky excluded), fit the single factor on the two mapping
+constants that brings the day chapters' median ratio to 1.0, keep the ratio between the two
+constants, and re-anchor the tests. State the residual per chapter. The aircraft's own level is
+allowed to move with the world.
+
+**Model recommendation.** medium, measurement discipline.
+
+**Verify.** Per-chapter ratio table before and after; `SunlightEnergyTests` re-anchored; goldens
+zero movers.
 
 ## Open judgements
 
