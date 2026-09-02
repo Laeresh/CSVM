@@ -120,8 +120,12 @@ internal static class ZeppelinHullActivationSuites
 
             var started = world.Runtime.Play(DockAnim);
             ctx.Check(started.Count > 0, $"'{DockAnim}', the anim OBJECTIVE8 wakes, starts count={started.Count}");
+
+            // pz_deploy_hook's own longest track (top_seg's 10 s rotate) starts 3 s in and gates
+            // the land_on activations behind WAIT_FOR_COMPLETION. The cones are not due before
+            // 13 s, so this runs well past that.
             const float dt = 1f / 60f;
-            for (int i = 0; i < 60 * 12; i++)
+            for (int i = 0; i < 60 * 20; i++)
             {
                 world.Runtime.Advance(dt);
                 zeps.SimStep(dt);
@@ -134,10 +138,11 @@ internal static class ZeppelinHullActivationSuites
             ctx.Check(bay.Count > 0 && bay[0].IsVisibleInTree(),
                 $"…and so does the hangar bay {DockAnim} switches on, so the choreography lands on a hull that is in the world");
             ctx.Check(host.IsVisibleInTree(),
-                $"…the hull still drawing after the dock choreography has run 12 s");
+                $"…the hull still drawing once the dock choreography has run its course");
 
-            // ⚠ Recorded, not asserted: the landing cones ride the hull and are drawn only once
-            // their own OBJECT_ACTIVE_STATE lands, which is a name-resolution question of its own.
+            // Each cone is a distinct node (land_on under pz_manual_land, land_on~2's own sibling
+            // under pz_auto_land) that pzhomebase's compiled symbol table addresses by its own
+            // gamez index, never by ambiguous name, so both draw once their activation lands.
             var cone = world.Runtime.FindNodes("land_on", host);
             int shownCones = 0;
             foreach (var c in cone)
@@ -148,6 +153,8 @@ internal static class ZeppelinHullActivationSuites
                 }
             }
 
+            ctx.Check(cone.Count == 2 && shownCones == cone.Count,
+                $"both landing cones draw once the dock choreography has run: cones {shownCones}/{cone.Count}");
             report.AppendLine($"dock live: hook visible={hook.Count > 0 && hook[0].IsVisibleInTree()} cones {shownCones}/{cone.Count}");
         }
         finally
