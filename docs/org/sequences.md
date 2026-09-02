@@ -450,7 +450,7 @@ evaluator's branch order:
 | `0x1` | `RANDOM_WEIGHT` | `table[i] <= value`, see the ring below |
 | `0x2` | `PLAYER_RANGE` | `dist²(anchor, player) <= value` (`FUN_004ec540`) |
 | `0x4` | `ANIMATION_LOD` | `value <= DAT_00727fc8` (the detail setting) |
-| `0x8` | `PLAYER_UNDERCOVER` | upward 50 m probe from the player (`FUN_004ec410`) |
+| `0x8` | `PLAYER_UNDERCOVER` | a vertical probe from the player (`FUN_004ec410`), see below |
 | `0x10` | `NODE_UNDERCOVER` | the same probe from the node |
 | `0x20` | `HW_RENDER` | `DAT_009be708` |
 | `0x40` | `PLAYER_1ST_PERSON` | `DAT_009fd17c` |
@@ -471,6 +471,31 @@ the parser also accepts, against **1,097 occurrences of `PLAYER_RANGE`** on the 
 control. The reader tokens are the parser's own literal keywords and the reader sources are what
 the compiled archives are built from, so that half is a direct test rather than an inference.
 Nothing here is a gap in CSVM: there is no shipped condition to evaluate.
+
+### The undercover probe is a signed vertical ray, and its operand is a float bit pattern
+
+`FUN_004ec410` is the whole mechanism behind both undercover bits. It takes the probe node's world
+position from `FUN_004cf200`, clears that node's own collidable bit at `+0x24` for the duration of
+the cast (`FUN_004cd260` saves it, `FUN_004cd210` restores it) so a body cannot detect itself, sets
+the query filter to `0x40000` and the stop-at-first-hit flag (`FUN_004c7620` / `FUN_004c75e0`), and
+casts a segment from `(x, y, z)` to `(x, y + d, z)` through the world segment query `FUN_004c8f70`.
+That query walks the world's cell grid and reports the first node in a cell carrying both the
+visible bit `0x4` and the collidable bit `0x10`. A hit sets the caller's out-parameter to 1; the
+`0x10` branch at `004ec080` reads that out-parameter and takes the branch on 1, and answers false
+whenever the node index is negative, the node is absent, or the query itself fails.
+
+**`d` is the signed length in metres, so the sign is the direction.** A negative `d` probes DOWN,
+which is what the reader spelling `NODE_NEAR_GROUND` describes, and a positive `d` probes UP, which
+is what "undercover" describes. `FUN_004ec410`'s 50.0 is only the default for a null operand
+pointer, and the condition evaluator always passes the record's own `+0x14` slot, so no shipped
+condition takes it.
+
+⚠ **The compiled operand is a raw 4-byte word the extraction types as u32, not a length.** It holds
+the IEEE-754 bit pattern of that float: `3263299584` is `0xC2820000` = −65.0, `3229614080` is
+`0xC0800000` = −4.0. Every one of the install's 473 occurrences decodes to a round value, and the
+census is in [`formats/anim-definitions.md`](../formats/anim-definitions.md). Reading the u32 as a
+length gives a probe of billions of metres, which is why the field has to be reinterpreted before
+it is compared to anything.
 
 ⚠ **`PLAYER_LINED_UP` owns the `* 4.0` that looked like a `PLAYER_RANGE` scale factor.** The
 evaluator's `local_18 * 4.0 <= value` sits in the `0x200` branch, and that branch is angular, not

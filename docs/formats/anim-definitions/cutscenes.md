@@ -571,13 +571,61 @@ rooted on `player_balmoral` and turns `rwingbend` and `lwingbend` ±1.9198622 ra
 `move_player` gives the Balmoral and Warhawk branches their own two-second wait and then `all_done`,
 so those two airframes end the episode sooner than the rest.
 
+**One swing per docking is a property of the merge, not of a runtime guard.** The fork and each of
+its branches exist exactly once in a loaded mission's program, so the single `CALL_ANIMATION` in
+`hooked_to_klondike` starts one fork and that fork's arm starts one hook. `AnimProgram` loads the
+compiled archives first and then drops any later definition repeating a loaded one's (`NAME`,
+`ANIMATION_NAME`) pair, whatever scope it came from, which is what makes the shared `player_hook.zrd`
+copy of `player_extend_hook` and the `-1` twins of `blood_hook_extend`, `brig_hook_extend` and
+`brig_hook_startup` cost nothing. The census line naming `(mission-scope + NAME1)` describes the two
+gates that run BEFORE that drop rather than the drop itself: a mission-scope reader definition is
+skipped unless the mission's compiled `mis_anim` lists its pair, and a shared- or chapter-scope
+`NAME1` multi-target definition is skipped because the compiler expands it per instance. A
+plain-`NAME` shared definition passes both gates and is then deduplicated against its compiled twin,
+so it cannot become a second instance. `landings-hookup-airframe` reads the loaded count for the fork
+and for the flown airframe's branch, and counts both over a driven docking.
+
+**No `<x>_hook_startup` runs in a player docking.** Four airframes author one (`bal`, `gyro`, `brig`,
+`war`), every one of them `ON_CALL`, and the only definitions that call them are C4/M04's
+black-market hookup and its AI airframe states (`bhmhookup.zrd`, `bhm_warhawks.zrd`,
+`anim2_*-ai_*_state`, `player-bm_unhook_player`), which pose a hook on an AI aeroplane. What parks a
+player's hook is the aircraft archive's own inactive bit on the `<x>_hook` group, and all eleven
+airframes ship that bit clear, so the seven authoring no startup are parked exactly like the four
+that do.
+
+⚠ **What parks a hook's ARMS is `<x>_hook_retract`'s `RESET_STATE`, not the group's inactive bit.**
+Each extend definition activates its group and arm nodes in its `state` sequence at t=0 while its
+`control` sequence starts the arms' own scale motion one second later, and that motion's `from` is a
+collapsed scale (`pirate_hook_extend` takes `l_arm3` and `r_arm3` from `(1, 0, 0)`, `bal_hook_extend`
+takes `l_arm1` and `r_arm1` from `(1, 1, 0.5)`). Nothing writes a pose in that second: the sequence
+stepper holds its cursor on a start-gated event and calls no handler until the gate opens, the
+`OBJECT_MOTION_FROM_TO` handler writes `from` on its first dispatched tick, and
+`OBJECT_ACTIVE_STATE` writes no pose at all ([`../anim-definitions.md`](../anim-definitions.md), "A
+`from` pose is written on the event's first dispatched tick"). The arm therefore holds whatever posed
+it last, and what posed it is the matching retract's `RESET_STATE`, which bootstrap pass 1 applies to
+every loaded definition: `pirate_hook_retract` parks `l_arm3` and `r_arm3` at rotation `(0, 0, 0)`
+and scale `(1, 0, 0)`, the pose its extend starts from, and switches the group, both doors and both
+arms off. The aircraft archive's own `(1, 1, 1)` on those nodes is not what a docking shows.
+`OriginalScreenshots/Videos/CM02.mkv` is the check: over the docking cutscene's opening shot the arms
+are invisible above the mount for a second, grow over the next second, and only then swing out on the
+two-second rotate.
+
+An airframe whose retract poses no scale keeps the archive's pose for that second and does open its
+motion with a step. `bal_hook_retract` names only the two rotations, so the Balmoral's `l_arm1` and
+`r_arm1` sit at `(1, 1, 1)` against a `from` of `(1, 1, 0.5)`. That is the data, and it is a small
+squash rather than a collapse.
+
 **All three therefore need the flown aeroplane's own subtree in the animation runtime's node
 table.** CSVM indexes it there when the flight rigs are built, and again after an airframe swap,
 rebased onto the chapter's cross-archive base the same way the staged intro aircraft are
 (`AircraftStage.StageFlown`); the docking-hook group is built for a human rig and parked at its
-archive-authored inactive bit (`Mech3/PlaneBuilder.cs`). ⚠ The airframe node's own visibility is
-that ACTIVE bit, so the flight rig writes its presence one node higher, on the shake pivot: an
-aircraft a cutscene holds `Inert` while posing it must not read as "no airframe at all".
+archive-authored inactive bit (`Mech3/PlaneBuilder.cs`). ⚠ That rebased index deliberately runs no
+general `RESET_STATE` pass, since a chapter definition anchoring on a generic airframe node name must
+not re-pose a live aeroplane, so `StageFlown` applies the one scoped pass the arms need through
+`AnimRuntime.ParkDockingHook`: the `RESET_STATE` of every definition anchored on a `*_hook` group
+inside that model. ⚠ The airframe node's own visibility is that ACTIVE bit, so the flight rig writes
+its presence one node higher, on the shake pivot: an aircraft a cutscene holds `Inert` while posing
+it must not read as "no airframe at all".
 
 #### Limits and readings
 

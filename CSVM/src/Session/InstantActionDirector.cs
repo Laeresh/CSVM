@@ -112,6 +112,17 @@ public sealed class InstantActionDirector
         return null;
     }
 
+    // Split out so a suite can drive it over a bare StuntMission. ⚠ Gated on THIS run's own
+    // AllComplete, never the mission's win/loss flag: splitscreen can end with the other pilot
+    // still short. prevBest stays read before the gated record — reorder it and a completing
+    // new-best run would show its own just-written time as "previous" (docs/architecture.md).
+    internal static StuntSummary BuildStuntSummary(StuntMission run, ScoreStore store, string key)
+    {
+        float? prevBest = store.GetBest(key);
+        bool newBest = run.AllComplete && store.RecordIfBest(key, run.Elapsed);
+        return new StuntSummary(run, run.Elapsed, prevBest, newBest);
+    }
+
     /// <summary>The mission's actor build: the chapter's patrol net, the ace (dogfight_ace), the
     /// wingmen, and every wave's inert roster — one contiguous phase of GameSession's
     /// BuildFlightRigs, called at the same point in its build order. Returns the build-summary
@@ -738,9 +749,7 @@ public sealed class InstantActionDirector
             return null;
         var store = ScoreStore.Load();
         string key = $"{_spec.Chapter}/{_spec.Mission}/{PlaneRoster.PlaneFor(_spec, 0)}";
-        float? prevBest = store.GetBest(key);
-        bool newBest = store.RecordIfBest(key, run.Elapsed);
-        return new StuntSummary(run, run.Elapsed, prevBest, newBest);
+        return BuildStuntSummary(run, store, key);
     }
 
     // The launch hook handed to the objective zeppelin's generator: releases the next still-parked

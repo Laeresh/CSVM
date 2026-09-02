@@ -486,6 +486,15 @@ still resolve and activate it later.
 Carries the node's `zone_id` as `ZoneId` (default −1 when the field is absent, i.e. ungated) — the
 original's per-node visibility zone, honoured per node by `SceneBuilder` and per camera by
 `Mech3/ZoneGate.cs`.
+Carries the node's `field040` as `MissionTargetWord` (absent from the JSON when zero), the word the
+original reads a mission structure's flag and team out of: bit 31 flags it (`IsMissionStructure`),
+bit 22 marks a gasbag (`IsGasbagStructure`), and bits 0-21 are eleven two-bit ownership slots, one
+per mission of the chapter, so the team needs the mission number — `MissionStructureTeam(mission)`
+reads one slot, `MissionSlotOf` turns a mission folder name into that 1-based number, and
+`WorldObjectTeam` resolves a node the way the engine's factory does, taking the nearest ancestor's
+slot where the node itself authors none. `SceneBuilder` stamps the answer on the flagged nodes and
+`DestructibleRegistry` puts it on the pool (docs/org/targeting.md "What a mission structure's team
+is").
 Carries the World node's partition grid twice: `PartitionNodes` is the flat distinct set every
 placement walk uses, and `PartitionCellNodes` (with the grid origin and cell size read off the first
 cell's own bounds) keeps the per-cell membership an area query needs (see `WorldPartitionGrid`).
@@ -544,6 +553,13 @@ present (water/buildings/untagged, each polygon's own texture deciding), each al
 collider-bearing node registers with `WorldCollision`, which owns its `Disabled` flag from then
 on. A `GameZ.IsMarkerGizmo` mesh draws nothing but its Node3D is still built, since animations
 attach puffers and sounds to those nodes by name.
+A node the scene data flags as a mission structure carries `MissionStructureTeamMeta` (and
+`MissionStructureGasbagMeta` where it is a gasbag), the channel `DestructibleRegistry` reads a
+pool's team through, since the registry meets a pool as a Node3D with no gamez node to ask. The
+team is resolved HERE because a node authors one owner per mission of the chapter and only the
+build knows which mission it is: `MissionSlot` carries that number in, `WorldSession` sets it from
+the mission folder through `WorldBuilder.MissionSlot`, and a node authoring no owner for this
+mission is stamped with none.
 A surface's colour is `vertex colour × material` (the original's baked-lighting modulate), except
 where `GameZ.VertexColorsRestateMaterialColor` detects the two are the same authored value
 (mostly skydome skirts — docs/formats/weather.md). `DebugClutterFlag` (`--debug-clutterflag`)
@@ -849,10 +865,12 @@ The AI pilot-skill constants (docs/formats/ai-rosters.md): player.json's
 slot 6; `RosterRatingBiases`: slot 33 as `AiRatingBias` — wildcard `Matches`, shipped pairs,
 a third element accepted and preserved raw, never acted on; the spawn-facing `Roster*` readers for
 slots 0–5, 20, 21, 31, 32, 40 and 65, every one defensive over a short block; `RosterAce`: slot 67,
-the debrief's kill-crediting flag) and the thin
-per-mission roster loader (`LoadRoster`), plus the positional-header join that exposes disabled
+the debrief's kill-crediting flag; `RosterInitHealth`: slot 7, null unless authored > 0;
+`RosterArmor`: slot 66, null unless authored >= 0 or the block is too short to carry it) and the
+thin per-mission roster loader (`LoadRoster`), plus the positional-header join that exposes disabled
 generator parameter blocks (`LoadGeneratorRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
-slot 6/33 census goldens in `AiTargetRankingTests`; the spawn slots in `CampaignRosterPlanTests`.
+slot 6/33 census goldens in `AiTargetRankingTests`; the spawn slots in `CampaignRosterPlanTests`;
+the two durability gates and the absent-slot case in `RosterDurabilityOverrideTests`.
 
 ## src/Mech3/AiVolumes.cs
 `AiVolume` (radius, upper, lower) and `AiVolumeSet` (activation, attack, return): the one shape
@@ -933,7 +951,10 @@ shared-scope FILE gate (`ListedSharedFiles`: a shared reader file loads only whe
 `anim.zrd` index closure, the chapter's `cam_anim.zrd` or the mission's `mis_anim.zrd` names it,
 reported as `SharedFilesSkipped`) are decode knowledge: docs/formats/anim-definitions.md "Mission
 library scope". Both gates apply only with a compiled mission manifest present, so a reader-only
-extraction is untouched. Pinned by the `mission-off-turrets` suite (C3/M03 loads no balloon def,
+extraction is untouched. Whatever survives them is then deduplicated on the (`NAME`,
+`ANIMATION_NAME`) pair in `Add`, and since the compiled archives load first the compiled form always
+wins: that third rule, absent from the census line, is what stops a plain-`NAME` shared definition
+coexisting with its compiled twin, and what makes the archives' own duplicate files free. Pinned by the `mission-off-turrets` suite (C3/M03 loads no balloon def,
 C3/M02 does). Which world ENTITIES a mission shows is MissionSetup
 plus the interp boot script, not this file. `Defs`, `StartAnims` and `MissionLibrarySkipped` are
 `IReadOnlyList` over private backing lists: one program is already shared by every runtime `Subset`
@@ -1163,6 +1184,16 @@ swap in those sequences takes the RESET-derived `ApplyDeathSwap`, withheld when 
 its own visible death, the same rule the live kill applies. Shipped `DAMAGE_SEQUENCE`s carry only
 `CallAnimation` puffer calls (and three `StopAnimation`s), so a carried partial HP lands as the
 stage counter alone and no stage burst plays. Regression: the `carried-state-silent` suite.
+**`NODE_UNDERCOVER` is a real probe**, not a stub: `EvaluateCondition`'s arm casts a vertical
+segment of the condition's own signed length from the named node against `ContactMask`, excluding
+the collider bodies under the host the probed node belongs to, since the original clears the probed
+node's own collidable bit and one gamez node is a whole subtree of bodies here. The operand needs
+decoding before it is a length (`UndercoverReach`); the probe's semantics, the sign convention and
+the u32 bit pattern are in `docs/org/sequences.md` and `docs/formats/anim-definitions.md`. No mask
+wired answers false, the same structural fallback the contact tiers take, so every lab, golden and
+collision-less suite is unaffected. This is what makes a downed zeppelin's `killpzep` breakup play:
+its `main_altitude_check` polls 65 m under the hull and opens as the wreck sinks, and each engine's
+own break polls 4 m under that engine. Regression: the `zeppelin-breakup` suite.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
@@ -1433,11 +1464,17 @@ Regression: the `campaign-balloon-death` suite. Schema: docs/formats/destructibl
 `Instance.Reseed(max)` re-seeds a pool from a mission record — the F18 zeppelin zones, where
 `zeppelins.json` hp beats the def's own `HEALTH` — and refuses once damaged, so a late wire-up
 cannot heal a fight in progress. `Instance.Team`, `Instance.Owner` and `Instance.Dormant` are what a mission
-record can put on a pool: an owning side where the data names one (`ZeppelinRuntime` is the only
-writer of either today, and a pool with no team is neutral, so nobody's target), the name of the
+record can put on a pool: an owning side where the data names one (a pool with no team is neutral,
+so nobody's target), the name of the
 entity the pool is a PART of (a zeppelin's zones carry their hull's name, which is the only thing a
 `rating_biases` pattern naming the airship can match), and "registered but not in the world yet",
 which `AimCandidateSet.AddStructures` refuses outright.
+Two writers author a team. `ZeppelinRuntime` fans a mission record's own over an airship, and
+`Register` reads one off the pool's damage node where `SceneBuilder` stamped it, which is how a
+pool standing on a mission-structure node becomes a candidate with a side rather than scenery: in
+C1/M05 that puts the Red Cross hospital ship on the player's side and the mission's zeppelin zones
+on the enemy's, from the same field (`MissionStructureTeamOf`, `Instance.Gasbag`,
+docs/org/targeting.md "What a mission structure's team is"; `turret-structure-targets` suite).
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM→PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies —
@@ -1721,8 +1758,15 @@ One `ai.zrd` turret gunner, both families: carried (`BuildCarried`, per host fro
 the vehicle def's `thirdp` `TurretMount`s × `TurretDefs` × the built plane model, ticked from
 `FlightController.SimStep`) and world emplacement (`BuildEmplacements`, per matched `NODES`
 pattern node via `AnimRuntime.FindNodes` with multi-segment paths scoped to the prior match,
-ticked by `Session/TurretEmplacementRuntime`). Per tick: nearest hostile aircraft inside
-`DETECTION_RANGE` (team gate through `AimAssist.Hostile`; carried = host's
+ticked by `Session/TurretEmplacementRuntime`). Per tick: the nearest hostile entry of the whole
+`VehicleList` inside `DETECTION_RANGE`, read through `ProjectilePool.CollectVehicleList`, so an
+AI ground or sea vehicle is a candidate beside an aircraft the way the decoded picker holds both
+(docs/org/targeting.md "What a turret's candidate set holds"; `turret-vessel-targets` suite). A
+ship reaches it as the vessel it is, never registered as aircraft. Then the mission structures,
+through `ProjectilePool.CollectMissionStructures`, walked after the vehicles against the same
+running best with a tie going to them and a gasbag dropped, which is the decoded pass order
+(`turret-structure-targets` suite). The picker's other two pools (turrets, tracked ordnance) are
+decoded but unscanned. Team gate through `AimAssist.Hostile`; carried = host's
 `FlightController.Team`, emplacement = the authored/default `TurretDef.TeamId` with no conversion,
 since one integer space covers aircraft and emplacements alike, until `SetTeam` fans a zeppelin
 record's own team over the guns standing on that hull),
@@ -1742,8 +1786,9 @@ hands the constructor (a `GodotWorldQuery` over the host); `_host` itself stays 
 gives (`WorldVelocity`, `InPlay`, `PlayerIndex`). An emplacement has no host and no `IWorldQuery`
 either, so it keeps its own `WorldRayBlocked` twin, deliberately left alone: a gunner mounted on
 world geometry needs its own section excluded from the ray, which a carried gunner never does.
-Format and decode: [formats/turrets.md](formats/turrets.md). Proven by the `carried-turrets` and
-`world-turrets` suites, `TurretDefsTests` and `TurretLineOfSightTests`.
+Format and decode: [formats/turrets.md](formats/turrets.md). Proven by the `carried-turrets`,
+`world-turrets` and `turret-vessel-targets` suites, `TurretDefsTests` and
+`TurretLineOfSightTests`.
 
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math (an `internal` class — nothing else may call it):
@@ -2063,7 +2108,13 @@ candidate lists off this pool's own state: the live rounds the engine wraps (a F
 with a fuse longer than `AimAssist.MinFuseDistance` **or** `TARGETABLE`, `FUN_00441830`'s two
 independent reasons), the registered aircraft, and each
 registered aircraft's carried turret gunners — the same roster the hit ray and the fuse
-already use, so the assist cannot drift onto a second list. `PlayShotSound` is the turret gunners'
+already use, so the assist cannot drift onto a second list. `CollectVehicleList` is the whole of
+the first of those lists, aircraft plus the `SurfaceVehicles` runtime's hulls, for a scan that
+wants the engine's `VehicleList` rather than its aircraft half; `GameSession` wires the runtime in
+beside the world emplacements, and a build with no hulls leaves it null.
+`CollectMissionStructures` is the third of those lists, the session's `DestructibleRegistry` wired
+in the same way, so a gunner reaches the structure pool through the pool it already holds.
+`PlayShotSound` is the turret gunners'
 launch bark through the pool's own one-shot pool. `DefaultVelocity` (500 m/s, the
 launch speed for a def with no `VELOCITY`) is shared with the scan so the lead is solved for the
 speed the round actually leaves at.
@@ -2788,7 +2839,10 @@ Two flavours of one airframe: `Load` resolves everything down the player chain, 
   `AiFlightAssembler` resolves it into `AiTitle` for the targeting readout.
   `VehicleMode` carries the def chain's own `mode` key, and `WithAiSpawnJitter` is gated on it: the
   original jitters the `jet` and `heli` classes only, so the `mode wingman` family flies its authored
-  dynamics (`docs/org/flightModel.md`, "The per-spawn jitter").
+  dynamics (`docs/org/flightModel.md`, "The per-spawn jitter"). `WithRosterDurability` applies the
+  roster block's own `init_health`/`armor` override (aiv slots 7/66) to `VehicleHealth`/
+  `VehicleArmor` before `WithEnemyDurability`; both arguments arrive already gated, so null always
+  means unset, never an authored zero (`docs/org/vehicleDamage.md`).
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a
@@ -2882,7 +2936,9 @@ active — `IaWrapupBoard` carries the splits there instead (`BL-358`).
 ## src/Flight/ScoreStore.cs
 Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
 `chapter/mission/plane` → `{best, date}`; `GetBest` / `RecordIfBest` (returns whether it was a
-new best — never worsens a record).
+new best — never worsens a record). The public `Load()` always opens the player's own file; an
+internal `Load(storePath)` overload exists only so a suite can point at a throwaway path instead
+(`instant-action-stunt-summary`) — never the player's own store.
 
 ## src/Flight/StuntRace.cs
 The internal `Remove` operation is compensation for an uncommitted roster build, including removal
@@ -3293,18 +3349,28 @@ maneuver. Both refuse an engine-out aircraft and a re-engage while the boost or 
 is alive; the boost animation lives at least 1 s after an engage. `Installed` is the injector
 (the hangar's nitrous engine ids 3-5, or the roster block's `nitro` slot); `EngagedThisTick` and
 `ReleasedThisTick` are the edges `FlightController.AdvanceNitro` turns into the shake kick, the
-`nitro_boost`/`nitro_decay` defs and the `snd_nitro` loop. `AdvanceNitro` plays them with
+`nitro_boost`/`nitro_decay` defs and the `snd_nitro` loop.
+⚠ **The edges are cleared by `BeginStep` at the top of the step and nowhere later.** The original
+carries no edges at all: the play, the player shake and the force-feedback effect run inside
+`SetNitro` itself, so these two flags stand in for that single call and have to survive from the
+arm that raises one to the reader at the end of the same step. The tank update (`Advance`) runs
+after the command arm, as the original's per-vehicle update runs after its input handler, and
+clearing them there deleted every engage: the boost still accelerated the aircraft, while its
+animation, its shake and its loop sound were all cancelled before anything read them. The release
+edge survived that, being raised by the tank update's own cutoff, which is why the decay half
+looked healthy. `AdvanceNitro` plays the defs with
 `AnimRuntime.Play(name, PlaneModel, applyReset: false)`, the same fallback-anchor shape
 `startprops`/`stopprops` already use: the defs' own anchor NAME (`warhawk`, `plane_props.zrd`)
 never resolves inside a per-plane crash rig's index, so `PlayWithin` (no fallback) silently played
-neither. That fix's visible effect is only the `nitropuffN` exhaust puffers at `exhaust1..4`,
-which every flyable `player_*` model carries; the disc swap (`nitropropN`) stays inert on any
-flyable aircraft, since no `player_*` model's own built subtree carries that geometry, though
-`extracted/planes/nodes.json` declares 34 `nitropropN` nodes under both a bare-named root and a
-`player_*` root per aircraft. Whether the original ever showed the swap on a flyable aircraft, or
-only ran it against the bare root, is open (`BL-546`). Regression: `nitro-boost-anchors`
-(exhaust half only). Every constant is censused by `FlightConstantInventoryTests`;
-`NitroSystemTests` pins the lifecycle and the force couplings.
+neither. What an engage shows is the `nitropuffN` exhaust puffers at `exhaust1..4` and the
+`prop1..3` fade, both authored to last one second; the disc swap (`nitropropN`) shows on no flyable
+aircraft, and the decode says it never did, because the original resolves a `LOCAL_NODES_ONLY`
+definition's names strictly inside the calling vehicle's own node subtree with no global tier
+(`org/flightModel.md`, "Nitro"), and the discs ship only on the separate bare-named library root.
+Regressions: `nitro-boost-anchors` (the call shape on a replica rig) and `nitro-boost-flown-rig`
+(the engage edge and the emitting puffers on the rig `WorldEffectsFactory` builds for a session,
+reached through `FlightController`'s own step). Every constant is censused by
+`FlightConstantInventoryTests`; `NitroSystemTests` pins the lifecycle and the force couplings.
 
 ## src/Flight/PathFollower.cs
 The engine's SECOND movement law, and the exclusive alternative to `FlightModel`: the dispatcher
@@ -3583,7 +3649,13 @@ its `player` marker in and draws the model there, then hands back the pose the a
 the staging began, or the one `ResumeAt` re-placed it at (`Session/CutsceneController.cs`).
 `BindCrashRig` takes the
 crash runtime, the def table, the anchor and the two respawn snapshots in one call, so the rig
-cannot be half-bound and only `CrashRuntime`/`CrashAnchor` stay readable as properties. The DEATH family (`CRASH into`, `midair aspect`, every
+cannot be half-bound and only `CrashRuntime`/`CrashAnchor` stay readable as properties.
+Those two and `CrashDefs` also FORCE a rig that is armed but not built: `ArmPendingCrashRig` hands
+this aeroplane the rest of a stepped build (`Session/CrashRigQueue.cs`) and `EnsureCrashRig` runs it,
+which is what `TakeProjectileHit`, `TakeCollisionHit` and `Crash` call at their head so nothing is
+shot at, flown into the ground or destroyed while its rig is out of reach. ⚠ Respawn reads the
+backing field instead: a still-armed rig has played nothing, so there is nothing there to undo, and
+asking would build the whole rig on the frame an aeroplane is placed. The DEATH family (`CRASH into`, `midair aspect`, every
 `vehicle health exhausted`, `graze`, `embedded in terrain`, `AI ram`, `impact`) routes through
 `Log.Info("flight", …)`, so a play session's file sink carries how each aircraft died; the
 per-round weapon breadcrumbs around them are a different family and still `GD.Print`. The
@@ -3886,7 +3958,9 @@ is the one dial whose bezel centre and radius are read from the tree rather than
 geometry extracted from the plane's own gauges subtree
 (structure/scales/quirks: docs/formats/hud.md); polys draw by data priority, rest rotations
 ignored; PartFraction binds flight or the lab; dial centres are bottom-anchored (FromBottom) so
-panes keep them on screen. `DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (`BL-085`/`BL-173`) is
+panes keep them on screen. `HeadingDeg` carries the nose heading `CompassTape` also reads (`BL-663`);
+the cluster draws no screen-space compass itself, but `CockpitGauges` reads the same field to turn
+the authored 3D panel's compass drum, so the tape and the drum never compute the heading twice. `DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (`BL-085`/`BL-173`) is
 the damage-dial band function — `frac` is `PartFraction`'s COMBINED armor+health value (both bound
 sources, flight and the lab, feed that scale; nothing here computes it),
 `yellowAt`/`orangeAt`/`redAt` are mined per-part from the data's own `*_damage_green/yellow/red`
@@ -4927,7 +5001,7 @@ add and activate them (`Props`). All carry a rebased gamez index (`PointerBaseOf
 next multiple of 2500), which is what makes a compiled definition's cross-archive symbol table
 bind them instead of claiming a name with no node. Built for every mission that plays a cutscene
 (`WorldSession`'s intro, approach-trigger or mission-list gate), so every other session's node
-census is exactly what it was. `StageFlown` puts the FLOWN aircraft's own airframe subtree in the runtime's node table under the same rebase, run when the rigs are built and again after an airframe swap: that is what makes a hookup definition's per-airframe branches decidable, since each tests one `player_<airframe>` node's active bit and then poses that airframe's own hook, wing fold and mount offset. The pose half is
+census is exactly what it was. `StageFlown` puts the FLOWN aircraft's own airframe subtree in the runtime's node table under the same rebase, run when the rigs are built and again after an airframe swap: that is what makes a hookup definition's per-airframe branches decidable, since each tests one `player_<airframe>` node's active bit and then poses that airframe's own hook, wing fold and mount offset. That rebased index runs no general RESET_STATE pass, because a chapter definition anchoring on a generic airframe node name must not re-pose a live aeroplane, so `StageFlown` follows it with `AnimRuntime.ParkDockingHook`: the RESET_STATE of every definition anchored on a `*_hook` group inside that model, which is what parks the hook ARMS collapsed. The archive's inactive bit parks the group and nothing else, and an arm left at the archive's own full length is drawn extended for the second before its scale motion starts and then collapses, which reads as a second hook swing. The pose half is
 `Session/CutsceneController.cs`; the decode is
 `docs/formats/anim-definitions/cutscenes.md`.
 
@@ -5631,7 +5705,17 @@ the campaign's own loss rule shares; and the whole-window wrap-up board,
 its counters summed across every seat (`enemiesShotDown` filtered on `killer != null` — a bare
 terrain crash never reaches the take-hit body the original counts in — Shot % through
 `ProjectilePool.ScoredShooters`, zones read live at `MissionEnded` time, P1's stunt best recorded
-under the mission's own score key).
+under the mission's own score key). `BuildStuntSummary` (`BL-426`) is the record's own gate: it
+gets THIS run's own `AllComplete`, never the mission's win/loss flag, since a splitscreen mission
+ends once every pilot is done OR spent, so P1's own zone set can still be short when the mission
+itself ends on the other pilot going out of lives — each pilot's summary reads that pilot's own
+`StuntMission`, so the gate is per-pilot by construction. The stored `prevBest` is read before the
+gated record either way, so a run that does not qualify still shows the true stored best instead of
+nothing; reading it after the record would show a completing new-best run its own just-written time
+as "previous". A failed run's working default, pending the author's own judgement, is to show its
+elapsed total with no NEW BEST flag — the original's own behaviour here is not decoded, and whether
+an already-poisoned `user://stunt_scores.json` needs invalidating is a separate open question this
+item does not settle.
 `ForceDebugScoreboard()` is `--debug-scoreboard`'s single-fire force, attributed to P1:
 `dogfight_ace`/`dogfight_squadron` through `DebugForceCrash`; `stunt_flying` needs nothing,
 already forced by `HumanFlightAdapter`'s own `DebugCompleteStunt` wiring; `zeppelin_run` has no
@@ -5702,7 +5786,10 @@ name, because C3/M01's village node stands at the world origin. A site on a worl
 original publishes for a mission structure (`docs/org/targeting.md`); its own position is only the
 fallback for a node that draws nothing. C1/M05's balloon groups stand on the water with the balloon
 16 m above them and C2's `sghangar` stands at the world origin, so the node's position is not the
-site. A site is keyed by
+site. A site carries the team of the node it stands on where that node is a mission structure, and
+neutral otherwise, which is the original's own split: a record naming a flagged node keeps that
+object's team, and a record that has to build its own builds it neutral. Almost every site is the
+second case, since a group is flagged on a child. A site is keyed by
 `ObjectiveTarget.Key`, and `ResolveTarget` walks a path one name at a time with `FindNodes` scoped
 to the node before, so `piratezep/rock_zeppelin` is the hull's own child and a bare name is the
 first global match; `targets.zrd` is looked up by the whole key first (a path-authored entry
@@ -5937,9 +6024,11 @@ the launch is counted. C1/M04's `eairg32` (`Eairg32_params` against a label tabl
 `Earig32_params`) is the shipped case; the data stays as shipped. `ApplyPlan` is the after-the-spawn half of a
 plan (volumes under the floor, signature maneuvers, the gunner's rating biases and its assignment),
 shared by the campaign placement and the generator launch so the two cannot drift; ⚠ it leaves an
-escorting block's `primary_target` alone, because there it names a leader and not a target.
-Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`; the placement half
-is the `campaign-roster` suite, the generator half the `generator-roster-params` suite.
+escorting block's `primary_target` alone, because there it names a leader and not a target. A
+plan's `InitHealth`/`Armor` (`AiSkills.RosterInitHealth`/`RosterArmor`, aiv slots 7/66) travel
+through `SpawnFor` onto the `AiSpawn` record; `AiFlightAssembler.Assemble` is what applies them.
+Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs` and `RosterDurabilityOverrideTests.cs`; the
+placement half is the `campaign-roster` suite, the generator half the `generator-roster-params` suite.
 
 ## src/Session/ScriptedPathVehicles.cs
 One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored
@@ -6124,6 +6213,17 @@ C3/M03's `cgzep_camera`, which no start list names (its start anim `calldestroy_
 calls it first and the zeppelin's destruction half a second later, so the destruction plays under
 the camera from that one call and the host re-issues nothing). Decode:
 `docs/formats/anim-definitions/cutscenes.md`.
+The card's own material carries no occlusion guarantee: `BindWorld` overrides it (no depth test,
+top render priority, moved into the sorted-transparent pass) so the card wins the pixel regardless
+of what the episode flies between the camera and it, without touching the card's position or the
+field of view `FrameBars` computes from its extent. The override cannot be a plain duplicate of
+the card's own material, since every world mesh carries `SceneBuilder.BiasMaterial`'s
+`ShaderMaterial`, which has no depth-test or render-priority property of its own; it is built
+fresh instead, reading the source shader's `albedo_color` parameter so the card keeps its authored
+colour, unshaded and both-sided so neither the light nor the source polygon's authored sidedness
+changes how it reads. The `letterbox` definition only ever toggles the node's `ACTIVE` state and
+its pose (see `docs/formats/anim-definitions/cutscenes.md`), never an opacity or a colour, so
+replacing the material outright authors no fade the override could fight.
 
 ## src/Session/GeneratorCycle.cs
 The decoded egen launch timing law for ONE generator (M4 B6 + F20), pure over `Step` calls (no
@@ -6240,7 +6340,11 @@ and logs so — never an invented default. `PollDamage` (per `SimStep`) drives
 `Motion.AliveEngines`, plays record cannon stages, and owns the kill (`ZeppelinDamage.IsDead`);
 the kill logs, stops the motion, plays the prerequisite-gated hull-death def
 (`all_pzep_gasbags`-shaped, found by data, never by name) and raises `ZeppelinKilled` (the
-generator disable). The same recount raises `ZeppelinEnginesDisabled` once the LAST engine dies
+generator disable). That def calls `killpzep`, whose whole breakup waits on a `NODE_UNDERCOVER`
+probe under the hull, so the pitch-over, the six gasbag drops and the gondola drop arrive as the
+wreck sinks rather than at the kill; the gasbag splashes are sited by the `CALL_ANIMATION` arm from
+each gasbag's live transform at the moment its bounce fires, which is what a template that snaps to
+an absolute world point needs. The same recount raises `ZeppelinEnginesDisabled` once the LAST engine dies
 (gated on the hull, since the original's list compaction stops at death): that is Instant Action's
 own `zeppelin_run` win, ahead of the hull kill, and `WireZones` warns outright about an engine with
 no pool because such an engine can never die and would leave the mode unwinnable on its own
@@ -6321,6 +6425,10 @@ unconsumed. The aggregate owns the live
 human/AI membership views, fans target-source updates to present and future members, and drops its
 non-node bindings in `ClearMembership`; the session subtree remains the aircraft node owner.
 `HumanFlightAdapter` and `AiFlightAssembler` are the two private assembly implementations.
+`SpawnAi` returns before the aeroplane's crash rig exists: the roster owns a `CrashRigQueue` and the
+session pumps it one step a frame through `PumpDeferredCrashRigs`. ⚠ A caller that configures
+rig-owned state (`DestroyDef` is the one that bites) between the spawn and the build has to force it
+first with `FlightController.EnsureCrashRig`, or the build writes over what it set.
 `SwapPlayerAirframe` is the third commit path, a mission putting one player into a different
 airframe mid-flight (callback codes 965 to 967): it removes the outgoing aircraft and re-runs the
 human assembler on the named airframe with the pose, heading, throttle and speed that aircraft
@@ -6358,10 +6466,30 @@ aircraft/archive resources, live world services, and human-session bindings. The
 the roster from accepting all of `SessionSpec` or exposing either internal assembler while making
 required dependencies explicit at the production seam.
 
+## src/Session/CrashRigQueue.cs
+The session's queue of crash rigs whose aeroplane is already flying. A mid-flight AI introduction is
+the one aircraft build that happens on a frame the player is watching, and the crash rig is the only
+block of it the aeroplane does not need in order to be in the world, so `AiFlightAssembler` opens the
+rig (`WorldEffectsFactory.BeginFlightCrashRuntime`) and hands it here instead of building it. `Pump`,
+called once a frame from `GameSession._Process` through `FlightRoster.PumpDeferredCrashRigs`,
+advances the head build by one step; `Defer` arms the aeroplane itself
+(`FlightController.ArmPendingCrashRig`) so any reader of the rig, and both damage intakes and the
+ground contact, build it in place first. ⚠ Strictly one build at a time, head first: the seed is
+already drawn at the request, but the emitter and node counts a run reports would otherwise depend on
+frame timing. `Drop` is the rollback path (a controller being freed keeps no queued rig) and
+`Discard` the membership clear's. Measured effect and what remains: `docs/verification.md` PERF-25.
+
 ## src/Session/AiFlightAssembler.cs
 The roster's private AI assembly path. It prepares authored/fallback pilot skills and maneuvers,
 builds the model, controller, livery, loadout/ordnance, damage visuals and optional crash runtime,
-then places the finished node. It also resolves the def's authored `title` into
+then places the finished node. The crash runtime is OPENED rather than built: the block is handed to
+`CrashRigQueue` where the caller supplied one, so the launch frame carries the model, controller,
+loadout, turrets, damage visuals and placement only, and `startprops` plays from the queue's
+completion hook. With no queue the assembler finishes the rig in place, which is what every
+off-frame caller wants. `Assemble` chains `PlaneStats.WithRosterDurability(spawn.InitHealth,
+spawn.Armor)` ahead of `WithEnemyDurability`/`WithAiSpawnJitter`, the engine's own order
+(docs/org/vehicleDamage.md), so a named ace's authored hull is what the scale and the jitter land
+on. It also resolves the def's authored `title` into
 `PlaneStats.AiTitle` (the militia name the targeting readout prints), because this is where the
 loaded def and the session's string table meet. `FlightController.Scheme`/`ShippedSkins`/`Painter`
 record this build's paint resolution and its own painter, read back by an airframe swap carrying a
@@ -6427,7 +6555,18 @@ copy — see `AnimRuntime`'s pool paragraphs for the mechanism and the `damage-t
 for the regression shape. The stage has **two** sources: the chapter gamez, then the planes gamez
 for a root it has none of, which is the only place the destroy def's parachute (`chuteman`) lives;
 both spawners pass it, and its own builder is cached here for the session.
-After the bind, `BuildFlightCrashRuntime` pre-warms the rig's emitters
+`BuildFlightCrashRuntime` is the one-call form of `BeginFlightCrashRuntime`, which opens the same
+build as a `CrashRigBuild` handle a caller advances with `Step()` or runs out with `Finish()`. The
+phases are the build's own joints: prepare (def table, destroy def, crash root, root-name
+derivation), one authored pool slot each through `StageCrashSlot`, the wreck subtree, the runtime
+bind, and the emitter pre-warm. A mid-flight AI introduction takes the stepped form so the launch
+frame carries only what puts the aeroplane in the world (`CrashRigQueue`, `BL-641`); every other
+caller takes the one-call form. Two rules the split imposes: the crash RNG stream is drawn in
+`BeginFlightCrashRuntime`, at the request rather than at the bind, so a deferred rig's seed follows
+the order its aeroplanes were introduced and not the order the pumps finish; and `WireDamageStages`
+is handed the runtime rather than reading `FlightController.CrashRuntime`, because that property
+forces the very build it is part of.
+After the bind, the build pre-warms the rig's emitters
 (`AnimRuntime.PrewarmEmitters` with the plane model and the crash root as the call-site anchors),
 recorded as the `emitters` startup phase and logged per rig, so a crash or a damage stage finds its
 puffers and materials built and trips no `effect_pool_miss`. Measured on the Bloodhawk in C1: 217

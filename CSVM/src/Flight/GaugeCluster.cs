@@ -73,6 +73,12 @@ public sealed partial class GaugeCluster : Control
     /// <inheritdoc cref="HorizonPitchRad"/>
     public float HorizonRollRad;
 
+    /// <summary>The nose heading in degrees, the same value <see cref="CompassTape"/> reads (0 =
+    /// north/−Z, 90 = east/+X). Carried here so the screen-space tape and the 3D panel's compass
+    /// drum (<see cref="CockpitGauges"/>) turn off one computed number rather than each deriving
+    /// it.</summary>
+    public float HeadingDeg;
+
     // ---- tuning ----
     // The hardpoint dial's belt-light ring is 8 positions on every airframe regardless of the
     // loadout's pylon count (user-confirmed against the original; markers.md) —

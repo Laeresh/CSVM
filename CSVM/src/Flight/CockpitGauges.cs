@@ -20,6 +20,7 @@ public sealed class CockpitGauges
     private readonly Needle _altHundreds, _altThousands, _speed, _nitroBoost, _nitroCharge;
     private readonly Needle _gunArrow, _missileArrow;
     private readonly Horizon _horizon;
+    private readonly CompassDrum _compass;
     private readonly List<Belt> _belts;
     private readonly List<DamageZoneSkin> _zones;
     private readonly List<Readout> _readouts;
@@ -41,6 +42,10 @@ public sealed class CockpitGauges
         // 5 of 11 airframes and the ball's own container on the other 6, while "pfhorizon" is the
         // ball mesh on all 11 (docs/formats/hud.md). Null on any build that ships none.
         _horizon = Horizon.Find(gauges, "pfhorizon");
+        // The binary's own lookup string is "compass"; the DATA names the same node "comp" on
+        // some airframes (docs/formats/hud.md), so try the engine's name first and fall back to
+        // the data's, the same two-name search pfhorizon needed against horizn/horiz.
+        _compass = CompassDrum.Find(gauges, "compass", "comp");
         _lowAltLamp = FindNamed(gauges, "lowalt_on");
         _stallLamp = FindNamed(gauges, "stallwarning_on");
         _nitroDial = FindNamed(gauges, "nitrogauge");
@@ -48,7 +53,7 @@ public sealed class CockpitGauges
         // that used to be silent; this line is what makes it visible again.
         int needles = new[]
             { _altHundreds, _altThousands, _speed, _nitroBoost, _nitroCharge, _gunArrow, _missileArrow }
-            .Count(n => n.IsBound) + (_horizon.IsBound ? 1 : 0);
+            .Count(n => n.IsBound) + (_horizon.IsBound ? 1 : 0) + (_compass.IsBound ? 1 : 0);
         int lamps = new[] { _lowAltLamp, _stallLamp, _nitroDial }.Count(n => n != null);
         Log.Debug("flight", $"cockpit gauges bound needles={needles} lamps={lamps} readouts={_readouts.Count} belts={_belts.Count} zones={_zones.Count}");
     }
@@ -107,6 +112,7 @@ public sealed class CockpitGauges
         SetIfSwept(_gunArrow, gauges.GunArrowAngleDeg);
         SetIfSwept(_missileArrow, gauges.MissileArrowAngleDeg);
         _horizon.SetAttitude(gauges.HorizonPitchRad, gauges.HorizonRollRad);
+        _compass.SetHeadingDeg(gauges.HeadingDeg);
         Show(_lowAltLamp, gauges.LowAltLampLit);
         Show(_stallLamp, gauges.StallLampLit);
         // ⚠ Only the Devastator ships nitrogauge active:false, so on every other airframe the dial
@@ -257,6 +263,47 @@ public sealed class CockpitGauges
                 return;
             }
             var basis = (new Basis(Vector3.Back, -rollRad) * new Basis(Vector3.Right, pitchRad)).Scaled(_scale);
+            _node.Transform = new Transform3D(basis, _origin);
+        }
+    }
+
+    /// <summary>The compass drum, node <c>compass</c> in the binary's own lookup string, <c>comp</c>
+    /// in the data on some airframes (docs/formats/hud.md). Turned about the node's Y axis, the
+    /// engine's own <c>FUN_004d1a30(node, 0, -heading, 0)</c> argument taken as-is: like
+    /// <see cref="Horizon"/> and unlike a <see cref="Needle"/>, this angle is the engine's own
+    /// value, not a screen-space clockwise degree the 3D drive negates a second time. A compass
+    /// card that stays pointed at true north while its parent (the cockpit, riding the plane) yaws
+    /// needs exactly this: rotating the node by −heading in the parent's own frame cancels the
+    /// parent's rotation, leaving the card's WORLD orientation constant as the aircraft turns.
+    /// <c>Vector3.Up</c> is the node's own Y axis under the importer's <c>Yxz</c> Euler convention,
+    /// the same one <see cref="Horizon"/> already relies on for X and Z.</summary>
+    private readonly struct CompassDrum
+    {
+        private readonly Node3D? _node;
+        private readonly Vector3 _origin;
+        private readonly Vector3 _scale;
+
+        private CompassDrum(Node3D node)
+        {
+            _node = node;
+            _origin = node.Transform.Origin;
+            _scale = node.Transform.Basis.Scale;
+        }
+
+        public bool IsBound => _node != null;
+
+        public static CompassDrum Find(Node3D gauges, string engineName, string dataName) =>
+            (FindNamed(gauges, engineName) ?? FindNamed(gauges, dataName)) is { } node
+                ? new CompassDrum(node)
+                : default;
+
+        public void SetHeadingDeg(float headingDeg)
+        {
+            if (_node == null)
+            {
+                return;
+            }
+            var basis = new Basis(Vector3.Up, -Mathf.DegToRad(headingDeg)).Scaled(_scale);
             _node.Transform = new Transform3D(basis, _origin);
         }
     }

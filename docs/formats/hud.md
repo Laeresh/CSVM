@@ -225,7 +225,16 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   `gungauge` / `missilegauge` are decoded below; `nitrogauge` (face, `nitro_backplate`, needles
   `nitro_boost` / `nitro_charge`) is driven by `GaugeCluster` off the nitro decode in
   `docs/org/flightModel.md`, "Nitro". The `compass` drum (`FUN_004d1a30(node, 0, -heading, 0)` at
-  `0049f8fe`) is decoded but stays unwired in the remake.
+  `0049f8fe`) turns about the node's own Y axis by that argument taken as-is, the same rule
+  `pfhorizon` already follows for its own rotation: the engine's value is written straight through
+  with no re-derivation. `CockpitGauges` finds the drum by the binary's own name, `compass`, first
+  (present as the mesh-bearing node on every player airframe checked in `extracted/planes/nodes.json`)
+  and falls back to `comp` (the data's own container name on the same airframes, present but never
+  looked up by the binary) if that search ever misses. Heading is `GaugeCluster.HeadingDeg`, the
+  same value `CompassTape` reads, so the 3D drum and the screen-space tape turn off one number: a
+  card fixed to true north rotates by `-heading` in its parent's own frame precisely so its WORLD
+  orientation stays put while the cockpit (riding the plane) yaws under it, matching the tape's own
+  "headings increase to the left" card behaviour.
 - ⚠ **`nitrogauge` is the one dial not authored in normalized dial coords.** Its
   `nitro_backplate` mesh spans x ±1.4489 and y −0.1292…3.6746, so the bezel is centred at
   y ≈ 2.2078 with radius ≈ 1.4489 rather than at the origin with radius 1; the plate carries

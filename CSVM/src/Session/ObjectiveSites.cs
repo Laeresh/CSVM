@@ -167,7 +167,12 @@ public sealed class ObjectiveSites
             into.Add(new AimCandidate
             {
                 Position = at,
-                Team = AimAssist.NeutralTeam,
+                // A record naming a mission-structure node stamps its flags onto the object that
+                // node already built and keeps its team; one naming any other node builds its own,
+                // and the original builds those neutral, which is almost every site.
+                Team = (Resolve(node) is { } site
+                    ? DestructibleRegistry.MissionStructureTeamOf(site)
+                    : null) ?? AimAssist.NeutralTeam,
                 Live = true,
                 ConeOverride = AimAssist.NoConeOverride,
                 Source = SiteFor(node, graph, at),

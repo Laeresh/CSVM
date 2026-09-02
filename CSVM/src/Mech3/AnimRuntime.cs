@@ -460,6 +460,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly Dictionary<(string Kind, Node3D? Anchor), bool> _condLast = new();
 
+    // Per host: the collider RIDs a NODE_UNDERCOVER probe from inside that host ignores. Keyed by
+    // instance id rather than by the node, so a freed host is never dereferenced as a dictionary
+    // key long after the subtree it named is gone.
+    private readonly Dictionary<ulong, Godot.Collections.Array<Rid>> _undercoverExclude = new();
+
     private readonly HashSet<string> _retargetsLogged = new(StringComparer.Ordinal);
 
     // The (caller anim, target node) pairs AnchorWarnAnimNames has already warned about, which is
@@ -1145,6 +1150,32 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _resolver.ClearFindCache();
     }
 
+    /// <summary>Parks a flown airframe's docking hook where the airframe's own
+    /// <c>&lt;x&gt;_hook_retract</c> RESET_STATE puts it, scoped to definitions anchored on a
+    /// <see cref="PlaneBuilder.IsDockingHook"/> group inside this model since the general pass
+    /// deliberately does not run over a rebased aircraft (<see cref="IndexRebasedStage"/>).
+    /// ⚠ Without it the extend switches a full-length arm on and collapses it a second later.
+    /// Decode: docs/formats/anim-definitions/cutscenes.md. Returns the definitions applied.</summary>
+    public int ParkDockingHook(Node3D planeModel)
+    {
+        ArgumentNullException.ThrowIfNull(planeModel);
+        int applied = 0;
+        foreach (var def in _program.Defs)
+        {
+            if (def.ResetState == null)
+                continue;
+            foreach (var a in Anchors(def))
+            {
+                if (a == null || !planeModel.IsAncestorOf(a)
+                    || !PlaneBuilder.IsDockingHook(NameOf(a)))
+                    continue;
+                ApplyInstant(def.ResetState.Events, def, a);
+                applied++;
+            }
+        }
+        return applied;
+    }
+
     /// <summary>Makes one live aircraft answer for the gamez LIBRARY-ROOT vehicle node it was
     /// spawned from, by that node's name and compiled index. A chapter's own copy of a vehicle is
     /// never placed, so a definition written against it addresses a name with nothing behind it.
@@ -1346,6 +1377,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         return started ? 3 : 0;
     }
+
+    /// <summary>How often one IF/ELSEIF condition kind has evaluated true and false so far, the
+    /// same census <c>ReportConditions</c> logs. A suite reads it to say whether a gate has
+    /// opened at all, which no node pose can distinguish from a gate that opened and did
+    /// nothing.</summary>
+    public (int True, int False) ConditionTally(string kind) =>
+        _conditions.TryGetValue(kind, out var c) ? c : (0, 0);
 
     /// <summary>The definitions carrying one ANIMATION_NAME — the same lookup
     /// <c>CALL_ANIMATION</c> dispatch uses, exposed so the zeppelin damage runtime can register
@@ -3191,10 +3229,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                               && ConditionNode(obj.Get("node_index") ?? obj.Get("node"), def, anchor)
                                  is { } n2
                               && WorldPos(n2).Y < (obj.Num("altitude") ?? 0f),
-            // NODE_UNDERCOVER (the reader spells it NODE_NEAR_GROUND) needs a ground/occlusion
-            // probe this class has no access to. All 473 uses sit in ON_CALL definitions the
-            // bootstrap never reaches, so a false stub costs nothing today.
-            "NodeUndercover" => false,
+            // NODE_UNDERCOVER (the reader spells it NODE_NEAR_GROUND): a vertical probe of the
+            // authored signed length from the node, true when it meets world geometry. The
+            // operand needs decoding first, and the probe is the surface read.
+            "NodeUndercover" => obj != null
+                                && ConditionNode(obj.Get("node_index") ?? obj.Get("node"), def, anchor)
+                                   is { } n3
+                                && NodeUndercover(n3, anchor, UndercoverReach(obj.Num("distance") ?? 0f)),
             _ => false,
         };
         CountCondition(kind, result);
@@ -3216,6 +3257,60 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // not cover reads a fixed value.
     private float HealthOf(AnimDefinition def, Node3D? anchor) =>
         _destructibles.Get(def, anchor)?.Health ?? def.Health;
+
+    // NODE_UNDERCOVER's operand is the compiled record's raw 4-byte slot, which the extraction
+    // types as u32 while it holds the IEEE-754 bit pattern of a SIGNED length in metres; the
+    // reader form spells the same argument as a plain number. Reinterpreting only above 2^24
+    // separates them, since no authored probe is 16.7 million metres long. Census and the sign
+    // convention: docs/formats/anim-definitions.md.
+    private float UndercoverReach(float raw) =>
+        raw >= 16777216f && raw <= uint.MaxValue && raw == Mathf.Floor(raw)
+            ? BitConverter.Int32BitsToSingle(unchecked((int)(uint)raw))
+            : raw;
+
+    // The condition's probe: a vertical segment of `reach` metres from the node, positive up and
+    // negative down, true when it meets world geometry. No mask wired means no collision world,
+    // which the original answers false the same way (docs/org/sequences.md).
+    private bool NodeUndercover(Node3D node, Node3D? anchor, float reach)
+    {
+        if (ContactMask == 0 || Mathf.IsZeroApprox(reach) || !IsInstanceValid(node))
+            return false;
+        if (node.GetWorld3D()?.DirectSpaceState is not { } space)
+            return false;
+        // The node's ORIGIN is what the original casts from, but an absolute-modelled subtree
+        // holds its vertices in world space under an identity transform, so its origin is the map
+        // corner; VisualOriginOf is that same point corrected, and needs the node in the tree.
+        var from = node.IsInsideTree() ? VisualOriginOf(node) : WorldPos(node);
+        var query = PhysicsRayQueryParameters3D.Create(
+            from, from + new Vector3(0f, reach, 0f), ContactMask);
+        query.Exclude = UndercoverExclusion(
+            anchor != null && IsInstanceValid(anchor) ? anchor : node);
+        return space.IntersectRay(query).Count > 0;
+    }
+
+    // The original clears the probed node's own collidable bit for the duration of the cast, so a
+    // body cannot detect itself. One gamez node is a whole subtree of collider bodies here, and
+    // the probe is authored on a PART of a vehicle (killpzep casts from a gasbag down through the
+    // hull it hangs under), so the exclusion has to cover the host, not the part. Cached per host:
+    // the poll idiom re-evaluates every frame and a zeppelin carries hundreds of bodies.
+    private Godot.Collections.Array<Rid> UndercoverExclusion(Node3D host)
+    {
+        ulong key = host.GetInstanceId();
+        if (_undercoverExclude.TryGetValue(key, out var cached))
+            return cached;
+        var rids = new Godot.Collections.Array<Rid>();
+        var stack = new Stack<Node>();
+        stack.Push(host);
+        while (stack.Count > 0)
+        {
+            var n = stack.Pop();
+            if (n is CollisionObject3D body)
+                rids.Add(body.GetRid());
+            foreach (var child in n.GetChildren())
+                stack.Push(child);
+        }
+        return _undercoverExclude[key] = rids;
+    }
 
     // Records a whole pooled copy's authored pose while it is still as-built. RestOf captures a
     // node the first time something MOVES it, which on a reused copy is a play that already

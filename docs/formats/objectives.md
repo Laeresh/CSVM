@@ -109,6 +109,14 @@ gate, and the timer only starts counting once `n` is awake. C1/M04's 18 and 19 (
 29, which 28's `DEDG [2, 2]` wakes) are the shipped case: their naps of 20 wait for 29, and the
 Paladin Blake squad arrives 30 s or 90 s after that, whichever route the radio tower chose.
 
+A gate objective is therefore one an author means never to complete while the gate is wanted, and
+a gate whose own condition reads true is a chain that stops for good. C1/M04's 29 is `INACTIVE1
+[piratezep]` over the hull the mission is built around, so the gate stands exactly as long as that
+hull is switched on: the mission's own intro switches it off for its last shot and switches it
+back on in the `RESET_STATE` the handoff runs, and a session that leaves it off reads 29 complete
+on the tick it wakes, closing 18 and 19 permanently. The same node gates 40, which 42 depends on,
+so the docking chain 42/43/44 rests on the hull twice over.
+
 ### Completion conditions
 
 An awake objective completes when **any one** of its condition families reports true

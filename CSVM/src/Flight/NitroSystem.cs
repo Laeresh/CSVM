@@ -50,12 +50,23 @@ public sealed class NitroSystem
     public bool DecayAnimPlaying => _anim == Anim.Decay;
 
     /// <summary>Set on the tick the boost engaged (shake, force feedback, boost def start);
-    /// cleared by the next <see cref="Advance"/>.</summary>
+    /// cleared by the next <see cref="BeginStep"/>.</summary>
     public bool EngagedThisTick { get; private set; }
 
     /// <summary>Set on the tick the boost animation stopped and the decay def should start;
-    /// cleared by the next <see cref="Advance"/>.</summary>
+    /// cleared by the next <see cref="BeginStep"/>.</summary>
     public bool ReleasedThisTick { get; private set; }
+
+    /// <summary>Opens a step: clears both tick edges so this step's own arms can raise them.
+    /// ⚠ Never clear them anywhere later in a step. An edge cleared between the arm that raises it
+    /// and the consumer that reads it deletes the engage outright, costing the boost its animation,
+    /// its shake and its loop sound while the aircraft still accelerates. Why the flags exist at
+    /// all, and what the original does instead: docs/org/flightModel.md, "Nitro".</summary>
+    public void BeginStep()
+    {
+        EngagedThisTick = false;
+        ReleasedThisTick = false;
+    }
 
     /// <summary>The human command arm, once per tick before <see cref="Advance"/>: the injector
     /// and the cutoff drop the boost, a tank under the engage line keeps whatever state it is in,
@@ -83,11 +94,11 @@ public sealed class NitroSystem
     }
 
     /// <summary>The per-vehicle tank update: burn while boosting, refill always, clamp, and the
-    /// cutoff that ends a burn. Clears the tick edges first, so call it after the command arm.</summary>
+    /// cutoff that ends a burn. Runs after the command arm, as the original's per-vehicle update
+    /// runs after its input handler, and leaves both tick edges alone: its own cutoff raises the
+    /// release edge, and the command arm's engage edge has not been read yet.</summary>
     public void Advance(float dt, bool engineOut)
     {
-        EngagedThisTick = false;
-        ReleasedThisTick = false;
         if (Boosting)
             Charge -= dt * BurnRate;
         Charge = Mathf.Clamp(Charge + dt * RechargeRate, 0f, Capacity);

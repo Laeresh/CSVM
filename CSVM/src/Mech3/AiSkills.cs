@@ -120,12 +120,14 @@ public sealed class AiSkills
     private const int TeamSlot = 3;
     private const int GroupSlot = 4;
     private const int EnabledSlot = 5;
+    private const int InitHealthSlot = 7;
     private const int TitleSlot = 20;
     private const int DeactivatedSlot = 21;
     private const int PrefEngageAltSlot = 31;
     private const int SignatureSlot = 32;
     private const int TaxiPathSlot = 40;
     private const int AccentSlot = 65;
+    private const int ArmorSlot = 66;
 
     // Roster slot 67: ace, the flag the debrief's kill-crediting reads to choose the starred
     // tally over the plain one (docs/formats/ai-rosters.md "Field table").
@@ -290,6 +292,22 @@ public sealed class AiSkills
     /// <summary>Reads a roster block's <c>accentID</c> (slot 65), the voice id, or null on
     /// <c>-1</c> or a short block.</summary>
     public static int? RosterAccentId(IReadOnlyList<object?> fields) => IntSlot(fields, AccentSlot);
+
+    /// <summary>Reads a roster block's <c>init_health</c> (slot 7): the whole-vehicle health-pool
+    /// override the spawn applies only when authored greater than zero
+    /// (docs/org/vehicleDamage.md "Where the numbers come from at spawn"). <c>0.0</c> and
+    /// <c>-1</c> both mean "use the airframe default", so both read null, the same as a short
+    /// block that omits the slot.</summary>
+    public static float? RosterInitHealth(IReadOnlyList<object?> fields) =>
+        fields.Count > InitHealthSlot && fields[InitHealthSlot] is float f && f > 0f ? f : null;
+
+    /// <summary>Reads a roster block's <c>armor</c> (slot 66): the whole-vehicle armour-pool
+    /// override the spawn applies whenever authored zero or greater
+    /// (docs/org/vehicleDamage.md "Where the numbers come from at spawn"). ⚠ The gate differs from
+    /// <see cref="RosterInitHealth"/>'s: <c>0.0</c> is a real override here, only <c>-1</c> and a
+    /// short block (33 of 414 stop before this slot) read null. A missing slot is not a zero.</summary>
+    public static float? RosterArmor(IReadOnlyList<object?> fields) =>
+        fields.Count > ArmorSlot && fields[ArmorSlot] is float f && f >= 0f ? f : null;
 
     /// <summary>Reads a roster block's <c>ace</c> flag (slot 67): true on the 26 blocks a mission
     /// script singles out, whose kill the debrief credits into the starred tally instead of the

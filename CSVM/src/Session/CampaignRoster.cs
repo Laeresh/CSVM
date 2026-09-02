@@ -96,6 +96,16 @@ public sealed class RosterSpawnPlan
     /// (docs/org/debrief.md#what-the-tallies-count).</summary>
     public bool Ace { get; init; }
 
+    /// <summary>The block's <c>init_health</c> (slot 7): the whole-vehicle health-pool override,
+    /// or null when the slot is unset, <c>0.0</c> or absent (docs/org/vehicleDamage.md "Where the
+    /// numbers come from at spawn").</summary>
+    public float? InitHealth { get; init; }
+
+    /// <summary>The block's <c>armor</c> (slot 66): the whole-vehicle armour-pool override, or
+    /// null on <c>-1</c> or a short block. ⚠ A missing slot is not a zero: 33 of 414 shipped
+    /// blocks stop before this one and must read null here, never <c>0.0</c>.</summary>
+    public float? Armor { get; init; }
+
     public string? TaxiPath { get; init; }
 
     public float? PrefEngageAlt { get; init; }
@@ -269,6 +279,8 @@ public sealed class CampaignRosterPlan
                 AccentId = AiSkills.RosterAccentId(fields),
                 Nitro = AiSkills.RosterNitro(fields),
                 Ace = AiSkills.RosterAce(fields),
+                InitHealth = AiSkills.RosterInitHealth(fields),
+                Armor = AiSkills.RosterArmor(fields),
                 TaxiPath = AiSkills.RosterTaxiPath(fields),
                 PrefEngageAlt = AiSkills.RosterPrefEngageAlt(fields),
                 Title = AiSkills.RosterTitle(fields),
@@ -326,7 +338,7 @@ public sealed class CampaignRosterPlan
             AiDef: plan.AiDef, Fit: plan.Fit,
             AttackRating: InstantActionRuntime.RepresentativeRating(plan.Skills),
             Nitro: plan.Nitro, RosterSkills: plan.Skills, NodeName: nodeName ?? plan.Name,
-            PilotName: plan.Title);
+            PilotName: plan.Title, InitHealth: plan.InitHealth, Armor: plan.Armor);
 
     /// <summary>The generator parameter blocks of one mission, keyed by the
     /// <c>vehicle.params</c> label a generator names. Mission data, so a launch resolves its block
