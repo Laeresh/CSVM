@@ -251,7 +251,8 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/Original/OriginalSeats.cs` — the shell's sortie screens (a `partial`): the aircraft window over the shared roster, every seat's cursor tagged on it, the seat strip, the hint, FLY as seat 0's confirmation and the launch, later seats' own frames.
 - `src/UI/Menu/Original/OriginalHangar.cs` — the shell's hangar (a `partial`) over the shared hangar feature: the decoded PLANE NAME screen, the Plane Construction hub with its six tab sections as siblings, the construction totals page and the INVENTORY, each composed from its layout section, with the defaults ask as a dialog and every dropdown's list under its box.
 - `src/UI/Menu/Original/OriginalPresentation.cs` — the Original presentation node: the shell drawn through `ComposedBoardView` on the board layer, every seat polled, the pointer mapped through `BoardFit`, pad joins scanned on the sortie screens, seat 0's text capture following the shell, the OS pointer hidden while shown.
-- `src/UI/Menu/Original/OriginalAvailability.cs` — the minimal Original availability check: the layout reads, `[MainMenu]` is there, its art is on disk; a reason, or the loaded layout.
+- `src/UI/Menu/Original/OriginalAvailability.cs` — Original's availability answer before entry: the stamp is not behind, the layout reads with a `[MainMenu]` in it, the asset manifest's required files are all there; a reason, or the loaded layout.
+- `src/UI/Menu/Original/OriginalAssetManifest.cs` — the versioned required/optional file manifest derived from the decoded layout, and the structural check over a data root that answers with every fault at once.
 - `src/UI/Menu/Original/OriginalRosters.cs` — the sortie screens' chapter labels over the shared roster, and the eleven stock airframes resolved through the Instant Action decode, the stock half of the shared aircraft roster.
 - `src/UI/Menu/Original/OriginalCues.cs` — the two cue names Original asks for: a button rollover and a button click.
 - `src/UI/Menu/Original/PointerSeat.cs` — seat 0 with the mouse as its `MenuPointer`, the click a press edge; device reads injected, so engine-free.
@@ -436,7 +437,7 @@ clusters they delegate to.
 - `src/Session/Launcher.cs` — Main.tscn root: the once-per-process bootstrap (args → paths → log/seed/window), shader-global registration, persistent camera/lighting, launchscreen + menu flow; instantiates a `GameSession` session node per launch.
 - `src/Session/GameSession.cs` — the per-launch session node (instantiated by `Launcher`): builds one session — rigs, world, plane, HUD, weather — from its `SessionSpec`; return-to-menu `QueueFree`s it.
 - `src/Session/SessionSimulation.cs` — the plain-C# owner of one haltable, ordered session-simulation step; `GameSession` maps its named runtime phases to the existing subsystem owners.
-- `src/Session/ExtractionStamp.cs` — boot-time check of `extracted/VERSION.json` (the provenance stamp the extraction scripts write): schema const + at most one warning line when the stamp is stale, missing, or unreadable.
+- `src/Session/ExtractionStamp.cs` — boot-time check of `extracted/VERSION.json` (the provenance stamp the extraction scripts write): schema const + at most one warning line when the stamp is stale, missing, or unreadable, plus the `Behind` read a caller blocks on.
 - `src/Session/LiveryResolver.cs` — resolves each player's livery against a `SessionSpec`: the paint catalog, the pattern-mask library, and the per-player scheme pick.
 - `src/Session/SpawnPicker.cs` — resolves each player's flight spawn against a `SessionSpec`: the shared spawn-list index and the per-player point (or the `--spawn-at=` override); the plain `IFlightStarts`.
 - `src/Session/IFlightStarts.cs` — the spawn-placement seam: one call answering for the **whole field** at once, plus the `FlightStart` pos/look-at pair every rig is placed from.
@@ -4505,8 +4506,8 @@ logged ("campaign boards draw their hardcoded chrome: ..."), so the boards draw 
 did before the layout existed and nothing throws; a null data root is the `Fallback` with no
 reason, since nothing was there to read. `Over(MenuLayout)` wraps an already-parsed artifact for a
 test's fixture. Built-in loads the layout for itself here rather than through the Original
-presentation's `OriginalAvailability` load, because that load also refuses a layout whose main-menu
-art is missing, a condition the campaign boards must draw through ("usable without"); the two
+presentation's `OriginalAvailability` load, because that load also refuses a tree missing art the
+manifest requires, a condition the campaign boards must draw through ("usable without"); the two
 reads are of the same file and the same reader. `CampaignFlow.Layout` is where the pages and
 `CampaignBoards` get it (`For(DataRoot)`, or the instance a constructor was handed), and
 `LaunchMenu.CampaignLayoutOverride` lets a suite pin every flow it opens to the `Fallback` for a
@@ -5631,7 +5632,9 @@ process's music channel, sound archive and the rof tree's `ASSETS/SOUNDS`, and `
 the sink. The active presentation is settled once there through `MenuHost.Select`
 (`PresentationResolution.Resolve` with `--force-builtin`, `--presentation=` and the saved
 `OptionsStore` request; availability is registration plus `OriginalAvailable`, which loads the
-decoded layout through `OriginalAvailability` and keeps it for the factory) and logged as one `ui`
+decoded layout through `OriginalAvailability`, keeps it for the factory and logs the optional
+absences as their own `ui` line, and is asked again on every switch so a repaired tree is seen)
+and logged as one `ui`
 line with the requested and active ids and the fallback reason; an unknown, blank or unavailable
 request falls back to Built-in rather than crashing, and a fallback never rewrites the saved
 request. A `PresentationSwitchExit` is acted on one frame later (`_pendingSwitch`, the exit
@@ -6784,6 +6787,9 @@ warning line per boot — stale schema, missing file, or unreadable — each nam
 the extraction scripts). Warn, never block: the dev tree holds valid extractions predating the stamp.
 Schema 2 is the first the menu layout reader (`src/UI/Menu/MenuLayout.cs`) requires: a tree
 extracted before `menu_layout.json` existed is reported stale rather than read as an empty menu.
+`Behind(dataRoot, need, out reason)` is the same stamp read for a caller that blocks on it rather
+than warning: true only when the stamp is there, carries a schema and is under `need`, so a tree
+with no stamp or an unreadable one still runs. Original's availability check is its one caller.
 
 ## src/Flight/CollisionLayers.cs
 The named physics collision layers — world (layer 1, the engine default every pre-existing
@@ -7415,7 +7421,10 @@ steps the shell per seat, requests its cues through the host's audio, hands its 
 host, and ends the narration the frame the shell is no longer on the briefing. `Hide` takes the
 layer off screen, releases the text capture, ends any narration (a launch from the briefing's
 flight check ends the voice with it) and restores the OS pointer;
-`Deactivate` frees it. `PaletteFor(inks)` is the shell's inks as a `BoardPalette`; the Options
+`Deactivate` frees it. `Measure` is the strip size the layout does not carry, read off the file
+once per art name and cached, so a file that does not read leaves the row a fallback rectangle and
+logs one `ui` line for that name, which is what an optional file's absence degrades to.
+`PaletteFor(inks)` is the shell's inks as a `BoardPalette`; the Options
 screen draws with `PaletteFor(preferencesInks, inks)`, the Preferences page's authored text and
 title colours with the paper plaque's label tail; the Instant
 Action screen and the hangar's inventory draw with `PaletteFor(instantActionInks)`, every text in
@@ -7429,12 +7438,28 @@ board component takes under Built-in. In-engine coverage: `menu-original-tracer`
 `menu-player-setup-seats` over the install's own layout.
 
 ## src/UI/Menu/Original/OriginalAvailability.cs
-The minimal availability check Original makes before it can be selected, standing in for the full
-required/optional manifest: `Load(dataRoot, out reason)` reads the layout through `MenuLayout`,
-requires a `[MainMenu]` section with its two panes and six buttons, and requires every art file
-those rows name under `extracted/rof/ASSETS/GRAPHICS`. Returns the loaded layout when Original can
-run, else null and the first reason, which the host appends to its fallback reason. The Free
-Flight screen's own art (the paper plaque, the pointers) degrades rather than blocks.
+The availability answer Original is selected on: `Load(dataRoot, out reason, out degraded)` refuses
+a tree stamped below `OriginalAssetManifest.StampSchema` (`ExtractionStamp.Behind`), reads the
+layout through `MenuLayout`, requires a `[MainMenu]` section in it, and then checks the manifest
+derived from that layout. Returns the loaded layout when Original can run, else null and the one
+reason, which the host appends to its fallback reason; `degraded` is the optional half, for the
+caller to log once. `ArtPath` is where a layout art name resolves, used by the presentation's own
+size read too. Off-engine coverage: `CSVM.Tests/OriginalManifestTests.cs`.
+
+## src/UI/Menu/Original/OriginalAssetManifest.cs
+The versioned required/optional manifest, derived from the decoded layout rather than hand-listed.
+`Derive(layout)` classes every art name of the 22 sections Original composes required, minus a
+short table of rows it does not draw (the two backdrop movies, the Preferences page's in-flight way
+back, the cabin's memento and save rows, the messagebox's multiplayer and About variants); every
+other section's art, those rows' art and the media a script names are optional; the five files the
+scripts name and Original draws anyway (the two pointers, the font, the two export plaques) are
+required. `Check(dataRoot)` reads no bitmap: existence plus the PNG signature and IHDR size for
+required entries, existence alone for optional ones, and answers one `OriginalAssetReport` naming
+every fault with its section, row and file. `Schema` is bumped when the derivation or the check
+changes what Original needs. The classification is reconciled against what the screens actually
+draw by `CSVM.Tests/OriginalCoverageTests.cs`, which fails any art it draws that is classed
+optional; the required-but-undrawn side is printed, not asserted, since chrome like a scrollbar
+only draws on a state the journeys do not reach.
 
 ## src/UI/Menu/Original/PointerSeat.cs
 Seat 0 with a pointer: wraps the seat that polls the keyboard and the unclaimed pads and adds the

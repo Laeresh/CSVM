@@ -577,6 +577,13 @@ public sealed class OriginalPresentation : IMenuPresentation
             size = (image.GetWidth(), image.GetHeight());
         }
 
+        if (size == null)
+        {
+            // Once per name, since the answer is cached: the row keeps its fallback rectangle and
+            // the screen draws, which is what an optional file's absence degrades to.
+            Log.Info("ui", $"original presentation: {art} does not read at {path}; the row it sizes keeps its fallback rectangle");
+        }
+
         _sizes[art] = size;
         return size;
     }

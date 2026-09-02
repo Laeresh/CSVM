@@ -539,41 +539,55 @@ original plays where is `CAP-52`'s to confirm.
 
 ## Part 3: assets, required and optional
 
-For E42. **Required** means the screen cannot be drawn or read without it; **optional** means the
-screen degrades locally and stays usable.
+**Required** means a screen Original composes cannot be drawn without it; **optional** means the
+screen degrades locally and stays usable. The runtime manifest
+(`CSVM/src/UI/Menu/Original/OriginalAssetManifest.cs`) derives that classification from the decoded
+layout on every start, so this section is the reading and the manifest is the enforcement. Over the
+install's own layout it classifies **95 required** and **67 optional** files; the two optional
+absences it reports are `CrimFlag.MPG` and `Final.MPG`.
 
 ⚠ **The manifest cannot be generated from `LAYOUT.CSV` alone.** The layout names 124 distinct art
 files; the archive ships 681 PNG, 143 TGA, 107 JPG and 25 TIF. The rest are named by scripts
 (`ACTIVEPOINTERZ.PNG`, `PASSIVEPOINTERZ.PNG`, `ARIAL8.TGA`) or built at runtime by string
 concatenation (`"assets\graphics\pc_p_hangar" + <airframe> + ".jpg"`,
 `"assets\graphics\scrapbook\" + <name>`, and the per-pattern `.BM` sets). `menu_layout.json`
-carries both halves, complete names and the fragments a runtime name is assembled from, which is
-what E42 validates against. `ZOOMPOINTER.PNG` and `PX_<n>_BLUEPRINT.TGA` appear in neither half:
-see the closing section.
+carries both halves, complete names and the fragments a runtime name is assembled from, and the
+manifest classifies the complete names alone. `ZOOMPOINTER.PNG` and `PX_<n>_BLUEPRINT.TGA` appear
+in neither half: see the closing section. Of the layout's own names, 97 are in the 22 sections
+Original composes and 31 only outside them; seven of the 97 sit in rows no composed screen draws,
+which is why the required count is 90 layout names plus the five the scripts name.
 
-| Class | Files | Required or optional | Notes |
+| Class | Files | Manifest class | Notes |
 |---|---|---|---|
-| `LAYOUT.CSV` | 1 | **required** for every Original screen | absent means no geometry at all |
-| `ui_strings.json` + `RESOURCE.H` | 2 | **required** | 152 symbols referenced, 149 resolve; `IDS_GN_1P/2P/3P` are dead layout references |
-| `SCRAPBOOK.CSV` | 1 | **required** for ScrapBook and ScrapbookZoom, optional elsewhere | 461 rows; the book's extent is the file's extent |
-| screen backgrounds (`MM_`, `PF_`, `GO_`, `AP_`, `VP_`, `CP_`, `KB_`, `IA_`, `CM_`, `PC_`, `FC_`, `PS_`, `OL_`, `SB_`, `PX_`, `MB_`) | 16 families | **required** per screen | a screen with no backdrop is not a degraded screen |
-| button strips | 119 `B` rows over ~60 PNGs | **required** per screen | four stacked frames, disabled / normal / rollover / depressed; the words are painted in, so the state is entirely which frame draws |
-| shared widget chrome (`GN_`, `FC_B_Scroll*`, `PX_B_Scroll*`, `CM_B_Scroll*`, the dropdown arrows) | ~12 | **required** wherever a list or combo is drawn | named through `[GLOBALVARS]` macros, so one miss hits many screens |
-| `ARIAL8.TGA`, `FONT.TGA` | 2 | **required** | the global 3D font; the string table's `[FONTID]` tags name `.ttf` faces the archive does not carry |
-| `ACTIVEPOINTERZ.PNG`, `PASSIVEPOINTERZ.PNG`, `ZOOMPOINTER.PNG` | 3 | **required** for a mouse-first presentation | Built-in draws no pointer at all today (`BL-654`) |
+| `menu_layout.json` (from `LAYOUT.CSV`) | 1 | **required**, ahead of the manifest | absent means no geometry at all, and no manifest to derive; the availability check answers with the missing path |
+| `extracted/VERSION.json` | 1 | **required** when it is behind the stamp schema Original reads | a tree with no stamp still runs; the check is `ExtractionStamp.Behind` |
+| screen backgrounds of the 22 composed sections (`MM_`, `PF_`, `IA_`, `CM_`, `PC_`, `FC_`, `PS_`, `OL_`, `SB_`, `PX_`, `MB_`) | 11 families | **required** | a screen with no backdrop is not a degraded screen |
+| button strips of the composed sections | 119 `B` rows over ~60 PNGs | **required** | four stacked frames, disabled / normal / rollover / depressed; the words are painted in, so the state is entirely which frame draws |
+| shared widget chrome (`GN_`, `FC_B_Scroll*`, `PX_B_Scroll*`, `CM_B_Scroll*`, `IA_B_Scroll*`, the dropdown arrows) | ~12 | **required** | named through `[GLOBALVARS]` macros, so one miss hits many screens |
+| `ARIAL8.TGA` | 1 | **required** | the global 3D font; the string table's `[FONTID]` tags name `.ttf` faces the archive does not carry, and `FONT.TGA` is named by nothing |
+| `ACTIVEPOINTERZ.PNG`, `PASSIVEPOINTERZ.PNG` | 2 | **required** | script-named and drawn on every screen; Built-in draws no pointer at all (`BL-654`) |
+| `PX_B_ReadyToExport.png`, `PX_B_CancelExport.png` | 2 | **required** | script-named, drawn by the plane construction hub; no layout row names them |
+| `ZOOMPOINTER.PNG` | 1 | not classified | named in neither the layout nor an external-asset entry, and Original draws the two pointers above on the zoom too |
+| `GO_`, `AP_`, `VP_`, `CP_`, `KB_` page art | 5 families | optional | the five Preferences pages are out of scope, so no composed screen draws them |
+| `GN_B_ReturnToGame.Png` | 1 | optional | `[Preferences]`' in-flight way back; the menu's page offers `PC_B_ReturnMainMenu.png` instead |
+| `MessageBox`'s `MP_*` and `MA_*` rows, and the art of every section outside the 22 | 3 + 31 | optional | no local counterpart for the multiplayer error box, the About box, or a screen Original composes nothing from |
+| `ui_strings.json` + `RESOURCE.H` | 2 | optional | 152 symbols referenced, 149 resolve; `UiStrings` falls back to an empty table, so the screens draw with no words rather than not at all |
+| `SCRAPBOOK.CSV` | 1 | optional | 461 rows; the book's extent is the file's extent, and without it the book lists nothing |
 | `MOUSECLICK`, `MOUSEOVER`, `ENTERTEXT`, `ENTERTEXT_ERROR` | 4 | optional | a silent menu is usable |
-| `MUSIC_SPLASH.WAV` | 1 | optional | |
-| `MUSIC_LOOP`, `SFX_LOOP`, `VOICE_LOOP` | 3 | optional | Audio page previews only |
-| `PC_P_HANGAR0..10.JPG` | 11 | optional | the cabin's window photo; the painted cabin reads without it |
-| `PX_0..10_BLUEPRINT.TGA` | 11 | optional | the hangar's art column; `IHangarPage.Art` already returns null on a miss |
-| `FC_PlaneIcons.png`, `SB_killMARKERcombined.png` and the other frame strips | ~6 | optional | a missing silhouette leaves a hole, not a broken screen |
-| scrapbook art | 238 files | optional per scrap | a `Snap_*` row is already skipped when the file is not on disk |
-| paint `.BM` masks | 184 | **required** for the Paint screen, optional elsewhere | 14 pattern folders; `FORTUNE` has all 62 skins, `BLCKSWAN` 5 |
-| `CrimFlag.MPG`, `Final.MPG` | 2 | **absent** | `LAYOUT.CSV` names both and `extracted/rof/ASSETS/GRAPHICS/MPG/` is empty; `BL-446` |
-| `MM_BackGround.png`, `MM_SplashBackground.jpg` | 2 | **unreferenced** | neither appears in any layout row, and the shipped `MM_BackGround.png` is a placeholder reading "CS BACKGROUND" |
+| `MUSIC_SPLASH.WAV`, `MUSIC_LOOP`, `SFX_LOOP`, `VOICE_LOOP` | 4 | optional (the loops are not classified) | the three loop names carry no directory in the scripts, so the manifest has no path to check |
+| `PC_P_HANGAR0..10.JPG` | 11 | not classified | assembled at runtime from a fragment; the cabin's window photo, and the painted cabin reads without it |
+| `PX_0..10_BLUEPRINT.TGA` | 11 | not classified | assembled at runtime; `IHangarPage.Art` already returns null on a miss |
+| scrapbook art | 238 files | not classified | assembled at runtime; a `Snap_*` row is already skipped when the file is not on disk |
+| paint `.BM` masks | 184 | not classified | assembled at runtime per pattern; 14 pattern folders, `FORTUNE` has all 62 skins, `BLCKSWAN` 5 |
+| `CrimFlag.MPG`, `Final.MPG` | 2 | optional, and absent | `LAYOUT.CSV` names both and `extracted/rof/ASSETS/GRAPHICS/MPG/` is empty; no screen plays a movie, so they are the two absences every start reports (`BL-446`) |
+| `MM_BackGround.png`, `MM_SplashBackground.jpg` | 2 | not classified | neither appears in any layout row, and the shipped `MM_BackGround.png` is a placeholder reading "CS BACKGROUND" |
+
+**Not classified** means the manifest carries no entry: the name is assembled at runtime from a
+fragment rather than written out, so there is no file list to check before entry. Those degrade
+where they are drawn, and the pages that draw them already handle a miss.
 
 ⚠ **The original's own top-level backdrop is a movie the extraction does not carry, and the still
-beside it is a placeholder.** E41's Original main menu therefore has no faithful background
+beside it is a placeholder.** Original's main menu therefore has no faithful background
 available. That is an accepted remake-only rule to write down, not a missing asset to hunt for.
 
 ## Part 4: what the evidence does not cover

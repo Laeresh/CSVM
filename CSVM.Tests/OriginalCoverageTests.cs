@@ -137,6 +137,7 @@ public class OriginalCoverageTests : IDisposable
 
     private readonly ITestOutputHelper _output;
     private readonly string _dir;
+    private readonly HashSet<string> _drawn = new(StringComparer.OrdinalIgnoreCase);
     private int _runs;
 
     public OriginalCoverageTests(ITestOutputHelper output)
@@ -287,6 +288,7 @@ public class OriginalCoverageTests : IDisposable
 
         screensReached = screens.Count;
         var (driven, disabled, slots, outOfScope) = CheckEdges(layout, measure, dataRoot, failures);
+        int drawn = CheckManifest(layout, failures);
         int expectedScreens = Enum.GetValues<OriginalScreen>().Length - (dataRoot == null ? 1 : 0);
         if (screensReached != expectedScreens)
         {
@@ -295,7 +297,8 @@ public class OriginalCoverageTests : IDisposable
 
         _output.WriteLine(
             $"{label}: {screensReached} screens reached and left, {Journeys.Length} journeys x 3 input families = {journeyRuns} runs, "
-            + $"{driven} layout edges driven, {slots} realised as the wingman slot's row, {disabled} drawn disabled, {outOfScope} out of scope, 0 dead ends");
+            + $"{driven} layout edges driven, {slots} realised as the wingman slot's row, {disabled} drawn disabled, {outOfScope} out of scope, 0 dead ends, "
+            + $"{drawn} art names drawn, none of them the manifest's optional");
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
     }
 
@@ -316,6 +319,7 @@ public class OriginalCoverageTests : IDisposable
         Assert.Null(exit);
         Assert.Equal(journey.Target, shell.Screen);
         screens.Add(shell.Screen);
+        Collect(shell.Compose());
         foreach (string key in journey.Expect ?? Array.Empty<string>())
         {
             Assert.True(Row(shell, key) is { Enabled: true }, $"{key} stands on {shell.Screen}");
@@ -515,6 +519,47 @@ public class OriginalCoverageTests : IDisposable
         }
 
         return (driven, disabled, slots, outOfScope);
+    }
+
+    // Every art name the journeys drew, against the manifest's classification: what a screen draws
+    // cannot be a file Original is allowed to run without. A name the manifest does not carry is a
+    // runtime-assembled one (a blueprint, a scrap, a paint mask), which the inventory classes on
+    // its own. The other direction, a required name no journey drew, is listed for the reader.
+    private int CheckManifest(MenuLayout layout, List<string> failures)
+    {
+        var manifest = OriginalAssetManifest.Derive(layout);
+        foreach (string art in _drawn)
+        {
+            if (manifest.Find(art) is { Need: OriginalAssetNeed.Optional } entry)
+            {
+                failures.Add($"{art} is drawn and the manifest classes it optional ({entry.Section}.{entry.Row})");
+            }
+        }
+
+        var idle = manifest.Assets
+            .Where(a => a.Need == OriginalAssetNeed.Required && !_drawn.Contains(a.Name))
+            .Select(a => $"{a.Name} ({a.Section}.{a.Row})").ToList();
+        _output.WriteLine($"required but drawn by no journey: {(idle.Count == 0 ? "none" : string.Join(", ", idle))}");
+        return _drawn.Count;
+    }
+
+    private void Collect(ComposedBoard board)
+    {
+        foreach (var picture in board.Backdrop.Concat(board.Pictures).Concat(board.Overlays.SelectMany(o => o.Pictures)))
+        {
+            if (picture.Art.Library == BoardArtLibrary.Ui)
+            {
+                _drawn.Add(picture.Art.Name);
+            }
+        }
+
+        foreach (var plaque in board.Plaques)
+        {
+            if (plaque.Art.Library == BoardArtLibrary.Ui)
+            {
+                _drawn.Add(plaque.Art.Name);
+            }
+        }
     }
 
     // A wingman's slot row on the flight check stands when the mission flies a wingman and is

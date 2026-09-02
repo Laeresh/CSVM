@@ -21,6 +21,23 @@ public static class ExtractionStamp
     /// extractions.</summary>
     public const int Schema = 2;
 
+    /// <summary>Whether the tree under <paramref name="dataRoot"/> is stamped below
+    /// <paramref name="need"/>, with the re-extract instruction as <paramref name="reason"/>.
+    /// A tree with no stamp, or one whose stamp does not read, is not behind: the dev tree holds
+    /// extractions that predate the stamp, and a caller that blocks on this must not refuse them.</summary>
+    public static bool Behind(string dataRoot, int need, out string? reason)
+    {
+        reason = null;
+        int? found = Stamped(dataRoot);
+        if (found == null || found >= need)
+        {
+            return false;
+        }
+
+        reason = $"the extraction tree is stamped schema={found} and this build reads schema={need} or later; re-run ExtractAssets.ps1 and ExtractRof.ps1 (with -Force if everything looks up to date)";
+        return true;
+    }
+
     /// <summary>Compares the stamp under <paramref name="dataRoot"/> against
     /// <see cref="Schema"/> and logs AT MOST one warning line — stale schema, missing file,
     /// or unreadable — each naming the fix. Warn, never block: the dev tree holds years of
@@ -53,6 +70,28 @@ public static class ExtractionStamp
         catch (Exception e) when (e is IOException or JsonException or FormatException)
         {
             Log.Warn("core", $"extraction stamp unreadable path={path} error={e.GetType().Name} — re-run ExtractAssets.ps1 to rewrite it");
+        }
+    }
+
+    // The stamp's schema integer, or null when there is no stamp, no schema in it, or it does not
+    // read. Silent: Check above is the one place a stamp problem is reported to the player.
+    private static int? Stamped(string dataRoot)
+    {
+        var path = Path.Combine(dataRoot, "extracted", "VERSION.json");
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.TryGetProperty("schema", out var schema) && schema.ValueKind == JsonValueKind.Number
+                ? schema.GetInt32() : null;
+        }
+        catch (Exception e) when (e is IOException or JsonException or FormatException)
+        {
+            return null;
         }
     }
 }

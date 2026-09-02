@@ -1015,9 +1015,10 @@ public partial class Launcher : Node3D
         return host;
     }
 
-    // The host's availability answer: Original needs the decoded layout and the main menu's art;
-    // the layout it loads is kept for the presentation itself. Every other id is available once
-    // registered.
+    // The host's availability answer: Original needs the decoded layout and every file its asset
+    // manifest classes required; the layout it loads is kept for the presentation itself. Asked
+    // again on every switch, so a tree repaired between the two answers is seen. Every other id is
+    // available once registered.
     private string? OriginalAvailable(PresentationId id)
     {
         if (id != PresentationId.Original)
@@ -1025,13 +1026,18 @@ public partial class Launcher : Node3D
             return null;
         }
 
-        if (_originalLayout != null)
+        var layout = OriginalAvailability.Load(_dataRoot, out var reason, out var degraded);
+        if (layout != null)
         {
-            return null;
+            _originalLayout = layout;
         }
 
-        _originalLayout = OriginalAvailability.Load(_dataRoot, out var reason);
-        return _originalLayout != null ? null : reason;
+        if (degraded != null)
+        {
+            Log.Info("ui", $"original presentation: {degraded}");
+        }
+
+        return reason;
     }
 
     // The mouse in window pixels, the pointer half of seat 0: the viewport's last known position,

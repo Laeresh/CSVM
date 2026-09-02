@@ -172,7 +172,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E — Completion and release gate
 
 41. ☑ Complete Original top level, Options and every remaining transition
-42. ☐ Enforce the required/optional Original asset manifest
+42. ☑ Enforce the required/optional Original asset manifest
 43. ☐ Complete typed launch and semantic return routing across every journey
 44. ☐ Run acceptance, enable Original normally and publish the Modern extension contract
 
@@ -526,7 +526,8 @@ drawing frame 0) plus the remake-only Free Flight door, Free Flight screen and m
 screen, composed in the `FC_B_CHANGEPLANE` paper-plaque convention with the file-wide state
 colours; `OriginalPresentation` draws it through `ComposedBoardView` on one `BoardFit` and maps
 seat 0's pointer into the authored space; `PointerSeat` wraps the Built-in seat with the mouse;
-`OriginalAvailability` is the minimal manifest (layout file, `[MainMenu]`, its art) and enters
+`OriginalAvailability` was the minimal manifest B13 stood up (layout file, `[MainMenu]`, its art,
+E42 replacing the last of those with the derived manifest) and enters
 `MenuHost.Select` through the new `Availability` delegate, a failure selecting Built-in with the
 reason and leaving the saved request alone. Switching is a fourth typed exit,
 `PresentationSwitchExit`, produced by Built-in's new Options door (the Mode screen's sixth row,
@@ -1508,7 +1509,7 @@ against the script's Yes focus, the Options chooser's placement) go to the user 
 **⚠ Traps.** “Looks complete” is not inventory coverage. A screen with no Back/recovery path is a
 dead end even if its launch action works.
 
-## E42 ☐ Enforce the required/optional Original asset manifest
+## E42 ☑ Enforce the required/optional Original asset manifest
 
 **Goal.** Original availability is decided before entry from a versioned manifest; required failure
 falls back clearly while optional absence degrades locally.
@@ -1532,9 +1533,62 @@ draws. `OriginalAvailability` still checks `[MainMenu]` alone.
 
 **Model recommendation.** medium — bounded validation once A1/A2 define the data.
 
-**Verify.** Test complete, missing-required, corrupt-required, missing-optional, stale-schema and
-assets-restored-next-launch cases; locally hide one required asset and perform the agreed recovery
-playtest.
+What was built. `OriginalAssetManifest` derives the classification from the decoded layout on every
+start: the art of the 22 sections Original composes is required, less a table of 13 rows it does not
+draw (the two backdrop movies, `PF_B_RETURNTOGAME`, the cabin's memento and save rows, the
+messagebox's `MP_*` and `MA_*` variants); every other section's art, those rows' art and the media a
+script names with a directory are optional; and the files the scripts name and Original draws anyway
+are required. That last set is five, not the three the E41 handoff named: the coverage check's new
+reconciliation caught `PX_B_ReadyToExport.png` and `PX_B_CancelExport.png` being drawn by the plane
+construction hub while the manifest classed them optional, which is the check earning its keep.
+`Check(dataRoot)` reads no bitmap (existence plus the PNG signature and IHDR size for required
+entries, existence alone for optional ones) and answers one report naming every fault with its
+section, row and file. `OriginalAvailability.Load` is the reader: a tree stamped below
+`OriginalAssetManifest.StampSchema` is refused with the re-extract instruction, then the layout, then
+a `[MainMenu]` section, then the manifest. `StampSchema` is `ExtractionStamp.Schema` itself, the
+schema the decoded layout's first reader raised, so a tree extracted before that decode is refused
+with the re-extract instruction (the loaders' own check on that stamp only warns); the landed
+extractor re-stamps an existing tree without re-extracting it. `Launcher.OriginalAvailable` asks on
+every process start and every `SwitchPresentation`, so a repaired tree is seen without a state reset,
+and logs the optional absences as their own line. The presentation's own `Measure` logs one line per
+art name it cannot read and keeps the row's fallback rectangle, which is what an optional absence
+degrades to.
+
+**Verify.** `dotnet build CSVM/CSVM.sln` (0 warnings), the whole `dotnet test` (3023, 8 of them new
+in `CSVM.Tests/OriginalManifestTests.cs`: the classification over a hand-authored layout fixture with
+invented file names, then the six cases over a scratch tree of hand-made 24-byte PNG headers,
+complete (9 required, 5 optional, nothing degraded), missing-required (the reason naming
+`MainMenu.MM_B_CAMPAIGN names FX_B_Campaign.png (not there)`, `MenuHost` selecting Built-in with
+`Requested` still Original), corrupt-required (a wrong signature reads as `not a PNG`, a truncated
+file as `shorter than a PNG header`), missing-optional (available, with the two names in the degraded
+line), stale-schema (a stamp of 0 refused, a stamp of 1 accepted, no stamp accepted) and
+assets-restored (the same manifest instance answers complete again once the file is back); plus the
+`[ExtractedDataFact]` over the install, 95 required and 67 optional with 0 required faults and the
+two `.MPG` absences. `OriginalCoverageTests` now collects every art name the journeys draw and fails
+any the manifest classes optional: 82 names over the install, 83 over the fixture, none optional).
+Then `.\RunTests.ps1 -Filter "menu" -SkipUnits -SkipGoldens` (13 suites, 13 passed, engine errors
+clean, `menu-original-tracer`'s availability-fallback case green), `.\CheckCommentCaps.ps1 -Summary`
+(all within cap) and `.\CheckEncoding.ps1` (no mojibake). The recovery playtest ran against a scratch
+data root, `.scratch\e42-scratch-root`, a copy of `extracted\VERSION.json`, `rof`, `zrdr`, `planes`,
+`rimage` and `soundsl`; the user's own tree was never written to. Three windowed probes on the hidden
+desktop through `RunProbe.ps1`, each `--data-root=<scratch> --presentation=original --menu
+--screenshot=<absolute>`: over the complete copy, `[ui] menu presentation active=original
+requested=original`; with `MM_B_Campaign.png` moved out of the copy, `[ui] menu presentation
+active=built-in requested=original reason='original' is not available: the Original asset manifest
+(schema 1) refuses 1 of 95 required files: MainMenu.MM_B_CAMPAIGN names MM_B_Campaign.png (not
+there)`; with the file put back, `active=original requested=original` again and a shot byte-length
+identical to the first. Every run also logs `[ui] original presentation: 2 of 67 optional files are
+not there and are drawn without: MainMenu.MOVIE names CrimFlag.MPG (not there); FinalCinema.CF_MOVIE
+names Final.MPG (not there)`, and a fourth probe over the untouched install logs the same two lines
+with Original active. `docs/verification.md` rules that bit: **METHOD-9** (the reconciliation failed
+on its first run and named the two export plaques, so it is a check that can fail), **METHOD-3** (the
+missing and restored probes are the same command over the same copy, minutes apart, with the complete
+run as the baseline), **SHOT-9**/**SHOT-10** (windowed probes on the hidden desktop, absolute paths,
+every shot checked present), **SHOT-32** (a shot proves the frame it drew: which presentation stood
+is read off the log line, not off the picture), **SRC-7** (a file is required because a screen draws
+it, proved by the composed board's own art names, not because the layout mentions it).
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Do not discover required absence one blank screen at a time. Do not overwrite the
 requested presentation during fallback.
@@ -1593,6 +1647,14 @@ mode in Original, the frame-deferred `SwitchPresentation` both ways, a real pad'
 sounds, and the pointer's rollover and pressed frames. The two remake choices the matrix should
 put to the user are the delete box opening on No against the script's Yes focus, and the Options
 chooser's placement on the Preferences page.
+
+Handoff from E42: the acceptance matrix's asset half is `OriginalAssetManifest`, and the six cases
+the matrix must run are the ones `OriginalManifestTests` pins off engine, over the real install
+rather than a fixture: complete, missing-required (the fallback line and the request kept),
+corrupt-required, missing-optional (the degraded line and the screen still drawn), a stamp below
+`StampSchema`, and a required file restored while the process is up, which only the switch through
+`SwitchPresentation` re-checks and no test drives at the controls. The recovery pass belongs on a
+scratch data root copy, never on the user's tree.
 
 **Model recommendation.** high — release gate and architectural audit require broad judgement.
 
