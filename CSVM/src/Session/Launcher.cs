@@ -1221,6 +1221,11 @@ public partial class Launcher : Node3D
         var strings = UiStrings.TryLoad(_dataRoot) ?? UiStrings.Empty;
         host.Features.Add(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), _zrdrPath));
         host.Features.Add(new CampaignFeature(strings, PlanePickerRoster.AirframeNode));
+        // The keymap editor writes through C21's per-player store. The write is injected rather
+        // than reached for, so the feature itself stays engine-free and a suite can hold a
+        // different one.
+        host.Features.Add(new ControlsFeature((player, profile) =>
+            CSVM.Bindings.BindingStore.UserBindings().Save(player, profile)));
         host.AddSeat(seat);
         string? saved = OptionsStore.UserOptions().Load().MenuPresentation;
         string? reason = host.Select(_spec.ForceBuiltInPresentation, _spec.PresentationOverride, saved);

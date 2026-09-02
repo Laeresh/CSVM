@@ -34,21 +34,22 @@ public sealed class ActionMap
         };
     }
 
-    /// <summary>Gives a control to an action, taking it off whichever action held it. Returns the
-    /// action that lost it, or null when it was free or already this one's, so a rebinding screen
-    /// can name the loss rather than performing it silently.</summary>
-    public InputAction? Assign(InputAction action, Binding binding)
+    /// <summary>Gives a control to an action, taking it off every action that held it, and returns
+    /// those in enum order so a screen can name each loss rather than performing it silently.
+    /// ⚠ Every owner, not the first. <see cref="Add"/> deliberately puts one control on two actions
+    /// (a numpad snap-look diagonal, d-pad up in flight), and a steal stopping at the first owner
+    /// would leave it on the other, which is the state the original forbids (`FUN_005371d0`,
+    /// `FUN_00535fb0`).</summary>
+    public IReadOnlyList<InputAction> Assign(InputAction action, Binding binding)
     {
-        InputAction? stolenFrom = null;
+        var stolenFrom = new List<InputAction>();
         foreach (var pair in _sets)
         {
             if (pair.Key != action && RemoveMatching(pair.Value, binding))
-            {
-                stolenFrom = pair.Key;
-                break;
-            }
+                stolenFrom.Add(pair.Key);
         }
 
+        stolenFrom.Sort();
         var set = SetFor(action);
         RemoveMatching(set, binding);
         set.Add(binding);
@@ -76,24 +77,28 @@ public sealed class ActionMap
     public IReadOnlyList<Binding> Bindings(InputAction action) =>
         _sets.TryGetValue(action, out var set) ? set.Bindings : System.Array.Empty<Binding>();
 
-    /// <summary>Which action currently owns that control, if any. A screen calls this before
-    /// assigning so it can warn about the steal ahead of committing it.</summary>
-    public bool TryFindOwner(Binding binding, out InputAction owner)
+    /// <summary>Every action that currently holds that control, in enum order. A screen calls this
+    /// before assigning so it can name the losers ahead of committing the steal.
+    /// ⚠ A list rather than one action, and there is no single-owner form on purpose: two actions
+    /// deliberately share several shipped controls, and a caller that took the first owner would
+    /// report one loss and perform two.</summary>
+    public IReadOnlyList<InputAction> OwnersOf(Binding binding)
     {
+        var owners = new List<InputAction>();
         foreach (var pair in _sets)
         {
             foreach (var held in pair.Value.Bindings)
             {
                 if (SameControl(held, binding))
                 {
-                    owner = pair.Key;
-                    return true;
+                    owners.Add(pair.Key);
+                    break;
                 }
             }
         }
 
-        owner = default;
-        return false;
+        owners.Sort();
+        return owners;
     }
 
     /// <summary>An independent copy, for a screen whose edits may be cancelled.</summary>

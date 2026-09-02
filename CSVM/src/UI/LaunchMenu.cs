@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Bindings;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -38,6 +39,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// the one process-wide choice so far, the menu presentation, and every presentation exposes
     /// them so a player can always get back to Built-in.</summary>
     public const string OptionsRow = "Options";
+
+    /// <summary>The row that opens the rebinding screen, inside Options. It is not beside the
+    /// presentation and graphics steppers as a third choice: those two are process-wide and leave
+    /// through <c>OptionsApplyExit</c>, while a keymap is per player and saves itself.</summary>
+    public const string ControlsRow = "Controls...";
 
     // Base metrics at 720p, scaled up on taller viewports (like StuntScoreboard). All TUNE.
     private const int TitleFont = 40;
@@ -83,6 +89,17 @@ public sealed partial class LaunchMenu : CanvasLayer
     // onto the 19 presets (docs/formats/instant-action.md, "Screen controls"). Decoded, not a fit
     // to our own layout — do not "tidy" it to the item count.
     private const int PresetWindow = 14;
+    // The Controls list's window, and the two stepper rows above it (the seat, and which of the
+    // three keymaps is being edited). Flight alone owns 35 actions, so the list is windowed like
+    // the Table of Contents rather than shrinking the whole band to fit. TUNE.
+    private const int ControlsWindow = 14;
+    private const int ControlsHeaderRows = 2;
+    // The Controls list's two column widths and the extra band width they need, in ems of the row
+    // font and in 720p points. TUNE: measured against the longest shipped action name and the
+    // longest four-control row, not decoded from anything.
+    private const float ControlsLabelEms = 11f;
+    private const float ControlsValueEms = 20f;
+    private const float ControlsExtraWidth = 260f;
     // The chip strip's own font size and corner inset, in authored board points — scaled through
     // the same BoardFit the board itself draws at, so the chips read like part of that screen.
     private const float ChipFont = 16f;
@@ -161,6 +178,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The Table of Contents' list cursor and the first visible row of its 14-row window; the
     // applied preset itself is the feature's.
     private int _presetCursor, _presetTop;
+    // The Controls screen's list cursor and window top. The seat, the context, the focused action
+    // and the capture in progress are all the shared feature's, so a switch of presentation keeps
+    // them; this screen keeps only where the cursor sits.
+    private int _controlsIndex, _controlsTop;
+    private ControlsFeature _controls = null!;
     // The cursors of the Waves, WaveEdit, Wingmen and WingmanLoadout screens: which wave row,
     // which wave is being edited, which of its fields, which wingman field, which fit row. The
     // values under them are the feature's.
@@ -247,7 +269,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // frame, and a confirm that changes nothing on screen reads as a dead button on a pad.
     private int _pressFrames;
 
-    private enum Screen { Mode, Chapter, Presets, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout, Hangar, Campaign, Options }
+    private enum Screen { Mode, Chapter, Presets, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout, Hangar, Campaign, Options, Controls }
 
     // What a fit row edits. The reset row carries no slot of its own and is the only one Accept
     // does anything on, since every other row is a live stepper.
@@ -349,6 +371,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Hangar => _hangar?.Row ?? 0,
         Screen.Campaign => _campaign?.Row ?? 0,
         Screen.Options => _optionsIndex,
+        Screen.Controls => _controlsIndex,
         _ => _slots.Count == 1 && _slots[0].InLoadout ? _slots[0].FitRow : _slots[0].PlaneIndex,
     };
 
@@ -394,6 +417,9 @@ public sealed partial class LaunchMenu : CanvasLayer
             _setup = host.Features.Get<PlayerSetupFeature>(),
             _hangarFeature = host.Features.Get<HangarFeature>(),
             _campaignFeature = host.Features.Get<CampaignFeature>(),
+            // Optional rather than required: a bare host in a suite that never opens the Controls
+            // screen has no reason to carry a keymap editor, and a local one edits nothing shared.
+            _controls = host.Features.TryGet<ControlsFeature>(out var controls) ? controls : new ControlsFeature(),
             _player1 = player1,
             Layer = HudLayers.Board,
             Visible = false,
@@ -527,11 +553,17 @@ public sealed partial class LaunchMenu : CanvasLayer
             "plane" or "loadout" or "selected" => Screen.Plane,
             "wingmanloadout" => Screen.WingmanLoadout,
             "options" => Screen.Options,
+            "controls" => Screen.Controls,
             _ => Screen.Mode,
         };
         if (_screen == Screen.Options)
         {
             OpenOptions();
+        }
+
+        if (_screen == Screen.Controls)
+        {
+            OpenControls();
         }
 
         // Environment/MissionType/Waves/Wingmen only exist under Instant Action — force it so a
@@ -1046,6 +1078,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                 return HandleCampaignInput(p1) || dirty;
             }
 
+            if (_screen == Screen.Controls)
+            {
+                return HandleControlsInput(p1) || dirty;
+            }
+
             if (p1.Move != 0)
             {
                 int n = CurrentCount();
@@ -1391,6 +1428,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                 else if (_optionsIndex == 1)
                 {
                     ToggleGraphicsChoice();
+                }
+                else if (_optionsIndex == 2)
+                {
+                    _screen = Screen.Controls;
+                    OpenControls();
                 }
                 else
                 {
@@ -2198,7 +2240,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         // The hangar's art sits in a column of its own to the LEFT of the rows (E47b, the layout
         // the original's paint screen uses), so the band is that much wider when it shows.
         var hangarArt = PageArt();
-        var column = Column((ContentWidth + (hangarArt != null ? HangarArtWidth : 0)) * s, s);
+        // The Controls list is two columns wide (the action, then every control on it), so it needs
+        // more room than a centred one-line row does.
+        float extra = (hangarArt != null ? HangarArtWidth : 0) + (_screen == Screen.Controls ? ControlsExtraWidth : 0);
+        var column = Column((ContentWidth + extra) * s, s);
         column.AddChild(Spacer((int)(ZonePad * s)));
         column.AddChild(Label(Heading(), (int)(HeadingFont * s), HeadingColor, HorizontalAlignment.Center));
 
@@ -2217,8 +2262,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         // onto 19, so it draws a slice and Row keeps taking the ABSOLUTE index (which is what the
         // cursor comparison and the row text both read).
         int count = CurrentCount();
-        int first = _screen == Screen.Presets ? _presetTop : 0;
-        int last = _screen == Screen.Presets ? Math.Min(count, _presetTop + PresetWindow) : count;
+        int first = _screen == Screen.Presets ? _presetTop : _screen == Screen.Controls ? _controlsTop : 0;
+        int last = _screen == Screen.Presets ? Math.Min(count, _presetTop + PresetWindow)
+            : _screen == Screen.Controls ? Math.Min(count, _controlsTop + ControlsWindow)
+            : count;
         for (int i = first; i < last; i++)
             content.AddChild(Row(i, s));
 
@@ -2276,6 +2323,265 @@ public sealed partial class LaunchMenu : CanvasLayer
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
     }
 
+    // Opens the rebinding screen on this seat's live keymaps. Every joined seat is registered once
+    // and then kept, because the maps are what the pollers read and rebuilding one would throw away
+    // whatever the player had already rebound.
+    private void OpenControls()
+    {
+        // Before the loop, not after: the aid path opens this screen out of ShowMenu, before any
+        // frame has run, and a screen with no registered seat has no keymap to draw.
+        SyncSlots();
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            int player = i + 1;
+            if (!ControlsHasSeat(player))
+            {
+                _controls.AddSeat(player, ControlsProfile(_slots[i].Input), ControlsPadOf, _slots[i].Input.Keyboard);
+            }
+        }
+
+        _controlsIndex = 0;
+        _controlsTop = 0;
+        _controls.Discard();
+    }
+
+    // One seat's three keymaps. Menu is the poller's own live map, so a rebind there is felt on the
+    // next frame; Flight and Camera are the shipped defaults on the portable pad placeholder, since
+    // no polling site reads a saved profile yet (D31's recorded gap).
+    private BindingProfile ControlsProfile(MenuInput input)
+    {
+        var maps = new Dictionary<InputContext, ActionMap>
+        {
+            [InputContext.Flight] = DefaultBindings.MapFor(InputContext.Flight, DefaultBindings.AnyPad),
+            [InputContext.Menu] = input.Map,
+            [InputContext.Camera] = DefaultBindings.MapFor(InputContext.Camera, DefaultBindings.AnyPad),
+        };
+        return new BindingProfile(maps, input.Keyboard);
+    }
+
+    // Which pad identity a captured control is stamped with, per context. The menu poller's map is
+    // authored on its own seat placeholder and the other two on the portable one, and a capture
+    // must produce the identity the map already uses or the steal rule would not see the conflict.
+    private DeviceId ControlsPadOf(InputContext context) =>
+        context == InputContext.Menu ? MenuInput.SeatPads : DefaultBindings.AnyPad;
+
+    private bool ControlsHasSeat(int player)
+    {
+        foreach (int seated in _controls.Players)
+        {
+            if (seated == player)
+                return true;
+        }
+
+        return false;
+    }
+
+    // One frame of the Controls screen. A capture in progress swallows the frame: the player is
+    // pressing a control to BIND it, so reading the same press as a menu command would move the
+    // cursor and confirm a row under them.
+    private bool HandleControlsInput(MenuInput p1)
+    {
+        if (_controls.Capturing)
+        {
+            bool captured = _controls.Poll(p1.Devices);
+            if (captured)
+                p1.RebindsApplied();
+            return captured;
+        }
+
+        bool dirty = false;
+        if (p1.Move != 0)
+        {
+            _controlsIndex = Wrap(_controlsIndex + p1.Move, CurrentCount());
+            SyncControlsCursor();
+            dirty = true;
+        }
+
+        if (p1.MoveX != 0)
+        {
+            dirty |= StepControls(p1.MoveX);
+        }
+
+        if (p1.Accept)
+        {
+            AcceptControls(p1);
+            dirty = true;
+        }
+        else if (p1.Back)
+        {
+            BackFromControls();
+            dirty = true;
+        }
+
+        return dirty || HandleControlsShortcuts(p1);
+    }
+
+    // The two gestures with no row of their own: unbind the highlighted control, and put this
+    // seat's whole context back to the shipped keymap.
+    private bool HandleControlsShortcuts(MenuInput p1)
+    {
+        bool dirty = false;
+        if (p1.Loadout && _controlsIndex >= ControlsHeaderRows)
+        {
+            _controls.UnbindSlot();
+            p1.RebindsApplied();
+            dirty = true;
+        }
+
+        if (p1.Presets)
+        {
+            _controls.ResetContext();
+            p1.RebindsApplied();
+            dirty = true;
+        }
+
+        return dirty;
+    }
+
+    private void AcceptControls(MenuInput p1)
+    {
+        if (_controls.Pending != null)
+        {
+            _controls.ConfirmSteal();
+            p1.RebindsApplied();
+            return;
+        }
+
+        switch (_controlsIndex)
+        {
+            case 0: StepControlsPlayer(1); break;
+            case 1: StepControlsContext(1); break;
+            default: _controls.BeginCapture(p1.Devices); break;
+        }
+    }
+
+    // Back means the narrowest thing still open: the pending steal, then the capture, then the
+    // screen itself, which is where the keymap is written.
+    private void BackFromControls()
+    {
+        if (_controls.Pending != null)
+        {
+            _controls.DiscardSteal();
+            return;
+        }
+
+        _controls.Save();
+        _screen = Screen.Options;
+    }
+
+    private bool StepControls(int dir) => _controlsIndex switch
+    {
+        0 => StepControlsPlayer(dir),
+        1 => StepControlsContext(dir),
+        _ => StepControlsSlot(dir),
+    };
+
+    private bool StepControlsPlayer(int dir)
+    {
+        var players = _controls.Players;
+        if (players.Count < 2)
+            return false;
+
+        int at = 0;
+        for (int i = 0; i < players.Count; i++)
+        {
+            if (players[i] == _controls.Player)
+                at = i;
+        }
+
+        _controls.Player = players[Wrap(at + dir, players.Count)];
+        SyncControlsCursor();
+        return true;
+    }
+
+    private bool StepControlsContext(int dir)
+    {
+        var all = Enum.GetValues<InputContext>();
+        int at = Array.IndexOf(all, _controls.Context);
+        _controls.Context = all[Wrap(at + dir, all.Length)];
+        _controlsIndex = Math.Min(_controlsIndex, CurrentCount() - 1);
+        SyncControlsCursor();
+        return true;
+    }
+
+    private bool StepControlsSlot(int dir)
+    {
+        _controls.MoveSlot(dir);
+        return true;
+    }
+
+    // Keeps the window over the cursor and the feature's focused action under it, so the row the
+    // player is looking at is the row a capture binds.
+    private void SyncControlsCursor()
+    {
+        int last = Math.Max(0, CurrentCount() - ControlsWindow);
+        int top = Math.Clamp(_controlsTop, 0, last);
+        if (_controlsIndex < top)
+            top = _controlsIndex;
+        else if (_controlsIndex >= top + ControlsWindow)
+            top = _controlsIndex - ControlsWindow + 1;
+        _controlsTop = Math.Clamp(top, 0, last);
+        if (_controlsIndex >= ControlsHeaderRows)
+            _controls.Focus(_controlsIndex - ControlsHeaderRows);
+    }
+
+    private string ControlsRowLabel(int index) => index switch
+    {
+        0 => "Player",
+        1 => "Control set",
+        _ => BindingLabels.Name(_controls.Actions[index - ControlsHeaderRows]),
+    };
+
+    // A row's controls, with the highlighted slot marked so the player can see which of several
+    // bindings the next capture would replace. The empty slot past the end is what adds one.
+    private string ControlsRowValue(int index)
+    {
+        if (index == 0)
+            return _controls.Player.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (index == 1)
+            return ControlsContextLabel(_controls.Context);
+
+        var action = _controls.Actions[index - ControlsHeaderRows];
+        string row = _controls.RowText(action);
+        if (index != _controlsIndex)
+            return row;
+
+        int count = _controls.Bindings(action).Count;
+        return _controls.Slot >= count ? row + "   [add]" : $"{row}   [{_controls.Slot + 1}/{count}]";
+    }
+
+    private string ControlsContextLabel(InputContext context) => context switch
+    {
+        InputContext.Flight => "Flying",
+        InputContext.Menu => "Menus and boards",
+        _ => "Free camera",
+    };
+
+    // The status line the feature wrote, when it has something to say; otherwise what this row is.
+    private string ControlsDetail(int focus)
+    {
+        if (_controls.Status.Length > 0)
+            return _controls.Status;
+        return focus switch
+        {
+            0 => "Whose keymap this is. Each seat holds its own, so rebinding here touches nobody else.",
+            1 => "Which keymap: one control means different things flying, on a board and in the free camera.",
+            _ => "Enter / A rebinds the marked control; ←→ picks which one.",
+        };
+    }
+
+    private string ControlsFooter()
+    {
+        if (_controls.Capturing)
+            return "Press a control       Esc / B  Cancel";
+        if (_controls.Pending != null)
+            return "Enter / A  Take it       Esc / B  Leave it alone";
+        return _controlsIndex < ControlsHeaderRows
+            ? "↑↓  Choose       ←→  Change       P / X  Defaults       Esc / B  Back"
+            : "↑↓  Choose       ←→  Which control       Enter / A  Rebind"
+                + "       L / Y  Unbind       P / X  Defaults       Esc / B  Back";
+    }
+
     private void TogglePresentationChoice() =>
         _presentationChoice = _presentationChoice == PresentationId.Original.Value
             ? PresentationId.BuiltIn.Value
@@ -2324,6 +2630,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Hangar => _hangar?.Page.Title ?? HangarRow,
             Screen.Campaign => _campaign?.Page.Title ?? CampaignRow,
             Screen.Options => "OPTIONS",
+            Screen.Controls => $"CONTROLS  ({_controlsIndex + 1}/{CurrentCount()})",
             _ when _slots.Count == 1 && _slots[0].InLoadout =>
                 $"AMMO SELECTION  ({_roster[_slots[0].PlaneIndex].Name})",
             _ when _slots.Count == 1 && _slots[0].Locked => "AIRCRAFT SELECTED",
@@ -2549,8 +2856,12 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     // How many rows the middle band actually draws. Only the contents list differs from the item
     // count: it is a 14-row window onto 19, and budgeting for all 19 shrinks it for nothing.
-    private int DrawnRowCount() =>
-        _screen == Screen.Presets ? Math.Min(CurrentCount(), PresetWindow) : CurrentCount();
+    private int DrawnRowCount() => _screen switch
+    {
+        Screen.Presets => Math.Min(CurrentCount(), PresetWindow),
+        Screen.Controls => Math.Min(CurrentCount(), ControlsWindow),
+        _ => CurrentCount(),
+    };
 
     // One line at a font size, the height a reserved slot keeps whatever it holds.
     private float LineHeight(int fontSize) => MenuFont?.GetHeight(fontSize) ?? 0f;
@@ -2683,7 +2994,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Mode => Modes.Length + 3, // + the trailing campaign, hangar and options rows
         Screen.Hangar => _hangar?.Page.RowCount ?? 1,
         Screen.Campaign => _campaign?.Page.RowCount ?? 1,
-        Screen.Options => 3, // the presentation and graphics steppers, then the apply row
+        Screen.Options => 4, // the two steppers, the controls door, then the apply row
+        Screen.Controls => ControlsHeaderRows + _controls.Actions.Count,
         Screen.Chapter => CurrentChapters.Length,
         Screen.Presets => InstantActionPresets.All.Count,
         Screen.Environment => InstantActionFeature.Environments.Count,
@@ -2704,6 +3016,14 @@ public sealed partial class LaunchMenu : CanvasLayer
             bool focused = index == CurrentIndex;
             return FitRowControl(fitRows, index, (int)(RowFont * s),
                 focused ? RowFocusColor : RowColor, focused);
+        }
+
+        if (_screen == Screen.Controls)
+        {
+            bool onRow = index == _controlsIndex;
+            return CursorRow.BuildColumns(ControlsRowLabel(index), ControlsRowValue(index),
+                ControlsLabelEms * RowFont * s, ControlsValueEms * RowFont * s, (int)(RowFont * s),
+                onRow ? RowFocusColor : RowColor, onRow);
         }
 
         string text = RowText(index);
@@ -2734,8 +3054,10 @@ public sealed partial class LaunchMenu : CanvasLayer
             {
                 0 => $"Menu presentation: {PresentationChoiceLabel()}",
                 1 => $"Graphics: {GraphicsChoiceLabel()}",
+                2 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
+            Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
             Screen.Chapter => CurrentChapters[index].Name,
             Screen.Presets => InstantActionPresets.All[index].Name,
             Screen.Environment => InstantActionFeature.Environments[index].Name,
@@ -2961,6 +3283,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                 : "↑↓  Choose       ←→  Change       Enter / A  Continue       Esc / B  Back";
         }
 
+        if (_screen == Screen.Controls)
+        {
+            return ControlsFooter();
+        }
+
         string back = _screen == Screen.Mode ? "Esc / B  Quit" : "Esc / B  Back";
         string who = _slots.Count > 1 ? "       (P1 chooses)" : "";
         string nav = _screen switch
@@ -2996,6 +3323,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Hangar => $"{HangarRow}  ›  {_hangar?.Page.Title}",
             Screen.Campaign => $"{CampaignRow}  ›  {_campaign?.Page.Title}",
             Screen.Options => OptionsRow,
+            Screen.Controls => $"{OptionsRow}  ›  Controls  ›  Player {_controls.Player}",
             Screen.Chapter => $"{mode}  ›  Map  ›  Aircraft",
             Screen.Presets => $"{mode}  ›  Table of Contents",
             Screen.Environment => $"{mode}{PresetCrumb()}  ›  Environment  ›  Mission  ›  Aircraft",
@@ -3028,8 +3356,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             0 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
             1 => GraphicsDetail(),
+            2 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves both choices and restarts the menu at its top level; unfinished setup is discarded.",
         },
+        Screen.Controls => ControlsDetail(focus),
         Screen.Presets => PresetDetail(focus),
         Screen.Chapter => $"Region {CurrentChapters[focus].Code}",
         Screen.Environment => $"Region {InstantActionFeature.Environments[focus].Code}",

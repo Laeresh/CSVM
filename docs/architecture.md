@@ -243,6 +243,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/MenuExit.cs` — the one typed menu exit `Launcher` consumes: `LaunchExit`, `CampaignMissionExit`, `QuitExit`, `OptionsApplyExit`; presentations never build sessions.
 - `src/UI/Menu/MenuReturnDestination.cs` — semantic return destinations (top level, cabin, debrief) that each presentation maps into its own screen graph.
 - `src/UI/Menu/MenuLayout.cs` — the runtime reader of `extracted/rof/menu_layout.json`: screens, widgets with typed field access through the artifact's own kind table, navigation edges, script-named assets; engine-free.
+- `src/UI/Menu/ControlsFeature.cs` — the shared rebinding screen: one seat's keymaps, the row and slot cursors, the capture in progress, and the steal it names before performing; engine-free.
 - `src/UI/Menu/PlayerSetupFeature.cs` — the shared player setup: seats claimed by input-source identity, the aircraft roster (`MenuAircraft`), each seat's cursor, two-stage pick and fit, the launch gate per mode, the `MenuSeatChoice` list; device-neutral and engine-free.
 - `src/UI/Menu/HangarFeature.cs` — the shared hangar: one scratch build over a `CustomPlaneStore` and an optional `IHangarWallet`, its three starts, the airframe pick with the defaults ask, the per-tab operations, the purchase gate in the original's words, the commit, the sale or deletion, the name rules and the discard; engine-free, walked by Built-in's `HangarFlow` and Original's hub alike.
 - `src/UI/Menu/MenuIdleSource.cs` — a seat's input source with no device behind it, "no device", idle every frame; what the screenshot aid seats extra players over.
@@ -514,6 +515,8 @@ both sit on top of these types.
 - `src/Bindings/DefaultBindings.cs` — the shipped keymap as data, one map per context, reproducing `docs/controls.md`; also the placeholder pad identity a default is authored on.
 - `src/Bindings/BindingProfile.cs` — one seat's whole input: a map and a `PlayerActions` per context, plus the keyboard gate that applies to all of them.
 - `src/Bindings/BindingStore.cs` — the versioned, human-readable JSON keymap file, one per player under `user://`, falling back per action to the shipped default for anything it cannot read.
+- `src/Bindings/ControlCapture.cs` — what a rebinding screen may capture and the release-first scan that turns a press into a binding on the seat's own device identity; no axis and no hat.
+- `src/Bindings/BindingLabels.cs` — what a rebinding screen prints: an action's name, a control's keycap name, and a binding row that counts what it is not showing.
 
 ### Session root and tests
 
@@ -4317,11 +4320,20 @@ and the store's customs) beside this screen's own `PickerPlane` list, so a saved
 both. The cabin's FLY MISSION (`FlyCampaignMission`) leaves the same way as
 a `CampaignMissionExit` (profile, story position, one seat choice per joined human with its stock
 node, joined pads, stored fit and hangar build). Back on the Mode screen leaves as a `QuitExit`.
-The Mode screen's last row is the Options door (`OptionsRow`, `--menu=options`): a three-row screen
+The Mode screen's last row is the Options door (`OptionsRow`, `--menu=options`): a four-row screen
 whose first row steps the menu presentation between Built-in and Original (Left/Right or Accept),
-whose second steps the graphics mode between Original and Enhanced the same way, and whose third,
-"Apply and restart the menu", leaves as an `OptionsApplyExit` carrying both; the launcher persists
-them and restarts the menu. The steppers open on the saved options, read from `OptionsStore`, so
+whose second steps the graphics mode between Original and Enhanced the same way, whose third is the
+Controls door, and whose fourth, "Apply and restart the menu", leaves as an `OptionsApplyExit`
+carrying the first two; the launcher persists them and restarts the menu.
+The Controls screen (`ControlsRow`, `--menu=controls`) is the rebinding screen over the shared
+`ControlsFeature`: a windowed two-column list of one seat's actions and the controls on each, under
+a seat stepper and a context stepper. Accept starts a capture, and the capture reads the seat's own
+`MenuInput.Devices` rather than its semantic commands, because a captured control has to carry the
+seat's pad identity and a `MenuCommands` frame hides the device on purpose; a capture in progress
+swallows the frame, so the press being bound cannot also walk the cursor. Left/Right pick which of
+an action's controls the next capture replaces, past the last one being the empty slot that adds;
+L/Y unbinds it and P/X restores the seat's shipped keymap. A capture landing on a held control asks
+before it takes it. Back writes the seat's keymap through the store and returns to Options. The steppers open on the saved options, read from `OptionsStore`, so
 each shows back what was asked for rather than what is active. The graphics row's description says
 it takes effect on the next start, since `GraphicsMode` resolves once at launch.
 This door is the one Built-in change the presentation work makes; every other Built-in screen,
@@ -8054,6 +8066,18 @@ or a store. Owned by the `MenuHost`'s feature set and read out of it by `LaunchM
 `OriginalShell`. Off-engine coverage: `CSVM.Tests/FreeFlightFeatureTests.cs`, which checks the
 gate against `LaunchMenu.CanLaunch(MenuMode.Free, ...)` case by case.
 
+## src/UI/Menu/ControlsFeature.cs
+The rebinding screen as a shared `IMenuFeature`, engine-free: which seat's keymap is being edited
+(`Player`, one registered `BindingProfile` per seat through `AddSeat`), which of the three contexts
+(`Context`), the row and slot cursors (`Focus`, `MoveSlot`), the capture in progress
+(`BeginCapture`/`Poll` over the seat's own `IDeviceState`) and the steal it is about to perform.
+A capture that lands on a free control binds it; one that lands on a held control raises `Pending`
+naming every action that would lose it and moves nothing until `ConfirmSteal`, which is what keeps
+the original's conflict rule from happening behind the player's back. `UnbindSlot` drops one
+control, `ResetContext` restores the shipped keymap in the very map the polling site holds, and
+`Save` writes through the injected per-player store. Editing is scoped to one seat's profile, so
+two seats cannot reach each other's bindings. Coverage: `CSVM.Tests/ControlsFeatureTests.cs`.
+
 ## src/UI/Menu/PlayerSetupFeature.cs
 Player setup as a shared `IMenuFeature`, device-neutral and engine-free. `Seats` are
 `PlayerSeat`s in join order, each bound to the `IMenuInputSource` that claimed it (`Join(source)`:
@@ -8198,13 +8222,36 @@ offered them would let a player break their own diagnostics.
 ## src/Bindings/ActionMap.cs
 
 One player's keymap, an action to a `BindingSet`. `Assign` is the winning half of the steal rule and
-returns the action that lost the control, so a screen can name the loss instead of performing it
-silently; `SameControl` is what "the same control" means there, ignoring an axis deadzone so
-re-binding an axis adjusts it rather than stacking a copy. `ResolveInto` reads every bound action
-once per tick into a reused snapshot. `Add` is the other half: it binds without stealing, for the
-shipped defaults and a loaded file, where a control is deliberately on two actions (a numpad
-snap-look diagonal, flight's d-pad up). It holds no defaults and no device lookup. Coverage:
-`CSVM.Tests/ActionMapTests.cs`.
+returns every action that lost the control, in enum order, so a screen can name each loss instead of
+performing it silently; `OwnersOf` asks the same question without committing, and there is no
+single-owner form, because several shipped controls sit on two actions and a caller taking the first
+owner would report one loss and perform two. `SameControl` is what "the same control" means there,
+ignoring an axis deadzone so re-binding an axis adjusts it rather than stacking a copy, and reading a
+hat direction and the d-pad button Godot actually reports as different controls (which is why nothing
+authors a hat and no capture produces one). `ResolveInto` reads every bound action once per tick into
+a reused snapshot. `Add` is the other half: it binds without stealing, for the shipped defaults and a
+loaded file, where a control is deliberately on two actions (a numpad snap-look diagonal, flight's
+d-pad up). It holds no defaults and no device lookup. Coverage: `CSVM.Tests/ActionMapTests.cs`.
+
+## src/Bindings/ControlCapture.cs
+
+What a rebinding screen may capture, and the scan that turns a press into a `Binding`: the bindable
+key list, Godot's whole pad button range, and the mouse buttons past the pointer's own. `Arm` masks
+everything already held so the press that opened the capture is not read as the answer to it, and a
+masked control has to be released first. Every pad control is stamped with the seat's own identity
+rather than a hardware GUID, because a seat reads a set of pads through a placeholder and a real GUID
+beside a placeholder row would be two controls to `ActionMap.SameControl` and one to the player.
+Axes and hats are not scanned: an axis needs a movement rule rather than a threshold, and no hat may
+be authored on this backend. Escape and pad B cancel and are therefore never captured. Coverage:
+`CSVM.Tests/ControlCaptureTests.cs`.
+
+## src/Bindings/BindingLabels.cs
+
+What a rebinding screen prints: an action's name, a control's name in keycap terms rather than enum
+terms, and one row of an action's whole binding list. A row states how many bindings it is not
+showing, because the original ships four slots per action and draws the first two non-empty
+(`FUN_00449fc0`, `docs/org/input.md`), so its screen hides bindings with no way for a player to tell.
+Separate from `BindingStore`'s tokens on purpose: a file is parsed back and a label is only read.
 
 ## src/Bindings/ActionSnapshot.cs
 

@@ -21,11 +21,93 @@ public class ActionMapTests
         var map = new ActionMap();
         var space = new Binding(DeviceId.Keyboard, BindingControl.Key(32));
 
-        Assert.Null(map.Assign(InputAction.FireGuns, space));
-        Assert.Equal(InputAction.FireGuns, map.Assign(InputAction.FireRockets, space));
+        Assert.Empty(map.Assign(InputAction.FireGuns, space));
+        Assert.Equal(new[] { InputAction.FireGuns }, map.Assign(InputAction.FireRockets, space));
 
         Assert.Empty(map.Bindings(InputAction.FireGuns));
         Assert.Single(map.Bindings(InputAction.FireRockets));
+    }
+
+    /// <summary>The defect D31 inherited: two actions deliberately share several shipped controls
+    /// (a numpad snap-look diagonal, d-pad up in flight), and a steal that stopped at the first
+    /// owner left the control on the second one, which is the state the original forbids.</summary>
+    [Fact]
+    public void AControlHeldByTwoActionsIsTakenFromBothAndBothAreNamed()
+    {
+        var map = new ActionMap();
+        var diagonal = new Binding(DeviceId.Keyboard, BindingControl.Key(87));
+        map.Add(InputAction.LookUp, diagonal);
+        map.Add(InputAction.LookLeft, diagonal);
+
+        var lost = map.Assign(InputAction.Nitro, diagonal);
+
+        Assert.Equal(new[] { InputAction.LookUp, InputAction.LookLeft }, lost);
+        Assert.Empty(map.Bindings(InputAction.LookUp));
+        Assert.Empty(map.Bindings(InputAction.LookLeft));
+        Assert.Single(map.Bindings(InputAction.Nitro));
+    }
+
+    /// <summary>The losers are reported in enum order however the map was filled, so the sentence a
+    /// screen prints does not depend on dictionary ordering.</summary>
+    [Fact]
+    public void TheStolenFromListIsInEnumOrderWhateverOrderTheOwnersWereAdded()
+    {
+        var map = new ActionMap();
+        var button = new Binding(Pad, BindingControl.Button(11));
+        map.Add(InputAction.CycleStuntTarget, button);
+        map.Add(InputAction.TargetNextEnemy, button);
+
+        Assert.Equal(
+            new[] { InputAction.TargetNextEnemy, InputAction.CycleStuntTarget },
+            map.Assign(InputAction.Respawn, button));
+    }
+
+    /// <summary>A steal from two owners takes only that one control from each: the shared d-pad
+    /// direction goes and every other binding both actions hold stays.</summary>
+    [Fact]
+    public void AStealFromTwoOwnersLeavesEachOwnersOtherBindingsAlone()
+    {
+        var map = new ActionMap();
+        var shared = new Binding(Pad, BindingControl.Button(11));
+        var tab = new Binding(DeviceId.Keyboard, BindingControl.Key(9));
+        var t = new Binding(DeviceId.Keyboard, BindingControl.Key(84));
+        map.Add(InputAction.TargetNextEnemy, t);
+        map.Add(InputAction.TargetNextEnemy, shared);
+        map.Add(InputAction.CycleStuntTarget, tab);
+        map.Add(InputAction.CycleStuntTarget, shared);
+
+        map.Assign(InputAction.Respawn, shared);
+
+        Assert.Equal(new[] { t }, map.Bindings(InputAction.TargetNextEnemy));
+        Assert.Equal(new[] { tab }, map.Bindings(InputAction.CycleStuntTarget));
+    }
+
+    /// <summary>The trigger-deadzone alias B15 landed, unchanged on purpose: boost gates the same
+    /// axis at half travel and the dolly at zero, and <see cref="ActionMap.SameControl"/> ignores
+    /// the deadzone, so both are named as owners rather than one being missed.</summary>
+    [Fact]
+    public void TheTwoDeadzonesOfOneTriggerAreOneControlAndBothOwnersAreNamed()
+    {
+        var map = new ActionMap();
+        map.Add(InputAction.CameraBoost, new Binding(Pad, BindingControl.Axis(5, 1, 0.5f)));
+        map.Add(InputAction.CameraDollyOut, new Binding(Pad, BindingControl.Axis(5, 1, 0f)));
+
+        var trigger = new Binding(Pad, BindingControl.Axis(5, 1, 0.5f));
+
+        Assert.Equal(new[] { InputAction.CameraBoost, InputAction.CameraDollyOut }, map.OwnersOf(trigger));
+        Assert.Equal(new[] { InputAction.CameraBoost, InputAction.CameraDollyOut }, map.Assign(InputAction.CameraUp, trigger));
+    }
+
+    /// <summary>The other recorded alias, left alone as well: a hat direction and the d-pad button
+    /// Godot actually reports are different controls here, which is why nothing may author a hat
+    /// (`DefaultBindings`) and why capture never produces one.</summary>
+    [Fact]
+    public void AHatDirectionAndTheDpadButtonStayDifferentControls()
+    {
+        var map = new ActionMap();
+        map.Add(InputAction.TargetNextEnemy, new Binding(Pad, BindingControl.Button(11)));
+
+        Assert.Empty(map.OwnersOf(new Binding(Pad, BindingControl.Hat(0, HatDirection.Up))));
     }
 
     [Fact]
@@ -53,7 +135,7 @@ public class ActionMapTests
         map.Assign(InputAction.FireGuns, space);
         map.Assign(InputAction.FireGuns, padB);
 
-        Assert.Equal(InputAction.FireGuns, map.Assign(InputAction.Nitro, space));
+        Assert.Equal(new[] { InputAction.FireGuns }, map.Assign(InputAction.Nitro, space));
 
         Assert.Equal(new[] { padB }, map.Bindings(InputAction.FireGuns));
     }
@@ -65,7 +147,7 @@ public class ActionMapTests
         var space = new Binding(DeviceId.Keyboard, BindingControl.Key(32));
         map.Assign(InputAction.FireGuns, space);
 
-        Assert.Null(map.Assign(InputAction.FireGuns, space));
+        Assert.Empty(map.Assign(InputAction.FireGuns, space));
         Assert.Single(map.Bindings(InputAction.FireGuns));
     }
 
@@ -86,7 +168,7 @@ public class ActionMapTests
         var map = new ActionMap();
         map.Assign(InputAction.ThrottleUp, new Binding(Pad, BindingControl.Axis(4, 1, 0.2f)));
 
-        Assert.Null(map.Assign(InputAction.ThrottleDown, new Binding(Pad, BindingControl.Axis(4, -1, 0.2f))));
+        Assert.Empty(map.Assign(InputAction.ThrottleDown, new Binding(Pad, BindingControl.Axis(4, -1, 0.2f))));
         Assert.Single(map.Bindings(InputAction.ThrottleUp));
         Assert.Single(map.Bindings(InputAction.ThrottleDown));
     }
@@ -98,9 +180,8 @@ public class ActionMapTests
         var space = new Binding(DeviceId.Keyboard, BindingControl.Key(32));
         map.Assign(InputAction.FireGuns, space);
 
-        Assert.True(map.TryFindOwner(space, out var owner));
-        Assert.Equal(InputAction.FireGuns, owner);
-        Assert.False(map.TryFindOwner(new Binding(Pad, BindingControl.Button(3)), out _));
+        Assert.Equal(new[] { InputAction.FireGuns }, map.OwnersOf(space));
+        Assert.Empty(map.OwnersOf(new Binding(Pad, BindingControl.Button(3))));
         Assert.Single(map.Bindings(InputAction.FireGuns));
     }
 
@@ -263,7 +344,7 @@ public class ActionMapTests
         var map = new ActionMap();
         map.Assign(InputAction.FireGuns, new Binding(Pad, BindingControl.Button(1)));
 
-        Assert.Null(map.Assign(InputAction.FireRockets, new Binding(OtherPad, BindingControl.Button(1))));
+        Assert.Empty(map.Assign(InputAction.FireRockets, new Binding(OtherPad, BindingControl.Button(1))));
         Assert.Single(map.Bindings(InputAction.FireGuns));
         Assert.Single(map.Bindings(InputAction.FireRockets));
     }
