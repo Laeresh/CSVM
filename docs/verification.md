@@ -837,6 +837,13 @@ loss. What the engine renders was decodable from the authored constants + oscill
   `SurfaceRegistry` name (`dirt`, `water`, `buildings`, …) and an unknown one is a WARN line and an
   ignored flag, not a failure. Confirm the impact line names a real surface node before reading any
   frame.
+- **INSTR-42** — **A golden that produces NO image failed differently from one whose hash moved.
+  Read `broken` as a tooling fault and `moved` as a content change, and open the preserved log
+  before believing either.** Measured on `main`: two shots hit the 300 s ceiling having logged
+  `Cannot instantiate C# script … Launcher.cs`, because the assembly was rebuilt under the running
+  battery, while the other sixteen hashed identical and a serial re-run returned all eighteen. A
+  build whose ambient cwd resolves to a different tree is the usual cause, and `.scratch/
+  goldens-failures/<stamp>/` holds the evidence that says so.
 
 ## SRC — sources and documents
 
