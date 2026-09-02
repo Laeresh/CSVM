@@ -136,6 +136,11 @@ public partial class Launcher : Node3D
     private const float EnhancedTonemapAgxWhite = 6.0f;
     private const float EnhancedTonemapAgxContrast = 1.0f;
 
+    // The zone default FOG_COLOR (Flight/Weather.cs's no-weather zone), which is the colour a
+    // horizon dome fades into at eye level. Enhanced mode's sky until a flown zone writes its own
+    // over it, so a world with no weather.json still reflects a plausible sky.
+    private static readonly Color EnhancedDefaultSkyColor = new(0.69f, 0.69f, 0.69f);
+
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
     // exists — the same empty list the pre-split root held after a teardown.
     private static readonly List<PlayerRig> NoRigs = new();
@@ -1012,6 +1017,7 @@ public partial class Launcher : Node3D
         // time (CockpitOverlay.NewOverlay), so its 100 m interior inherits the same settings.
         if (GraphicsMode.Enhanced)
         {
+            UseMissionSky(_env);
             _env.SsaoEnabled = true;
             _env.SsaoRadius = EnhancedSsaoRadius;
             _env.SsaoIntensity = EnhancedSsaoIntensity;
@@ -1023,6 +1029,20 @@ public partial class Launcher : Node3D
             EnableGlowAndTonemap(_env);
         }
         AddChild(new WorldEnvironment { Environment = _env });
+    }
+
+    // Enhanced mode alone: the sky a reflection reads is the mission's own colour, not Godot's
+    // procedural gradient. The dome is gamez geometry drawn over the background, so this is
+    // normally unseen; what it feeds is the glossy water's specular. WeatherRig.WriteSkyColor
+    // writes the flown zone's own FOG_COLOR over the default here on every zone apply.
+    // ⚠ Do not leave the ambient on the sky: enhanced mode drives it from the zone's authored
+    // SUNLIGHT_AMBIENT, and a flat sky would override that with one colour.
+    private void UseMissionSky(Godot.Environment env)
+    {
+        env.Sky = new Sky { SkyMaterial = new PanoramaSkyMaterial() };
+        env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
+        env.AmbientLightColor = Colors.White;
+        WeatherRig.WriteSkyColor(env, EnhancedDefaultSkyColor);
     }
 
     // Every setting here is TUNE: nothing in the original authors a shadow map, so there is no

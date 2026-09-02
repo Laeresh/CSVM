@@ -42,6 +42,12 @@ public sealed class WeatherRig
     private const float NightDiffuseCap = 0.6f;
     private const float NightAmbientCap = 0.15f;
 
+    // The flat sky panorama's size, enhanced mode only. One texel would do for a colour that is
+    // uniform in every direction; a few keeps the equirectangular sampler and its mip chain off
+    // the degenerate case for nothing.
+    private const int SkyPanoramaWidth = 8;
+    private const int SkyPanoramaHeight = 4;
+
     // ⚠ TUNE, judged at the controls, and enhanced mode ONLY. Shadowed ground reads badly through
     // the authored haze: a cast shadow needs contrast to be seen at all, and the zones put full fog
     // close enough that half of every shadow is already grey. Pushing near and far out together
@@ -215,6 +221,21 @@ public sealed class WeatherRig
     /// in original mode), so another distance-gated population can follow the same pushed fog
     /// without this class exposing <c>EnhancedFogRangeScale</c> itself.</summary>
     public static float EnhancedFogScale() => GraphicsMode.Enhanced ? EnhancedFogRangeScale : 1f;
+
+    /// <summary>Paints one Environment's sky a single flat colour, enhanced mode's stand-in for
+    /// the mission's horizon dome. Godot draws a reflection off a <c>Sky</c> resource only, so the
+    /// colour goes in as a panorama; a background colour alone leaves the specular with no radiance
+    /// at all. Public because <c>Launcher</c> builds the Environment.
+    /// ⚠ Float format and an explicit linear value: an 8-bit texture's sRGB decode is the
+    /// renderer's choice, and a wrong one shifts every reflection.</summary>
+    public static void WriteSkyColor(Godot.Environment env, Color skyColor)
+    {
+        if (env.Sky?.SkyMaterial is not PanoramaSkyMaterial panorama)
+            return;
+        var image = Image.CreateEmpty(SkyPanoramaWidth, SkyPanoramaHeight, false, Image.Format.Rgbaf);
+        image.Fill(skyColor.SrgbToLinear());
+        panorama.Panorama = ImageTexture.CreateFromImage(image);
+    }
 
     /// <summary>Registers a second (sun, env) pair — a cockpit overlay's cloned copies — so every
     /// future enhanced-mode zone change reaches it too, not only the zone live when it was built.
@@ -501,18 +522,17 @@ public sealed class WeatherRig
     // The energy/colour half of ApplyEnhancedLighting, shared by the session sun/env and every
     // registered clone, so the two can never drift onto different formulas.
     private static void ApplyEnhancedSunAndEnv(DirectionalLight3D sun, Godot.Environment? env,
-        float sunEnergy, Color sunColor, float ambientEnergy, Color ambientColor, bool night)
+        float sunEnergy, Color sunColor, float ambientEnergy, Color ambientColor, Color skyColor)
     {
         sun.LightEnergy = sunEnergy;
         sun.LightColor = sunColor;
         if (env == null)
             return;
-        // ⚠ Do not restore the reflection under a night sky: the specular comes off the
-        // PLACEHOLDER procedural background, not the mission's dome, so glossy water mirrors a
-        // daylit gradient whatever the energies say. Measurements: docs/architecture.md.
-        env.ReflectedLightSource = night
-            ? Godot.Environment.ReflectionSource.Disabled
-            : Godot.Environment.ReflectionSource.Bg;
+        // The zone's own FOG_COLOR, which is the colour its horizon dome fades into and measures
+        // within a few units of that dome as drawn (docs/org/weather.md). Glossy water reflects
+        // this rather than a placeholder gradient, so a night zone mirrors its own sky.
+        WriteSkyColor(env, skyColor);
+        env.ReflectedLightSource = Godot.Environment.ReflectionSource.Bg;
         // ⚠ Take the ambient off the sky: AmbientSource.Sky reads the placeholder procedural sky,
         // not the mission's authored ambient colour, and would ignore both values written here.
         env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
@@ -766,10 +786,11 @@ public sealed class WeatherRig
             _sun.DirectionalShadowFadeStart = EnhancedShadowFadeStart;
         }
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
-        bool night = IsNightZone(fog);
-        ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, fog.SunColorDiffuse, ambientEnergy, fog.SunColorAmbient, night);
+        ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, fog.SunColorDiffuse, ambientEnergy,
+            fog.SunColorAmbient, fog.FogColor);
         foreach (var (sun, env) in _extraLighting)
-            ApplyEnhancedSunAndEnv(sun, env, sunEnergy, fog.SunColorDiffuse, ambientEnergy, fog.SunColorAmbient, night);
+            ApplyEnhancedSunAndEnv(sun, env, sunEnergy, fog.SunColorDiffuse, ambientEnergy,
+                fog.SunColorAmbient, fog.FogColor);
     }
 
     // The per-rig whiteout overlays and the mission's precipitation field — the half of

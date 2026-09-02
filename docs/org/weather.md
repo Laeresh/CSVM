@@ -415,6 +415,26 @@ a requested zone's subtree is a bare marker. C5 = `zone1`, confirmed by playtest
 C5/IA1 in the original and can see across the city, which `ZONE3`'s 50–250 m fog and 300 m clip
 would make impossible.
 
+### The dome's own colour against `FOG_COLOR`
+
+The dome as drawn, sampled off `--freecam --det` captures in original mode (mean sRGB over a fixed
+rect, 0-255), beside the `FOG_COLOR` the flown zone authors:
+
+| Chapter / zone | dome top | dome at the horizon | authored `FOG_COLOR` |
+|---|---|---|---|
+| C1 zone2 | 174, 174, 174 | 176, 176, 176 | 176, 176, 176 |
+| C1B zone1 | 35 median luminance under the puff field | 29, 37, 58 | 16, 24, 48 |
+| C3 zone1 | 176, 209, 242 | 186, 193, 205 | 201, 201, 201 |
+| C5 zone1 | 17, 18, 26 | 2, 2, 3 | 0, 0, 0 |
+
+`FOG_COLOR` is the colour the dome fades into at eye level, and it holds as a whole-dome
+approximation: the grey-sky chapters match it within 2 and 15 units, and both night chapters sit
+within a few units of black like their own fog. Only C3 disagrees in hue, where the dome's blue top
+carries almost exactly the fog's luminance (204 against 201) without its neutrality. No zone block
+carries a sky colour of its own, so nothing finer is decoded: the dome's colours live in its
+textures and vertex data, per chapter, not per zone. Enhanced mode paints its Environment sky this
+colour (`WeatherRig.WriteSkyColor`), which is what a reflection reads.
+
 ## The cloud deck's two regimes
 
 The deck tiles are **ordinary world meshes carrying `zone_id 2`** at their own authored altitude

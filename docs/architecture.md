@@ -483,7 +483,11 @@ pushed far so shadows never end in clear air; `LIGHT_STATE` point lights are mir
 scales its colour above 1.0 to feed an Environment glow pass, and an AgX tonemap rolls the
 resulting HDR scene off instead of clipping it; SSAO adds contact shading in ambient light, and
 SSR reflects the shoreline off water surfaces the engine already classifies as `"water"`
-(`Launcher.cs`'s `SetupLighting`). The cockpit interior pass and every splitscreen pane pick up
+(`Launcher.cs`'s `SetupLighting`); the sky those water surfaces reflect where SSR finds nothing is
+the flown zone's own `FOG_COLOR`, painted flat over Godot's procedural placeholder
+(`Launcher.cs`'s `UseMissionSky`, `WeatherRig.WriteSkyColor`). ⚠ That needs a `Sky` resource: a
+background COLOUR gives the specular no radiance at all, which reads as a plausible improvement
+because it removes the placeholder rather than replacing it. The cockpit interior pass and every splitscreen pane pick up
 the same settings and the same per-zone updates, since both duplicate or share the session's own
 sun and Environment (`CockpitOverlay.cs`, `SplitScreen.cs`).
 
@@ -5582,6 +5586,11 @@ declares `shadows_disabled` in its shader. The front-culled world needs no `Doub
 the source's visible side is Godot's back face, which is the face the sun sees. `EnableWaterReflections`
 is the same mode gate on the Environment's SSR, for the one glossy population `SceneBuilder` builds;
 what it can and cannot reflect is measured in `docs/PLAN-enhanced-graphics.md` C24.
+`UseMissionSky` is the same mode gate on the Environment's sky: enhanced mode swaps Godot's
+placeholder `ProceduralSkyMaterial` for a flat `PanoramaSkyMaterial` carrying one colour, which
+`WeatherRig` rewrites per zone from that zone's `FOG_COLOR`, and takes the ambient off the sky so
+the authored `SUNLIGHT_AMBIENT` keeps it. The faithful path keeps the procedural sky, which it
+never shows: the dome is gamez geometry drawn over the background.
 `SetupLighting` also sets SSAO on the enhanced `_env` (radius 2.5, intensity 2.0, power 1.5, detail
 0.5, horizon 0.06, sharpness 0.98; all TUNE for this world's street-canyon scale). The faithful path
 never enables it, since SSAO reads ambient light and the unshaded path has none for it to modulate.
@@ -6619,8 +6628,10 @@ mode `ApplyZone` also drives the real sun and the Environment ambient from the z
 `CSVM.Tests/SunlightEnergyTests.cs`), and neutralises `csky_world_light` to 1.0 so the fullbright
 dimming does not land twice; original mode's path is unchanged. A zone whose authored `FOG_COLOR`
 is near-black is treated as a night zone (`IsNightZone`), which caps those two energies at the
-install's own night pair and takes the Environment's reflected light source away so glossy water
-stops mirroring the placeholder procedural sky; every day zone is untouched.
+install's own night pair; every day zone is untouched. `WriteSkyColor` then paints the Environment's
+sky the zone's own `FOG_COLOR` as a flat panorama, so the water's specular reflects the mission's
+authored sky at every zone rather than a placeholder gradient (census in
+[org/weather.md](org/weather.md)).
 Enhanced mode also pushes the fog out. `FogRangeFor` scales a zone's authored near/far by
 `EnhancedFogRangeScale` (2.0, TUNE) and is identity in original mode; both fog-range writers
 (`ApplyZone` and `ApplyFogState`) go through it, so a FOG_STATE edge cannot snap the haze back to

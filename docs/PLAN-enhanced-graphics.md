@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 41. ☑ Shadows end before the fog ramp, not inside it
 42. ☑ C5 reads too bright in enhanced mode, its water a light grey
 43. ☑ The clutter building fade reaches as far as the pushed fog
-44. ☐ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
+44. ☑ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
 45. ☐ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
 
 ## Dependency and parallelism notes
@@ -1606,7 +1606,7 @@ zero movers, on an RTX 5080. The complete `.\RunTests.ps1`: PASS, 2802 units, 20
 (errors clean), 18 goldens hash-identical, 169.7 s total. `dotnet build CSVM/CSVM.sln`: clean, 0
 warnings, 0 errors.
 
-## E44 ☐ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
+## E44 ☑ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
 
 **Goal.** In enhanced mode the Environment's background and reflection source are the mission's
 own horizon dome (or a colour derived from it), so specular and any sky-sourced term read the
@@ -1631,6 +1631,91 @@ reflection source if the new sky makes it read right, keeping E42's cap.
 
 **Verify.** C1B and C5 night seas darker toward the original; C3 and C1 day water reflects a sky
 that matches the dome's colour; original mode untouched, goldens zero movers.
+
+**What the background was.** In both modes the Environment was built with `BGMode.Sky` over a
+`Sky { SkyMaterial = new ProceduralSkyMaterial() }`, Godot's default day gradient, with
+`AmbientSource.Sky` and energy 0.9 (`Launcher.SetupLighting`). Enhanced mode then took the ambient
+off the sky per zone (B12) and, on a night zone, took the reflection away outright (E42). The
+faithful path never SHOWS that sky: the dome is gamez geometry drawn camera-centred over the
+background at every altitude. What the sky was is the reflection and, before B12, the ambient.
+
+**What it is now.** Option (a), and no new fidelity TUNE. Enhanced mode's Environment carries a
+flat `PanoramaSkyMaterial` (8x4 texels, `Rgbaf`) whose one colour is the flown zone's authored
+`FOG_COLOR`, written in linear (`WeatherRig.WriteSkyColor`, called from `ApplyEnhancedSunAndEnv`,
+so it reaches the cockpit overlay's registered copy on every zone change).
+`Launcher.UseMissionSky` builds the same material with the zone default 0.69 grey, for a world
+that applies no zone at all, and moves the ambient to `AmbientSource.Color` there rather than
+leaving a flat sky to override the authored `SUNLIGHT_AMBIENT`. E42's night reflection disable is
+gone: `ReflectedLightSource` is `Bg` at every zone, because the night sky reflected is now the
+zone's own near-black rather than a daylit gradient. Option (b) was not attempted: no zone block
+carries a sky colour, so a per-zone panorama would have to be RENDERED off the dome geometry, and
+the census below shows a flat `FOG_COLOR` already lands within 2 to 15 units of that dome.
+
+**The colour census.** The dome as drawn in original mode, sampled off `--freecam --det` captures
+(mean sRGB over a fixed rect, 0-255), against the zone's authored `FOG_COLOR`. The table is
+`docs/org/weather.md`'s, repeated here for the judgement it settles.
+
+| Chapter / zone | dome top | dome at the horizon | authored `FOG_COLOR` |
+|---|---|---|---|
+| C1 zone2 | 174, 174, 174 | 176, 176, 176 | 176, 176, 176 |
+| C1B zone1 | 35 median luminance under the puff field | 29, 37, 58 | 16, 24, 48 |
+| C3 zone1 | 176, 209, 242 | 186, 193, 205 | 201, 201, 201 |
+| C5 zone1 | 17, 18, 26 | 2, 2, 3 | 0, 0, 0 |
+
+Only C3 disagrees in hue, and there the blue top carries almost exactly the fog's luminance (204
+against 201). Nothing else per zone is decoded to blend with, so `FOG_COLOR` alone is the answer
+and no blend TUNE exists.
+
+**⚠ A background colour is not a sky, and the wrong mechanism looked like a win.** The first arm
+set `BGMode.Color` with the zone colour and `ReflectedLightSource = Bg`. C1's lake darkened from 82
+to 59 and C3's sea from 98 to 95, both toward the original, and the night chapters came out
+byte-identical. The control refutes it: a pure-RED background rendered byte-identically to the
+fog-grey one, so the colour reached nothing. Godot builds a radiance map from a `Sky` resource
+only, and `BGMode.Color` had simply removed the specular. Under the flat panorama the same red
+control tints the water red, which is what licenses the numbers below (`docs/verification.md`
+WORLD-29).
+
+**Verified.** <pending orchestrator run>
+
+Commands, all from the item's worktree with `$env:CSVM_DATA_ROOT="Z:\CSVM"`:
+`dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
+`.\RunTests.ps1 -Suite fog-state -SkipUnits -SkipGoldens`: PASS, 1 suite run of 200 (non-zero),
+engine errors clean.
+`.\RunTests.ps1 -Suite cockpit-overlay-pass -SkipUnits -SkipGoldens`: PASS, 1 suite run of 200,
+engine errors clean.
+`.\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only): PASS, 18 shot(s) hash-identical, zero
+movers, 47.1 s.
+
+Captures are `.\RunProbe.ps1 … --det --mute --frames=120` runs under `.scratch/e44/`, three arms per
+pose (original, enhanced from the committed tree, enhanced after), plus a sky-up pose per chapter
+for the census. Labelled montages beside them and copied to the plan worktree's `.scratch/e44/`:
+`montage_c1b.png`, `montage_c5.png`, `montage_c3.png`, `montage_c1.png`, and the four `*-sky` ones.
+
+| Pose / region | original | enhanced before | enhanced after |
+|---|---|---|---|
+| C1B night sea, water | 17.73 | 56.58 | 57.02 |
+| C1B night sea, island | 26.93 | 61.85 | 62.10 |
+| C5 waterfront, near water | 37.46 | 29.11 | 29.11 |
+| C5 waterfront, far water | 37.43 | 29.34 | 29.34 |
+| C5 waterfront, city blocks | 6.05 | 6.72 | 6.72 |
+| C3 island sea, water | 82.17 | 98.43 | 105.22 |
+| C3 island sea, mountain | 123.72 | 47.15 | 47.29 |
+| C1 waterfall lake, water | 35.86 | 82.01 | 96.17 |
+| C1 waterfall lake, cliff | 61.68 | 93.30 | 93.30 |
+
+Rec.709 luminance, 0-255, over fixed rects. C5's frames are byte-identical before and after (its
+`FOG_COLOR` is exactly black, so the restored reflection carries nothing), and C1B's move by 0.44:
+restoring the night reflection costs what a near-black sky is worth, which is the measurement E42
+could not make with a placeholder sky in the way. The day chapters take the hue and the level of
+their own sky: C1's overcast 176 grey and C3's 201 grey are brighter than the placeholder gradient
+those surfaces mirrored before, so day water reads lighter and greyer, and C1's enclosed lake most
+of all.
+
+**What this does not fix.** Day water is now further from the original's flat unreflective surface
+than it was (C1's lake 96 against 36), because the authored overcast IS bright. The lever left is
+the mirror itself, not the sky it mirrors: C24's SSR/gloss on wave-less water planes is already an
+open judgement, and this item makes what it reflects correct rather than deciding how much of it to
+reflect. C1B's night sea is still far above the original for the reasons E42 recorded.
 
 ## E45 ☐ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
 
@@ -1673,6 +1758,7 @@ decoded rule.
 - C5's night zone authoring a day-level SUNLIGHT, so its skyline reads daylit under the pushed
   fog with nothing in the data asking for a dimmer light there.
 - SSR's hard mirror on wave-less water planes, since the surfaces carry no wave normals to break
-  the reflection up.
+  the reflection up, and with it how much of the zone's own sky that mirror should return: a day
+  chapter's authored overcast is bright, so C1's lake reads light grey under it.
 - When to pin the two enhanced goldens proposed in D32 (declined until the values above settle),
   and whether the day/night pair chosen there is the right pair to stand in for the whole mode.
