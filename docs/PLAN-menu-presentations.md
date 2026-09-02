@@ -1391,7 +1391,11 @@ the book and back, hearing the narration start, restart and stop) is the user's 
 was for D31; the suite's launch is verified at the host's sink and the flown mission's record is
 written the way the director writes one.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The plan tree with D33 landed passed the complete `.\RunTests.ps1` (3012 units, 212
+engine suites across 4 shards with `menu-original-campaign` among them, 18 goldens hash-identical,
+engine errors clean, 173.3s). No real profile was written by any run. The at-the-controls journey
+from the roster to a flown mission and back to the scrapbook remains owed, as the Verify paragraph
+states.
 
 **⚠ Traps.** Shared board components do not make the two presentations one screen graph. Briefing
 state drives narration, but cue selection and transition timing remain presentation responsibilities.
