@@ -82,6 +82,17 @@ Godot reports, which is a button), so the hazard can only arrive from a hand-aut
 owns the defaults and therefore owns the call: either never author a `Hat` binding, or drop
 `ControlKind.Hat` from the model as unreachable on this backend. Do not resolve it by widening
 `SameControl` to alias the two, which would bake the d-pad's button numbers into the comparison.
+**Resolved by C21**, which authors every d-pad default as a `Button` and makes `BindingStore` reject
+a hat token, so the two encodings never coexist. `ControlKind.Hat` stays in the model.
+
+⚠ **`ActionMap.Assign` steals from only the first owner it finds.** Its scan `break`s on the first
+match, so a control held by two actions loses it from one of them and stays on the other. That state
+is now reachable rather than theoretical: C21's defaults deliberately put each numpad snap-look
+diagonal on two actions, through `ActionMap.Add`, which binds without stealing. Nothing today calls
+`Assign` on those, so nothing is broken yet. **D31 owns the call**, because a rebinding screen is
+the first thing that will: either `Assign` steals from every owner and reports a list rather than
+one action, or the screen refuses the edit and says which actions share the control. Do not leave it
+to be discovered at the controls.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -154,6 +165,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ The binding model: device identity, tagged control, binding list
 2. ☑ `InputAction` and `ActionMap`: named actions resolved per player
 3. ☑ The device registry: enumeration, stable identity, hot-plug
+4. ☐ A mouse control kind, so free-look is bindable at all
 
 ### Wave B — the migration
 
@@ -376,7 +388,7 @@ binding an action to a pad, unplugging it, watching the action go quiet, and rep
 different port to see it fire again.
 
 **⚠ Traps.** Godot's joypad index is a connection slot and is reused. Storing it is exactly the bug
-this item exists to prevent. Godot has no raw hat/POV API of its own: a controller's d-pad arrives
+this item exists to prevent. Godot has no raw hat or POV API of its own: a controller's d-pad arrives
 as four `JoyButton` values (`DpadUp`/`DpadRight`/`DpadDown`/`DpadLeft`), so `GodotDeviceState`
 treats hat index 0 as that d-pad and every other hat index as unbindable. The plan's Approach names
 a "live index-to-identity table maintained on the joy_connection_changed signal" without saying who
@@ -384,6 +396,41 @@ owns the wiring; `GodotDeviceState.RefreshDevices()` does the read and is meant 
 launch and again from that signal, but the call site is left for whoever builds the per-tick
 resolver (A2's `ActionMap`, or `GameSession`), since A3 has no polling loop of its own to hook it
 into.
+
+## A4 ☐ A mouse control kind, so free-look is bindable at all
+
+**Goal.** `InputAction.FreeLook` has a default binding like every other action, and B11 and B13 can
+migrate their free-look sites instead of leaving a raw poll behind.
+
+**Evidence (confidence: traced).** C21 bound 56 of 58 actions and left `FreeLook` out because the
+model has no mouse control kind, while `docs/controls.md` ships RMB-held free-look twice: the
+first-person head pan, and the freecam look posture that `SpectatorCamera` reads. The gap is not
+hypothetical, and two Wave B items run into it.
+
+⚠ **This is the one respect in which our model came out narrower than the original's, and Decision 3
+says it should be wider.** `crimson.exe` carries a mouse button in bits 26-27 of every command word,
+values 1-3 for left, right and middle (`FUN_00537150`, named by `FUN_005379b0`, decoded in
+`docs/org/input.md`). A1 modelled keyboard, pad button, axis and hat, and dropped the one input the
+original actually had. Nothing decided that: it fell out of this plan's own Approach line naming
+four kinds, which was written from the pad-and-keyboard end of the problem.
+
+**Approach.** A fifth `ControlKind.Mouse` carrying a button index, its factory beside the other four,
+a resolve arm in `Binding.Resolve`, an `IsMouseButtonDown` member on `IDeviceState` implemented over
+`Input.IsMouseButtonPressed`, a `mouse:` token in `BindingStore`, and `FreeLook` bound to the right
+button in `DefaultBindings` with its entry dropped from `Unbound`. Pointer motion is out of scope:
+this binds the button that gates free-look, not the delta, which stays where it is.
+
+**Model recommendation.** medium. Contained and well-specified, but it touches five landed files and
+their tests.
+
+**Verify.** `DefaultBindingsTests`'s coverage gate tightens by one, leaving `MenuJoin` as the only
+member of `Unbound`. Add a `mouse:` round-trip through `BindingStore` and a resolve test over the
+fake device state in the shape A1 used. Complete `.\RunTests.ps1`.
+
+**⚠ Traps.** Do not model pointer motion here. Free-look direction is a relative law with no absolute
+position (`docs/controls.md` says so, and it is why the pad takes a different path), and folding
+motion in would put a delta into a type whose whole contract is a held-and-how-far pair. Leave
+`ControlValue` alone.
 
 # Wave B — the migration
 
