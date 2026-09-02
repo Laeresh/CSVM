@@ -150,8 +150,9 @@ outside a field's set reads as never set.
 
 **An option is a store field plus a row in each presentation's Options screen.** Adding one means
 a nullable field on `OptionsDef` with its accepted-value set, the two writes in `Serialize` and
-`Deserialize`, a row in Built-in's Options screen and one in Original's Preferences chooser slot,
-a value on `OptionsApplyExit`, and the line in `Launcher.ApplyOptions` that saves it. The store's
+`Deserialize`, a row in Built-in's Options screen and an entry in the table Original's Game Options
+page draws its rows from, a value on `OptionsApplyExit`, and the line in `Launcher.ApplyOptions`
+that saves it. The store's
 `Version` does not move for a new field: a missing field already reads as never set, so a file
 written before the field existed loads with everything it does have, and the version gate is
 reserved for a field whose meaning or shape changed. Whichever module consumes the option decides
@@ -179,13 +180,14 @@ switch, so a tree repaired while the process is up is seen by the next switch; a
 never re-selects.
 
 Every presentation exposes Options, since a player must be able to leave a presentation from inside
-it. Built-in's is the Mode screen's Options row (`--menu=options`); Original's is its Preferences
-page (`--menu=options` under `--presentation=original`). Both offer the same saved options, read
-them from the store on entry, and leave through an `OptionsApplyExit` carrying every choice. Both
-presentation choosers toggle between the two shipped tokens, so a third presentation extends the
-choosers as well as the registry (checklist below); both graphics choosers toggle between
-`original` and `enhanced` and say in their description line that the choice takes effect on the
-next start, since the mode is resolved once at launch and applying it rebuilds nothing. The
+it. Built-in's is the Mode screen's Options row (`--menu=options`); Original's is the Game Options
+page behind its Preferences page's first door (`--menu=game-options` under
+`--presentation=original`). Both offer the same saved options, read them from the store on entry,
+and leave through an `OptionsApplyExit` carrying every choice. Both presentation choosers offer the
+two shipped tokens alone, so a third presentation extends them as well as the registry (checklist
+below); both graphics choosers cover `original` and `enhanced` and say in their description that
+the choice takes effect on the next start, since the mode is resolved once at launch and applying
+it rebuilds nothing. The
 startup recovery is `--force-builtin`, which beats everything and rewrites nothing.
 
 ## Audio
@@ -319,8 +321,8 @@ the contract above, not from Original's code. In particular it does not inherit:
   sampling of extracted art, are the rule for screens composed in the original's coordinate space.
   A presentation that lays out for the window's own aspect owes `BoardFit` nothing.
 - **The remake-only screens and rules.** Original's Free Flight, Dogfight and BUILD PLANE doors and
-  screens, its Options chooser's placement on the Preferences page, its disabled Preferences page
-  doors, its keyboard and pad focus over a pointer-driven original, and its pointer hotspot are
+  screens, the words and control kinds its Game Options rows take, its three disabled Preferences
+  page doors, its keyboard and pad focus over a pointer-driven original, and its pointer hotspot are
   readings recorded in the inventory as remake-only. A new
   presentation makes its own choices for the same operations and records them the same way.
 - **The pointer bitmaps and the cue names.** The two extracted pointer bitmaps and the four cue
@@ -372,8 +374,9 @@ In order. Each step names the file it touches and the test that proves it.
    every input family the presentation supports, every exit typed.
 6. **Expose Options.** A screen that reads the saved options from `OptionsStore`, offers every
    registered token and every option the store carries, and leaves through `OptionsApplyExit`.
-   Generalise the two shipped presentation choosers from their two-token toggle to the registered
-   set at the same time, so a switch into and out of the new presentation works from both of them.
+   Generalise the two shipped presentation choosers from their two shipped tokens to the registered
+   set at the same time (Built-in's Options row and the table Original's Game Options page draws
+   from), so a switch into and out of the new presentation works from both of them.
 7. **Register it.** One `registry.Register(PresentationId.<Name>, () => new <Name>Presentation(...))`
    in `Launcher.BuildMenuHost`, reading `_menuAid` for the cold start's aid as the two shipped
    factories do.

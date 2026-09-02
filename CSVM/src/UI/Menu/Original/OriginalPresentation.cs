@@ -30,6 +30,15 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the Options screen.</summary>
     public const string OptionsAid = "options";
 
+    /// <summary>The aid value that opens the Game Options page behind it.</summary>
+    public const string GameOptionsAid = "game-options";
+
+    /// <summary>The Game Options aid's argument that leaves its Menu dropdown standing open.</summary>
+    public const string GameOptionsOpenAid = "open";
+
+    /// <summary>The Game Options aid's argument that leaves its checkbox checked.</summary>
+    public const string GameOptionsCheckedAid = "checked";
+
     /// <summary>The aid value that opens the Instant Action screen.</summary>
     public const string InstantActionAid = "instant-action";
 
@@ -262,6 +271,11 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case OptionsAid:
                     _shell.Open(OriginalScreen.Options);
                     break;
+                case GameOptionsAid:
+                case GameOptionsAid + ":" + GameOptionsOpenAid:
+                case GameOptionsAid + ":" + GameOptionsCheckedAid:
+                    OpenGameOptionsAid(aid);
+                    break;
                 case InstantActionAid:
                     _shell.OpenInstantAction();
                     break;
@@ -415,6 +429,25 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     private static Color ToColor(MenuLayoutColor c) => new(c.R / 255f, c.G / 255f, c.B / 255f, 1f);
 
+    // The Game Options aid's two posed states, each the keyboard walk that reaches it rather than a
+    // state the page can only be put in from outside: Accept on the opening focus stands the Menu
+    // dropdown's list open, and a step down then Accept checks the box.
+    private void OpenGameOptionsAid(string aid)
+    {
+        _shell!.OpenGameOptions();
+        int colon = aid.IndexOf(':');
+        string pose = colon >= 0 ? aid[(colon + 1)..] : string.Empty;
+        if (pose == GameOptionsCheckedAid)
+        {
+            _shell.Step(new MenuCommands { MoveY = 1 });
+        }
+
+        if (pose.Length > 0)
+        {
+            _shell.Step(new MenuCommands { Accept = true });
+        }
+    }
+
     // Joining is open on the two sortie screens, where a seat has an aircraft column to pick from,
     // and on the campaign's flight check, where a joined seat gets a check of its own.
     private bool JoiningOpen() =>
@@ -557,11 +590,11 @@ public sealed class OriginalPresentation : IMenuPresentation
     {
         if (_shell != null && _view != null)
         {
-            // Paper pages write in authored black, the hub in its own inks, the Options screen in
-            // the Preferences page's, a campaign screen in the palette its shared board component
-            // takes under Built-in, and the rest in the file-wide inks over the dark top level.
+            // Paper pages write in authored black, the hub in its own inks, the Options screen and
+            // the Game Options page in the Preferences page's, a campaign screen in the palette its
+            // shared board component takes under Built-in, and the rest in the file-wide inks.
             var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.HangarInventory ? _paperPalette
-                : _shell.Screen == OriginalScreen.Options ? _preferencesPalette
+                : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette
                 : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)
                 : _palette;

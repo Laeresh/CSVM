@@ -19,9 +19,13 @@ public enum OriginalScreen
     /// <summary>The remake-only Dogfight screen: the Free Flight screen's shape over the Dogfight gate.</summary>
     Dogfight,
 
-    /// <summary>The Options screen: the decoded <c>[@Preferences@]</c> chrome with the
-    /// presentation chooser as its content.</summary>
+    /// <summary>The Options screen: the decoded <c>[@Preferences@]</c> page, its GAME OPTIONS
+    /// door live and its three other doors drawn disabled.</summary>
     Options,
+
+    /// <summary>The decoded <c>[@GameOptions@]</c> page: the shared options in its authored row
+    /// shape, with ACCEPT CHANGES and CANCEL CHANGES under them.</summary>
+    GameOptions,
 
     /// <summary>The decoded <c>[@InstantAction@]</c> setup screen: the Table of Contents, the
     /// dropdowns, the paged enemy rows, the radio pair and its buttons.</summary>
@@ -128,21 +132,22 @@ public sealed record OriginalInks(
     MenuLayoutColor Disabled, MenuLayoutColor Active, MenuLayoutColor Rollover, MenuLayoutColor Depressed,
     MenuLayoutColor LabelNormal, MenuLayoutColor LabelRollover, MenuLayoutColor LabelDepressed);
 
-/// <summary>The colours the Options screen writes in, read off <c>[@Preferences@]</c>: its
-/// description rows' authored text colour and its title's.</summary>
+/// <summary>The colours the Options screen and the Game Options page write in, read off
+/// <c>[@Preferences@]</c>: its description rows' authored text colour and its title's, which
+/// <c>[@GameOptions@]</c> repeats row for row.</summary>
 public sealed record OriginalPreferencesInks(MenuLayoutColor Text, MenuLayoutColor Title);
 
 /// <summary>
 /// The Original presentation's screen graph, engine-free: the decoded top level with the
 /// remake-only Free Flight, Dogfight and hangar doors, the sortie screens, the Options screen over
-/// the decoded Preferences chrome, and the decoded Instant Action, campaign and hangar screens over
-/// their shared features (each family its own partial file), driven by each seat's semantic
-/// commands and composed into a <see cref="ComposedBoard"/> in the authored 800x600 space. Seat
+/// the decoded Preferences chrome with the Game Options page behind its live door, and the decoded
+/// Instant Action, campaign and hangar screens over their shared features (each family its own
+/// partial file), driven by each seat's semantic commands and composed into a
+/// <see cref="ComposedBoard"/> in the authored 800x600 space. Seat
 /// 0's pointer arrives already mapped into that space; hovering a live row moves the focus onto
 /// it, so keyboard, pad and pointer share one cursor. A dialog (the original's messagebox) may
-/// stand over any screen, and while one does its answers are the only rows. Every rectangle and
-/// art name comes from the layout; the art's pixel size, which the layout does not carry, comes
-/// from the measurer the presentation injects.
+/// stand over any screen, and while one does its answers are the only rows. Every rectangle and art
+/// name comes from the layout, the art's pixel size from the measurer the presentation injects.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -155,14 +160,11 @@ public sealed partial class OriginalShell
     /// <summary>The Free Flight screen's launch button.</summary>
     public const string FlyKey = "FLY";
 
-    /// <summary>The Options screen's presentation toggle.</summary>
+    /// <summary>The Game Options page's menu-presentation dropdown.</summary>
     public const string PresentationKey = "PRESENTATION";
 
-    /// <summary>The Options screen's graphics-mode toggle.</summary>
+    /// <summary>The Game Options page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
-
-    /// <summary>The Options screen's apply button.</summary>
-    public const string ApplyKey = "APPLY";
 
     /// <summary>The Options screen's section in the layout, whose chrome it is composed over.</summary>
     public const string PreferencesSection = "Preferences";
@@ -170,23 +172,13 @@ public sealed partial class OriginalShell
     /// <summary>The Options screen's way back, <c>[@Preferences@]</c>'s own RETURN TO MAIN MENU.</summary>
     public const string OptionsBackKey = "PF_B_MAINMENU";
 
-    /// <summary>The Preferences pages' four doors, drawn disabled: no shared option stands behind them.</summary>
-    public static readonly string[] PreferencesPageKeys = { "PF_B_GAMEOPTIONS", "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS" };
+    /// <summary>The Preferences page's four page doors, in their authored order. The first opens
+    /// the Game Options page; the other three draw disabled, no shared option standing behind
+    /// them.</summary>
+    public static readonly string[] PreferencesPageKeys = { GameOptionsDoorKey, "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS" };
 
-    // The choosers' own words on the slot's first lines, above the plaques rather than beside them:
-    // a plaque is wide enough to reach the description column at every window size. Two short lines
-    // rather than one long one, each well inside the page's 310-pixel description box, so neither
-    // wraps into the row of plaques standing under them. The first line names the two plaques in
-    // the order they stand, since both read ORIGINAL until one of them is stepped.
-    private const string ChooserDescription = "Menu presentation, then graphics mode.";
-    private const string ChooserRestartNote = "Graphics takes effect on the next start.";
-    private const float ChooserGap = 8f;
-
-    // The two description lines' box inside the chooser's slot, which the plaques stand under.
-    private const float ChooserLine = 30f;
     private const float PreferencesTitleFont = 20f;
     private const float PreferencesTextFont = 14f;
-    private const float ChooserFont = 12f;
 
     // The Free Flight door beside the button frame, level with the frame's first row. The frame
     // column is full, so the door stands in the clear left margin at the row pitch's height.
@@ -301,7 +293,7 @@ public sealed partial class OriginalShell
     /// <summary>The colours the shell writes in.</summary>
     public OriginalInks Inks { get; }
 
-    /// <summary>The colours the Options screen writes in.</summary>
+    /// <summary>The colours the Options screen and the Game Options page write in.</summary>
     public OriginalPreferencesInks PreferencesInks { get; }
 
     /// <summary>The current screen's rows, in focus order: a standing dialog's answers alone,
@@ -328,10 +320,10 @@ public sealed partial class OriginalShell
     /// <summary>The picked chapter's code, or null.</summary>
     public string? PickedChapter => _pickedChapter >= 0 ? _chapters[_pickedChapter].Code : null;
 
-    /// <summary>The presentation the Options screen would apply.</summary>
+    /// <summary>The presentation the Game Options page would apply.</summary>
     public string PresentationChoice => _choice;
 
-    /// <summary>The graphics mode word the Options screen would apply.</summary>
+    /// <summary>The graphics mode word the Game Options page would apply.</summary>
     public string GraphicsChoice => _graphics;
 
     /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
@@ -354,12 +346,9 @@ public sealed partial class OriginalShell
         _screen = screen;
         _hover = -1;
         _pressed = -1;
-        if (screen == OriginalScreen.Options && _options?.Invoke() is { } saved)
+        if (screen == OriginalScreen.GameOptions)
         {
-            // What was asked for, not what this process resolved: a flag or the config key can
-            // have decided the running graphics mode, and the screen still owes the player back
-            // the word their own Apply saved.
-            _graphics = saved.GraphicsMode ?? CSVM.Utils.GraphicsMode.Default;
+            ReadSavedOptions();
         }
     }
 
@@ -420,7 +409,8 @@ public sealed partial class OriginalShell
                 rows = Rows;
                 focus = EnsureFocus(rows);
             }
-            else if (pointer.Clicked && over < 0 && (CloseInstantActionDropdown() || CloseHangarDropdown() || CloseCampaignCombo()))
+            else if (pointer.Clicked && over < 0
+                && (CloseInstantActionDropdown() || CloseHangarDropdown() || CloseCampaignCombo() || CloseGameOptionsDropdown()))
             {
                 // A click off an open list closes it and picks nothing.
                 changed = true;
@@ -442,10 +432,15 @@ public sealed partial class OriginalShell
 
         if (commands.MoveX != 0)
         {
-            // On the Instant Action screen a sideways step on a dropdown or a radio changes its
-            // value, in the hangar it steps a dropdown or walks the tab bar, on a campaign screen
-            // it steps a closed field's pick; anywhere else it crosses columns.
+            // A sideways step changes a value where a screen has one under the cursor (an Instant
+            // Action dropdown or radio, a Game Options row, a hangar dropdown or tab, a closed
+            // campaign field); anywhere else it crosses columns.
             if (_screen == OriginalScreen.InstantAction && StepInstantActionValue(rows, focus, commands.MoveX))
+            {
+                rows = Rows;
+                focus = EnsureFocus(rows);
+            }
+            else if (_screen == OriginalScreen.GameOptions && StepGameOptionValue(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
@@ -502,7 +497,8 @@ public sealed partial class OriginalShell
         var notes = new List<BoardNote>();
         var overlays = new List<BoardPanel>();
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
-        bool ownPage = _screen is OriginalScreen.InstantAction or OriginalScreen.Options || IsHangarScreen || IsCampaignScreen;
+        bool ownPage = _screen is OriginalScreen.InstantAction or OriginalScreen.Options or OriginalScreen.GameOptions
+            || IsHangarScreen || IsCampaignScreen;
         if (!ownPage && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
         {
             pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, logo.Art[0], logo.Frames), logo.Int("X"), logo.Int("Y")));
@@ -531,6 +527,9 @@ public sealed partial class OriginalShell
             case OriginalScreen.Options:
                 ComposeOptions(pictures, lines);
                 break;
+            case OriginalScreen.GameOptions:
+                ComposeGameOptions(screenRows, screenFocus, pictures, fills, lines, plaques, overlays);
+                break;
         }
 
         if (!ownPage || _screen == OriginalScreen.Options)
@@ -554,23 +553,6 @@ public sealed partial class OriginalShell
 
         return new ComposedBoard(pictures, strokes, lines, plaques, notes,
             backdrop: backdrop, fills: fills, overlays: overlays);
-    }
-
-    // Where the chooser's slot starts on the Preferences page: under the last page door, at the
-    // doors' own pitch, which the rows author and the panel has room for. Its first line is the
-    // description; the plaques stand a line under it.
-    private static (float X, float Y) ChooserCorner(MenuLayoutScreen screen)
-    {
-        var first = screen.Widget(PreferencesPageKeys[0]);
-        var last = screen.Widget(PreferencesPageKeys[^1]);
-        var beforeLast = screen.Widget(PreferencesPageKeys[^2]);
-        if (first == null || last == null)
-        {
-            return (OptionsX, OptionsTop);
-        }
-
-        float pitch = beforeLast != null ? last.Int("Y") - beforeLast.Int("Y") : OptionsPitch;
-        return (first.Int("X"), last.Int("Y") + Math.Max(OptionsPitch, pitch));
     }
 
     private static OriginalPreferencesInks ReadPreferencesInks(MenuLayout layout, OriginalInks inks)
@@ -751,11 +733,9 @@ public sealed partial class OriginalShell
     }
 
     // The Options screen's chrome, [@Preferences@]'s own: its logo and background panes, its title
-    // and the description beside each page door, plus the choosers' two description lines in the
-    // same column and colour, on the first lines of the choosers' own slot. The rows themselves
-    // (the four disabled doors, the two choosers, APPLY and RETURN TO MAIN MENU) are drawn by the
-    // row loop. With no section the choosers stand alone over the top level's logo, and the two
-    // description lines run together as the one centred footer line that layout has room for.
+    // and the description beside each page door. The rows themselves (the four doors and RETURN TO
+    // MAIN MENU) are drawn by the row loop. With no section the page's own door stands alone over
+    // the top level's logo.
     private void ComposeOptions(List<BoardPicture> pictures, List<BoardLine> lines)
     {
         var screen = _layout.Screen(PreferencesSection);
@@ -767,8 +747,6 @@ public sealed partial class OriginalShell
             }
 
             lines.Add(new BoardLine("OPTIONS", OptionsX, OptionsTop - 44f, 0f, HeadingFont, BoardInk.Heading));
-            lines.Add(new BoardLine($"{ChooserDescription} {ChooserRestartNote}", 0f, FooterY,
-                BoardFit.AuthoredWidth, FooterFont, BoardInk.Detail, -1, false, BoardJustify.Center));
             return;
         }
 
@@ -786,22 +764,14 @@ public sealed partial class OriginalShell
                 BoardInk.Heading, -1, false, title.Int("Justify") == 1 ? BoardJustify.Center : BoardJustify.Left));
         }
 
-        MenuLayoutWidget? lastDescription = null;
         foreach (string key in new[] { "PF_T_GODESC", "PF_T_APDESC", "PF_T_VPDESC", "PF_T_CPDESC" })
         {
             if (screen.Widget(key) is { } description)
             {
-                lastDescription = description;
                 lines.Add(new BoardLine(description.Text ?? string.Empty, description.Int("X"), description.Int("Y"),
                     description.Int("Width"), PreferencesTextFont, BoardInk.Row));
             }
         }
-
-        var (_, slotY) = ChooserCorner(screen);
-        float descriptionX = lastDescription?.Int("X") ?? OptionsX;
-        float descriptionWidth = lastDescription?.Int("Width", 310) ?? 310;
-        lines.Add(new BoardLine(ChooserDescription, descriptionX, slotY, descriptionWidth, ChooserFont, BoardInk.Row));
-        lines.Add(new BoardLine(ChooserRestartNote, descriptionX, slotY + ChooserFont, descriptionWidth, ChooserFont, BoardInk.Row));
     }
 
     private int EnsureFocus(IReadOnlyList<OriginalRow> rows)
@@ -879,18 +849,9 @@ public sealed partial class OriginalShell
             case OriginalScreen.Options:
                 switch (row.Key)
                 {
-                    case PresentationKey:
-                        _choice = _choice == PresentationId.Original.Value
-                            ? PresentationId.BuiltIn.Value
-                            : PresentationId.Original.Value;
+                    case GameOptionsDoorKey:
+                        OpenGameOptions();
                         break;
-                    case GraphicsKey:
-                        _graphics = _graphics == CSVM.Utils.GraphicsMode.EnhancedWord
-                            ? CSVM.Utils.GraphicsMode.Default
-                            : CSVM.Utils.GraphicsMode.EnhancedWord;
-                        break;
-                    case ApplyKey:
-                        return new OptionsApplyExit(new PresentationId(_choice), _graphics);
                     case BackKey:
                     case OptionsBackKey:
                         Open(OriginalScreen.TopLevel);
@@ -898,6 +859,8 @@ public sealed partial class OriginalShell
                 }
 
                 break;
+            case OriginalScreen.GameOptions:
+                return ActivateGameOptions(row);
         }
 
         return null;
@@ -905,9 +868,10 @@ public sealed partial class OriginalShell
 
     // Back with a dialog standing takes its declining answer, the messagebox script's own Escape.
     // On a sortie screen it first undoes seat 0's own pick, a stage at a time; browsing, it leaves
-    // the screen. On the Instant Action screen the first Back closes an open list; the next one
-    // leaves. The campaign and the hangar have their own graphs to walk back through. The top
-    // level quits outright, as MAINMENU.SCRIPT's Quit terminates with no confirm.
+    // the screen. On the Instant Action screen and the Game Options page the first Back closes an
+    // open list and the next one leaves, the page's leaving being CANCEL CHANGES. The campaign and
+    // the hangar walk their own graphs back. The top level quits outright, as MAINMENU.SCRIPT's
+    // Quit terminates with no confirm.
     private MenuExit? Back()
     {
         if (_dialog is { } dialog)
@@ -928,6 +892,12 @@ public sealed partial class OriginalShell
 
         if (_screen == OriginalScreen.InstantAction && CloseInstantActionDropdown())
         {
+            return null;
+        }
+
+        if (_screen == OriginalScreen.GameOptions)
+        {
+            BackGameOptions();
             return null;
         }
 
@@ -983,28 +953,25 @@ public sealed partial class OriginalShell
             case OriginalScreen.Options:
                 BuildOptionsRows(rows);
                 break;
+            case OriginalScreen.GameOptions:
+                BuildGameOptionsRows(rows);
+                break;
         }
 
         return rows;
     }
 
-    // The Options screen over [@Preferences@]: the four page doors at their authored corners,
-    // disabled since no shared option stands behind them; the two choosers side by side as paper
-    // plaques in the slot under them, under the slot's description, with APPLY on its own line
-    // below them; and the section's own RETURN TO MAIN MENU. APPLY drops to the second line rather
-    // than taking a third column because the page's RETURN plaque stands in the right half of the
-    // slot's own band. Without the section the choosers stand alone with a BACK plaque.
+    // The Options screen over [@Preferences@]: the four page doors at their authored corners, the
+    // GAME OPTIONS door live and the other three disabled since no shared option stands behind
+    // them, and the section's own RETURN TO MAIN MENU. Without the section the page's own door
+    // stands alone with a BACK plaque, so the screen is still navigable.
     private void BuildOptionsRows(List<OriginalRow> rows)
     {
-        string choice = _choice == PresentationId.Original.Value ? "ORIGINAL" : "BUILT-IN";
-        string graphics = _graphics == CSVM.Utils.GraphicsMode.EnhancedWord ? "ENHANCED" : "ORIGINAL";
         var screen = _layout.Screen(PreferencesSection);
         if (screen == null)
         {
-            rows.Add(TextButton(PresentationKey, choice, OptionsX, OptionsTop, true, 0));
-            rows.Add(TextButton(GraphicsKey, graphics, OptionsX, OptionsTop + OptionsPitch, true, 0));
-            rows.Add(TextButton(ApplyKey, "APPLY", OptionsX, OptionsTop + (2 * OptionsPitch), true, 0));
-            rows.Add(TextButton(BackKey, "BACK", OptionsX, OptionsTop + (3 * OptionsPitch), true, 0));
+            rows.Add(TextButton(GameOptionsDoorKey, "GAME OPTIONS", OptionsX, OptionsTop, true, 0));
+            rows.Add(TextButton(BackKey, "BACK", OptionsX, OptionsTop + OptionsPitch, true, 0));
             return;
         }
 
@@ -1012,24 +979,17 @@ public sealed partial class OriginalShell
         {
             if (screen.Widget(key) is { } door)
             {
-                rows.Add(Button(door, false));
+                rows.Add(Button(door, key == GameOptionsDoorKey));
             }
         }
 
-        var (x, slotY) = ChooserCorner(screen);
-        var plaque = PlaqueSize();
-        float y = slotY + ChooserLine;
-        float applyY = y + plaque.Height + ChooserGap;
-        rows.Add(TextButton(PresentationKey, choice, x, y, true, 0));
-        rows.Add(TextButton(GraphicsKey, graphics, x + plaque.Width + ChooserGap, y, true, 0));
-        rows.Add(TextButton(ApplyKey, "APPLY", x, applyY, true, 0));
         if (screen.Widget(OptionsBackKey) is { } back)
         {
             rows.Add(Button(back, true));
         }
         else
         {
-            rows.Add(TextButton(BackKey, "BACK", x, applyY + OptionsPitch, true, 0));
+            rows.Add(TextButton(BackKey, "BACK", OptionsX, OptionsTop, true, 0));
         }
     }
 

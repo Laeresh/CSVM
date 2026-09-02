@@ -122,9 +122,9 @@ public sealed class OriginalAssetManifest
     /// optional, since nothing Original draws reads it.</summary>
     public static readonly IReadOnlyList<string> ComposedSections = new[]
     {
-        "MainMenu", "Preferences", "InstantAction", "Campaign", "PassengerCabin", "FlightCheck", "PlaneSelection",
-        "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC", "ScrapbookZoom", "Hangar", "PlaneName", "PlaneConstruction",
-        "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
+        "MainMenu", "Preferences", "GameOptions", "InstantAction", "Campaign", "PassengerCabin", "FlightCheck",
+        "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC", "ScrapbookZoom", "Hangar", "PlaneName",
+        "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
     };
 
     // The files the GUI scripts name outside the layout and Original draws anyway: the two pointer

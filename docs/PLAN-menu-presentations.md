@@ -1836,7 +1836,7 @@ Every row a machine can run was run; every row only a human can run reads owed.
 | A real pad's join and walk in both presentations | a pad pressing Start on Built-in's aircraft screen and on Original's Free Flight and Dogfight screens; the joined pad walking, selecting and confirming; Back unjoining it; FLY launching two seats with each pad flying its own pane; a pad unplugged mid-setup | **owed at the controls**: expect the seat joined, tagged and freed as `menu-player-setup-seats` drives it, and the unplugged pad's seat gone |
 | The mouse over Original's every screen | `.\RunDev.ps1 --presentation=original`, the pointer moved slowly over every plaque, list row, dropdown, tab and scrap of every screen the inventory lists, one press held on a plaque | **owed at the controls**: expect the active pointer over a live button and the passive one elsewhere, the rollover frame on entering a plaque and the depressed frame while held, a list row taking focus with no frame change |
 | The sounds | the same run with audio | **owed at the controls**: expect `MOUSEOVER` on entering a plaque, `MOUSECLICK` on a press, nothing on a list row or a scrap, `ENTERTEXT` per character the profile screen's box takes and `ENTERTEXT_ERROR` per refused one, the briefing's narration starting on entry, restarting on REPLAY BRIEFING and stopping on RETURN TO CABIN and GO TO FLIGHT CHECK |
-| A switch both ways at the controls | `.\RunDev.ps1`, Options, Original, APPLY; then PREFERENCES, GAME OPTIONS, the Menu dropdown to BUILT-IN, ACCEPT CHANGES (once `F51` lands; until then the Preferences chooser's plaque and APPLY); then a restart of the game with no flag | **owed at the controls**: expect the other presentation's top level one frame after the apply each time, unfinished setup gone, and the saved choice honoured on the restart; with a required file moved out of a scratch root copy and put back while the process is up, expect the switch to see the repaired tree |
+| A switch both ways at the controls | `.\RunDev.ps1`, Options, Original, APPLY; then PREFERENCES, GAME OPTIONS, the Menu dropdown to BUILT-IN, ACCEPT CHANGES; then a restart of the game with no flag | **owed at the controls**: expect the other presentation's top level one frame after the apply each time, unfinished setup gone, and the saved choice honoured on the restart; with a required file moved out of a scratch root copy and put back while the process is up, expect the switch to see the repaired tree |
 
 `docs/verification.md` rules that bit: **METHOD-6** (which binary each side of the Built-in
 comparison used is named: `mp-e43`'s build of the same `CSVM/` tree against this tree's),
@@ -1881,8 +1881,8 @@ this plan's options store, which is where it now lives: `OptionsDef` carries `gr
 `menuPresentation` with the same version-tolerant rules, `Launcher._Ready` hands the saved word to
 `GraphicsMode.Resolve` under the `--graphics=` flag and over the config key, and both Options
 screens carry a two-way row for it beside the presentation row. Built-in's Options screen is three
-rows (presentation, graphics, apply); Original's chooser slot is two plaques side by side with
-APPLY under them and two description lines above. The fourth exit is `OptionsApplyExit`, carrying
+rows (presentation, graphics, apply); Original carries the pair as two rows of the Game Options
+page `F51` composed. The fourth exit is `OptionsApplyExit`, carrying
 both choices, since the graphics word needs saving and nothing else, and keeping every write in
 `Launcher.ApplyOptions` leaves the options file with exactly one writer. `--det` reads no saved
 option at all, so a golden capture never depends on the machine's options file. The mode takes

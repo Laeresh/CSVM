@@ -38,6 +38,25 @@ PF_T_APDESC=T,IDS_PF_AUDIO_DESC,340,320,0,310,40,<TCOLOR>,0
 PF_T_VPDESC=T,IDS_PF_VIDEO_DESC,340,370,0,310,40,<TCOLOR>,0
 PF_T_CPDESC=T,IDS_PF_CONTROLS_DESC,340,420,0,310,40,<TCOLOR>,0
 
+;The Game Options page behind the Preferences page's first door: the shipped section's keys and
+;both return edges on invented lines and art, at an invented row pitch, so the page's row shape is
+;read off the section rather than hard-coded.
+[@GameOptions@]
+V1=TCOLOR,0xFFFFDDC4
+GO_BACKGROUND=P,PP_GoBack.png,100,200,0,1,0,1,0
+GO_B_ACCEPTCHANGES=B,PP_B_Accept.png,200,470,0,0,Preferences,0x1020,1,,,,,,
+GO_B_CANCELCHANGES=B,PP_B_Cancel.png,450,470,0,0,Preferences,0x1020,1,,,,,,
+GO_B_HEADTURN=B,PP_B_Check8.png,250,400,0,0,,0x1000,0,,,,,1,0
+GO_T_TITLE=T,IDS_GO_TITLE,120,220,50,200,28,0XFFC0BAAD,1
+GO_T_DIFFTITLE=T,IDS_GO_DIFF_TITLE,130,280,50,170,20,<TCOLOR>,0
+GO_T_VIEWTITLE=T,IDS_GO_VIEW_TITLE,130,340,50,170,20,<TCOLOR>,0
+GO_T_HEADTITLE=T,IDS_GO_HEAD_TITLE,130,400,50,112,40,<TCOLOR>,1
+GO_T_DIFFDESC=T,IDS_GO_DIFF_DESC,340,290,50,310,40,<TCOLOR>,0
+GO_T_VIEWDESC=T,IDS_GO_VIEW_DESC,340,350,50,310,40,<TCOLOR>,0
+GO_T_HEADDESC=T,IDS_GO_HEAD_DESC,340,410,50,310,40,<TCOLOR>,0
+GO_D_DIFFICULTY=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_DropUp.png,PP_B_DropDown.png,135,295,0,144,17,4
+GO_D_VIEW=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_DropUp.png,PP_B_DropDown.png,135,355,0,144,17,4
+
 [@Credits@]
 CR_BackGround=P,PC_Back.jpg,0,0,1,1,0,0,0
 CR_B_Exit=B,PC_B_Done.png,650,550,0,0,MainMenu,0x1000,1,,,,,,

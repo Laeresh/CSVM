@@ -197,7 +197,7 @@ public class OriginalShellTests
     }
 
     [Fact]
-    public void TheOptionsScreenTogglesBothChoicesAndAppliesThemAsOneExit()
+    public void TheGameOptionsPageTakesBothChoicesAndAppliesThemAsOneExit()
     {
         var shell = Shell(out _);
         shell.Step(Down);
@@ -205,77 +205,106 @@ public class OriginalShellTests
         shell.Step(Down);
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.Options, shell.Screen);
+        Assert.Equal(OriginalShell.GameOptionsDoorKey, shell.FocusedKey);
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.GameOptions, shell.Screen);
         Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
         Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
         Assert.Equal(OriginalShell.PresentationKey, shell.FocusedKey);
-        Assert.Contains(shell.Compose().Plaques, p => p.Label == "ORIGINAL");
 
+        // Accept on the closed dropdown opens its list; picking the second item closes it and
+        // leaves the focus on the box, now reading the other token.
         shell.Step(Accept);
+        Assert.Equal(OriginalShell.PresentationKey, shell.OpenGameOption);
+        Assert.Equal(new[] { "ORIGINAL", "BUILT-IN" }, shell.Rows.Select(r => r.Label));
+        shell.Step(Down);
+        shell.Step(Accept);
+        Assert.Null(shell.OpenGameOption);
         Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
-        Assert.Contains(shell.Compose().Plaques, p => p.Label == "BUILT-IN");
+        Assert.Equal("BUILT-IN", shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey).Label);
+
+        // A sideways step on the closed box takes the next token with wrap.
+        shell.Step(Right);
+        Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
+        shell.Step(Right);
+        Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
 
         shell.Step(Down);
         Assert.Equal(OriginalShell.GraphicsKey, shell.FocusedKey);
         shell.Step(Accept);
         Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
-        Assert.Contains(shell.Compose().Plaques, p => p.Label == "ENHANCED");
+        Assert.Equal(4 + 2, shell.Compose().Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
 
         shell.Step(Down);
-        Assert.Equal(OriginalShell.ApplyKey, shell.FocusedKey);
+        Assert.Equal(OriginalShell.GameOptionsAcceptKey, shell.FocusedKey);
         var step = shell.Step(Accept);
         var exit = Assert.IsType<OptionsApplyExit>(step.Exit);
         Assert.Equal(PresentationId.BuiltIn, exit.Presentation);
         Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
+    }
+
+    [Fact]
+    public void CancelChangesAndBackBothDropTheEditsAndReturnToPreferences()
+    {
+        var shell = Shell(out _);
+        shell.OpenGameOptions();
+        shell.Step(Right);
+        Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
 
         shell.Step(Down);
-        Assert.Equal(OriginalShell.OptionsBackKey, shell.FocusedKey);
+        Assert.Equal(OriginalShell.GraphicsKey, shell.FocusedKey);
+        shell.Step(Down);
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.GameOptionsCancelKey, shell.FocusedKey);
         shell.Step(Accept);
-        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+        Assert.Equal(OriginalScreen.Options, shell.Screen);
+        Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
+
+        // Back on the open list closes it; the next Back is CANCEL CHANGES.
+        shell.OpenGameOptions();
+        shell.Step(Accept);
+        Assert.Equal(OriginalShell.PresentationKey, shell.OpenGameOption);
+        shell.Step(Back);
+        Assert.Null(shell.OpenGameOption);
+        Assert.Equal(OriginalScreen.GameOptions, shell.Screen);
+        shell.Step(Back);
+        Assert.Equal(OriginalScreen.Options, shell.Screen);
     }
 
-    /// <summary>Opening the screen shows back the saved word, not what this process resolved: a
-    /// flag or the config key can have decided the running mode, and the row owes the player the
-    /// choice their own Apply saved. The store is a scratch one; the shell never writes it.</summary>
+    /// <summary>Opening the page shows back the saved words, not what this process resolved: a
+    /// flag or the config key can have decided the running mode, and the rows owe the player the
+    /// choices their own ACCEPT CHANGES saved. The store is a scratch one; the shell never writes it.</summary>
     [Fact]
-    public void TheGraphicsRowOpensOnTheSavedWord()
+    public void TheRowsOpenOnTheSavedWords()
     {
-        var saved = new OptionsDef { GraphicsMode = GraphicsMode.EnhancedWord };
+        var saved = new OptionsDef { GraphicsMode = GraphicsMode.EnhancedWord, MenuPresentation = PresentationId.BuiltIn.Value };
         var shell = Shell(out _, () => saved);
-        shell.Open(OriginalScreen.Options);
+        shell.OpenGameOptions();
 
         Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
-        Assert.Contains(shell.Compose().Plaques, p => p.Label == "ENHANCED");
+        Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
+        Assert.Equal("BUILT-IN", shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey).Label);
 
-        // A file that never set the field opens the row on the shipped default.
+        // A file that never set the fields opens the rows on the shipped defaults.
         saved.GraphicsMode = null;
-        shell.Open(OriginalScreen.TopLevel);
-        shell.Open(OriginalScreen.Options);
+        saved.MenuPresentation = null;
+        shell.OpenGameOptions();
         Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
+        Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
     }
 
     [Fact]
-    public void TheOptionsScreenIsComposedOverThePreferencesChromeWithItsPageDoorsDisabled()
+    public void TheOptionsScreenIsComposedOverThePreferencesChromeWithOnlyItsGameOptionsDoorLive()
     {
         var shell = Shell(out _);
         shell.Open(OriginalScreen.Options);
 
-        // The four decoded page doors at their authored corners, disabled; the two choosers side
-        // by side in the slot under them at the doors' own pitch, under the slot's two description
-        // lines, with APPLY a plaque's height below them; the section's own RETURN TO MAIN MENU.
+        // The four decoded page doors at their authored corners, the first live and the other
+        // three disabled, then the section's own RETURN TO MAIN MENU.
         Assert.Equal(
-            new[]
-            {
-                "PF_B_GAMEOPTIONS", "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS",
-                OriginalShell.PresentationKey, OriginalShell.GraphicsKey, OriginalShell.ApplyKey, OriginalShell.OptionsBackKey,
-            },
+            new[] { "PF_B_GAMEOPTIONS", "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS", OriginalShell.OptionsBackKey },
             shell.Rows.Select(r => r.Key));
-        Assert.Equal(new[] { false, false, false, false, true, true, true, true }, shell.Rows.Select(r => r.Enabled));
-        var chooser = shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey);
-        Assert.Equal((110f, 490f), (chooser.X, chooser.Y));
-        var graphics = shell.Rows.Single(r => r.Key == OriginalShell.GraphicsKey);
-        Assert.Equal((110f + 160f + 8f, 490f), (graphics.X, graphics.Y));
-        var apply = shell.Rows.Single(r => r.Key == OriginalShell.ApplyKey);
-        Assert.Equal((110f, 490f + 28f + 8f), (apply.X, apply.Y));
+        Assert.Equal(new[] { true, false, false, false, true }, shell.Rows.Select(r => r.Enabled));
         var back = shell.Rows.Single(r => r.Key == OriginalShell.OptionsBackKey);
         Assert.Equal((460f, 500f, 240f, 50f), (back.X, back.Y, back.Width, back.Height));
 
@@ -284,12 +313,9 @@ public class OriginalShellTests
         Assert.Equal((100f, 200f), (board.Pictures[1].X, board.Pictures[1].Y));
         Assert.Contains(board.Lines, l => l.Text == "PREFERENCES" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Change the audio settings." && l.X == 340f && l.Y == 320f);
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Menu presentation,", System.StringComparison.Ordinal) && l.X == 340f && l.Y == 460f);
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Graphics takes effect", System.StringComparison.Ordinal) && l.X == 340f && l.Y == 472f);
+        Assert.Contains(board.Lines, l => l.Text == "Change the difficulty level and default views." && l.X == 340f);
         Assert.Equal(0, board.Plaques.Single(p => p.Art.Name == "PP_B_Audio.png").Frame);
-        // Both choosers read ORIGINAL on a fresh screen: the focused one draws its focus frame,
-        // its neighbour the enabled resting frame.
-        Assert.Equal(new[] { 2, 1 }, board.Plaques.Where(p => p.Label == "ORIGINAL").Select(p => p.Frame));
+        Assert.Equal(2, board.Plaques.Single(p => p.Art.Name == "PP_B_GameOptions.png").Frame);
         Assert.Equal(new MenuLayoutColor(0xFF, 0xFF, 0xDD, 0xC4), shell.PreferencesInks.Text);
         Assert.Equal(new MenuLayoutColor(0xFF, 0xC0, 0xBA, 0xAD), shell.PreferencesInks.Title);
 
@@ -299,6 +325,35 @@ public class OriginalShellTests
         shell.Open(OriginalScreen.Options);
         shell.Step(Back);
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+    }
+
+    [Fact]
+    public void TheGameOptionsPageIsComposedOverItsSectionsOwnRowShape()
+    {
+        var shell = Shell(out _);
+        shell.OpenGameOptions();
+
+        // Row one's dropdown box at the authored corner and width, row two's checkbox at the
+        // head-turn box's offset from its own row, then the two decoded plaques.
+        var menu = shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey);
+        Assert.Equal((135f, 295f, 144f, 17f), (menu.X, menu.Y, menu.Width, menu.Height));
+        var graphics = shell.Rows.Single(r => r.Key == OriginalShell.GraphicsKey);
+        Assert.Equal((250f, 340f, 16f, 16f), (graphics.X, graphics.Y, graphics.Width, graphics.Height));
+        var accept = shell.Rows.Single(r => r.Key == OriginalShell.GameOptionsAcceptKey);
+        Assert.Equal((200f, 470f, 240f, 50f), (accept.X, accept.Y, accept.Width, accept.Height));
+
+        var board = shell.Compose();
+        Assert.Equal(new[] { "PM_Logo.png", "PP_GoBack.png" }, board.Pictures.Select(p => p.Art.Name).Take(2));
+        Assert.Contains(board.Lines, l => l.Text == "GAME OPTIONS" && l.X == 120f && l.Justify == BoardJustify.Center);
+        Assert.Contains(board.Lines, l => l.Text == "Menu" && l.X == 130f && l.Y == 280f && l.Width == 170f);
+        Assert.Contains(board.Lines, l => l.Text == "Select the menu presentation." && l.X == 340f && l.Y == 290f && l.Width == 310f);
+        Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 340f && l.Width == 112f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal) && l.Y == 350f);
+        // The third authored row is left empty: the page draws two titles, two descriptions and
+        // its own tab title, and nothing at the Auto Head Turn line.
+        Assert.Equal(5, board.Lines.Count(l => l.Row < 0));
+        // The checkbox draws unchecked and unfocused: the second of its eight frames.
+        Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
     }
 
     [Fact]
@@ -370,10 +425,13 @@ public class OriginalShellTests
     }
 
     // The fixture's strips: every button strip 240x200 (four 50-pixel frames), the paper plaque
-    // 160x112 (four 28-pixel frames), the panes unmeasured.
+    // 160x112 (four 28-pixel frames), the checkbox 16x128 (eight 16-pixel frames), the dropdown
+    // arrows 15x56, the panes unmeasured.
     private static (int Width, int Height)? Measure(string art) => art switch
     {
         "PM_B_Paper.png" => (160, 112),
+        "PP_B_Check8.png" => (16, 128),
+        "PP_B_DropUp.png" or "PP_B_DropDown.png" => (15, 56),
         _ when art.StartsWith("PM_B_", System.StringComparison.Ordinal) => (240, 200),
         _ when art.StartsWith("PP_B_", System.StringComparison.Ordinal) => (240, 200),
         _ => null,

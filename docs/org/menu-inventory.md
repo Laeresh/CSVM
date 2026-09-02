@@ -63,8 +63,8 @@ own callbacks and economy are [`hangar.md`](hangar.md), the mission-end book
 | Distinct art files `LAYOUT.CSV` names | **124** (122 present in the extraction, 2 absent) |
 | Distinct `IDS_*` symbols `LAYOUT.CSV` names | **152**, of which **149** resolve to text |
 | UI sound files | **8** |
-| Original screens in this plan's scope | **27** of the 34 single-player screens (22 built; the 5 Preferences pages stand behind doors drawn disabled) |
-| Layout-stated navigation edges in the original | **46** (22 driven by Original, 2 realised as the wingman slot's row, 6 drawn disabled, 16 out of scope; see [Coverage](#coverage)) |
+| Original screens in this plan's scope | **27** of the 34 single-player screens (23 built; the 4 remaining Preferences pages stand behind doors drawn disabled) |
+| Layout-stated navigation edges in the original | **46** (25 driven by Original, 2 realised as the wingman slot's row, 5 drawn disabled, 14 out of scope; see [Coverage](#coverage)) |
 
 ## Part 1: Built-in as it stands
 
@@ -425,15 +425,15 @@ families (pointer clicks on the rows' rectangles, keyboard cursor commands walki
 pad cursor commands walking up and left), once over the hand-authored fixture layout and once over
 the install's own `menu_layout.json` and art. Every `ScriptToExe` edge of an in-scope section must
 have an entry saying how Original realises it, and the entry is checked against the shell. The
-tally over the install: 23 screens (every `OriginalScreen`) reached and left with no open campaign,
-build or dialog behind; 37 journeys by 3 families; 46 edges of which **22 are driven** (the row is
+tally over the install: 24 screens (every `OriginalScreen`) reached and left with no open campaign,
+build or dialog behind; 38 journeys by 3 families; 46 edges of which **25 are driven** (the row is
 pressed and the target screen shows), **2 are realised as the wingman slot's row** (`FC_B_CHANGEPLANEW`
 and `FC_B_CHANGEAMMOW` are the pilot's plaques at the wingman's slot, present exactly when the
-mission flies a wingman), **6 are drawn disabled** (`MM_B_MULTIPLAYER`, `MM_B_CREDITS`, and the four
-`PF_B_*` page doors on the Options screen) and **16 are out of scope** (the eight ACCEPT/CANCEL
-returns of GameOptions, Audio, Video and ControlsPrefs, `CP_B_KEYS` and Keys' two returns,
+mission flies a wingman), **5 are drawn disabled** (`MM_B_MULTIPLAYER`, `MM_B_CREDITS`, and the three
+`PF_B_*` page doors the Options screen has no page behind) and **14 are out of scope** (the six
+ACCEPT/CANCEL returns of Audio, Video and ControlsPrefs, `CP_B_KEYS` and Keys' two returns,
 MomentoSelection's two returns and the cabin's `PC_B_CHANGEMOMENTO`, `IAWU_B_CONTINUE`,
-`CR_B_Exit`); 0 dead ends. The exits are checked too: Quit as a `QuitExit`, APPLY as a
+`CR_B_Exit`); 0 dead ends. The exits are checked too: Quit as a `QuitExit`, ACCEPT CHANGES as a
 `OptionsApplyExit`, FLY on Free Flight and Fly Mission on Instant Action as a `LaunchExit`,
 FLY MISSION as a `CampaignMissionExit`, and Purchase Now returning to the top level with the plane
 saved. Keyboard and pad share one semantic command vocabulary at the seat seam (Decision 25), so
@@ -455,10 +455,11 @@ HardPoints, Paint, Purchase; MessageBox.
 savegame system here, and the `LOAD` branch is unreachable in the shipped build); Credits;
 MomentoSelection (deferred, `BL-463`); IA_WrapUp (a flight board, excluded by Decision 5).
 
-**Of the 27, five are in the census and out of this plan:** GameOptions, Audio, Video,
-ControlsPrefs and Keys. No shared option exists behind any of them (the options store carries the
-menu presentation alone), so Original composes Preferences itself as its Options screen and draws
-the four page doors disabled; a later plan that adds a shared option owns the page it belongs on.
+**Of the 27, four are in the census and out of this plan:** Audio, Video, ControlsPrefs and Keys.
+No shared option exists behind any of them, so Original draws their three page doors disabled; a
+later plan that adds a shared audio, video or controls option owns the page it belongs on.
+GameOptions is built: the two options the store does carry stand on it, and `PF_B_GAMEOPTIONS` is
+live.
 Multiplayer is network play with no local counterpart, so `MM_B_MULTIPLAYER` draws its disabled
 frame and takes no input; `MM_B_CREDITS` does the same, Credits being out of scope.
 
@@ -473,9 +474,9 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 | (none: remake-only) | Free Flight, Chapter, Plane | none | none | none | **Original's Free Flight door and screen, of our design under Decision 11.** The door is a text button in the `FC_B_CHANGEPLANE` paper-plaque convention beside the button frame, level with Campaign; the screen is the logo over two text lists (the shared chapter roster and the shared aircraft roster, the eleven stock airframes then the saved custom planes in an eleven-row window) with BACK and FLY plaques, a seat strip under the chapters and each later seat's tag on its aircraft row. Nothing on it is decoded |
 | (none: remake-only) | Dogfight, Chapter, Plane | none | none | none | **Original's Dogfight door and screen, of our design under Decision 11.** The door sits under the Free Flight door in the same plaque convention; the screen is the Free Flight screen's shape over the Dogfight gate (a second seat must join and confirm before FLY stands). The original's Multiplayer is network play and ships no split-screen Dogfight, so nothing here is decoded |
 | (none: remake-only) | the join strip and per-seat picks | none | none | none | **Original's join flow, of our design.** Start on an unclaimed pad joins a seat on either sortie screen (the same gesture and pad bookkeeping as Built-in's, through `MenuSeatDevices`); the joined pad walks its own cursor on the aircraft column, selects and confirms with A, and leaves with B while browsing; seat 0's mouse, keyboard or pad picks the map and the aircraft and presses FLY, which is its own confirmation. The original has no join gesture |
-| Preferences (as Options) | Options | 14 rows | this page | **none** | layout only for the composition; `PREFERENCES.SCRIPT` says the four page doors deactivate the screen (the layout carries their targets) and the fifth button is `pf_b_mainmenu` out of flight (`activate(@mainmenu@)`) or `pf_b_returntogame` in flight. **Built as Original's Options screen over the section's chrome**: `PF_LOGO`, `PF_BACKGROUND`, `PF_T_TITLE`, the four description rows in their authored colour, the four page doors at their corners drawn disabled (no shared option stands behind them), `PF_B_MAINMENU` as the way back, and the presentation chooser as the content, two paper plaques (ORIGINAL or BUILT-IN, APPLY) in the slot under the doors at the doors' own pitch, a line below the slot's own one-line description in the description column (a plaque is wide enough to reach that column, so the two cannot share a line at any window size). Remake-only: the chooser's placement and words, the disabled doors (a state the original never shows). `PF_B_RETURNTOGAME` is the in-flight variant and is not drawn; the pause board is out of scope |
+| Preferences (as Options) | Options | 14 rows | this page | **none** | layout only for the composition; `PREFERENCES.SCRIPT` says the four page doors deactivate the screen (the layout carries their targets) and the fifth button is `pf_b_mainmenu` out of flight (`activate(@mainmenu@)`) or `pf_b_returntogame` in flight. **Built as Original's Options screen over the section's chrome**: `PF_LOGO`, `PF_BACKGROUND`, `PF_T_TITLE`, the four description rows in their authored colour, the four page doors at their corners, `PF_B_GAMEOPTIONS` live in its four frames onto the Game Options page and the three others drawn disabled (no shared audio, video or controls option stands behind them), and `PF_B_MAINMENU` as the way back. The page carries no content of its own: the shared options moved onto the Game Options page its first door opens. Remake-only: the three disabled doors, a state the original never shows. `PF_T_GODESC`'s decoded words describe the original's page, not ours, and stay as authored. `PF_B_RETURNTOGAME` is the in-flight variant and is not drawn; the pause board is out of scope |
 | (none: remake-only) | Mode's Build Custom Plane, the Instant Action pick's door | none | none | none | **Original's BUILD PLANE door and its wallet-free entry, of our design under Decision 11.** The door sits under the Dogfight door in the same plaque convention and opens the decoded name screen, as the cabin's `PC_B_PLANEX` edge does, over the saved-plane store with no wallet; the original reaches plane construction only from the cabin and the Instant Action screen's `IA_B_BUILD`, whose edge the layout does not state, so that button stays disabled. What the cabin path would supply and this door cannot (the wallet, the profile's ownership) is left out rather than invented: the hub shows no cash note, prices are never checked against funds, and the hub's READY and CANCEL wear the export strips the Instant Action stills show (`PX_B_ReadyToExport`, `PX_B_CancelExport`), without their $50000 figure, whose enforcement is undecoded |
-| GameOptions | (none) | 13 rows | no | **none** | layout only; `BL-570` wants the difficulty row. **Out of this plan**: no shared option exists, so `PF_B_GAMEOPTIONS` draws disabled on Original's Options screen |
+| GameOptions | Options | 13 rows | no | `GameOptions.png` | layout only for the composition; the script creates all 13 rows, sends the choices out on accept (`callback($$E$$, 2128, 1, …)`) and drops them on cancel (`callback($$E$$, 2110)`), and both plaques state `Preferences` as their edge. **Built as Original's Game Options page**, `PF_B_GAMEOPTIONS`' destination: `GO_BACKGROUND` and `GO_T_TITLE` at their corners, then the shared options in the section's own row shape (a title in the `TITLEX` column at the row's line, a control in the `DROPX` column, a description in the `DESCX` column, rows at the authored 62-pixel pitch from the first row's Y 283), with `GO_B_ACCEPTCHANGES` leaving as the options apply carrying both choices and `GO_B_CANCELCHANGES` returning to Preferences with them dropped. The page opens on the saved options and never writes them. Remake-only, since only two shared options exist: row one is "Menu", a dropdown over the two shipped presentations reading ORIGINAL or BUILT-IN, described "Select the menu presentation."; row two is "Enhanced Graphics", a checkbox drawn from `PF_B_CheckBoxSmall.Png` at the head-turn box's own offset from its row and taking the head-turn row's narrower title box, described "Select the lit world. Takes effect on the next start."; the third authored row is left empty rather than drawing a control that picks nothing, and Difficulty's row is `BL-570`'s to fill at that position. Two control kinds is deliberate: a second dropdown reading ORIGINAL would put back the word a player could not tell from the other. The page draws the Preferences page's `PF_LOGO`, its own section authoring no logo pane and the photograph showing one standing. **The plate holds three rows**: a fourth at the authored pitch would reach the plaque row at Y 457, so a further option past Difficulty needs either a taller plate (one image, so a stretched or tiled drawing is a remake reading to record) or paged rows |
 | Audio | (none) | 19 rows | no | **none** | layout only; three preview loops are script-bound; `BL-455`. **Out of this plan**: `PF_B_AUDIO` draws disabled |
 | Video | (none) | 31 rows | no | **none** | layout only. **Out of this plan**: `PF_B_VIDEO` draws disabled |
 | ControlsPrefs | (none) | 12 rows | no | **none** | layout only. **Out of this plan**: `PF_B_CONTROLS` draws disabled, and Keys behind it is unreached |
@@ -543,7 +544,7 @@ original plays where is `CAP-52`'s to confirm.
 screen degrades locally and stays usable. The runtime manifest
 (`CSVM/src/UI/Menu/Original/OriginalAssetManifest.cs`) derives that classification from the decoded
 layout on every start, so this section is the reading and the manifest is the enforcement. Over the
-install's own layout it classifies **95 required** and **67 optional** files; the two optional
+install's own layout it classifies **99 required** and **63 optional** files; the two optional
 absences it reports are `CrimFlag.MPG` and `Final.MPG`.
 
 ⚠ **The manifest cannot be generated from `LAYOUT.CSV` alone.** The layout names 124 distinct art
@@ -553,24 +554,25 @@ concatenation (`"assets\graphics\pc_p_hangar" + <airframe> + ".jpg"`,
 `"assets\graphics\scrapbook\" + <name>`, and the per-pattern `.BM` sets). `menu_layout.json`
 carries both halves, complete names and the fragments a runtime name is assembled from, and the
 manifest classifies the complete names alone. `ZOOMPOINTER.PNG` and `PX_<n>_BLUEPRINT.TGA` appear
-in neither half: see the closing section. Of the layout's own names, 97 are in the 22 sections
-Original composes and 31 only outside them; seven of the 97 sit in rows no composed screen draws,
-which is why the required count is 90 layout names plus the five the scripts name.
+in neither half: see the closing section. Of the layout's own names, 101 are in the 23 sections
+Original composes and 27 only outside them; seven of the 101 sit in rows no composed screen draws,
+which is why the required count is 94 layout names plus the five the scripts name.
 
 | Class | Files | Manifest class | Notes |
 |---|---|---|---|
 | `menu_layout.json` (from `LAYOUT.CSV`) | 1 | **required**, ahead of the manifest | absent means no geometry at all, and no manifest to derive; the availability check answers with the missing path |
 | `extracted/VERSION.json` | 1 | **required** when it is behind the stamp schema Original reads | a tree with no stamp still runs; the check is `ExtractionStamp.Behind` |
-| screen backgrounds of the 22 composed sections (`MM_`, `PF_`, `IA_`, `CM_`, `PC_`, `FC_`, `PS_`, `OL_`, `SB_`, `PX_`, `MB_`) | 11 families | **required** | a screen with no backdrop is not a degraded screen |
-| button strips of the composed sections | 119 `B` rows over ~60 PNGs | **required** | four stacked frames, disabled / normal / rollover / depressed; the words are painted in, so the state is entirely which frame draws |
+| screen backgrounds of the 23 composed sections (`MM_`, `PF_`, `GO_`, `IA_`, `CM_`, `PC_`, `FC_`, `PS_`, `OL_`, `SB_`, `PX_`, `MB_`) | 12 families | **required** | a screen with no backdrop is not a degraded screen |
+| button strips of the composed sections | 122 `B` rows over ~62 PNGs | **required** | four stacked frames, disabled / normal / rollover / depressed; the words are painted in, so the state is entirely which frame draws |
 | shared widget chrome (`GN_`, `FC_B_Scroll*`, `PX_B_Scroll*`, `CM_B_Scroll*`, `IA_B_Scroll*`, the dropdown arrows) | ~12 | **required** | named through `[GLOBALVARS]` macros, so one miss hits many screens |
 | `ARIAL8.TGA` | 1 | **required** | the global 3D font; the string table's `[FONTID]` tags name `.ttf` faces the archive does not carry, and `FONT.TGA` is named by nothing |
 | `ACTIVEPOINTERZ.PNG`, `PASSIVEPOINTERZ.PNG` | 2 | **required** | script-named and drawn on every screen; Built-in draws no pointer at all (`BL-654`) |
 | `PX_B_ReadyToExport.png`, `PX_B_CancelExport.png` | 2 | **required** | script-named, drawn by the plane construction hub; no layout row names them |
 | `ZOOMPOINTER.PNG` | 1 | not classified | named in neither the layout nor an external-asset entry, and Original draws the two pointers above on the zoom too |
-| `GO_`, `AP_`, `VP_`, `CP_`, `KB_` page art | 5 families | optional | the five Preferences pages are out of scope, so no composed screen draws them |
+| `GO_BackGround.png`, `PF_B_AcceptChanges.png`, `PF_B_CancelChanges.png`, `PF_B_CheckBoxSmall.Png` | 4 | **required** | the Game Options page draws every art name its section carries; the dropdown's arrow and scroll set are the shared chrome above |
+| `AP_`, `VP_`, `CP_`, `KB_` page art | 4 families | optional | the four remaining Preferences pages are out of scope, so no composed screen draws them |
 | `GN_B_ReturnToGame.Png` | 1 | optional | `[Preferences]`' in-flight way back; the menu's page offers `PC_B_ReturnMainMenu.png` instead |
-| `MessageBox`'s `MP_*` and `MA_*` rows, and the art of every section outside the 22 | 3 + 31 | optional | no local counterpart for the multiplayer error box, the About box, or a screen Original composes nothing from |
+| `MessageBox`'s `MP_*` and `MA_*` rows, and the art of every section outside the 23 | 3 + 27 | optional | no local counterpart for the multiplayer error box, the About box, or a screen Original composes nothing from |
 | `ui_strings.json` + `RESOURCE.H` | 2 | optional | 152 symbols referenced, 149 resolve; `UiStrings` falls back to an empty table, so the screens draw with no words rather than not at all |
 | `SCRAPBOOK.CSV` | 1 | optional | 461 rows; the book's extent is the file's extent, and without it the book lists nothing |
 | `MOUSECLICK`, `MOUSEOVER`, `ENTERTEXT`, `ENTERTEXT_ERROR` | 4 | optional | a silent menu is usable |

@@ -31,7 +31,9 @@ internal static class MenuOriginalSuites
         + "selected by the CLI override, shown at the top level with the pointer hidden and the "
         + "Free Flight door focused, a pointer frame over Quit takes focus and cues the rollover, a "
         + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
-        + "FLY leaves as one LaunchExit, the return re-enters the top level, a switch to Built-in "
+        + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
+        + "GAME OPTIONS door open the decoded page whose dropdown and checkbox take both choices "
+        + "and whose CANCEL CHANGES drops them, a switch to Built-in "
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
         + "Original fresh, Built-in's Options route steps both choices and emits the apply exit "
         + "carrying them, the force flag recovers "
@@ -75,6 +77,7 @@ internal static class MenuOriginalSuites
             Pointer(ctx, host, seat, shell, audio);
             Fly(ctx, host, seat, shell, exits);
             Return(ctx, host, shell, exits);
+            OriginalOptionsRoute(ctx, host, seat, shell, exits);
             SwitchToBuiltIn(ctx, host, seat, shell);
             BuiltInOptionsRoute(ctx, host, seat, exits);
             SwitchBackToOriginal(ctx, host);
@@ -266,6 +269,65 @@ internal static class MenuOriginalSuites
         }
 
         ctx.Check(!host.Shown, $"and the presentation is hidden for the launcher to act (shown={host.Shown})");
+    }
+
+    // Original's own Options route over the install's decoded sections: PREFERENCES opens the
+    // Preferences page, its GAME OPTIONS door the decoded page, whose two rows take both choices
+    // and whose CANCEL CHANGES drops them; the walk leaves the top level as it found it.
+    private static void OriginalOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits)
+    {
+        WalkTo(host, seat, shell, "MM_B_PREFERENCES");
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.Options && shell.FocusedKey == OriginalShell.GameOptionsDoorKey,
+            $"PREFERENCES opens the Preferences page with its GAME OPTIONS door focused ({shell.Screen}, {shell.FocusedKey})");
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.GameOptions && shell.FocusedKey == OriginalShell.PresentationKey,
+            $"GAME OPTIONS opens the decoded page on its Menu dropdown ({shell.Screen}, {shell.FocusedKey})");
+        var board = shell.Compose();
+        int titles = 0;
+        foreach (var line in board.Lines)
+        {
+            titles += line.Text is "GAME OPTIONS" or "Menu" or "Enhanced Graphics" ? 1 : 0;
+        }
+
+        ctx.Check(titles == 3, $"drawing the section's own tab title over our two row titles ({titles} of 3)");
+        bool box = false;
+        foreach (var plaque in board.Plaques)
+        {
+            box |= plaque.Art.Frames == 8;
+        }
+
+        ctx.Check(box, $"with the checkbox drawn from its eight-state strip ({board.Plaques.Count} plaques)");
+        Press(host, seat, Accept);
+        ctx.Check(shell.OpenGameOption == OriginalShell.PresentationKey && shell.Rows.Count == 2,
+            $"Accept opens the dropdown over the two shipped presentations ({shell.OpenGameOption}, {shell.Rows.Count})");
+        Press(host, seat, Down);
+        Press(host, seat, Accept);
+        ctx.Check(shell.PresentationChoice == PresentationId.BuiltIn.Value,
+            $"and picking the second closes it on the other token ({shell.PresentationChoice})");
+        Press(host, seat, Down);
+        Press(host, seat, Accept);
+        ctx.Check(shell.GraphicsChoice == GraphicsMode.EnhancedWord,
+            $"Accept on the checkbox under it flips the graphics word ({shell.GraphicsChoice})");
+        WalkTo(host, seat, shell, OriginalShell.GameOptionsCancelKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.Options && shell.PresentationChoice == PresentationId.Original.Value
+            && shell.GraphicsChoice == GraphicsMode.Default,
+            $"CANCEL CHANGES lands back on Preferences with both edits dropped ({shell.Screen}, {shell.PresentationChoice}, {shell.GraphicsChoice})");
+        WalkTo(host, seat, shell, OriginalShell.OptionsBackKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel && exits.Count == 1,
+            $"and RETURN TO MAIN MENU leaves the page without an exit ({shell.Screen}, {exits.Count})");
+        WalkTo(host, seat, shell, OriginalShell.FreeFlightKey);
+    }
+
+    // Walks the focus down onto a row by key, the keyboard's own way there.
+    private static void WalkTo(MenuHost host, ScriptedSeat seat, OriginalShell shell, string key)
+    {
+        for (int guard = 0; guard < 32 && shell.FocusedKey != key; guard++)
+        {
+            Press(host, seat, Down);
+        }
     }
 
     private static void SwitchBackToOriginal(TestContext ctx, MenuHost host)

@@ -44,9 +44,9 @@ public class OriginalCoverageTests : IDisposable
     // the inventory's own list and are counted, not driven.
     private static readonly string[] InScopeSections =
     {
-        "MainMenu", "Preferences", "InstantAction", "Campaign", "PassengerCabin", "FlightCheck", "PlaneSelection",
-        "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC", "ScrapbookZoom", "Hangar", "PlaneName", "PlaneConstruction",
-        "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
+        "MainMenu", "Preferences", "GameOptions", "InstantAction", "Campaign", "PassengerCabin", "FlightCheck",
+        "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC", "ScrapbookZoom", "Hangar", "PlaneName",
+        "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
     };
 
     private static readonly string[] Cabin ={ OriginalShell.CampaignKey, "Continue" };
@@ -57,6 +57,8 @@ public class OriginalCoverageTests : IDisposable
         new("free-flight", OriginalScreen.FreeFlight, new[] { OriginalShell.FreeFlightKey }, new[] { OriginalShell.BackKey }),
         new("dogfight", OriginalScreen.Dogfight, new[] { OriginalShell.DogfightKey }, new[] { OriginalShell.BackKey }),
         new("options", OriginalScreen.Options, new[] { "MM_B_PREFERENCES" }, new[] { OriginalShell.OptionsBackKey }),
+        new("game-options", OriginalScreen.GameOptions, new[] { "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey },
+            new[] { OriginalShell.GameOptionsCancelKey, OriginalShell.OptionsBackKey }),
         new("instant-action", OriginalScreen.InstantAction, new[] { "MM_B_INSTANTACTION" }, new[] { OriginalShell.ExitKey }),
         new("campaign-roster", OriginalScreen.CampaignRoster, new[] { OriginalShell.CampaignKey }, new[] { "CancelProfile" }),
         new("campaign-cabin", OriginalScreen.CampaignCabin, Cabin, new[] { "ReturnToMainMenu" }),
@@ -90,7 +92,13 @@ public class OriginalCoverageTests : IDisposable
         new("defaults-ask", OriginalScreen.HangarAirframe, Then(Hub, OriginalShell.AirframeDropKey, OriginalShell.AirframeDropKey + ":1"), new[] { OriginalShell.AskCancelKey, OriginalShell.CancelBuildKey },
             Expect: new[] { OriginalShell.AskOkKey, OriginalShell.AskCancelKey }),
         new("quit", null, new[] { "MM_B_QUIT" }, Array.Empty<string>(), Exit: typeof(QuitExit)),
-        new("apply-options", null, new[] { "MM_B_PREFERENCES", OriginalShell.ApplyKey }, Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
+        new("apply-options", null,
+            new[]
+            {
+                "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey, OriginalShell.GraphicsKey,
+                OriginalShell.PresentationKey, OriginalShell.PresentationKey + ":1", OriginalShell.GameOptionsAcceptKey,
+            },
+            Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
         new("free-flight-launch", null, new[] { OriginalShell.FreeFlightKey, "C1", OriginalShell.AirframeKey(0), OriginalShell.FlyKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
         new("instant-action-launch", null, new[] { "MM_B_INSTANTACTION", OriginalShell.FlyMissionKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
         new("campaign-launch", null, Then(Cabin, "NextMission", "GoToFlightCheck", "FlyMission"), Array.Empty<string>(), Exit: typeof(CampaignMissionExit)),
@@ -107,7 +115,9 @@ public class OriginalCoverageTests : IDisposable
         ["MainMenu.MM_B_MULTIPLAYER"] = Edge.Disabled("MM_B_MULTIPLAYER", "network play; the 22 multiplayer scripts have no layout and no local counterpart"),
         ["MainMenu.MM_B_PREFERENCES"] = Edge.Driven("options", "MM_B_PREFERENCES"),
         ["MainMenu.MM_B_CREDITS"] = Edge.Disabled("MM_B_CREDITS", "Credits is out of this plan's scope"),
-        ["Preferences.PF_B_GAMEOPTIONS"] = Edge.Disabled("PF_B_GAMEOPTIONS", "no shared game option stands behind the page", "options"),
+        ["Preferences.PF_B_GAMEOPTIONS"] = Edge.Driven("game-options", OriginalShell.GameOptionsDoorKey),
+        ["GameOptions.GO_B_ACCEPTCHANGES"] = Edge.Driven("apply-options", OriginalShell.GameOptionsAcceptKey),
+        ["GameOptions.GO_B_CANCELCHANGES"] = Edge.Driven("game-options", OriginalShell.GameOptionsCancelKey),
         ["Preferences.PF_B_AUDIO"] = Edge.Disabled("PF_B_AUDIO", "no shared audio option stands behind the page", "options"),
         ["Preferences.PF_B_VIDEO"] = Edge.Disabled("PF_B_VIDEO", "no shared video option stands behind the page", "options"),
         ["Preferences.PF_B_CONTROLS"] = Edge.Disabled("PF_B_CONTROLS", "no shared controls option stands behind the page", "options"),
@@ -187,18 +197,18 @@ public class OriginalCoverageTests : IDisposable
     }
 
     [Fact]
-    public void TheOptionsChoosersDescriptionClearsEveryPlaqueOverTheFixture()
+    public void TheGameOptionsRowsClearEachOtherAndTheirWordsOverTheFixture()
     {
-        ChooserDescriptionClearsThePlaques(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null);
+        GameOptionRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null);
     }
 
     [ExtractedDataFact]
-    public void TheOptionsChoosersDescriptionClearsEveryPlaqueOverTheInstall()
+    public void TheGameOptionsRowsClearEachOtherAndTheirWordsOverTheInstall()
     {
         string dataRoot = TestData.DataRoot!;
         var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
         Assert.True(layout != null, reason ?? "the install's decoded layout reads");
-        ChooserDescriptionClearsThePlaques(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot);
+        GameOptionRowsAreClearOfEachOther(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot);
     }
 
     private static string[] Then(string[] route, params string[] more)
@@ -216,7 +226,8 @@ public class OriginalCoverageTests : IDisposable
         "PH_Tab.png" => (120, 120),
         "PH_B_OkCancel.png" => (80, 96),
         "PH_B_Check8.png" => (16, 128),
-        "PH_B_DropUp.png" or "PH_B_DropDown.png" => (15, 56),
+        "PH_B_DropUp.png" or "PH_B_DropDown.png" or "PP_B_DropUp.png" or "PP_B_DropDown.png" => (15, 56),
+        "PP_B_Check8.png" => (16, 128),
         "PH_Decals.tga" => (66, 3300),
         "PH_PlaneIcons.png" => (100, 1200),
         _ when art.StartsWith("PH_B_", StringComparison.Ordinal) => (200, 128),
@@ -593,44 +604,45 @@ public class OriginalCoverageTests : IDisposable
         return 1;
     }
 
-    // The choosers' description lines and their three plaques share one slot under the page doors,
-    // and a plaque is wide enough to reach the description column, so no plaque may share a line
-    // with either description line, and no two plaques may overlap each other. The authored space
-    // scales uniformly, so disjoint here is disjoint at every window size.
-    private void ChooserDescriptionClearsThePlaques(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
+    // The page's four rows share one plate, so no two of them may overlap, and no control may sit
+    // over a title or a description: a control that covered the words beside it is what sent the
+    // options off the Preferences page in the first place. The authored space scales uniformly, so
+    // disjoint here is disjoint at every window size.
+    private void GameOptionRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
     {
         var shell = Fresh(layout, measure, dataRoot, out _, out _);
-        shell.Open(OriginalScreen.Options);
-        var lines = shell.Compose().Lines
-            .Where(l => l.Text.StartsWith("Menu presentation,", StringComparison.Ordinal)
-                || l.Text.StartsWith("Graphics takes effect", StringComparison.Ordinal))
-            .ToArray();
-        Assert.Equal(2, lines.Length);
-        string[] keys = { OriginalShell.PresentationKey, OriginalShell.GraphicsKey, OriginalShell.ApplyKey, OriginalShell.OptionsBackKey };
-        foreach (string key in keys)
-        {
-            var plaque = Row(shell, key)!;
-            foreach (var description in lines)
+        shell.OpenGameOptions();
+        var rows = shell.Rows.ToArray();
+        Assert.Equal(
+            new[]
             {
-                bool clear = description.Y + description.Size <= plaque.Y
-                    || plaque.Y + plaque.Height <= description.Y
-                    || description.X + description.Width <= plaque.X
-                    || plaque.X + plaque.Width <= description.X;
-                Assert.True(clear, $"{key} at ({plaque.X}, {plaque.Y}, {plaque.Width}, {plaque.Height}) covers " +
-                    $"'{description.Text}' at ({description.X}, {description.Y}, {description.Width}, {description.Size})");
+                OriginalShell.PresentationKey, OriginalShell.GraphicsKey,
+                OriginalShell.GameOptionsAcceptKey, OriginalShell.GameOptionsCancelKey,
+            },
+            rows.Select(r => r.Key));
+        var words = shell.Compose().Lines.Where(l => l.Row < 0 && l.Text != "GAME OPTIONS").ToArray();
+        Assert.Equal(4, words.Length);
+        foreach (var row in rows)
+        {
+            foreach (var line in words)
+            {
+                bool clear = line.Y + line.Size <= row.Y || row.Y + row.Height <= line.Y
+                    || line.X + line.Width <= row.X || row.X + row.Width <= line.X;
+                Assert.True(clear, $"{row.Key} at ({row.X}, {row.Y}, {row.Width}, {row.Height}) covers " +
+                    $"'{line.Text}' at ({line.X}, {line.Y}, {line.Width}, {line.Size})");
             }
         }
 
-        for (int i = 0; i < keys.Length; i++)
+        for (int i = 0; i < rows.Length; i++)
         {
-            for (int j = i + 1; j < keys.Length; j++)
+            for (int j = i + 1; j < rows.Length; j++)
             {
-                var a = Row(shell, keys[i])!;
-                var b = Row(shell, keys[j])!;
+                var a = rows[i];
+                var b = rows[j];
                 bool clear = a.X + a.Width <= b.X || b.X + b.Width <= a.X
                     || a.Y + a.Height <= b.Y || b.Y + b.Height <= a.Y;
-                Assert.True(clear, $"{keys[i]} at ({a.X}, {a.Y}, {a.Width}, {a.Height}) overlaps " +
-                    $"{keys[j]} at ({b.X}, {b.Y}, {b.Width}, {b.Height})");
+                Assert.True(clear, $"{a.Key} at ({a.X}, {a.Y}, {a.Width}, {a.Height}) overlaps " +
+                    $"{b.Key} at ({b.X}, {b.Y}, {b.Width}, {b.Height})");
             }
         }
     }

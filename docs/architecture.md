@@ -247,7 +247,8 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/HangarFeature.cs` — the shared hangar: one scratch build over a `CustomPlaneStore` and an optional `IHangarWallet`, its three starts, the airframe pick with the defaults ask, the per-tab operations, the purchase gate in the original's words, the commit, the sale or deletion, the name rules and the discard; engine-free, walked by Built-in's `HangarFlow` and Original's hub alike.
 - `src/UI/Menu/MenuIdleSource.cs` — a seat's input source with no device behind it, "no device", idle every frame; what the screenshot aid seats extra players over.
 - `src/UI/MenuSeatDevices.cs` — the pad side of the shared player setup for any presentation: seat 0's claimed pad, the join gesture per pad, hotplug, and the flight binding a seat's source carries.
-- `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph, engine-free: the decoded top level plus the Free Flight, Dogfight and hangar doors, the two sortie screens over the shared player setup, the Options screen over the decoded Preferences chrome, the decoded Instant Action, campaign and hangar screens (their own partials), the messagebox dialog over any screen, pointer hit-testing, column focus, cues, exits and the composed board.
+- `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph, engine-free: the decoded top level plus the Free Flight, Dogfight and hangar doors, the two sortie screens over the shared player setup, the Options screen over the decoded Preferences chrome, the decoded Game Options, Instant Action, campaign and hangar screens (their own partials), the messagebox dialog over any screen, pointer hit-testing, column focus, cues, exits and the composed board.
+- `src/UI/Menu/Original/OriginalGameOptions.cs` — the shell's Game Options page (a `partial`) over the decoded `[@GameOptions@]` section: the shared options as a table of rows placed at the authored row pitch, a dropdown over the presentations and a checkbox over the graphics mode, ACCEPT CHANGES as the options apply and CANCEL CHANGES back to Preferences.
 - `src/UI/Menu/Original/OriginalSeats.cs` — the shell's sortie screens (a `partial`): the aircraft window over the shared roster, every seat's cursor tagged on it, the seat strip, the hint, FLY as seat 0's confirmation and the launch, later seats' own frames.
 - `src/UI/Menu/Original/OriginalHangar.cs` — the shell's hangar (a `partial`) over the shared hangar feature: the decoded PLANE NAME screen, the Plane Construction hub with its six tab sections as siblings, the construction totals page and the INVENTORY, each composed from its layout section, with the defaults ask as a dialog and every dropdown's list under its box.
 - `src/UI/Menu/Original/OriginalPresentation.cs` — the Original presentation node: the shell drawn through `ComposedBoardView` on the board layer, every seat polled, the pointer mapped through `BoardFit`, pad joins scanned on the sortie screens, seat 0's text capture following the shell, the OS pointer hidden while shown.
@@ -7507,13 +7508,11 @@ Free Flight, Dogfight and BUILD PLANE doors, text buttons in the paper-plaque co
 the frame; the two remake-only sortie screens, Free Flight and Dogfight (`OriginalSeats.cs`, one
 `partial`); the Options screen, which `MM_B_PREFERENCES` opens, composed over `[Preferences]`'s own
 chrome (`PF_LOGO`, `PF_BACKGROUND`, `PF_T_TITLE`, the four description rows in their authored
-colour, `PreferencesInks`) with the four page doors (`PreferencesPageKeys`) at their corners drawn
-disabled, since no shared option stands behind them, the presentation chooser as its content (the
-ORIGINAL/BUILT-IN toggle and APPLY as paper plaques in the slot under the doors at the doors' own
-pitch, `ChooserCorner`, a line below the slot's own one-line description in the description
-column, which a plaque is wide enough to reach and would otherwise cover) and the section's
-own `PF_B_MAINMENU` (`OptionsBackKey`) as the way back, the chooser standing alone with a BACK
-plaque when a layout has no such section; the decoded Instant Action
+colour, `PreferencesInks`) with the four page doors (`PreferencesPageKeys`) at their corners, the
+first live onto the Game Options page and the other three drawn disabled since no shared option
+stands behind them, and the section's own `PF_B_MAINMENU` (`OptionsBackKey`) as the way back; the
+Game Options page in its own partial file (`OriginalGameOptions.cs`, below), which that live door
+opens; the decoded Instant Action
 screen, in its own partial file (`OriginalInstantAction.cs`, below), which `MM_B_INSTANTACTION`
 opens; the campaign's nine screens (the profile screen, the cabin, the table of contents, the
 briefing, the flight check, ammo selection, plane selection, the book and a scrap's zoom) in their
@@ -7571,6 +7570,21 @@ check: every screen reached from the top level and left back to it by pointer, k
 with nothing left open, every in-scope `ScriptToExe` edge driven, drawn disabled or recorded out of
 scope, and every exit typed, once over the fixture and once over the install's own layout
 (`docs/org/menu-inventory.md`, Coverage).
+
+## src/UI/Menu/Original/OriginalGameOptions.cs
+The Game Options page, the shell's partial over the decoded `[@GameOptions@]` section;
+`OpenGameOptions` reads the saved options through the shell's injected reader and opens the page on
+its first row. Its content is a table (`GameOptions`): per option a key, a title, a description, the
+control kind, the store field's words and how that field is read and written, so a further option is
+one entry plus its field. The two shipped rows are the presentation as a dropdown over the two
+registered tokens and the graphics mode as a checkbox from the section's eight-state strip; the
+third authored row is left empty. `ReadGameOptionsPage` takes the row shape off the section's own
+widgets (title column, first row's line and pitch, dropdown box, the checkbox's offset from its row,
+description column), so a layout that moves a row moves ours. `GO_B_ACCEPTCHANGES` leaves as the
+`OptionsApplyExit` carrying both choices; `GO_B_CANCELCHANGES` and Back drop the edits for
+Preferences, Back closing an open list first. A screen never writes the store,
+`Launcher.ApplyOptions` does. The words and control kinds are remake-only readings, in
+`docs/org/menu-inventory.md`.
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens over the shared player setup, the other half of the `partial`.
@@ -7805,7 +7819,7 @@ size read too. Off-engine coverage: `CSVM.Tests/OriginalManifestTests.cs`.
 
 ## src/UI/Menu/Original/OriginalAssetManifest.cs
 The versioned required/optional manifest, derived from the decoded layout rather than hand-listed.
-`Derive(layout)` classes every art name of the 22 sections Original composes required, minus a
+`Derive(layout)` classes every art name of the 23 sections Original composes required, minus a
 short table of rows it does not draw (the two backdrop movies, the Preferences page's in-flight way
 back, the cabin's memento and save rows, the messagebox's multiplayer and About variants); every
 other section's art, those rows' art and the media a script names are optional; the five files the
