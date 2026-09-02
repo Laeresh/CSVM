@@ -29,8 +29,8 @@ public sealed class AiPilot
     /// different follower is <c>SET_AI_NET</c>'s seam; null returns to the last derived course).
     /// Each <see cref="Next"/> re-derives heading/altitude from the follower's current target node
     /// when set; branch choices draw from its own seeded rng, so a fixed-dt run stays deterministic.
-    /// ⚠ Null (netless) is a configuration the original never reaches, and it hunts in roll: no leg
-    /// means no <see cref="PatrolAim"/> displacement to damp it (`BL-387`).</summary>
+    /// ⚠ Null never happens in the original and hunts in roll (no leg, so no <see cref="PatrolAim"/>
+    /// damping); on a campaign AI it means an escort whose leader left play, and nothing else.</summary>
     public AiNetFollower? Patrol;
 
     /// <summary>The forward-gun gunnery, or null for an unarmed pilot. When its target is live and
@@ -48,9 +48,9 @@ public sealed class AiPilot
     /// <summary>The formation escort (<see cref="AiEscort"/>), or null for a pilot that flies no
     /// station. When it has a live leader it is the WHOLE dispatch, exactly as the original's
     /// <c>mode wingman</c> fork is: only the two AI states its own law short-circuits on, stunned
-    /// and avoid crash, run instead of it. ⚠ Invented: a leader out of play falls back to the
-    /// orders below, where the original dereferences its leader with no null check at all
-    /// (docs/org/aiPilot.md, "The escort law").</summary>
+    /// and avoid crash, run instead of it. ⚠ Invented: the original dereferences its leader with no
+    /// null check at all (docs/org/aiPilot.md, "The escort law"), so a leader out of play is CSVM's
+    /// own case, and the host seats the pilot on that leader's net instead of leaving it here.</summary>
     public AiEscort? Escort;
 
     /// <summary>The nine-mode state machine, or null for the bare-orders pilot above.

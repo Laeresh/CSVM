@@ -76,7 +76,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Hawaii (C3)
 
 1. ☐ `BL-630` CM02: the docking hook's two side parts swing their authored travel on the Balmoral's auto-land
-2. ☐ `BL-524` CM05/CM07: a wingman whose leader leaves play stops holding a bearing to a dead enemy
+2. ☑ `BL-524` CM05/CM07: a wingman whose leader leaves play stops holding a bearing to a dead enemy
 
 ### Wave B — Northwest (C1)
 
@@ -176,7 +176,7 @@ different hook artifact (an aircraft's own arm left at archive-full length for o
 `ParkDockingHook`), and `PT-97` covers that one; this item is the `piratezep` crane hook, not the
 aircraft's arm, so do not conflate the two.
 
-## A2 ☐ `BL-524` CM05/CM07: a wingman whose leader leaves play stops holding a stale bearing
+## A2 ☑ `BL-524` CM05/CM07: a wingman whose leader leaves play stops holding a stale bearing
 
 **Goal.** In CM05 (C3/M04) and CM07 (C1/M02), a friendly wingman whose leader is shot down and
 whose own target then dies no longer flies out of the mission on its last pursuit bearing; it does
@@ -216,6 +216,20 @@ watches the escorts after the first patrol is destroyed.
 hand-off is itself unsettled. Do not add a leash constant. Do not re-decode the original for a
 lay-off rule; that search is done and recorded, and the answer is that the code is unreachable.
 `BL-523`'s promotion gate is a different question and stays in the backlog.
+
+**Landed.** A wingman whose leader leaves play inherits that leader's own patrol net, which the
+author chose over the three options put to them: it uses only authored data, a candidate always
+exists (every one of the 53 escort blocks names a netted leader), and it needs no invented
+constant. `CampaignDirector.TakeLostLeadersNets` runs each `Step` over the roster and hands such a
+pilot the net its leader is walking, through the same `SeatOnNet` body `SET_AI_NET` uses, so the
+escort buffer is dropped and the machine's gates are re-baselined the way a scripted net
+assignment does. A leader that flies no net, which is every player-led escort, leaves its wingman
+exactly as it was and says so once. The behaviour reaches 32 wingmen in 17 of the 53 shipped
+missions, the netless blocks whose `primary_target` is a netted `devastator`; the other 21 escort
+the player and are untouched. `AiPilot` itself is unchanged: its netless arm still projects the
+orders it was left with, which is what makes the hand-off necessary and is pinned as such.
+
+**Verified.** <pending orchestrator run>
 
 # Wave B — Northwest (C1)
 

@@ -2735,7 +2735,9 @@ original's laws build,
 an evasive maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks),
 and an optional `Escort` (`AiEscort`) which, whenever its leader is in play, takes the dispatch
 away from all of those but stunned and avoid crash, the original's own `mode wingman` fork,
-one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. Pure over
+one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. A leader
+that leaves play drops the pilot to the netless arm, which projects the orders it was left with
+and so holds them; `CampaignDirector` is what re-seats such a pilot, on the lost leader's net. Pure over
 the model state and its own fields, seeded randomness only, so a fixed-dt run is deterministic
 (`AiPilotTests`). The original's own steering law is `AiControlLaw`; this class is only its driver
 (docs/org/aiPilot.md). `Stun(seconds)` is the AI stun's entry (`FUN_004200d0`, reached by a
@@ -6009,7 +6011,11 @@ that way and always has.
 mission" contract `InstantActionDirector.TryCreate` has. `Attach(WorldInputs)` arms the graph once
 every runtime a directive can touch is up, applies the chapter's persist log and hands the world's
 `DangerZoneRibbons` to every roster pilot; `Step(dt)` is
-called from BOTH of `GameSession`'s drive paths. Every graph transition is one
+called from BOTH of `GameSession`'s drive paths. Each step also walks the roster for a wingman
+whose escort leader has left play and seats it on that leader's own patrol net
+(`TakeLostLeadersNets` through `SeatOnNet`, the body `SET_AI_NET` shares), since a netless escort
+holds the orders its last pursuit wrote once its leader is gone; a leader flying no net, which is
+every player-led escort, leaves its wingman untouched and is reported once. Every graph transition is one
 `[campaign] objective N woke|napped|completed|killed|slept|expired [by M] [for Ns] at Ts` line
 through `Log.Info`, so the file sink carries the chain a sortie report is about. `WireScoredShooter`
 registers the scripted player's aircraft into `ProjectilePool.ScoredShooters`, deferred into `Step`

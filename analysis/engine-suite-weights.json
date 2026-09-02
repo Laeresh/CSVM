@@ -147,6 +147,7 @@
     "generator-launch-climb-out": 4.0,
     "wingman-station": 5.289,
     "wingman-engage": 1.161,
+    "wingman-lost-leader": 0.430,
     "campaign-objectives-hud": 2.126,
     "campaign-cutscene": 1.531,
     "cutscene-letterbox": 2.055,
