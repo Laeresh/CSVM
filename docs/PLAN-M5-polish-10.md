@@ -380,8 +380,8 @@ have to give. Nothing shipped puts that case on the screen.
 
 **Landed.** `ZeppelinRuntime.cs:69-75`'s per-instance floor (`1.5 * turnCircle`, up to 515.7 m for
 CM08's Pandora) is replaced with `ZeppelinRuntime.ArrivalFloorM`, a flat 50 m TUNE constant with
-no decoded mechanism behind it. A campaign
-census (`CSVM.Tests/ZeppelinsTests.cs`'s new `TheArrivalFloorClearsEveryShippedZeppelinLeg`) walks
+no decoded mechanism behind it. A campaign census
+(`CSVM.Tests/ZeppelinsTests.cs`'s new `TheArrivalFloorClearsEveryShippedZeppelinLeg`) walks
 every mission that ships a `ZeppelinDef` (58 records, the reader's own install-wide census),
 across all 8 chapters plus Instant Action, and measures the horizontal length of every edge on
 every net a zeppelin flies: 678 edges. The shortest is 143.9 m (C4/M04's `M4Piratezep`, edge 0-5),
@@ -391,19 +391,36 @@ it also clears C1/IA1's `IAZep` edge 4-5 (413.7 m), the leg the OLD 515.7 m floo
 skipped outright, which is what the test catches when the floor is set back to the old worst-case
 value.
 
-A headless `--fly --chapter=C1B --mission=M03 --zeppelins --det` probe (`RunProbe.ps1`, the `zep:`
-log lines) flew CM08's Pandora over the same 1443 m leg (node 3 to node 4) the plan's Evidence cites:
-it now captures node 4 at roughly (-5630,-4990), about 1246 m along the 1443 m leg, around 86% flown
-against the old floor's 64%. The suite `zeppelin-pandora-dead-end` (real Klondike1 data, stops
-released the way the mission's objectives would) still shows every one of the route's 12 edges
-walked end to end, the cargo point settled to within 0.1 m at its own altitude, and the pitch never
-exceeding the steepest leg's slope. The settling glide (`BL-597`, `PLAN-M5-polish-9` `B11`) is
-unaffected, since an armed stop point bypasses the arrival-radius test entirely, and this suite is
-that item's own cargo-point check, re-run clean.
+An engine-free simulation of the real Klondike1 net, the same production `AiNetFollower`/
+`ZeppelinMotion`, measured the node 3 to node 4 leg precisely: 1443.2 m long, radius
+`max(10% of leg, 50 m floor)` = 144.3 m, since the DECODED 10%-per-leg rule dominates on a leg
+this long and the floor never engages there. That predicts 90.0% flown; the measured capture landed
+at 90.1%, matching within the turn-in cost of node 3's own 75° corner. An earlier reading of this
+same leg reported 86%, read off a `RunProbe.ps1` flight's `zep:` log lines by interpolating between
+two heartbeat prints roughly 5 s apart; that interpolation, not a second mechanism, produced the
+lower number. The arrival radius alone accounts for the walk's advance on this leg.
 
-**Verified.** The complete `.\RunTests.ps1`: build clean, 3074 of 3074 units passed, 230 of 230
+A campaign-wide census of every node where a shipped net turns, ranked by how much arc a hull's own
+turn circle (`speed / max_rate_yaw`) demands against the shorter of its two adjacent legs, finds its
+worst case on C1B/MP3's `ZVZ1a`: a 67.7° turn at node 6 on a 205 m leg, against a 343.8 m turn
+circle (speed 30, rate_yaw 5, the Pandora's own class) demanding 406 m of arc, a 201 m shortfall,
+the largest anywhere in the campaign. Driven headless with the real production code, the hull enters
+that leg in 7.7 s and leaves it in 16.5 s, both close to straight-line cruise time; it never orbits.
+`CSVM.Tests/ZeppelinsTests.cs`'s new `TheWorstShippedTurnBreaksOutRatherThanOrbits` pins this: the
+hull reaches node 6 and advances past it inside a 90 s budget, about 3x the measured transit. The
+`ArrivalFloorM` doc comment now cites this test rather than only asserting the overshoot is
+accepted.
+
+The suite `zeppelin-pandora-dead-end` (real Klondike1 data, stops released the way the mission's
+objectives would) still shows every one of the route's 12 edges walked end to end, the cargo point
+settled to within 0.1 m at its own altitude, and the pitch never exceeding the steepest leg's slope.
+The settling glide (`BL-597`, `PLAN-M5-polish-9` `B11`) is unaffected, since an armed stop point
+bypasses the arrival-radius test entirely, and this suite is that item's own cargo-point check,
+re-run clean.
+
+**Verified.** The complete `.\RunTests.ps1`: build clean, 3075 of 3075 units passed, 230 of 230
 engine suites passed with engine errors clean across 4 shards, and all 18 golden shots
-hash-identical, in 227.2 s (over the 180 s budget, awareness only). No golden moved.
+hash-identical, in 194.8 s (over the 180 s budget, awareness only). No golden moved.
 
 **Original approach (kept for reference).**
 
