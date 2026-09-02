@@ -64,6 +64,13 @@ public sealed class CampaignDirector
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SurfaceVehicle> _vessels = new(StringComparer.OrdinalIgnoreCase);
 
+    // Roster blocks authoring their own objectiveTarget flag (aiv slot 37), keyed by block name,
+    // with the MSG_OBJ_* label their own slot 39 carries. The mission authors this ON the
+    // vehicle, not through a targets.zrd entry, so ObjectiveSites reads it as a third source
+    // alongside targets.zrd's own entries and the graph's ADD_OBJECTIVE_TARGET edits.
+    private readonly Dictionary<string, string> _rosterObjectiveMarkers =
+        new(StringComparer.OrdinalIgnoreCase);
+
     // The two per-airframe kill tallies (docs/org/debrief.md#what-the-tallies-count),
     // credited as the roster's own aircraft go down. Read into the mission-end attempt; never
     // written from anywhere else.
@@ -166,6 +173,12 @@ public sealed class CampaignDirector
     /// <see cref="RosterInputs.SpawnSurface"/> built, plus a ship generator's hulls under their
     /// launch names.</summary>
     public IReadOnlyDictionary<string, SurfaceVehicle> Vessels => _vessels;
+
+    /// <summary>Roster blocks that carry their own objective-target flag (aiv slot 37), by block
+    /// name, with the MSG_OBJ_* label their own slot 39 authors. <see cref="ObjectiveSites"/>
+    /// reads this as a third source of objective-flagged keys, alongside <c>targets.zrd</c>'s own
+    /// entries and the graph's <c>ADD_OBJECTIVE_TARGET</c> edits.</summary>
+    public IReadOnlyDictionary<string, string> RosterObjectiveMarkers => _rosterObjectiveMarkers;
 
     /// <summary>The story position being flown.</summary>
     public int Seq => _mission.Seq;
@@ -432,6 +445,7 @@ public sealed class CampaignDirector
             _roster[spawn.Name] = rig;
             _rosterPlans[spawn.Name] = spawn;
             _rosterPlacedPose[spawn.Name] = (pos, fwd);
+            RegisterObjectiveMarker(spawn.Name, spawn);
             rig.Group = spawn.Group;
             rig.Downed += (_, killer) => CreditKill(spawn, killer);
             // The chapter's own copy of this vehicle is never placed, so anything it authors past
@@ -618,6 +632,7 @@ public sealed class CampaignDirector
         {
             return;
         }
+        RegisterObjectiveMarker(launchName, template);
         GD.Print($"campaign: launch '{launchName}' ({template.Name}) booked into the roster " +
                  $"team={template.Team?.ToString() ?? "-"} group={template.Group}");
     }
@@ -777,6 +792,7 @@ public sealed class CampaignDirector
         }
         _vessels[spawn.Name] = vessel;
         _rosterPlans[spawn.Name] = spawn;
+        RegisterObjectiveMarker(spawn.Name, spawn);
         if (spawn.Net is { } net)
         {
             vessel.Patrol(net);
@@ -788,6 +804,16 @@ public sealed class CampaignDirector
                      : "no net") +
                  (spawn.Inert ? " DEACTIVATED" : "") +
                  $" spawn=({vessel.Position.X:0},{vessel.Position.Y:0.##},{vessel.Position.Z:0})");
+    }
+
+    // Books a spawned block's own objective-target flag and label under its roster name, the way
+    // targets.zrd's own objective-flagged entries are already known by their target key.
+    private void RegisterObjectiveMarker(string name, RosterSpawnPlan spawn)
+    {
+        if (spawn.ObjectiveTarget && spawn.HelpLabel != null)
+        {
+            _rosterObjectiveMarkers[name] = spawn.HelpLabel;
+        }
     }
 
     // The wingman's aircraft and fit off the profile, for the mission that has one. Resolved here
