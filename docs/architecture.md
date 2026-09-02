@@ -5529,6 +5529,12 @@ what it can and cannot reflect is measured in `docs/PLAN-enhanced-graphics.md` C
 never enables it, since SSAO reads ambient light and the unshaded path has none for it to modulate.
 `CockpitOverlay.NewOverlay` duplicates `_env` at build time, so the interior pass inherits the same
 settings automatically.
+`EnableGlowAndTonemap` is the same mode gate for `_env`'s glow and tonemap: `GlowHdrThreshold` 1.0
+with `GlowBloom` 0 so only the glow-arm sprites (`SceneBuilder`'s `col.rgb * 1.5`, the only pixels
+enhanced mode pushes above 1.0) bloom; `TonemapMode` AgX with its own white/contrast pair recovers
+the day chapters' far-ridge washout instead of clipping it (all TUNE, judged against C1/C4/C5
+captures in `docs/PLAN-enhanced-graphics.md` C22). `CockpitOverlay`'s duplicated `_env` inherits
+this too, so the interior pass tonemaps once, the same as the world pass.
 Vsync resolves at the same `_Ready` site as the shader clock / `--perf` tick: `display.vsync`
 config key (default true) or `--no-vsync`, the flag always beating the key.
 The config read is unconditional even when the flag already decided, so the key still registers

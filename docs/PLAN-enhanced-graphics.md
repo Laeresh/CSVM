@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Post stack
 
 21. ☑ Lighting-exempt surfaces become emissive (light-source class only; the rest is a disproof)
-22. ☐ Environment glow + tonemap
+22. ☑ Environment glow + tonemap
 23. ☑ SSAO
 24. ☑ SSR on water — evaluate, then ship or park
 
@@ -825,7 +825,7 @@ falls back to fog colour and cannot bloom. Nothing else in the world exceeds 1.0
 saturated the scale shows only in its falloff (C1's max clips at 255), which is what the tonemap in
 C22 is expected to recover.
 
-## C22 ☐ Environment glow + tonemap
+## C22 ☑ Environment glow + tonemap
 
 **Goal.** Enhanced mode gets an Environment glow pass keyed to genuinely bright pixels (C21's
 emissives, tracers, explosions) and a filmic-family tonemap so the now-HDR scene rolls off instead
@@ -850,6 +850,80 @@ does not; canopy edge shows no tonemap seam. Original-mode goldens zero movers.
 chain; they must not be re-tuned to compensate for enhanced-mode bloom (they are measured against
 original footage). WorldBuilder.cs:487-488 forbids a colour-grading stage for the *faithful* dome
 colour; the tonemap lives strictly behind the enhanced branch.
+
+**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln`: clean, 0 warnings, 0 errors.
+`.\CheckCommentCaps.ps1 -Summary` and `.\CheckEncoding.ps1`: both clean over the whole tree.
+
+The landed change is `Launcher.EnableGlowAndTonemap`, called from `SetupLighting`'s existing
+enhanced-mode branch alongside `EnableWaterReflections`. Every value is a named TUNE constant:
+`GlowHdrThreshold` 1.0 and `GlowBloom` 0 so only pixels the HDR buffer already carries above 1.0
+bloom, matching C21's contract that the glow-arm sprites (`col.rgb * 1.5`) are the only such
+pixels; `GlowIntensity` 0.9, `GlowStrength` 1.1 and `GlowBlendMode` Screen for an additive halo that
+does not blow out a sprite's own core; `GlowHdrScale` 2.0 and `GlowHdrLuminanceCap` 8.0 so a
+saturated flare core still separates from its falloff. `TonemapMode` is AgX, chosen over Filmic at
+the controls: AgX recovered the C1/C4 day-chapter far-ridge washout (Wave B's known defect) into
+real terrain colour and detail, where Filmic left the same ridge closer to a flat wash; `TonemapWhite`
+is left at its default (AgX ignores it) and `TonemapAgxWhite` 6.0 / `TonemapAgxContrast` 1.0 hold the
+recommended photorealistic-lighting range from the 4.7 docs with no push either way, since C5's night
+city and C1/C4's daylight all read correctly at these defaults, `TonemapExposure` stays neutral at 1.0.
+
+**The over-1.0 claim.** No HDR pixel-readback instrument exists, so this was verified by A/B: a
+throwaway `CSVM_GLOW_TONEMAP_OFF` env-var gate (removed before landing) let the same enhanced build
+run with `EnableGlowAndTonemap` skipped. At every sampled region that is not a glow-arm sprite (a
+lit-window/wall cluster, a mid-tone building facade, an empty dark-sky patch, the C1/C4 far-ridge
+terrain) the glow-off capture is pixel-for-pixel close to or identical to original mode adjusted only
+by the already-landed lighting/shadow/SSAO/SSR terms, while the ring immediately around C5's moon
+(the one glow-arm sprite in that capture) jumps from mean 17.75 (glow off, exactly the original-mode
+value) to 20.98 (glow on) over a 20x20 px sample, showing the bloom is confined to the source. The moon disc
+itself drops from mean 201.54/max 251.41 (glow off) to mean 173.35/max 195.80 (glow on), which is the
+tonemap rolling off what was clipping, not the source dimming for no reason.
+
+**The cockpit seam.** `CockpitOverlay.NewOverlay` duplicates `_env` after `SetupLighting` has already
+called `EnableGlowAndTonemap` on it (`GameSession.BuildCockpitPasses` runs after the world's
+Environment is fully configured), so the interior SubViewport's own copy carries the same
+`GlowEnabled`/`TonemapMode`/every glow and tonemap value verbatim, and each viewport is tonemapped
+once, inside its own pass, before the PremultAlpha composite: the composite blends two already
+tonemapped images rather than re-applying a curve. A `--view=cockpit` capture in enhanced mode shows
+no banding or hard edge at the canopy strut under a 5x zoom crop (`.scratch/c22/cockpit_enhanced_zoom_leftstrut.png`);
+the same world/strut luminance sample B15 used reads world 114.12 / strut 123.39 in enhanced mode
+against world 91.61 / strut 91.90 in original, a delta that (as in B15's own splitscreen measurement)
+tracks different geometry sitting behind each rect rather than a mode-introduced seam, since no
+banding shows under zoom. No CockpitOverlay code change was needed.
+
+**Captures**, all `RunProbe.ps1 ... --det --mute` under `.scratch/c22/`, `$env:CSVM_DATA_ROOT="Z:\CSVM"`
+set first: C5's default freecam spawn (night city, moon + lamps), the aircraft at C1's
+`--pos=-6420,25,-3260 --direction=1,0,-0.3` dock-light pose (also exercises C24's SSR on the water),
+C1's and C4's default freecam spawns (the horizon washout), a firing sequence
+(`--fly --chapter=C1 --plane=player_bhawk --fire --shots=15`, picking the frame the muzzle flash
+sprite is visible), and `--view=cockpit`. Each pair (original/enhanced, and enhanced with the
+throwaway glow/tonemap gate on) reports 0 `ERROR` lines in its `.err` stream (a few WARNING lines
+about a late `snd_police` SOUND_NODE appear at the off-mission scripted `--pos`, unrelated to this
+item and present in every mode). Labelled montages: `montage_c5_city.png`, `montage_c1_horizon_tonemap.png`,
+`montage_c4_horizon_tonemap.png`, `montage_c1_dock.png`, `montage_gunfight.png`, `montage_cockpit.png`.
+The muzzle-flash region (30x25 px at the wingtip gun) reads mean 60.33/max 98.89 in original against
+mean 77.37/max 125.43 in enhanced, confirming tracers/muzzle flashes bloom under the same pass.
+
+**Perf**, C5 (heaviest), `RunProbe.ps1 --freecam --chapter=C5 --no-vsync --perf --det --mute
+--frames=600`, three runs per configuration, `gpu_ms`/`frame_ms` medians over the last five 60-frame
+windows (each run time-boxed with `-TimeoutSec 35` since `--perf` alone has no auto-quit):
+
+| scenario | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| original `gpu_ms` | 1.54 | 1.51 | 1.54 |
+| enhanced, glow+tonemap off `gpu_ms` | 1.85 | 1.85 | 1.85 |
+| enhanced, glow+tonemap on `gpu_ms` | 1.90 | 1.90 | 1.90 |
+
+`frame_ms` stayed at 8.33-8.55 in every run (the 120 fps uncapped ceiling on this rig, well under the
+16.7 ms 60 fps budget). Glow and tonemap together cost about 0.05 ms of GPU time on top of the
+already-enhanced (shadows + omnis + SSAO + SSR) baseline, in line with the item's evidence that both
+are negligible-to-low cost.
+
+Goldens-only (`.\RunTests.ps1 -SkipUnits -SkipEngine`): PASS, 18 shot(s) hash-identical, zero movers,
+same hashes before and after the throwaway verification gate was removed. Engine suite
+`cockpit-overlay-pass` (`.\RunTests.ps1 -Suite cockpit-overlay-pass -SkipUnits -SkipGoldens`): 1
+passed, 0 failed, engine errors clean. An eight-chapter enhanced `--freecam` sweep
+(C1/C1B/C1C/C2/C2B/C3/C4/C5, `--det --mute --frames=5`) reported 0 `ERROR` lines in every `.err`
+stream.
 
 ## C23 ☑ SSAO
 

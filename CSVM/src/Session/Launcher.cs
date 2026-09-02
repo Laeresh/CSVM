@@ -106,6 +106,31 @@ public partial class Launcher : Node3D
     private const float EnhancedSsaoHorizon = 0.06f;
     private const float EnhancedSsaoSharpness = 0.98f;
 
+    // TUNE, judged at the controls against C21's contract (only the glow-arm sprites exceed 1.0
+    // in the HDR buffer). A threshold of 1.0 blooms exactly them; bloom stays 0 so nothing below
+    // threshold glows, and screen blend keeps a flare's halo additive without blowing its own
+    // core out further.
+    private const float EnhancedGlowHdrThreshold = 1.0f;
+    private const float EnhancedGlowBloom = 0.0f;
+    private const float EnhancedGlowIntensity = 0.9f;
+    private const float EnhancedGlowStrength = 1.1f;
+    private const Godot.Environment.GlowBlendModeEnum EnhancedGlowBlendMode =
+        Godot.Environment.GlowBlendModeEnum.Screen;
+
+    // TUNE. Scale and cap on the values the glow pass reads before it thresholds them; wide enough
+    // that a saturated flare core (255 before the tonemap) still separates from its own falloff.
+    private const float EnhancedGlowHdrScale = 2.0f;
+    private const float EnhancedGlowHdrLuminanceCap = 8.0f;
+
+    // TUNE, judged at the controls against a C4 horizon, a C1 horizon and C5 at night: AgX rolls
+    // off the far-ridge washout the authored sun energy produces (Wave B) while keeping the night
+    // city's contrast, where Filmic read flatter. Exposure stays neutral; the AgX-specific white
+    // point is what recovers the horizon rather than the general TonemapWhite, which AgX ignores.
+    private const Godot.Environment.ToneMapper EnhancedTonemapMode = Godot.Environment.ToneMapper.Agx;
+    private const float EnhancedTonemapExposure = 1.0f;
+    private const float EnhancedTonemapAgxWhite = 6.0f;
+    private const float EnhancedTonemapAgxContrast = 1.0f;
+
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
     // exists — the same empty list the pre-split root held after a teardown.
     private static readonly List<PlayerRig> NoRigs = new();
@@ -988,6 +1013,7 @@ public partial class Launcher : Node3D
             _env.SsaoHorizon = EnhancedSsaoHorizon;
             _env.SsaoSharpness = EnhancedSsaoSharpness;
             EnableWaterReflections(_env);
+            EnableGlowAndTonemap(_env);
         }
         AddChild(new WorldEnvironment { Environment = _env });
     }
@@ -1019,6 +1045,26 @@ public partial class Launcher : Node3D
         env.SsrFadeIn = EnhancedSsrFadeIn;
         env.SsrFadeOut = EnhancedSsrFadeOut;
         env.SsrDepthTolerance = EnhancedSsrDepthTolerance;
+    }
+
+    // Enhanced mode alone: with a lit world, sun, shadows and real light energy feeding the HDR
+    // colour buffer, values can exceed 1.0 and clip instead of rolling off, and C21's glow-arm
+    // sprites are the only surfaces meant to bloom. The cockpit pass duplicates this Environment
+    // at build time (CockpitOverlay.NewOverlay), so its own tonemap matches the world pass exactly.
+    private void EnableGlowAndTonemap(Godot.Environment env)
+    {
+        env.GlowEnabled = true;
+        env.GlowHdrThreshold = EnhancedGlowHdrThreshold;
+        env.GlowBloom = EnhancedGlowBloom;
+        env.GlowIntensity = EnhancedGlowIntensity;
+        env.GlowStrength = EnhancedGlowStrength;
+        env.GlowBlendMode = EnhancedGlowBlendMode;
+        env.GlowHdrScale = EnhancedGlowHdrScale;
+        env.GlowHdrLuminanceCap = EnhancedGlowHdrLuminanceCap;
+        env.TonemapMode = EnhancedTonemapMode;
+        env.TonemapExposure = EnhancedTonemapExposure;
+        env.TonemapAgxWhite = EnhancedTonemapAgxWhite;
+        env.TonemapAgxContrast = EnhancedTonemapAgxContrast;
     }
 
     // Shows the launchscreen (building it on first use) and wiring its Launch/Quit
