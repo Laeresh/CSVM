@@ -886,6 +886,50 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-667`'s closing record in `docs/PLAN-M5-polish-10.md` `A2`, `BL-517` and
   `BL-567` (the same zeppelin-only claim, each closed disproven), `CAP-46`.
 
+- `BL-687` `[Bug]` **A `mode ship` vehicle takes no gun at all, so a patrol boat never fires the
+  weapon its own def authors.** *Evidence (traced):* reported at the controls on three missions in
+  one sortie: CM08 "the guns are not firing at me" (`PT-87`), CM12 "boats dont fire" (`PT-101`), and
+  CM10 "patrol boats and lifeboats dont shoot and dont track" (`PT-100`), whose A/B is
+  `OriginalScreenshots/Videos/CM10.mkv` showing the boats firing on the hospital ship shortly after
+  the start. A `mode ship` roster block or generator launch becomes a `SurfaceVehicle`: a hull on a
+  `PathFollower` with a destructible pool and nothing else — no `FlightController`, no `AiPilot`, no
+  `AiGunner`, no weapon. The roster loop takes the surface branch and `continue`s
+  (`CSVM/src/Session/CampaignDirector.cs:428-432`) before the `AiPilot` every aircraft block reaches
+  at `:434`; `AiGeneratorRuntime` returns straight after `vessel.Launch` (`:408-419`);
+  `SurfaceVehicle.Step` is the injure ladder and the follower alone
+  (`CSVM/src/Session/SurfaceVehicle.cs:147-167`). The only production callers of
+  `ProjectilePool.Spawn` are `FlightController`, `TurretController`, `ZeppelinRuntime.Cannons` and
+  `IncomingFire`, and a hull reaches none of them. So there is no gun object, no target selection and
+  no fire decision for a hull — this is not a mode the AI machine fails to set. `vehicle.zrd`'s
+  `patrolboat` authors `weapons [wep_29, 9000, 0.3, 1.0, 500.0]` with `activation 2500`,
+  `attack_dwell 60` and `not_pursuit_dwell 5`, and the original runs them: the world tick walks every
+  awake vehicle into `FUN_0041c270`, all three behaviours call the fire decision `FUN_0041f420`
+  themselves, and the target scorer is selected on the vehicle's own `mode` word — `FUN_00421950`
+  for everything that is not `jet` or `wingman` ([`docs/org/aiPilot.md`](docs/org/aiPilot.md):68-87,
+  :119-124).
+  *Fix shape:* give a `mode ship` hull the target selection and fire decision its def already
+  authors, reading the `weapons` tuple and the dwell fields rather than inventing a rate or a range.
+  *⚠ Traps:* **Settle the `t_truck` question before building anything.** `t_truck` carries the
+  identical `mode ship`, the identical `weapons` tuple and the identical dwell fields, *and* ships
+  its own `ai.zrd` standalone-turret entry. If a hull's gun is driven by the standalone-turret object
+  in the original, a boat with no `ai.zrd` entry is authored silent and the correct port is nothing;
+  unanswered, this fix is unbounded. **The lifeboat's gun is not this item and not a defect.**
+  `lifesaverNM > lifesaver > lifeboat > healthy > turret > gun > firepoint` is a complete rig, but
+  `TurretController.BuildEmplacements` instantiates only what an `ai.zrd` `NODES` pattern matches,
+  and no shipped pattern matches `lifeboat`, `patrolboat` or `ptboat*`; the original reads the same
+  file, so it is authored silent and `PT-100`(a) asked for something the original never does.
+  [`docs/architecture.md`](docs/architecture.md):6593-6595 already records "no `ai.zrd` entry names a
+  patrol boat" and misattributes the silent gun to `BL-523` — correct that line in the same change.
+  **"Turrets shoot at player" on CM10 is correct behaviour**, not an inverted team: `bbtur**` authors
+  no `TEAM`, takes `TurretDef.DefaultTeamId = 2` (`CSVM/src/Flight/TurretDefs.cs:20`), and minimises
+  distance over one running best, so the nearer player is what it locks. **The structure-team decode
+  is not refuted** — the hospital ship and the Goose's engines both carry `field040 = 0x90155555` on
+  the player's side, the scan reaches them and `AimAssist.Hostile` excludes a player-team gun. And
+  **`PT-101`(a)/(b) is unflyable as written**: C2's gamez carries no `aagun`, `maagun`, `thug`,
+  `bbtur` or `b_turret` node, so no turret exists near the Goose to slew.
+  *Cross-refs:* `BL-523` (the AI mode machine, which this is not), `BL-626`, `BL-664`, `BL-598`,
+  `BL-637`, `PT-87`, `PT-100`, `PT-101`.
+
 ## Flight model & collision physics
 
 - `BL-669` `[Research]` **CM12's ace `hkfirebrand_9` is authored under the terrain sheet, which is
@@ -2276,6 +2320,57 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   shot can move to a row and confirm on it. *Cross-refs:* the plane selection and ammo screens'
   open lists are unpinned by any golden until this exists.
 
+- `BL-688` `[Bug]` **A roster-authored objective marker is a second candidate beside the aircraft
+  rather than a flag stamped on it, so it is selectable before the plane wakes, again beside it,
+  after it dies, and under its raw node name.** *Evidence (traced):* four symptoms reported at the
+  controls, one mechanism. CM02: "i have double targeting for the balmorals, as enemy and objective
+  and the objective marker dont vanish after killing the balmorals". CM15: "the defend balmoral
+  objective marker is too early selectable (Balmoral not there yet)" and "it should say Balmoral not
+  balmoral_1". CM11: "the label should be `Stunt Plane` instead of secfury_5 and secfury_6".
+  A roster block's objective flag (aiv slot 37) is modelled as a second, always-live synthetic
+  candidate. `ObjectiveSites.Collect` writes `Live = true` unconditionally
+  (`CSVM/src/Session/ObjectiveSites.cs:191`) and reads the position off the live rig with no wake or
+  death gate (`:287-291`), where `CampaignDirector`'s own DEDG walk gates on
+  `!rig.Crashed && !rig.Deactivated` (`CSVM/src/Session/CampaignDirector.cs:1158`).
+  `TargetPool.Rebuild` walks vehicles then objectives with no identity comparison
+  (`CSVM/src/Flight/TargetPool.cs:60-93`), so one aeroplane is offered twice.
+  The name comes free with the same fix: the aircraft's own candidate **already** carries the right
+  string, slot 20 flowing `AiSkills.RosterTitle` → `RosterSpawnPlan.Title` → `AiSpawn.PilotName` →
+  `PlaneStats.AiTitle` → `TargetRef.DisplayName`. The screen reads `secfury_5` only because the
+  synthetic candidate sorts ahead of it on the decoded `key = -1`, and that candidate's own fallback
+  is the raw node key (`ObjectiveSites.cs:344`).
+  *Decided at the controls:* **one stop, one bracket, and Objective outranks Enemy Target** where an
+  entity is both.
+  *Fix shape:* stamp the objective flag onto the aircraft's existing candidate and delete the roster
+  branch out of `ObjectiveSites`; add a slot-38 reader for the category line, which has none today.
+  *⚠ Traps:* **CM02's three `britbalmoral_*` blocks author slot 20 EMPTY**, so the correct result
+  there is a box with a category and *no* name line ([`docs/org/targeting.md`](docs/org/targeting.md):668-670);
+  a naive "use the block's title" fix gets that wrong. The data's name for CM15's aeroplane is
+  `MSG_TEX_NAME` → "Tex" with `MSG_BOMBER_NAME` → "Bomber" beside it, **not** "Balmoral", which is
+  the airframe title the decode says the readout never reads; the author accepted "Tex". Slot 20 is
+  per roster BLOCK and never per class — `docs/org/targeting.md:686` is explicit that the
+  `vehicle.zrd` def's own `MSG_VEH_*` title is read by none of the three authors, so do not "fall
+  back to the class". `BL-686` is a `[Feature]` proposing this same seam and has **not** landed; it
+  merged no code.
+  *Cross-refs:* `BL-686`, `BL-637`, `BL-635`, `BL-632`, `PT-112`, `PT-117` (whose (c) this
+  subsumes).
+
+- `BL-691` `[Bug]` **The export message box draws its OK button in ink the plaque behind it
+  hides.** *Evidence (traced):* reported at the controls as "OK button is missing in the dialog"
+  (`PT-96`(a)). The original draws it: `OriginalScreenshots/Campaign Flight Check Change Plane Export
+  dialog.png` shows OK as light text on a dark plaque inside a bordered strip, so the button belongs
+  there and the box is otherwise right. The box is composed as an overlay taking the palette of the
+  screen beneath it, and the plane-selection screen maps to `Paper`, whose `LabelActivate` is
+  `Color(0,0,0)` (`CSVM/src/UI/BoardPalette.cs:74-75`, `:23`) against `Panel`'s gold (`:57`) — which
+  is why the delete confirm over the profile screen reads and this one does not.
+  *Fix shape:* give the message box an ink that does not depend on the screen it covers.
+  *⚠ Traps:* **Check the strip frame against the original's shot before concluding the ink is the
+  whole cause.** `CSVM/src/UI/CampaignBoards.cs:341` chooses strip frame 2 and `BoardInk.LabelActivate`
+  on one line, so a wrong frame would present identically and the ink fix would leave it invisible.
+  The second half of the same report, "needed 2 exports but then it worked", is **not** this item:
+  `BL-651` already owns the export-to-Instant-Action crossing and the picker that is not re-read.
+  *Cross-refs:* `BL-651`, `PT-96`.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2632,6 +2727,43 @@ usual.
   Plane.png` alone. Two airframes reading `Average` is consistent with many formulas, and a
   stand-in that happens to match the four sampled aircraft is exactly what is already there.
   *Cross-refs:* the plane selection screen that draws them.
+
+- `BL-689` `[Bug]` **CM13's flight check hands one CHANGE PLANE answer to both crew slots, and the
+  mission's own aircraft is never granted.** *Evidence (traced):* reported at the controls as "in
+  CM13 i cant select a plane on replay". `CampaignFeature`'s change-plane answer is slot-less
+  (`CSVM/src/Session/CampaignFeature.cs:165-173`) and `CampaignFlightCheckPage.cs:385,389` hands the
+  same answer to the pilot and the wingman; the original's second rule, owned count minus one against
+  a floor of three, has no term in our code at all; and the mission's grant never happens.
+  *⚠ Traps:* **Half of what was seen is faithful, so do not fix it away.** The original also bars the
+  *pilot's* button outright on mission 13
+  ([`docs/formats/campaign-screens.md`](docs/formats/campaign-screens.md):283), and bars *both*
+  buttons when owned-minus-one falls below three (`:285-287`). Whether the wingman's button should
+  have been offered depends on how many aeroplanes that profile owns. The gaps are the three named
+  above, not "CM13 locks plane selection".
+  *Cross-refs:* [`docs/PLAN-menu-presentations.md`](docs/PLAN-menu-presentations.md) owns the
+  campaign screens; `PT-108`.
+
+- `BL-690` `[Bug]` **A staged cutscene aircraft is built with no painter, so CM15's Balmoral wears
+  the shipped skins where the aeroplane it stands in for wears its scheme.** *Evidence (traced):*
+  reported at the controls as "the balmoral in the cutscene should have fortune hunters livery not
+  the default". CM15 puts two different Balmoral models on screen for one aeroplane and only the
+  flyable one is painted: `AircraftStage` builds every staged subtree on one bare `SceneBuilder` with
+  no `textureSubstitute` hook and holds no `PaintScheme` (`CSVM/src/Session/AircraftStage.cs:142`,
+  `:171-178`), where `PlaneBuilder` passes
+  `textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex`
+  (`CSVM/src/Mech3/PlaneBuilder.cs:69-70`).
+  *Fix shape:* give the staged aeroplane its own `SceneBuilder` carrying the scheme the mission's own
+  rig resolved.
+  *⚠ Traps:* **Do not hardcode `player_fortune` into the stage** — take the scheme from the
+  `balmoral_1` rig, so the prop tracks the aeroplane it films rather than pinning a constant a
+  roster-authored pattern would contradict. **One `SceneBuilder` serves every staged subtree**, so a
+  substitution hook installed on it reaches `piratefighter`, `chuteman` and the wing-walk figures as
+  well. ⚠ **The data authors no livery for this block at all**, so "Fortune Hunters" rests on the
+  remake's default-pattern rule and on the report, not on a value in a file, and no CM15 footage
+  exists to settle what the original's drop Balmoral wears. The same gap covers the intro prop
+  `piratefighter`, whose `devastator`/`wingman` defs *do* author `paint_pattern player_fortune`,
+  which is the better-founded half of the same item.
+  *Cross-refs:* `BL-632`, `PT-112`.
 
 ## Tooling, platform & docs
 
