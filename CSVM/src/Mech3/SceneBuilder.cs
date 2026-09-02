@@ -1510,7 +1510,12 @@ void fragment() {{");
         if (fogged)
         {
             sb.AppendLine("    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
-            sb.AppendLine("    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
+            // ⚠ The lit arms fog through FOG, never ALBEDO: Godot lights whatever ALBEDO holds, so
+            // a fogged albedo still varies with its normal at full fog. csky_fog_color is linear,
+            // the space FOG.rgb resolves in and the one the fullbright arm's mix lands in.
+            sb.AppendLine(worldLit
+                ? "    FOG = vec4(csky_fog_color, csky_fog_on * fog_amt);"
+                : "    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
         }
         // The debug overlays' per-instance tint, a no-op at alpha 0. Under --debug-clutterflag the
         // fullbright world shows the flag colour EmitTriangle wrote into COLOR instead of the lit,

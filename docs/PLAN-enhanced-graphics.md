@@ -114,7 +114,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 42. ☑ C5 reads too bright in enhanced mode, its water a light grey
 43. ☑ The clutter building fade reaches as far as the pushed fog
 44. ☑ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
-45. ☐ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
+45. ☑ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
 46. ☐ The water mirror strength, measured against the original's water, or the water bit parked
 47. ☐ Day chapters read brighter than the original overall; the energy mapping re-anchored on frames
 
@@ -1719,7 +1719,7 @@ the mirror itself, not the sky it mirrors: C24's SSR/gloss on wave-less water pl
 open judgement, and this item makes what it reflects correct rather than deciding how much of it to
 reflect. C1B's night sea is still far above the original for the reasons E42 recorded.
 
-## E45 ☐ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
+## E45 ☑ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
 
 **Goal.** In enhanced mode a surface inside the fog ramp fades into the fog colour the way the
 original's does, only farther away; the lit and shaded sides of a fogged hill no longer read as
@@ -1747,6 +1747,92 @@ fade with the fog, which this gives for free.
 structure (sample the sun-side and shade-side of one fogged hill, the two means converge to the
 fog colour); the near world unchanged. Original-mode every-key dump identical; goldens zero
 movers.
+
+**Verified.** <pending orchestrator run>
+
+The landed change is 7 lines in `CSVM/src/Mech3/SceneBuilder.cs`, inside `GetBiasShader`'s `fogged`
+block. `fog_amt` and the whole of `csky_fog_amount` are untouched; the emitted line is now selected
+by the arm. The `worldLit` arm (which `waterLit` is a subset of) emits
+`FOG = vec4(csky_fog_color, csky_fog_on * fog_amt);` and leaves `ALBEDO = col.rgb` as the vertex
+modulate wrote it, so Godot lights the surface colour and then blends the finished pixel toward the
+haze after every light term. Every other arm keeps
+`ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);` byte for byte. `fog_world` is still
+computed for both, since its guard is `fogged || fullbright` and the lit arm is fogged.
+
+**The colour space is settled by measurement, not by reading.** `csky_fog_color` is written linear
+(`WeatherRig.ApplyZone` converts the authored sRGB `FOG_COLOR`), and `FOG.rgb` is resolved in that
+same linear space ahead of the same tonemap the fullbright path's mix goes through. At C1's freecam
+default the camera-anchored dome, which fogs through `ALBEDO` on the fullbright arm, reads exactly
+`(159.00, 159.00, 159.00)` in enhanced mode; after the change the fully fogged ridge below it reads
+exactly `(159.00, 159.00, 159.00)` on both its sun and its shade face. A `FOG` value resolved in
+gamma space, or after the tonemap, could not land on the fullbright arm's number to the last
+hundredth. Custom `FOG` also applies with the Environment's own fog switched off, which the same
+measurement proves, so nothing had to be enabled on the Environment.
+
+**A consequence worth naming: the haze is no longer multiplied by the enhanced sun.** The old form
+was `light x mix(albedo, fog, f)`, so the fog colour itself took the sun and ambient terms; the new
+form is `mix(light x albedo, fog, f)`, which is the model the faithful path already uses, where
+`csky_world_light` scales `ALBEDO` and the mix then pulls toward an undimmed `csky_fog_color`. Where
+a zone's enhanced sun energy exceeds 1 the mid-ramp veil therefore reads thinner than before: C4
+(sun energy 1.61) shows its fogged dunes darker and slightly more separated mid-ramp, while its
+deepest visible terrain converges on the dome. That is the sun no longer lighting the atmosphere,
+and the energies it interacts with are already TUNE under "Open judgements".
+
+Commands and results, all from the worktree with `$env:CSVM_DATA_ROOT="Z:\CSVM"`:
+`dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
+`.\RunTests.ps1 -Suite plane-shader-reuse -SkipUnits -SkipGoldens`: PASS, 1 suite run of 200
+(non-zero), engine errors clean, 0 unexpected lines.
+`.\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only): PASS, 18 shot(s) hash-identical, zero
+movers, 45.9 s.
+
+Original-mode byte identity used B11's method rebuilt as a throwaway: a static enumerator called
+from `SceneBuilder`'s constructor, armed by `CSVM_SCRATCH_SHADER_DUMP`, walking every reachable key
+of all three generators (`GetBiasShader` over DebugClutterFlag x shaded x textured x blend x scissor
+x doubleSided x scroll x clampUv x lit x fogged x clutterFade x water x 4 edgeClamp values, plus
+every billboard key and all three cylindrical axes) and writing each key's `Shader.Code`. The
+baseline came from the committed tree before the edit. `dump_orig_before.txt` and
+`dump_orig_after.txt` are both 25,953,088 bytes and SHA-256
+`BBCC1E87A7F868C47F878BA37C3F3393885CB19039C1E3A440CB08F695580FF9`, identical, so original mode's
+shader text did not move. `dump_enh_before.txt` is 25,120,320 bytes /
+`2B799A2DC9949F8F39BB011B3F314C389E2E035DBD499CD6AE04D5765E252981` and `dump_enh_after.txt`
+25,099,840 bytes / `F0CC2A12BEC9FE2FFF917DE007D6F094D27365D2B734C3DEE72E913BCF9F1B18`, so the
+instrument was seen able to fail. Attributing every differing line to the key header above it, 2,048
+of the 16,640 dumped keys moved and all 2,048 are `bias sh=False li=True fo=True`, which is the lit,
+fogged world arm and nothing else. The instrument was deleted before finishing.
+
+Captures are `.\RunProbe.ps1 --freecam --chapter=<X> --graphics=<mode> --det --mute --frames=15
+--screenshot=<abs>` runs under `.scratch/e45/`, three arms per pose (original, enhanced on the
+committed tree taken first, enhanced after the edit), all nine exiting 0 with zero engine ERROR
+lines. Rects are 24x12, the two hill rects of a pose sharing a row so they share a depth.
+
+| pose | rect (x,y) | original | enhanced before | enhanced after |
+|---|---|---|---|---|
+| C1 hills | fogged ridge, sun face (1072,372) | 176.00 | 138.47 | 159.00 |
+| C1 hills | fogged ridge, shade face (1008,372) | 176.00 | 121.10 | 159.00 |
+| C1 hills | dome above the ridge (1200,352) | 176.00 | 159.00 | 159.00 |
+| C1 hills | near hillside (200,640) | 77.87 | 98.92 | 98.92 |
+| C4 horizon | fogged dune, sun face (944,408) | 151.75 | 143.10 | 136.96 |
+| C4 horizon | fogged dune, shade face (1072,408) | 147.38 | 121.72 | 108.91 |
+| C4 horizon | deepest visible terrain (1184,376) | 191.84 | 168.49 | 167.11 |
+| C4 horizon | dome beside it (1200,340) | 192.00 | 168.00 | 168.00 |
+| C4 horizon | near ridge (300,550) | 73.43 | 91.66 | 91.66 |
+| C2 buildings | hillside, sun face (112,352) | 215.76 | 145.58 | 145.58 |
+| C2 buildings | hillside, shade face (240,352) | 215.76 | 107.84 | 107.84 |
+| C2 buildings | near wall (700,425) | 75.67 | 72.11 | 72.04 |
+| C2 buildings | near hangar roof (350,500) | 119.40 | 124.45 | 124.45 |
+
+C1 is the item's claim measured: the ridge sits past that zone's pushed fog far, its two faces
+differed by 17.37 before and by 0.00 after, and the value they land on is the dome's own fogged
+value. C4's chosen pair is mid-ramp rather than fully fogged, so it separates by 6.7 more than
+before for the sun-energy reason above, while the deepest terrain in frame moves from 0.49 above the
+dome to 0.89 below it. C2's hillsides sit inside that zone's 4200 m fog near, so they are unfogged
+and unmoved to the last hundredth, which is the near-world control the item asked for; the three
+near-camera rects across the three poses move by 0.00, 0.00 and 0.07.
+
+Montages: `montage_c1_hills.png`, `montage_c4_horizon.png`, `montage_c2_buildings.png` and the two
+3x close-ups `montage_zoom_c1_hills.png`, `montage_zoom_c4_horizon.png`, under
+`.claude/worktrees/eg-e45/.scratch/e45/` and copied to
+`.claude/worktrees/enhanced-graphics/.scratch/e45/`.
 
 ## E46 ☐ The water mirror strength, measured against the original's water, or the water bit parked
 
