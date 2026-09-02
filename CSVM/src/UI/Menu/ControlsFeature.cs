@@ -11,8 +11,8 @@ public sealed record RebindSteal(InputAction Action, Binding Binding, IReadOnlyL
 
 /// <summary>The shared rebinding screen: which seat is being edited, which context and action the
 /// cursor is on, the capture in progress, and the steal it is about to perform. Engine-free like
-/// every other feature, so a presentation supplies the frame's raw device state and draws whatever
-/// this reports.
+/// every other feature: a presentation registers each seat's hardware readers once
+/// (<see cref="ICaptureDevices"/>) and draws whatever this reports.
 /// ⚠ Edits are staged. Every rebind, unbind and reset lands in a working copy of the seat's maps,
 /// and only <see cref="Accept"/> writes them through to the maps the polling sites hold.
 /// <see cref="Cancel"/> throws the working copy away, which is what makes a whole-map reset safe to
@@ -112,16 +112,16 @@ public sealed class ControlsFeature : IMenuFeature
 
     /// <summary>Registers one seat's live keymap. The profile is the one its polling sites read, not
     /// a copy, so <see cref="Accept"/> reaches the seat without a reload; the screen itself edits a
-    /// working copy of it. <paramref name="padOf"/> gives the identity that context's pad bindings
-    /// sit on, per context rather than per seat, because the three polling sites do not share one
-    /// placeholder.</summary>
-    public void AddSeat(int player, BindingProfile profile, Func<InputContext, DeviceId> padOf, bool readsKeyboard)
+    /// working copy of it. <paramref name="devices"/> is where a capture reads and which identity it
+    /// stamps, per context rather than per seat, because the three polling sites do not share one
+    /// placeholder (<see cref="ICaptureDevices"/>).</summary>
+    public void AddSeat(int player, BindingProfile profile, ICaptureDevices devices, bool readsKeyboard)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        ArgumentNullException.ThrowIfNull(padOf);
+        ArgumentNullException.ThrowIfNull(devices);
         if (!_seats.ContainsKey(player))
             _players.Add(player);
-        _seats[player] = new SeatState(profile, padOf, readsKeyboard);
+        _seats[player] = new SeatState(profile, devices, readsKeyboard);
         if (_players.Count == 1)
             _player = player;
     }
@@ -154,15 +154,18 @@ public sealed class ControlsFeature : IMenuFeature
     }
 
     /// <summary>Starts listening for a control. Everything already held is masked, so the button
-    /// that opened the capture is not read as the answer to it.</summary>
-    public void BeginCapture(IDeviceState state)
+    /// that opened the capture is not read as the answer to it.
+    /// ⚠ The hardware comes from the seat's own reader for the context on screen, never from a
+    /// caller. A reader answers for one pad identity and the three contexts hold three, so a
+    /// caller-supplied state mismatches silently: pads read false and nothing throws
+    /// (<see cref="ICaptureDevices"/>).</summary>
+    public void BeginCapture()
     {
-        ArgumentNullException.ThrowIfNull(state);
         var seat = _seats[_player];
         Pending = null;
         Capturing = true;
         _capture = new ControlCapture(seat.PadOf(_context), seat.ReadsKeyboard);
-        _capture.Arm(state);
+        _capture.Arm(seat.Devices.For(_context));
         Status = $"Press a control for {BindingLabels.Name(Focused)}.";
     }
 
@@ -177,12 +180,14 @@ public sealed class ControlsFeature : IMenuFeature
 
     /// <summary>One frame of a capture in progress: returns true when something the screen draws
     /// changed. Does nothing while no capture is running.</summary>
-    public bool Poll(IDeviceState state)
+    public bool Poll()
     {
-        ArgumentNullException.ThrowIfNull(state);
         if (!Capturing || _capture is not { } capture)
             return false;
 
+        // One read of the seat's hardware for the whole frame, so the cancel check and the capture
+        // cannot see two different pad lists.
+        var state = _seats[_player].Devices.For(_context);
         if (capture.Cancelled(state))
         {
             Capturing = false;
@@ -384,21 +389,23 @@ public sealed class ControlsFeature : IMenuFeature
     // a capture needs to know about the seat.
     private sealed class SeatState
     {
-        public SeatState(BindingProfile profile, Func<InputContext, DeviceId> padOf, bool readsKeyboard)
+        public SeatState(BindingProfile profile, ICaptureDevices devices, bool readsKeyboard)
         {
             Profile = profile;
-            PadOf = padOf;
+            Devices = devices;
             ReadsKeyboard = readsKeyboard;
             Restage();
         }
 
         public BindingProfile Profile { get; }
 
-        public Func<InputContext, DeviceId> PadOf { get; }
+        public ICaptureDevices Devices { get; }
 
         public bool ReadsKeyboard { get; }
 
         public Dictionary<InputContext, ActionMap> Working { get; } = new();
+
+        public DeviceId PadOf(InputContext context) => Devices.PadOf(context);
 
         /// <summary>Takes the working copy back to what the polling sites currently hold.</summary>
         public void Restage()

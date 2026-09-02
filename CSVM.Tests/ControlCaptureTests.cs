@@ -19,7 +19,7 @@ public class ControlCaptureTests
     [Fact]
     public void AFreshKeyPressIsCapturedAsAKeyboardBinding()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
 
@@ -36,7 +36,7 @@ public class ControlCaptureTests
     [Fact]
     public void AControlAlreadyHeldWhenTheCaptureArmsIsNotTheAnswerToIt()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         state.Keys.Add((int)Key.Enter);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
@@ -53,7 +53,7 @@ public class ControlCaptureTests
     [Fact]
     public void APadButtonIsCapturedOnTheSeatsOwnIdentityAndNotOnAHardwareGuid()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
 
@@ -65,10 +65,35 @@ public class ControlCaptureTests
         Assert.Equal((int)JoyButton.X, binding.Control.Index);
     }
 
+    /// <summary>The rule the defect broke, stated as a rule rather than as a story about one
+    /// screen: a capture reads pads through <see cref="IDeviceState.IsButtonDown"/> and
+    /// <see cref="IDeviceState.AxisValue"/> addressed by identity, and a seat's state answers for
+    /// one identity, so a capture stamping a different one sees an entirely idle pad. Nothing
+    /// throws and the keyboard is untouched, which is why this cannot be noticed except at the
+    /// controls.</summary>
+    [Fact]
+    public void ACaptureReadingAStateThatAnswersForAnotherIdentitySeesNoPadAtAll()
+    {
+        var other = DeviceId.Joypad("*");
+        var state = new FakeDevices(Seat);
+        var capture = new ControlCapture(other, readsKeyboard: true);
+        capture.Arm(state);
+
+        state.Buttons.Add((Seat, (int)JoyButton.X));
+        state.Axes[(Seat, (int)JoyAxis.LeftY)] = -1f;
+        Assert.Null(capture.Poll(state));
+        Assert.False(capture.Cancelled(state));
+
+        // The keyboard is addressed by kind rather than by seat identity, so it keeps working and
+        // the screen still looks alive.
+        state.Keys.Add((int)Key.J);
+        Assert.Equal((int)Key.J, capture.Poll(state)!.Value.Control.Index);
+    }
+
     [Fact]
     public void AnAxisIdlingInsideItsDriftIsNeverCaptured()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
 
@@ -82,7 +107,7 @@ public class ControlCaptureTests
     [Fact]
     public void AnAxisPastTheRestBandButShortOfTheMoveThresholdIsNotCapturedEither()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
 
@@ -94,7 +119,7 @@ public class ControlCaptureTests
     [Fact]
     public void AnAxisMovedDecisivelyIsCapturedWithTheSignItMoved()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
 
@@ -111,7 +136,7 @@ public class ControlCaptureTests
     [Fact]
     public void AnAxisDeflectedWhenTheCaptureArmedMustCentreBeforeItCanBeCaptured()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         state.Axes[(Seat, (int)JoyAxis.LeftX)] = 0.9f;
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
@@ -131,7 +156,7 @@ public class ControlCaptureTests
     [Fact]
     public void APressedButtonBeatsAStickAThumbIsRestingOn()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
 
@@ -144,7 +169,7 @@ public class ControlCaptureTests
     [Fact]
     public void ADpadDirectionIsCapturedAsItsButtonAndAHatIsNotCapturedAtAll()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
 
@@ -162,7 +187,7 @@ public class ControlCaptureTests
     [Fact]
     public void ACapturedAxisResolvesTheBooleanAnActionDesignedAsAButtonExpects()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
         state.Axes[(Seat, (int)JoyAxis.TriggerRight)] = 1f;
@@ -183,7 +208,7 @@ public class ControlCaptureTests
     [Fact]
     public void EscapeAndPadBCancelRatherThanBinding()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
 
@@ -200,7 +225,7 @@ public class ControlCaptureTests
     [Fact]
     public void AnEscapeStillHeldFromOpeningTheCaptureDoesNotCancelIt()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         state.Keys.Add((int)Key.Escape);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
@@ -217,7 +242,7 @@ public class ControlCaptureTests
     [Fact]
     public void APadOnlySeatCapturesNoKeyAndNoMouseButtonButStillCapturesItsPad()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         var capture = new ControlCapture(Seat, readsKeyboard: false);
         capture.Arm(state);
 
@@ -232,7 +257,7 @@ public class ControlCaptureTests
     [Fact]
     public void AMouseButtonPastThePointersOwnIsCapturedOnTheOneMouse()
     {
-        var state = new FakeDevices();
+        var state = new FakeDevices(Seat);
         var capture = new ControlCapture(Seat, readsKeyboard: true);
         capture.Arm(state);
 
@@ -245,8 +270,18 @@ public class ControlCaptureTests
         Assert.Equal(ControlKind.Mouse, binding.Control.Kind);
     }
 
+    /// <summary>A seat's hardware under the contract the shipping <see cref="SeatDeviceState"/>
+    /// enforces: it answers for one joypad identity and returns false or zero for every other,
+    /// whatever that other device is doing. A fake answering for whichever pad it was asked about
+    /// would be more permissive than the production type, and a screen capturing through a state
+    /// that does not answer for its own identity would then pass here and read nothing at the
+    /// controls.</summary>
     private sealed class FakeDevices : IDeviceState
     {
+        private readonly DeviceId _seatPad;
+
+        public FakeDevices(DeviceId seatPad) => _seatPad = seatPad;
+
         public HashSet<int> Keys { get; } = new();
 
         public HashSet<int> Mouse { get; } = new();
@@ -260,15 +295,18 @@ public class ControlCaptureTests
         public bool IsKeyDown(DeviceId device, int keyCode) =>
             device == DeviceId.Keyboard && Keys.Contains(keyCode);
 
-        public bool IsButtonDown(DeviceId device, int button) => Buttons.Contains((device, button));
+        public bool IsButtonDown(DeviceId device, int button) =>
+            device == _seatPad && Buttons.Contains((device, button));
 
         public bool IsMouseButtonDown(DeviceId device, int button) =>
             device == DeviceId.Mouse && Mouse.Contains(button);
 
         public float AxisValue(DeviceId device, int axis) =>
-            Axes.TryGetValue((device, axis), out float value) ? value : 0f;
+            device == _seatPad && Axes.TryGetValue((device, axis), out float value) ? value : 0f;
 
         public HatDirection HatState(DeviceId device, int hat) =>
-            Hats.TryGetValue((device, hat), out var state) ? state : HatDirection.None;
+            device == _seatPad && Hats.TryGetValue((device, hat), out var state)
+                ? state
+                : HatDirection.None;
     }
 }
