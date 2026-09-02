@@ -87,7 +87,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Hollywood (C2)
 
-21. ☐ `BL-635` CM11: the stunt planes carry the objective marker their roster blocks author
+21. ☑ `BL-635` CM11: the stunt planes carry the objective marker their roster blocks author
 22. ◐ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs (diagnosed: render rate, not the animation; the session-wide fix is `BL-676`)
 23. ❌ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake (disproven: the ram is a contact the original does not have, because it backface-culls collision per polygon and both tiles here are single-sided; `BL-678`, with `BL-669` for the authored pose)
 24. ❌ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
@@ -444,7 +444,7 @@ wake trigger directly and asserts this invariant.
 
 # Wave C — Hollywood (C2)
 
-## C21 ☐ `BL-635` CM11: the stunt planes carry the objective marker their roster blocks author
+## C21 ☑ `BL-635` CM11: the stunt planes carry the objective marker their roster blocks author
 
 **Goal.** In CM11 (C2/M02) both stunt planes, `secfury_5` and `secfury_6`, carry the objective
 marker and the `MSG_OBJ_FOLLOW` label their roster blocks author.
@@ -474,6 +474,28 @@ flies CM11 from the objective that starts the follow and sees both markers.
 these aircraft invents data the mission does not author. Two aircraft share the key, so a marker
 on only one is not a pass. C21 edits `CampaignDirector.cs` and `ObjectiveSites.cs`, which B13 and
 B14 also edit; see the contention notes.
+
+**Landed.** `AiSkills.RosterObjectiveTarget`/`RosterHelpLabel` read slots 37/39;
+`RosterSpawnPlan.ObjectiveTarget`/`HelpLabel` carry them into the plan; `CampaignDirector`'s three
+spawn paths (the roster loop, a generator launch, a surface vehicle) book a flagged block's own
+name and label into a new `RosterObjectiveMarkers` map, gated on the flag rather than the label
+alone (C4/M05's `blakepeace_3_1`/`_2` author a non-key slot 39 string with the flag unset).
+`ObjectiveSites.CollectTargets` reads that map as a third source alongside `targets.zrd`'s own
+entries and the graph's `ADD_OBJECTIVE_TARGET` adds, filtered by the same completed
+`REMOVE_OBJECTIVE_TARGET` targets.zrd entries already are: CM11's own OBJECTIVE1/40/41/42/54 all
+remove `secfury_5`/`secfury_6` this way without ever adding them, which an unfiltered reading would
+have kept showing after the follow ends. `SiteFor`'s label priority is the graph's own
+`SET_HELP_LABEL`, then the roster block's slot 39, then `targets.zrd`'s. One position source had
+to be added past what the Approach anticipated: a roster aircraft with no chapter-gamez
+library-root copy under its own block name (`secfury_5`/`_6` included; C2's gamez carries no
+`fury`-named node at all) is never indexed on `AnimRuntime` by `RosterMarkers.Attach`, so the
+existing `Resolve`/`SiteAnchor` path can never find one; `ObjectiveSites.RosterAircraftPosition`
+reads the spawned `FlightController`'s own live `WorldPosition` instead. The census: 8 of 414
+shipped blocks author slot 37 = 1 (CM11's pair, C2/M05 `balmoral_1`, C3/M05
+`britbalmoral_1`/`_2`/`_3`, C5/M01 `autogyro_1`, C5/M04 `stihellhound_5_7`), and this fix reaches
+all eight through the same path, not CM11 alone.
+
+**Verified.** <pending orchestrator run>
 
 ## C22 ◐ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs
 

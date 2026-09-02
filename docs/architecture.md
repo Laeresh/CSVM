@@ -938,11 +938,14 @@ slot 6; `RosterRatingBiases`: slot 33 as `AiRatingBias` — wildcard `Matches`, 
 a third element accepted and preserved raw, never acted on; the spawn-facing `Roster*` readers for
 slots 0–5, 20, 21, 31, 32, 40 and 65, every one defensive over a short block; `RosterAce`: slot 67,
 the debrief's kill-crediting flag; `RosterInitHealth`: slot 7, null unless authored > 0;
-`RosterArmor`: slot 66, null unless authored >= 0 or the block is too short to carry it) and the
-thin per-mission roster loader (`LoadRoster`), plus the positional-header join that exposes disabled
-generator parameter blocks (`LoadGeneratorRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
-slot 6/33 census goldens in `AiTargetRankingTests`; the spawn slots in `CampaignRosterPlanTests`;
-the two durability gates and the absent-slot case in `RosterDurabilityOverrideTests`.
+`RosterArmor`: slot 66, null unless authored >= 0 or the block is too short to carry it;
+`RosterObjectiveTarget`: slot 37, a strict boolean; `RosterHelpLabel`: slot 39 raw, gated on
+`RosterObjectiveTarget` by the caller, not here) and the thin per-mission roster loader
+(`LoadRoster`), plus the positional-header join that exposes disabled generator parameter blocks
+(`LoadGeneratorRoster`). Units + shipped-constant goldens in `AiSkillsTests`; slot 6/33 census
+goldens in `AiTargetRankingTests`; the spawn slots in `CampaignRosterPlanTests`; the two durability
+gates and the absent-slot case in `RosterDurabilityOverrideTests`; slots 37/39 in
+`RosterObjectiveMarkerTests`.
 
 ## src/Mech3/AiVolumes.cs
 `AiVolume` (radius, upper, lower) and `AiVolumeSet` (activation, attack, return): the one shape
@@ -5899,32 +5902,42 @@ Format and decode: docs/formats/objectives.md.
 The flown campaign mission's objective sites, offered to each player's `TargetPool` as
 objective-flagged candidates: the original carries an objective as a companion flag on the Enemy
 cycle, so one site is drawn at a time and d-pad up steps between them. The set is `targets.zrd`'s
-own `objective` entries minus those a completed objective's `REMOVE_OBJECTIVE_TARGET` names, plus
-whatever `ADD_OBJECTIVE_TARGET` has added: `ObjectiveGraph.ObjectiveTargets` alone starts empty and
-a mission that only ever REMOVES its sites would offer nothing. One `ObjectiveSite` instance lives
-as long as the mission flags it, since the selection is held by source identity; its position and
-labels are re-read every frame, which is what tracks a site under a moving node. `PointFor` prefers
-the bare `TRAVELERS` point of the objective that edits a target over the world node of the same
-name, because C3/M01's village node stands at the world origin. A site on a world node is marked at
-`SiteAnchor`, the centre of the world bounding box of everything that node draws, which is what the
+own `objective` entries plus every roster block that authors the flag on itself
+(`CampaignDirector.RosterObjectiveMarkers`, aiv slot 37 — CM11's `secfury_5`/`secfury_6`, the
+shipped case), minus whichever of those a completed objective's `REMOVE_OBJECTIVE_TARGET` names,
+plus whatever `ADD_OBJECTIVE_TARGET` has added: `ObjectiveGraph.ObjectiveTargets` alone starts
+empty and a mission that only ever REMOVES its sites would offer nothing, CM11's own OBJECTIVE1
+included, which removes both stunt planes without ever adding them. One `ObjectiveSite` instance
+lives as long as the mission flags it, since the selection is held by source identity; its position
+and labels are re-read every frame, which is what tracks a site under a moving node. `PointFor`
+prefers the bare `TRAVELERS` point of the objective that edits a target over the world node of the
+same name, because C3/M01's village node stands at the world origin. Next, a roster marker reads
+its own spawned `FlightController`'s live `WorldPosition` (`RosterAircraftPosition`): a roster
+aircraft with no chapter-gamez library root under its own block name is never indexed on
+`AnimRuntime` (`RosterMarkers.Attach` only indexes one when that root exists), so `Resolve`/
+`SiteAnchor` below can never find it. Otherwise a site on a world node is marked at `SiteAnchor`,
+the centre of the world bounding box of everything that node draws, which is what the
 original publishes for a mission structure (`docs/org/targeting.md`); its own position is only the
 fallback for a node that draws nothing. C1/M05's balloon groups stand on the water with the balloon
 16 m above them and C2's `sghangar` stands at the world origin, so the node's position is not the
 site. A site carries the team of the node it stands on where that node is a mission structure, and
 neutral otherwise, which is the original's own split: a record naming a flagged node keeps that
 object's team, and a record that has to build its own builds it neutral. Almost every site is the
-second case, since a group is flagged on a child. A site is keyed by
+second case, since a group is flagged on a child (a roster-aircraft site is always this case, since
+`RosterAircraftPosition` resolves no `DestructibleRegistry` instance). A site is keyed by
 `ObjectiveTarget.Key`, and `ResolveTarget` walks a path one name at a time with `FindNodes` scoped
 to the node before, so `piratezep/rock_zeppelin` is the hull's own child and a bare name is the
 first global match; `targets.zrd` is looked up by the whole key first (a path-authored entry
-keys `parent/child` there too) and by the path's last node as the fallback, the help label by the
-whole key. The marker's verb, proper name and colour all come off that table through `Messages`
+keys `parent/child` there too) and by the path's last node as the fallback. The help label reads
+the graph's own `SET_HELP_LABEL` first, then the roster block's own slot 39, then `targets.zrd`'s.
+The marker's verb, proper name and colour all come off that table through `Messages`
 (`Zeppelin [Disable] -` over `Worker's Voyage` in red, `[Dock] -` over `Worker's Voyage Docking
 Hook` in blue), and a site whose key finds no entry falls back to its node name, which is what a
 table loaded from the wrong scope looks like. `GameSession` binds it through
 `FlightRoster.SetTargetObjectives`. Pinned by `campaign-objective-markers`,
-`campaign-objective-target-path`, `campaign-objective-labels` and `campaign-race-chain` (the
-hangar anchor, and C2/M03's race chain of per-zone objectives with a racer-death DEDG each).
+`campaign-objective-target-path`, `campaign-objective-labels`, `campaign-race-chain` (the
+hangar anchor, and C2/M03's race chain of per-zone objectives with a racer-death DEDG each) and
+`campaign-cm11-stunt-marker` (the roster-marker source, over CM11's own built roster and graph).
 
 ## src/Session/CampaignHumanField.cs
 Engine-free objective rules over every joined human, represented by `HumanState` position, captured
@@ -6073,7 +6086,9 @@ authored `netids` becomes `AiPilot.Patrol` on the chapter's net with its trailer
 volumes and the `min_ai_active_dist` floor, the signature maneuvers, the rating biases and the
 accent, builds a `deactivated` block inert, places a `taxiPath` block held on its path
 (`PlaceOnPath`: re-pinned through `FlightController.PlaceHeld` each tick, `Activate`d at the
-handoff speed), and logs one `campaign: roster '<name>'` line per block. A block whose
+handoff speed), books a block's own objective-target flag and label into `RosterObjectiveMarkers`
+(`RegisterObjectiveMarker`, aiv slots 37/39, also called from the generator-launch and surface
+paths), and logs one `campaign: roster '<name>'` line per block. A block whose
 `primary_target` is not spawned holds its course; a leader that dies later is `AiPilot`'s own
 fallback. `Roster` is the spawned map by block name; the player's block is skipped. A surface
 vehicle (`mode ship`) plans as a hull and goes to `RosterInputs.SpawnSurface` instead of the
@@ -6155,9 +6170,12 @@ plan (volumes under the floor, signature maneuvers, the gunner's rating biases a
 shared by the campaign placement and the generator launch so the two cannot drift; ⚠ it leaves an
 escorting block's `primary_target` alone, because there it names a leader and not a target. A
 plan's `InitHealth`/`Armor` (`AiSkills.RosterInitHealth`/`RosterArmor`, aiv slots 7/66) travel
-through `SpawnFor` onto the `AiSpawn` record; `AiFlightAssembler.Assemble` is what applies them.
-Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs` and `RosterDurabilityOverrideTests.cs`; the
-placement half is the `campaign-roster` suite, the generator half the `generator-roster-params` suite.
+through `SpawnFor` onto the `AiSpawn` record; `AiFlightAssembler.Assemble` is what applies them. A
+plan's `ObjectiveTarget`/`HelpLabel` (slots 37/39) are not applied here at all: `CampaignDirector`
+reads them straight off the plan at spawn to book its own `RosterObjectiveMarkers`.
+Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`, `RosterDurabilityOverrideTests.cs` and
+`RosterObjectiveMarkerTests.cs`; the placement half is the `campaign-roster` suite, the generator
+half the `generator-roster-params` suite.
 
 ## src/Session/ScriptedPathVehicles.cs
 One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored

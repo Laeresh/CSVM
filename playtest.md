@@ -941,6 +941,26 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   *Blocks:* nothing tracks the outcome; a marker that does read as resting on the water reopens
   `BL-656` against the entrance flight's own authored path rather than against `ObjectiveSites.cs`.
 
+### CM11 (C2/M02) · the stunt planes' objective marker
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:10
+```
+
+- `PT-117` `[Own]` **Both stunt planes carry the objective marker and its Follow label from
+  mission start** (`BL-635`). `secfury_5` and `secfury_6` author the roster's own objective flag
+  and label (aiv slots 37/39) rather than a `targets.zrd` entry, and each marker now reads off the
+  aircraft's own live position instead of a world node. Fly the mission's opening over the studio
+  lot with both stunt planes in view, then continue to wherever the studio gate objective
+  completes.
+  *Look for:*
+  - (a) both planes carry a marker labelled Follow as they perform their routine;
+  - (b) the marker moves with each plane rather than sitting fixed at a spawn point;
+  - (c) once the gate objective completes, both markers clear rather than lingering on a plane
+    that has flown off or been shot down.
+  *Blocks:* nothing tracks the outcome; a missing marker, a wrong label, or one that lingers past
+  the gate objective reopens `BL-635`.
+
 ### CM12 (C2/M01) · the patrol boats and the Spruce Goose
 
 ```powershell

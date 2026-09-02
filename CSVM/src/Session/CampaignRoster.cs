@@ -112,6 +112,17 @@ public sealed class RosterSpawnPlan
 
     public string? Title { get; init; }
 
+    /// <summary>The block's own <c>objectiveTarget</c> flag (slot 37): true when this block's
+    /// aircraft itself carries the mission's objective marker, gated together with
+    /// <see cref="HelpLabel"/> (docs/formats/ai-rosters.md "Field table").</summary>
+    public bool ObjectiveTarget { get; init; }
+
+    /// <summary>The block's own <c>helpLabel</c> (slot 39) raw: the MSG_OBJ_* key its marker
+    /// carries when <see cref="ObjectiveTarget"/> is set, or designer text otherwise (C4/M05's
+    /// <c>blakepeace_3_1</c>/<c>_2</c> author <c>"Blake Aviation"</c> with the flag unset) — gate
+    /// on <see cref="ObjectiveTarget"/> before treating this as a message key.</summary>
+    public string? HelpLabel { get; init; }
+
     /// <summary>The menu-chosen loadout laid over the stock table, the campaign wingman's only.</summary>
     public LoadoutChoice? Fit { get; init; }
 
@@ -284,6 +295,8 @@ public sealed class CampaignRosterPlan
                 TaxiPath = AiSkills.RosterTaxiPath(fields),
                 PrefEngageAlt = AiSkills.RosterPrefEngageAlt(fields),
                 Title = AiSkills.RosterTitle(fields),
+                ObjectiveTarget = AiSkills.RosterObjectiveTarget(fields),
+                HelpLabel = AiSkills.RosterHelpLabel(fields),
                 Fit = planeNode == wingmanNode ? wingmanFit : null,
                 Scheme = handover is { } paint
                          && name.Equals(AirframeHandover.WingmanName, StringComparison.OrdinalIgnoreCase)
