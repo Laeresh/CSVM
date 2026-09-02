@@ -813,6 +813,13 @@ loss. What the engine renders was decodable from the authored constants + oscill
   drive left 134, 237, 334, 446 and 562 stale rows behind, run after run, on every airframe after
   the first (`AnimRuntime.FreedNodeRows`). The count is deterministic and the throw is not, so a
   green suite is evidence of nothing here. Read the count.
+- **INSTR-39** — **A "did it move" distance is scored by the defect, so it passes hardest on the
+  worst behaviour.** `zeppelin-breakup` asked each gasbag to move more than 1 m from its rest pose,
+  which all six cleared while four of them were falling 1,228 m through the sea; a gasbag that stops
+  on the water moves 0.5 m and fails the same check. `campaign-balloon-death` asked its lifeboat to
+  end below where it started, which only sinking through the sea satisfies. Read the DISPATCH for
+  "did the event fire" and the RESTING POSITION for "did it end in the right place". A displacement
+  answers neither, and it rewards whichever fault travels furthest.
 
 ## SRC — sources and documents
 

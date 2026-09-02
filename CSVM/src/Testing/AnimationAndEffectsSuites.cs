@@ -238,11 +238,11 @@ internal static class AnimationAndEffectsSuites
             (float Flight, float EndY, string? Bounce, bool ByContact, MotionContactTier Tier,
                 int ColumnLandings, int SweepLandings, float Reported) Run(
                 uint mask, System.Func<GodotObject?, bool>? waterHook, AnimData? body = null,
-                float limit = 0f)
+                float limit = 0f, float dropFrom = DropHeight)
             {
                 var node = new Node3D { Name = "ground-contact-probe" };
                 root.AddChild(node);
-                node.GlobalPosition = new Vector3(0f, surfaceY + DropHeight, 0f);
+                node.GlobalPosition = new Vector3(0f, surfaceY + dropFrom, 0f);
 
                 uint maskWas = runtime.ContactMask;
                 var hookWas = runtime.SurfaceIsWater;
@@ -317,6 +317,22 @@ internal static class AnimationAndEffectsSuites
                 $"the column landing dispatches its branch too bounce={column.Bounce ?? "(none)"}");
             ctx.Check(column.ColumnLandings == 1 && column.SweepLandings == 0,
                 $"and is tallied apart from the sweep column={column.ColumnLandings} sweep={column.SweepLandings}");
+
+            // 1b2 — a body that is ALREADY under the surface. The original's column is a query at
+            // (x, z) that answers whatever the body's height, and `y + stepY < height` then lifts
+            // it back on; a query that only looks down answers nothing and the body keeps falling.
+            const float Sunk = -25f;
+            var below = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                new Vector3(0f, surfaceY + Sunk, 0f), new Vector3(0f, surfaceY + Sunk - 4096f, 0f),
+                CollisionLayers.World));
+            ctx.Same(0, below.Count,
+                $"nothing sits under the sunk start, so only the surface above it can answer hits={below.Count}");
+            var sunk = Run(CollisionLayers.World, _ => false, Body(flagged: false, complex: false),
+                dropFrom: Sunk);
+            ctx.Check(sunk.ByContact && sunk.ColumnLandings == 1,
+                $"the column lifts a body under the surface back onto it byContact={sunk.ByContact} column={sunk.ColumnLandings}");
+            ctx.Check(sunk.EndY >= surfaceY - 1f && sunk.EndY <= surfaceY + 2f,
+                $"and rests it there rather than {-Sunk:0} m down endY={sunk.EndY:0.00} surfaceY={surfaceY:0.00}");
 
             // 1c — NO_ALTITUDE is the opt-out, and it vetoes the COLUMN only. `gunshell` is its one
             // author install-wide, and it must keep falling through the world exactly as before.
