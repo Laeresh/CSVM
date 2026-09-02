@@ -121,11 +121,16 @@ public sealed class MenuInput
     // the pad alone. Three seats over two maps rather than one, because the pad-only twins and the
     // text-entry aliasing are both narrower readings of the same bindings.
     private readonly PlayerActions _keys;
-    private readonly PlayerActions _typingKeys;
     private readonly PlayerActions _padOnly;
+
+    private PlayerActions _typingKeys;
 
     // Whichever of the two keyboard seats TextEntry selected this tick.
     private PlayerActions _live;
+
+    // A rebind landed on Map, so the text-entry reading (a clone with the typeable keys dropped) is
+    // stale and is rebuilt on the next read rather than on every one.
+    private bool _typingStale;
 
     private bool _acceptPrev, _backPrev, _padBackPrev, _startPrev, _loadoutPrev, _presetsPrev;
     private bool _erasePrev;
@@ -143,6 +148,17 @@ public sealed class MenuInput
         _padOnly = new PlayerActions(map, false);
         _live = _keys;
     }
+
+    /// <summary>This seat's hardware as the binding model addresses it, refreshed by every
+    /// <see cref="Poll"/>. A rebinding screen captures through this rather than through the seat's
+    /// semantic commands, because a captured control has to carry this seat's own pad identity
+    /// (<see cref="SeatPads"/>) and a semantic command hides the device on purpose.</summary>
+    public IDeviceState Devices => _devices;
+
+    /// <summary>This seat's live menu keymap, the object a rebinding screen edits. Editing it moves
+    /// the bindings this poller reads on its next frame, since the readers hold the map itself; call
+    /// <see cref="RebindsApplied"/> afterwards so the text-entry reading is rebuilt too.</summary>
+    public ActionMap Map => _keys.Map;
 
     /// <summary>The single pad this player is bound to, or −1 when it has none or several
     /// (player 1's unclaimed set) — for logging and the join bookkeeping.</summary>
@@ -225,6 +241,12 @@ public sealed class MenuInput
 
         return map;
     }
+
+    /// <summary>Told after a rebinding screen edits <see cref="Map"/>, so the text-entry reading is
+    /// rebuilt from the new bindings. Without it a control rebound onto a letter would stay live
+    /// while a name is being typed, which is the collision <see cref="TypingMap"/> exists to stop.
+    /// </summary>
+    public void RebindsApplied() => _typingStale = true;
 
     /// <summary>Reads this player's devices and fills the result fields.</summary>
     public void Poll(float dt)
@@ -384,6 +406,12 @@ public sealed class MenuInput
     // taken from the live field because a caller sets it after construction.
     private void ReadDevices()
     {
+        if (_typingStale)
+        {
+            _typingKeys = new PlayerActions(TypingMap(_keys.Map), Keyboard);
+            _typingStale = false;
+        }
+
         _keys.ReadsKeyboard = Keyboard;
         _typingKeys.ReadsKeyboard = Keyboard;
         _devices.Refresh();

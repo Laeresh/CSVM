@@ -34,7 +34,7 @@ public class BindingStoreTests
         var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
         var map = profile.Map(InputContext.Flight);
         var space = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Space));
-        Assert.Equal(InputAction.FireGuns, map.Assign(InputAction.FireRockets, space));
+        Assert.Equal(new[] { InputAction.FireGuns }, map.Assign(InputAction.FireRockets, space));
         map.Clear(InputAction.Nitro);
 
         var loaded = BindingStore.Deserialize(BindingStore.Serialize(1, profile), Pad, readsKeyboard: true);

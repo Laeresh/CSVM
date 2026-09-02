@@ -93,6 +93,9 @@ diagonal on two actions, through `ActionMap.Add`, which binds without stealing. 
 the first thing that will: either `Assign` steals from every owner and reports a list rather than
 one action, or the screen refuses the edit and says which actions share the control. Do not leave it
 to be discovered at the controls.
+**Resolved by D31**, which took the first branch: `Assign` steals from every owner and returns them
+in enum order, `TryFindOwner` is replaced by `OwnersOf`, and there is no single-owner form left for a
+caller to reach for.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -182,7 +185,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — the screen
 
-31. ☐ The rebinding screen: capture, assign, steal-from-previous-owner
+31. ☑ The rebinding screen: capture, assign, steal-from-previous-owner
 32. ☐ Binding an axis or a hat to a digital action
 33. ☐ Close `BL-296` and `BL-398`, and hand `BL-357` its keys
 
@@ -814,7 +817,9 @@ action rule took a named list of deliberate sharers rather than only the numpad 
 ⚠ **A third alias class exists now**, created by the dolly change and recorded for D31 alongside the
 other two: `Axis(TriggerRight, +1, 0.5)` and `Axis(TriggerRight, +1, 0f)` are two `Binding` values,
 since deadzone is part of equality, but one control under `SameControl`, which ignores deadzone. Two
-camera actions therefore share a trigger, reachable through `Assign` and `TryFindOwner`.
+camera actions therefore share a trigger, reachable through `Assign` and `OwnersOf`.
+**D31 left this one alone deliberately.** The comparison is right as it stands, and the screen names
+both owners before taking the trigger from either, so the pair breaks only when a player asks for it.
 
 **Correction to this item's own Evidence.** Calling `GodotDeviceState`'s missing `Pads.For` gate a
 live determinism hole overstated it. A repo-wide grep shows no polling site has ever used that type,
@@ -1048,7 +1053,150 @@ event narration. The keypad debug-key layout is intentional and is not a mistake
 
 # Wave D — the screen
 
-## D31 ☐ The rebinding screen: capture, assign, steal-from-previous-owner
+## D31 ☑ The rebinding screen: capture, assign, steal-from-previous-owner
+
+**Landed.** Three new files and one screen. `CSVM/src/Bindings/ControlCapture.cs` is what a screen
+may capture and the release-first scan that turns a press into a `Binding`;
+`CSVM/src/Bindings/BindingLabels.cs` is what the screen prints, including the row that counts what
+it is not showing; `CSVM/src/UI/Menu/ControlsFeature.cs` is the shared engine-free
+`IMenuFeature` holding the seats, the row and slot cursors, the capture in progress and the steal it
+is about to perform. The built-in launchscreen draws it as `Screen.Controls`, reached from a new
+Options row and from `--menu=controls`. Three landed files changed: `ActionMap` (`Assign` returns a
+list and `TryFindOwner` becomes `OwnersOf`), `MenuInput` (its seat device state, its live map and a
+`RebindsApplied` that rebuilds the text-entry reading after a rebind), and the two host wirings that
+register the feature. Nothing else under `CSVM/src/Bindings` moved.
+
+**The menu framework (the first `<TODO>`).** The rebinding logic is a shared feature in
+`CSVM.UI.Menu` and the screen that offers it is the presentation's, which is the split
+`docs/menu-presentations.md` defines and `PlayerSetupFeature` and `HangarFeature` already follow. The
+alternatives were both worse: a screen built only inside `LaunchMenu` would have to be written a
+second time for Original, and a screen built only inside `OriginalShell` would need the decoded
+layout to exist before a player could rebind anything. Built-in draws it here; Original's
+`PF_B_CONTROLS` is a decoded, currently disabled door on its Preferences page and is where the same
+feature goes there, which this item does not build.
+
+⚠ **The capture deliberately does not come through `MenuCommands`, and that is the one place this
+screen steps outside the seam.** `IMenuInputSource` is device-neutral by contract, and a rebinding
+screen's whole subject is the raw control. Navigation still goes through the seat's semantic
+commands like every other screen; the capture reads the seat's own `IDeviceState`, newly exposed as
+`MenuInput.Devices`. A capture in progress swallows the whole frame, so the press being bound cannot
+also walk the cursor and confirm the row under it.
+
+**The four inherited defects, one decision each.**
+
+1. **`Assign` steals from the first owner only: fixed in `ActionMap`.** It now returns every action
+   that lost the control, in enum order, and `TryFindOwner` is replaced by `OwnersOf`, which returns
+   the same list. There is no single-owner form left, on purpose: the state is reachable rather than
+   theoretical (C21 puts each numpad snap-look diagonal on two actions and B15 puts d-pad up on
+   `TargetNextEnemy` and `CycleStuntTarget`), and any caller taking the first owner would report one
+   loss and perform two. The screen is the only thing that calls `Assign`, so the fix is invisible
+   to the sim.
+2. **The Hat/Button d-pad alias: correct as it stands, no change.** C21 closed it by authoring every
+   d-pad default as a `Button` and making `BindingStore` reject a hat token, so the two encodings
+   never coexist. `ControlCapture` completes that from the other end: it scans buttons and never
+   hats, so a capture cannot introduce the alias either. Widening `SameControl` would bake the
+   d-pad's button numbers into the comparison, which B15's traps forbid. A fact in `ActionMapTests`
+   pins the two as different controls so the decision cannot be quietly reversed.
+3. **The `pad:*` placeholder against a real GUID: handled in the screen, not in `SameControl`.**
+   Every seat in the game reads a set of pads through a placeholder identity today
+   (`DefaultBindings.AnyPad` in flight, `menu-seat`, `spectator-seat`), so a capture that read raw
+   hardware would produce a real GUID that the seat's own device state cannot resolve and that the
+   steal rule reads as a different control. `ControlCapture` therefore never invents a device
+   identity: it is constructed with the identity that context's bindings are already authored on and
+   stamps captured pad controls with it. C21's and B13's rule that a placeholder answers only for
+   itself is untouched, and `SameControl` is untouched.
+4. **The trigger-deadzone alias: correct as it stands, no change.** `SameControl` ignoring the
+   deadzone is A2's deliberate call, and it is what makes re-binding an already-bound axis adjust it
+   in place rather than stack a copy. B15's double-binding of `TriggerRight` survives because the
+   screen never calls `Assign` on it unasked. What the screen adds is that both owners are named:
+   binding that trigger to a third action reports "Camera Boost and Camera Dolly Out lost it", so
+   the player sees the pair before agreeing to break it. Fixing this in `SameControl` would have to
+   choose between breaking B15's pair and letting a player silently hold one trigger on three
+   actions, and neither is the screen's call to make behind their back.
+
+**The steal is shown, not performed.** A capture that lands on a free control binds it and says so.
+A capture that lands on a held control raises `Pending`, naming every action that would lose it, and
+moves nothing until the player confirms; Back leaves every action's controls exactly where they
+were. The commit message then names what actually happened, from `Assign`'s own return rather than
+from the preview.
+
+**No binding is hidden.** A row prints up to four controls, which is the longest row the shipped set
+holds, and appends "+N more" beyond that, so a player can always tell a two-binding action from a
+five-binding one. `NoShippedActionHidesABindingAtTheRowsOwnLimit` asserts nothing ships hidden. The
+slot cursor walks every binding an action holds, the empty slot past the last one adds a control, and
+L/Y drops the one under the cursor.
+
+⚠ **Nothing in the game reads a saved keymap yet, and this item does not change that.** `FlightController`,
+`SpectatorCamera` and `MenuInput` each build `BindingProfile.Defaults(...)` in their own constructor,
+and `BindingStore` is called from no polling site. So the Menu context is live (the screen edits
+`MenuInput.Map` itself, the object seat 0's readers hold, and a menu rebind is felt on the next
+frame) while Flight and Camera are edited and saved but not yet consumed. Closing that gap means a
+launch-time load with a `--det` gate, since DET-8 makes a scripted run a function of the committed
+tree and a user's saved keymap would break exactly that; it also means re-entering
+`FlightController`'s constructor, which the plan flags. It is a successor item's, and it is stated
+here rather than left to be found at the controls.
+
+**D32 is unaffected either way.** `ControlCapture` scans keys, pad buttons and mouse buttons and
+returns `Binding?`; adding an axis arm means adding a movement rule (a rest baseline plus a travel
+threshold, per its own trap about a drifting stick) and a fourth loop, with no change to
+`ControlsFeature`, which only ever sees a `Binding`.
+
+**Verified.** Three suites, 47 facts, each asserting a specific resolution.
+
+- `CSVM.Tests/ControlCaptureTests.cs`, 8 facts: a fresh key press captured as a keyboard binding, a
+  control held when the capture armed not captured until released and pressed again, a pad button
+  stamped with the seat's identity while another pad's button is ignored, a fully moved axis and a
+  reported hat captured as nothing at all, Escape and pad B cancelling rather than binding, an
+  Escape still held from opening the capture not cancelling it, a pad-only seat capturing no key and
+  no mouse button but still capturing its pad, and a mouse button past the pointer's own landing on
+  the one mouse.
+- `CSVM.Tests/ControlsFeatureTests.cs`, 17 facts: the free-control bind and its status line, the
+  held-control preview naming both owners of d-pad up while moving nothing, confirm taking it from
+  both, discard leaving both alone, a rebind on player 2 leaving player 1's map untouched, the slot
+  cursor replacing rather than adding, the empty slot adding rather than replacing, an unbind
+  touching no other action, a reset restoring the defaults in the very map the polling site holds,
+  one context's edit leaving the other two alone, the save being the player's own and running once
+  per change, two edited seats both written by one save (the dirty mark is per seat, or stepping the
+  Player row would drop the first seat's work), a captured pad control carrying that context's own
+  pad identity, a capture stopping to
+  name the owner rather than binding, no shipped row hiding a binding, a long row counting what it
+  hides, and `Discard` dropping the capture and the pending steal but not the keymap.
+- `CSVM.Tests/ActionMapTests.cs` gains 5 facts and now holds 22: a control on two actions taken from
+  both and both named, the loser list in enum order whatever order the map was filled, each loser
+  keeping its other bindings, the two deadzones of one trigger naming both owners, and a hat
+  direction and the d-pad button staying different controls. Three existing facts moved because
+  `Assign`'s return became a list, and one because `TryFindOwner` became `OwnersOf`; none of them
+  loosened.
+
+Run the three with
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~ControlsFeatureTests|FullyQualifiedName~ControlCaptureTests|FullyQualifiedName~ActionMapTests" -SkipEngine -SkipGoldens`.
+
+Complete `.\RunTests.ps1` in the item's worktree: PASS, exit 0, 3342 units, 233 engine suites, 18
+goldens hash-identical, 0 build warnings (172.5s total; the engine stage 105.9s against a 100.0s
+budget, which is awareness only). `menu-original-tracer` now walks into the Controls screen and back
+out of it, so the screen is constructed, drawn and left in engine rather than only in unit tests;
+that suite and `menu-launch-return` both gained the Options screen's fourth row.
+
+⚠ **What the automated evidence cannot reach.** No suite presses a physical key or pad button:
+`--det` implies `--no-pads` and every scripted run is unattended (B14's own limitation, `DET-2`,
+`DET-6`, `INSTR-14`). The capture suites drive a fake `IDeviceState`, which proves the rule and not
+the wiring from `MenuInput.Devices` to it. **Owed at the controls, and the author's to judge:**
+
+1. Open Options, then Controls, on a keyboard. Walk the list, rebind one flight action to a free
+   key, and read the status line. Does the screen say what it did in words you would use?
+2. Rebind an action onto `D-pad Up` with a pad connected. The screen must name both Target Next
+   Enemy and Cycle Stunt Target before taking it, and Back must leave both alone.
+3. Rebind a menu action (say Menu Loadout) and confirm the launchscreen answers the new control
+   immediately, without leaving the screen. This is the one context that is live today.
+4. In splitscreen, join a second pad at aircraft select, come back to Controls, step the Player row
+   to 2, and rebind something. Player 1's rows must not change when you step back, and player 2's
+   seat must show a pad-only device with the keyboard rows unreachable.
+5. Press P/X to restore defaults and confirm the rows come back to `docs/controls.md`'s table.
+6. The look and the fit: two-column rows at 14 visible, the "+N more" tail, and the footer's press
+   list. `ControlsLabelEms`, `ControlsValueEms`, `ControlsExtraWidth` and `ControlsWindow` are TUNE
+   and were measured against the longest shipped row, not judged at the controls.
+
+**Original approach (kept for reference).**
 
 **Goal.** The player opens a screen, picks an action, presses a control, and that control is now
 bound to it.
@@ -1056,7 +1204,10 @@ bound to it.
 **Evidence (confidence: lead-only, with a traced conflict rule).** The conflict semantics are
 decoded: reassigning a control clears it from its previous owner and two actions cannot share one
 (`docs/org/input.md`, `FUN_005371d0`, `FUN_00535fb0`). The screen itself has no precedent in our
-codebase. <TODO: name the menu framework the screen is built in, from `docs/architecture.md`.>
+codebase. The menu framework is the shared-feature-plus-presentation split of
+`docs/menu-presentations.md`: an engine-free `IMenuFeature` in `CSVM.UI.Menu` holding the model, and
+one screen per presentation offering it, built-in's here and Original's behind its decoded
+`PF_B_CONTROLS` door.
 
 **Approach.** A capture mode that reads the next control from any device, resolves it to a
 `Binding`, and assigns it. Show the steal explicitly (name the action losing the control) rather
@@ -1064,8 +1215,10 @@ than performing it silently.
 
 **Model recommendation.** high. UI plus conflict semantics plus per-player routing.
 
-**Verify.** <TODO: the manual check, in splitscreen: rebind for player 2 only and confirm player 1
-is unaffected.>
+**Verify.** In splitscreen, with a second pad joined at aircraft select: open Controls, step the
+Player row to 2, rebind one action, then step back to player 1 and confirm that action's row is
+unchanged. Player 2's seat is pad-only, so its keyboard rows must stay unreachable to a capture
+while remaining listed.
 
 **⚠ Traps.** The original ships four slots per action and shows the first two non-empty
 (`FUN_00449fc0`), which means its screen *hides* bindings. Ours holds a list, so the screen must

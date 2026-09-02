@@ -39,6 +39,8 @@ internal static class MenuSuiteHost
         var strings = UiStrings.TryLoad(dataRoot) ?? UiStrings.Empty;
         host.Features.Add(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), zrdr));
         host.Features.Add(new CampaignFeature(strings, PlanePickerRoster.AirframeNode));
+        // No save: a suite must never write over the keymap saved at this machine's controls.
+        host.Features.Add(new ControlsFeature());
     }
 
     /// <summary>A launchscreen over a bare host, for a suite that drives the screens and reads

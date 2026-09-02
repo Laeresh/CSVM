@@ -14,9 +14,12 @@ menu cursor up on a board, and flies forward in the free camera; `P` pauses in
 flight and opens the presets list on a menu screen; `Space` fires the guns in
 flight and confirms on a board.
 
-Per-player rebinding of these actions is being built. Until it ships the
-defaults below are the whole keymap; once it does, they are the starting point a
-new player gets and the set a reset returns to.
+These are the defaults, not the whole keymap. The launchscreen's Options screen
+carries a Controls door where each seat rebinds any action here, and the rows
+below are the starting point a new player gets and the set that screen's reset
+returns to. What the game reads while flying is still the shipped set: the menu
+context takes a rebind immediately, and the flight and free-camera contexts are
+edited and saved but not yet loaded at launch.
 
 Not every row here is a bindable action. The debug overlays and the lab panels
 (`F5`, `F10` through `F18`, `C`, `X`, and the viewer and weapon-lab keys) are

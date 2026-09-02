@@ -25,6 +25,7 @@ internal static class MenuOriginalSuites
     private static readonly MenuCommands Down = new() { MoveY = 1 };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
     private static readonly MenuCommands Right = new() { MoveX = 1 };
+    private static readonly MenuCommands Back = new() { Back = true };
 
     [Suite("menu-original-tracer",
         "Original Free Flight through the presentation boundary over the install's decoded layout: "
@@ -35,7 +36,8 @@ internal static class MenuOriginalSuites
         + "GAME OPTIONS door open the decoded page whose dropdown and checkbox take both choices "
         + "and whose CANCEL CHANGES drops them, a switch to Built-in "
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
-        + "Original fresh, Built-in's Options route steps both choices and emits the apply exit "
+        + "Original fresh, Built-in's Options route steps both choices, opens and leaves the "
+        + "rebinding screen behind its Controls door and emits the apply exit "
         + "carrying them, the force flag recovers "
         + "and a missing layout falls back with the request kept")]
     internal static void MenuOriginalTracer(TestContext ctx)
@@ -245,8 +247,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Up);
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow, $"Up from Free Flight wraps onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 3,
-            $"Accept opens the Options screen with its three rows ({menu.ShownScreen}, {menu.ShownRowCount})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 4,
+            $"Accept opens the Options screen with its four rows ({menu.ShownScreen}, {menu.ShownRowCount})");
         string before = menu.ShownRowText;
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText != before && menu.ShownRowText.StartsWith("Menu presentation: ", System.StringComparison.Ordinal),
@@ -258,6 +260,14 @@ internal static class MenuOriginalSuites
         ctx.Check(menu.ShownRowText != beforeGraphics && menu.ShownRowText.StartsWith("Graphics: ", System.StringComparison.Ordinal),
             $"Right steps the graphics row under it ({beforeGraphics} -> {menu.ShownRowText})");
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the third row is the Controls door ({menu.ShownRowText})");
+        Press(host, seat, Accept);
+        ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
+            $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
+        Press(host, seat, Back);
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowText == LaunchMenu.ControlsRow,
+            $"and Back returns to Options on the door it came from ({menu.ShownScreen}, {menu.ShownRowText})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
         ctx.Check(exits.Count == 2 && exits[1] is OptionsApplyExit,

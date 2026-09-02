@@ -124,7 +124,8 @@ internal static class MenuLaunchReturnSuites
             run.Show(MenuReturnDestination.TopLevel);
             WalkTo(run, menu, LaunchMenu.OptionsRow);
             run.Press(Accept);
-            // Past the presentation and graphics steppers onto the third row, the apply row.
+            // Past the two steppers and the Controls door onto the fourth row, the apply row.
+            run.Press(Down);
             run.Press(Down);
             run.Press(Down);
             run.Press(Accept);
