@@ -12,13 +12,15 @@ public readonly record struct BoardButtonRef(BoardButton Button, int Slot = 0)
 }
 
 /// <summary>
-/// The authored geometry of the six campaign screens, and the composer that turns a page plus a
-/// cursor into a <see cref="ComposedBoard"/>. Every coordinate here is the original's own, in the
-/// 800x600 dialog space: the five script-driven screens from <c>ASSETS\LAYOUT.CSV</c>
-/// (<c>docs/formats/campaign-screens.md</c>), the briefing from <c>Briefing.zrd</c>'s own chrome
-/// (<c>docs/formats/briefing.md</c>). The handful the shipped layout leaves as unresolved authoring
-/// macros were measured off the reference screenshots; <c>docs/org/campaign-board.md</c> says which
-/// and how.
+/// The fixed chrome of the campaign screens, and the composer that turns a page plus a cursor into
+/// a <see cref="ComposedBoard"/>. Every button, pane and text slot names its <c>LAYOUT.CSV</c>
+/// section and row and is read from the decoded layout through <see cref="CampaignLayout"/>, the
+/// value the board drew before the layout existed standing beside it as the fallback, so the
+/// screen composes the same whether the artifact is present or not. The briefing is the exception:
+/// its chrome is <c>Briefing.zrd</c>'s own (<c>docs/formats/briefing.md</c>) and no layout row
+/// describes it. A value marked pinned was measured off the reference screenshot and differs from
+/// its row by a pixel or a bitmap; <c>docs/org/campaign-board.md</c> names each with the row's
+/// value, and the pinned one is what draws.
 /// </summary>
 public static class CampaignBoards
 {
@@ -48,12 +50,15 @@ public static class CampaignBoards
     private const float ComboArrowHeight = 12f;
     private const float ScrollArrowHeight = 11f;
 
-    // Where the 410x300 messagebox art lands on the 800x600 board, which is centred, and the face
-    // and button width its own widgets take.
+    // Where the 410x300 messagebox art lands on the 800x600 board, which is centred: [@MessageBox@]
+    // gives the box its internal geometry and no screen position, and the reference screenshots put
+    // its edges here. The label's face and width, and its three-pixel drop into the plaque, are
+    // measured off the same shots.
     private const float DialogX = 195f;
     private const float DialogY = 150f;
     private const float DialogFont = 12f;
     private const float DialogButtonWidth = 62f;
+    private const float DialogLabelDrop = 3f;
 
     // MB_B_Icon.Png stacks three icons rather than a button's four states: the warning, and the two
     // the other message classes use.
@@ -70,6 +75,9 @@ public static class CampaignBoards
     private static readonly byte[] ComboPaper = { 200, 212, 230 };
     private static readonly byte[] ComboPicked = { 167, 185, 215 };
 
+    // The drop-down and scrollbar strips every campaign D row names, which [GLOBALVARS] also
+    // carries as GN_DROPDOWN / GN_DROPUP and FC_UP / FC_DOWN / FC_SLIDER; those macros are what
+    // ComposeCombo reads them through, since a CampaignCombo carries no row of its own.
     private static readonly BoardArt ComboDownArrow = Ui("GN_B_ListboxarrowSMALLdown.png", ArrowFrames);
     private static readonly BoardArt ComboUpArrow = Ui("GN_B_ListboxarrowSMALLup.png", ArrowFrames);
     private static readonly BoardArt ScrollUp = Ui("FC_B_ScrollUp.png", ArrowFrames);
@@ -77,6 +85,7 @@ public static class CampaignBoards
     private static readonly BoardArt ScrollThumb = Ui("FC_B_ScrollBar.png");
 
     private static readonly BoardArt PaperButton = Ui("SB_B_PaperButton.png", StripFrames);
+    private static readonly BoardArt FlightPaperButton = Ui("FC_B_PaperButton.Png", StripFrames);
     private static readonly BoardArt ReturnToCabinArt = Ui("GN_B_ReturntoCabin.png", StripFrames);
 
     // The results card's two tabs share one strip. Which of them draws over the card and which
@@ -89,8 +98,8 @@ public static class CampaignBoards
     private static readonly BoardArt CurrentMissionTab = Ui("SB_B_Currentmissiontab.png", StripFrames);
 
     // SB_B_NEXT, the book's forward page tab. The table of contents is a page of that same book, so
-    // it takes the tab at the same place; [@ScrapBook_TOC@] authors no arrow of its own, leaving
-    // that page with nothing a pad can turn forward by.
+    // it takes the tab at the same place off [@ScrapBook@]'s row; [@ScrapBook_TOC@] authors no arrow
+    // of its own, leaving that page with nothing a pad can turn forward by.
     private static readonly BoardArt MoreTab = Ui("SB_B_more_tab.png", StripFrames);
 
     // The briefing's plaque is the one that ships beside the mission art rather than with the
@@ -98,110 +107,171 @@ public static class CampaignBoards
     // fonts, which is the whole of its focus state.
     private static readonly BoardArt BriefButton = new(BoardArtLibrary.Rimage, "brief_button1");
 
-    // Where each screen's buttons sit, keyed by screen then by button and crew slot. Nothing here
-    // is derived: it is the layout row's own X,Y, or the measurement docs/org/campaign-board.md
-    // records where the shipped row leaves a macro unresolved.
+    // Where each screen's buttons sit, keyed by screen then by button and crew slot: the layout
+    // row each is read from, and the row's own value as the fallback. ⚠ CM_B_START keeps
+    // CM_B_Start.png where its row names GN_B_Continue.png (a pixel narrower), and the four paper
+    // plaques keep the measured 131 / 349 where their rows say 132 / 350; both are pinned so the
+    // board draws what the reference shows, and docs/org/campaign-board.md carries the discrepancy.
     private static readonly Dictionary<CampaignScreen, BoardSlot[]> Buttons = new()
     {
         [CampaignScreen.Roster] = new[]
         {
-            new BoardSlot(BoardButton.Continue, 0, Ui("CM_B_Start.png", StripFrames), 474, 293),
-            new BoardSlot(BoardButton.DeletePlayer, 0, Ui("CM_B_DeletePlayer.png", StripFrames), 193, 547),
-            new BoardSlot(BoardButton.CancelProfile, 0, Ui("CM_B_Cancel.png", StripFrames), 444, 547),
+            new BoardSlot(BoardButton.Continue, 0, CampaignLayout.RosterSection, "CM_B_START",
+                Ui("CM_B_Start.png", StripFrames), 474, 293, PinnedArt: true),
+            new BoardSlot(BoardButton.DeletePlayer, 0, CampaignLayout.RosterSection, "CM_B_DELETEPLAYER",
+                Ui("CM_B_DeletePlayer.png", StripFrames), 193, 547),
+            new BoardSlot(BoardButton.CancelProfile, 0, CampaignLayout.RosterSection, "CM_B_CANCEL",
+                Ui("CM_B_Cancel.png", StripFrames), 444, 547),
         },
         [CampaignScreen.Cabin] = new[]
         {
-            new BoardSlot(BoardButton.NextMission, 0, Ui("PC_B_NextMission.png", StripFrames), 87, 504),
-            new BoardSlot(BoardButton.PreviousMissions, 0, Ui("PC_B_PreviousMissions.png", StripFrames), 361, 539),
-            new BoardSlot(BoardButton.PlaneConstruction, 0, Ui("PC_B_PlaneConstruction.png", StripFrames), 452, 431),
-            new BoardSlot(BoardButton.ReturnToMainMenu, 0, Ui("PC_B_ReturnMainMenu.png", StripFrames), 593, 561),
+            new BoardSlot(BoardButton.NextMission, 0, CampaignLayout.CabinSection, "PC_B_NEWMISSION",
+                Ui("PC_B_NextMission.png", StripFrames), 87, 504),
+            new BoardSlot(BoardButton.PreviousMissions, 0, CampaignLayout.CabinSection, "PC_B_PREVIOUS",
+                Ui("PC_B_PreviousMissions.png", StripFrames), 361, 539),
+            new BoardSlot(BoardButton.PlaneConstruction, 0, CampaignLayout.CabinSection, "PC_B_PLANEX",
+                Ui("PC_B_PlaneConstruction.png", StripFrames), 452, 431),
+            new BoardSlot(BoardButton.ReturnToMainMenu, 0, CampaignLayout.CabinSection, "PC_B_RETURNMM",
+                Ui("PC_B_ReturnMainMenu.png", StripFrames), 593, 561),
         },
         [CampaignScreen.PreviousMissions] = new[]
         {
-            new BoardSlot(BoardButton.ViewMission, 0, PaperButton, 440, 505, true),
-            new BoardSlot(BoardButton.ReplayMission, 0, PaperButton, 596, 505, true),
-            new BoardSlot(BoardButton.ScrapbookNext, 0, MoreTab, 708, 465),
-            new BoardSlot(BoardButton.CurrentMission, 0, CurrentMissionTab, 558, 7, true),
-            new BoardSlot(BoardButton.ReturnToCabin, 0, ReturnToCabinArt, 593, 561),
+            new BoardSlot(BoardButton.ViewMission, 0, CampaignLayout.ContentsSection, "SBTOC_B_VIEW",
+                PaperButton, 440, 505, true),
+            new BoardSlot(BoardButton.ReplayMission, 0, CampaignLayout.ContentsSection, "SBTOC_B_REPLAY",
+                PaperButton, 596, 505, true),
+            new BoardSlot(BoardButton.ScrapbookNext, 0, CampaignLayout.BookSection, "SB_B_NEXT",
+                MoreTab, 708, 465),
+            new BoardSlot(BoardButton.CurrentMission, 0, CampaignLayout.ContentsSection, "SBTOC_B_CURRENT",
+                CurrentMissionTab, 558, 7, true),
+            new BoardSlot(BoardButton.ReturnToCabin, 0, CampaignLayout.ContentsSection, "SBTOC_B_RETURN",
+                ReturnToCabinArt, 593, 561),
         },
         [CampaignScreen.Scrapbook] = new[]
         {
-            new BoardSlot(BoardButton.ReplayMission, 0, PaperButton, 594, 505, true),
-            new BoardSlot(BoardButton.ViewAllMissions, 0, Ui("SB_B_ViewAllMissions.png", StripFrames), 375, 560),
-            new BoardSlot(BoardButton.ReturnToCabin, 0, ReturnToCabinArt, 593, 561),
-            new BoardSlot(BoardButton.ScrapbookPrev, 0, Ui("SB_B_back_tab.png", StripFrames), 0, 465),
-            new BoardSlot(BoardButton.ScrapbookNext, 0, MoreTab, 708, 465),
-            new BoardSlot(BoardButton.CurrentMission, 0, CurrentMissionTab, 558, 7, true),
-            new BoardSlot(BoardButton.BestTab, 0, StatCardTab, 432, 283, true),
-            new BoardSlot(BoardButton.MostTab, 0, StatCardTab, 594, 283, true),
+            new BoardSlot(BoardButton.ReplayMission, 0, CampaignLayout.BookSection, "SB_B_REPLAY",
+                PaperButton, 594, 505, true),
+            new BoardSlot(BoardButton.ViewAllMissions, 0, CampaignLayout.BookSection, "SB_B_TOC",
+                Ui("SB_B_ViewAllMissions.png", StripFrames), 375, 560),
+            new BoardSlot(BoardButton.ReturnToCabin, 0, CampaignLayout.BookSection, "SB_B_RETURNPC",
+                ReturnToCabinArt, 593, 561),
+            new BoardSlot(BoardButton.ScrapbookPrev, 0, CampaignLayout.BookSection, "SB_B_PREV",
+                Ui("SB_B_back_tab.png", StripFrames), 0, 465),
+            new BoardSlot(BoardButton.ScrapbookNext, 0, CampaignLayout.BookSection, "SB_B_NEXT",
+                MoreTab, 708, 465),
+            new BoardSlot(BoardButton.CurrentMission, 0, CampaignLayout.BookSection, "SB_B_CURRENT",
+                CurrentMissionTab, 558, 7, true),
+            new BoardSlot(BoardButton.BestTab, 0, CampaignLayout.BookSection, "SB_B_BEST",
+                StatCardTab, 432, 283, true),
+            new BoardSlot(BoardButton.MostTab, 0, CampaignLayout.BookSection, "SB_B_MOST",
+                StatCardTab, 594, 283, true),
         },
         [CampaignScreen.ScrapbookZoom] = new[]
         {
-            new BoardSlot(BoardButton.CloseZoom, 0, Ui("GN_B_Continue.png", StripFrames), 640, 519),
-            new BoardSlot(BoardButton.ExportScrap, 0, Ui("SB_B_ExportToDesktop.png", StripFrames), 593, 561),
+            new BoardSlot(BoardButton.CloseZoom, 0, CampaignLayout.ZoomSection, "SBZ_B_RETURN",
+                Ui("GN_B_Continue.png", StripFrames), 640, 519),
+            new BoardSlot(BoardButton.ExportScrap, 0, CampaignLayout.ZoomSection, "SBZ_B_EXPORT",
+                Ui("SB_B_ExportToDesktop.png", StripFrames), 593, 561),
         },
+
+        // Briefing.zrd's BUTTONS section, not a layout row: no section, so the fallback is the value.
         [CampaignScreen.Briefing] = new[]
         {
-            new BoardSlot(BoardButton.ReplayBriefing, 0, BriefButton, 197, 560, true),
-            new BoardSlot(BoardButton.ReturnToCabin, 0, BriefButton, 397, 560, true),
-            new BoardSlot(BoardButton.GoToFlightCheck, 0, BriefButton, 597, 560, true),
+            new BoardSlot(BoardButton.ReplayBriefing, 0, null, null, BriefButton, 197, 560, true),
+            new BoardSlot(BoardButton.ReturnToCabin, 0, null, null, BriefButton, 397, 560, true),
+            new BoardSlot(BoardButton.GoToFlightCheck, 0, null, null, BriefButton, 597, 560, true),
         },
         [CampaignScreen.FlightCheck] = new[]
         {
-            new BoardSlot(BoardButton.ChangePlane, 0, Ui("FC_B_PaperButton.png", StripFrames), 128, 131, true),
-            new BoardSlot(BoardButton.ChangeAmmo, 0, Ui("FC_B_PaperButton.png", StripFrames), 274, 131, true),
-            new BoardSlot(BoardButton.ChangePlane, 1, Ui("FC_B_PaperButton.png", StripFrames), 128, 349, true),
-            new BoardSlot(BoardButton.ChangeAmmo, 1, Ui("FC_B_PaperButton.png", StripFrames), 274, 349, true),
-            new BoardSlot(BoardButton.ReturnToBriefing, 0, Ui("FC_B_ReturnToBriefing.png", StripFrames), 341, 553),
-            new BoardSlot(BoardButton.FlyMission, 0, Ui("FC_B_FlyMission.png", StripFrames), 551, 553),
+            new BoardSlot(BoardButton.ChangePlane, 0, CampaignLayout.FlightCheckSection, "FC_B_CHANGEPLANE",
+                FlightPaperButton, 128, 131, true, PinnedY: true),
+            new BoardSlot(BoardButton.ChangeAmmo, 0, CampaignLayout.FlightCheckSection, "FC_B_CHANGEAMMO",
+                FlightPaperButton, 274, 131, true, PinnedY: true),
+            new BoardSlot(BoardButton.ChangePlane, 1, CampaignLayout.FlightCheckSection, "FC_B_CHANGEPLANEW",
+                FlightPaperButton, 128, 349, true, PinnedY: true),
+            new BoardSlot(BoardButton.ChangeAmmo, 1, CampaignLayout.FlightCheckSection, "FC_B_CHANGEAMMOW",
+                FlightPaperButton, 274, 349, true, PinnedY: true),
+            new BoardSlot(BoardButton.ReturnToBriefing, 0, CampaignLayout.FlightCheckSection, "FC_B_RETURNBRIEF",
+                Ui("FC_B_ReturnToBriefing.png", StripFrames), 341, 553),
+            new BoardSlot(BoardButton.FlyMission, 0, CampaignLayout.FlightCheckSection, "FC_B_FLYMISSION",
+                Ui("FC_B_FlyMission.png", StripFrames), 551, 553),
         },
         [CampaignScreen.Ammo] = new[]
         {
-            new BoardSlot(BoardButton.AcceptLoadout, 0, Ui("OL_B_AcceptLoadout.png", StripFrames), 341, 553),
-            new BoardSlot(BoardButton.CancelLoadout, 0, Ui("OL_B_CancelLoadout.png", StripFrames), 551, 553),
+            new BoardSlot(BoardButton.AcceptLoadout, 0, CampaignLayout.AmmoSection, "OL_B_ACCEPT",
+                Ui("OL_B_AcceptLoadout.png", StripFrames), 341, 553),
+            new BoardSlot(BoardButton.CancelLoadout, 0, CampaignLayout.AmmoSection, "OL_B_CANCEL",
+                Ui("OL_B_CancelLoadout.png", StripFrames), 551, 553),
         },
 
         // PS_B_SELLP and PS_B_SELLW are authored beside the two EXPORT buttons and are deliberately
         // absent: PLANESELECTION.SCRIPT deactivates both unconditionally at gui_create.
         [CampaignScreen.PlaneSelection] = new[]
         {
-            new BoardSlot(BoardButton.ExportPlane, 0, Ui("FC_B_PaperButton.Png", StripFrames), 560, 168, true),
-            new BoardSlot(BoardButton.ExportPlane, 1, Ui("FC_B_PaperButton.Png", StripFrames), 560, 385, true),
-            new BoardSlot(BoardButton.AcceptSelections, 0, Ui("PS_B_AcceptSelections.png", StripFrames), 341, 553),
-            new BoardSlot(BoardButton.CancelSelections, 0, Ui("PS_B_CancelSelections.png", StripFrames), 551, 553),
+            new BoardSlot(BoardButton.ExportPlane, 0, CampaignLayout.PlaneSelectionSection, "PS_B_EXPORTP",
+                FlightPaperButton, 560, 168, true),
+            new BoardSlot(BoardButton.ExportPlane, 1, CampaignLayout.PlaneSelectionSection, "PS_B_EXPORTw",
+                FlightPaperButton, 560, 385, true),
+            new BoardSlot(BoardButton.AcceptSelections, 0, CampaignLayout.PlaneSelectionSection, "PS_B_ACCEPT",
+                Ui("PS_B_AcceptSelections.png", StripFrames), 341, 553),
+            new BoardSlot(BoardButton.CancelSelections, 0, CampaignLayout.PlaneSelectionSection, "PS_B_CANCEL",
+                Ui("PS_B_CancelSelections.png", StripFrames), 551, 553),
         },
     };
 
-    // The screen chrome that is neither the page's own art nor a button: the profile screen's
-    // dialog panel and the briefing's objectives parchment, both at their authored positions.
-    private static readonly Dictionary<CampaignScreen, BoardPicture[]> Chrome = new()
+    // The screen chrome that is neither the page's own art nor a button: each screen's background
+    // pane and the profile screen's dialog panel, at their rows' positions.
+    private static readonly Dictionary<CampaignScreen, BoardPane[]> Chrome = new()
     {
-        // The profile dialog stands over the main menu it opened from: the title mark over the
-        // flag movie. The movie is not decoded and its shipped still is a placeholder, so the mark
-        // stands alone and the ground behind it stays plain.
+        // The profile dialog stands over the main menu it opened from: [@MainMenu@]'s title mark
+        // over the flag movie. The movie is not decoded and its shipped still is a placeholder, so
+        // the mark stands alone and the ground behind it stays plain.
         [CampaignScreen.Roster] = new[]
         {
-            new BoardPicture(Ui("MM_Logo.png"), 134, 13),
-            new BoardPicture(Ui("CM_BackGround.png"), 193, 251),
+            new BoardPane(CampaignLayout.MainMenuSection, "MM_LOGO", Ui("MM_Logo.png"), 134, 13),
+            new BoardPane(CampaignLayout.RosterSection, "CM_BACKGROUND", Ui("CM_BackGround.png"), 193, 251),
         },
-        [CampaignScreen.PreviousMissions] = new[] { new BoardPicture(Ui("SB_BackgroundTOC.jpg"), 0, 0) },
-        [CampaignScreen.Scrapbook] = new[] { new BoardPicture(Ui("SB_BackGround.jpg"), 0, 0) },
-        [CampaignScreen.FlightCheck] = new[] { new BoardPicture(Ui("FC_BackGround.jpg"), 0, 0) },
-        [CampaignScreen.Ammo] = new[] { new BoardPicture(Ui("OL_BackGround.jpg"), 0, 0) },
-        [CampaignScreen.PlaneSelection] = new[] { new BoardPicture(Ui("PS_BackGround.jpg"), 0, 0) },
+        [CampaignScreen.PreviousMissions] = new[]
+        {
+            new BoardPane(CampaignLayout.ContentsSection, "SBTOC_BACKGROUND", Ui("SB_BackgroundTOC.jpg"), 0, 0),
+        },
+        [CampaignScreen.Scrapbook] = new[]
+        {
+            new BoardPane(CampaignLayout.BookSection, "SB_BACKGROUND", Ui("SB_BackGround.jpg"), 0, 0),
+        },
+        [CampaignScreen.FlightCheck] = new[]
+        {
+            new BoardPane(CampaignLayout.FlightCheckSection, "FC_BACKGROUND", Ui("FC_BackGround.jpg"), 0, 0),
+        },
+        [CampaignScreen.Ammo] = new[]
+        {
+            new BoardPane(CampaignLayout.AmmoSection, "OL_BACKGROUND", Ui("OL_BackGround.jpg"), 0, 0),
+        },
+        [CampaignScreen.PlaneSelection] = new[]
+        {
+            new BoardPane(CampaignLayout.PlaneSelectionSection, "PS_BACKGROUND", Ui("PS_BackGround.jpg"), 0, 0),
+        },
     };
 
     /// <summary>The board for a page with the cursor on <paramref name="focusedRow"/>. A row the
     /// page names a button for becomes that button's plaque; every other row lists down the
     /// screen's own authored text slots. <paramref name="pressed"/> draws the focused plaque in
-    /// its depressed frame for the frames a confirm is held.</summary>
+    /// its depressed frame for the frames a confirm is held. <paramref name="layout"/> is where
+    /// the chrome is read from, the fallback when a caller has none.</summary>
     public static ComposedBoard For(
         ICampaignPage page, int focusedRow, bool pressed = false, string detail = "",
-        CampaignModal? modal = null)
+        CampaignModal? modal = null, CampaignLayout? layout = null)
     {
-        var backdrop = Chrome.TryGetValue(page.Screen, out var chrome)
-            ? chrome
-            : Array.Empty<BoardPicture>();
+        layout ??= CampaignLayout.Fallback;
+        var backdrop = new List<BoardPicture>();
+        if (Chrome.TryGetValue(page.Screen, out var chrome))
+        {
+            foreach (var pane in chrome)
+            {
+                backdrop.Add(pane.Resolve(layout));
+            }
+        }
+
         var lines = new List<BoardLine>(page.Captions);
         var plaques = new List<BoardPlaque>();
         var fills = new List<BoardFill>(page.Fills);
@@ -213,7 +283,7 @@ public static class CampaignBoards
         {
             if (page.Combo(row) is { } combo)
             {
-                ComposeCombo(combo, row == focusedRow, fills, pictures, lines, overlays);
+                ComposeCombo(combo, row == focusedRow, layout, fills, pictures, lines, overlays);
                 continue;
             }
 
@@ -221,28 +291,29 @@ public static class CampaignBoards
             if (reference.Button != BoardButton.None && Find(slots, reference) is { } slot)
             {
                 bool focused = row == focusedRow;
+                var (art, x, y) = slot.Resolve(layout);
                 plaques.Add(new BoardPlaque(
-                    slot.Art, slot.X, slot.Y, row,
-                    ComposedBoard.PlaqueFrame(slot.Art.Frames, focused, focused && pressed),
+                    art, x, y, row,
+                    ComposedBoard.PlaqueFrame(art.Frames, focused, focused && pressed),
                     slot.Labelled ? page.RowText(row) : string.Empty,
                     ComposedBoard.PlaqueInk(focused, focused && pressed)));
                 continue;
             }
 
-            var (x, y, width) = TextSlot(page.Screen, listIndex++);
+            var (tx, ty, width) = TextSlot(page.Screen, listIndex++, layout);
             lines.Add(new BoardLine(
-                page.RowText(row), x, y, width, ListFont,
+                page.RowText(row), tx, ty, width, ListFont,
                 row == focusedRow ? BoardInk.RowFocused : BoardInk.Row, row));
         }
 
-        if (detail.Length > 0 && DetailSlot(page.Screen) is { } note)
+        if (detail.Length > 0 && DetailSlot(page.Screen, layout) is { } note)
         {
             lines.Add(new BoardLine(detail, note.X, note.Y, note.Width, ListFont, BoardInk.Detail));
         }
 
         if (modal != null)
         {
-            overlays.Add(Dialog(modal));
+            overlays.Add(Dialog(modal, layout));
         }
 
         return new ComposedBoard(
@@ -250,22 +321,27 @@ public static class CampaignBoards
     }
 
     /// <summary>The messagebox as its own panel, centred on the board. Every position inside it is
-    /// <c>[@MessageBox@]</c>'s own, offset by where the 410x300 art lands: the layout gives the box
-    /// its internal geometry and no screen position, and the reference screenshots put its edges at
-    /// the centred one (<c>OriginalScreenshots/Campaign Flight Check Change Plane Export
-    /// dialog.png</c>).</summary>
-    public static BoardPanel Dialog(CampaignModal modal)
+    /// <c>[@MessageBox@]</c>'s own row (<c>MB_P_BACKGROUND</c>, <c>MB_P_ICON</c>,
+    /// <c>MB_B_CENTER</c>, <c>MB_T_MESSAGE</c>), offset by where the 410x300 art lands; the
+    /// reference (<c>OriginalScreenshots/Campaign Flight Check Change Plane Export dialog.png</c>)
+    /// puts its edges at the centred one.</summary>
+    public static BoardPanel Dialog(CampaignModal modal, CampaignLayout? layout = null)
     {
+        layout ??= CampaignLayout.Fallback;
+        const string section = CampaignLayout.DialogSection;
+        var (iconX, iconY) = layout.At(section, "MB_P_ICON", 36f, 65f);
+        var (buttonX, buttonY) = layout.At(section, "MB_B_CENTER", 174f, 254f);
+        var (messageX, messageY, messageWidth) = layout.Box(section, "MB_T_MESSAGE", 94f, 70f, 282f);
         var pictures = new List<BoardPicture>
         {
-            new(Ui("MB_Background.png"), DialogX, DialogY),
-            new(Ui("MB_B_Icon.Png", DialogIconFrames), DialogX + 36f, DialogY + 65f),
-            new(Ui("MB_B_Buttons.Png", StripFrames), DialogX + 174f, DialogY + 254f, 2),
+            new(layout.Art(section, "MB_P_BACKGROUND", Ui("MB_Background.png")), DialogX, DialogY),
+            new(layout.Art(section, "MB_P_ICON", Ui("MB_B_Icon.Png", DialogIconFrames)), DialogX + iconX, DialogY + iconY),
+            new(layout.Art(section, "MB_B_CENTER", Ui("MB_B_Buttons.Png", StripFrames)), DialogX + buttonX, DialogY + buttonY, 2),
         };
         var lines = new List<BoardLine>
         {
-            new(modal.Message, DialogX + 94f, DialogY + 70f, 282f, DialogFont, BoardInk.Dialog),
-            new(modal.Button, DialogX + 174f, DialogY + 257f, DialogButtonWidth, DialogFont,
+            new(modal.Message, DialogX + messageX, DialogY + messageY, messageWidth, DialogFont, BoardInk.Dialog),
+            new(modal.Button, DialogX + buttonX, DialogY + buttonY + DialogLabelDrop, DialogButtonWidth, DialogFont,
                 BoardInk.LabelActivate, Justify: BoardJustify.Center),
         };
         return new BoardPanel(Array.Empty<BoardFill>(), pictures, lines);
@@ -275,10 +351,11 @@ public static class CampaignBoards
     /// that has to draw that button itself rather than let it become a plaque: the results card's
     /// unselected tab, which the original puts behind the card. Null when the screen has no such
     /// button.</summary>
-    public static (BoardArt Art, float X, float Y)? SlotOf(CampaignScreen screen, BoardButton button)
+    public static (BoardArt Art, float X, float Y)? SlotOf(
+        CampaignScreen screen, BoardButton button, CampaignLayout? layout = null)
     {
         var slots = Buttons.TryGetValue(screen, out var found) ? found : Array.Empty<BoardSlot>();
-        return Find(slots, new BoardButtonRef(button)) is { } slot ? (slot.Art, slot.X, slot.Y) : null;
+        return Find(slots, new BoardButtonRef(button))?.Resolve(layout ?? CampaignLayout.Fallback);
     }
 
     /// <summary>The briefing parchment's objectives list, at the <c>LIST</c> widget's own authored
@@ -290,40 +367,68 @@ public static class CampaignBoards
 
     /// <summary>The authored panel a screen writes the focused row's description into, or null
     /// where the screen has none and the shell's own hint line has to carry it. The ammo screen has
-    /// one, its description column, which is what that widget is for.</summary>
-    public static (float X, float Y, float Width)? DetailSlot(CampaignScreen screen) => screen switch
+    /// one, <c>OL_S_AMMODESC</c>. ⚠ Its y is pinned at the measured 92 where the row says 96, so
+    /// the row supplies the column's x and width alone.</summary>
+    public static (float X, float Y, float Width)? DetailSlot(CampaignScreen screen, CampaignLayout? layout = null)
     {
-        CampaignScreen.Ammo => (566f, 92f, 172f),
-        _ => null,
-    };
+        if (screen != CampaignScreen.Ammo)
+        {
+            return null;
+        }
+
+        var (x, _, width) = (layout ?? CampaignLayout.Fallback).Box(
+            CampaignLayout.AmmoSection, "OL_S_AMMODESC", 566f, 96f, 172f);
+        return (x, 92f, width);
+    }
 
     /// <summary>Where the <paramref name="index"/>-th list row of a screen sits, as x, y and wrap
     /// width in authored pixels. Each screen's own text widgets, walked in their authored order;
     /// a screen with more rows than widgets keeps stepping by the last one's line height.</summary>
-    public static (float X, float Y, float Width) TextSlot(CampaignScreen screen, int index) =>
-        screen switch
+    public static (float X, float Y, float Width) TextSlot(
+        CampaignScreen screen, int index, CampaignLayout? layout = null)
+    {
+        layout ??= CampaignLayout.Fallback;
+        switch (screen)
         {
-            // The name field, then the roster listbox's seven visible rows.
-            CampaignScreen.Roster => index == 0
-                ? (243f, 297f, 221f)
-                : (245f, 356f + ((index - 1) * 20f), 305f),
-            // One heading per crew slot, at the PILOT and WINGMAN widgets.
-            CampaignScreen.FlightCheck => (138f, index == 0 ? 102f : 320f, 400f),
+            // The name field, then the roster listbox's visible rows at its own item height.
+            case CampaignScreen.Roster when index == 0:
+                return layout.Box(CampaignLayout.RosterSection, "CM_E_NAME", 243f, 297f, 221f);
+            case CampaignScreen.Roster:
+            {
+                var (x, y, width) = layout.Box(CampaignLayout.RosterSection, "CM_L_PLAYERS", 245f, 356f, 305f);
+                int pitch = layout.Int(CampaignLayout.RosterSection, "CM_L_PLAYERS", "ItemHeight", 20);
+                return (x, y + ((index - 1) * pitch), width);
+            }
+
+            // One heading per crew slot, at the PILOT and WINGMAN widgets. The row carries the
+            // heading and the aircraft's name in one line where the layout splits them over two
+            // widgets, so the wrap width is the pair's and not FC_T_PILOT's own 94.
+            case CampaignScreen.FlightCheck:
+            {
+                var (x, y) = layout.At(
+                    CampaignLayout.FlightCheckSection, index == 0 ? "FC_T_PILOT" : "FC_T_WINGMAN",
+                    138f, index == 0 ? 102f : 320f);
+                return (x, y, 400f);
+            }
 
             // ⚠ The ammo screen has no entry here, and must not regain one: its picks are drop-down
             // fields and its captions are the page's own lines, so no row of it reaches this table.
-            _ => (20f, 20f + (index * 20f), 400f),
-        };
+            default:
+                return (20f, 20f + (index * 20f), 400f);
+        }
+    }
 
     // One drop-down: the field goes into the screen's own layers, and an open list goes into an
     // overlay instead, because it hangs across whatever the screen draws under it.
     private static void ComposeCombo(
-        CampaignCombo combo, bool focused, List<BoardFill> fills, List<BoardPicture> pictures,
-        List<BoardLine> lines, List<BoardPanel> overlays)
+        CampaignCombo combo, bool focused, CampaignLayout layout, List<BoardFill> fills,
+        List<BoardPicture> pictures, List<BoardLine> lines, List<BoardPanel> overlays)
     {
         fills.AddRange(Box(combo.X, combo.Y, combo.Width, ComboFieldHeight, ComboPaper));
         pictures.Add(new BoardPicture(
-            combo.Open ? ComboUpArrow : ComboDownArrow,
+            combo.Open
+                ? layout.GlobalArt("GN_DROPUP", ComboUpArrow)
+                : layout.GlobalArt("GN_DROPDOWN", ComboDownArrow),
             combo.X + combo.Width - ComboArrowWidth,
             combo.Y + ((ComboFieldHeight - ComboArrowHeight) / 2f),
             ArrowNormal));
@@ -331,13 +436,13 @@ public static class CampaignBoards
             focused ? BoardInk.RowFocused : BoardInk.Row));
         if (combo.Open)
         {
-            overlays.Add(OpenList(combo));
+            overlays.Add(OpenList(combo, layout));
         }
     }
 
     // The open list under its field: the box, the picked row's bar, the visible entries, and the
     // scrollbar when the entries outrun the window.
-    private static BoardPanel OpenList(CampaignCombo combo)
+    private static BoardPanel OpenList(CampaignCombo combo, CampaignLayout layout)
     {
         float top = combo.Y + ComboFieldHeight;
         float height = combo.Visible * combo.RowHeight;
@@ -366,9 +471,10 @@ public static class CampaignBoards
         if (combo.Scrolls)
         {
             float bar = combo.X + combo.Width - ComboArrowWidth;
-            pictures.Add(new BoardPicture(ScrollUp, bar, top, ArrowNormal));
-            pictures.Add(new BoardPicture(ScrollDown, bar, top + height - ScrollArrowHeight, ArrowNormal));
-            pictures.Add(new BoardPicture(ScrollThumb, bar, ThumbY(combo, top, height)));
+            pictures.Add(new BoardPicture(layout.GlobalArt("FC_UP", ScrollUp), bar, top, ArrowNormal));
+            pictures.Add(new BoardPicture(
+                layout.GlobalArt("FC_DOWN", ScrollDown), bar, top + height - ScrollArrowHeight, ArrowNormal));
+            pictures.Add(new BoardPicture(layout.GlobalArt("FC_SLIDER", ScrollThumb), bar, ThumbY(combo, top, height)));
         }
 
         return new BoardPanel(fills, pictures, lines);
@@ -413,8 +519,34 @@ public static class CampaignBoards
         return null;
     }
 
-    // Labelled says the layout row carries a ResID, so the plaque's words are drawn over blank
-    // art. Every screen-specific button bakes its own words into its strip instead.
+    // One button: the layout row it is read from (null for the briefing's zrd-authored plaques)
+    // and the fallback beside it. Labelled says the row carries a ResID, so the plaque's words are
+    // drawn over blank art; every screen-specific button bakes its own words into its strip
+    // instead. PinnedY and PinnedArt keep the measured value over the row's.
     private readonly record struct BoardSlot(
-        BoardButton Button, int Slot, BoardArt Art, float X, float Y, bool Labelled = false);
+        BoardButton Button, int Slot, string? Section, string? Key, BoardArt Art, float X, float Y,
+        bool Labelled = false, bool PinnedY = false, bool PinnedArt = false)
+    {
+        public (BoardArt Art, float X, float Y) Resolve(CampaignLayout layout)
+        {
+            if (Section == null || Key == null)
+            {
+                return (Art, X, Y);
+            }
+
+            var art = PinnedArt ? Art : layout.Art(Section, Key, Art);
+            var (x, y) = layout.At(Section, Key, X, Y);
+            return (art, x, PinnedY ? Y : y);
+        }
+    }
+
+    // One fixed pane of a screen's chrome, read the same way a button is.
+    private readonly record struct BoardPane(string Section, string Key, BoardArt Art, float X, float Y)
+    {
+        public BoardPicture Resolve(CampaignLayout layout)
+        {
+            var (x, y) = layout.At(Section, Key, X, Y);
+            return new BoardPicture(layout.Art(Section, Key, Art), x, y);
+        }
+    }
 }

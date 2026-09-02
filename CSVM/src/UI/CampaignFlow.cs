@@ -183,6 +183,10 @@ public sealed class CampaignFlow
     // The screens entered, innermost last. Never empty: popping the last one ends the flow.
     private readonly List<CampaignScreen> _stack = new() { CampaignScreen.Roster };
 
+    // The layout the boards read their chrome through, resolved from the data root on first use
+    // unless a caller handed one in (a unit test's fixture, a parity suite's fallback).
+    private CampaignLayout? _layout;
+
     /// <summary>Opens a flow over <paramref name="store"/> through a private feature, reading its
     /// roster once. <paramref name="dataRoot"/> may be null; a page's art then simply loads none.
     /// <paramref name="planes"/> is the hangar's build store the flight check and ammo screens
@@ -190,16 +194,19 @@ public sealed class CampaignFlow
     /// hangar build exists and each plane reads as its airframe's stock fit, which is also what
     /// the two profile-seeded starters are.</summary>
     public CampaignFlow(CampaignProfileStore store, UiStrings strings, string? dataRoot = null,
-        CustomPlaneStore? planes = null, StockLoadouts? stock = null)
+        CustomPlaneStore? planes = null, StockLoadouts? stock = null, CampaignLayout? layout = null)
         : this(Opened(new CampaignFeature(strings, PlanePickerRoster.AirframeNode), store, planes, stock, dataRoot))
     {
+        _layout = layout;
     }
 
     /// <summary>Opens a flow over the shared <paramref name="feature"/>, which must already be
     /// open on a store; the launchscreen builds every flow this way, over the host's one
-    /// feature.</summary>
-    public CampaignFlow(CampaignFeature feature)
+    /// feature. <paramref name="layout"/> is the chrome source a caller pins (a suite composing
+    /// the same screens twice); null reads the data root's own.</summary>
+    public CampaignFlow(CampaignFeature feature, CampaignLayout? layout = null)
     {
+        _layout = layout;
         Feature = feature ?? throw new ArgumentNullException(nameof(feature));
         if (!feature.IsOpen)
         {
@@ -238,6 +245,11 @@ public sealed class CampaignFlow
 
     /// <summary>The folder <c>extracted/</c> sits in, or null when the caller has none.</summary>
     public string? DataRoot => Feature.DataRoot;
+
+    /// <summary>The decoded menu layout the pages and <see cref="CampaignBoards"/> read the fixed
+    /// chrome through: the one under <see cref="DataRoot"/>, or the fallback with no root. Built-in's
+    /// alone; the feature carries no presentation geometry.</summary>
+    public CampaignLayout Layout => _layout ??= CampaignLayout.For(DataRoot);
 
     /// <summary>Every stored profile's name, re-read by <see cref="RefreshRoster"/>.</summary>
     public IReadOnlyList<string> Roster => Feature.Roster;

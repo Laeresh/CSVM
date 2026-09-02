@@ -7,8 +7,9 @@ plaques. This page holds the one decision every one of them inherits, which libr
 came from, and what is deliberately not reproduced yet.
 
 The code is `CSVM/src/UI/BoardFit.cs` (the mapping), `ComposedBoard.cs` (what a board is made of),
-`CampaignBoards.cs` (the authored geometry and the composer) and `ComposedBoardView.cs` (the
-renderer). The decodes the coordinates come from are
+`CampaignBoards.cs` (the fixed chrome and the composer), `CampaignLayout.cs` (the boards' read of
+the decoded layout) and `ComposedBoardView.cs` (the renderer). The decodes the coordinates come
+from are [`formats/menu-layout.md`](../formats/menu-layout.md),
 [`formats/campaign-screens.md`](../formats/campaign-screens.md) and
 [`formats/briefing.md`](../formats/briefing.md).
 
@@ -68,8 +69,17 @@ be invented.
 
 Three sources, and a reader should know which one is under any given number.
 
-- **`ASSETS\LAYOUT.CSV`**, for the five script-driven screens. Each widget row carries its art path
-  and its X,Y directly, and those are used verbatim.
+- **`ASSETS\LAYOUT.CSV`**, for the script-driven screens, read at run time from the decoded
+  `extracted/rof/menu_layout.json` through `CampaignLayout`. Every button, pane and text slot in
+  `CampaignBoards` and in the pages names its section and row, and each read carries the value the
+  board drew before the layout existed as its fallback: a row that is present answers, a missing
+  file, section, row or column answers with the fallback whole (never one coordinate from the row
+  and one from the fallback). A data root with no `menu_layout.json`, or an unreadable one, logs
+  one `ui` warning naming the reason and every board draws from its fallbacks, which are the
+  shipped rows' own values, so the screens are the same either way. The macros the shipped file
+  resolves per section (`<GX>`, `<Y>`, `<V2>`, `<V3>`, `<V4>`) reach the boards already
+  substituted. Where the row's value and the reference screenshot disagree, the board **pins** the
+  measured value and reads the rest of the row; the table below names each.
 - **`Briefing.zrd`'s `BRIEFINGDIALOG`**, for the briefing's parchment (`POSITION [0, 295]`), its
   title (`[35, 315]`), its list (`[35, 335]`, `WORDWRAP [185, 240]`, `SPACING [5]`) and its three
   plaques (`[197, 560]`, `[397, 560]`, `[597, 560]`). ⚠ The list's four numbers are a flow rule and
@@ -78,27 +88,36 @@ Three sources, and a reader should know which one is under any given number.
   than one 30 px slot would be, so a fixed pitch draws them over each other (`BL-490`). How tall an
   entry drew is a font metric, which is why `BoardNote` carries the widget and the renderer
   measures it.
-- **Measured off the reference screenshots and confirmed against the layout's own per-section
-  definitions**, for the handful of rows whose values reach the layout through `<V<n>>`-style
-  macros. Each was found by matching the button's own bitmap against the screenshot at every
+- **Measured off the reference screenshots**, for the values whose row disagrees with the
+  screenshot. Each was found by matching the element's own bitmap against the screenshot at every
   offset and taking the best fit; the X the match returned agreed with the layout row's own X in
-  every case, which is what makes the Y trustworthy. The macros are defined in the file
-  (`[@FlightCheck@]` gives `GX,553`, `V2,132`, `V3,350`, `V4,FC_B_PaperButton.Png`;
-  `[@Campaign@]` gives `Y,547`), and the decoded values agree with the measurements to within a
-  pixel, so the two methods cross-validate (`docs/formats/menu-layout.md`).
+  every case, which is what makes the Y trustworthy. Most measurements agree with the decoded rows
+  exactly (`<GX>` at 553 with `FC_B_ReturnToBriefing.png` matched at the row's own `x = 341`,
+  `<Y>` at 547 with `CM_B_DeletePlayer.png` at `x = 193`, `<V4>` as `FC_B_PaperButton.Png`, the
+  only paper button whose 117-pixel width matches the drawn plaque), so those read from the row.
+  The ones that differ are pinned: the code keeps the measured value, reads the rest of the row,
+  and the discrepancy is recorded here rather than in the layout.
 
-| Macro | Screen | Measured | How |
-|---|---|---|---|
-| `<GX>` | flight check, ammo selection | `y = 553` | matched `FC_B_ReturnToBriefing.png` at `x = 341` (layout's own X) |
-| `<Y>` | profile | `y = 547` | matched `CM_B_DeletePlayer.png` at `x = 193` |
-| `<V2>` / `<V3>` | flight check | `y = 131` / `y = 349` | the CHANGE AMMO plaque's edges in `Campaign Flight Check.png` |
-| `<V4>` | flight check | `FC_B_PaperButton.png` | the only paper button whose 117-pixel width matches the drawn plaque |
+| Row | Screen | Row says | Pinned at | How |
+|---|---|---|---|---|
+| `CM_B_START` art | profile | `GN_B_Continue.png` | `CM_B_Start.png` | the drawn CONTINUE plaque is the wider strip, matched in `Campaign Player Profile.png` |
+| `FC_B_CHANGEPLANE` / `FC_B_CHANGEAMMO` y (`<V2>`) | flight check | `132` | `131` | the CHANGE AMMO plaque's edges in `Campaign Flight Check.png` |
+| `FC_B_CHANGEPLANEW` / `FC_B_CHANGEAMMOW` y (`<V3>`) | flight check | `350` | `349` | the same match on the wingman block |
+| `FC_T_TITLE` / `OL_T_TITLE` x and justification | flight check, ammo selection | `132`, centred in 190 | `138`, left | the heading's first glyph in both reference shots; the row's y and width read |
+| `OL_S_AMMODESC` y | ammo selection | `96` | `92` | the description column's first line in `Campaign Ammo Selection.png`; the row's x and width read |
+| `FC_T_GUNLISTW` / `FC_T_ROCKETLISTW` y | flight check | `400` | `399` | the wingman tables keep the pilot pair's 17-pixel drop under their heading row |
+| `PS_T_WINGPLANE` y | plane selection | `323` | `324` | the wingman's plane line keeps the pilot line's `106 + 218`, the drop every other widget of the pair has |
+
+`PS_T_TITLE` is read at its row's `x = 132` and drawn left-justified where the row says centred;
+only the justification is pinned there.
 
 Two positions are chosen rather than decoded, and both are marked as such in the code. The cabin's
-memento window (`179, 330`, 73x84) is the block each `PC_P_HANGAR*.JPG` keys out for it, and the
-picture inside it is always the campaign's opening keepsake because choosing one is not shipped.
-The profile screen's title mark (`MM_Logo.png` at `134, 13`) is matched off `Campaign Player
-Profile.png`.
+memento window (`179, 330`, 73x84) is the block each `PC_P_HANGAR*.JPG` keys out for it, where the
+layout's `PC_MEMENTO` pane sits at `169, 325` with no size, and the picture inside it is always the
+campaign's opening keepsake because choosing one is not shipped. The profile screen's title mark
+(`MM_Logo.png`) is `[@MainMenu@]`'s own `MM_LOGO` row, read from the layout; what is chosen is
+standing it over the profile dialog at all, matched off `Campaign Player Profile.png`, since the
+flag movie it belongs over is not decoded.
 
 ## The flight check's objectives note
 
@@ -122,7 +141,8 @@ The previous-missions screen's list is `SBTOC_L_TOCList`, and an `L` row's colum
 `Slider,UpArrow,DownArrow,ScriptPointer,X,Y,Z,Width,Height,TotalDisplayed,TabOrder`. It reads
 `420,140,0,325,80,4`: the widget's top left is `420,140`, a row is 325 wide and **80 tall**
 (`Height` on an `L` row is one row's, not the widget's), and four of them are on screen at once.
-Everything inside a row is `SCRAPBOOK_TOC.SCRIPT`'s own list sub-script, which the layout says
+The page reads the box, the row height, the window and the three scroll bitmaps off that row once
+when it is built. Everything inside a row is `SCRAPBOOK_TOC.SCRIPT`'s own list sub-script, which the layout says
 nothing about:
 
 - The aircraft silhouette is `assets\graphics\fc_planeicons.png` at `location.x + 2`, one frame per

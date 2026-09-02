@@ -7,6 +7,8 @@ G1=DISABLED,0xFFBCBCBC
 G2=ACTIVE,0xFFFFFFFF
 G3=ROLLOVER,0xFFFFFFFF
 G4=DEPRESSED,0xFF000000
+G5=GN_DROPDOWN,PM_B_DropDown.png
+G6=FC_SLIDER,PM_B_Slider.png
 
 [@MainMenu@]
 MM_LOGO=P,PM_Logo.png,100,10,0,1,0,1,0
@@ -21,6 +23,38 @@ MM_B_QUIT=B,PM_B_Quit.png,280,530,0,0,,0x1000,0,,,,,,
 [@FlightCheck@]
 V1=PLAQUE,PM_B_Paper.png
 FC_B_CHANGEPLANE=B,<PLAQUE>,120,130,0,IDS_PM_CHANGEPLANE,PlaneSelection,0x1000,1,,,,,,,0xFF767676,0xFF133D77,0xFF374D6B,0xFF000000
+
+;The campaign boards' sections: the keys the boards read, on invented lines and art, so a moved
+;row shows in the composed board and a pinned value shows by staying put.
+[@Campaign@]
+V1=Y,540
+CM_BACKGROUND=P,PM_Panel.png,180,240,0,1,0,1,0
+CM_B_START=B,PM_B_Continue.png,470,290,0,0,,0x1000,0,,,,,,
+CM_B_DELETEPLAYER=B,PM_B_Delete.png,200,<Y>,0,0,,0x1000,0,,,,,,
+CM_B_CANCEL=B,PM_B_Cancel.png,450,<Y>,0,0,,0x1000,0,,,,,,
+CM_E_NAME=E,FONT_PM_EDIT,240,300,0,230,22,16,0xFFFF0000,,0xFFEF0010
+CM_L_PLAYERS=L,PM_B_Slider.png,PM_B_Up.png,PM_B_Down.png,250,360,0,300,24,5
+
+[@MessageBox@]
+MB_P_BACKGROUND=P,PM_Box.png,0,0,0,1,0,1,0
+MB_P_ICON=P,PM_Icons.png,30,60,0,3,0,1,0
+MB_T_MESSAGE=T,0,90,72,0,280,140,0xFFFFFFFF,0
+MB_B_CENTER=B,PM_B_Small.png,170,250,0,IDS_OK,,0x1000,0,,,,,,,<DISABLED>,<ACTIVE>,<ROLLOVER>,<DEPRESSED>
+
+[@ScrapBook_TOC@]
+SBTOC_T_CHARACTER=T,0,420,60,0,310,24,0xFF000000,1
+SBTOC_T_MISSIONS=T,0,420,110,0,310,24,0xFF000000,3
+SBTOC_L_TOCList=L,PM_B_Slider.png,PM_B_Up.png,PM_B_Down.png,410,150,0,330,60,5
+
+[@OrdinanceLayout@]
+OL_S_AMMODESC=S,0xFF554C67,0xFFE6DABE,PM_B_Slider.png,PM_B_Up.png,PM_B_Down.png,560,100,0,180,190,,0xFF000000
+OL_D_AMMO0=D,PM_B_Slider.png,PM_B_Up.png,PM_B_Down.png,PM_B_DropUp.png,PM_B_DropDown.png,130,125,0,150,16,6
+
+[@ScrapbookZoom@]
+SBZ_T_TITLEB=T,0,24,55,0,670,82,0xFF000000,1
+SBZ_T_CAPTIONB=T,0,0,0,0,700,550,0xFF000000,0
+SBZ_T_TEXTB=T,0,20,140,0,674,373,0xFF000000,4
+SBZ_T_TITLEC=T,0,27,45,0,660,72,0xFF000000,1
 
 ;The Instant Action setup screen: the same widget keys and row types the shipped section carries,
 ;on invented lines. The two enemy pages share the right column's lines, as the shipped file's do.

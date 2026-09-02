@@ -51,6 +51,20 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     // decode): a pylon resolving to this row carries nothing, whether or not the pylon itself exists.
     private const int NoOrdnance = 11;
 
+    // The layout section every fixed element of this screen is read from, and the screen's own
+    // title, FC_T_TITLE. ⚠ The title's x is pinned at the measured 138 and drawn left-justified
+    // where the row says 132, centred in its 190; the row supplies y and width.
+    private const string Section = CampaignLayout.FlightCheckSection;
+    private const float TitleX = 138f;
+    private const float TitleY = 36f;
+    private const float TitleWidth = 190f;
+    private const float TitleFont = 20f;
+
+    // FC_T_MISSION, the mission's long name under the title.
+    private const float MissionX = 136f;
+    private const float MissionY = 70f;
+    private const float MissionWidth = 400f;
+
     // The objectives note, at the authored positions of fc_t_objtitle and fc_t_objectives. The
     // title's face is the langui row's own [AB19I] tag: 19 pixels, italic.
     private const float ObjectivesTitleX = 558f;
@@ -67,10 +81,19 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     private const float ObjectivesFont = 16f;
 
     // The two weapon tables' headings, at the authored y of fc_t_guntitlep and fc_t_guntitlew, and
-    // the drop from a heading to its list, which is that widget pair's own 17 pixels.
+    // the drop from a heading to its list. ⚠ The drop is pinned at the pilot pair's 17 for both
+    // crews: FC_T_GUNLISTW and FC_T_ROCKETLISTW are authored at 400, one pixel lower.
+    private const float GunColumnX = 240f;
+    private const float RocketColumnX = 394f;
+    private const float TableWidth = 150f;
     private const int PilotTableY = 167;
     private const int WingmanTableY = 382;
     private const int TableGap = 17;
+
+    // FC_P_PILOTPLANE and FC_P_WINGPLANE, the crew silhouettes.
+    private const float SilhouetteX = 144f;
+    private const float PilotSilhouetteY = 190f;
+    private const float WingmanSilhouetteY = 408f;
 
     // The weapon lists' face. The columns are 150 authored pixels wide and the ammunition names
     // carry their maker, so a row only fits at ten.
@@ -140,20 +163,22 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     public override int RowCount => Rows().Count;
 
     /// <summary>Each crew slot's aircraft silhouette, the airframe's own frame of the icon sheet,
-    /// at the authored positions of <c>fc_p_pilotplane</c> and <c>fc_p_wingplane</c>.</summary>
+    /// at <c>FC_P_PILOTPLANE</c> and <c>FC_P_WINGPLANE</c>.</summary>
     public override IReadOnlyList<BoardPicture> Pictures
     {
         get
         {
+            var layout = Flow.Layout;
+            var fallback = new BoardArt(BoardArtLibrary.Ui, "FC_PlaneIcons.Png", SilhouetteFrames);
             var pictures = new List<BoardPicture>(2);
             var rows = Rows();
             foreach (var row in rows)
             {
                 if (row.Silhouette is { } airframe)
                 {
-                    pictures.Add(new BoardPicture(
-                        new BoardArt(BoardArtLibrary.Ui, "FC_PlaneIcons.Png", SilhouetteFrames),
-                        144, row.Slot == 0 ? 190 : 408, airframe));
+                    string key = row.Slot == 0 ? "FC_P_PILOTPLANE" : "FC_P_WINGPLANE";
+                    var (x, y) = layout.At(Section, key, SilhouetteX, row.Slot == 0 ? PilotSilhouetteY : WingmanSilhouetteY);
+                    pictures.Add(new BoardPicture(layout.Art(Section, key, fallback), x, y, airframe));
                 }
             }
 
@@ -163,27 +188,33 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     /// <summary>The title and mission-name widgets, the objectives note down the right of the
     /// board, each slot's GUNS and ROCKETS headings, and the focused aircraft's weapon block under
-    /// its own pair, which is what those two tables are.</summary>
+    /// its own pair, which is what those two tables are. Each is at its own <c>FC_T_*</c> row.</summary>
     public override IReadOnlyList<BoardLine> Captions
     {
         get
         {
+            var layout = Flow.Layout;
             var rows = Rows();
+            var (_, titleY, titleWidth) = layout.Box(Section, "FC_T_TITLE", TitleX, TitleY, TitleWidth);
+            var (missionX, missionY, missionWidth) = layout.Box(Section, "FC_T_MISSION", MissionX, MissionY, MissionWidth);
             var lines = new List<BoardLine>
             {
-                new(Heading, 138, 36, 190, 20, BoardInk.Heading),
-                new(Title, 136, 70, 400, 15, BoardInk.Detail),
+                new(Heading, TitleX, titleY, titleWidth, TitleFont, BoardInk.Heading),
+                new(Title, missionX, missionY, missionWidth, 15, BoardInk.Detail),
             };
 
             if (ObjectivesNote() is { Length: > 0 } note)
             {
+                var (objTitleX, objTitleY, objTitleWidth) = layout.Box(
+                    Section, "FC_T_OBJTITLE", ObjectivesTitleX, ObjectivesTitleY, ObjectivesTitleWidth);
+                var (objX, objY, objWidth) = layout.Box(
+                    Section, "FC_T_OBJECTIVES", ObjectivesX, ObjectivesY, ObjectivesWidth);
                 lines.Add(new BoardLine(
                     Flow.Strings.Text(1014, "Objectives").Trim(),
-                    ObjectivesTitleX, ObjectivesTitleY, ObjectivesTitleWidth, ObjectivesTitleFont,
+                    objTitleX, objTitleY, objTitleWidth, ObjectivesTitleFont,
                     BoardInk.Detail, Italic: true));
                 lines.Add(new BoardLine(
-                    note, ObjectivesX, ObjectivesY, ObjectivesWidth, ObjectivesFont,
-                    BoardInk.Detail, Italic: true));
+                    note, objX, objY, objWidth, ObjectivesFont, BoardInk.Detail, Italic: true));
             }
 
             foreach (var row in rows)
@@ -193,11 +224,14 @@ public sealed class CampaignFlightCheckPage : CampaignPage
                     continue;
                 }
 
-                float y = row.Slot == 0 ? PilotTableY : WingmanTableY;
-                lines.Add(new BoardLine("GUNS", 240, y, 150, 12, BoardInk.Heading));
-                lines.Add(new BoardLine("ROCKETS", 394, y, 150, 12, BoardInk.Heading));
-                lines.Add(new BoardLine(row.Guns, 240, y + TableGap, 150, TableFont, BoardInk.Row));
-                lines.Add(new BoardLine(row.Rockets, 394, y + TableGap, 150, TableFont, BoardInk.Row));
+                string crew = row.Slot == 0 ? "P" : "W";
+                float fallbackY = row.Slot == 0 ? PilotTableY : WingmanTableY;
+                var (gunX, gunY, gunWidth) = layout.Box(Section, "FC_T_GUNTITLE" + crew, GunColumnX, fallbackY, TableWidth);
+                var (rocketX, rocketY, rocketWidth) = layout.Box(Section, "FC_T_ROCKETTITLE" + crew, RocketColumnX, fallbackY, TableWidth);
+                lines.Add(new BoardLine("GUNS", gunX, gunY, gunWidth, 12, BoardInk.Heading));
+                lines.Add(new BoardLine("ROCKETS", rocketX, rocketY, rocketWidth, 12, BoardInk.Heading));
+                lines.Add(new BoardLine(row.Guns, gunX, gunY + TableGap, gunWidth, TableFont, BoardInk.Row));
+                lines.Add(new BoardLine(row.Rockets, rocketX, rocketY + TableGap, rocketWidth, TableFont, BoardInk.Row));
             }
 
             return lines;

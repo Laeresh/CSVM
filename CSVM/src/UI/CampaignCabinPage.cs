@@ -24,8 +24,9 @@ public sealed class CampaignCabinPage : CampaignPage
     // original's own gate) is a boolean with no accompanying message string.
     private const string FinishedReason = "Every mission in the campaign has been completed.";
 
-    // The memento's window inside PC_Mementopicframe, measured as the block each hangar
-    // photograph keys out for it. The frame's own border covers the edges either way.
+    // The memento's window inside PC_Mementopicframe, chosen rather than read: it is the block each
+    // hangar photograph keys out for it, where the layout's PC_MEMENTO pane sits at 169,325 with
+    // no size. The frame's own border covers the edges either way.
     private const int MementoX = 179;
     private const int MementoY = 330;
     private const int MementoWidth = 73;
@@ -70,15 +71,19 @@ public sealed class CampaignCabinPage : CampaignPage
 
     /// <summary>The scene as the original layers it: the pilot's own aircraft first, then the
     /// painted cabin over it, whose colour-keyed hole is where the window is. The photograph ships
-    /// as JPG, which the shell's own loader reads.</summary>
+    /// as JPG, which the shell's own loader reads. The panes' positions and the two fixed bitmaps
+    /// are <c>[@PassengerCabin@]</c>'s <c>PC_PLANE</c>, <c>PC_BACKGROUND</c> and <c>PC_FRAME</c>.</summary>
     public override IReadOnlyList<BoardPicture> Pictures
     {
         get
         {
-            var pictures = new List<BoardPicture>(2);
+            var layout = Flow.Layout;
+            const string section = CampaignLayout.CabinSection;
+            var pictures = new List<BoardPicture>(4);
             if (PlaneArtName() is { } photo)
             {
-                pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, photo), 46, 69));
+                var (planeX, planeY) = layout.At(section, "PC_PLANE", 46, 69);
+                pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, photo), planeX, planeY));
             }
 
             // The memento, over the hangar photograph's own keyed-out block for it and under the
@@ -86,11 +91,15 @@ public sealed class CampaignCabinPage : CampaignPage
             pictures.Add(new BoardPicture(
                 new BoardArt(BoardArtLibrary.Rimage, "ms_p_initialpinup1"),
                 MementoX, MementoY, 0, false, 1f, 0f, MementoWidth, MementoHeight));
-            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, "PC_BackGround.png"), 0, 0));
+            var (backX, backY) = layout.At(section, "PC_BACKGROUND", 0, 0);
+            pictures.Add(new BoardPicture(
+                layout.Art(section, "PC_BACKGROUND", new BoardArt(BoardArtLibrary.Ui, "PC_BackGround.png")), backX, backY));
 
             // The frame is painted over the painting rather than seen through its hole, which is
             // the one element the layout puts above the background.
-            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, "PC_Mementopicframe.png"), 169, 317));
+            var (frameX, frameY) = layout.At(section, "PC_FRAME", 169, 317);
+            pictures.Add(new BoardPicture(
+                layout.Art(section, "PC_FRAME", new BoardArt(BoardArtLibrary.Ui, "PC_Mementopicframe.png")), frameX, frameY));
             return pictures;
         }
     }

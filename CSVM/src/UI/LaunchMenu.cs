@@ -276,6 +276,12 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// cached, so a store set after the build applies to the next door press.</summary>
     public CampaignProfileStore? CampaignProfiles { get; set; }
 
+    /// <summary>The layout every campaign flow opened after this reads its fixed chrome through,
+    /// or null for the data root's own decoded layout. A suite sets <see cref="CampaignLayout.Fallback"/>
+    /// to compose the same screens with the hardcoded chrome and compare; the game never sets
+    /// it.</summary>
+    public CampaignLayout? CampaignLayoutOverride { get; set; }
+
     /// <summary>The hangar flow while one is open, or null. Read-only, for the same reason
     /// <see cref="Campaign"/> is: its screens are driven through it, not around it.</summary>
     public HangarFlow? Hangar => _hangar;
@@ -1649,7 +1655,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private CampaignFlow NewCampaignFlow(CampaignProfileStore store)
     {
         _campaignFeature.Open(store, CustomPlaneStore.UserPlanes(), Fits, _dataRoot);
-        return new CampaignFlow(_campaignFeature);
+        return new CampaignFlow(_campaignFeature, CampaignLayoutOverride);
     }
 
     // The campaign's screens sit behind a flow rather than behind the screen enum, so --menu=
@@ -2353,9 +2359,9 @@ public sealed partial class LaunchMenu : CanvasLayer
         string detail = _error.Length > 0 ? _error : page.Detail(row);
         // A block of text is the screen's own to place; the one-line hint band takes only what a
         // screen has nowhere else to put, which is every short description and every refusal.
-        bool banded = CampaignBoards.DetailSlot(page.Screen) == null && !detail.Contains('\n');
+        bool banded = CampaignBoards.DetailSlot(page.Screen, flow.Layout) == null && !detail.Contains('\n');
         _boardRoot.Show(
-            CampaignBoards.For(page, row, _pressFrames > 0, detail, flow.Modal),
+            CampaignBoards.For(page, row, _pressFrames > 0, detail, flow.Modal, flow.Layout),
             BoardPalette.For(page.Screen),
             banded ? detail : string.Empty,
             page.Footer);

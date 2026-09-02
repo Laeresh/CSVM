@@ -166,7 +166,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — Campaign convergence
 
 31. ☑ Separate campaign feature state from presentation descriptions
-32. ☐ Migrate campaign fixed chrome to decoded layouts without visual change
+32. ☑ Migrate campaign fixed chrome to decoded layouts without visual change
 33. ☐ Complete Original campaign interaction, briefing and audio integration
 
 ### Wave E — Completion and release gate
@@ -1157,7 +1157,7 @@ paragraph states.
 **⚠ Traps.** Do not replace one presentation-shaped `ICampaignPage` with a universal screen schema.
 Not every current stack operation necessarily belongs in shared feature state; classify it first.
 
-## D32 ☐ Migrate campaign fixed chrome to decoded layouts without visual change
+## D32 ☑ Migrate campaign fixed chrome to decoded layouts without visual change
 
 **Goal.** Existing campaign screens source fixed chrome, geometry, artwork roles and widget metadata
 from decoded layouts while retaining their current dynamic content and appearance.
@@ -1179,10 +1179,70 @@ scratch-profile aids and `menu-campaign-journey` are the regression baseline, wi
 
 **Model recommendation.** high — mechanical breadth under a strict pixel-regression constraint.
 
-**Verify.** Raw-pixel hashes for all existing campaign aids at the pinned reference resolution,
-plus 4:3/wide/tall fit checks and malformed/missing decoded-layout cases. <TODO: decide whether any
-known nondeterministic campaign aid needs a masked or semantic comparison after reading
-`docs/verification.md`.>
+What was built: `CampaignLayout` (`CSVM/src/UI/CampaignLayout.cs`), the boards' read of the
+decoded layout. Every button slot, background pane and text slot in `CampaignBoards`, and every
+fixed element in the seven migrated pages (cabin, previous missions, scrapbook, scrapbook zoom,
+flight check, ammo, plane selection), names its `LAYOUT.CSV` section and row and reads it through
+`CampaignLayout.At`/`Box`/`Int`/`Art`/`GlobalArt`/`Justify`/`ZoomFamily`, with the value the board
+drew before the layout existed handed in beside the read as the fallback. `At` and `Box` answer with
+the whole row or the whole fallback, never one coordinate from each. Where the decoded value and the
+reference screenshot disagree the measured value is pinned and the rest of the row reads: `CM_B_START`
+keeps `CM_B_Start.png` (row: `GN_B_Continue.png`), the four flight-check paper plaques keep 131/349
+(rows: 132/350), `OL_S_AMMODESC` keeps y 92 (row: 96), `FC_T_TITLE`/`OL_T_TITLE` keep x 138 left
+(rows: 132 centred), `FC_T_GUNLISTW`/`FC_T_ROCKETLISTW` keep the pilot pair's 17-pixel drop (rows:
+400), `PS_T_WINGPLANE` keeps `106 + 218` (row: 323); `docs/org/campaign-board.md` carries the table.
+The two chosen positions stay chosen (the cabin's memento window; standing `MM_LOGO` over the profile
+dialog, its position now the row's). The briefing's chrome is `Briefing.zrd`'s and no layout row
+describes it, so its slots carry no section. Dynamic content is untouched: every page still reads
+`CampaignFlow`'s forwarding members over `CampaignFeature`, and nothing dynamic is serialized.
+
+Availability and failure rule: Built-in loads the layout for itself through
+`CampaignLayout.For(dataRoot)` (once per data root, kept in a static table, exposed as
+`CampaignFlow.Layout`), not through the Original presentation's `OriginalAvailability` load, because
+that load also refuses a layout whose main-menu art is missing and the campaign boards must draw
+through that ("usable without"). A missing or unreadable `menu_layout.json` is the `Fallback`
+instance with its `Reason`, logged once as a `ui` warning ("campaign boards draw their hardcoded
+chrome: ..."); every board then draws from its fallbacks, which are the shipped rows' own values, so
+the screens are the same either way and nothing throws. A null data root is the fallback with no
+reason. Tested over an empty temp root, a hand-authored malformed file and a foreign JSON in
+`CSVM.Tests/CampaignLayoutTests.cs`; the real file is never touched.
+
+**Verify.** `dotnet build CSVM/CSVM.sln`; the whole `dotnet test` (3000, of which 12 are
+`CampaignLayoutTests`: the fallback rule over a null root, an empty root, a malformed file and a
+foreign JSON; every read over the hand-authored campaign sections added to
+`CSVM.Tests/fixtures/menu-layout-original/LAYOUT.CSV` with invented geometry and art; a moved row
+moving the composed plaque and the pinned art, y and description column staying put; the dialog and
+the table of contents reading their rows); `.\RunTests.ps1 -Suite campaign-layout-parity -SkipUnits
+-SkipGoldens` (the new suite in `CSVM/src/Testing/CampaignLayoutSuites.cs`: every campaign board aid
+composed twice through a real `LaunchMenu`, once with `LaunchMenu.CampaignLayoutOverride` pinned to
+`CampaignLayout.Fallback` and once reading the install's layout, the two `ComposedBoard`s compared
+element by element, with the decoded side required to have loaded and the six pinned rows required
+to differ from their fallbacks so the comparison is between two sources; 11 aids, 278 elements,
+identical); `.\RunTests.ps1 -Filter menu -SkipUnits -SkipGoldens` (12 suites, 12 passed) and
+`.\RunTests.ps1 -Filter campaign -SkipUnits -SkipGoldens` (44 suites including the new one and
+`campaign-loop`, 44 passed, engine errors clean); `.\CheckCommentCaps.ps1 -Summary`;
+`.\CheckEncoding.ps1`. Shots: the twelve scratch-profile aids `campaign-empty`, `campaign-roster`,
+`campaign-entry`, `campaign-cabin`, `campaign-previous`, `campaign-scrapbook`,
+`campaign-briefing:24`, `campaign-flightcheck`, `campaign-guestcheck:2 --debug-join=3`,
+`campaign-ammo`, `campaign-planeselection` and `campaign-hangar`, each one Godot run on the hidden
+desktop with `--resolution <WxH>` ahead of the `--` and `--menu=<aid> --screenshot=<abs path>`
+(`.scratch\d32-shots.ps1`), at 1280x720 (the reference), 1024x768, 1920x1080 and 600x750, from
+this worktree at the plan branch's tip before any edit into `.scratch\d32-before\` (taken twice,
+`.scratch\d32-before-repeat\`, byte-identical, so the aids are deterministic) and from the migrated
+tree into `.scratch\d32-after\`, compared by decoded 32bpp pixels (SHA-256 over the rows,
+`.scratch\d32-compare.ps1`): 48 of 48 identical, zero differing pixels; `BoardFit` is unchanged, so
+the three fit sizes were expected identical and are. Comparison decision: no aid needs a masked or
+semantic comparison. The entry aid's caret is a fixed glyph, not a blink; the briefing aid advances
+its reveal in 1/60 s slices to 24 s before it draws (SHOT-32), so the frame is deterministic; the
+repeat run proved it (METHOD-2). `docs/verification.md` rules that bit: **METHOD-6** (which binary
+each side used is named), **METHOD-2** (same-build variation measured before the A/B, zero),
+**METHOD-10** (the parity suite refuses to pass when the decoded side did not load or the pinned
+rows do not differ, so a fallback-against-fallback run cannot read as parity), **METHOD-9** (the
+unit tests move a row and the composed plaque moves, so the read path can fail), **SHOT-6**
+(decoded pixels, never PNG bytes), **SHOT-9**/**SHOT-10** (windowed probes on the hidden desktop,
+absolute paths, every file checked present), **SHOT-32** (the briefing aid proves its frame alone).
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Fixed chrome may migrate; dynamic content may not be serialized into extracted output.
 Patch-overlay precedence must match extraction, and no game asset enters git.
@@ -1213,6 +1273,18 @@ through `CommitLoadout`/`CommitPlanes`/`ExportPlane`, guests walk `Field`, and F
 `host.Exit(campaign.BuildExit(padsPerSeat))`. `CabinReturn` and `DebriefReturn` map onto its
 screens through `SeatProfile(name)` and `EnterScrapbook(seq)`. The screen stack, the cursor, the
 refusal line and the modal are Built-in's `CampaignFlow`'s and are not to be reused.
+
+Handoff from D32: the board component Original reuses is `CampaignBoards.For(page, focusedRow,
+pressed, detail, modal, layout)` over an `ICampaignPage`, composing a `ComposedBoard` that
+`ComposedBoardView` draws; it takes its layout as a `CampaignLayout`, which Original builds with
+`CampaignLayout.Over(layout)` from the `MenuLayout` it already holds (`OriginalShell._layout`), so
+both presentations read one parsed artifact and Original never goes through `CampaignLayout.For`'s
+static table. Every slot's section and row are named in `CampaignBoards.Buttons`/`Chrome`, the
+pinned measurements are the ones `docs/org/campaign-board.md` tables, and `CampaignBoards.Dialog`
+composes the message box for either presentation. The pages' `Pictures`/`Captions`/`Fills` read
+`Flow.Layout`, so an Original campaign page over the shared feature either reuses the Built-in pages
+through a `CampaignFlow(feature, CampaignLayout.Over(layout))` or composes its own rows with the
+same reads.
 
 **Model recommendation.** high — timing, narration and persistent campaign paths cross several seams.
 

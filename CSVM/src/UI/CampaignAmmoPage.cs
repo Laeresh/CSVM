@@ -28,10 +28,11 @@ public sealed class CampaignAmmoPage : CampaignPage
     private const int AcceptRow = GroupRows + PylonRows;
     private const int CancelRow = AcceptRow + 1;
 
-    // [@OrdinanceLayout@]'s own geometry, with V3=136, V4=410, DROPWIDTH=148 and [GLOBALVARS]'
-    // STDITEMH=15 resolved: the gun captions (OL_T_GunName0..3), the ammunition fields
-    // (OL_D_AMMO0..3) fifteen pixels under them, and the rockets in two columns
-    // (OL_D_ROCKETS0..3 at V3, OL_D_ROCKETS4..7 at V4).
+    // [@OrdinanceLayout@]'s own geometry as the fallback under each row read, with V3=136, V4=410,
+    // DROPWIDTH=148 and [GLOBALVARS]' STDITEMH=15 resolved: the gun captions (OL_T_GunName0..3),
+    // the ammunition fields (OL_D_AMMO0..3) fifteen pixels under them, and the rockets in two
+    // columns (OL_D_ROCKETS0..3 at V3, OL_D_ROCKETS4..7 at V4).
+    private const string Section = CampaignLayout.AmmoSection;
     private const float CaptionX = 142f;
     private const float CaptionY = 105f;
     private const float GroupPitch = 42f;
@@ -51,6 +52,19 @@ public sealed class CampaignAmmoPage : CampaignPage
     // The caption takes the same face its field's words do, which is what the reference draws.
     private const float CaptionFont = 11f;
     private const float HeadingFont = 15f;
+
+    // OL_T_TITLE. ⚠ Its x is pinned at the measured 138 and drawn left-justified where the row
+    // says 132, centred in its 190; the row supplies y and width.
+    private const float TitleX = 138f;
+    private const float TitleY = 36f;
+    private const float TitleWidth = 190f;
+    private const float TitleFont = 20f;
+
+    // OL_P_PLANETOPICON and OL_P_PLANEFRTICON, the two aircraft diagrams.
+    private const float TopDiagramX = 305f;
+    private const float TopDiagramY = 96f;
+    private const float FrontDiagramX = 225f;
+    private const float FrontDiagramY = 437f;
 
     // IDS_OL_AMMO_CAPTION and IDS_OL_ROCKET_CAPTION, the parenthesised notes beside the two panel
     // headings. Both strings own a leading space, and the authored x is where that space starts.
@@ -106,18 +120,18 @@ public sealed class CampaignAmmoPage : CampaignPage
     {
         _planes = planes;
         _stock = stock;
+        var layout = flow.Layout;
         for (int group = 0; group < GroupRows; group++)
         {
-            _groupField[group] = new CampaignCombo(
-                LeftColumnX, AmmoFieldY + (group * GroupPitch), DropWidth, ItemHeight, AmmoListRows);
+            _groupField[group] = Field(layout, $"OL_D_AMMO{group}",
+                LeftColumnX, AmmoFieldY + (group * GroupPitch), AmmoListRows);
         }
 
         for (int cell = 0; cell < PylonRows; cell++)
         {
-            _pylonField[cell] = new CampaignCombo(
+            _pylonField[cell] = Field(layout, $"OL_D_ROCKETS{cell}",
                 cell < 4 ? LeftColumnX : RightColumnX,
-                RocketFieldY + (cell % 4 * RocketPitch),
-                DropWidth, ItemHeight, RocketListRows);
+                RocketFieldY + (cell % 4 * RocketPitch), RocketListRows);
             _pylonRows[cell] = Array.Empty<int>();
         }
     }
@@ -141,8 +155,8 @@ public sealed class CampaignAmmoPage : CampaignPage
     /// the plan-view sheet.</summary>
     public override HangarArt? Art => Diagram(PlaneDiagrams.Top);
 
-    /// <summary>The two aircraft diagrams, each the airframe's own frame of its sheet, at the
-    /// authored positions of <c>ol_p_planetopicon</c> and <c>ol_p_planefrticon</c>.</summary>
+    /// <summary>The two aircraft diagrams, each the airframe's own frame of its sheet, at
+    /// <c>OL_P_PLANETOPICON</c> and <c>OL_P_PLANEFRTICON</c>.</summary>
     public override IReadOnlyList<BoardPicture> Pictures
     {
         get
@@ -153,33 +167,44 @@ public sealed class CampaignAmmoPage : CampaignPage
                 return Array.Empty<BoardPicture>();
             }
 
+            var layout = Flow.Layout;
             int frame = ClampAirframe(plane.Airframe);
+            var (topX, topY) = layout.At(Section, "OL_P_PLANETOPICON", TopDiagramX, TopDiagramY);
+            var (frontX, frontY) = layout.At(Section, "OL_P_PLANEFRTICON", FrontDiagramX, FrontDiagramY);
             return new[]
             {
-                new BoardPicture(new BoardArt(BoardArtLibrary.Ui, "OL_PlaneDiagramsTop.png", DiagramFrames), 305, 96, frame),
-                new BoardPicture(new BoardArt(BoardArtLibrary.Ui, "OL_PlaneDiagramsFront.png", DiagramFrames), 225, 437, frame),
+                new BoardPicture(layout.Art(Section, "OL_P_PLANETOPICON",
+                    new BoardArt(BoardArtLibrary.Ui, "OL_PlaneDiagramsTop.png", DiagramFrames)), topX, topY, frame),
+                new BoardPicture(layout.Art(Section, "OL_P_PLANEFRTICON",
+                    new BoardArt(BoardArtLibrary.Ui, "OL_PlaneDiagramsFront.png", DiagramFrames)), frontX, frontY, frame),
             };
         }
     }
 
     /// <summary>The screen's own title, the two panel headings with their parenthesised notes, and
     /// one caption per gun group: the calibre the group mounts, or the greyed marker an empty group
-    /// carries in its place. All at their authored widgets, the captions at
+    /// carries in its place. All at their own <c>OL_T_*</c> rows, the captions at
     /// <c>OL_T_GunName0..3</c>.</summary>
     public override IReadOnlyList<BoardLine> Captions
     {
         get
         {
             EnsureLoaded();
+            var layout = Flow.Layout;
+            var (_, titleY, titleWidth) = layout.Box(Section, "OL_T_TITLE", TitleX, TitleY, TitleWidth);
+            var (ammoX, ammoY, ammoWidth) = layout.Box(Section, "OL_T_AMMOTITLE", LeftColumnX, 74f, 150f);
+            var (ammoNoteX, ammoNoteY, ammoNoteWidth) = layout.Box(Section, "OL_T_AMMOCAPTION", 246f, 75f, 200f);
+            var (rocketX, rocketY, rocketWidth) = layout.Box(Section, "OL_T_ROCKETTITLE", LeftColumnX, 290f, 200f);
+            var (rocketNoteX, rocketNoteY, rocketNoteWidth) = layout.Box(Section, "OL_T_ROCKETCAPTION", 214f, 291f, 200f);
             var lines = new List<BoardLine>
             {
-                new("AMMO SELECTION", 138, 36, 190, 20, BoardInk.Heading),
-                new("AMMUNITION", LeftColumnX, 74, 150, HeadingFont, BoardInk.Heading),
+                new("AMMO SELECTION", TitleX, titleY, titleWidth, TitleFont, BoardInk.Heading),
+                new("AMMUNITION", ammoX, ammoY, ammoWidth, HeadingFont, BoardInk.Heading),
                 new(Flow.Strings.Text(AmmoCaptionLabel, " (by gun group):"),
-                    246, 75, 200, CaptionFont, BoardInk.Detail),
-                new("ROCKETS", LeftColumnX, 290, 200, HeadingFont, BoardInk.Heading),
+                    ammoNoteX, ammoNoteY, ammoNoteWidth, CaptionFont, BoardInk.Detail),
+                new("ROCKETS", rocketX, rocketY, rocketWidth, HeadingFont, BoardInk.Heading),
                 new(Flow.Strings.Text(RocketCaptionLabel, " (underwing hardpoints):"),
-                    214, 291, 200, CaptionFont, BoardInk.Detail),
+                    rocketNoteX, rocketNoteY, rocketNoteWidth, CaptionFont, BoardInk.Detail),
             };
             if (_plane == null)
             {
@@ -189,10 +214,10 @@ public sealed class CampaignAmmoPage : CampaignPage
             for (int group = 0; group < GroupRows; group++)
             {
                 bool armed = _build.GunPresent[group];
+                var (x, y, width) = layout.Box(Section, $"OL_T_GunName{group}", CaptionX, CaptionY + (group * GroupPitch), 200f);
                 lines.Add(new BoardLine(
                     armed ? CalibreName(_build.GunCalibre[group]) : Flow.Strings.Text(NoGunLabel, "No Gun"),
-                    CaptionX, CaptionY + (group * GroupPitch), 200, CaptionFont,
-                    armed ? BoardInk.Row : BoardInk.Detail));
+                    x, y, width, CaptionFont, armed ? BoardInk.Row : BoardInk.Detail));
             }
 
             return lines;
@@ -337,6 +362,17 @@ public sealed class CampaignAmmoPage : CampaignPage
 
         Discard();
         return false;
+    }
+
+    // One drop-down field at its D row's own box, item height and window, the fallbacks being the
+    // shipped row's values.
+    private static CampaignCombo Field(CampaignLayout layout, string key, float x, float y, int rows)
+    {
+        var (fieldX, fieldY, width) = layout.Box(Section, key, x, y, DropWidth);
+        return new CampaignCombo(
+            fieldX, fieldY, width,
+            layout.Int(Section, key, "ItemHeight", (int)ItemHeight),
+            layout.Int(Section, key, "TotalDisplayed", rows));
     }
 
     private static int ClampAmmo(int ammo) => ammo >= 0 && ammo <= 3 ? ammo : 0;

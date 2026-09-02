@@ -18,6 +18,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
 {
     // SB_T_NAMEANDAREA, the page title's own widget. The layout row names no face, so 19 is the
     // cap height measured off Campaign Mission End screen CM01.png.
+    private const string Section = CampaignLayout.BookSection;
     private const float TitleX = 58f;
     private const float TitleY = 53f;
     private const float TitleFont = 19f;
@@ -26,6 +27,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
     // Best to Date tab and 1 under Most Recent.
     private const float CardX = 403f;
     private const float CardY = 297f;
+    private const int CardFrames = 2;
 
     // SB_B_Statcardtab.png's own frame width, for centring the unselected tab's label the way
     // ComposedBoardView.DrawPlaque centres a plaque's own.
@@ -33,7 +35,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
     private const float TabLabelY = 7f;
     private const float TabLabelFont = 13f;
 
-    private static readonly BoardArt StatCard = new(BoardArtLibrary.Ui, "SB_P_Card.png", 2);
+    private static readonly BoardArt StatCard = new(BoardArtLibrary.Ui, "SB_P_Card.png", CardFrames);
 
     // The browsed position: the SCRAPBOOK.CSV mission slot (1-based) and spread. Reset to the
     // opened mission's spread 1 whenever the flow opens the book again or CampaignFlow.MissionSeq
@@ -107,12 +109,12 @@ public sealed class CampaignScrapbookPage : CampaignPage
 
             if (Result() is not { } result)
             {
-                lines.Add(CampaignScrapbookResults.NotYetFlown());
+                lines.Add(CampaignScrapbookResults.NotYetFlown(Flow.Layout));
                 return lines;
             }
 
-            lines.AddRange(CampaignScrapbookResults.Rows(result, _bestToDate));
-            lines.AddRange(CampaignScrapbookResults.StampLabels(result, _bestToDate));
+            lines.AddRange(CampaignScrapbookResults.Rows(result, _bestToDate, Flow.Layout));
+            lines.AddRange(CampaignScrapbookResults.StampLabels(result, _bestToDate, Flow.Layout));
             return lines;
         }
     }
@@ -148,10 +150,11 @@ public sealed class CampaignScrapbookPage : CampaignPage
                     tab.Art, tab.X, tab.Y, ComposedBoard.PlaqueFrame(tab.Art.Frames, focused, false)));
             }
 
-            pictures.Add(new BoardPicture(StatCard, CardX, CardY, _bestToDate ? 0 : 1));
+            var (cardX, cardY) = Flow.Layout.At(Section, "SB_STATCARD", CardX, CardY);
+            pictures.Add(new BoardPicture(Flow.Layout.Art(Section, "SB_STATCARD", StatCard), cardX, cardY, _bestToDate ? 0 : 1));
             if (result is { } r)
             {
-                pictures.AddRange(CampaignScrapbookResults.StampPictures(r, _bestToDate));
+                pictures.AddRange(CampaignScrapbookResults.StampPictures(r, _bestToDate, Flow.Layout));
             }
 
             return pictures;
@@ -355,7 +358,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
     // Where the tab that is NOT selected draws, or null when the layout carries no such slot.
     private (BoardArt Art, float X, float Y)? UnselectedTab() =>
         CampaignBoards.SlotOf(
-            CampaignScreen.Scrapbook, _bestToDate ? BoardButton.MostTab : BoardButton.BestTab);
+            CampaignScreen.Scrapbook, _bestToDate ? BoardButton.MostTab : BoardButton.BestTab, Flow.Layout);
 
     private string TabLabel(RowKind kind) => kind == RowKind.BestTab
         ? Flow.Strings.Text(1159, CampaignScrapbookResults.TabTitle(bestToDate: true))
@@ -369,7 +372,8 @@ public sealed class CampaignScrapbookPage : CampaignPage
         string name = Flow.Profile?.Name ?? string.Empty;
         string title = Flow.Strings.Text(3480 + mission - 1, $"Mission {mission}");
         string text = Flow.Strings.Has(1215) ? Flow.Strings.Format(1215, name, title) : $"{name} - {title}";
-        return new BoardLine(text, TitleX, TitleY, 0f, TitleFont, BoardInk.Heading, Italic: true);
+        var (x, y) = Flow.Layout.At(Section, "SB_T_NAMEANDAREA", TitleX, TitleY);
+        return new BoardLine(text, x, y, 0f, TitleFont, BoardInk.Heading, Italic: true);
     }
 
     // The browsed (mission, spread), reset to the opened mission's spread 1 whenever the flow has
