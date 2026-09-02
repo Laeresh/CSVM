@@ -188,6 +188,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 31. ☑ The rebinding screen: capture, assign, steal-from-previous-owner
 32. ☐ Binding an axis or a hat to a digital action
 33. ☐ Close `BL-296` and `BL-398`, and hand `BL-357` its keys
+34. ☐ The saved keymap is read at launch, so a flight rebind is felt
+
+⚠ **34 lands before 33.** A flight rebind is written and never read, so closing `BL-296` and
+`BL-398` ahead of 34 would retire two items against a feature that works in one context of three.
 
 ## Dependency and parallelism notes
 
@@ -1261,3 +1265,36 @@ name the seam rather than the blocker. Do not implement either.
 
 **⚠ Traps.** A closed item is deleted from `backlog.md`, not marked FIXED (Ground rules). The
 closing evidence and its date go in the commit message, found later with `git log --grep=BL-398`.
+
+⚠ **This item lands last, after D34.** `BL-398` asks for a rebindable keymap and `BL-296` for a
+per-player one. Both are true in the menu context alone until the saved map is read at launch, so
+closing them before D34 would retire the items against a third of the feature.
+
+## D34 ☐ The saved keymap is read at launch, so a flight rebind is felt
+
+**Goal.** A control rebound on the screen is the control that flies the aeroplane, in the next
+session and in this one.
+
+**Evidence (confidence: traced).** `FlightController`, `SpectatorCamera` and `MenuInput` each build
+`BindingProfile.Defaults(...)` in their own constructor, and `BindingStore` is called from no polling
+site, so the Menu context is live while Flight and Camera are saved and never read (D31's section
+records this in full).
+
+**Approach.** A launch-time load that hands each seat its stored profile, replacing the defaults
+those three constructors build for themselves. The seam already exists: C21's `BindingProfile` is
+what each site holds, so the change is where the profile comes from rather than what it is.
+
+**Model recommendation.** high. It reaches three constructors and the determinism gate at once.
+
+**Verify.** A rebind survives a restart, at the controls, in flight rather than on a menu. Plus a
+`--det` fact that a scripted run ignores a stored profile entirely.
+
+**⚠ Traps.** ⚠ **DET-8 is the whole risk.** `--det` ignores `config.json` precisely so a scripted
+run is a function of its committed tree, and a keymap loaded from the user's profile directory would
+break exactly that: every golden and every probe would depend on whoever ran it. The load must be
+gated off under `--det` the way the options store is, and the gate needs a test that can fail rather
+than an assertion that it was written.
+
+⚠ A stored profile names actions and controls that a later build may not have. A rename or a dropped
+action must degrade to the default for that action rather than throwing at launch or, worse, leaving
+a seat with no fire button.
