@@ -461,10 +461,11 @@ motion in would put a delta into a type whose whole contract is a held-and-how-f
 
 **Goal.** No raw input poll remains in `FlightController`, and the aeroplane flies identically.
 
-**Evidence (confidence: lead-only).** `BL-296` names `FlightController` as carrying about a dozen
-bindings, with `MenuInput` and `SpectatorCamera` alongside it, and `docs/controls.md` as the binding
-record. <TODO: none of these files were read in the session that wrote this plan. Start with the
-census and correct this Evidence line from it.>
+**Evidence (confidence: traced).** `FlightController` reaches the hardware through four wrappers
+(`KeyDown`, `KeyAxis`, `PadPressed`, `PadAxis`) rather than at 34 raw calls, and those wrappers carry
+two rules the seam does not: the keyboard gate `UseKeyboard`, and `Pads.For(PadDevices)`, which for a
+single player is every connected pad rather than one identity. `docs/controls.md` is the binding
+record and C21's defaults reproduce it.
 
 **Approach.** Census first (`grep` for `IsKeyPressed`, `IsJoyButtonPressed`, `GetAxis`, `IsActionPressed`
 under `CSVM/src`), record the real count in "What the data actually ships", then replace each site
@@ -474,9 +475,23 @@ diff is mechanical and reviewable.
 **Model recommendation.** medium. Mechanical once A2 exists, but the file is large and the blast
 radius is the whole flight model.
 
-**Verify.** `.\RunTests.ps1` in full (this lands under `CSVM/`), plus a `--det` run compared against
-a baseline taken *before* the change. An unchanged number is not evidence unless you have seen it
-able to fail, so take the baseline first.
+**Verify.** `CSVM.Tests/FlightBindingMappingTests.cs`, 76 facts over a fake `IDeviceState` in
+`BindingModelTests`'s shape, is what actually proves the migration: every migrated key and pad
+button against the action its call site now names, the four signed key pairs and the pad's four
+axes in the sign the flight model reads, the snap-look cluster's eight composed directions, the
+keyboard/pad splits the tap-hold splitter and the four view-mode edge slots depend on, both ends of
+every key pair reading zero rather than one end taking priority, and the two dropped pad routes
+asserted still unbound. Run with
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~FlightBindingMappingTests" -SkipEngine -SkipGoldens`.
+
+`--det` baseline, taken in the item's worktree before the first edit and repeated after it:
+`--chapter=C1 --plane=player_bhawk --hold=0.2,0.1,0,1 --det --mute --shots=4 --frames=120` and
+`--chapter=C1 --plane=player_bhawk --ai=player_fury --ai-damage=0.02 --fire --det --mute --shots=3`,
+both through `RunProbe.ps1`, seven PNGs md5-identical across the pair. The second one holds the gun
+trigger, so the fire path is compiled and called rather than merely present.
+
+Complete `.\RunTests.ps1` in the item's worktree: PASS, exit 0, 3214 units, 230 engine suites, 18
+goldens hash-identical, 0 build warnings (159.2s total, every stage inside its budget).
 
 **⚠ Traps.** `docs/controls.md:29-33` and `:46` record bindings that are load-bearing beyond the
 keymap: `L` is *reserved and deliberately unbound* for Track Target (`BL-399`), and the debug keys
