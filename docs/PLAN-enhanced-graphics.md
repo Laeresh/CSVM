@@ -115,8 +115,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 43. ☑ The clutter building fade reaches as far as the pushed fog
 44. ☑ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
 45. ☑ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
-46. ❌ The water mirror strength, measured against the original's water, or the water bit parked
+46. ☑ The water mirror strength, measured against the original's water, or the water bit parked (mirror kept on the user's verdict)
 47. ☑ Day chapters read brighter than the original overall; the energy mapping re-anchored on frames
+48. ☐ Soft sun shadow edges, so a cliff's shadow on flat water is not a hard line
 
 ## Dependency and parallelism notes
 
@@ -1841,7 +1842,7 @@ Montages: `montage_c1_hills.png`, `montage_c4_horizon.png`, `montage_c2_building
 `.claude/worktrees/eg-e45/.scratch/e45/` and copied to
 `.claude/worktrees/enhanced-graphics/.scratch/e45/`.
 
-## E46 ❌ The water mirror strength, measured against the original's water, or the water bit parked
+## E46 ☑ The water mirror strength, measured against the original's water, or the water bit parked
 
 **Goal.** Enhanced-mode water reads close to the original's water luminance by day and by night,
 with whatever reflection survives that constraint; if no roughness/specular pair gets there, the
@@ -1861,7 +1862,15 @@ shoreline reflection at sea level, or park the bit if none does. The pair stays 
 
 **Verify.** The three poses' water within a stated distance of the original; goldens zero movers.
 
-**As landed: the water bit is parked.** The sweep is six roughness/specular pairs, each with SSR
+**As landed: the mirror stays, on the user's verdict.** The sweep below was run and the agent
+parked the water arm and SSR on its numbers, since no gloss pair lands near the original's water
+luminance. The user then judged the glossy water at the controls as better than the original and
+kept it: the shipped pair (roughness 0.1, specular 0.5) and SSR are restored, C24's ship verdict
+stands, and the sweep stays here as the measurement of what the mirror costs in luminance. The
+grey-water complaint that opened this item was C5's night water, which E42 answers; the day
+water's distance from the original is accepted as the divergence's look, not a defect.
+
+**The sweep (the parked arm's measurement).** Six roughness/specular pairs, each with SSR
 on and off, at three poses, sampling a fixed water rect and a fixed non-water reference rect per
 pose through a throwaway environment-variable override on the two constants
 (`CSVM_SCRATCH_WATER_ROUGHNESS`/`_SPECULAR`) and a throwaway gate on the SSR call
@@ -2085,6 +2094,26 @@ C3 darker) is real shading from a real sun and real shadows landing on baked ver
 already encoded the original's own static shading, the same double-shading the lit-world item's
 traps named; this item's mandate is the day chapters' overall level, not per-chapter or
 per-surface shading, and it does not touch the vertex-colour-flattening question that trap raised.
+
+## E48 ☐ Soft sun shadow edges, so a cliff's shadow on flat water is not a hard line
+
+**Goal.** Enhanced-mode sun shadows have a penumbra, so a cast edge on a flat surface (the C1
+waterfall lake under its cliff) reads as a soft transition rather than the hard line the user
+saw, while the aircraft's own shadow and building shadows keep their shape.
+
+**Evidence (confidence: traced).** B13's shadow settings leave `DirectionalLight3D.LightAngularDistance`
+at 0 (a point sun, hard edges) and `ShadowBlur` at Godot's 1.0. The original's lake carries only
+baked darkening with a soft edge.
+
+**Approach.** Set `LightAngularDistance` (the sun's apparent size in degrees; the real sun is about
+0.5, TUNE, start there) and if needed `ShadowBlur` in `Launcher.EnableSunShadows`, both mirrored
+onto the cockpit sun clone by B15's copy. Check the cost (a larger angular distance widens the
+PCSS-style filter) with `--perf` on C5 at 4 panes, and check acne at C1's low sun does not return.
+
+**Model recommendation.** medium, low effort.
+
+**Verify.** C1 waterfall lake, C1 hangar shadow and the aircraft's shadow before/after; perf delta;
+goldens zero movers.
 
 ## Open judgements
 
