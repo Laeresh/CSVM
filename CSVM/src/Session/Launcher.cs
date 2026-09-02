@@ -555,9 +555,9 @@ public partial class Launcher : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
-        // --run-tests reads and writes options in a fresh scratch directory, never the player's
-        // file: a driven Options screen must open on the shipped defaults. Set before the first
-        // UserOptions() call below, and per process rather than shared (docs/architecture.md).
+        // --run-tests must never read or write the player's options file, and this must be set
+        // before the first UserOptions() call below. One scratch directory per process, never a
+        // shared one: docs/architecture.md's OptionsStore entry has the shard race that settled it.
         if (_spec.RunTests)
         {
             string scratchOptions = Path.Combine(Path.GetTempPath(), "CSVM", "run-tests-options",

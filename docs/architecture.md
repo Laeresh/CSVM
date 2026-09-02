@@ -479,6 +479,39 @@ clusters they delegate to.
 - `src/Session/LadderSwitch.cs` — the original's rope-ladder switch as an engine-free rule and state machine: the ladder is wanted when the aircraft's own up axis is within 45 degrees of world up and the player is inside an active `pickups.zrd` sensor, and the switch starts `drop_ladder` or `retract_ladder` to match, one transition at a time, holding a transient state until the definition's own `CALLBACK 123` settles it. A mission that authors neither definition flips the state silently, so no per-mission table exists. `Holder` is the co-op half, engine-free for the same reason the rest is: the incumbent human keeps the switch for as long as they qualify and only once they stop is the field asked, first qualifier in player order winning. ⚠ A single owner rather than "any human qualifies", because the transient states mean two humans drifting through one sensor under an "any" rule would thrash the drop against the retract; the incumbent is asked first precisely so a second qualifier changes nothing. Decode: `docs/org/ladderSwitch.md`.
 - `src/Session/LadderSwitchRuntime.cs` — `LadderSwitch` flown against the built world: every frame outside a cutscene it reads each flying human's attitude and position against the mission's pickup sensors, resolves the one holder through `LadderSwitch.Holder`, and starts the ladder definitions as mission triggers, so the drop's `OBJECT_ADD_CHILD` can materialize the library rope ladder. A holder that has stopped qualifying with nobody to take over is what retracts the ladder, and the same pass finding a replacement is what stops that retraction ever starting. It takes the runtime's `CALLBACK` host slot and chains to the cutscene host behind it, which is where the original registers the switch on each definition. Bound with the landings trigger, story missions only.
 
+### `src/Bindings/` — the input binding model
+
+What a binding is, how one resolves against hardware, and the named actions a polling site asks
+for. The registry that turns a device identity into a live pad and the map that holds the actions
+both sit on top of these types.
+
+- `src/Bindings/DeviceId.cs` — which device a binding is on, as a stable value: the one keyboard, or a joypad named by its hardware string rather than by a connection index.
+- `src/Bindings/BindingControl.cs` — the tagged control: a key, a button, one signed half of an axis past a deadzone, or one direction of a hat, built through four validating factories.
+- `src/Bindings/Binding.cs` — one control on one named device, plus `ControlValue`, the held/how-far pair every resolution returns.
+- `src/Bindings/IDeviceState.cs` — the tick's raw hardware state addressed by device identity; the seam that keeps resolution engine-free, answering false for an absent device.
+- `src/Bindings/BindingSet.cs` — the bindings one action holds, ORed together the way the original ORs its four slots, with the deepest deflection winning the analogue read.
+- `src/Bindings/DeviceRegistry.cs` — the live joypad index-to-identity table, rebuilt from a
+  connected-pad list on `Refresh` rather than trusting an index to stay put across a replug; pure
+  and engine-free, so the mapping rule is tested without a joypad (`CSVM.Tests/DeviceRegistryTests.cs`).
+  Two connected pads reporting the same GUID (identical hardware sharing one SDL identity) is a real
+  collision: the first one seen claims it and the second stays unresolved rather than the pair
+  silently driving one binding together.
+- `src/Bindings/GodotDeviceState.cs` — the live `IDeviceState` over Godot's `Input` singleton,
+  addressed by identity through a `DeviceRegistry` rather than a raw index; `RefreshDevices()` reads
+  the connected roster and is meant to run once at launch and again on
+  `Input.Singleton.JoyConnectionChanged`, though the call site belongs to whoever builds the per-tick
+  resolver, since this module has no polling loop of its own. Godot exposes a d-pad as four
+  `JoyButton` values rather than a raw hat, so hat index 0 is that d-pad and every other hat index is
+  unbindable.
+- `src/Bindings/InputAction.cs` — the enum of named actions, one member per binding that exists at a polling site, contiguous because the snapshot indexes arrays by it.
+- `src/Bindings/ActionMap.cs` — one player's keymap: which control fires which action, with assignment taking a control off its previous owner and naming the action that lost it.
+- `src/Bindings/ActionSnapshot.cs` — the tick's resolved values, so two consumers reading one action in one tick get the same answer. No edges and no history.
+- `src/Bindings/PlayerActions.cs` — the seam a polling site holds: a map, the tick's snapshot, and the pad-only keyboard gate for splitscreen players two to four.
+- `src/Bindings/InputContext.cs` — which set of controls a seat is reading (flight, menu, camera), because one control means different things in different modes and a map holds each control once.
+- `src/Bindings/DefaultBindings.cs` — the shipped keymap as data, one map per context, reproducing `docs/controls.md`; also the placeholder pad identity a default is authored on.
+- `src/Bindings/BindingProfile.cs` — one seat's whole input: a map and a `PlayerActions` per context, plus the keyboard gate that applies to all of them.
+- `src/Bindings/BindingStore.cs` — the versioned, human-readable JSON keymap file, one per player under `user://`, falling back per action to the shipped default for anything it cannot read.
+
 ### Session root and tests
 
 - `src/Pads.cs` — single owner of "which gamepads exist": the phantom-device policy (span every pad) plus the `--no-pads` switch.
@@ -5570,7 +5603,9 @@ that matched nothing, which `Run` refuses before any suite starts. `SuiteShards`
 term that divides rather than selects; `Run` applies it AFTER the miss checks, so an empty shard is
 a legitimate division and an empty selector is still a typo. A sharded run's `ScratchDir` moves
 beside its `--log-file`, which is what keeps concurrent shards (and concurrent runs) off each
-other's report and artifacts. `TestContext.
+other's report and artifacts. The options a `--run-tests` process reads and writes go to a
+per-process scratch directory instead of the player's file; that rule lives on `OptionsStore`, which
+owns the override. `TestContext.
 EmitterFactory` (mutable, default null) forwards straight into `WorldSession.Options.EmitterFactory`
 for the next `WithWorld` build. `WithPrivateWorld` is what a suite installing one uses: never read
 from the shared cache and never written to it, freed when the body returns, so no build option a
@@ -8082,3 +8117,120 @@ Original passes seat 0 on `PlayerPlane`'s node. Off-engine coverage:
 `CSVM.Tests/InstantActionFeatureTests.cs`, which also checks `LaunchMenu`'s public rosters against
 the feature's; the characterization of Built-in's journey over it is `menu-instant-action-journey`
 (`src/Testing/MenuInstantActionSuites.cs`).
+
+## src/Bindings/DeviceId.cs
+
+Which device a binding sits on, as a value: `DeviceKind` plus, for a joypad, the hardware string
+its platform reports. `Keyboard` is a singleton because the platform reports one key state whatever
+produced it; `Joypad` takes the stable string and refuses a blank one. The default value is
+`DeviceKind.None` and names nothing, which is what a binding read from a file with a missing device
+becomes. Turning an identity into a live joypad index belongs to the device registry, not here.
+
+## src/Bindings/BindingControl.cs
+
+The tagged control half of a binding: `ControlKind` picks which of `Key`, `Button`, `Axis` and `Hat`
+the numeric members mean, and the four static factories are the only way to build one, because they
+are where the per-kind invariants live. `HatDirection` is a flags enum so a device can report a
+diagonal, while a binding names exactly one direction. `Deadzone` is both the noise gate and the
+digital threshold; the model carries no second number for the two jobs. The original's four fixed
+typed slots and its reasons are decoded in `docs/org/input.md`.
+
+## src/Bindings/Binding.cs
+
+`Binding` is a device identity plus a control, and `Resolve` is the whole read: it reaches hardware
+only through `IDeviceState`, so the model is exercised without an engine. `ControlValue` is the
+held/how-far pair, with `Pressed` true exactly when `Value` is above zero, which is what lets an
+axis drive an action written as digital and a button drive one written as analogue. Structural
+equality is what a rebinding screen compares when it takes a control off its previous owner.
+
+## src/Bindings/IDeviceState.cs
+
+The tick's raw hardware state, addressed by device identity rather than connection index: keys,
+buttons, axis travel with no deadzone applied, and a hat's full direction flags. Every member
+answers for an absent device instead of throwing, which is how an unplugged pad silences its
+actions without the map losing the rows. The live implementation over Godot is the device
+registry's.
+
+## src/Bindings/BindingSet.cs
+
+The bindings one action holds. `Resolve` ORs them, which is the original's four-slots rule
+(`FUN_00537530`, `docs/org/input.md`) without its four fixed slots, and takes the deepest deflection
+any of them reports so a half-pressed trigger cannot beat a held button on the same action. `Add`
+drops a duplicate rather than rejecting it, `Remove` is the losing half of the steal rule, and
+`Clone` gives an editing screen something it can throw away. It owns no action name and no device
+lookup. Coverage: `CSVM.Tests/BindingModelTests.cs`.
+
+## src/Bindings/InputAction.cs
+
+The named actions, one member per binding a polling site holds today, so migrating a site is a
+lookup swap rather than a rename. The members are contiguous from zero because `ActionSnapshot`
+indexes arrays by them; adding one at the end is safe and renumbering is not. Debug and lab keys
+are deliberately outside the enum: they are development instruments, and a rebinding screen that
+offered them would let a player break their own diagnostics.
+
+## src/Bindings/ActionMap.cs
+
+One player's keymap, an action to a `BindingSet`. `Assign` is the winning half of the steal rule and
+returns the action that lost the control, so a screen can name the loss instead of performing it
+silently; `SameControl` is what "the same control" means there, ignoring an axis deadzone so
+re-binding an axis adjusts it rather than stacking a copy. `ResolveInto` reads every bound action
+once per tick into a reused snapshot. `Add` is the other half: it binds without stealing, for the
+shipped defaults and a loaded file, where a control is deliberately on two actions (a numpad
+snap-look diagonal). It holds no defaults and no device lookup. Coverage:
+`CSVM.Tests/ActionMapTests.cs`.
+
+## src/Bindings/ActionSnapshot.cs
+
+The tick's resolved held/how-far pair per action, so two consumers asking the same question in one
+tick cannot disagree. It carries no went-down and no went-up: edge detection stays in the consumer
+that already owns its previous-frame slot, because the sim is a level read on the fixed tick and
+scripted `--det` / `--hold` runs depend on that. The instance is reused every tick.
+
+## src/Bindings/PlayerActions.cs
+
+What a polling site holds: a player's `ActionMap`, the tick's snapshot, and `Poll` as the one place
+hardware is read. `ReadsKeyboard` is the existing player-1-only keyboard rule, kept on the seat
+rather than in the map, so a pad-only splitscreen player keeps the shipped keyboard defaults in
+their map and simply reads none of them. Turning a device identity into live hardware belongs to the
+device registry; this type only reads the state it is handed.
+
+## src/Bindings/InputContext.cs
+
+Which controls a seat is reading: flight, menu, or the free camera. A seat holds one `ActionMap` per
+context rather than one map overall, because the shipped keymap gives one control several meanings
+(`W` pitches down in flight, moves a menu cursor up, and flies the spectator camera forward) while a
+map holds a control once. The steal rule therefore runs inside a context, which is also the scope a
+rebinding screen edits: a conflict is two flight actions wanting one button, not flight and the menu
+sharing it.
+
+## src/Bindings/DefaultBindings.cs
+
+The shipped keymap as data, one `ActionMap` per context, transcribed from `docs/controls.md`. Every
+action is either bound here or on the `Unbound` list, which stops a migrating site meeting a hole one
+call at a time: `FreeLook` is unbound because the model has no mouse-button kind, `MenuJoin` because
+joining is a gesture over controls the menu binds elsewhere. A pad default names the placeholder
+identity `AnyPad`, which no hardware reports, and `MapFor` puts the seat's own pad in its place. Two
+rules bind edits here: nothing authors a hat binding, since Godot reports a d-pad as four buttons and
+the two encodings are one control `ActionMap.SameControl` reads as two; and the numpad snap-look
+diagonals are deliberately one key on two actions, which is why the set is built through
+`ActionMap.Add` rather than `Assign`. Coverage: `CSVM.Tests/DefaultBindingsTests.cs`.
+
+## src/Bindings/BindingProfile.cs
+
+One seat's whole input: an `ActionMap` and a `PlayerActions` per context, and the keyboard gate that
+applies to all of them at once. This is what a polling site is handed and what a rebinding screen
+edits. `Poll` resolves every context on the tick rather than only the mode in front of the player,
+because a pause board and the aeroplane behind it are both live on one tick.
+
+## src/Bindings/BindingStore.cs
+
+The keymap file: versioned JSON, one per player, under `user://`. Named and versioned against the
+original, which writes 2400 unversioned raw bytes to the registry and points its live array at the
+loaded buffer (`docs/org/input.md`), so a record-layout change there reinterprets an old save. A
+binding is stored as `device/control` in words (`keyboard/key:Space`, `pad:<id>/axis:LeftY+@0.25`), so
+a player can correct one row by hand. Anything this build cannot read costs that action its saved
+bindings and nothing else: an unknown action or context name, an unreadable token, and a hat row (see
+`DefaultBindings`) all leave that action at its default while the rest of the file loads. Every
+action is written, the unbound ones included, so a deliberate unbind survives a reload. Whether a
+seat reads the keyboard is not persisted, or a saved file could hand a pad-only splitscreen player
+the keyboard back. Coverage: `CSVM.Tests/BindingStoreTests.cs`.
