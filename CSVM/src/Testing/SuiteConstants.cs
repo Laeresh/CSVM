@@ -54,6 +54,15 @@ internal static class SuiteConstants
     // coverage without changing the 48/48 line.
     internal const int RigGunGroups = 4;
 
+    // The vertical span the ground probe casts through, past every chapter's terrain either way, and
+    // how far either side of a found surface its from-below companion starts and ends. The standoff
+    // is short so the second ray meets the surface the first one found, not a neighbouring tile.
+    internal const float GroundProbeCeilingM = 4000f;
+
+    internal const float GroundProbeFloorM = -4000f;
+
+    internal const float GroundProbeStandoffM = 50f;
+
     // Destructible instances / distinct node groups per chapter, at each chapter's default mission.
     // Authored-inactive placed roots are staged hidden and therefore contribute to this registry.
     // Instances exceed node groups where a reader wildcard def and its compiled per-instance twin
@@ -70,6 +79,23 @@ internal static class SuiteConstants
         ("C3", 210, 133),
         ("C4", 92, 67),
         ("C5", 158, 94),
+    };
+
+    // Partition cells whose centre answers a downward ray, and how many of those also answer one
+    // from below, per chapter. The first column is every cell in every chapter and must stay that
+    // way: a drop is ground an aircraft would fall through. The second is the two-sided remainder
+    // the data itself authors, C4's one cell and C5's 23; it read 144/144, 256/256 everywhere while
+    // every world collider was forced two-sided.
+    internal static readonly (string Chapter, int FromAbove, int FromBelow)[] GroundCensus =
+    {
+        ("C1", 144, 0),
+        ("C1B", 144, 0),
+        ("C1C", 144, 0),
+        ("C2", 144, 0),
+        ("C2B", 144, 0),
+        ("C3", 256, 0),
+        ("C4", 144, 1),
+        ("C5", 256, 23),
     };
 
     // C1 textures spanning the three alpha classes the flatten must leave alone: opaque,

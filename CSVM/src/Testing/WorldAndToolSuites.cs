@@ -626,6 +626,64 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // The ground's sidedness, chapter by chapter, at the centre of every world partition cell: a
+    // ray from above must still meet a collider, and one from below must pass through wherever the
+    // source polygon clears SHOW_BACKFACE. The first column is the tripwire against the failure a
+    // per-polygon sidedness rule risks, an aircraft falling through the map; the second is the
+    // contact the original never has, and CM12's ace is stuck under it.
+    [Suite("world-ground-solid",
+        "every chapter's ground answers a ray from above at each partition-cell centre, and the " +
+        "one-sided part of it answers nothing from below")]
+    internal static void WorldGroundSolid(TestContext ctx)
+    {
+        var report = new System.Text.StringBuilder();
+        foreach (var (chapter, expectAbove, expectBelow) in GroundCensus)
+        {
+            ctx.WithWorld(chapter, collision: true, world =>
+            {
+                var grid = world.Gamez.FindByName("world1");
+                ctx.Check(grid?.PartitionCellX > 0f && grid.PartitionCols > 0,
+                    $"{chapter} carries a partition grid to sample over");
+                if (grid?.PartitionCellX is not > 0f)
+                    return;
+
+                var space = ctx.Host.GetWorld3D().DirectSpaceState;
+                int above = 0, below = 0;
+                for (int row = 0; row < grid.PartitionRows; row++)
+                {
+                    for (int col = 0; col < grid.PartitionCols; col++)
+                    {
+                        float x = grid.PartitionOriginX + ((col + 0.5f) * grid.PartitionCellX);
+                        float z = grid.PartitionOriginZ - ((row + 0.5f) * grid.PartitionCellZ);
+                        var down = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                            new Vector3(x, GroundProbeCeilingM, z),
+                            new Vector3(x, GroundProbeFloorM, z), CollisionLayers.World));
+                        if (down.Count == 0)
+                            continue;
+                        above++;
+                        // From just under whatever the downward ray found, so the second ray tests
+                        // that same surface rather than one a whole map's depth away.
+                        float surfaceY = down["position"].AsVector3().Y;
+                        var up = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                            new Vector3(x, surfaceY - GroundProbeStandoffM, z),
+                            new Vector3(x, surfaceY + GroundProbeStandoffM, z), CollisionLayers.World));
+                        if (up.Count > 0)
+                            below++;
+                    }
+                }
+
+                int cells = grid.PartitionRows * grid.PartitionCols;
+                report.AppendLine($"{chapter}: {cells} cells, {above} answer from above, {below} of those also from below");
+                ctx.Same(cells, above, $"{chapter} cells whose ground stops a ray from above");
+                ctx.Same(expectAbove, above, $"{chapter} ground solid from above");
+                ctx.Same(expectBelow, below, $"{chapter} of those also solid from below");
+                ctx.Note($"{chapter} ground: {above}/{cells} cells solid from above, {below} also solid from below");
+            });
+        }
+
+        ctx.WriteArtifact("test-world-ground-solid.txt", report.ToString());
+    }
+
     // ---- needs Godot's Image, nothing else -------------------------------------------------------
 
     [Suite("tex-dropin", "the census/override flatten repaints RGB and changes nothing else")]

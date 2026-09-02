@@ -412,6 +412,9 @@ public partial class FlightController : Node3D
     // own forward axis times this literal (docs/formats/anim-definitions/cutscenes.md).
     private const float ReplacedSpeed = 53.6448f;
     private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
+    // How often the under-map backstop may write a line. Not a tuned quantity: it exists only so a
+    // stuck aircraft's per-frame resets read as a rate and a count rather than a flood of lines.
+    private const float UnderMapReportInterval = 1f;
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
     // The nitro_decay def's authored opacity fade (RUN_TIME 1.0), which is how long a re-engage
     // stays refused for; the runtime has no completion callback to read it off.
@@ -483,6 +486,8 @@ public partial class FlightController : Node3D
     private float _keyRoll;                      // by StickRamp; a gamepad's analogue axis adds on
     private float _keyYaw;                       // top and is never ramped
     private double _sinceTelemetry;
+    private float _sinceUnderMapReport;          // s since the under-map backstop last reported
+    private int _underMapResets;                 // its running count, which is how a loop reads
     private WarningShotCue? _warningShots;       // the near-miss cue's shipped accumulator
     private FlightInput _lastInput;              // this physics frame's stick input (drives the surfaces)
     // s until auto-rematch on a finished race (scripted hold runs only). Not the lifecycle's
@@ -1749,8 +1754,21 @@ public partial class FlightController : Node3D
         // Backstop if the swept ray ever misses. A HELD plane is exempt: it is exactly where the lab
         // parked it (below the map is a legal place to hold), and a respawn would fling it away from
         // the target it was aimed at.
+        _sinceUnderMapReport += dt;
         if (!_held && _model.Position.Y < UnderMapY)
+        {
+            // ⚠ Rate-limited rather than one line per reset. An aircraft stuck under the map trips
+            // this every physics frame, so an ungated print is one console write per frame per
+            // plane (docs/verification.md PERF-23); the running count is what says it is a loop.
+            _underMapResets++;
+            if (_sinceUnderMapReport >= UnderMapReportInterval)
+            {
+                _sinceUnderMapReport = 0f;
+                var under = _model.Position;
+                Log.Warn("flight", $"under-map backstop: {Name} (P{PlayerIndex + 1}) below y={UnderMapY:0} at ({under.X:0},{under.Y:0},{under.Z:0}), respawned to its spawn; {_underMapResets} reset(s) so far");
+            }
             Respawn();
+        }
 
         _sinceTelemetry += dt;
         if (_sinceTelemetry >= 1.0)

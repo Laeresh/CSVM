@@ -128,6 +128,11 @@ public sealed class ClutterBuilder
     /// <summary>The decoration kinds of the last Build (null until Build placed something).</summary>
     public IReadOnlyList<KindExport>? ExportedKinds { get; private set; }
 
+    /// <summary>Of <see cref="SolidCollisionTriangles"/>, those from a polygon clearing
+    /// <c>SHOW_BACKFACE</c>: the size of the divergence left by these shapes staying two-sided while
+    /// the world's honour the flag. The reason they do is on <c>BuildSolidCollision</c>.</summary>
+    public int SolidCollisionOneSidedTriangles { get; private set; }
+
     /// <summary>Distinct collision shapes built by the last Build (one per decoration mesh).</summary>
     public int SolidCollisionShapes { get; private set; }
 
@@ -325,7 +330,7 @@ public sealed class ClutterBuilder
         var exportedMesh = new List<int>();   // parallel: each export's decoration MeshIndex
         var solidKinds = new List<Kind>();
         InstanceCount = SolidCount = SolidCollisionTriangles = 0;
-        SolidCollisionShapes = SolidCollisionInstances = 0;
+        SolidCollisionShapes = SolidCollisionInstances = SolidCollisionOneSidedTriangles = 0;
         _solidShapes = null;
         // _allKinds, not templates.Values — a substitution-only kind has instances to export and
         // no template to be found under.
@@ -539,13 +544,18 @@ public sealed class ClutterBuilder
         return w0 >= -slack && w1 >= -slack && w2 >= -slack;
     }
 
-    // The mesh's triangles in its own local space, using the same fan/strip rule as
-    // SceneBuilder.EmitPolygon and PlaceOnMesh, so the collider matches what is drawn.
-    private static void AppendTriangles(GameZMesh mesh, List<Vector3> into)
+    // The mesh's triangles in its own local space, fan or strip as the polygon says, and how many of
+    // them came from a polygon that clears SHOW_BACKFACE. ⚠ Unlike SceneBuilder.EmitCollisionFaces
+    // this does not alternate a strip's winding, so the triangles it returns are not consistently
+    // wound and cannot be given a sidedness (see BuildSolidCollision).
+    private static int AppendTriangles(GameZMesh mesh, List<Vector3> into)
     {
+        int oneSided = 0;
         foreach (var poly in mesh.Polygons)
         {
             int n = poly.VertexIndices.Count;
+            if (!poly.ShowBackface && n >= 3)
+                oneSided += n - 2;
             if (poly.TriangleStrip)
             {
                 for (int i = 0; i + 2 < n; i++)
@@ -565,6 +575,8 @@ public sealed class ClutterBuilder
                 }
             }
         }
+
+        return oneSided;
     }
 
     private static double[] Cross(double[] p, double[] q) => new[]
@@ -1078,15 +1090,16 @@ public sealed class ClutterBuilder
             if (shapes.ContainsKey(kind.MeshIndex))
                 continue;
             tris.Clear();
-            AppendTriangles(_gamez.Meshes[kind.MeshIndex], tris);
+            int oneSided = AppendTriangles(_gamez.Meshes[kind.MeshIndex], tris);
             if (tris.Count == 0)
                 continue;
-            // Backface collision for the same reason SceneBuilder's world colliders use it:
-            // the source winding is inconsistent, so a one-sided trimesh lets raycasts
-            // through the down-wound faces.
+            // ⚠ Two-sided where SceneBuilder's world colliders are one-sided, and not for want of the
+            // flag: this triangulation does not alternate a strip's winding, so these triangles have
+            // no agreed front to be solid from (docs/architecture.md, src/Mech3/Clutter.cs).
             var shape = new ConcavePolygonShape3D { Data = tris.ToArray(), BackfaceCollision = true };
             shapes[kind.MeshIndex] = shape;
             SolidCollisionTriangles += tris.Count / 3;
+            SolidCollisionOneSidedTriangles += oneSided;
         }
         SolidCollisionShapes = shapes.Count;
         if (shapes.Count == 0)

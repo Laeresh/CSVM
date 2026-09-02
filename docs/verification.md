@@ -512,6 +512,15 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **WORLD-31** — **A sibling object is a control only once you have censused every authored path that can reach it.** Six of CM09's twelve zeppelin engines are destroyed by `killpzep`, so the other six looked like the control that would prove the breakup did the work; all twelve went dark, because each burning gasbag's own death definition destroys the two engines beside it. Grep the whole mission's definitions for the target's name before calling anything untouched.
 - **WORLD-32** — **A Godot property that accepts a write is not a property the renderer reads: prove a lighting knob is live by driving it to an extreme and watching the goldens move.** `Environment.AmbientLightEnergy` is inert in the faithful path. With `AmbientLightSource.Sky` and the default full `AmbientLightSkyContribution`, the ambient term is the sky cubemap scaled by the *background* energy multiplier, so the ambient energy never enters the shader. Measured: taking the launcher's 0.9 to 0.0 left all 18 goldens byte-identical, while the same experiment on `DirectionalLight3D.LightEnergy` (1.6 → 0.5) moved 7. Run that pair of experiments before attributing any part of an aircraft's brightness to the ambient, and before spending a calibration on a number nothing reads.
 
+- **WORLD-33** — **An upward ray reports open air under a one-sided collider, so it cannot tell
+  "nothing overhead" from "a surface whose back is culled": read a column DOWNWARD from above
+  instead.** World colliders honour the polygon's own `SHOW_BACKFACE`, and 64 % of the install's
+  collision faces clear it, water everywhere. Measured across all eight chapters at every partition
+  cell centre: a downward ray answers in 1,376 of 1,376 cells, an upward one from just under the
+  surface it found in 24 (`world-ground-solid`). That second reading was 1,376 of 1,376 while every
+  collider was forced two-sided, which is why an upward probe written then looks correct and now
+  quietly answers "open air" almost everywhere.
+
 ## SHELL — Windows, PowerShell, and processes
 
 - **SHELL-2** — **Identify stray Godot processes by worktree and probe flag.**
@@ -660,10 +669,11 @@ loss. What the engine renders was decodable from the authored constants + oscill
   no `camera1` in it at all, so a suite over a subsystem must build the world the way the session
   that runs it does.
 - **INSTR-22** — **An aircraft that sinks below `FlightController`'s under-map backstop is teleported
-  to its spawn with no crash flag and no log line, so any distance a suite is accumulating swallows
-  the jump. Gate a flown leg on an altitude floor.** The backstop fires at y = 0 on a stage that has
+  to its spawn with no crash flag, so any distance a suite is accumulating swallows the jump. Gate a
+  flown leg on an altitude floor.** The backstop fires at y = 0 on a stage that has
   no ground at all, `Crashed` is never set, and the reset is invisible to a `Crashed` check sampled
-  every step. Measured on `wingman-station`: the scripted leader descended through y = 0 twice in a
+  every step. It does now write a rate-limited `under-map backstop:` line carrying a running reset
+  count, which is how a stuck aircraft's loop reads in a log; a suite still cannot see it. Measured on `wingman-station`: the scripted leader descended through y = 0 twice in a
   120 s run and reappeared at its 1200 m spawn, and those two jumps are the whole of a reported
   3797 m worst separation and most of a 415 m mean, on a leg that plateaued at 254 m and never read
   above 470 m while both aircraft were flying. INSTR-18 is the same failure at the altitude cap.

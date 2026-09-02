@@ -182,6 +182,7 @@ public sealed class WorldSession
                                    // per-attachment triangle count.
                                    ? $" ({clutterBuilder.SolidCollisionShapes} shared collision shapes"
                                      + $", {clutterBuilder.SolidCollisionTriangles} tris"
+                                     + $" ({clutterBuilder.SolidCollisionOneSidedTriangles} of them one-sided in the source, kept two-sided here)"
                                      + $", {clutterBuilder.SolidCollisionInstances} attachments)"
                                    : "")
                              : "")
