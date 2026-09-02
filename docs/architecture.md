@@ -3475,7 +3475,9 @@ Schema and the data→look TUNE mapping: docs/formats/weather.md.
 
 ## src/Flight/SpectatorCamera.cs
 The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look (captured only
-while held), wheel speed, pads via `Pads.For(_padDevices)`; lab additions `Frame(Aabb)`, the
+while held), wheel speed, pads via `Pads.For(_padDevices)`. Every key and pad read resolves
+through `InputContext.Camera` (`src/Bindings/`) and the mouse stays on `InputEvent`s. Lab
+additions `Frame(Aabb)`, the
 `FollowNode` orbit-lock (released by any translation input; `ExitFollow` keeps orientation) and
 a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 While locked, the orbit answers the mouse **and the pad**: right stick swings it, the triggers

@@ -548,7 +548,26 @@ three named files.
 
 **Model recommendation.** medium, low effort.
 
-**Verify.** A repo-wide grep for the poll calls returns only the resolver itself.
+**Verify.** `CSVM.Tests/SpectatorBindingsTests.cs`, 28 facts over a fake `IDeviceState` in
+`BindingModelTests`'s shape, is the per-site mapping evidence B14 cannot produce: every key the old
+code polled resolves the action that replaced it, each key pair and each stick keeps the sign the
+old `Axis`/`PadAxis` helper returned, the shoulders reproduce `PadButtonAxis`, the triggers cross the
+same half-travel boost gate, a stick inside 0.18 still reads nothing, every pad default sits on the
+seat placeholder rather than on a hardware identity, both ends of a pair read zero (this camera's
+pairs are all the symmetric form `ActionSnapshot.Axis` implements, unlike `MenuInput`'s), and no
+camera binding is a mouse control. Run with
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~SpectatorBindingsTests" -SkipEngine -SkipGoldens`.
+A repo-wide grep for `Input.IsKeyPressed`, `Input.IsJoyButtonPressed`, `Input.GetJoyAxis` and
+`Input.IsMouseButtonPressed` leaves `SpectatorCamera`'s own `SeatDevices` (the seat's
+`IDeviceState`, which is where the reads belong) and `Launcher.cs`'s pointer click, which is not an
+action. Complete `.\RunTests.ps1` in the item's worktree.
+
+One difference is deliberate and recorded rather than hidden: past the deadzone the seam rescales an
+axis onto [0, 1] (`Binding.Resolve`) where `PadAxis` passed the raw travel through, so the freecam's
+stick response between 0.18 and full deflection is a ramp from zero rather than a step to 0.18. Rest
+and full deflection are unchanged, so the top look and fly rates are the same. The orbit dolly reads
+the boost and slow triggers, whose shipped 0.5 threshold now dead-zones the first half of a trigger
+that used to dolly from zero; giving the dolly its own action would fix it and is not this item's.
 
 **⚠ Traps.** ⚠ **`SpectatorCamera` does not poll the mouse; it handles `InputEvent`s.** Free-look
 there is `InputEventMouseButton { ButtonIndex: MouseButton.Right }` toggling a `_looking` field, with
