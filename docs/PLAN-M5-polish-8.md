@@ -1068,7 +1068,8 @@ orchestrator.
 ## D31 ☐ At-the-controls pass over the landed items
 
 **Goal.** Every landed item whose acceptance needs eyes or a judgement gets both, and every
-finding becomes a fix, a follow-up `BL`, or a recorded verdict.
+finding becomes a fix, a follow-up `BL`, or a recorded verdict. The checks are `playtest.md`'s
+`PT-86` (nitro) and `PT-97` to `PT-106`, one per landed item.
 
 **Evidence (confidence: n/a; this item consumes the others' playtest lines).** The checks owed,
 by item: A1 CM09 flown to the docking if the headless run could not prove it; A2 any campaign
