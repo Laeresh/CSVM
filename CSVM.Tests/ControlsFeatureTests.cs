@@ -461,6 +461,28 @@ public class ControlsFeatureTests
         Assert.True(feature.Dirty);
     }
 
+    [Fact]
+    public void ACapturedTriggerNamesBothOwnersOfTheDoubleBoundTriggerWhateverDeadzoneEachHolds()
+    {
+        var feature = new ControlsFeature();
+        feature.AddSeat(1, BindingProfile.Defaults(Pad, readsKeyboard: true), _ => Pad, true);
+        feature.Context = InputContext.Camera;
+        feature.Focus(IndexOf(feature, InputAction.CameraLockTarget));
+        feature.MoveSlot(9);
+
+        // The right trigger ships on boost at 0.5 and on the dolly at 0, and SameControl ignores the
+        // deadzone, so a capture at a third one lands on both rather than stacking a copy.
+        Assert.True(feature.Offer(Axis(JoyAxis.TriggerRight, 1, ControlCapture.CapturedDeadzone)));
+
+        Assert.Equal(
+            new[] { InputAction.CameraBoost, InputAction.CameraDollyOut },
+            feature.Pending!.Losers);
+
+        feature.ConfirmSteal();
+        Assert.Empty(feature.Bindings(InputAction.CameraDollyOut));
+        Assert.Contains(Key(Godot.Key.Shift), feature.Bindings(InputAction.CameraBoost));
+    }
+
     private static (ControlsFeature Feature, ActionMap Map) Flight()
     {
         var feature = new ControlsFeature();
@@ -498,6 +520,9 @@ public class ControlsFeatureTests
     private static Binding Key(Key key) => new(DeviceId.Keyboard, BindingControl.Key((int)key));
 
     private static Binding Button(JoyButton button) => new(Pad, BindingControl.Button((int)button));
+
+    private static Binding Axis(JoyAxis axis, int sign, float deadzone) =>
+        new(Pad, BindingControl.Axis((int)axis, sign, deadzone));
 
     private sealed class FakeDevices : IDeviceState
     {
