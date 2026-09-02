@@ -38,6 +38,11 @@ public static class EngineAudioCurves
     /// Decode: docs/formats/vehicle.md, "What makes an airframe damaged".</summary>
     internal const float DamagedEngineHealthFraction = 0.25f;
 
+    // The re-arm delay's floor and spread: a threshold drawn as Min + Spread*u, u in [0, 1).
+    // The original's own 3.0 + 2*rand()/32767 (docs/formats/vehicle.md, "an airframe damaged").
+    private const float DamagedRearmMin = 3f;
+    private const float DamagedRearmSpread = 2f;
+
     // The mixer clamps the played frequency rather than letting a multiplier reach zero; Godot has
     // no such floor, and a PitchScale of 0 stalls the stream instead of bottoming out.
     private const float MinPitch = 0.01f;
@@ -75,6 +80,22 @@ public static class EngineAudioCurves
         stats.DamagedEnginePitchRandom
             ? stats.DamagedEnginePitchLo + ((stats.DamagedEnginePitchHi - stats.DamagedEnginePitchLo) * u)
             : 1f;
+
+    /// <summary>Ticks the shared re-arm timer one frame and says whether the damaged loop may
+    /// start now. The accumulator resets to zero once it crosses a threshold redrawn every frame
+    /// from <paramref name="u"/>, the frame's own draw in [0, 1). Only reached while the engine
+    /// handle is silent and the airframe is damaged.
+    /// Decode: docs/formats/vehicle.md, "What makes an airframe damaged".</summary>
+    public static bool AdvanceDamagedRearm(DamagedEngineTimer timer, float dt, float u)
+    {
+        timer.Elapsed += dt;
+        if (timer.Elapsed < DamagedRearmMin + (DamagedRearmSpread * u))
+        {
+            return false;
+        }
+        timer.Elapsed = 0f;
+        return true;
+    }
 
     /// <summary>The engine slot's definition and its pitch multiplier: damaged swaps onto
     /// <c>damaged_engine_sound</c> at a drawn multiplier; else <paramref name="cockpitView"/>

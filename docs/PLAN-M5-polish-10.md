@@ -146,7 +146,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Feedback at the controls
 
 21. ☐ `BL-419` The sonic ground burst reads as one flat ring on the terrain
-22. ☐ `BL-459` A damaged engine's loop waits out the original's re-arm delay before it restarts
+22. ☑ `BL-459` A damaged engine's loop waits out the original's re-arm delay before it restarts
 23. ☑ `BL-433` Numpad `+`/`−` drive the chase camera's zoom
 24. ☑ `BL-679` A staged airframe leaves no stale node behind in the name resolver
 25. ❌ `BL-405` Mounted ordnance tracks the aim before it launches, or the census closes it (disproven: no shipped airframe authors an animated mount node, so the pylon staying fixed already matches the original)
@@ -706,7 +706,50 @@ neighbourhood (`PoseChannel.SetSubtreeOpacity`, `ApplyOpacity`) and is a separat
 touches that path, do not silently absorb it. `CAP-26` is the rocket-impact rings capture, and its
 "look for" list should gain the flat-ring-against-airborne-hoops question as this item settles it.
 
-## C22 ☐ `BL-459` A damaged engine's loop waits out the original's re-arm delay before it restarts
+## C22 ☑ `BL-459` A damaged engine's loop waits out the original's re-arm delay before it restarts
+
+**Landed.** `CSVM/src/Flight/AiEngineAudio.cs`'s `SetEngineDamaged` now only STOPS the slot-0 handle
+on the healthy→damaged edge; it no longer swaps the stream on that frame. `Update`'s new
+`ArmDamagedLoop` ticks a shared re-arm timer every frame the handle is silent and the airframe is
+damaged, via the new pure `EngineAudioCurves.AdvanceDamagedRearm(DamagedEngineTimer, dt, u)`
+(`u` the frame's own draw off `Rng.Stream(Rng.FlightAudio)`), and only swaps the stream, draws the
+pitch multiplier and logs `slot 0 -> snd_damagedengine` once the accumulated time crosses a
+threshold redrawn each call as `3.0 + 2·u` seconds. The timer's state
+(`PlaneStats.DamagedTimer`, a new `DamagedEngineTimer` with one mutable `Elapsed` field) lives on
+the airframe DEFINITION, not the instance: it is set once in `PlaneStats`'s object initialiser and
+every `With*` clone's `MemberwiseClone` carries the same reference forward, so every aircraft built
+off one cached `PlaneStats` (`GameSession.BuildFlightRigs`'s `aiStatsCache`) shares one counter and
+one draw, exactly as the original's def field does. A looped `snd_damagedengine` that is still
+playing skips `ArmDamagedLoop` entirely, matching "never reaches the timer". The damaged→healthy
+direction is untouched and stays immediate. `docs/architecture.md`'s `AiEngineAudio.cs`,
+`PlaneStats.cs` and `EngineAudioCurves.cs` entries carry the mechanism and the sharing trap.
+
+**Verified.** New suite `ai-engine-rearm` (`CSVM/src/Testing/AiSuites.cs`) spawns two AI aircraft off
+one cached `PlaneStats`. The first ticks alone to 2.9 s (under the 3 s floor, so this is
+deterministic whatever the seed draws, since no possible drawn threshold sits below it) with no
+swap. The second, only silenced afterward, inherits that head start and swaps within its own 174
+frames (short of the 3 s floor a fresh timer would need), while the untouched first aircraft still
+has not; the damaged→healthy restore is confirmed immediate throughout. Run against the pre-fix
+code (a deliberate revert-and-restore, not landed), the same suite fails on its first check, "the
+damaged loop does not swap on the frame the damage is decided", a real fail-before/pass-after
+regression. A flown `RunProbe.ps1 --chapter=C1 --plane=player_bhawk --ai=player_fury
+--ai-damage=0.1 --volume=0 --log=sound:debug --seed=1 --det` (a temporary physics-frame counter
+added and removed for the measurement) put `audible` at physics frame 8 and
+`slot 0 -> snd_damagedengine` at frame 199, 191 frames, 3.18 s at the fixed 16.667 ms step, inside
+the decoded 3 to 5 s window; the same probe against the pre-fix code logged the swap at frame 8
+too, ahead of `audible` in the log. `EngineAudioModelTests` (`CSVM.Tests`) gained direct unit
+coverage of `AdvanceDamagedRearm`'s threshold/reset arithmetic and of the `DamagedTimer` reference
+surviving every `PlaneStats.With*` clone. Full `.\RunTests.ps1` after this item's own change: build
+clean (0 warnings), 3077/3077 units, 231/231 engine suites, 18/18 goldens hash-identical, no
+golden moved. Re-verified after merging in `A1`, `A3`, `B13`, `C23` and `C24`: build clean,
+3095/3095 units, 232/232 engine suites (232 now that `ai-engine-rearm` joins the other four
+items' own new suites), and the golden stage moves exactly the five shots those items' own
+sections already record as pending (`B13`'s four C1/IA1 aircraft shots plus `A1`'s
+`c1-debris-rest`), all thirteen others hash-identical. None of the five is a shot this item's own
+Evidence, Approach or Verify sections named, and this item touches no rendered pixel path, so
+they are not re-pinned here; that stays each moved shot's own item to close.
+
+**Original approach (kept for reference).**
 
 **Goal.** A damaged AI aircraft that comes back inside the engine-audio cull starts its damaged loop
 three to five seconds after it becomes audible, as the original does, rather than on the same frame.
