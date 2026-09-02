@@ -502,17 +502,40 @@ tidy either while migrating.
 
 **Goal.** Menu navigation resolves through the same seam.
 
-**Evidence (confidence: lead-only).** Named in `BL-296`. <TODO: read `MenuInput` and state what it
-polls.>
+**Evidence (confidence: traced).** `MenuInput` polls 34 named controls, not 33. Twenty-five are the
+nine menu actions and migrate: the keys `Up` `W` `Down` `S` `Left` `A` `Right` `D` `Enter` `KpEnter`
+`Space` `Escape` `L` `P`, the pad buttons `DpadUp` `DpadDown` `DpadLeft` `DpadRight` `A` `B` `Start`
+`Y` `X`, and the two halves each of `LeftY` and `LeftX` past a 0.5 deadzone. Nine do not: the five
+in `ScanActivePad` (`A`, `B`, `DpadUp`, `DpadDown`, `LeftY`) and `JoinPressed`'s `Start` answer
+*which pad acted*, and `Shift`, `Backspace` and the 37-key typing sweep have no named action at all.
 
-**Approach.** As B11, scoped to the menu actions.
+**Approach.** As B11, scoped to the menu actions. Three readings of one seat cover the file's own
+distinctions: the pad-only twins (`PadMove`, `PadMoveX`, `PadBack`) are a seat with
+`ReadsKeyboard` false, and `TextEntry`'s dead letter aliases are a map with every binding on a
+typeable key dropped (`MenuInput.TypingMap`), which reproduces `AliasDown` and keeps holding after a
+rebind. Pad rows sit on a seat-local placeholder identity, `MenuInput.SeatPads`, because a menu seat
+reads a set of pads (player 1 holds every unclaimed one) and no binding may store a connection index;
+`MenuInput.SeatDevices` answers for it through `CSVM.Pads.For`, keeping the focus and `--no-pads`
+gates.
 
 **Model recommendation.** medium, low effort. Mechanical fan-out.
 
-**Verify.** <TODO.>
+**Verify.** `CSVM.Tests/MenuInputBindingTests.cs`, 46 facts over a fake device state in
+`BindingModelTests`'s shape: each of the 25 migrated controls resolves its action *and no other menu
+action*, the stick fires strictly past 0.5 and not at it, a pad-only seat reads its pad and none of
+the keyboard rows, every typeable key is dead in the text-entry map while the dedicated keys and the
+whole pad stay live, `Dir` takes the negative end when both are held, and `MenuJoin` is the only
+menu action the seat cannot resolve. Run with
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~MenuInputBindingTests" -SkipEngine -SkipGoldens`.
+Then the complete `.\RunTests.ps1`, since this lands under `CSVM/`.
 
 **⚠ Traps.** Menu input runs outside the fixed tick. Confirm the once-per-tick snapshot in A2 does
 not starve it before reusing the same resolver here.
+
+⚠ **The join path stays a raw poll and is not a hole in the migration.** `JoinPressed` and
+`ScanActivePad` ask which *device* produced an input, and a seat's bindings OR across every pad the
+seat holds, so the answer is unrecoverable from an action. C21 already leaves `MenuJoin` unbound for
+this reason; `LastActivePad` is the same question and gets the same treatment.
 
 ## B13 ☐ Migrate `SpectatorCamera` and whatever the census turns up
 
