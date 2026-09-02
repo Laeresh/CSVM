@@ -33,6 +33,8 @@ public readonly record struct Binding(DeviceId Device, BindingControl Control)
                 return ControlValue.Digital(state.IsKeyDown(Device, Control.Index));
             case ControlKind.Button:
                 return ControlValue.Digital(state.IsButtonDown(Device, Control.Index));
+            case ControlKind.Mouse:
+                return ControlValue.Digital(state.IsMouseButtonDown(Device, Control.Index));
             case ControlKind.Hat:
                 return ControlValue.Digital((state.HatState(Device, Control.Index) & Control.Direction) != 0);
             default:

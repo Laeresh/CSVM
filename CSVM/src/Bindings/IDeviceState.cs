@@ -14,6 +14,9 @@ public interface IDeviceState
     /// <summary>Whether that button is held.</summary>
     bool IsButtonDown(DeviceId device, int button);
 
+    /// <summary>Whether that mouse button is held. The numbering is the engine's own.</summary>
+    bool IsMouseButtonDown(DeviceId device, int button);
+
     /// <summary>The axis at rest-relative travel in [-1, 1], with no deadzone applied: the deadzone
     /// belongs to the binding, so two bindings can gate the same axis differently.</summary>
     float AxisValue(DeviceId device, int axis);

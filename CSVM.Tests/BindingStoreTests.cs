@@ -60,6 +60,22 @@ public class BindingStoreTests
         Assert.Contains(kp7, loaded.Bindings(InputAction.LookLeft));
     }
 
+    /// <summary>A mouse binding round-trips through the file like any other control: the token names
+    /// the device and the button in words, and reads back to the same binding.</summary>
+    [Fact]
+    public void RoundTrip_PreservesAMouseBinding()
+    {
+        var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        var json = BindingStore.Serialize(1, profile);
+
+        Assert.Contains("mouse/mouse:Right", json, StringComparison.Ordinal);
+
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true).Map(InputContext.Flight);
+        Assert.Equal(
+            new[] { new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Right)) },
+            loaded.Bindings(InputAction.FreeLook));
+    }
+
     /// <summary>A hand-written file from a bumped version: the version says how the tokens are
     /// encoded, so a reader that understands the tokens it is given keeps them and every action the
     /// file does not name stays at its shipped default.</summary>

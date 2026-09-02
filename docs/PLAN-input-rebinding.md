@@ -165,7 +165,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ The binding model: device identity, tagged control, binding list
 2. ☑ `InputAction` and `ActionMap`: named actions resolved per player
 3. ☑ The device registry: enumeration, stable identity, hot-plug
-4. ☐ A mouse control kind, so free-look is bindable at all
+4. ☑ A mouse control kind, so free-look is bindable at all
 
 ### Wave B — the migration
 
@@ -397,7 +397,30 @@ launch and again from that signal, but the call site is left for whoever builds 
 resolver (A2's `ActionMap`, or `GameSession`), since A3 has no polling loop of its own to hook it
 into.
 
-## A4 ☐ A mouse control kind, so free-look is bindable at all
+## A4 ☑ A mouse control kind, so free-look is bindable at all
+
+**Landed.** `ControlKind.Mouse` end to end: `DeviceId.Mouse` (a singleton with an empty id, following
+`DeviceId.Keyboard`, since there is one mouse and no registry involvement), the
+`BindingControl.Mouse` factory, a resolve arm in `Binding.Resolve`, `IsMouseButtonDown` on
+`IDeviceState` implemented over `Input.IsMouseButtonPressed`, a `mouse:` token in `BindingStore`, and
+`FreeLook` bound to the right button. `Unbound` holds `MenuJoin` alone, and its test asserts that
+exact list rather than a count, so the tightening cannot be masked by a loosened assertion.
+
+**A pad-only seat's mouse is silenced along with its keyboard**, which this item did not anticipate
+and which adding a member to `IDeviceState` forced. It is not a new rule: `FlightController:3681`
+already reads free-look as `UseKeyboard && Input.IsMouseButtonPressed(MouseButton.Right)`, so the
+mouse is gated on the keyboard seat today, and `PlayerActions.MutedKeyboard` reproduces that. Left
+ungated, every splitscreen pad-only seat would have gained a live free-look off the one physical
+mouse, which is a behaviour change and this plan forbids those.
+
+**Verified.** A resolve fact in `BindingModelTests`, a `FreeLook_IsTheRightMouseButton` fact and the
+tightened `Unbound` assertion in `DefaultBindingsTests`, and a `mouse/mouse:Right` round-trip in
+`BindingStoreTests`. Run with
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~BindingModelTests|FullyQualifiedName~DefaultBindingsTests|FullyQualifiedName~BindingStoreTests" -SkipEngine -SkipGoldens`.
+Complete `.\RunTests.ps1` in the item's worktree: PASS, exit 0, 3138 units, 230 engine suites, 18
+goldens hash-identical, 0 build warnings.
+
+**Original approach (kept for reference).**
 
 **Goal.** `InputAction.FreeLook` has a default binding like every other action, and B11 and B13 can
 migrate their free-look sites instead of leaving a raw poll behind.
@@ -489,7 +512,15 @@ three named files.
 
 **Verify.** A repo-wide grep for the poll calls returns only the resolver itself.
 
-**⚠ Traps.** <TODO: fill from the census.>
+**⚠ Traps.** ⚠ **`SpectatorCamera` does not poll the mouse; it handles `InputEvent`s.** Free-look
+there is `InputEventMouseButton { ButtonIndex: MouseButton.Right }` toggling a `_looking` field, with
+the pan itself driven by `InputEventMouseMotion`. The census counted its polled key and pad reads,
+which are migratable, but the mouse path is not one of them. **Do not convert those events into
+polls, and do not convert any polled site into an event.** `BL-296`'s trap is that an event-based
+seam breaks scripted `--det` / `--hold` runs, and the inverse swap here would change when free-look
+starts and stops relative to the frame. Migrate the polled reads, leave the event handlers alone,
+and say in the landing commit which sites were left and why. The wheel-sets-speed and mouse-pick
+paths are events too and are equally out of scope.
 
 ## B14 ☐ Determinism gate: `--det` / `--hold` reproduce bit for bit
 

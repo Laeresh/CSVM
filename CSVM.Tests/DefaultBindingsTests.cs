@@ -47,7 +47,7 @@ public class DefaultBindingsTests
             Assert.Empty(map.Bindings(action));
         }
 
-        Assert.Equal(2, DefaultBindings.Unbound.Count);
+        Assert.Equal(new[] { InputAction.MenuJoin }, DefaultBindings.Unbound);
     }
 
     [Fact]
@@ -141,6 +141,18 @@ public class DefaultBindingsTests
             new Binding(Pad, BindingControl.Button((int)JoyButton.DpadRight)),
             map.Bindings(InputAction.SelectGunGroup));
         Assert.Equal(3, map.Bindings(InputAction.Pause).Count);
+    }
+
+    /// <summary>Free look is the held right mouse button, the one action the model had no kind for
+    /// until <see cref="BindingControl.Mouse"/> existed.</summary>
+    [Fact]
+    public void FreeLook_IsTheRightMouseButton()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+
+        Assert.Equal(
+            new[] { new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Right)) },
+            map.Bindings(InputAction.FreeLook));
     }
 
     /// <summary>The whole seat: three contexts, each with its own live actions, and the keyboard
