@@ -173,7 +173,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 41. ☑ Complete Original top level, Options and every remaining transition
 42. ☑ Enforce the required/optional Original asset manifest
-43. ☐ Complete typed launch and semantic return routing across every journey
+43. ☑ Complete typed launch and semantic return routing across every journey
 44. ☐ Run acceptance, enable Original normally and publish the Modern extension contract
 
 ## Dependency and parallelism notes
@@ -1597,7 +1597,7 @@ re-extracting anything.
 **⚠ Traps.** Do not discover required absence one blank screen at a time. Do not overwrite the
 requested presentation during fallback.
 
-## E43 ☐ Complete typed launch and semantic return routing across every journey
+## E43 ☑ Complete typed launch and semantic return routing across every journey
 
 **Goal.** All menu paths leave through one typed handoff and every flight return is expressed as a
 semantic destination that each presentation maps into its own graph.
@@ -1621,9 +1621,99 @@ yet carry.
 
 **Model recommendation.** max — session lifecycle and campaign progression are high-blast-radius.
 
-**Verify.** Launch and return every mode in both presentations, including restart/rerun distinctions,
-campaign mission completion and failure, and presentation fallback before return. <TODO: exact
-session suite matrix and whether any return path needs a new deterministic aid.>
+What was found by reading, then built. The launch side was already whole: `LaunchMenu` leaves
+through `IMenuHost.Exit` alone (`FireLaunch` for the three modes, `FlyCampaignMission`, Back on
+Mode as `QuitExit`, Options' apply as `PresentationSwitchExit`), `OriginalShell` the same four
+through `OriginalPresentation.Tick`, and `Launcher.OnMenuExit` is the one consumer; no launch
+callback remained on `LaunchMenu`, and no presentation names `GameSession`, `Launcher` or
+`LauncherContext` (now enforced by a metadata scan, below). The return side had one leak: the
+`--menu=` aid rode in each presentation's constructor and was applied on every `Activate`, so a
+return after a flight re-entered the aid's screen, and `Launcher.ShowMenu` re-raised the
+`loadboard` aids on every show for the same reason. Closed: `Launcher` parks the aid in
+`_menuAid`, the registry factories read it when they run (inside the first `Show`, so the cold
+start's instance gets it and the fresh instance a switch creates gets none) and the first
+`ShowMenu` consumes it; each presentation consumes its own copy on its first `Activate`. A return
+to the top level is now the top level itself in both presentations, with Built-in's cursors intact
+(B11's rule, re-pinned); the debrief and cabin returns are unchanged. This is the one change to
+Built-in's observable return behaviour the plan makes and it is recorded in `docs/cli.md`'s
+`--menu=` bullet; no aid relied on re-application, so the destination vocabulary carries nothing
+new. The real-store versus scratch-store distinction is the presentation's aid handling, not the
+destination's: a destination says where the player stands, a store is the presentation's
+environment, and the two campaign returns already name a profile that is re-read from the
+presentation's store (`user://Profiles`, or the scratch store a suite sets). It is made explicit
+as `CampaignAidProfiles.PlayerDoor` (`campaign`), which both presentations read, and Original gains
+`--menu=campaign` under `--presentation=original` as the same player's door; every other campaign
+value stays a shot over the scratch store. Deleted or renamed: `LauncherContext.ReturnToCabin`
+(a misnomer; the destination it fed is the debrief) is `CampaignMissionEnded`, `GameSession`
+follows, and the stale "Launch callback" reading on `MenuMode`'s doc is corrected; nothing else
+transitional was left to delete. Kept on purpose: `Launcher.BuiltInMenu`, null-safe under
+Original, for Built-in's one-shot debug aids and its failed-build error line. Original gets no
+failed-build note: the failure is a data-tree fault the log names, and a messagebox for it would
+be an invented state under Decision 11; a failed build now logs one `ui` line naming the active
+presentation, and Original's top level shows bare. A return never re-selects the presentation:
+availability is asked at `Select` and at a switch, so a tree repaired mid-process is seen by the
+switch alone (E42's rule), and a return re-shows the instance that is up.
+
+**Verify.** `dotnet build CSVM/CSVM.sln` (0 warnings); the whole `dotnet test` (3024, one new:
+`MenuNamespaceDependencyTests.PresentationsNeverConstructASessionOrReachTheLauncher`, the A4 scan
+over `CSVM.UI` and every `CSVM.UI.Menu*` namespace banning `GameSession`, `Launcher` and
+`LauncherContext` in signatures and bodies alike); `.\RunTests.ps1 -Suite menu-launch-return
+-SkipUnits -SkipGoldens` (the new suite in `CSVM/src/Testing/MenuLaunchReturnSuites.cs`: two hosts
+standing for two processes over one scratch store under `.scratch\menu-launch-return\Profiles`, a
+Built-in process started on `--menu=chapter` and an Original one on `--menu=free-flight`, each
+opening on the aid's screen once; in each, Free Flight, an ace duel, a squadron, a two-seat
+Dogfight and the cabin's FLY MISSION leave as `LaunchExit`/`CampaignMissionExit` with the host's
+`Shown` already false when the sink runs; every `Show(TopLevel)` afterwards lands on Mode or the
+Original top level with the cursors and seats kept and the picks dropped; `Show(DebriefReturn)`
+lands on the book over the saved profile and `Show(CabinReturn)` on the cabin; Back on Mode and
+Quit leave as `QuitExit`, Options' apply as `PresentationSwitchExit`; a third Original process on
+`--menu=campaign` opens the profile screen over the presentation's store, not the scratch aid
+store; and Original refused at `Select` runs Built-in on Mode with `Requested` still Original,
+launches, and re-shows the same instance on the return with availability restored, since a return
+does not re-select). Under a deliberate perturbation (the Built-in aid not consumed) the suite
+fails 16 of its checks, the first being `the return lands on Mode, not on the aid's screen
+(Chapter, row 0)`. Then `.\RunTests.ps1 -Filter "menu,campaign" -SkipUnits -SkipGoldens` (57
+suites, 57 passed, engine errors clean, 92.8s; `campaign-loop`, `campaign-mission-end` and
+`campaign-player-death` among them, unchanged), `.\CheckCommentCaps.ps1 -Summary` (all within
+cap) and `.\CheckEncoding.ps1` (no mojibake). Built-in unchanged on a cold start: `mode`,
+`chapter`, `plane`, `selected`, `options`, `loadboard`, `loadboard-campaign` and the twelve
+scratch-profile campaign aids `campaign-empty`, `campaign-roster`, `campaign-entry`,
+`campaign-cabin`, `campaign-previous`, `campaign-scrapbook`, `campaign-briefing:24`,
+`campaign-flightcheck`, `campaign-guestcheck:2 --debug-join=3`, `campaign-ammo`,
+`campaign-planeselection` and `campaign-hangar` at 1280x720, each one Godot run on the hidden
+desktop with `--resolution 1280x720` ahead of the `--` and `--menu=<aid> --screenshot=<abs path>`
+(`.scratch\e43-shots.ps1`), from the `mp-e42` worktree at `7ead9eb3` (its `CSVM/` and
+`CSVM.Tests/` trees are byte-identical to the plan tip `cb4255a4`, which differs from it by the
+E42 record commit alone) into `.scratch\e43-shots\builtin-before\` and from this tree into
+`.scratch\e43-shots\builtin-after\`, compared by decoded 32bpp pixels (`.scratch\e43-compare.ps1`):
+19 of 19 identical, zero differing pixels. No region differs, because the change is to what a
+return shows and every aid shot is a cold start. What the suite proves: every exit's type and
+payload at the host's sink, the host hiding the presentation before the sink runs, and each
+presentation's mapping of the three destinations on a `Show` after an exit. What it does not
+reach, `Launcher`'s own half, is read and is short: `ExitSession` is `ReturnToMenu(TopLevel)`
+when menu-driven and a quit otherwise; `RestartSession` frees and rebuilds without touching the
+menu; a campaign mission's end (won or lost, the outcomes `campaign-mission-end` and
+`campaign-player-death` drive through the director) reaches `CampaignMissionEnded`, is queued in
+`_pendingDebrief` and becomes `ReturnToMenu(DebriefReturn(profile, seq))` on the next frame; a
+failed build is `ReturnToMenu(TopLevel)` plus the log line and Built-in's error line. The
+harness runs suites before any session builds and no flag exits a flight without a hand at the
+controls, so no new deterministic aid is added for a return; that half is owed at the controls
+(`RunDev.ps1`, each of Free Flight, Instant Action, Dogfight and a campaign mission to FLY in
+each presentation, the pause board's Exit, expect the top level of that presentation with its
+cursors where they were; a campaign mission flown to its end, won and lost, expect the scrapbook
+on that mission; the same under `--menu=chapter` and `--presentation=original --menu=free-flight`,
+expect the top level and not the aid's screen). `docs/verification.md` rules that bit:
+**METHOD-6** (which binary each side used is named: `mp-e42` at `7ead9eb3` against this tree),
+**METHOD-3** (the compared aids read a scratch store emptied on every open; the user's profile and
+plane stores were never written), **METHOD-9** (the suite fails under the perturbation above; a
+suite that could not fail would have passed it), **SHOT-6** (decoded pixels, never PNG bytes),
+**SHOT-9**/**SHOT-10** (windowed probes on the hidden desktop, absolute paths, every file checked
+present), **SHOT-32** (a shot proves the frame it drew; the return is the suite's to prove). One
+observation outside this item: `--menu=campaign-roster` draws the cabin (its hash equals
+`campaign-cabin`'s before and after), since the aid's walk seats the profile before its switch;
+Built-in's own behaviour, preserved under Decision 16 and left for the backlog.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** A semantic destination is not a shared concrete screen id. Presentations never hide
 themselves and construct `GameSession` directly.
@@ -1659,6 +1749,20 @@ corrupt-required, missing-optional (the degraded line and the screen still drawn
 `StampSchema`, and a required file restored while the process is up, which only the switch through
 `SwitchPresentation` re-checks and no test drives at the controls. The recovery pass belongs on a
 scratch data root copy, never on the user's tree.
+
+Handoff from E43: the launch and return half of the matrix is `menu-launch-return` (every exit
+type and every destination in both presentations at the host's sink) plus the metadata scan in
+`MenuNamespaceDependencyTests`, and the acceptance matrix should run both as rows before the
+controls. What only the controls prove is `Launcher`'s own leg, so the at-the-controls pass must
+fly each of Free Flight, Instant Action, Dogfight and a campaign mission from each presentation and
+leave through the pause board's Exit, expecting that presentation's top level with its cursors
+kept; fly a campaign mission to its end, won and lost, expecting the scrapbook on that mission;
+Restart an Instant Action mission and a campaign mission, expecting a rebuild with no menu shown;
+force a failed build from the menu (a chapter folder moved out of a scratch data root copy),
+expecting Built-in's Mode screen with its error line and Original's top level with the `ui` line
+in the log; and start once under `--menu=chapter` and once under `--presentation=original
+--menu=free-flight`, expecting the aid's screen on the cold start and the top level on the
+return. Every campaign row runs over a scratch profile copy, never the user's store.
 
 **Model recommendation.** high — release gate and architectural audit require broad judgement.
 

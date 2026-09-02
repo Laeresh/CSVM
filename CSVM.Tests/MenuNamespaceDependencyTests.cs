@@ -25,6 +25,21 @@ public class MenuNamespaceDependencyTests
         Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
     }
 
+    /// <summary>The launch and return contract's other half: no presentation, and nothing else
+    /// under <c>CSVM.UI</c>, constructs a session or reaches the launcher. A launch leaves as a
+    /// <c>MenuExit</c> through the host and a return arrives as a destination, so the session
+    /// types are never named on the presentation side, in a signature or in a body.</summary>
+    [Fact]
+    public void PresentationsNeverConstructASessionOrReachTheLauncher()
+    {
+        var violations = AssemblyDependencyScan.Violations(
+            Assembly("CSVM.dll"),
+            ns => ns == "CSVM.UI" || ns.StartsWith("CSVM.UI.Menu", StringComparison.Ordinal),
+            name => name is "CSVM.Session.GameSession" or "CSVM.Session.Launcher" or "CSVM.Session.LauncherContext");
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+    }
+
     [Fact]
     public void TheScannerSeesASignatureReference()
     {

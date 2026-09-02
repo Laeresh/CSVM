@@ -12,6 +12,13 @@ namespace CSVM.UI.Menu;
 /// </summary>
 public static class CampaignAidProfiles
 {
+    /// <summary>The one campaign <c>--menu=</c> value that is a player's door rather than a shot:
+    /// it opens the campaign over the presentation's own store (the player's <c>user://Profiles</c>
+    /// unless a suite set a scratch one) and never over this scratch store. Every other campaign
+    /// value opens a screen over <see cref="Store"/>. The store is the presentation's to choose,
+    /// so no <c>MenuReturnDestination</c> names one.</summary>
+    public const string PlayerDoor = "campaign";
+
     /// <summary>The seeded player every aid seats.</summary>
     public const string Pilot = "Zachary";
 

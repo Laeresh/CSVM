@@ -4183,7 +4183,8 @@ same `BoardFit` the board itself draws at — a shell overlay rather than a page
 `CampaignBoards`' authored per-screen geometry has nowhere to put a live, per-frame roster and every
 page would otherwise need the same field. A solo campaign draws no strip, matching every other
 composed board's "no full join strip" rule (`RebuildBoard`'s own comment). The flow's `Message`
-rides the same error line the hangar's gate uses. `--menu=campaign` opens the real `user://Profiles`
+rides the same error line the hangar's gate uses. `--menu=campaign` (`CampaignAidProfiles.PlayerDoor`,
+the player's door) opens the real `user://Profiles`
 roster; every other `campaign-*` value is a screenshot aid over a scratch profile directory
 (`CampaignAidProfiles`, shared with the Original presentation's aids of the same names), so
 those shots are the same on every machine and cannot write into a real campaign. The one exception
@@ -5644,8 +5645,15 @@ state), re-selects with the saved request in place of any `--presentation=` over
 flag still wins) and shows the top level. `ShowMenu(destination)` shows the host at a semantic
 `MenuReturnDestination`, then does what is the owner's: the `loadboard` aids, the menu music cue,
 and the one-shot `--debug-join=`/`--debug-waves=`/`--debug-wingmen=`/`--debug-preset=` aids
-through `BuiltInMenu`, the one door onto the launchscreen (`Active as BuiltInPresentation`), also
-used for the failed-build note. Esc ownership and the capture director's menu flag read
+through `BuiltInMenu`, the one door onto the launchscreen (`Active as BuiltInPresentation`, null
+under Original), also used for the failed-build note. The `--menu=` aid is the cold start's alone:
+`BuildMenuHost` parks it in `_menuAid`, both registry factories read it when they run (inside the
+first `Show`, so the first instance gets it and the fresh instance a switch creates gets none), and
+the first `ShowMenu` consumes it, applying the `loadboard` aids once. Every later show, a return
+from flight through `ReturnToMenu` or a debrief through `OpenDebrief`, lands on the destination
+itself in both presentations. A failed build returns to the top level, logs one `ui` line naming
+the active presentation, and shows Built-in's error line where Built-in is active; Original has no
+note and its top level shows bare. Esc ownership and the capture director's menu flag read
 `MenuHost.Shown`, never a node's visibility. `_Process` ticks the host last, after `RunOwedLaunch`,
 which is where the launchscreen's own process callback ran when it ticked itself as a child.
 
@@ -5658,12 +5666,15 @@ over the profile and story position; it names no chapter and no mission, since
 one place resolves a story position whether it came from a cabin or a `--campaign=` command line),
 and a `QuitExit` quits the tree. The host has already hidden the presentation when the sink runs,
 with its screens kept so a failed build can show it again where it stood. The campaign's return
-leg is `ReturnToCabin`, handed down through `LauncherContext` and non-null only in a menu-driven
-process: a campaign mission's end queues the profile name alongside its `CampaignMissionResult`,
-and the next `_Process` frees the session and shows the menu at a `DebriefReturn(profile, seq)`,
-which Built-in maps onto the scrapbook with the cabin on its far side. Queued rather than acted on
-directly, because the mission ends inside the session's own physics step, which is no place to
-free it.
+leg is `CampaignMissionEnded`, handed down through `LauncherContext` and non-null only in a
+menu-driven process: a campaign mission's end, won or lost, queues the profile name alongside its
+`CampaignMissionResult`, and the next `_Process` frees the session and shows the menu at a
+`DebriefReturn(profile, seq)`, which each presentation maps onto its own book with the cabin on its
+far side. Queued rather than acted on directly, because the mission ends inside the session's own
+physics step, which is no place to free it. The boards' Exit is `ExitSession`, a
+`ReturnToMenu(TopLevel)` in a menu-driven process and a quit otherwise; `RestartSession` rebuilds
+without touching the menu. These three, the failed build's return and the two sinks above are every
+way a session hands control back, and each is a destination or a quit, never a screen name.
 The music channel is built here too, once per process and after every early-quit probe, over a
 `SoundArchive` of its own rather than the build-scoped `SessionArchives.Sounds`: one channel has to
 outlive a mission launch, or the cabin track would restart every time the player left a board. It
@@ -6960,11 +6971,13 @@ from flight lands on the screens as they were left; `Tick` runs the presentation
 The Built-in presentation (`CSVM.UI.Menu.BuiltIn`): `LaunchMenu` registered under
 `PresentationId.BuiltIn`. Constructed with the parent node, the data paths, the `--menu=` aid and
 the raw `MenuInput` behind the host's first seat. `Activate` builds the launchscreen under the
-parent on the first call (switching its own process callback off) and calls `ShowMenu(aid)` on
-every call, then maps the destination: `TopLevelReturn` is the aid's screen, `CabinReturn` opens
-the profile's cabin, `DebriefReturn` the scrapbook on the flown mission. `Tick` runs the menu's
-frame; `Hide` is `HideMenu`; `Deactivate` removes and frees the node. `Menu` exposes the
-launchscreen for what is still Built-in's alone (the launcher's debug aids and failed-build note).
+parent on the first call (switching its own process callback off), calls `ShowMenu(aid)` with the
+aid on that first call and with "" on every later one (the aid is consumed, so a return from flight
+lands on Mode with the cursors kept, as `menu-launch-return` pins), then maps the destination:
+`TopLevelReturn` is the Mode screen, `CabinReturn` opens the profile's cabin, `DebriefReturn` the
+scrapbook on the flown mission. `Tick` runs the menu's frame; `Hide` is `HideMenu`, called by the
+host alone; `Deactivate` removes and frees the node. `Menu` exposes the launchscreen for what is
+Built-in's alone (the launcher's one-shot debug aids and its failed-build note).
 
 ## src/UI/Menu/BuiltIn/BuiltInSeat.cs
 A pad-side `IMenuInputSource`: wraps one `MenuInput`, polls it and translates the result into a
@@ -7029,9 +7042,12 @@ The one typed menu exit, handed to `IMenuHost.Exit` and consumed by `Launcher`: 
 it, ends the active presentation and shows the selected one at its top level). A custom plane
 arrives as its resolved `CustomPlaneDef`, never a store name, so the consumer reads no store.
 Presentations never construct sessions. `LaunchMenu` produces the first three and the switch,
-`OriginalShell` the launch, the campaign launch, the quit and the switch, and `Launcher.OnMenuExit` consumes them all;
-the return side still carries the `--menu=` aid on every top-level show until the semantic
-destinations replace it.
+`OriginalShell` the launch, the campaign launch, the quit and the switch, and `Launcher.OnMenuExit`
+consumes them all; the return side is `MenuReturnDestination` alone, the `--menu=` aid reaching
+only the cold start. `CSVM.Tests/MenuNamespaceDependencyTests.cs` scans the compiled metadata so
+nothing under `CSVM.UI` names `GameSession`, `Launcher` or `LauncherContext`; `menu-launch-return`
+(`src/Testing/MenuLaunchReturnSuites.cs`) drives every launch and every return through a real
+`MenuHost` in both presentations.
 
 ## src/UI/Menu/MenuLayout.cs
 The runtime reader of `extracted/rof/menu_layout.json`, the decoded menu layout `ExtractRof.ps1`
@@ -7402,8 +7418,10 @@ refreshes the setup's roster from the saved-plane store on every call (`Roster(c
 it), stands the shell on the top level and then maps the destination: a `CabinReturn` reopens the
 campaign and seats the named profile on the cabin (`ShowCabin`), a `DebriefReturn` seats it and
 opens the book on the flown mission (`ShowScrapbook`), either landing on the profile screen with a
-logged warning when the profile cannot be read; a top-level show applies the `--menu=` aid
-(`free-flight`, `dogfight`, `instant-action`, `options`, the hangar's `plane-name`,
+logged warning when the profile cannot be read; the first show alone applies the `--menu=` aid,
+consumed so every later top-level show is the top level itself (`campaign`, the player's door onto
+the profile screen over the presentation's store, `free-flight`, `dogfight`, `instant-action`,
+`options`, the hangar's `plane-name`,
 `plane-construction`, `plane-paint`, `plane-purchase` and `plane-inventory`, each on a fresh build
 named Sample Plane that no aid commits, the campaign aids it shares with Built-in over
 `CampaignAidProfiles`' scratch store, `CampaignAids`, the briefing's seconds argument advanced in
@@ -7474,6 +7492,11 @@ pointer; a source that wants one wraps itself the same way.
 Where the menu stands when it comes back, said semantically: `TopLevel`, `CabinReturn(profile)`,
 `DebriefReturn(profile, missionSeq)`. The host names the destination and the active presentation
 maps it into its own graph at `Activate`, so no presentation-specific screen id crosses the seam.
+A destination names where the player stands and never a store: the two campaign returns name a
+profile, and the store it is re-read from is the presentation's own (`user://Profiles`, or the
+scratch store a suite sets), the same choice the `--menu=` campaign values make through
+`CampaignAidProfiles.PlayerDoor`. The `--menu=` aid is not a destination either; it reaches the
+cold start alone, so a return is always one of these three.
 The dependency direction for this whole folder: types in the `CSVM.UI.Menu` namespace reference
 no `Godot` type and no `CSVM.UI` type outside that exact namespace, enforced by
 `CSVM.Tests/MenuNamespaceDependencyTests.cs` over compiled metadata (signatures and method-body

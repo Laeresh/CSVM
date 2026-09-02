@@ -139,6 +139,9 @@ public partial class Launcher : Node3D
     // A presentation switch the Options route asked for, acted on at the top of the next frame:
     // the exit arrives inside the active presentation's own tick, which is no place to free it.
     private PresentationId? _pendingSwitch;
+    // The --menu= aid, held for the cold start alone: the first presentation created reads it and
+    // the first ShowMenu consumes it, so no return from flight and no switch re-enters its screen.
+    private string? _menuAid;
     private bool _menuDriven;      // launched into the menu → Esc from flight returns here, not quit
     // The score, and the archive it streams from. Both are process-lifetime, unlike the
     // build-scoped SessionArchives.Sounds: one channel has to survive a mission launch, or the
@@ -218,8 +221,8 @@ public partial class Launcher : Node3D
     private GameClock? ClockNow => _clock ?? GameClock.Current;
 
     // The launchscreen while the Built-in presentation is the active one, else null: the door for
-    // what is still Built-in's alone (the debug aids, the failed-build note). Every other reading
-    // of the menu goes through the host.
+    // what is Built-in's alone (its one-shot debug aids, its failed-build note). Null-safe under
+    // Original, where both are absent by design; every other reading of the menu goes through the host.
     private LaunchMenu? BuiltInMenu => (_menuHost?.Active as BuiltInPresentation)?.Menu;
 
     public override void _Ready()
@@ -828,6 +831,9 @@ public partial class Launcher : Node3D
             return; // a CLI launch leaves the log to tell the story, as it always did
         }
         ReturnToMenu(MenuReturnDestination.TopLevel);
+        // Built-in's error line is its own; Original has no note and its top level shows bare, so
+        // the log carries the fact for both presentations.
+        Log.Warn("ui", $"menu: the build failed, back at the top level of {_menuHost?.Selected}");
         BuiltInMenu?.ShowError($"Could not load {_spec.Chapter} / {string.Join(", ", _spec.PlaneNames)} — see the log.");
     }
 
@@ -904,7 +910,7 @@ public partial class Launcher : Node3D
             MenuPads = _menuPads,
             ExitSession = ExitSession,
             RestartSession = RestartSession,
-            ReturnToCabin = _menuDriven
+            CampaignMissionEnded = _menuDriven
                 ? (profile, result) => _pendingDebrief = (profile, result)
                 : null,
             Music = _music,
@@ -956,16 +962,20 @@ public partial class Launcher : Node3D
     }
 
     // Shows the menu at a semantic destination, building the host on first use. Re-shown by
-    // ReturnToMenu after Esc-from-flight and by OpenDebrief after a campaign mission.
+    // ReturnToMenu after the boards' Exit and a failed build, and by OpenDebrief after a campaign
+    // mission. The --menu= aid is the cold start's alone: the presentation created inside the
+    // first Show reads it, and it is consumed here so a return shows the destination itself.
     private void ShowMenu(MenuReturnDestination destination)
     {
         _menuHost ??= BuildMenuHost();
+        string aid = _menuAid ?? string.Empty;
         _menuHost.Show(destination);
+        _menuAid = null;
         // The load screen is up for two frames during a build and torn down before anything
         // renders, so a shot of it needs a door of its own that leaves it standing.
-        if (_spec.MenuStartScreen is "loadboard" or "loadboard-campaign")
+        if (aid is "loadboard" or "loadboard-campaign")
         {
-            ShowLoadScreen(_spec.MenuStartScreen == "loadboard-campaign");
+            ShowLoadScreen(aid == "loadboard-campaign");
         }
 
         // Safe on every entry: a cue for the track already playing is a no-op, which is exactly
@@ -993,10 +1003,13 @@ public partial class Launcher : Node3D
         var builtInSeat = new BuiltInSeat(new MenuInput { Keyboard = true });
         var seat = new PointerSeat(builtInSeat, MousePosition, () => Input.IsMouseButtonPressed(MouseButton.Left));
         var registry = new PresentationRegistry();
+        // The factories read the aid when they run, which is inside a Show: the cold start's
+        // instance gets it, and the fresh instance a switch creates gets none.
+        _menuAid = _cli.MenuStartScreen;
         registry.Register(PresentationId.BuiltIn,
-            () => new BuiltInPresentation(this, _zrdrPath, _dataRoot, _cli.MenuStartScreen, builtInSeat.Input));
+            () => new BuiltInPresentation(this, _zrdrPath, _dataRoot, _menuAid ?? string.Empty, builtInSeat.Input));
         registry.Register(PresentationId.Original,
-            () => new OriginalPresentation(this, _dataRoot, _originalLayout!, _cli.MenuStartScreen, builtInSeat.Input, _spec.DebugJoin));
+            () => new OriginalPresentation(this, _dataRoot, _originalLayout!, _menuAid ?? string.Empty, builtInSeat.Input, _spec.DebugJoin));
         var host = new MenuHost(registry, _menuAudio, OnMenuExit);
         host.Availability = OriginalAvailable;
         host.Features.Add(new FreeFlightFeature());
@@ -1210,9 +1223,9 @@ public partial class Launcher : Node3D
         BeginLaunch();
     }
 
-    // A flown campaign mission is over: free the world and reopen the menu on the debrief for the
-    // mission just flown, which Built-in maps onto the scrapbook with the cabin on its far side.
-    // Reached from the session's MissionEnded by way of _pendingDebrief, one frame later, carrying
+    // A flown campaign mission is over, won or lost: free the world and reopen the menu on the
+    // debrief for the mission just flown, which each presentation maps onto its own book. Reached
+    // from the session's CampaignMissionEnded by way of _pendingDebrief, one frame later, carrying
     // the result the mission ended with.
     private void OpenDebrief(string profile, CampaignMissionResult result)
     {
@@ -1496,10 +1509,11 @@ public sealed class LauncherContext
     /// the Launcher can do.</summary>
     public required System.Action RestartSession { get; init; }
 
-    /// <summary>Frees this session and reopens the launchscreen on the named profile's campaign
-    /// cabin, carrying the mission's result intact from <c>MissionEnded</c>. Null when this process
-    /// was not launched into the menu, where there is no cabin to return to.</summary>
-    public System.Action<string, CampaignMissionResult>? ReturnToCabin { get; init; }
+    /// <summary>A campaign mission ended, won or lost: the Launcher frees this session a frame later
+    /// and shows the menu at the debrief of the named profile's flown mission, carrying the result
+    /// intact from <c>MissionEnded</c>. Null when this process was not launched into the menu,
+    /// where there is no menu to return to.</summary>
+    public System.Action<string, CampaignMissionResult>? CampaignMissionEnded { get; init; }
 
     /// <summary>The process's music channel, so a mission's own cues reach the one player that
     /// outlives every session. Null when the sound archive or the sound definitions would not

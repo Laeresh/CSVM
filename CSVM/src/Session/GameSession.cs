@@ -112,7 +112,7 @@ public partial class GameSession : Node3D
     // the named profile's cabin, carrying the result so a page can be opened on it. Null
     // outside a menu-driven process (a --campaign= run from the command line has no cabin to
     // return to and simply stays in the flown world).
-    private readonly Action<string, CampaignMissionResult>? _returnToCabin;
+    private readonly Action<string, CampaignMissionResult>? _campaignMissionEnded;
     // The process's music channel, owned by the Launcher so one channel outlives every session.
     // Handed to CampaignDirector, which is what routes the mission's own music cues into it.
     private readonly MusicPlayer? _music;
@@ -328,7 +328,7 @@ public partial class GameSession : Node3D
         _menuPads = ctx.MenuPads;
         _exitSession = ctx.ExitSession;
         _restartSession = ctx.RestartSession;
-        _returnToCabin = ctx.ReturnToCabin;
+        _campaignMissionEnded = ctx.CampaignMissionEnded;
         _music = ctx.Music;
     }
 
@@ -781,19 +781,19 @@ public partial class GameSession : Node3D
         }
     }
 
-    // A campaign mission has ended and its result is banked (D31 records the attempt and saves the
-    // profile before raising this). The world stays up for the rest of the frame; the Launcher
-    // frees this session and reopens the launchscreen on the cabin, which re-reads the profile
+    // A campaign mission has ended and its result is banked (the director records the attempt and
+    // saves the profile before raising this). The world stays up for the rest of the frame; the
+    // Launcher frees this session and shows the menu at the debrief, which re-reads the profile
     // this director just wrote.
     private void OnCampaignMissionEnded(CampaignMissionResult result)
     {
-        if (_spec.CampaignProfile is not { } profile || _returnToCabin == null)
+        if (_spec.CampaignProfile is not { } profile || _campaignMissionEnded == null)
         {
             return;
         }
 
-        GD.Print($"campaign: {result.Outcome} — returning '{profile}' to the cabin");
-        _returnToCabin(profile, result);
+        GD.Print($"campaign: {result.Outcome} — handing '{profile}' back to the menu's debrief");
+        _campaignMissionEnded(profile, result);
     }
 
     // Places every rig at the --pos= placement BuildFlightRigs withheld while the intro owned

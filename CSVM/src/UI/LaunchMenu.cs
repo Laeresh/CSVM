@@ -1648,16 +1648,16 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // The campaign's screens sit behind a flow rather than behind the screen enum, so --menu=
-    // reaches them the way it reaches the hangar's. Every scripted value runs over a scratch
-    // profile directory instead of user://Profiles, so the shot is the same on every machine and no
-    // aid can write into a real campaign. The briefing takes a seconds argument
-    // ("campaign-briefing:20") because its screen is a two-minute reveal and every stage of it is
-    // a different picture.
+    // reaches them the way it reaches the hangar's. The player's door and campaign-fly run over
+    // the presentation's store; every other value runs over the shared scratch directory, so the
+    // shot is the same on every machine and no aid can write into a real campaign. The briefing
+    // takes a seconds argument ("campaign-briefing:20") because its screen is a two-minute reveal
+    // and every stage of it is a different picture.
     private void OpenCampaignAid(string startScreen)
     {
         int colon = startScreen.IndexOf(':');
         string value = colon < 0 ? startScreen : startScreen[..colon];
-        if (value is not ("campaign" or "campaign-empty" or "campaign-roster" or "campaign-entry"
+        if (value is not (CampaignAidProfiles.PlayerDoor or "campaign-empty" or "campaign-roster" or "campaign-entry"
             or "campaign-cabin" or "campaign-previous" or "campaign-scrapbook" or "campaign-briefing"
             or "campaign-flightcheck" or "campaign-guestcheck" or "campaign-ammo"
             or "campaign-planeselection" or "campaign-hangar" or "campaign-fly"))
@@ -1665,7 +1665,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        if (value == "campaign")
+        if (value == CampaignAidProfiles.PlayerDoor)
         {
             OpenCampaign();
             return;

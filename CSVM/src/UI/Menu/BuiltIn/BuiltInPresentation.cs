@@ -9,21 +9,22 @@ namespace CSVM.UI.Menu.BuiltIn;
 /// given parent on the first call and shows it on every call, mapping the semantic destination
 /// onto the launchscreen's own screens; <see cref="Hide"/> takes it off screen with its cursors
 /// intact; <see cref="Deactivate"/> frees it. The menu's frame runs from <see cref="Tick"/>, so
-/// its own process callback is switched off. The <c>--menu=</c> aid is Built-in's alone and is
-/// applied on every top-level show, as the launchscreen always did.
+/// its own process callback is switched off. The <c>--menu=</c> aid opens the first show alone;
+/// every later show lands on the destination itself, so a return from flight is the top level.
 /// </summary>
 public sealed class BuiltInPresentation : IMenuPresentation
 {
     private readonly Node _parent;
     private readonly string _zrdrPath;
     private readonly string _dataRoot;
-    private readonly string _aid;
     private readonly MenuInput _player1;
+    // Consumed by the first Activate: an aid names a screen a shot wants, never where a return lands.
+    private string _aid;
     private LaunchMenu? _menu;
 
-    /// <summary>A presentation that builds its menu under <paramref name="parent"/>, opening on
-    /// <paramref name="aid"/> (a <c>--menu=</c> value or "") and binding seat 0's devices through
-    /// <paramref name="player1"/>, the poller behind the host's first seat.</summary>
+    /// <summary>A presentation that builds its menu under <paramref name="parent"/>, opening its
+    /// first show on <paramref name="aid"/> (a <c>--menu=</c> value or "") and binding seat 0's
+    /// devices through <paramref name="player1"/>, the poller behind the host's first seat.</summary>
     public BuiltInPresentation(Node parent, string zrdrPath, string dataRoot, string aid, MenuInput player1)
     {
         _parent = parent ?? throw new ArgumentNullException(nameof(parent));
@@ -35,8 +36,8 @@ public sealed class BuiltInPresentation : IMenuPresentation
 
     public PresentationId Id => PresentationId.BuiltIn;
 
-    /// <summary>The launchscreen while built. The owner's door for what is still Built-in's
-    /// alone: the debug aids, the load-screen aid and the failed-build note.</summary>
+    /// <summary>The launchscreen while built. The owner's door for what is Built-in's alone: its
+    /// one-shot debug aids and the failed-build note.</summary>
     public LaunchMenu? Menu => _menu;
 
     public void Activate(IMenuHost host, MenuReturnDestination destination)
@@ -49,7 +50,9 @@ public sealed class BuiltInPresentation : IMenuPresentation
             _parent.AddChild(_menu);
         }
 
-        _menu.ShowMenu(_aid);
+        string aid = _aid;
+        _aid = string.Empty;
+        _menu.ShowMenu(aid);
         switch (destination)
         {
             case CabinReturn cabin:

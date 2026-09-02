@@ -36,10 +36,10 @@ public enum SessionProbe
     WeaponTest,
 }
 
-/// <summary>The launchscreen's Mode screen, in the order its rows are drawn. Carried through
-/// <see cref="LaunchMenu"/>'s <c>Launch</c> callback and into <see cref="SessionSpec.FromMenu"/>,
-/// which turns the pick into <see cref="SessionSpec.Stunt"/>/<see cref="SessionSpec.Versus"/> —
-/// kept here rather than on <c>LaunchMenu</c> so the menu's own tests stay engine-free.</summary>
+/// <summary>The launchscreen's Mode screen, in the order its rows are drawn. Carried in the
+/// typed <c>LaunchExit</c> into <see cref="SessionSpec.FromMenu"/>, which turns the pick into
+/// <see cref="SessionSpec.Stunt"/>/<see cref="SessionSpec.Versus"/> — kept here rather than on
+/// <c>LaunchMenu</c> so the menu's own tests stay engine-free.</summary>
 public enum MenuMode
 {
     Free,

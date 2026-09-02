@@ -75,9 +75,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     private readonly Node _parent;
     private readonly string _dataRoot;
     private readonly MenuLayout _layout;
-    private readonly string _aid;
     private readonly MenuInput _player1;
     private readonly Dictionary<string, (int Width, int Height)?> _sizes = new(StringComparer.OrdinalIgnoreCase);
+    // Consumed by the first Activate: an aid names a screen a shot wants, never where a return lands.
+    private string _aid;
     private int _debugJoin;
     private CanvasLayer? _layer;
     private ComposedBoardView? _view;
@@ -98,9 +99,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     private bool _revealRunning;
 
     /// <summary>A presentation drawing under <paramref name="parent"/> over the art beneath
-    /// <paramref name="dataRoot"/>, composed from <paramref name="layout"/>, opening on
-    /// <paramref name="aid"/> (an Original <c>--menu=</c> value or "") at every top-level show,
-    /// binding pads over seat 0's poller <paramref name="player1"/>, and seating
+    /// <paramref name="dataRoot"/>, composed from <paramref name="layout"/>, opening its first show
+    /// on <paramref name="aid"/> (an Original <c>--menu=</c> value or "") and every later one on
+    /// the destination itself, binding pads over seat 0's poller <paramref name="player1"/>, and seating
     /// <paramref name="debugJoin"/> device-less players once, the screenshot aid.</summary>
     public OriginalPresentation(Node parent, string dataRoot, MenuLayout layout, string aid, MenuInput player1, int debugJoin = 0)
     {
@@ -219,6 +220,8 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         _shell.ReturnToTopLevel();
         StopNarration();
+        string aid = _aid;
+        _aid = string.Empty;
         if (destination is CabinReturn cabin)
         {
             // The two flight returns reopen the campaign on the user's store and seat the profile
@@ -237,14 +240,18 @@ public sealed class OriginalPresentation : IMenuPresentation
                 Log.Warn("ui", $"original presentation: debrief return could not seat '{debrief.Profile}'; the profile screen shows instead");
             }
         }
-        else if (_aid.Length > 0 && OpenCampaignAid(_aid))
+        else if (aid.Length > 0 && OpenCampaignAid(aid))
         {
             // A campaign aid over the scratch store, shared with Built-in's aids of the same name.
         }
         else
         {
-            switch (_aid)
+            switch (aid)
             {
+                case CampaignAidProfiles.PlayerDoor:
+                    // The player's own door, over the presentation's store and never the scratch one.
+                    _shell.OpenCampaign();
+                    break;
                 case FreeFlightAid:
                     _shell.Open(OriginalScreen.FreeFlight);
                     break;
