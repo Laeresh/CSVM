@@ -806,6 +806,13 @@ loss. What the engine renders was decodable from the authored constants + oscill
   airframes. Compare sorted magnitudes, or compare the whole basis, and never assert
   `Scale.X == authored.X` on anything that also rotates. The same caution applies to reading a
   rotation back off a node whose scale is non-uniform.
+- **INSTR-38** — **A fault that needs a hash collision fires on a minority of runs, so re-running a
+  suite measures the collision rate and not the fault. Assert the stale state directly.** Measured
+  on `landings-hookup-airframe`: a freed airframe's rows stay keys in the resolver's identity-keyed
+  maps, and the `landings` filter threw `ObjectDisposedException` on 1 run in 14 while the same
+  drive left 134, 237, 334, 446 and 562 stale rows behind, run after run, on every airframe after
+  the first (`AnimRuntime.FreedNodeRows`). The count is deterministic and the throw is not, so a
+  green suite is evidence of nothing here. Read the count.
 
 ## SRC — sources and documents
 

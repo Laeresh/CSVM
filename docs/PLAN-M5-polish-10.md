@@ -146,7 +146,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☐ `BL-419` The sonic ground burst reads as one flat ring on the terrain
 22. ☐ `BL-459` A damaged engine's loop waits out the original's re-arm delay before it restarts
 23. ☑ `BL-433` Numpad `+`/`−` drive the chase camera's zoom
-24. ☐ `BL-679` A staged airframe leaves no stale node behind in the name resolver
+24. ☑ `BL-679` A staged airframe leaves no stale node behind in the name resolver
 25. ❌ `BL-405` Mounted ordnance tracks the aim before it launches, or the census closes it (disproven: no shipped airframe authors an animated mount node, so the pylon staying fixed already matches the original)
 
 ### Wave D — Closing sortie
@@ -594,7 +594,43 @@ this item adds one axis and must not start that rebuild. Do not invent a zoom ra
 `[0, 1]` over the authored base distance, not an absolute metre figure. The dynamic chase radius is
 shared with `--view=`, so check that a pinned view is unaffected.
 
-## C24 ☐ `BL-679` A staged airframe leaves no stale node behind in the name resolver
+## C24 ☑ `BL-679` A staged airframe leaves no stale node behind in the name resolver
+
+**Landed.** `NameResolver<TNode>.DropFreed` retires every row naming a node the liveness delegate
+rejects, together with the ancestry entries and cached answers keyed on one, and `FreedRows` counts
+what a stage would otherwise leave behind. `AnimRuntime.IndexRebasedStage` calls it before it grows
+the table (through the private `DropFreedNodes`), and `AnimRuntime.FreedNodeRows` exposes the count
+to a suite. That entry is the one staging call that puts a subtree in over one its caller may have
+freed, an airframe swapped for another on the same rig, and `AircraftStage.StageFlown` is its only
+caller. `landings-hookup-airframe` now asserts the count is zero after each airframe is staged.
+
+**The Evidence below cites the wrong site, and the real one is a level down.** The throw is not in
+`Add`. The captured stack is `NameResolver.IsWithin`, the `_parentOf` lookup inside `FindAll`'s
+scope filter, reached from `AnimRuntime.Targets` under `PoseChannel.HandleActiveState` while the
+hookup definition dispatches an `ACTIVE_STATE`. A freed node is not merely a row `FindAll` skips:
+it stays a dictionary KEY in the ancestry map and in the find cache, both keyed by `Node3DIdentity`,
+whose `Equals` reads `GetInstanceId()`. The walk therefore throws for whatever later query happens
+to hash into the dead key's bucket, which is why a minority of runs fail rather than all of them.
+`Remove` cannot be the fix either, since removing hashes the dead key it is handed; `DropFreed`
+rebuilds the keyed collections instead.
+
+The Evidence's second claim, that the rate does not change with the number of planes driven, is
+also wrong. The stale-row count grows strictly, 0, 134, 237, 334, 446 and 562 across the six
+airframes the suite drove, so every further airframe raises the collision odds. That is what made a
+seventh airframe throw often enough for `PLAN-M5-polish-9` to drop `player_autogyro` from the list.
+It is back, seven airframes now, and passes.
+
+**Verified.** The fault is non-deterministic, so both rates were measured over 14 runs of
+`.\RunTests.ps1 -Filter landings -SkipUnits -SkipGoldens`. Unfixed tree: 1 run in 14 threw.
+Fixed tree, with the seventh airframe restored: 0 in 14. The suite's own new check does not rest on
+that rate and is the instrument to read instead: with the sweep commented out it fails on five of
+the six airframes driven at the time, at the counts above, and passes with the sweep in. Off engine,
+three `NameResolverTests` cases pin the rule without Godot, against a comparer that throws for a
+freed node exactly as `Node3DIdentity` does. Both loops ran on one shard, so shard order is not a
+confounder between them. Full battery: build clean, units 3076 passed 0 failed, engine 230 suites
+passed 0 failed over four shards with errors clean, goldens 18 of 18 hash-identical, exit 0.
+
+**Original approach (kept for reference).**
 
 **Goal.** A suite staging several airframes in one process runs clean every time, because a freed
 airframe's nodes are removed from the resolver when it goes rather than surviving to be compared.

@@ -233,8 +233,8 @@ public sealed class AircraftStage
     /// table, rebased onto <see cref="PointerBase"/>, which is what makes a hookup definition's
     /// per-airframe branches decidable: each tests one <c>player_&lt;airframe&gt;</c> node's active
     /// bit and then poses that airframe's own hook, wing fold and mount offset. Idempotent per
-    /// model; a swap stages the replacement and the freed one stops resolving on its own.
-    /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
+    /// model; the rows naming a freed airframe go when the next stage retires them, never on their
+    /// own. Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
     public void StageFlown(AnimRuntime runtime, Node3D? planeModel)
     {
         ArgumentNullException.ThrowIfNull(runtime);

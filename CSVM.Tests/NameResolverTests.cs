@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
@@ -505,7 +506,81 @@ public class NameResolverTests
         Assert.Empty(resolver.Anchors(Def("", rootName: "healthy")));
     }
 
+    // ---- a freed node has to LEAVE the index, not merely be skipped by it ----
+
+    [Fact]
+    public void AFreedRowThrowsForAScopedFindAllOverLiveNodes()
+    {
+        // The site the engine throws at: the scope filter walks the recorded parent chain through
+        // a map keyed by node identity, so a live row's own lookup meets the dead key.
+        var world = Node("world");
+        var wing = Node("hook");
+        var resolver = WithFreedAirframe(world, wing);
+
+        Assert.Throws<ObjectDisposedException>(() => resolver.FindAll("hook", world));
+        Assert.Equal(2, resolver.DropFreed());
+        Assert.Equal(new[] { wing }, resolver.FindAll("hook", world));
+    }
+
+    [Fact]
+    public void AFreedAirframeThrowsWhenTheNextOneIsStagedOverIt()
+    {
+        // Nothing tells the index a node has gone, so the next stage's own rows are what meet the
+        // dead ones: an airframe swap indexes a replacement over the aircraft it freed.
+        var resolver = WithFreedAirframe();
+
+        Assert.Equal(2, resolver.FreedRows());
+        Assert.Throws<ObjectDisposedException>(() => StageWarhawk(resolver));
+    }
+
+    [Fact]
+    public void DropFreedLetsTheNextAirframeStageAndResolveItsOwnNames()
+    {
+        var resolver = WithFreedAirframe();
+
+        Assert.Equal(2, resolver.DropFreed());
+        Assert.Equal(0, resolver.FreedRows());
+        var (staged, hook) = StageWarhawk(resolver);
+
+        Assert.Equal(new[] { staged }, resolver.FindAll("player_*", null));
+        Assert.Equal(new[] { hook }, resolver.FindAll("hook", staged));
+        Assert.Equal(new[] { hook }, resolver.FindAll("hook", null));
+    }
+
     private static TestNode Node(string label) => new() { Label = label };
+
+    // One drive's airframe freed the way a rig is when its drive ends, over any live rows the
+    // caller wants beside it: the state landings-hookup-airframe leaves the node table in.
+    private static NameResolver<TestNode> WithFreedAirframe(TestNode? liveRoot = null, TestNode? liveChild = null)
+    {
+        var gone = Node("player_balmoral");
+        var goneHook = Node("hook");
+        var resolver = new NameResolver<TestNode>(FreedThrowsIdentity.Instance, isLive: n => !n.Freed);
+        if (liveRoot != null)
+        {
+            resolver.Add(liveRoot, "world", null);
+        }
+
+        if (liveChild != null)
+        {
+            resolver.Add(liveChild, "hook", liveRoot);
+        }
+
+        resolver.Add(gone, "player_balmoral", null);
+        resolver.Add(goneHook, "hook", gone);
+        gone.Freed = true;
+        goneHook.Freed = true;
+        return resolver;
+    }
+
+    private static (TestNode Staged, TestNode Hook) StageWarhawk(NameResolver<TestNode> resolver)
+    {
+        var staged = Node("player_warhawk");
+        var hook = Node("hook");
+        resolver.Add(staged, "player_warhawk", null);
+        resolver.Add(hook, "hook", staged);
+        return (staged, hook);
+    }
 
     private static AnimDefinition Def(string name, string? rootName = null, bool localNodesOnly = false) =>
         new() { Name = name, RootName = rootName, LocalNodesOnly = localNodesOnly };
@@ -540,5 +615,26 @@ public class NameResolverTests
     private sealed class TestNode
     {
         public string Label = "";
+
+        public bool Freed;
+    }
+
+    // The engine's node identity as a freed node meets it: Godot reads an instance id that is
+    // gone. Every key hashes alike so one bucket holds them all, which makes the collision the
+    // engine only meets on some runs certain here.
+    private sealed class FreedThrowsIdentity : IEqualityComparer<TestNode>
+    {
+        public static readonly FreedThrowsIdentity Instance = new();
+
+        public bool Equals(TestNode? x, TestNode? y) => ReferenceEquals(Live(x), Live(y));
+
+        public int GetHashCode(TestNode obj)
+        {
+            Live(obj);
+            return 0;
+        }
+
+        private static TestNode? Live(TestNode? node) =>
+            node is { Freed: true } ? throw new ObjectDisposedException(nameof(TestNode)) : node;
     }
 }
