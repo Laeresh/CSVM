@@ -2340,7 +2340,12 @@ public sealed partial class LaunchMenu : CanvasLayer
             int player = i + 1;
             if (!ControlsHasSeat(player))
             {
-                _controls.AddSeat(player, ControlsProfile(player, _slots[i].Input), ControlsPadOf, _slots[i].Input.Keyboard);
+                var input = _slots[i].Input;
+                _controls.AddSeat(
+                    player,
+                    ControlsProfile(player, input),
+                    new SeatCaptureDevices(ControlsPadOf, () => input.Pads),
+                    input.Keyboard);
             }
         }
 
@@ -2361,17 +2366,20 @@ public sealed partial class LaunchMenu : CanvasLayer
         var maps = new Dictionary<InputContext, ActionMap>
         {
             [InputContext.Flight] = LaunchBindings.Map(
-                player, InputContext.Flight, DefaultBindings.AnyPad, input.Keyboard),
+                player, InputContext.Flight, ControlsPadOf(InputContext.Flight), input.Keyboard),
             [InputContext.Menu] = input.Map,
             [InputContext.Camera] = LaunchBindings.Map(
-                player, InputContext.Camera, DefaultBindings.AnyPad, input.Keyboard),
+                player, InputContext.Camera, ControlsPadOf(InputContext.Camera), input.Keyboard),
         };
         return new BindingProfile(maps, input.Keyboard);
     }
 
-    // Which pad identity a captured control is stamped with, per context. The menu poller's map is
-    // authored on its own seat placeholder and the other two on the portable one, and a capture
-    // must produce the identity the map already uses or the steal rule would not see the conflict.
+    // Which pad identity a context's rows sit on, and therefore which one a captured control is
+    // stamped with and which one the seat's capture reader answers for. The menu poller's map is
+    // authored on its own seat placeholder and the other two on the portable one. One function
+    // feeds all three uses: a capture on an identity the map does not use hides the conflict from
+    // the steal rule, and a reader on an identity the capture does not use reads every pad as
+    // false.
     private DeviceId ControlsPadOf(InputContext context) =>
         context == InputContext.Menu ? MenuInput.SeatPads : DefaultBindings.AnyPad;
 
@@ -2393,7 +2401,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         if (_controls.Capturing)
         {
-            return _controls.Poll(p1.Devices);
+            return _controls.Poll();
         }
 
         bool dirty = false;
@@ -2462,7 +2470,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             case 0: _controls.ResetSeat(); break;
             case 1: _controls.Cancel(); break;
             case 2: CommitControls(p1); break;
-            default: _controls.BeginCapture(p1.Devices); break;
+            default: _controls.BeginCapture(); break;
         }
     }
 

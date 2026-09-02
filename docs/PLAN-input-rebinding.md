@@ -1577,3 +1577,72 @@ the profile, and replacing it would leave the menu on the pre-Accept keymap with
 it. ⚠ A staged model has one new way to lose work: leaving the screen. Back is Cancel here, which is
 the original's shape, and it means a player who walks away without pressing Accept keeps the keymap
 they were playing with. Whether that reads right at the controls is a judgement, not a decode.
+
+## The capture identity: a pad control is captured through the reader that answers for it
+
+**The defect, reported at the controls.** Persistence worked and no gamepad control could be
+rebound. Keyboard capture worked everywhere and pad capture worked in the Menu context alone, which
+is why the screen looked alive.
+
+**The cause.** A capture stamps a pad control with the identity that context's rows sit on, and it
+reads pads through `IDeviceState.IsButtonDown` and `AxisValue`, both addressed by that same
+identity. `SeatDeviceState` answers for exactly one identity and returns false or zero for every
+other. The screen took its identity from `LaunchMenu.ControlsPadOf`, which gives
+`MenuInput.SeatPads` for Menu and `DefaultBindings.AnyPad` for Flight and Camera, and its device
+state from `MenuInput.Devices`, which is built on `MenuInput.SeatPads` alone. So in Flight and
+Camera every pad read returned false, nothing was ever a capture candidate, and nothing threw. The
+keyboard was unaffected because `IsKeyDown` keys off `DeviceKind.Keyboard` rather than the seat.
+
+**The repair.** The identity and the reader are one thing now, and they come from one place.
+`ICaptureDevices` reports both, `SeatCaptureDevices` builds one `SeatDeviceState` per context from
+the one `padOf` it also answers `PadOf` with, and `ControlsFeature.AddSeat` takes that object in
+place of the bare `padOf` function. `BeginCapture()` and `Poll()` no longer take a device state from
+the caller: the seat's reader for the context on screen supplies it. A presentation can no longer
+pair an identity with a reader that answers for a different pad, which was the whole failure.
+
+**The alternative, and what it would have cost.** The other coherent repair is to capture on the
+identity the polled state already answers for, which means building the screen's Flight and Camera
+maps on `MenuInput.SeatPads` as well. It works only because `BindingStore` retargets a stored
+`AnyPad` row onto the loading seat's identity, so the on-disk keymap would name the menu seat for
+flight rows and the flight seat's read would depend on that retarget to mean anything. It also
+leaves the screen editing every seat's map through player one's pad list, which is wrong at a
+splitscreen seat 2, and it keeps the identity and the reader as two values a call site has to pair
+correctly. Per-context readers cost one small type and fix the splitscreen list as a side effect.
+
+⚠ **Why the suites missed it, which is the part that must not repeat.** Two things, and the second
+is the general one. First, the pairing lived in `LaunchMenu` and nothing tested it: the feature was
+handed a device state per frame, so no unit could see which one. Second, the fakes in
+`ControlCaptureTests` and `ControlsFeatureTests` answered for whichever device they were asked
+about, which is more permissive than the type they stand in for, so they could not have expressed
+the rule even where they were used. A test that passes against a fake looser than the production
+type is not evidence about the production type.
+
+**What now stops it.** The pairing moved inside the tested unit, and both fakes now enforce
+`SeatDeviceState`'s own rule: a state answers for one joypad identity and returns false or zero for
+every other. `ControlCaptureTests` gains
+`ACaptureReadingAStateThatAnswersForAnotherIdentitySeesNoPadAtAll`, which states the mechanism as a
+rule, and 15 facts run against the stricter fake.
+`ControlsFeatureTests` gains `APadButtonIsCapturedInEveryContextOnThatContextsOwnIdentity` (a pad
+button captured, staged and accepted in all three contexts, each on its own identity),
+`ACapturedPadButtonConflictsWithTheShippedPadRowSoTheStealRuleSeesIt` (the opposite failure: a
+captured control that is not the same control as the row it lands on would leave the steal rule
+blind and duplicate the binding), and
+`ACapturedPadControlSurvivesTheRoundTripToTheSeatThatFlies`, which walks the hop the author
+exercises: captured, staged, Accept, saved through the real `BindingStore`, read back the way
+`FlightController.LoadSavedKeymap` reads it, and resolved through `PlayerActions` on a state
+answering for the flight seat's identity.
+
+Reproducing the defect inside the repaired code, by reading every context through the Menu seat's
+reader while the capture keeps stamping the context's own identity, fails those three plus
+`ACaptureOnAControlAnotherActionHoldsStopsToNameItRatherThanBinding`, whose keyboard press lands on
+a different reader object under that reproduction.
+
+⚠ **`SameControl` was not widened, and must not be.** The conflict this defect sits next to is an
+identity mismatch, and C21 and B13 depend on a placeholder answering only for itself. The fix makes
+the identities agree rather than making the comparison ignore them.
+
+⚠ **Still owed at the controls, because no suite presses a pad** (`DET-2`, `DET-6`, `INSTR-14`
+apply unchanged): rebind a flight action to a pad button, Accept, quit, relaunch and fly it; rebind
+a camera action to a stick direction in the free camera; and in splitscreen, rebind on seat 2 with
+that seat's own pad, which is the second thing this repair changes and which the suites reach no
+better than the first.
