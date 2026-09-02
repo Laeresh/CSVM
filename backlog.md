@@ -632,8 +632,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   itself rather than from watching a play session. *Fix shape:* a `PrevSelectable` backward scan
   with the same empty-slot skipping, plus a second binding per selector, which is where this stops
   being a two-line change: the flight keymap has no spare paired keys and the pad's D-pad is
-  already spent on the two forward steps. `BL-296`'s per-player ActionMap is the natural home for
-  the four named actions if it lands first.
+  already spent on the two forward steps. The seam is built and the four named actions belong in it:
+  `InputAction` gains a reverse member per selector, `DefaultBindings` authors it, and the rebinding
+  screen is what finds a player their second pair, so the key space that blocked this is no longer
+  the blocker (`CSVM/src/Bindings/`, `docs/controls.md`).
   ⚠ Traps: (a) **The cycle sequence is settled and must not be re-derived**: the selector walks the
   hardpoints in physical mount order (`Loadout.PylonStepOrder`, `FireControl`'s `pylonStepOrder`),
   which is NOT the order the list is built in (`Loadout.PylonFillOrder`, 1,5,2,6,3,7,4,8, which says
@@ -648,27 +650,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   mixed fits make the direction matter, so this item's value went up when that shipped;
   `BL-296` (ActionMap/rebinding seam), `git log --grep=BL-062` for what settled the
   per-hardpoint half.
-
-- `BL-398` `[Feature]` **A rebindable keymap — the real answer to targeting's key placement, not a
-  targeting-specific fix.** *Evidence:* the player-targeting plan's own out-of-scope call (a),
-  2026-08-15: every one of the original's eleven targeting keys collides with our WASD +
-  `Shift`/`Ctrl`-throttle flight scheme — the full collision audit is in `docs/org/targeting.md` —
-  so that plan ships a curated default set on free keys (`T` `Y` `U` `I` `O` + `L`, `D-pad Up`
-  tap/hold) instead of mirroring the original's letter-per-class layout (`E`/`W`/`R` plain/
-  `Shift`/`Ctrl`). A rebind layer is what actually resolves key placement; targeting is only the
-  feature that hit the wall hardest, because it is eleven keys deep into an already-full keymap.
-  *Fix shape:* `BL-296`'s per-player `ActionMap` seam, if it lands first.
-  **Decoded** (`docs/org/input.md`): the original's own map is one 32-bit word per command id
-  (`FUN_00537090`), packing four fixed binding slots (two keyboard control codes, one joystick
-  button, one mouse button) that `FUN_00537530` ORs together; a keyboard code is a raw DIK scancode
-  plus `0x100`/`0x200`/`0x400` Alt/Ctrl/Shift bits, and the 64 shipped defaults are emitted by code
-  at `FUN_004936c0`, not held in a table. Two rules are worth reusing: an action carries several
-  bindings at once, and reassigning a control steals it from its previous owner rather than
-  double-binding (`FUN_005371d0`, `FUN_00535fb0`). ⚠ The encoding is not: there is exactly one
-  joystick pointer in the program (`DAT_0075c1e0`), buttons are hardcoded 1-10 (`FUN_00536c40`),
-  and axes and hats are unbindable. Our binding must be a stable device identity plus a tagged
-  control (button, signed axis with deadzone, hat direction) held in a list, not a scancode in a
-  typed slot, so the ceiling is not inherited.
 
 - `BL-693` `[Tuning]` `[Owed-playtest]` **The rebinding screen's three axis-capture constants are
   picked, not measured.** *Evidence:* `ControlCapture.RestBand` **0.25**, `MoveThreshold` **0.6** and
@@ -2191,19 +2172,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* re-review `MarkerHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
   against it rather than in isolation. *Cross-refs:* `BL-449`, whose landing prompted this wording.
 
-- `BL-296` `[Feature]` **Per-player ActionMap: named actions over the raw key/pad polling, as the
-  rebinding seam.** Every control is hard-polled today (`Input.IsKeyPressed`/`IsJoyButtonPressed`
-  scattered across `FlightController` (~a dozen bindings), `MenuInput`, `SpectatorCamera`), with
-  per-player device routing via `PadDevices`/`UseKeyboard`; `docs/controls.md` is the binding
-  record. The shape (decided with BL-295, 2026-08-06): a named-action indirection — helpers like
-  `FirePressed()` become `actions.Held(Action.FireGuns)` resolved by a per-player `ActionMap`
-  (player 1 keyboard+pad, others pad-only), persistable so a rebinding UI can edit it later. Godot's
-  built-in `InputMap` supports runtime rebinding but is app-global, so the per-player layer stays
-  ours either way. ⚠ *Traps:* NOT an event/message bus — fire is a held control on the 60 Hz
-  fixed-tick sim, edge detection lives in the consumers (`FireControl`), and events would break
-  scripted `--det`/`--hold` runs; the polling *sites* are the seam, `FireControl` itself never
-  changes (it consumes `FireInputs` booleans). Update `docs/controls.md` when this lands.
-
 - `BL-351` `[Feature]` **Generalise the targeting HUD: target-cycling keybindings for the
   original's target classes.** Requested 2026-08-14 alongside M4 H22 (which extends the VS
   targeting elements to AI enemy planes but picks the target automatically). The original ships
@@ -2211,8 +2179,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   non-aircraft (ground/sea vehicles, turrets, zeppelins). Wanted: the same class-cycling on our
   targeting HUD — per pane in splitscreen, reusing the VS/H22 drawing elements unchanged, only
   the selection source generalises. Ground work: pull the original's exact bindings and cycle
-  order from its input config/manual before designing ours; wire through whatever input seam
-  exists when this lands (`BL-296`'s ActionMap if it has landed, hard polling if not).
+  order from its input config/manual before designing ours; wire through the named-action seam,
+  which is built: a class-cycle action per class in `InputAction`, authored in `DefaultBindings` and
+  rebindable, with the selection source generalising behind it (`CSVM/src/Bindings/`).
   *How you'd know it worked:* in a session with AI planes, a zeppelin and turrets, the target
   key cycles hostile aircraft; the non-aircraft key walks the zeppelin and turrets; each pane
   tracks its own pick. Depends on H22's target-tracking plumbing; `docs/controls.md` gains the

@@ -1,8 +1,9 @@
 ﻿# Input rebinding — a named-action seam and a device model that outlives the original's
 
-**ACTIVE PLAN** (written 2026-09-02). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**✅ COMPLETE.** Every item landed. What the plan did not finish is in `backlog.md` under its own
+ids rather than here: `BL-693` (the three axis-capture constants, owed a judgement at the controls),
+`BL-696` (the Original presentation has no way into the screen) and `BL-697` (only player 1's keymap
+can be reached, because seats join at aircraft select).
 
 This plan delivers `BL-296` (a per-player `ActionMap`: named actions over the raw key and pad
 polling) and `BL-398` (a rebindable keymap) as one piece of work, because they are one design. The
@@ -187,7 +188,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ The rebinding screen: capture, assign, steal-from-previous-owner
 32. ☑ Binding an axis or a hat to a digital action
-33. ☐ Close `BL-296` and `BL-398`, and hand `BL-357` its keys
+33. ☑ Close `BL-296` and `BL-398`, and hand `BL-357` its keys
 34. ☑ The saved keymap is read at launch, so a flight rebind is felt
 35. ☑ Staged edits and a whole-map reset: Accept, Cancel, Reset to default
 
@@ -1342,7 +1343,35 @@ of the movement threshold at a real stick is the author's and is listed above.
 **⚠ Traps.** ⚠ A resting stick drifts. Capture must not latch the first axis it sees at rest, which
 is the standard failure of this feature.
 
-## D33 ☐ Close `BL-296` and `BL-398`, and hand `BL-357` its keys
+## D33 ☑ Close `BL-296` and `BL-398`, and hand `BL-357` its keys
+
+**Landed.** Both entries are deleted from `backlog.md` rather than marked done, per the Ground
+rules; the evidence is in this plan and in the landing commits, found with `git log --grep=BL-296`
+and `--grep=BL-398`. `BL-357` and `BL-351` no longer name the seam as a condition: each says the
+seam is built and names what it needs from it, four selector actions for `BL-357` and a class-cycle
+action per class for `BL-351`.
+
+**Verified.** `BL-296` asked for named actions over the raw polling, per player, persistable. Every
+polling site resolves named actions (B11, B12, B13), the map is per seat and per context, and it
+persists and reloads (C21, D34). `BL-398` asked for a rebindable keymap. A player opens Options,
+Controls, captures a key, a pad button, a stick direction or a trigger, sees every action that loses
+the control before it loses it, accepts or cancels, resets a seat to the shipped defaults, and flies
+what they bound after a relaunch.
+
+⚠ **Three things are open, and they are open under their own ids rather than inside a closed item.**
+`BL-697`: the screen registers seats that have joined and seats join at aircraft select, so only
+player 1's keymap can be reached today, which is why `BL-296`'s per-player claim is proven by the
+store and the launch read rather than at a second seat's controls. `BL-696`: the Original
+presentation's door to the screen is still disabled, so the keymap is editable in Built-in alone.
+`BL-693`: the three axis-capture constants are picked rather than measured.
+
+⚠ **What the author confirmed at the controls, and what they did not.** Persistence was confirmed by
+the author on a real build, and the same session found that a pad control could not be captured at
+all in the Flight and Camera contexts, which the capture-identity item then fixed. That fix has not
+itself been felt at the controls: no suite can press a pad, since `--det` implies `--no-pads`. So the
+pad half of `BL-398` rests on unit evidence and one report of the defect it repairs.
+
+**Original approach (kept for reference).**
 
 **Goal.** Both backlog items are retired, and the item that was blocked on key space knows it is
 free.
