@@ -482,13 +482,26 @@ clusters they delegate to.
 ### `src/Bindings/` — the input binding model
 
 What a binding is, and how one resolves against hardware. Named actions and the map that holds
-them, and the registry that resolves a device identity to a live pad, sit on top of these types.
+them sit on top of these types.
 
 - `src/Bindings/DeviceId.cs` — which device a binding is on, as a stable value: the one keyboard, or a joypad named by its hardware string rather than by a connection index.
 - `src/Bindings/BindingControl.cs` — the tagged control: a key, a button, one signed half of an axis past a deadzone, or one direction of a hat, built through four validating factories.
 - `src/Bindings/Binding.cs` — one control on one named device, plus `ControlValue`, the held/how-far pair every resolution returns.
 - `src/Bindings/IDeviceState.cs` — the tick's raw hardware state addressed by device identity; the seam that keeps resolution engine-free, answering false for an absent device.
 - `src/Bindings/BindingSet.cs` — the bindings one action holds, ORed together the way the original ORs its four slots, with the deepest deflection winning the analogue read.
+- `src/Bindings/DeviceRegistry.cs` — the live joypad index-to-identity table, rebuilt from a
+  connected-pad list on `Refresh` rather than trusting an index to stay put across a replug; pure
+  and engine-free, so the mapping rule is tested without a joypad (`CSVM.Tests/DeviceRegistryTests.cs`).
+  Two connected pads reporting the same GUID (identical hardware sharing one SDL identity) is a real
+  collision: the first one seen claims it and the second stays unresolved rather than the pair
+  silently driving one binding together.
+- `src/Bindings/GodotDeviceState.cs` — the live `IDeviceState` over Godot's `Input` singleton,
+  addressed by identity through a `DeviceRegistry` rather than a raw index; `RefreshDevices()` reads
+  the connected roster and is meant to run once at launch and again on
+  `Input.Singleton.JoyConnectionChanged`, though the call site belongs to whoever builds the per-tick
+  resolver, since this module has no polling loop of its own. Godot exposes a d-pad as four
+  `JoyButton` values rather than a raw hat, so hat index 0 is that d-pad and every other hat index is
+  unbindable.
 
 ### Session root and tests
 

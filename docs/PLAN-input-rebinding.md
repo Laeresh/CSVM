@@ -134,7 +134,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ The binding model: device identity, tagged control, binding list
 2. ☐ `InputAction` and `ActionMap`: named actions resolved per player
-3. ☐ The device registry: enumeration, stable identity, hot-plug
+3. ☑ The device registry: enumeration, stable identity, hot-plug
 
 ### Wave B — the migration
 
@@ -255,7 +255,34 @@ tick, edge detection stays in the consumers (`FireControl` never changes, it con
 booleans), and events would break scripted `--det` / `--hold` runs. The polling *sites* are the
 seam; nothing downstream of them moves.
 
-## A3 ☐ The device registry: enumeration, stable identity, hot-plug
+## A3 ☑ The device registry: enumeration, stable identity, hot-plug
+
+**Landed.** `CSVM/src/Bindings/DeviceRegistry.cs` (the live index-to-identity table, pure and
+engine-free: `Refresh` takes an already-read roster of `(index, guid, name)` tuples, `IndexOf`
+returns a live index or null, `IdentityOf` turns a live index back into the stable id a capture
+screen should save) and `CSVM/src/Bindings/GodotDeviceState.cs` (the live `IDeviceState` over
+Godot's `Input` singleton, reading every device through the registry so an unresolvable identity
+answers false, zero or `HatDirection.None` rather than throwing).
+
+Three calls the plan left open, settled here: two connected pads reporting the same stable string
+is a real collision, so first-seen claims the identity and the second stays unresolved rather than
+both driving one binding; hat index 0 is the d-pad and every other hat index is unbindable, because
+Godot exposes no raw hat API; and `RefreshDevices()` is deliberately not called from a constructor,
+leaving the launch and signal wiring to whoever owns a polling loop.
+
+**Verified.** `CSVM.Tests/DeviceRegistryTests.cs`, 10 facts over synthetic rosters: resolve by GUID
+regardless of index, unplug to null, replug at a different index, a fresh registry rebuilding the
+same identity after a restart, the GUID-to-name fallback, a device reporting neither, the collision
+case, an unknown index, the keyboard never resolving an index, and two pads staying independent.
+Complete `.\RunTests.ps1` in the item's worktree: PASS, exit 0, 3095 units, 230 engine suites, 18
+goldens hash-identical, 0 build warnings.
+
+⚠ **Two things here are still unverified against hardware**, and no automated suite can reach them:
+that Godot reports the GUID and name this code expects for real hardware, and that
+`Input.Singleton.JoyConnectionChanged` fires on a genuine unplug and replug. The manual check is in
+Verify below and is owed at the controls.
+
+**Original approach (kept for reference).**
 
 **Goal.** A binding still points at the right pad after that pad is unplugged, plugged into a
 different port, and the game restarted.
@@ -272,12 +299,29 @@ dropped, so unplugging a pad does not silently erase a player's keymap.
 **Model recommendation.** medium. Mechanically contained once A1 fixes the model, but the
 absent-device rule needs judgement.
 
-**Verify.** <TODO: name the manual check. Something like: bind an action to pad 2, unplug it,
-confirm the binding persists and resolves false, replug into another port, confirm it resolves
-again.>
+**Verify.** The index-to-identity rule itself is engine-free and checkable without a pad:
+`CSVM.Tests/DeviceRegistryTests.cs` drives `DeviceRegistry.Refresh` with synthetic (index, guid,
+name) tuples standing in for the connected roster, and covers unplug (`IndexOf` goes to null,
+`BindingModelTests` already covers a binding resolving false from that), replug into a different
+index (the same guid resolves again at the new one), a restart (a fresh registry rebuilds the same
+identity from the same tuple), the GUID-to-name fallback, a device reporting neither, and two pads
+that collide on one GUID. Run with
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~DeviceRegistryTests" -SkipEngine -SkipGoldens`.
+What still needs a physical pad: that Godot actually reports a given GUID and name for real
+hardware, and that `Input.Singleton.JoyConnectionChanged` fires on a genuine unplug and replug.
+`GodotDeviceState` reads both but no automated suite exercises them; confirm at the controls by
+binding an action to a pad, unplugging it, watching the action go quiet, and replugging into a
+different port to see it fire again.
 
 **⚠ Traps.** Godot's joypad index is a connection slot and is reused. Storing it is exactly the bug
-this item exists to prevent.
+this item exists to prevent. Godot has no raw hat/POV API of its own: a controller's d-pad arrives
+as four `JoyButton` values (`DpadUp`/`DpadRight`/`DpadDown`/`DpadLeft`), so `GodotDeviceState`
+treats hat index 0 as that d-pad and every other hat index as unbindable. The plan's Approach names
+a "live index-to-identity table maintained on the joy_connection_changed signal" without saying who
+owns the wiring; `GodotDeviceState.RefreshDevices()` does the read and is meant to be called once at
+launch and again from that signal, but the call site is left for whoever builds the per-tick
+resolver (A2's `ActionMap`, or `GameSession`), since A3 has no polling loop of its own to hook it
+into.
 
 # Wave B — the migration
 
