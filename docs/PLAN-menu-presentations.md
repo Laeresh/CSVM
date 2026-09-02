@@ -176,6 +176,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 43. ☑ Complete typed launch and semantic return routing across every journey
 44. ◐ Run acceptance, enable Original normally and publish the Modern extension contract
 
+### Wave F — The Game Options page
+
+51. ☐ Compose Original's Game Options page and move both option rows onto it
+
 ## Dependency and parallelism notes
 
 A1 is the evidence inventory and blocks Original implementation items. A2 blocks every item that
@@ -185,7 +189,9 @@ C21 and C22 may proceed in parallel after B13 if their file ownership is separat
 on the current `LaunchMenu.cs` until its shell has been split. C23 and D31 touch the existing flow/page
 boundary and should not run in parallel if either edits shared composition types. D31 → D32 → D33 is
 linear. E41–E43 integrate the same presentation host and `Launcher`, so run them serially. E44 is the
-only normal-availability gate.
+only normal-availability gate. F51 follows E44's user judgement of the Preferences chooser and edits
+`OriginalShell`, the coverage check, the manifest and the inventory, so nothing runs beside it; E44's
+switch row at the controls is re-run once it lands.
 
 ---
 
@@ -1830,7 +1836,7 @@ Every row a machine can run was run; every row only a human can run reads owed.
 | A real pad's join and walk in both presentations | a pad pressing Start on Built-in's aircraft screen and on Original's Free Flight and Dogfight screens; the joined pad walking, selecting and confirming; Back unjoining it; FLY launching two seats with each pad flying its own pane; a pad unplugged mid-setup | **owed at the controls**: expect the seat joined, tagged and freed as `menu-player-setup-seats` drives it, and the unplugged pad's seat gone |
 | The mouse over Original's every screen | `.\RunDev.ps1 --presentation=original`, the pointer moved slowly over every plaque, list row, dropdown, tab and scrap of every screen the inventory lists, one press held on a plaque | **owed at the controls**: expect the active pointer over a live button and the passive one elsewhere, the rollover frame on entering a plaque and the depressed frame while held, a list row taking focus with no frame change |
 | The sounds | the same run with audio | **owed at the controls**: expect `MOUSEOVER` on entering a plaque, `MOUSECLICK` on a press, nothing on a list row or a scrap, `ENTERTEXT` per character the profile screen's box takes and `ENTERTEXT_ERROR` per refused one, the briefing's narration starting on entry, restarting on REPLAY BRIEFING and stopping on RETURN TO CABIN and GO TO FLIGHT CHECK |
-| A switch both ways at the controls | `.\RunDev.ps1`, Options, Original, APPLY; then PREFERENCES, BUILT-IN, APPLY; then a restart of the game with no flag | **owed at the controls**: expect the other presentation's top level one frame after APPLY each time, unfinished setup gone, and the saved choice honoured on the restart; with a required file moved out of a scratch root copy and put back while the process is up, expect the switch to see the repaired tree |
+| A switch both ways at the controls | `.\RunDev.ps1`, Options, Original, APPLY; then PREFERENCES, GAME OPTIONS, the Menu dropdown to BUILT-IN, ACCEPT CHANGES (once `F51` lands; until then the Preferences chooser's plaque and APPLY); then a restart of the game with no flag | **owed at the controls**: expect the other presentation's top level one frame after the apply each time, unfinished setup gone, and the saved choice honoured on the restart; with a required file moved out of a scratch root copy and put back while the process is up, expect the switch to see the repaired tree |
 
 `docs/verification.md` rules that bit: **METHOD-6** (which binary each side of the Built-in
 comparison used is named: `mp-e43`'s build of the same `CSVM/` tree against this tree's),
@@ -1850,7 +1856,9 @@ normally selectable, the two-answer box follows the script with Yes focused, and
 chooser's description moves above its plaques; with those three applied the tree passed the
 complete battery again (3026 units, 213 engine suites, 18 goldens hash-identical, 168.7s), and with
 main merged in and the graphics mode option landed it passed once more (3059 units, 221 engine
-suites, 18 goldens hash-identical, 163.4s). The at-the-controls rows remain owed.
+suites, 18 goldens hash-identical, 163.4s). The at-the-controls rows remain owed. The user's first
+look at the Preferences chooser found its two plaques indistinguishable (both read ORIGINAL, with
+no title over either), which is what `F51` answers with the decoded Game Options page.
 
 **What the user must do at the controls.** The nine owed rows above, in that order, each over
 `.\RunDev.ps1` and never against a real profile (copy one first) or the real extraction (copy
@@ -1883,3 +1891,155 @@ built from the value resolved at launch, and this plan does not rebuild them und
 
 **⚠ Traps.** Two presentations prove replaceability only if shared features have no dependency on
 either. Do not add a token Modern screen; the extension contract is the deliverable.
+
+---
+
+# Wave F — The Game Options page
+
+## F51 ☐ Compose Original's Game Options page and move both option rows onto it
+
+**Goal.** Original's two options stand on the decoded Game Options page, each under its own title
+with a description beside it, in the widget idiom the original uses for a choice (a dropdown) and
+for a switch (a checkbox), with ACCEPT CHANGES and CANCEL CHANGES under them. The Preferences page
+returns to its decoded form with its Game Options door live.
+
+**Evidence (confidence: traced).** The user judged the E44 chooser at the controls: two plaques
+both reading ORIGINAL with no title over either and no way to tell the presentation from the
+graphics mode. The original's own answer to a page of choices is `[@GameOptions@]`, which the
+layout decodes whole (`menu_layout.json`, 13 rows, zero unresolved macros or strings) and whose
+script `GAMEOPTIONS.SCRIPT` creates every one of them: `GO_BACKGROUND` (`GO_BackGround.png` at
+110,215, the same corner as `PF_BACKGROUND`), `GO_T_TITLE` "GAME OPTIONS" (122,228, width 200,
+centred, colour `0xFFC0BAAD`), three rows at a 62 px pitch each made of a title in the `TITLEX`
+column (138; `PF_TITLEW` 170 by `PF_TITLEH` 20, colour `TCOLOR` `0xFFFFDDC4`), a control in the
+`DROPX` column (143) and a description in the `DESCX` column (346; `PF_DESCW` 310 by `PF_DESCH`
+40, the same colour): Difficulty at Y 283 over `GO_D_DIFFICULTY` (a `D` row at 143,299, width 144,
+`PF_DROPH` 17, four items displayed, the `GN_B_ListboxarrowSMALL` pair for the closed box and the
+`CM_B_Scroll*` set for the open list), Default View at Y 345 over `GO_D_VIEW` (143,361, the same
+shape), and Auto Head Turn at Y 407 (title width 112, height 40, centred, so it wraps onto two
+lines) over `GO_B_HEADTURN`, a `B` row at 260,410 on `PF_B_CheckBoxSmall.Png` (8 frames, `Style` 1,
+`Checked` 0). `GO_B_ACCEPTCHANGES` (219,457, `PF_B_AcceptChanges.png`) and `GO_B_CANCELCHANGES`
+(451,457, `PF_B_CancelChanges.png`) both state `Preferences` as their edge; the script's mailbox
+sends the choices out through `callback($$E$$, 2128, 1, ...)` on accept and `callback($$E$$, 2110)`
+on cancel, and reads a dropdown's pick back off `sender.QG` on message 10015 and the checkbox's
+state off `mail(10008, sender)`. `OriginalScreenshots\GameOptions.png` shows the composed page:
+the plate over the red field, GAME OPTIONS on the plate's tab, the three titled rows with their
+descriptions in one column to the right, the two closed dropdowns showing their picked word with
+the small arrow, the checkbox drawn as a small round switch beside its two-line title, and the two
+paper plaques on the plate's bottom margin. Everything the item draws is therefore decoded; what
+is remake-only is the two rows' words and which control each option takes.
+
+What already exists to build it from: `OriginalRowKind.Dropdown` and the open-list rows the
+hangar and campaign screens hit-test under a closed box (`OriginalHangar.cs`, `OriginalCampaign.cs`,
+the `GN_B_ListboxarrowSMALL` arrows on their authored `D` rows), `OriginalRowKind.Radio` over an
+eight-state strip (the name screen's `PN_B_DEFAULT`, the Instant Action radio pair), the paper
+plaque and button strips `ComposeRows` draws, `ComposeOptions` reading `[@Preferences@]`, the
+`OptionsApplyExit` carrying both choices, and the coverage check's edge table, which today records
+`PF_B_GAMEOPTIONS` as drawn disabled and the two `GO_B_*CHANGES` returns as out of scope.
+
+**Approach.** Add `OriginalScreen.GameOptions`, composed over the section's own rows and reached
+from `PF_B_GAMEOPTIONS`, now live. Its content is the two options in the page's own row shape, the
+first two authored rows taken by ours and the third left empty, since the original's three rows
+have no shared option behind them (Difficulty is `BL-570`'s, and drawing a dropdown that picks
+nothing is an invented state; `BL-570` is amended to say its row belongs on this page at the
+authored Difficulty position). Row one, at the Difficulty row's Y: the title "Menu" in the title
+column, a dropdown in the control column over the two registered presentations reading ORIGINAL or
+BUILT-IN closed and listing both open, and the description "Select the menu presentation." in the
+description column. Row two, at the Default View row's Y: the title "Enhanced Graphics", a
+checkbox in the control column at the head-turn box's offset from its row (checked when the saved
+graphics word is `enhanced`), and the description "Select the lit world. Takes effect on the next
+start." Two controls of different kinds is deliberate: a second dropdown whose closed box reads
+ORIGINAL would put the word the user could not tell apart back on the page, and a switch is what
+the original's own page uses for a two-state option. Both rows open on the saved options
+(`OptionsStore.UserOptions()`), as Built-in's steppers and the current chooser do, so what the
+page shows back is the request, not the availability outcome. ACCEPT CHANGES leaves as the
+`OptionsApplyExit` carrying both choices, after which `Launcher.ApplyOptions` saves them and the
+selected presentation's top level stands one frame later (Decision 7; a change to the graphics
+word alone re-selects the same presentation and lands on its top level, which is what the
+description's "next start" sentence covers). CANCEL CHANGES returns to Preferences with the
+choices dropped. Back from the page is CANCEL CHANGES; Back from the open dropdown closes it.
+Keyboard and pad: down and up walk dropdown, checkbox, ACCEPT, CANCEL; Accept on the dropdown
+opens its list and on the checkbox flips it; a sideways step on the closed dropdown picks the next
+token with wrap, as the hangar's dropdowns do. The pointer: the rollover and depressed frames on
+the plaques and the checkbox, the open list's rows hit-tested under the box, `MOUSEOVER` and
+`MOUSECLICK` cues where every other Original screen plays them.
+
+The Preferences page loses the chooser slot (`ChooserCorner`, `ChooserDescription`,
+`ChooserRestartNote`, the two plaques and their layout constants) and draws what the section
+authors: the logo and background panes, the title, the four descriptions, `PF_B_GAMEOPTIONS` live
+in its four frames, the three other doors disabled (still a remake state, recorded for `CAP-51`),
+`PF_B_MAINMENU` as the way back. `PF_T_GODESC`'s decoded words ("Change the difficulty level and
+default views.") stay as authored beside the live door; they describe the original's page, and
+Decision 11 does not let this item rewrite a decoded string. The saved-options read moves from
+the Options composition to the Game Options one.
+
+Growth. More options will come to this page (`BL-570`'s Difficulty first), so the page's rows are
+a table (title, control kind, description, the store field it reads and writes) placed at the
+authored row pitch from the first authored row's Y, not three hand-placed rows, and adding one is
+adding a table entry plus the store field. What the page cannot promise is room: under Decision 12
+a larger window scales the same 800x600 canvas, so a higher resolution adds pixels and no authored
+space, and the plate holds three rows before a fourth reaches the plaque row at Y 457. The item
+measures and records in the inventory how many rows the plate holds; when the table outgrows it,
+the choice is between a taller plate (the pane is one image, so a stretched or tiled remake
+drawing is a remake reading to record) and paging the rows, and that choice is the later item's,
+not this one's.
+
+Built-in is unchanged (Decision 16): its Options screen keeps the presentation and graphics
+steppers and the apply row, and its pixel identity is re-proven as every item does.
+
+The manifest derives need from `OriginalAssetManifest.ComposedSections` and `Undrawn`, so the
+item adds `GameOptions` to the composed sections and names under `Undrawn` nothing, since the page
+draws every art name the section carries: `GO_BackGround.png`, the two `PF_B_*Changes.png`
+plaques, `PF_B_CheckBoxSmall.Png` through our checkbox and the dropdown's arrow and scroll set
+through our dropdown. Those files move from optional to required (`PF_B_GameOptions.png`'s frames
+are already required with the Preferences chrome), so re-count the census in the item's Verify and
+in the plan's E42 numbers where they are quoted (95 required, 67 optional over the install).
+
+The coverage check: the edge `Preferences → GameOptions` moves from drawn disabled to driven and
+the two `GameOptions → Preferences` returns from out of scope to driven, so the tallies in E41's
+and E44's text (22 driven, 6 drawn disabled, 16 out of scope over the install) each move by those
+three; a `game-options` journey opens the page from Preferences and leaves by CANCEL CHANGES, an
+`apply-options` journey (the existing one, re-pointed) opens it, flips the checkbox, picks the
+other presentation in the dropdown and leaves by ACCEPT CHANGES expecting the `OptionsApplyExit`
+with both choices. `OriginalShellTests` gains the page's composition over the fixture's new
+`[@GameOptions@]` section (hand-authored, legal: names and numbers, no art) and the row walk by
+all three input families. Add `--menu=game-options` under `--presentation=original` (no new flag;
+the flag index stays at its count) and record it in `docs/cli.md` beside `options`.
+
+Documentation the item owns: `docs/org/menu-inventory.md` (the Preferences row's composition, the
+GameOptions row moving from "out of this plan" to built, with the remake-only readings named: the
+two rows' words, which control each takes, the empty third row, the three doors still disabled;
+the "five in the census and out of this plan" sentence becomes four; the manifest table's `GO_`
+line), `docs/menu-presentations.md` (the "an option is a store field plus a row" paragraph and the
+extension checklist's Options step name the Game Options page rather than the Preferences chooser
+slot), `docs/architecture.md`'s `OriginalShell` entry, and `backlog.md`'s `BL-570` fix shape. E44's
+"A switch both ways at the controls" row is rewritten to walk PREFERENCES, GAME OPTIONS, the
+dropdown, ACCEPT CHANGES.
+
+**Model recommendation.** high — a decoded page composed on the release-gate screen, with the
+coverage check, the manifest census and the inventory all moving together.
+
+**Verify.** `dotnet build CSVM/CSVM.sln`; the whole `dotnet test` with `OriginalCoverageTests`
+reporting the new edge tallies and the `game-options` and `apply-options` journeys by three
+families, `OriginalShellTests` composing the page, `OriginalManifestTests` at the new census;
+`.\RunTests.ps1 -Filter "menu,campaign" -SkipUnits -SkipGoldens` with `menu-original-tracer`'s
+switch walking the new page; `.\CheckCommentCaps.ps1 -Summary`; `.\CheckEncoding.ps1`. Shots on
+the hidden desktop: Original's `options` and `game-options` aids at 800x600, 1280x720, 1920x1080
+and 600x750, the page once with the dropdown open (a keyboard walk in the probe, or the aid
+opening it), read against `OriginalScreenshots\GameOptions.png` for the plate, the tab title, the
+row columns and the plaque row; Built-in's `mode` and `options` aids at 1280x720 compared by
+decoded pixels against E44's `builtin-after` set, identical. The complete `.\RunTests.ps1` on the
+merged plan tree is the orchestrator's. At the controls the user judges the page with a
+montage, since the two rows' words and the checkbox choice are remake-only readings.
+
+**Verified.** Not yet.
+
+**⚠ Traps.** Do not put a third control on the page for Difficulty "while you are there": the
+scale's row needs a store field, a `Flight/Difficulty` reader and a golden's independence from
+the options file, which is `BL-570`'s own item. Do not rewrite `PF_T_GODESC` to describe our page;
+it is a decoded string. Do not draw the original's Default View and Auto Head Turn rows disabled;
+the original never shows a disabled dropdown, and an unused row is the smaller invention. The
+checkbox's checked frame is one of eight in `PF_B_CheckBoxSmall.Png`, a strip no composed screen
+draws yet; the name screen's `PN_B_DEFAULT` draws the sibling `MP_B_CheckBox8States.png` under the
+same `Style` 1 and the layout's one eight-state convention (`docs/formats/menu-layout.md`), so
+start from its frame order and confirm it against the install's strip in a shot with the box
+checked and unchecked before relying on it.
