@@ -1559,6 +1559,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `egen: 'cargozep1' spawn #1: 'bsfury_eg0' dropped ... patrolling net 'M3Allies'`. This item and
   `PT-102` both described enemy Black Swans, which is what made CM18 read as a mission mix-up at the
   controls; the count is right and the side is not.
+  ⚠ **The player-visible consequence, reported at the controls:** "all Black Swan plane are spawned
+  at the start mostly underground" and "they are not available to shoot down because they should
+  spawn with capturing the cargozep and start from it. not sitting on where they could be attacked".
+  All ten launches land at the generator's `cargobay` origin `(-3840,558,-2543)`, about 81 m below
+  the moored hull at `(-3840,639,-2624)`, and every one of them happens inside the opening cutscene,
+  so they are gone before the tiedowns are cut. `AiGeneratorRuntime` takes
+  `gen.Origin.GlobalPosition` with no clearance term, and the free-run is this item's own cause, so
+  the placement is a symptom of it rather than a separate defect. The authored `min_altitude` 250 is
+  absolute world Y and is already matched correctly; do not re-read it as height above terrain.
+  ⚠ **CM18 pays the spawn cost ten times, not twice.** `PLAN-M5-polish-8`'s `B14` attributes the
+  mission's stalls to two launches; the sortie shows `ai_spawn` hitches at 68.90, 68.41, 70.05 and
+  69.13 ms among ten, with a separate unattributed 290 ms frame beside them. Whatever this item
+  decides about the credit rule changes how often that cost is paid.
   [`docs/formats/mission-entities/enemy-generators.md`](formats/mission-entities/enemy-generators.md)
   ("Capacity rule and limit") records that the literal decoded rule blocks every shipped generator on
   its first tick, and that the data does **not** establish that 0 means unlimited, which is exactly
@@ -2814,6 +2827,68 @@ usual.
   `piratefighter`, whose `devastator`/`wingman` defs *do* author `paint_pattern player_fortune`,
   which is the better-founded half of the same item.
   *Cross-refs:* `BL-632`, `PT-112`.
+
+- `BL-694` `[Bug]` **CM14 becomes unwinnable when the Gemini is killed before its cannon bays are,
+  because the wreck comes to rest low enough to put the surviving bays under the sea.** *Evidence
+  (traced, and reproduced twice at the controls with the two outcomes side by side):* the mission's
+  third primary is the only route to a win. `OBJECTIVE13` is
+  `IDENTITY [PRIMARY, 3, MSG_BRF_HWM4_OBJ3]` gated on `ANIM_STATE COMPLETION_COUNT 5` over the six
+  `deploy_gmzep_lbroad11..32` in `INVALID`
+  (`extracted/C2B/M04/zrdr/objectives.zrd.json:755`); completing it naps `OBJECTIVE33`, which wakes
+  `OBJECTIVE14`, which naps `OBJECTIVE32` `INSTANTWIN`. Nothing else wakes any of the three. Failing
+  it loses nothing either — `OBJECTIVE22` `INSTANTLOSS` is woken only by `OBJECTIVE21`, three of the
+  *player's own* `piratezep` gasbags gone — so the mission simply never ends.
+  Only `destroy_gmzep_lbroadNN-gunback` (activation `WeaponHit`, health 60) writes those `INVALID`
+  states, and `killgmzep` invalidates only `gmzep_rocksleft`/`gmzep_rocksright`, so no zeppelin death
+  credits the objective. The gasbag kill is reachable independently: `geminizep` authors five healthy
+  zones with `num_healthy_required 3`, so three torpedoes kill it with every cannon untouched.
+  The two logged runs are the proof, and they differ only in order.
+  **Won:** `lbroad21` destroyed then `objective 11 completed` one line later, `lbroad31` destroyed
+  then `objective 12 completed`, the Gemini killed, and the last bay then shot on a floating wreck
+  the author put "a meter above the water level".
+  **Blocked:** no cannon destroyed at all, gasbags 2, 3 and 1 killed, `geminizep DESTROYED —
+  survivors 2 < required 3`, `objective 11` woken at 72.1 s and never completed, and no mission end
+  of any kind in the rest of the log.
+  The author's own account of the difference: "the wreck sank under water blocking the mission
+  because only the cannons count", and asked whether rounds reach a submerged gun, "stops at
+  surface" — which `Projectile.SurfaceIsWater` confirms, water being a real collider.
+  *Fix shape:* not settled, and the choice matters. The wreck's rest is the contact tier parking the
+  body's ORIGIN on what it lands on, which is decoded behaviour
+  ([`docs/org/objectMotion.md`](org/objectMotion.md):40 — `FUN_004cf200` hands the column query the
+  flying node's origin, with no bounding-box term), so raising the rest height is not obviously
+  right. The authored route is `killgmzep/breakunder`, which switches `underneath` inactive.
+  ⚠ **Do not make a gasbag kill credit primary 3.** `MSG_BRF_HWM4_OBJ3` reads "Destroy the GEMINI by
+  shooting the open cannon hatches", and the original's own death def credits nothing, so crediting
+  it would invent a win condition.
+  *⚠ Traps:* **`killgmzep` has never run under test.** `CSVM/src/Testing/ZeppelinBreakupSuites.cs:11,22`
+  pins C1/M04 and `piratezep` only, asserts six bags where the Gemini has five, and would fail its
+  12-of-12 engine check on a 14-engine hull, so a green suite is no evidence about this ship. There
+  is also no recovery for a player already in this state: `--debug-objective=N` drives `INACTIVEn`
+  conditions only and cannot satisfy an `ANIM_STATE` objective, and the campaign's four-attempt skip
+  offer needs four RECORDED failures, which an unwinnable-and-unlosable mission never produces.
+  *Open question for whoever takes this:* in the winning run `objective 13` completed with only TWO
+  bays destroyed. Two destroys invalidate four `deploy_*` defs and the objective is authored to need
+  five, so something else supplied the fifth; find it before changing any counting.
+  *Cross-refs:* `BL-695` (the same ladder crediting with no cannon touched at all), `BL-639`,
+  `BL-640`, `BL-668`, `CAP-55`, `PT-103`.
+
+- `BL-695` `[Bug]` **CM14's cannon-hatch ladder can complete with no Gemini cannon destroyed at
+  all.** *Evidence (traced from a sortie log):* on one CM14 run the whole primary ladder completed
+  without a single `[anim] damage:` line on any `lbroadNN` node anywhere in the mission window, and
+  with the Gemini still alive at the end (`engines 9/14`, never `DESTROYED`); the mission was Won at
+  208.7 s through `hooked_to_klondike`. The six `lbroad11..32` guns deploy normally in that window,
+  so the nodes exist and are reachable. The completions track the hull's ENGINE count rather than
+  its hatches: `objective 12` (authored `COMPLETION_COUNT 3`) completes on the line after
+  `geminizep' engines 11/14`, the third engine kill, and `objective 13` (`COMPLETION_COUNT 5`) on
+  the line after `engines 9/14`, the fifth. Ten `wep_07` FLAK launches and five engine kills over the
+  window, no hatch damage.
+  This is the mirror of `BL-694`: the same gate, credited by the wrong destructible set. A second
+  logged run shows the ladder working correctly off real hatch kills, so the fault is conditional
+  rather than constant, and finding what distinguishes the two runs is the first step.
+  *⚠ Traps:* do not "fix" this by tightening the count before `BL-694`'s open question is answered —
+  that run completed `objective 13` on four invalidations where five are authored, and the two
+  anomalies may share a cause. Neither should be changed on its own.
+  *Cross-refs:* `BL-694`, `BL-639`, `PT-103`.
 
 ## Tooling, platform & docs
 

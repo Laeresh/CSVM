@@ -132,6 +132,7 @@ draws its authored 800x600 space one-to-one.
 | `CAP-38` | Beeper and seeker hits ON an aircraft, **with audio** | In the original, fire the beeper (`wep_10`) and the seeker (`wep_11`) at an aircraft and film the hit itself, external/chase, close enough to read the burst on the airframe. Both weapons author `ANIMATION large_fireball` on their aircraft `IMPACT` row and ours plays exactly that on a fused or struck plane; the ground-side look is already signed off, so this clip is only the on-plane half. *Look for:* whether the original shows the large fireball on the plane, something smaller, or nothing beyond the paint, and the per-type impact sound on the same take (`snd_missile_beeper` / `snd_missile_seeker`) | Nothing tracks the outcome; a mismatch with our on-plane burst mints a new `BL` |
 | `CAP-29` | Panel-damage semantics | Take controlled damage per part in the original, own aircraft in frame (external/chase), damage display visible if possible. **Reduced 2026-08-15 by the `BL-297` decode**, which answered all three questions out of `crimson.exe` (`docs/org/vehicleDamage.md`, "Damage staging"): (a) effects land at the node the def names, so a nose hit DOES spark wing sites; (b) nothing per-part fires at all while a part's armor absorbs; (c) each entry fires once per downward crossing, so a panel tears once until repaired. **What is still owed is the look:** watch one panel cross its tear threshold and judge whether the flung debris reads as a piece of that panel or as generic flakes, and what visibly changes on the airframe. The other three are now confirmation, worth capturing on the same take if the framing allows but not worth a dedicated sortie | `BL-297` |
 | `CAP-47` | A gasbag burning out, CM14 (C2B/M04) | In the original, fly Clash of Dreadnaughts and set the Gemini's gasbags alight, holding one bag in frame from ignition through to whatever ends it, close enough to read both the fire and the envelope under it. *Look for:* what a finished gasbag looks like (a collapsed or missing envelope, a scorched one that stays, or a fire that simply stops), and what the zeppelin does once **three of its five** have finished, which is the authored death gate (`all_gmzep_gasbags` carries `MINIMUM_TO_SATISFY 3` over the five `finish_gmzepgasbagN` animations). Qualitative only: no burn duration is read off this clip as a constant | `BL-639` |
+| `CAP-55` | The Gemini's own death and where its wreck rests, CM14 (C2B/M04) | In the original, fly Clash of Dreadnaughts and torpedo three of the Gemini's five gasbags down **without destroying any left broadside bay**, then hold the hull in frame from the first bag falling through to where the wreck settles and stops moving. *Look for:* (a) how many gasbags separate and fall, counted against the hull, since our row and our suite disagree about five and six; (b) whether the gondola/underside disappears as it settles (`breakunder` switches `underneath` inactive); (c) the waterline against the three left broadside bays and their hatches once it is at rest; (d) a gun burst fired into whichever bay sits nearest the water, held long enough to see whether it takes damage; (e) the pause-screen objectives readout before and after that burst. Qualitative only: no distance or rest height is read off this clip as a constant. | `BL-694` (whether the original leaves a bay unreachable at all, which decides if our sinking is the defect or the mission order is), `BL-695`, `PT-103` |
 
 ### World
 
@@ -781,18 +782,28 @@ is a judgement on our own remake.
 ./RunGame.ps1 --campaign=<profile>:13
 ```
 
-- `PT-103` `[Own]` **A downed zeppelin pitches over, sheds six gasbags with splashes, and drops the
-  gondola** (`BL-440`, closed). `NodeUndercover` is now a real vertical probe, so `killpzep`'s
-  breakup runs once the hull is 65 m over the water. ⚠ **This cannot be flown in Instant Action**,
-  which is why it now sits here: the zeppelin run's mode-2 end condition fires on the gasbag
-  threshold, ending the mission before the breakup plays, and that is the original's own behaviour
-  rather than a defect of ours. `killpzep` exists in twenty mission folders and no `IA1` folder at
-  all. Torpedo the Gemini down over water on this sortie and follow it.
+- `PT-103` `[Own]` **A downed zeppelin pitches over, sheds its gasbags with splashes, and drops the
+  gondola** (`BL-440`, closed). ⚠ **This cannot be flown in Instant Action**, which is why it sits
+  here: the zeppelin run's mode-2 end condition fires on the gasbag threshold, ending the mission
+  before the breakup plays, and that is the original's own behaviour rather than a defect of ours.
+  `killpzep` exists in twenty mission folders and no `IA1` folder at all.
+  ⚠ **The numbers are per ship, and this row carried the wrong ones when it was repointed here.**
+  The Gemini (`geminizep`) authors FIVE healthy zones, `gasbag1`..`gasbag5`, kill at survivors below
+  3, breakup `all_gmzep_gasbags` → `killgmzep` with `break1`..`break5` and `hit_water1`..`hit_water5`.
+  C1/M04's `piratezep` is the six-bag ship with a threshold of 4, and it is what `killpzep` and the
+  `zeppelin-breakup` suite cover; that suite says nothing about this hull.
+  ⚠ **Destroy all three left broadside bays BEFORE torpedoing it.** Killing the gasbags first can
+  leave the mission unwinnable (`BL-694`): the wreck may rest low enough to put a surviving bay under
+  the sea, where rounds stop at the surface, and the third primary counts only destroyed hatches.
   *Look for:*
   - (a) the hull pitching nose-down over about eight seconds, then easing as the break starts;
-  - (b) six gasbags falling free with a splash and a ripple where each meets the water;
-  - (c) the gondola dropping away.
-  *Blocks:* nothing tracks the outcome; a breakup that does not play mints a new `BL`.
+  - (b) how many bays separate and fall with a splash and a ripple, counted against the hull — five
+    is what the data authors, and what the eye reads is the open question;
+  - (c) the gondola dropping away (`breakunder` also destroys the three chin turrets on this ship);
+  - (d) where the wreck comes to rest against the waterline, and whether every bay is still
+    reachable by gunfire once it stops moving.
+  *Blocks:* `BL-694`'s reachability half, and `BL-440`'s breakup on a hull no suite covers. A
+  breakup that does not play mints a new `BL`.
 
 ### CM18 (C4/M03) · the generator launches
 
@@ -815,7 +826,12 @@ is a judgement on our own remake.
   - (b) a launched Fury appearing and flying away on its net exactly as before;
   - (c) one shot down within its first quarter-second still showing its wreck and crash effects,
     which is the forcing guard no suite watches at the controls — use the debug kill rather than
-    firing on a friendly.
+    firing on a friendly;
+  - (d) where the Furies come out. They currently appear at the `cargobay` origin, about 81 m under
+    the moored hull and inside the opening cutscene, which is what "mostly underground" and "they are
+    not available to shoot down" describe (`BL-657`). Say whether the original launches them from the
+    flying zeppelin with its hangar doors opening, since that is the reading the fix would be built
+    against.
   *Blocks:* nothing; `BL-641` stays partial with its remaining path recorded in the plan. A missing
   wreck on an early kill mints a new `BL`.
 
