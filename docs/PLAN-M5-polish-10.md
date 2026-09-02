@@ -147,7 +147,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☐ `BL-459` A damaged engine's loop waits out the original's re-arm delay before it restarts
 23. ☐ `BL-433` Numpad `+`/`−` drive the chase camera's zoom
 24. ☐ `BL-679` A staged airframe leaves no stale node behind in the name resolver
-25. ☐ `BL-405` Mounted ordnance tracks the aim before it launches, or the census closes it
+25. ❌ `BL-405` Mounted ordnance tracks the aim before it launches, or the census closes it (disproven: no shipped airframe authors an animated mount node, so the pylon staying fixed already matches the original)
 
 ### Wave D — Closing sortie
 
@@ -596,7 +596,43 @@ stale entry which will also answer a later lookup with the wrong node, turning a
 silent wrong answer. The liveness delegate at `NameResolver.cs:67` exists for the resolver's own
 sweep and is not the place to paper over this.
 
-## C25 ☐ `BL-405` Mounted ordnance tracks the aim before it launches, or the census closes it
+## C25 ❌ `BL-405` Mounted ordnance tracks the aim before it launches, or the census closes it
+
+**Closed ❌ disproven, no code.** The census this item's own Approach called for came back no: no
+shipped airframe authors an animated node on the mount its ordnance hangs from, so `PylonOrdnance`
+parenting the round body to the pylon marker at identity and never touching it again is not a
+simplification. It is what the original does too, because the original never has anywhere to slew.
+
+**The census.** Full write-up in
+[`docs/org/aiPilot/aiWeapons.md`](org/aiPilot/aiWeapons.md), "Census: no shipped airframe carries
+that node". Per shipped airframe, over the ten `gun_pitch`/`gun_yaw` carriers that author ordnance
+(`devastator` and `bswingman` carry none and are excluded, per `aiWeapons.md`'s own ordnance
+census; `patrolboat`/`t_truck` carry a single gun and no pylons at all):
+
+| Airframe | Def | Pylon rig | Animated mount node authored? |
+|---|---|---|---|
+| Bloodhawk | `bloodhawk` | `pylon1`…`pylon8` | No |
+| Fury | `fury` | `pylon1`…`pylon8` | No |
+| Warhawk | `warhawk` | `pylon1`…`pylon8` | No |
+| Hoplite | `autogyro` | `pylon1`…`pylon8` | No |
+| Hellhound | `avenger` | `pylon1`…`pylon8` | No |
+| Balmoral | `balmoral` | `pylon1`…`pylon8` | No |
+| Brigand | `brigand` | `pylon1`…`pylon8` | No |
+| Firebrand | `firebrand` | `pylon1`…`pylon8` | No |
+| Kestrel | `kestrel` | `pylon1`…`pylon8` | No |
+| Peacemaker | `peacemaker` | `pylon1`…`pylon8` | No |
+
+Every one of the ten hangs its pylons off the identical rig the player planes use: mesh-less
+`Object3d` markers, `model_index -1`, no children, no distinguishing flag
+(`extracted/planes/nodes.json`), and `vehicle.zrd.json` authors no mount or node-reference field for
+any of them. The only nodes any shipped plane model ever moves are the five turret airframes'
+barrels, and turrets run an entirely separate system (`Turret`/`TurretRate` in `turret.cpp`) that
+never reaches this mount. The one shipped `lpylon*`/`rpylon*` node set belongs to `anim_bloodhawk`,
+a scripted asset outside the AI pilot's model roster, not to a second AI pylon rig; the
+`docs/formats/markers.md` pylon section carried that misreading and is corrected in the same commit
+as this closure.
+
+**Original approach (kept for reference).**
 
 **Goal.** Either a mounted rocket visibly follows the aim its launcher has already computed, the way
 the original's animated mount slews, or the shipped data is shown not to author such a mount

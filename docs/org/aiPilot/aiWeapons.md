@@ -221,6 +221,18 @@ An animated mount (a node in `+0x34`/`+0x38`) slews toward the clamped direction
 `FUN_00460840` rather than snapping to it, so its `+0xa4` also carries however far the mount still
 has to travel. A fixed forward gun has no node and reaches the clamped direction the same frame.
 
+**Census: no shipped airframe carries that node.** The ten AI airframes that author ordnance
+(`bloodhawk`, `fury`, `warhawk`, `autogyro`, `avenger`, `balmoral`, `brigand`, `firebrand`,
+`kestrel`, `peacemaker`, which is every `gun_pitch`/`gun_yaw` carrier except `devastator` and
+`bswingman`, and those two carry no ordnance) hang their pylons off the same rig the player planes
+use: `pylon1`…`pylon8`, mesh-less `Object3d` markers at `model_index -1` with no children and no
+distinguishing flag (`extracted/planes/nodes.json`). `vehicle.zrd.json` authors no mount or
+node-reference field at all. The only nodes any shipped plane model ever moves are the five turret
+airframes' barrels (`fgun`/`rgun`/`bgun0`…`bgun3`/`hgun`/`hgun2`), and turrets do not run through
+this mount: they are `Turret`/`TurretRate` in `turret.cpp`, entered through their own projectile
+spawner, never through `FUN_004897c0`'s vehicle-list walk. So the slewing branch is decoded and
+correct, but nothing shipped ever takes it: every mount, gun or ordnance, is the fixed case.
+
 ## The specials
 
 Three shipped ordnance types are not "launch at the target ahead", and the engine handles them in
@@ -256,9 +268,11 @@ handling belongs to the smoke screen and is a separate item.
 armed check, the two-sided `DAMAGES_ZEPPELIN` match, the squared band and the clamp-then-residual
 against `0.9962`, then the vehicle-wide lockout stamped ahead of the `quick_draw_chance` roll. It
 holds no target of its own, mirroring the original's single validated target across the whole weapon
-walk. Two divergences are deliberate: it does not arbitrate the weapon selection against the gun
-(our two classes share no mount and no aim vector, so there is nothing to arbitrate), and its round
-leaves along the clamped aim while the mounted body stays fixed to the pylon.
+walk. One divergence is deliberate: it does not arbitrate the weapon selection against the gun (our
+two classes share no mount and no aim vector, so there is nothing to arbitrate). The mounted body
+staying fixed to the pylon while the round leaves along the clamped aim is not a divergence at all
+(above, "Census: no shipped airframe carries that node"): the original's own mount is the fixed
+case for every shipped ordnance pylon, so it does not move either.
 
 ⚠ The match's zeppelin side is written but unexercised in play, for two reasons that are both
 elsewhere. The AI acquisition admits aircraft alone (`BL-363`), so the gasbag argument is always
