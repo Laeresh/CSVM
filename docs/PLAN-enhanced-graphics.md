@@ -111,7 +111,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E — At-the-controls findings from the Wave C montages
 
 41. ☐ Shadows end before the fog ramp, not inside it
-42. ☐ C5 reads too bright in enhanced mode, its water a light grey
+42. ☑ C5 reads too bright in enhanced mode, its water a light grey
 43. ☐ The clutter building fade reaches as far as the pushed fog
 
 ## Dependency and parallelism notes
@@ -1363,7 +1363,7 @@ split fractions still put the near cascades where the aircraft's shadow lives.
 **Verify.** C1 and C4 horizon captures: no shadow visible inside the ramp; the hangar and
 aircraft shadows unchanged near the camera. Goldens zero movers.
 
-## E42 ☐ C5 reads too bright in enhanced mode, its water a light grey
+## E42 ☑ C5 reads too bright in enhanced mode, its water a light grey
 
 **Goal.** C5's night city reads as night in enhanced mode, and its water reads dark, without
 inventing a value the data does not carry.
@@ -1386,6 +1386,110 @@ sky, whichever the measurement points at. A rule that is only "C5 is special" is
 
 **Verify.** C5 night reads dark with its lamps and lit windows still reading as sources; C1B
 night sea reads dark; day chapters unchanged. Goldens zero movers.
+
+**As landed.** Two writes, both in `WeatherRig` and both gated on one new pure predicate.
+`IsNightZone` reads the zone's authored `FOG_COLOR` as Rec.709 luminance against
+`NightFogLuminance` (0.25, TUNE). `EnhancedEnergies` then caps a night zone's authored pair at
+`NightDiffuseCap` 0.6 and `NightAmbientCap` 0.15, the install's own night pair, as a ceiling rather
+than a replacement, so a zone already authored dimmer keeps its values. `ApplyEnhancedSunAndEnv`
+takes a `night` flag and switches the Environment's `ReflectedLightSource` between `Disabled` and
+`Bg`, because the glossy water's specular comes off the **placeholder** procedural sky rather than
+the mission's dome and so ignores both energies. The zone log line gains
+`; night zone, energies capped`. `SceneBuilder`'s water constants and `EnableWaterReflections` were
+measured and left alone.
+
+**The measurement, and which term it blamed.** Six arms per pose, three C5 poses, through a
+throwaway `CSVM_SCRATCH_E42` gate that wrote the sun energy to 0, the ambient energy to 0, the water
+roughness/specular to the matte 1.0 / 0.0, or skipped the SSR block. Mean Rec.709 luminance
+(0-255) over fixed rects; the gate was removed before finishing.
+
+| Pose / region | original | enhanced | sun 0 | ambient 0 | matte water | no SSR |
+|---|---|---|---|---|---|---|
+| waterfront, near water | 37.45 | 60.44 | 49.48 | 33.12 | 52.84 | 60.44 |
+| waterfront, far water | 37.43 | 86.61 | 80.52 | 33.39 | 52.68 | 89.56 |
+| waterfront, city blocks | 6.24 | 10.34 | 7.42 | 6.12 | 10.34 | 10.34 |
+| waterfront, sky | 7.54 | 9.80 | 9.80 | 9.80 | 9.80 | 9.80 |
+| golden pose, distant skyline | 3.19 | 22.44 | 21.07 | 6.33 | 22.44 | 22.44 |
+| golden pose, near tower wall | 32.35 | 56.33 | 33.30 | 45.04 | 56.33 | 56.33 |
+| golden pose, lit windows | 37.63 | 61.71 | 38.41 | 49.05 | 61.71 | 61.71 |
+| golden pose, horizon water | 0.00 | 41.26 | 39.44 | 5.78 | 7.79 | 51.75 |
+| spawn, rooftops | 19.09 | 26.86 | 19.48 | 17.51 | 26.86 | 26.86 |
+| spawn, aircraft | 63.49 | 72.02 | 38.62 | 60.20 | 72.02 | 72.02 |
+
+The ambient is the term that carries the grey: it is nearly all of the distant skyline (22.44 to
+6.33) and of the water (41.26 to 5.78), while the sun carries the near lit wall (56.33 to 33.30).
+SSR contributes nothing to the complaint and is slightly darkening. The water bit is a real second
+term (the far water loses 34 without it), and the two together are why the energy cap alone left
+the water at 76.99: the glossy specular is fed by the background sky, not by
+`AmbientLightEnergy`, which is what the second write addresses.
+
+**The handle, and what every chapter resolves to under it.** `FOG_COLOR` luminance over all 212
+`ZONE*`/`SW_ZONE*` blocks (`docs/org/weather.md` carries the table). Night runs 0.0000 to 0.0942,
+day 0.6900 to 0.8461, nothing in the gap.
+
+| Chapter | zones | fog luminance | night? | authored diffuse / ambient | resolved enhanced sun / ambient |
+|---|---|---|---|---|---|
+| C1 | ZONE1, ZONE2 | 0.6900 | no | 1.2 / 0.25 (1.5 / 0.2 in two missions) | 1.28 / 0.45, unchanged |
+| C1B | ZONE1, ZONE2 | 0.0942 | yes | 0.6 / 0.15 | 0.64 / 0.27, cap not binding |
+| C1B M03 | ZONE1 | 0.0942 | yes | 0.65 / 0.35 | 0.64 / 0.27, capped |
+| C1C | ZONE1, ZONE2 | 0.6900 | no | 0.4 / 0.6 and 2.0 / 0.6 | unchanged |
+| C2 | ZONE1 | 0.8461 | no | 1.1 / 0.5 | 1.18 / 0.90, unchanged |
+| C2 | ZONE2 | 0.6900 | no | 0.4 / 0.6 to 2.0 / 0.6 | unchanged |
+| C2B | ZONE1, ZONE2 | 0.6900 | no | 0.4 / 0.6 and 2.0 / 0.2 | unchanged |
+| C3 | ZONE1 | 0.7900 | no | 1.5 / 0.3 | 1.61 / 0.54, unchanged |
+| C3 | ZONE2 (in-cloud, 9-10 km) | 0.0942 | yes | 1.5 / 0.3 | 0.64 / 0.27, capped |
+| C4 | ZONE1, ZONE2 | 0.7529 | no | 1.5 / 0.5 | 1.61 / 0.90, unchanged |
+| C5 | ZONE1, ZONE3 | 0.0000 / 0.0627 | yes | 1.5 / 0.5 | 0.64 / 0.27, capped |
+
+⚠ **The skydome is not a usable handle and was rejected on the data**: C1 and C4 are day missions
+that draw a moon and a star field (`docs/formats/weather.md`), so the dome's night art does not
+separate the populations.
+
+**Verified.** <pending orchestrator run>
+
+Commands, all from the item's worktree with `$env:CSVM_DATA_ROOT="Z:\CSVM"`:
+`dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors.
+`dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter "FullyQualifiedName~SunlightEnergyTests"`:
+7 passed, 0 failed (three new facts: the day-level pair under a black sky capping to the night
+pair, the cap behaving as a ceiling, and the install's own C5/C4 fog colours falling on opposite
+sides of the separator).
+`.\RunTests.ps1 -Suite fog-state -SkipUnits -SkipGoldens`: PASS, 1 suite run of 200 (non-zero),
+engine errors clean, 0 unexpected lines.
+`.\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only): PASS, 18 shot(s) hash-identical, zero
+movers, 42.1 s.
+
+Captures are `.\RunProbe.ps1 … --det --mute` runs under `.scratch/e42/`, three arms per pose
+(original, enhanced before the rule, enhanced after it), the "before" arm taken through a second
+throwaway switch that suppressed the predicate. Labelled montages beside them:
+`montage_c5_water.png`, `montage_c5_citynight.png`, `montage_c5_spawn.png`, `montage_c1b_night.png`,
+`montage_c1_day.png`, `montage_c2_day.png`, `montage_c4_day.png`.
+
+| Pose / region | original | enhanced before | enhanced after |
+|---|---|---|---|
+| C5 waterfront, near water | 37.45 | 60.44 | 29.11 |
+| C5 waterfront, far water | 37.43 | 86.61 | 29.23 |
+| C5 waterfront, city blocks | 6.24 | 10.34 | 5.31 |
+| C5 golden pose, distant skyline | 3.19 | 22.44 | 12.52 |
+| C5 golden pose, near tower wall | 32.35 | 56.33 | 33.34 |
+| C5 golden pose, lit windows | 37.63 | 61.71 | 37.43 |
+| C5 golden pose, horizon water | 0.00 | 41.26 | 4.91 |
+| C5 spawn, rooftops | 19.09 | 26.86 | 15.09 |
+| C5 spawn, aircraft | 63.49 | 72.02 | 45.71 |
+| C1B/IA1 night sea, near | 17.74 | 64.70 | 56.60 |
+| C1B/M03 night sea, near | n/a | 66.15 | 43.91 |
+
+C5's lit windows land within 0.2 of the original's level and the tower wall within 1.0, so the
+lamps and lit windows still read as sources while the world around them stops reading as noon. The
+waterfront's water goes from a light grey above the original to a dark sea slightly below it.
+C1, C2, C3 and C4's enhanced frames are **byte-identical** before and after (SHA-256 on the PNGs),
+which is stronger than "within noise": the predicate never fires on a day fog.
+
+**What this does not fix.** C1B's enhanced night sea is still far brighter than the original
+(56.60 against 17.74). The cap cannot reach it, because C1B already authors the night pair the cap
+is made of, so only the reflection-source write applies there. The residual belongs to terms this
+item does not own: the 2x fog-range push (`E41`), the glow and AgX tonemap (`C22`), and the
+placeholder procedural sky standing in for the mission dome behind the horizon. That last one is
+the single largest remaining lever and has no item yet.
 
 ## E43 ☐ The clutter building fade reaches as far as the pushed fog
 

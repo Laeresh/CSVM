@@ -28,6 +28,20 @@ public sealed class WeatherRig
     private const float SunEnergyPerDiffuse = 1.07f;
     private const float AmbientEnergyPerAuthored = 1.8f;
 
+    // ⚠ TUNE, enhanced mode only, and a PROXY the original never uses: it lights from SUNLIGHT and
+    // darkens from FOG_COLOR independently, so nothing in the game reads one off the other. What
+    // licenses it is that the two populations do not overlap: every zone under a night sky authors
+    // a fog luminance of 0.00 to 0.10 and every day zone 0.69 to 0.85, with nothing between across
+    // all 212 blocks. See docs/org/weather.md for the census.
+    private const float NightFogLuminance = 0.25f;
+
+    // ⚠ TUNE, and the install's OWN night pair (C1B's night zones, SUNLIGHT 0.6 / 0.15), used as a
+    // ceiling rather than a replacement: a night zone gets at most the light a night zone authors,
+    // so C5's day-level 1.5 / 0.5 under a black sky stops lighting the city like noon while a zone
+    // already authored dimmer keeps its own values.
+    private const float NightDiffuseCap = 0.6f;
+    private const float NightAmbientCap = 0.15f;
+
     // ⚠ TUNE, judged at the controls, and enhanced mode ONLY. Shadowed ground reads badly through
     // the authored haze: a cast shadow needs contrast to be seen at all, and the zones put full fog
     // close enough that half of every shadow is already grey. Pushing near and far out together
@@ -171,7 +185,19 @@ public sealed class WeatherRig
     /// pinnable without a live scene, and so a viewport holding its own copy of the sun can
     /// resolve the same numbers.</summary>
     public static (float Sun, float Ambient) EnhancedEnergies(WeatherState.ZoneWeather fog)
-        => (fog.SunDiffuse * SunEnergyPerDiffuse, fog.SunAmbient * AmbientEnergyPerAuthored);
+    {
+        bool night = IsNightZone(fog);
+        float diffuse = night ? MathF.Min(fog.SunDiffuse, NightDiffuseCap) : fog.SunDiffuse;
+        float ambient = night ? MathF.Min(fog.SunAmbient, NightAmbientCap) : fog.SunAmbient;
+        return (diffuse * SunEnergyPerDiffuse, ambient * AmbientEnergyPerAuthored);
+    }
+
+    /// <summary>Whether a zone's authored <c>FOG_COLOR</c> puts it under a night sky, which is
+    /// what caps its enhanced energies. Pure and public so the rule can be pinned and so a log
+    /// line can say which side of it a zone fell on.</summary>
+    public static bool IsNightZone(WeatherState.ZoneWeather fog)
+        => (0.2126f * fog.FogColor.R) + (0.7152f * fog.FogColor.G) + (0.0722f * fog.FogColor.B)
+           < NightFogLuminance;
 
     /// <summary>The fog range as written: the authored pair in the faithful path, pushed out by
     /// <c>EnhancedFogRangeScale</c> in enhanced mode so shadowed ground is not already grey. Pure
@@ -449,7 +475,8 @@ public sealed class WeatherRig
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
         return $"; enhanced sun energy {sunEnergy:0.00} (diffuse {fog.SunDiffuse:0.##}), "
                + $"ambient energy {ambientEnergy:0.00} (ambient {fog.SunAmbient:0.##}), "
-               + $"shadows to {FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).Y:0} m";
+               + $"shadows to {FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).Y:0} m"
+               + (IsNightZone(fog) ? "; night zone, energies capped" : string.Empty);
     }
 
     // "zone2 0 meshes, zone1 3 meshes" — the evidence the pick was made on, not just its result.
@@ -464,12 +491,18 @@ public sealed class WeatherRig
     // The energy/colour half of ApplyEnhancedLighting, shared by the session sun/env and every
     // registered clone, so the two can never drift onto different formulas.
     private static void ApplyEnhancedSunAndEnv(DirectionalLight3D sun, Godot.Environment? env,
-        float sunEnergy, Color sunColor, float ambientEnergy, Color ambientColor)
+        float sunEnergy, Color sunColor, float ambientEnergy, Color ambientColor, bool night)
     {
         sun.LightEnergy = sunEnergy;
         sun.LightColor = sunColor;
         if (env == null)
             return;
+        // ⚠ Do not restore the reflection under a night sky: the specular comes off the
+        // PLACEHOLDER procedural background, not the mission's dome, so glossy water mirrors a
+        // daylit gradient whatever the energies say. Measurements: docs/architecture.md.
+        env.ReflectedLightSource = night
+            ? Godot.Environment.ReflectionSource.Disabled
+            : Godot.Environment.ReflectionSource.Bg;
         // ⚠ Take the ambient off the sky: AmbientSource.Sky reads the placeholder procedural sky,
         // not the mission's authored ambient colour, and would ignore both values written here.
         env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
@@ -720,9 +753,10 @@ public sealed class WeatherRig
         if (fog.FogFar > 0f)
             _sun.DirectionalShadowMaxDistance = FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).Y;
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
-        ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, fog.SunColorDiffuse, ambientEnergy, fog.SunColorAmbient);
+        bool night = IsNightZone(fog);
+        ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, fog.SunColorDiffuse, ambientEnergy, fog.SunColorAmbient, night);
         foreach (var (sun, env) in _extraLighting)
-            ApplyEnhancedSunAndEnv(sun, env, sunEnergy, fog.SunColorDiffuse, ambientEnergy, fog.SunColorAmbient);
+            ApplyEnhancedSunAndEnv(sun, env, sunEnergy, fog.SunColorDiffuse, ambientEnergy, fog.SunColorAmbient, night);
     }
 
     // The per-rig whiteout overlays and the mission's precipitation field — the half of

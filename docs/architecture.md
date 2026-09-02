@@ -504,10 +504,11 @@ signs and lamps, so scaling that whole population would bloom a cloud deck and a
 census in `docs/org/vertexLighting.md`).
 
 **Open judgements.** The energy mapping from authored SUNLIGHT units to Godot light energies, the
-2x fog-range push and the shadow distance that follows it, C5's night zone authoring a day-level
-SUNLIGHT so its skyline reads daylit under the pushed fog, and SSR's hard mirror on wave-less
-water planes are all TUNE: judged at the controls against captures, not derived from a decoded
-rule. `docs/PLAN-enhanced-graphics.md`'s Open judgements list is where the user's at-the-controls
+2x fog-range push and the shadow distance that follows it, the night key read off `FOG_COLOR`
+luminance with its 0.25 separator and its 0.6 / 0.15 energy cap (a proxy the original never uses:
+it lights from SUNLIGHT and darkens from FOG_COLOR independently), and SSR's hard mirror on
+wave-less water planes are all TUNE: judged at the controls against captures, not derived from a
+decoded rule. `docs/PLAN-enhanced-graphics.md`'s Open judgements list is where the user's at-the-controls
 pass tracks them.
 
 The options menu exposes `graphics.mode` through the menu plan's own options store
@@ -6616,7 +6617,10 @@ the last writes, since the renderer refuses to read a global back outside the ed
 mode `ApplyZone` also drives the real sun and the Environment ambient from the zone's uncollapsed
 `SUNLIGHT_DIFFUSE`/`AMBIENT` and their colours (`EnhancedEnergies`, pinned by
 `CSVM.Tests/SunlightEnergyTests.cs`), and neutralises `csky_world_light` to 1.0 so the fullbright
-dimming does not land twice; original mode's path is unchanged.
+dimming does not land twice; original mode's path is unchanged. A zone whose authored `FOG_COLOR`
+is near-black is treated as a night zone (`IsNightZone`), which caps those two energies at the
+install's own night pair and takes the Environment's reflected light source away so glossy water
+stops mirroring the placeholder procedural sky; every day zone is untouched.
 Enhanced mode also pushes the fog out. `FogRangeFor` scales a zone's authored near/far by
 `EnhancedFogRangeScale` (2.0, TUNE) and is identity in original mode; both fog-range writers
 (`ApplyZone` and `ApplyFogState`) go through it, so a FOG_STATE edge cannot snap the haze back to
