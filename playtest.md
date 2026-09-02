@@ -557,6 +557,19 @@ reasons that have nothing to do with any of these checks.
   hull is a fault; a boat mid-turn is led less, which is not one.
   *Blocks:* nothing; it confirms a landed item on screen.
 
+- `PT-109` `[Own]` **The Pandora halts over the beached freighter and cranes its cargo**
+  (`BL-597`). Klondike1's node 7 is the cargo point, and the hull now settles on the node itself
+  rather than a hold distance short of it. Getting there is the mission's own chain: destroy the
+  power hut so the freighter runs aground instead of sailing on, then sink all four patrol boats,
+  which completes the second primary and releases the Pandora from its first stop.
+  *Look for:* the airship arriving over the wreck and stopping with the ship under it rather than
+  short of or past it, and about 70 s after the last boat goes down the freighter's hold doors
+  swinging open, the Pandora's cargo doors following, and the crane riding its chain down to the
+  deck and back up. Judge the hover point by eye against the hull below it.
+  ⚠ Nothing starts until group 3 is empty. A Pandora sitting 2 km up the route with no sequence is
+  the authored wait, not a fault; check the boats first.
+  *Blocks:* `BL-597`'s acceptance.
+
 ### AI flight — external view, own build (F52 AI arm)
 
 - `PT-54` `[Own]` **AI plant A/B against the old plant.** Fly the new AI force path, then relaunch flipping AI aircraft back onto the player plant

@@ -199,18 +199,20 @@ internal static class ZeppelinSuites
         }
     }
 
-    // CM08 (C1B/M03, "the Pandora"): piratezep's own Klondike1 net is an open 13-node
-    // chain with no stop point at all on its far end (node 0) — unlike C1/M04's PirateZep1
-    // above, which happens to author its far end armed under an unaddressable id. Releasing the
-    // two stops the file DOES arm (ids 7 and 8) lets the walk run the whole chain to that bare
-    // end, proving the structural dead-end hold (AiNetFollower) parks it there instead of
-    // re-picking node 1 and shuttling the route's altitude swing (150 to 400 m) forever.
+    // CM08 (C1B/M03, "the Pandora"): Klondike1 is an open 13-node chain carrying two armed
+    // stops, ids 7 (node 5) and 8 (node 7, the CARGO POINT over the freighter). Its far end,
+    // node 0, authors no stop point at all, unlike C1/M04's PirateZep1 above, whose far end is
+    // armed under an unaddressable id, so one walk of this route proves all three rules: an
+    // armed stop settles the hull ON its node, the cargo sequence starts from that stop, and a
+    // bare end still parks the airship instead of shuttling its 150-to-400 m altitude swing.
     [Suite("zeppelin-pandora-dead-end",
-        "the structural dead-end hold (BL-529): CM08's piratezep flies its own Klondike1 " +
-        "chain, releasing the two stops the file arms (ids 7 and 8), pitch never past the " +
-        "steepest leg's slope the whole route, until it reaches node 0 — an open end with NO " +
-        "stop point authored at all — and holds there for good rather than re-picking node " +
-        "1 and shuttling the altitude swing back and forth forever")]
+        "CM08's piratezep on its own Klondike1 chain: the file's stop 7 (node 5) settles the " +
+        "hull ON the node rather than a hold distance short of it, releasing it (what " +
+        "OBJECTIVE11 does) carries the Pandora to the cargo point over the freighter (stop 8, " +
+        "node 7), where the mission's own zepgetcargo — the freighter's hold doors, the " +
+        "Pandora's cargo doors, the crane on its chain — starts; releasing that too runs the " +
+        "chain to node 0, an open end with NO stop point authored at all, where the structural " +
+        "dead-end hold (BL-529) parks it for good, pitch never past the steepest leg's slope")]
     internal static void ZeppelinPandoraDeadEndSuite(TestContext ctx)
     {
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1B");
@@ -242,6 +244,10 @@ internal static class ZeppelinSuites
         // node 12, which is a degree-2 waypoint mid-chain — is the far end it walks the whole
         // route to reach.
         const int farEnd = 0;
+        const int cargoNode = 7;
+        ctx.Check(net.Nodes[5].StopPointId == 7 && net.Nodes[5].StopsHere
+            && net.Nodes[cargoNode].StopPointId == 8 && net.Nodes[cargoNode].StopsHere,
+            $"the file arms exactly stops 7 (node 5) and 8 (node {cargoNode}, the cargo point)");
 
         Node3D? host = null;
         ZeppelinRuntime? runtime = null;
@@ -257,10 +263,6 @@ internal static class ZeppelinSuites
             if (motion == null)
                 return;
 
-            // Release the file's own two armed stops so the walk can run the whole chain.
-            ctx.Same(1, runtime.SetStopPoint(def.Net, 7, false), $"stop 7 (node 5) releases");
-            ctx.Same(1, runtime.SetStopPoint(def.Net, 8, false), $"stop 8 (node 7) releases");
-
             // The steepest leg of the chain: the decoded steer law pitches AT the slope from
             // here to the node and eases onto it, so the hull never pitches past it. The old
             // bang-bang rate rang up into a standing ±30° swing on the same route.
@@ -272,14 +274,29 @@ internal static class ZeppelinSuites
             }
             const float dt = 1f / 60f;
             float worstPitch = 0f;
-            int steps = 0, budget = 60 * 900; // the whole ~9 km chain flies in well under 500 s
-            while (!(motion.Follower.Holding && motion.Follower.CurrentIndex == farEnd)
-                   && steps < budget)
-            {
-                runtime.SimStep(dt);
-                worstPitch = Mathf.Max(worstPitch, Mathf.Abs(motion.PitchRad));
-                steps++;
-            }
+
+            // Leg one, under the file's own arming: the first armed stop the walk meets. The
+            // hold latches on the hold sphere and the dock glide then settles the hull onto the
+            // node, so the resting pose is read after it, not at the moment the walk stops.
+            int steps = FlyUntilHold(runtime, motion, 5, ref worstPitch, 60 * 300);
+            Settle(runtime, dt);
+            float shortOf = motion.Position.DistanceTo(net.Nodes[5].Position);
+            ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == 5 && shortOf < 1f,
+                $"stop 7 settles the hull ON node 5 in {steps / 60f:0} s, {shortOf:0.##} m off it — not a hold distance short");
+
+            // OBJECTIVE11's own COMPLETED_STOPPOINT ["Klondike1", 7, 0] releases it onward.
+            ctx.Same(1, runtime.SetStopPoint(def.Net, 7, false), $"stop 7 (node 5) releases");
+            steps = FlyUntilHold(runtime, motion, cargoNode, ref worstPitch, 60 * 300);
+            Settle(runtime, dt);
+            float offCargo = motion.Position.DistanceTo(net.Nodes[cargoNode].Position);
+            ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == cargoNode && offCargo < 1f,
+                $"…and stop 8 settles it ON the cargo point, node {cargoNode}, in {steps / 60f:0} s, {offCargo:0.##} m off it");
+            ctx.Check(Mathf.Abs(motion.Position.Y - net.Nodes[cargoNode].Position.Y) < 1f,
+                $"…at the node's own altitude, which a crane lowering 54 m of chain needs: y={motion.Position.Y:0.#} against {net.Nodes[cargoNode].Position.Y:0.#}");
+
+            // OBJECTIVE21/22/23's ["Klondike1", 8, 0]: the rest of the chain to the bare end.
+            ctx.Same(1, runtime.SetStopPoint(def.Net, 8, false), $"stop 8 (node {cargoNode}) releases");
+            steps = FlyUntilHold(runtime, motion, farEnd, ref worstPitch, 60 * 900);
             ctx.Check(worstPitch <= steepest + Mathf.DegToRad(1f),
                 $"pitch never exceeded the steepest leg's {Mathf.RadToDeg(steepest):0.#}° the whole route, worst {Mathf.RadToDeg(worstPitch):0.#}°");
             ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == farEnd,
@@ -299,6 +316,8 @@ internal static class ZeppelinSuites
             runtime?.Free();
             host?.Free();
         }
+
+        ctx.WithWorld("C1B", collision: false, "M03", world => CheckCargoSequence(ctx, world, net, cargoNode));
     }
 
     // CM04 (C3/M03): NEW_GAME_START runs pzep_todrydock, one ObjectMotionSiScript on piratezep
@@ -1146,6 +1165,115 @@ internal static class ZeppelinSuites
             Deactivated = deactivated,
         };
     }
+
+    // Long enough for the dock glide's exponential to close whatever the hold latched at: 40 s
+    // takes a 30 m gap under a centimetre.
+    private static void Settle(ZeppelinRuntime runtime, float dt)
+    {
+        for (int i = 0; i < 60 * 40; i++)
+            runtime.SimStep(dt);
+    }
+
+    // Steps until the walk holds on `node`, carrying the route's worst pitch along. Returns the
+    // steps taken, which is the budget when it never got there and the caller's check then fails.
+    private static int FlyUntilHold(ZeppelinRuntime runtime, ZeppelinMotion motion, int node,
+        ref float worstPitch, int budget)
+    {
+        const float dt = 1f / 60f;
+        int steps = 0;
+        while (!(motion.Follower.Holding && motion.Follower.CurrentIndex == node) && steps < budget)
+        {
+            runtime.SimStep(dt);
+            worstPitch = Mathf.Max(worstPitch, Mathf.Abs(motion.PitchRad));
+            steps++;
+        }
+        return steps;
+    }
+
+    // The rendezvous the mission authors at Klondike1's cargo point: freighteraground beaches the
+    // freighter under it and calls its twelve tankerfreight crates up, and OBJECTIVE17's
+    // WAKE_ANIM ["zepgetcargo"] opens the freighter's hold doors, the Pandora's cargo doors 8 s
+    // later, and 5 s after that rides the crane down its chain and back up.
+    private static void CheckCargoSequence(TestContext ctx, TestWorld world, AiNet net, int cargoNode)
+    {
+        var calls = new List<string>();
+        foreach (var d in world.Runtime.DefsFor("zepgetcargo"))
+        {
+            foreach (var seq in d.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind == "CallAnimation" && ev.Data.Str("name") is { } name)
+                        calls.Add(name);
+                }
+            }
+        }
+        ctx.Check(calls.Contains("freighterdoors") && calls.Contains("open_pzepcargodoors")
+            && calls.Contains("activate_pzep_crane"),
+            $"zepgetcargo is the door-and-crane sequence, calls=[{string.Join(" ", calls)}]");
+
+        var door = First(world, "holddoora");
+        var crane = First(world, "crane");
+        ctx.Check(door != null && crane != null,
+            $"the built world carries the freighter's hold door and the Pandora's crane");
+        if (door == null || crane == null)
+            return;
+
+        // The ship sails: its build pose is kilometres from the route, and it is its own
+        // shipaground script — the branch a destroyed powerhut takes — that beaches it where the
+        // Pandora is authored to hover, so that script's LAST pose is what node 7 answers to.
+        var cargoPoint = net.Nodes[cargoNode].Position;
+        var beached = LastPoseOf(world, "freighteraground");
+        ctx.Check(beached != null, $"freighteraground carries the freighter's own shipaground script");
+        if (beached is { } rest)
+        {
+            ctx.Check(Horizontal(rest, cargoPoint) < 100f,
+                $"the beached freighter comes to rest under node {cargoNode}: {Horizontal(rest, cargoPoint):0} m from it in plan, ship at {rest}");
+            ctx.Check(cargoPoint.Y - rest.Y is > 80f and < 110f,
+                $"…with the cargo point {cargoPoint.Y - rest.Y:0} m above its deck, the drop a 54 m chain off a hatch 33 m under the hull needs");
+        }
+
+        float doorBefore = door.Rotation.X;
+        float craneBefore = crane.Position.Y;
+        int started = world.Runtime.PlayMissionTrigger("zepgetcargo").Count;
+        ctx.Check(started > 0, $"WAKE_ANIM 'zepgetcargo' starts {started} definition(s)");
+        Advance(world, 25f);
+        ctx.Check(Mathf.Abs(Mathf.AngleDifference(doorBefore, door.Rotation.X)) > Mathf.DegToRad(80f),
+            $"…the freighter's hold door has swung open, {Mathf.RadToDeg(Mathf.Abs(Mathf.AngleDifference(doorBefore, door.Rotation.X))):0}°");
+        ctx.Check(Mathf.Abs(crane.Position.Y - craneBefore) > 10f,
+            $"…and the crane has ridden its chain, {Mathf.Abs(crane.Position.Y - craneBefore):0} m of travel");
+    }
+
+    private static void Advance(TestWorld world, float seconds)
+    {
+        const float dt = 1f / 60f;
+        for (int i = 0; i < (int)(seconds * 60f); i++)
+            world.Runtime.Advance(dt);
+    }
+
+    // Where the named definition's first SI script leaves its object: the last frame's translate
+    // channel at that frame's own end. Null when the def carries no script.
+    private static Vector3? LastPoseOf(TestWorld world, string animName)
+    {
+        foreach (var def in world.Runtime.DefsFor(animName))
+        {
+            if (def.Archive == null || def.SiScriptIds.Length == 0)
+                continue;
+            var script = def.Archive.Script(def.SiScriptIds[0]);
+            if (script is not { Frames.Count: > 0 })
+                continue;
+            var last = script.Frames[^1];
+            if (last.Translate is { } translate)
+                return translate.At(last.EndTime - last.StartTime);
+        }
+        return null;
+    }
+
+    private static Node3D? First(TestWorld world, string name) =>
+        world.Runtime.FindNodes(name, null) is { Count: > 0 } hits ? hits[0] : null;
+
+    private static float Horizontal(Vector3 a, Vector3 b) =>
+        new Vector2(a.X - b.X, a.Z - b.Z).Length();
 
     private static void DriveScriptedPose(TestContext ctx, TestWorld world, ZeppelinDef def,
         IReadOnlyList<AiNet> nets)

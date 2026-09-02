@@ -2709,10 +2709,11 @@ the pose onto the world node, and `ResumeAt` re-seats it in place after a script
 The stop-point half is the decoded approach (`FUN_004bf360`): full speed until the along-facing
 range to a halting node falls under 250 m, then linearly down to zero; inside the follower's
 30 m (`Dock`) the throttle is cut, the pitch holds, and the hull and heading decay onto the node
-and the leg's bearing at e^(−0.2·dt), which is what closes the last metre onto the hold sphere.
-Once the follower is `Holding`, a station-keep: pitch commanded to 0 and heading kept, both
-frozen by the speed factor at speed 0. Pinned by `ZeppelinMotionTests` + the `zeppelin-motion`
-and `zeppelin-pandora-dead-end` suites.
+and the leg's bearing at e^(−0.2·dt), which settles it ON the node in plan and in altitude. A
+follower still on its SEAT (`LegStartIndex` −1) takes the own-node law (`FUN_004bf500`) instead,
+a station-keep on the record's own pose: pitch commanded to 0 and heading kept, both frozen by
+the speed factor at speed 0. Pinned by `ZeppelinMotionTests` + the `zeppelin-motion` and
+`zeppelin-pandora-dead-end` suites.
 
 ## src/Flight/AiPilot.cs
 The non-player `FlightModel` driver: standing orders in (heading in the mission-data
