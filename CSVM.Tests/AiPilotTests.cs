@@ -141,6 +141,64 @@ public class AiPilotTests
         Assert.False(pilot.SteeringPatrol);
     }
 
+    /// <summary>A wingman whose leader has left play and whose quarry is dead falls to the netless
+    /// arm of <see cref="AiPilot.Next"/>, which PROJECTS the two order fields without writing them,
+    /// so it holds the bearing its last pursuit wrote and dives toward the altitude that aeroplane
+    /// died at. Nothing inside the pilot re-derives them: the host hands it the lost leader's own
+    /// net (<c>CampaignDirector.TakeLostLeadersNets</c>, flown in <c>wingman-lost-leader</c> where a
+    /// leader can really leave play), and that seat is what re-derives both, pinned here.</summary>
+    [ExtractedDataFact]
+    public void ALeaderlessNetlessWingmanHoldsItsPursuitBearingUntilItInheritsANet()
+    {
+        var stats = PlaneStats.Load(ZrdrPath, "player_bhawk");
+        const float staleBearingDeg = 215f;   // where the quarry was when the last pursuit step ran
+        const float staleAltitudeM = 90f;     // and the altitude it was shot down at
+
+        // The state CM05 leaves `wingman_2` in once `devastator_1` is destroyed and its own
+        // target dies: an escort block with no leader in play and no live quarry. A null leader
+        // fails `Escort is { Leader.InPlay: true }` exactly as a crashed one does.
+        AiPilot Leaderless() => new()
+        {
+            Escort = new AiEscort(),
+            TargetHeadingDeg = staleBearingDeg,
+            TargetAltitude = staleAltitudeM,
+        };
+
+        var model = new FlightModel(stats);
+        model.Reset(new Vector3(0f, 400f, 0f), Basis.Identity, 80f, 0.85f);
+        var pilot = Leaderless();
+        for (int i = 0; i < (int)(10f / Dt); i++)
+            model.Step(pilot.Next(model, Dt), Dt);
+
+        Assert.Equal(staleBearingDeg, pilot.TargetHeadingDeg, 3);
+        Assert.Equal(staleAltitudeM, pilot.TargetAltitude, 3);
+        Assert.True(model.Position.Y < 300f,
+            $"the held orders did not fly it down toward the dead quarry: {model.Position.Y:0} m");
+
+        // The seat the host makes on the leader's own net, which is all `SeatOnNet` does to the
+        // pilot. Both order fields are re-derived on the very first step after it.
+        var net = new CSVM.Mech3.AiNet
+        {
+            Id = 11,
+            Name = "LostLeadersNet",
+            Nodes = new[]
+            {
+                new CSVM.Mech3.AiNetNode(new Vector3(0f, 500f, -2000f), System.Array.Empty<float>()),
+                new CSVM.Mech3.AiNetNode(new Vector3(2000f, 500f, -2000f), System.Array.Empty<float>()),
+            },
+            Edges = new[] { (0, 1) },
+        };
+        pilot.Escort = null;
+        pilot.Patrol = new AiNetFollower(net, new System.Random(1));
+        pilot.Next(model, Dt);
+
+        Assert.True(Mathf.Abs(Mathf.Wrap(pilot.TargetHeadingDeg - staleBearingDeg, -180f, 180f)) > 1f,
+            $"the seated pilot still holds the dead quarry's bearing, {pilot.TargetHeadingDeg:0.0}°");
+        Assert.True(Mathf.Abs(pilot.TargetAltitude - staleAltitudeM) > 1f,
+            $"…and still holds the altitude it died at, {pilot.TargetAltitude:0} m");
+        Assert.True(pilot.SteeringPatrol, "the seated pilot is not flying the net it was given");
+    }
+
     /// <summary>The stun mask (<c>FUN_004200d0</c>): a stunned pilot hands back neutral stick and
     /// rudder with the throttle lever left where it was, for exactly the seconds asked, and then
     /// steers again; a second stun while stunned overwrites the clock. With a mode machine the

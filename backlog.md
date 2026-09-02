@@ -2460,10 +2460,11 @@ usual.
   has a netless friendly patrol, and the original has no netless-patrol and no leaderless-wingman
   branch at all: `FUN_0041d1f0` indexes -1 on an unresolved net with no guard, `FUN_0041e760`
   dereferences its leader at `+0x2fc` with no null check, and `FUN_0049c880`, which would release a
-  wingman onto the chapter's first net, has no callers. The remaining fly-away path in CSVM is
-  `AiPilot.FlyPatrol`'s netless arm reading `TargetHeadingDeg` and `TargetAltitude` after
-  `FlyPursuit` has overwritten them, so a pilot with no net and no leader holds the last bearing to
-  a dead target. The take-off hand-off is settled (`BL-594`'s closing commit): a launch is released 300 m
+  wingman onto the chapter's first net, has no callers. The netless fly-away that remained,
+  `AiPilot.FlyPatrol`'s netless arm holding the pair `FlyPursuit` last wrote, is closed on the host
+  side: a wingman whose leader leaves play is seated on that leader's own net
+  (`CampaignDirector.TakeLostLeadersNets`), so no campaign pilot reaches that arm with a dead
+  quarry's bearing. The take-off hand-off is settled (`BL-594`'s closing commit): a launch is released 300 m
   past its last waypoint at 53 m/s, climbing, and lives; the net-nearest snap the original skips
   (`FUN_004b0f40`) stays undecoded.
   *Cross-refs:* `BL-524`, `docs/org/aiPilot.md`, `BL-522`'s closing commit (`git log --grep=BL-522`).

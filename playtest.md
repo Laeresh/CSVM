@@ -821,6 +821,29 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   *Blocks:* nothing tracks the outcome. The write and the read are pinned by unit tests either
   side, but no scripted run crosses the menu boundary between them, so a fail mints a new `BL`.
 
+### CM05 (C3/M04) and CM07 (C1/M02) · the escorts after a leader is lost
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:4
+./RunGame.ps1 --campaign=<profile>:6
+```
+
+- `PT-113` `[Own]` **A wingman whose leader is shot down picks up that leader's patrol route**
+  (`BL-524`, closed). CM05 pairs `wingman_2` with `devastator_1` on `M4Bravo#11` and `wingman_3`
+  with `devastator_2` on `M4Charlie#12`; CM07 pairs `wingman_2` and `wingman_3` with
+  `devastator_2` and `devastator_3` on `M2Bravo#26` and `M2Charlie#25`. Fly until one of those
+  leaders is destroyed, then keep the surviving wingman in sight, above all after its own target
+  dies, which is the moment it used to leave on a fixed bearing.
+  *Look for:*
+  - (a) the survivor turning onto its lost leader's circuit and staying in the mission area,
+    rather than shrinking into the distance on one heading at one altitude;
+  - (b) `campaign: 'wingman_2' lost its leader 'devastator_1' and takes its net 'M4Bravo#11'` in
+    `.scratch/logs/fly-*.log`, once per lost leader rather than every frame;
+  - (c) the survivor still fighting from the inherited route: it engages what comes into range
+    instead of flying a patrol past a fight.
+  *Blocks:* nothing tracks the outcome; a wingman that still flies out of the mission reopens
+  `BL-524`, and one that holds its net while enemies shoot at it is `BL-523`, not this.
+
 ### CM09 (C1/M04) · to the docking
 
 ```powershell
