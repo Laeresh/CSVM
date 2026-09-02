@@ -2179,6 +2179,92 @@ internal static class OrdnanceSuites
         });
     }
 
+    // The sonic burst's second half hangs off `sonic_emit1` in the caller's own copy: `ring_down1`
+    // is called there at (0,-5,0) and its own translate lands the ground ring at +6 in that frame.
+    // `sonic_puff1`, called on that same node, translates `sonic_emit1` 0 to 30 m to draw the
+    // vapour column. Resolved against the caller's copy instead of its own, that translate carries
+    // the anchor up with it and the ground ring is placed 30 m into the air.
+    [Suite("sonic-ground-ring",
+        "the sonic burst's ground ring lies on the struck surface: `ring_down1` settles about a " +
+        "metre above the impact and grows there, while `sonic_puff1`'s vapour column rises 30 m " +
+        "on its OWN copy of `sonic_emit1` and leaves the caller's anchor where the impact put it (C21)")]
+    internal static void SonicGroundRing(TestContext ctx)
+    {
+        var report = new System.Text.StringBuilder();
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            const string anim = "sonic_ground_effect";
+            var stage = StageBurstRoots(ctx, world, anim, 1);
+            var runtime = AnimRuntime.ForEffects(
+                AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
+                1, new CountingEmitterFactory(), false, SuiteConstants.BurstTtl,
+                () => ctx.Camera.GlobalPosition);
+            runtime.ManualAdvance = true;
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, world.Session.Program.Subset(anim));
+                var slot0 = stage.GetNode<Node3D>("pool0");
+                var site = ctx.Camera.GlobalPosition;
+                ctx.Check(runtime.PlayEffectAt(anim, site), $"the burst started at the site");
+
+                // ring_down1's own translate drops it from +30 to +6 in the call's frame over the
+                // first 0.3 s, so the height bound below is read after that authored fall lands.
+                const int settled = (int)((1.2f + 0.3f) * 60f) + 6;
+                float anchorRise = 0f;   // how far the CALLER's sonic_emit1 was dragged
+                float columnRise = 0f;   // how far sonic_puff1's own sonic_emit1 climbed
+                float ringHigh = 0f;     // the ground ring's greatest height once settled
+                float ringLast = 0f;     // its height on the last frame it drew
+                float ringScale = 0f;    // its greatest scale while drawn
+                int ringFrames = 0;
+                for (int i = 0; i <= 240; i++)
+                {
+                    var caller = EmitIn(slot0, "sonic_effect");
+                    var column = EmitIn(slot0, "sonic_puff1");
+                    if (caller != null)
+                        anchorRise = Mathf.Max(anchorRise, Mathf.Abs(caller.GlobalPosition.Y - site.Y));
+                    if (column != null)
+                        columnRise = Mathf.Max(columnRise, column.GlobalPosition.Y - site.Y);
+                    if (GroundRingIn(slot0) is { } ring && ring.IsVisibleInTree())
+                    {
+                        ringFrames++;
+                        ringLast = ring.GlobalPosition.Y - site.Y;
+                        if (i >= settled)
+                            ringHigh = Mathf.Max(ringHigh, ringLast);
+                        ringScale = Mathf.Max(ringScale, ring.GlobalBasis.Scale.X);
+                        report.AppendLine($"f{i,3} ring dy={ringLast:0.00} scale={ringScale:0.00} "
+                                          + $"caller={anchorRise:0.00} column={columnRise:0.00}");
+                    }
+                    runtime.Advance(1f / 60f);
+                }
+
+                // The guard against a vacuous pass: a ring that never drew, never grew, or a
+                // column that never ran would satisfy the height bound by doing nothing.
+                ctx.Check(ringFrames > 60,
+                    $"the ground ring drew for more than a second ({ringFrames} frame(s))");
+                ctx.Check(ringScale > 4f,
+                    $"it grew to the authored 5x while it drew (reached {ringScale:0.00})");
+                ctx.Check(columnRise > 29f,
+                    $"sonic_puff1's vapour column still climbs the authored 30 m ({columnRise:0.0} m)");
+                // The authored geometry: the call site is 5 m under the impact and the ring's own
+                // translate ends at +6 in that frame, so it lies about a metre over the surface.
+                ctx.Check(ringHigh < 5f,
+                    $"past that fall it never rides the column into the air (highest {ringHigh:0.0} m)");
+                ctx.Check(Mathf.Abs(ringLast - 1f) < 1.5f,
+                    $"it settles on the struck surface at the authored -5+6 m ({ringLast:0.00} m)");
+                ctx.Check(anchorRise < 0.5f,
+                    $"the caller's own sonic_emit1 stayed at the impact ({anchorRise:0.00} m moved)");
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
+        ctx.WriteArtifact("sonic-ground-ring.txt", report.ToString());
+    }
+
     // The HE burst's five fly_trail<N> bodies launch from their authored rest pose. The pool hands
     // a copy out again while its debris is still flying, and a checkout that leaves the previous
     // play's motions running lets the new launch take over from a MID-FLIGHT pose, so the burst
@@ -2416,6 +2502,33 @@ internal static class OrdnanceSuites
                 rows.Add((name, node.Transform.Origin));
         }
         return rows;
+    }
+
+    // One staged root's own `sonic_emit1`, or null: the burst stages three copies of the emitter
+    // rig and the whole question is which of them a definition drives.
+    private static Node3D? EmitIn(Node3D slot, string rootName)
+    {
+        if (slot.GetNodeOrNull<Node3D>(rootName) is not { } root)
+            return null;
+        foreach (var node in Descendants(root).OfType<Node3D>())
+        {
+            if (node.Name.ToString() == "sonic_emit1")
+                return node;
+        }
+        return null;
+    }
+
+    // The `ring_down1` copy's ring mesh — the one flat annulus the burst leaves on the ground.
+    private static MeshInstance3D? GroundRingIn(Node3D slot)
+    {
+        if (slot.GetNodeOrNull<Node3D>("sonic_ring5") is not { } root)
+            return null;
+        foreach (var mesh in Descendants(root).OfType<MeshInstance3D>())
+        {
+            if (mesh.GetParent() is Node3D owner && owner.Name.ToString() == "sonic_ring")
+                return mesh;
+        }
+        return null;
     }
 
     private static IEnumerable<Node> Descendants(Node node)

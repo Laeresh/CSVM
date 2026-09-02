@@ -267,9 +267,23 @@ opacity fade-in and a 0.6 s fade-out; its upper ring (called `AT_NODE he_ring, 0
 1→20 over 2.0 s. The sonic rings are five staggered copies with authored start scales
 (`sonic_ring2/3/4` reset to 0.6/0.7/0.8) so they read as an expanding stack.
 
-⚠ A ring is reset **`INACTIVE`** (HE) or **`ACTIVE` with `OPACITY_STATE OFF`** (AP, sonic) — two
-different ways of starting invisible. Anything that decides "does this template show?" must honour
-both, and must never assume an idle template is inactive.
+**The sonic burst's lasting shape is `ring_down1`, and it lies on the struck surface.** All five
+sonic rings are called `AT_NODE sonic_emit1, 0, -5, 0`, five metres under the impact; `ring_up1..4`
+rise 20 to 30 m from there over the first second, while `ring_down1`, called at `SEQUENCE_OFFSET 1.2`,
+translates from +30 to +6 in that frame over 0.3 s and then grows 1→5 over 2.6 s where it lands,
+about a metre over the surface. That single flat annulus expanding for some three seconds is what
+the burst reads as; the four upper rings are the opening flash.
+
+⚠ `ring_down1` shares `sonic_emit1` with `sonic_puff1`, whose own copy of that node it translates
+30 m up to draw the vapour column. A runtime that lets the callee drive the caller's node places the
+ground ring in the air; the rule that keeps them apart is in
+[org/sequences.md](../org/sequences.md)'s tier chain.
+
+⚠ A ring is reset **`INACTIVE`** (HE) or **`ACTIVE` with `OPACITY_STATE OFF`** (AP, sonic). Only the
+first starts it invisible: an `OPACITY_STATE` argument says whether translucency is ENABLED, so `OFF`
+draws the ring at full opacity and the sonic rings are on screen from the first frame, each one
+taken away again by its own `OBJECT_OPACITY_FROM_TO` ramp. Anything that decides "does this template
+show?" must honour both spellings, and must never assume an idle template is inactive.
 
 ⚠ Ring nodes carry `intersect_surface`, so a naively built template gets colliders — and the
 authored scale (up to ×20 on a 8.4 m quad) would leave an invisible ~170 m plate at the blast site.

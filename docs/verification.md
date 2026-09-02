@@ -829,6 +829,15 @@ loss. What the engine renders was decodable from the authored constants + oscill
   options between those two words. All 17 rows passed throughout, and none of them reached the
   guard.
 
+- **INSTR-41** — **A `--weapon-lab --weapon-fire` run with no target parks the plane level, so a
+  rocket expires at its authored `RANGE` in mid-air and the probe films the AIR burst.** The log
+  says so (`impact: … on /`, with the burst's Y at the aircraft's own altitude) and the shot still
+  shows an explosion, so a ground-effect probe reads as if it had worked. Aim it with
+  `--weapon-surface=<registry name>` plus `--weapon-standoff=<m>`; the surface token is a
+  `SurfaceRegistry` name (`dirt`, `water`, `buildings`, …) and an unknown one is a WARN line and an
+  ignored flag, not a failure. Confirm the impact line names a real surface node before reading any
+  frame.
+
 ## SRC — sources and documents
 
 - **SRC-1** — **Validate whether bytes are meaningful before numeric sanity checks.**

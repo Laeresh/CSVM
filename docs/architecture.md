@@ -1483,12 +1483,21 @@ resolves a node name inside a subtree the definition was given a private copy of
 unrelated instance's copy of a common name (`pilot`, `geometry`, `healthy`) can never answer first.
 Our stand-in is the effect-template pool, whose copies hang under the same crash root a definition
 anchors on, so the raw subtree walk is not exclusive at all. The `stagingAdmits` hook is the owner's
-verdict on one pooled copy (`AnimRuntime.StagingAdmits`): a copy is visible when the scope this tier
-searches sits inside it (a `CALL_ANIMATION` retargeted onto its call site's copy), when its root
-answers to the definition's own NAME or `ANIMATION_ROOT_NAME`, or when the definition's symbol table
+verdict on one pooled copy (`AnimRuntime.StagingAdmits`): a copy is visible when its root answers to
+the definition's own NAME or `ANIMATION_ROOT_NAME`, when the scope this tier searches sits inside it
+(a `CALL_ANIMATION` retargeted onto its call site's copy), or when the definition's symbol table
 names that root. Everything outside the pool always resolves, and on a non-pooled runtime nothing is
 refused, which is what keeps the ambient world boot byte-identical. ⚠ The filter belongs on every
 tier: applied to the first alone it only hands the same foreign copy to the next one down.
+**The call-site allowance stops at the definition's own copy** (`HasOwnCopyBeside`). A `CALL_ANIMATION`
+anchors its callee on the CALLER's node, so the anchor tier searches the caller's copy; where the
+callee has a staged copy of its own in that slot, the original would have searched the private copy
+it was handed and a name both copies carry belongs to the callee's. Refusing the caller's copy drops
+the name to the own-root tier, which is the pair the original reads as `def+0x6c`/`def+0x48`. Without
+it a callee's motion drives the caller's node: the sonic burst's `sonic_puff1` translates
+`sonic_emit1` 30 m up to draw its vapour column, and the caller anchors its ground ring, both lights
+and its second flare on that same name, so all four rode into the air. Regression:
+`sonic-ground-ring`.
 
 ## src/Mech3/Anim/TemplateStage.cs
 The effect-template stage as one module (`TemplateStage<TNode>`): pool-slot arithmetic (`SlotOf`,

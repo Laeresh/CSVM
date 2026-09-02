@@ -87,6 +87,7 @@
     "ordnance-burst-timeline": 0.096,
     "effect-pool-reset": 0.152,
     "effect-pool-spawn-pose": 0.114,
+    "sonic-ground-ring": 0.060,
     "repeat-call-slots": 0.012,
     "effects-census": 0.998,
     "bounce-launch": 0.978,
