@@ -172,7 +172,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Census the polling sites, then migrate `FlightController`
 12. ☑ Migrate `MenuInput`
 13. ☑ Migrate `SpectatorCamera` and whatever the census turns up
-14. ☐ Determinism gate: `--det` / `--hold` reproduce bit for bit
+14. ☑ Determinism gate: `--det` / `--hold` reproduce bit for bit
 15. ☑ Reconcile what the migration proved: one seat device state, the axis rescale, the stunt marker
 
 ### Wave C — defaults and persistence
@@ -580,7 +580,91 @@ starts and stops relative to the frame. Migrate the polled reads, leave the even
 and say in the landing commit which sites were left and why. The wheel-sets-speed and mouse-pick
 paths are events too and are equally out of scope.
 
-## B14 ☐ Determinism gate: `--det` / `--hold` reproduce bit for bit
+## B14 ☑ Determinism gate: `--det` / `--hold` reproduce bit for bit
+
+**Landed.** No production code. The item is a gate, and what it delivers is evidence plus this
+section's correction of its own Approach.
+
+⚠ **The single before/after across the whole of Wave B, which this item's Approach called for,
+cannot be reconstructed and was not taken.** Main advanced with unrelated work while Wave B ran, so
+a pre-A1 tree does not isolate the migration. `git diff --name-only be7ed774^ eccea121 -- CSVM/src`
+reaches 39 files; the narrower span against B11, B12 and B13's shared parent,
+`git diff --name-only af95cd13 eccea121 -- CSVM/src`, still reaches 29, of which 9 are Wave B's.
+The rest are m5-polish-9 and m5-polish-10 work:
+`a88b617f` rewrites `Weather.cs`, `WeatherRig.cs`, `GameSession.cs` and `Launcher.cs` to light an
+aircraft by the brightness its mission authors, which is exactly the imagery these probes shoot, and
+is an ancestor of neither `be7ed774^` nor `af95cd13`; `e593be51` re-pins four aircraft goldens on
+the same reading; and `AiEngineAudio`, `CameraController`, `MotionRuntime`, `NameResolver`,
+`AnimRuntime` and `ZeppelinRuntime` all changed alongside. Any pixel difference over that span is
+unattributable, and quoting one as an input-refactor result would be a fabrication.
+
+The confound is visible in the measurements rather than only in the log. Across
+`af95cd13` to `eccea121` the two flight probes below differ while the freecam and menu probes are
+md5-identical, which is what a rendering change to aircraft imagery looks like and not what an input
+refactor looks like. That asymmetry is the reason the span is not quoted as a gate.
+
+**Verified.** Two things were run in place of the missing span, and each answers a question a
+per-item pair cannot.
+
+*The merged combination of all five Wave B items is reproducible.* On `eccea121`, twice, with a
+`dotnet clean` and a full rebuild between the two passes, four invocations through `RunProbe.ps1`:
+
+- `--chapter=C1 --plane=player_bhawk --hold=0.2,0.1,0,1 --det --mute --shots=4 --frames=120`
+- `--chapter=C1 --plane=player_bhawk --ai=player_fury --ai-damage=0.02 --fire --det --mute --shots=3`
+- `--freecam --chapter=C1 --det --mute --shots=3 --frames=120`
+- `--menu=mode --det --mute --frames=60`
+
+Eleven PNGs, all eleven md5-identical across the two passes. The second invocation holds the gun
+trigger, so the fire path is compiled and called rather than merely present. The third and fourth
+were added here because B11's pair reaches neither `SpectatorCamera` nor `MenuInput`, so a flight
+probe alone would have left B12's and B13's files unrendered. Each argument is quoted at the shell:
+unquoted, PowerShell splits `--hold=0.2,0.1,0,1` on the commas and the run never quits.
+
+*B12 and B13 gain the per-item pair they never had.* B11 recorded one (lines above) and B15 re-ran
+it, but `4eaf4535` and `b1e2ae4b` landed on a test suite alone. Both are single commits off the same
+parent `af95cd13`, each touching exactly one production file, so the pair isolates cleanly. The same
+four invocations were run in three throwaway worktrees at `af95cd13`, `4eaf4535` and `b1e2ae4b`: all
+eleven PNGs carry one md5 each across all three trees, 33 hashes and 11 distinct values.
+
+Complete `.\RunTests.ps1` in the item's worktree: PASS, exit 0, 3312 units, 233 engine suites, 18
+goldens hash-identical, 0 build warnings (174.3s total; the engine stage 105.2s against a 100.0s
+budget, which is awareness only).
+
+**⚠ What this gate could not have caught, which is more than what it caught.** Five rules in
+`docs/verification.md` bite here, and four of them bite against the result:
+
+- **DET-2** (disable live input during scripted runs) and **DET-6** (scripted probes imply `--det`)
+  together are the whole limitation. `--det` bundles `--no-pads` and an unattended run has nobody at
+  the keyboard, so every polled read is false in every tree measured above. There is no way to
+  strengthen the gate by admitting live input, because dropping `--det` for `--no-det` drops the
+  reproducibility the comparison is made of.
+- **INSTR-14** (every automated session check runs on a parent-driven clock) narrows it again. All
+  four invocations drive the session themselves, so the gate says nothing about the realtime
+  `_PhysicsProcess` adapter, which is the only path a human's input ever arrives on.
+- **INSTR-33** is the same shape one level up, and is quoted here as the precedent rather than as a
+  finding about this item: the mode that makes a capture reproducible is the mode that removes the
+  thing under test.
+- **DET-8** (`--det` ignores `config.json`) is the one rule that works in the gate's favour. It is
+  what makes an md5 comparison across four different worktrees legitimate at all, since each run is
+  a function of its committed tree rather than of anyone's local tuning file.
+
+So a migrated site that resolves the *wrong* action, or no action at all, passes every number above
+unchanged. `FirePressed()` is still on the scripted path (`FlightController:1679` combines
+`AutoFire` with the polled read), so the seam is compiled and called, but the polled half is
+constantly false. By the Ground rules' own standard an unchanged number is not evidence unless you
+have seen it able to fail, and none of these could have failed on a mapping error.
+
+**What the gate does prove** is narrow and worth having: the migration did not disturb the scripted
+path, the fixed tick, the sim, the menu's construction or the freecam's, and the merged combination
+of five items is as reproducible as each item was alone.
+
+**What actually proves the migration** is the per-site mapping evidence in the Wave B items' own
+Verify lines: `FlightBindingMappingTests` (77 facts), `MenuInputBindingTests` (46) and
+`SpectatorBindingsTests` (29), each asserting that an action resolves from the control the old code
+polled and, in B12's case, from no other action. Read those before reading this section's numbers,
+not after.
+
+**Original approach (kept for reference).**
 
 **Goal.** Proof that the refactor changed no behaviour.
 
@@ -590,10 +674,18 @@ was kept.
 
 **Approach.** A gate, not a change. Take baselines before Wave B starts.
 
+⚠ **That Approach line is wrong and is corrected above.** A baseline taken before Wave B starts is
+only a gate if nothing else lands in between, and this repo runs several plans in parallel worktrees
+onto one main, so something else always does. The affordable form is the one Wave B items already
+used: a pair inside each item's own worktree, where the only delta is that item's change, plus one
+reproducibility check on the merged result. Write the per-item pair into the item, not into the
+gate.
+
 **Model recommendation.** medium. Reading a diff, not writing code.
 
-**Verify.** <TODO: name the exact `--det` / `--hold` invocations and the comparison, from
-`docs/verification.md` and `docs/cli.md`.>
+**Verify.** The four `RunProbe.ps1` invocations listed above, compared by md5 with `Get-FileHash`,
+run twice at merged main across a clean rebuild and once each in the before and after worktrees of
+every Wave B item that lacked a pair. Complete `.\RunTests.ps1`.
 
 **⚠ Traps.** ⚠ `docs/verification.md` exists because the instruments here mislead. Read it and cite
 the rule that bites before quoting any number as a pass.
