@@ -658,7 +658,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `Shift`/`Ctrl`). A rebind layer is what actually resolves key placement; targeting is only the
   feature that hit the wall hardest, because it is eleven keys deep into an already-full keymap.
   *Fix shape:* `BL-296`'s per-player `ActionMap` seam, if it lands first.
-  *Cross-refs:* `BL-296`, `docs/org/targeting.md`, `docs/controls.md`.
+  **Decoded** (`docs/org/input.md`): the original's own map is one 32-bit word per command id
+  (`FUN_00537090`), packing four fixed binding slots (two keyboard control codes, one joystick
+  button, one mouse button) that `FUN_00537530` ORs together; a keyboard code is a raw DIK scancode
+  plus `0x100`/`0x200`/`0x400` Alt/Ctrl/Shift bits, and the 64 shipped defaults are emitted by code
+  at `FUN_004936c0`, not held in a table. Two rules are worth reusing: an action carries several
+  bindings at once, and reassigning a control steals it from its previous owner rather than
+  double-binding (`FUN_005371d0`, `FUN_00535fb0`). ⚠ The encoding is not: there is exactly one
+  joystick pointer in the program (`DAT_0075c1e0`), buttons are hardcoded 1-10 (`FUN_00536c40`),
+  and axes and hats are unbindable. Our binding must be a stable device identity plus a tagged
+  control (button, signed axis with deadzone, hat direction) held in a list, not a scancode in a
+  typed slot, so the ceiling is not inherited.
+  *Cross-refs:* `BL-296`, `docs/org/input.md`, `docs/org/targeting.md`, `docs/controls.md`.
 
 - `BL-399` `[Feature]` **Track Target's camera behaviour — `L` is reserved, the camera itself is
   undecided.** *Evidence:* the player-targeting plan's out-of-scope call (b), 2026-08-15: the
