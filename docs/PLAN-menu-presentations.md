@@ -1588,7 +1588,11 @@ every shot checked present), **SHOT-32** (a shot proves the frame it drew: which
 is read off the log line, not off the picture), **SRC-7** (a file is required because a screen draws
 it, proved by the composed board's own art names, not because the layout mentions it).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The plan tree with E42 landed passed the complete `.\RunTests.ps1` (3023 units, the
+manifest cases among them, 212 engine suites across 4 shards with `menu-original-tracer` over the
+re-stamped install, 18 goldens hash-identical, engine errors clean, 182.6s with another build running
+beside it). The user's live tree was re-stamped to schema 2 by the landed extractor without
+re-extracting anything.
 
 **⚠ Traps.** Do not discover required absence one blank screen at a time. Do not overwrite the
 requested presentation during fallback.
