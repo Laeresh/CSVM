@@ -992,6 +992,24 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   *Blocks:* a stowed cannon that still dies reopens `BL-640`; a deployed one that will not die is a
   new item.
 
+### CM15 (C2/M05) · the paratrooper drop
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:14
+```
+
+- `PT-112` `[Own]` **The capture cutscene shows the Balmoral it is filmed around** (`BL-632`,
+  closed). The archive's `balmoral` node was never staged, so the drop played with the shot
+  composed on empty air; `AircraftStage` now stages it and the suite reads it framed through the
+  shot, but the suite drives the definition directly rather than through the mission's own
+  objective chain. Fly the mission through to the paratrooper drop (past `cargozep2`, the cargo
+  zeppelin the fighters patrol around).
+  *Look for:*
+  - (a) the Balmoral itself visible in the shot, not an empty frame over the zeppelin;
+  - (b) it moving through the shot rather than sitting parked;
+  - (c) the paratroopers still dropping and the letterbox/handoff unchanged from before.
+  *Blocks:* nothing tracks the outcome; a fail reopens `BL-632`.
+
 ### CM18 (C4/M03) · the generator launches
 
 ```powershell
