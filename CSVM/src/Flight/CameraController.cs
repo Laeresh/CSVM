@@ -69,6 +69,10 @@ public sealed class CameraController
     // radius and a full cut ~−7%, which is the term the eye actually sees.
     private const float DistTransientPerAccel = 0.105f;
 
+    // The numpad +/- zoom axis (docs/plans/PLAN-cockpit-view.md, "What the data actually ships"):
+    // the target moves at 2/s, clamped [0, 1]; the shown trim chases it at 1.5/s.
+    private const float ZoomAxisRate = 2f, ZoomSmoothRate = 1.5f;
+
     private const float ChaseLogInterval = 0.25f; // sim-s between chase-distance breadcrumb lines
 
     // The decoded per-mode BASE horizontal FOV, in degrees (org/cameraViews.md, "FOV constants
@@ -141,6 +145,10 @@ public sealed class CameraController
     private float _prevSpeed;                    // last sim step's speed (accel derivative)
     private float _simTime, _logAccum;           // chase breadcrumb bookkeeping
 
+    // The numpad +/- zoom axis's own state (BL-433): target then shown, both [0, 1]. Kept apart
+    // from _radius above; EffectiveRadius is where the two combine.
+    private float _zoomTarget, _zoomShown;
+
     // The smoothed plane→camera offset, world space. The offset eases, never the world position:
     // the original's footage shows its apparent size at 300 mph within 0.5% of its 118 mph value
     // once dist_factor is accounted for, which a first-order WORLD-position follower cannot do —
@@ -192,6 +200,11 @@ public sealed class CameraController
     /// momentary override: a numpad key held for a frame does not make the pilot leave the
     /// cockpit.</summary>
     public bool FirstPerson => PilotView.IsFirstPerson(ViewMode);
+
+    // The radius every external pose actually reads: the dynamic chase radius, minus the zoom
+    // axis's own trim over the AUTHORED base distance (not the dynamic one), floored at zero
+    // since a negative distance has no meaning. _radius itself never carries the trim.
+    private float EffectiveRadius => Mathf.Max(0f, _radius - (_zoomShown * _dist));
 
     /// <summary>One press of the original's "Cycle Cockpit Views" key advances the three-stop
     /// cycle: Cockpit → Nose → Chase → Cockpit.</summary>
@@ -250,7 +263,7 @@ public sealed class CameraController
         // Rigid views ride the DRAWN pose, not the raw sim pose — the two differ on the realtime
         // clock (render interpolation), and mixing them would jitter the plane inside a view
         // whose whole point is to be bolted to it. Identical on a parent-driven clock.
-        _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * _radius));
+        _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * EffectiveRadius));
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, up);
     }
 
@@ -261,7 +274,7 @@ public sealed class CameraController
     /// scripted-capture reason.</summary>
     public void BackView(in Transform3D renderPose)
     {
-        float r = Mathf.Clamp(_radius, _backMin, _backMax);
+        float r = Mathf.Clamp(EffectiveRadius, _backMin, _backMax);
         var dir = new Vector3(0f, 0f, -1f);     // ahead of the nose, plane frame
         _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * r));
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
@@ -279,7 +292,7 @@ public sealed class CameraController
         float pitch = Mathf.DegToRad(-stickY * HeadLook.PadLookPitchMaxDeg);  // stick up = look up
         var baseDir = new Vector3(0f, BaseUp, BaseBack).Normalized();
         var dir = new Basis(Vector3.Up, yaw) * (new Basis(Vector3.Right, pitch) * baseDir);
-        _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * _radius));
+        _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * EffectiveRadius));
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
     }
 
@@ -385,6 +398,28 @@ public sealed class CameraController
         _camera.LookAt(impact, Vector3.Up);
     }
 
+    // Kept beside its one caller, for the same SA1204 reason as FirstPersonPose above.
+#pragma warning disable SA1204
+    /// <summary>The zoom axis's raw target: moves toward 1 while <paramref name="zoomIn"/> is
+    /// held and toward 0 while <paramref name="zoomOut"/> is held, at <see cref="ZoomAxisRate"/>,
+    /// clamped to [0, 1]. Holding both cancels, the same as a plain axis. Pure, so the rate and
+    /// clamp unit-test without a camera.</summary>
+    public static float ZoomTarget(float target, bool zoomIn, bool zoomOut, float dt) =>
+        Mathf.Clamp(target + (((zoomIn ? 1f : 0f) - (zoomOut ? 1f : 0f)) * ZoomAxisRate * dt), 0f, 1f);
+#pragma warning restore SA1204
+
+    /// <summary>Advance the numpad +/- zoom axis one frame: the target via <see
+    /// cref="ZoomTarget"/>, then the shown trim chasing it at <see cref="ZoomSmoothRate"/> (the
+    /// same law <see cref="HeadLook.Approach"/> names). Reads the injected key state directly,
+    /// like <see cref="ActiveView"/> and <see cref="BackActive"/>, so the host polls no pad
+    /// device for it. ⚠ Call only where <see cref="Orbit"/> is not also running this frame — the
+    /// weapon lab's held orbit reads the same two keys for its own dolly.</summary>
+    public void UpdateZoom(float dt)
+    {
+        _zoomTarget = ZoomTarget(_zoomTarget, _keyDown(Key.KpAdd), _keyDown(Key.KpSubtract), dt);
+        _zoomShown = HeadLook.Approach(_zoomShown, _zoomTarget, ZoomSmoothRate, dt);
+    }
+
     /// <summary>Advance the dynamic chase radius one SIM step: <c>d = dist + dist_factor·V</c>
     /// (both authored) plus a first-order acceleration transient relaxing at the measured 0.65
     /// /sim-s — see docs/formats/camparam.md. ⚠ Deliberately NOT clamped into
@@ -410,7 +445,7 @@ public sealed class CameraController
         if (_logAccum >= ChaseLogInterval)
         {
             _logAccum = 0f;
-            Log.Debug("flight", $"chase t={_simTime:0.00} v={speed:0.00} d={_radius:0.000} excess={_distExcess:0.000}");
+            Log.Debug("flight", $"chase t={_simTime:0.00} v={speed:0.00} d={_radius:0.000} excess={_distExcess:0.000} zoom={_zoomShown:0.000}");
         }
     }
 
@@ -537,6 +572,6 @@ public sealed class CameraController
     {
         var nose = -attitude.Z;
         camUp = attitude.Y;
-        return ((nose * -BaseBack) + (camUp * BaseUp)) * (_radius / BaseDist);
+        return ((nose * -BaseBack) + (camUp * BaseUp)) * (EffectiveRadius / BaseDist);
     }
 }

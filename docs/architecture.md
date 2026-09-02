@@ -2114,8 +2114,15 @@ a spawn/respawn/crash-cut never shows a stale FOV. `LogView` already names the m
 (`view n=cockpit`), which is what makes a scripted mode selection verifiable. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
 authored) plus a first-order acceleration transient relaxing at the MEASURED 0.65 /sim-s
 (`UpdateDynamics`, host-called once per sim step); the offset's DIRECTION (behind and above at
-~15.7° elevation) is not in the data and stays hand-picked. Collaborators: `FlightController`
-(the only host) and `CamParams`.
+~15.7° elevation) is not in the data and stays hand-picked. The numpad `+`/`−` zoom axis
+(`BL-433`) trims that shared radius further: `UpdateZoom` reads the two keys directly (no pad,
+the same rule `ActiveView`/`BackActive` follow), moving a target at 2/s and easing the shown
+value at 1.5/s, both clamped `[0, 1]`; `EffectiveRadius` is where the trim actually lands
+(`_radius` minus `shown · Dist`, floored at zero), read by `Chase`, `FixedView`, `BackView` and
+`PadLook` instead of `_radius` so the trim reaches every external pose alike. Called only from
+the ordinary flight branch, never while the weapon lab's held orbit is running, since `Orbit`
+reads the same two keys for its own dolly. The head-look centre key zeroing this value too is
+`BL-435`, not yet wired. Collaborators: `FlightController` (the only host) and `CamParams`.
 
 ## src/Flight/HeadLook.cs
 The pilot's head in the two first-person views, decoded from the original's shared look controller
