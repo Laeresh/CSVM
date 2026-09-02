@@ -1978,13 +1978,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     `nitro` as `frequency 4.0, damp 3.0, sawtooth 1, magnitude 0.05`, read unchanged, and
     `PlaneShake` renders it as a sawtooth under an envelope — the same envelope-versus-random-walk
     mismatch as (a) and (d), which is why this is a clause here and not its own item.
-    ⚠ **Do not wire a number yet:** two repo sources contradict each other on which triple is
+    **Judged at the controls, and the answer settles the shape rather than the scale:** "Janky at
+    the beginning (larger but very fast) and then too small but still very fast." That is three
+    facts at once — the opening kick is too big, the decay to too-small is too quick, and the RATE
+    is wrong for the whole duration. A magnitude constant cannot produce that; it is the sawtooth
+    standing in for a random walk, which reads as a fast regular buzz where the original wanders.
+    So the mechanism is the fix here, exactly as in (a) and (d), and the factor-of-two ambiguity in
+    the magnitude is secondary — do not spend another pass on it before the walk lands.
+    ⚠ **Still do not wire a number:** two repo sources contradict each other on which triple is
     position and which is velocity (`docs/org/shakes.md`:168-173 against
     `analysis/gun-wobble-shake/FINDINGS.md`:168-182, which says the reverse twice), and the
     `sawtooth 1` branch constant coincides with the authored `frequency` of 4.0, which is exactly
-    the coincidence the trap below warns about. Settle the triple first, then ask the author whether
-    the wobble reads too big or too small, and whether the original's engage moves the nose or only
-    the roll — one word from the controls outranks another pass over the binary here.
+    the coincidence the trap below warns about.
+    *Still unanswered:* whether the original's engage moves the nose or only the roll.
   - **(fidelity) judge the port, then dial.** Playtest owed: fly the merged build and judge
     `GunBuzzKickScale` (1.0 default = faithful step) against the original clip before touching it.
     Two honest caveats: the random-walk **decay model (τ≈80 ms) is an engineering guess, not a

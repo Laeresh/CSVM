@@ -819,31 +819,6 @@ is a judgement on our own remake.
   *Blocks:* nothing; `BL-641` stays partial with its remaining path recorded in the plan. A missing
   wreck on an early kill mints a new `BL`.
 
-### Any chapter · cockpit view, a circle against the tape
-
-```powershell
-./RunGame.ps1 --plane=player_bhawk --chapter=C1
-```
-
-- `PT-104` `[Own]` **The cockpit compass drum turns with the heading tape, after the sign fix.**
-  The drum was turning the wrong way at the right rate: the engine's `-heading` argument is right in
-  the engine's own Euler frame, but this port's aircraft yaw is already `-heading`, so the cancelling
-  local write is `+heading`. The suite now pins the invariant (the card's world orientation held
-  constant against a derived aircraft yaw) rather than a local literal, which is why the old sign
-  passed. That proves the cancellation, not the look. Switch to the cockpit view and fly a full
-  circle each way.
-  *Look for:*
-  - (a) the drum and the tape showing the same card and turning together, headings increasing to
-    the left — this is the check that failed before and is the whole point of the re-fly;
-  - (b) the drum at rest still reading north with the nose on the tape's north (this passed before
-    and must not have regressed: at rest both signs read north, so it discriminates nothing on its
-    own);
-  - (c) both readouts agreeing with the world (the decoded compass north as world −Z is still
-    unverified, and a wrong axis moves both together).
-  *Blocks:* a drum still turning the wrong way means the frame derivation is wrong rather than the
-  sign, and mints a new `BL`; both readouts wrong together is `docs/formats/hud.md`'s open
-  compass-north question and mints a different one.
-
 ## Everything else
 
 Everything blocked on an unlanded fix is tracked in [`backlog.md`](backlog.md) with its own
