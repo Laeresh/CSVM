@@ -13,6 +13,10 @@ public sealed record RebindSteal(InputAction Action, Binding Binding, IReadOnlyL
 /// cursor is on, the capture in progress, and the steal it is about to perform. Engine-free like
 /// every other feature, so a presentation supplies the frame's raw device state and draws whatever
 /// this reports.
+/// ⚠ Edits are staged. Every rebind, unbind and reset lands in a working copy of the seat's maps,
+/// and only <see cref="Accept"/> writes them through to the maps the polling sites hold.
+/// <see cref="Cancel"/> throws the working copy away, which is what makes a whole-map reset safe to
+/// press. This is the original's model (`FUN_00419de0`, `FUN_00419d50`, `docs/org/input.md`).
 /// ⚠ A steal is never silent. A capture that lands on a held control raises <see cref="Pending"/>
 /// naming every action that would lose it, and nothing moves until <see cref="ConfirmSteal"/>.
 /// ⚠ Every edit is scoped to <see cref="Player"/>'s own profile. Two seats hold two maps, so a
@@ -104,12 +108,13 @@ public sealed class ControlsFeature : IMenuFeature
     /// splitscreen seat, which cannot capture a key or a mouse button.</summary>
     public bool ReadsKeyboard => _seats[_player].ReadsKeyboard;
 
-    private ActionMap Map => _seats[_player].Profile.Map(_context);
+    private ActionMap Map => _seats[_player].Working[_context];
 
     /// <summary>Registers one seat's live keymap. The profile is the one its polling sites read, not
-    /// a copy, so a committed rebind reaches the seat without a reload. <paramref name="padOf"/>
-    /// gives the identity that context's pad bindings sit on, per context rather than per seat,
-    /// because the three polling sites do not share one placeholder.</summary>
+    /// a copy, so <see cref="Accept"/> reaches the seat without a reload; the screen itself edits a
+    /// working copy of it. <paramref name="padOf"/> gives the identity that context's pad bindings
+    /// sit on, per context rather than per seat, because the three polling sites do not share one
+    /// placeholder.</summary>
     public void AddSeat(int player, BindingProfile profile, Func<InputContext, DeviceId> padOf, bool readsKeyboard)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -252,41 +257,75 @@ public sealed class ControlsFeature : IMenuFeature
         Status = $"{BindingLabels.Name(Focused)} lost {BindingLabels.Describe(dropped)}.";
     }
 
-    /// <summary>Puts this seat's whole context back to the shipped defaults, in place, so the maps
-    /// its polling sites already hold are the ones that change.</summary>
+    /// <summary>Puts one of this seat's contexts back to the shipped defaults, in the working copy.
+    /// The whole-map form is <see cref="ResetSeat"/>, which is the button the original ships.
+    /// </summary>
     public void ResetContext()
     {
         var seat = _seats[_player];
-        var defaults = DefaultBindings.MapFor(_context, seat.PadOf(_context));
-        var map = Map;
-        map.Clear();
-        foreach (var action in defaults.BoundActions)
-        {
-            foreach (var binding in defaults.Bindings(action))
-                map.Add(action, binding);
-        }
+        Restore(seat.Working[_context], DefaultBindings.MapFor(_context, seat.PadOf(_context)));
+        _slot = 0;
+        MarkDirty();
+        Status = $"{ContextName(_context)} defaults restored. Accept to keep them.";
+    }
+
+    /// <summary>Puts this seat's whole keymap back to the shipped defaults, every context at once,
+    /// in the working copy. The original's RESET TO DEFAULT rebuilds every category's rows from the
+    /// defaults and leaves the live map alone until ACCEPT (`FUN_00419de0`), which is what makes one
+    /// press of it recoverable.</summary>
+    public void ResetSeat()
+    {
+        var seat = _seats[_player];
+        foreach (var context in System.Enum.GetValues<InputContext>())
+            Restore(seat.Working[context], DefaultBindings.MapFor(context, seat.PadOf(context)));
 
         _slot = 0;
         MarkDirty();
-        Status = "Defaults restored.";
+        Status = "Every control set restored to defaults. Accept to keep them.";
     }
 
-    /// <summary>Writes every changed seat's keymap through whatever save the host supplied. Every
-    /// seat rather than the one on screen, since a player who edits two seats and leaves once
-    /// expects both written.</summary>
-    public void Save()
+    /// <summary>Commits every changed seat's working copy into the maps its polling sites hold, then
+    /// writes each through whatever save the host supplied. Every seat rather than the one on
+    /// screen, since a player who edits two seats and accepts once expects both.
+    /// ⚠ The commit fills the existing <see cref="ActionMap"/> rather than replacing it, because the
+    /// menu poller holds that object and a swapped reference would leave it on the old keymap.
+    /// </summary>
+    public void Accept()
     {
         foreach (int player in _players)
         {
-            if (_dirty.Contains(player))
-                _save?.Invoke(player, _seats[player].Profile);
+            if (!_dirty.Contains(player))
+                continue;
+
+            var seat = _seats[player];
+            foreach (var context in System.Enum.GetValues<InputContext>())
+                Restore(seat.Profile.Map(context), seat.Working[context]);
+
+            _save?.Invoke(player, seat.Profile);
         }
 
         _dirty.Clear();
+        Pending = null;
+        Capturing = false;
+        _capture = null;
+        Status = "Changes accepted.";
     }
 
-    /// <summary>Drops the capture, the pending steal and the status line. The keymaps themselves are
-    /// persisted data and survive a presentation switch.</summary>
+    /// <summary>Throws away every seat's staged edits, a reset included, and re-stages from the live
+    /// keymaps. Nothing the screen did since it was opened or last accepted survives.</summary>
+    public void Cancel()
+    {
+        foreach (var seat in _seats.Values)
+            seat.Restage();
+
+        _dirty.Clear();
+        ResetCursor();
+        Status = "Changes cancelled.";
+    }
+
+    /// <summary>Drops the capture, the pending steal and the status line, leaving the staged edits
+    /// and the live keymaps alone. A presentation switch is not an answer to Accept or Cancel.
+    /// </summary>
     public void Discard()
     {
         Capturing = false;
@@ -294,6 +333,26 @@ public sealed class ControlsFeature : IMenuFeature
         Status = string.Empty;
         ResetCursor();
     }
+
+    // Refills one map from another in place, keeping the target object identity. Add rather than
+    // Assign, because the shipped set deliberately puts one control on two actions and a steal here
+    // would silently undo the second.
+    private static void Restore(ActionMap target, ActionMap source)
+    {
+        target.Clear();
+        foreach (var action in source.BoundActions)
+        {
+            foreach (var binding in source.Bindings(action))
+                target.Add(action, binding);
+        }
+    }
+
+    private static string ContextName(InputContext context) => context switch
+    {
+        InputContext.Flight => "Flying",
+        InputContext.Menu => "Menu",
+        _ => "Free camera",
+    };
 
     private void Commit(Binding binding)
     {
@@ -321,5 +380,31 @@ public sealed class ControlsFeature : IMenuFeature
         Pending = null;
     }
 
-    private sealed record SeatState(BindingProfile Profile, Func<InputContext, DeviceId> PadOf, bool ReadsKeyboard);
+    // One registered seat: the live profile, the working copy the screen edits, and the two things
+    // a capture needs to know about the seat.
+    private sealed class SeatState
+    {
+        public SeatState(BindingProfile profile, Func<InputContext, DeviceId> padOf, bool readsKeyboard)
+        {
+            Profile = profile;
+            PadOf = padOf;
+            ReadsKeyboard = readsKeyboard;
+            Restage();
+        }
+
+        public BindingProfile Profile { get; }
+
+        public Func<InputContext, DeviceId> PadOf { get; }
+
+        public bool ReadsKeyboard { get; }
+
+        public Dictionary<InputContext, ActionMap> Working { get; } = new();
+
+        /// <summary>Takes the working copy back to what the polling sites currently hold.</summary>
+        public void Restage()
+        {
+            foreach (var context in System.Enum.GetValues<InputContext>())
+                Working[context] = Profile.Map(context).Clone();
+        }
+    }
 }
