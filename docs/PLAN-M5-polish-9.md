@@ -204,7 +204,7 @@ dropped, not for a defect in this fix but for a pre-existing `ObjectDisposedExce
 `NameResolver`/`IndexWorld` when the suite drives a seventh sequential airframe rebase in one run,
 reported separately. `PT-116` is the owed at-the-controls look.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The full battery on the merged tree: build clean, units 2822 passed 0 failed, engine 217 suites passed 0 failed with errors clean and no unweighted suite, goldens 18 of 18 hash-identical, 159.2 s total, exit 0.
 
 ## A2 ☑ `BL-524` CM05/CM07: a wingman whose leader leaves play stops holding a stale bearing
 
@@ -259,7 +259,7 @@ missions, the netless blocks whose `primary_target` is a netted `devastator`; th
 the player and are untouched. `AiPilot` itself is unchanged: its netless arm still projects the
 orders it was left with, which is what makes the hand-off necessary and is pinned as such.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The full battery on the merged tree: build clean, units 2822 passed 0 failed, engine 217 suites passed 0 failed with errors clean and no unweighted suite, goldens 18 of 18 hash-identical, 159.2 s total, exit 0.
 
 # Wave B — Northwest (C1)
 
@@ -315,7 +315,7 @@ freighter `freighteraground` beaches at (−6246, 0, −7572) and the drop a 54 
 33 m under the hull needs. Documented in `docs/formats/mission-entities.md` "Route ends and stop
 points". `PT-109` flies it at the controls.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The full battery on the merged tree: build clean, units 2822 passed 0 failed, engine 217 suites passed 0 failed with errors clean and no unweighted suite, goldens 18 of 18 hash-identical, 159.2 s total, exit 0.
 
 ## B12 ❌ `BL-666` CM09: a zeppelin killed by gasbags alone ends the mission one way or the other
 
@@ -374,7 +374,7 @@ What the measurement leaves open is the wait: 30 of the 32.6 s are the two autho
 player who quits earlier sees a mission that ends in neither direction. `PT-115` puts that
 judgement at the controls.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The full battery on the merged tree: build clean, units 2822 passed 0 failed, engine 217 suites passed 0 failed with errors clean and no unweighted suite, goldens 18 of 18 hash-identical, 159.2 s total, exit 0.
 
 ## B13 ☑ `BL-665` A woken roster block is re-placed where the script left it
 
@@ -417,7 +417,7 @@ run over all 24 shipped missions' rosters checking each deactivated block's name
 `GameZ.IsLibraryRoot`, finds none names a placed world node: this lands as a latent fix, and no
 shipped mission shows the symptom today.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The full battery on the merged tree: build clean, units 2822 passed 0 failed, engine 217 suites passed 0 failed with errors clean and no unweighted suite, goldens 18 of 18 hash-identical, 159.2 s total, exit 0.
 
 ## B14 ❌ `BL-656` CM10: an attack balloon's marker never rests on the water
 
@@ -470,7 +470,7 @@ value `CollectMeshBoxes` already produces at rest, and deferring the offer would
 reading that is already live and correct. `campaign-balloon-marker` now also drives the shipped
 wake trigger directly and asserts this invariant.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The full battery on the merged tree: build clean, units 2822 passed 0 failed, engine 217 suites passed 0 failed with errors clean and no unweighted suite, goldens 18 of 18 hash-identical, 159.2 s total, exit 0.
 
 # Wave C — Hollywood (C2)
 
@@ -525,7 +525,7 @@ shipped blocks author slot 37 = 1 (CM11's pair, C2/M05 `balmoral_1`, C3/M05
 `britbalmoral_1`/`_2`/`_3`, C5/M01 `autogyro_1`, C5/M04 `stihellhound_5_7`), and this fix reaches
 all eight through the same path, not CM11 alone.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The full battery on the merged tree: build clean, units 2822 passed 0 failed, engine 217 suites passed 0 failed with errors clean and no unweighted suite, goldens 18 of 18 hash-identical, 159.2 s total, exit 0.
 
 ## C22 ☑ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs
 
@@ -636,7 +636,7 @@ the action list its dispatcher walks (`FUN_004ed8c0` into `FUN_004d04e0`, the ap
 and never runs a callee event during the caller's own tick, so a callee's `INVALIDATE_ANIMATION`
 cannot latch before the caller's later events. That is filed as `BL-677` and no code here touches it.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The full battery on the merged tree: build clean, units 2822 passed 0 failed, engine 217 suites passed 0 failed with errors clean and no unweighted suite, goldens 18 of 18 hash-identical, 159.2 s total, exit 0.
 
 ## C23 ❌ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake
 
@@ -723,7 +723,7 @@ contact the original never has.
 measured nothing about the ace: a human rig is near-field by construction, so it is handed gravity
 the far-field ace never gets. A powered aircraft on the far branch does not sink at all.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The full battery on the merged tree: build clean, units 2822 passed 0 failed, engine 217 suites passed 0 failed with errors clean and no unweighted suite, goldens 18 of 18 hash-identical, 159.2 s total, exit 0.
 
 ## C24 ❌ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
 
@@ -763,7 +763,7 @@ apply.
 where the compiled index is not built; that fallback path was not exercised here. C24 shares the
 `Anim/` folder with A1 and C22 but is `NameResolver.cs` alone.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The full battery on the merged tree: build clean, units 2822 passed 0 failed, engine 217 suites passed 0 failed with errors clean and no unweighted suite, goldens 18 of 18 hash-identical, 159.2 s total, exit 0.
 
 ## C25 ☑ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
 
@@ -825,7 +825,7 @@ they deploy, which needs `OBJECTIVE25`'s `COMPLETED_ZEPCANNONS` (the two airship
 and the player inside the firing arc. No mission `startanims` deploys them early, so before that
 gate the cannons are immune where they were previously killable through their hatches.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The full battery on the merged tree: build clean, units 2822 passed 0 failed, engine 217 suites passed 0 failed with errors clean and no unweighted suite, goldens 18 of 18 hash-identical, 159.2 s total, exit 0.
 
 ## C26 ☑ `BL-632` CM15: the capture cutscene frames its Balmoral
 
@@ -894,7 +894,7 @@ is driven by any suite in `CSVM/src/Testing/`. The plan's "the chuteopen suites 
 mission's other cutscene" does not hold; that cutscene remains unverified by any suite, mine
 included, and is out of this item's scope.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The full battery on the merged tree: build clean, units 2822 passed 0 failed, engine 217 suites passed 0 failed with errors clean and no unweighted suite, goldens 18 of 18 hash-identical, 159.2 s total, exit 0.
 
 # Wave D — Closing sortie
 

@@ -163,11 +163,9 @@ public sealed class AircraftStage
             stage.Chuteman = builtChute;
         }
 
-        // ⚠ Under a switched-off holder, not switched off itself, the same reason FigureNodes are:
-        // no definition ever activates this node, only the capture drop's own OBJECT_ADD_CHILD
-        // reparenting it out from under the holder, which is what draws it. A subtree built ACTIVE
-        // at worldRoot directly, the way PropNode is, would sit visible at the archive's own build
-        // origin in every OTHER mission that stages an aircraft, since nothing there ever moves it.
+        // ⚠ Never stage this at worldRoot the way PropNode is: no definition activates the node,
+        // so it would draw at the archive's build origin in every other mission that stages an
+        // aircraft. docs/formats/anim-definitions/cutscenes.md.
         var balmoralHolder = new Node3D { Name = "balmoral_holder", Visible = false };
         worldRoot.AddChild(balmoralHolder);
         if (planesGamez.FindByName(BalmoralNode) is { } balmoral
