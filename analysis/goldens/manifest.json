@@ -85,14 +85,14 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "1d4d08c44d4857c6052c7f0297d66e96",
-      "exercises": "Held pitch-and-roll flight: quaternion physical rates, chase camera, default livery, prop and surface animators, gauges, compass, weapon readout, pipper, exhaust and SpeedCue; frame-sensitive.",
+      "hash": "1cdcf34e0e2e297ccdae3edc7008cc40",
+      "exercises": "Held pitch-and-roll flight: quaternion physical rates, chase camera, default livery, prop and surface animators, gauges, compass, weapon readout, pipper, exhaust, SpeedCue, and the plane lit by the zone's authored SUNLIGHT; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "9a03c3ce8b07343705f7023ddbdadc27",
+      "hash": "e6b86492c00daba59f5933f086294c03",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, flight-state-dependent SpeedCue and seeded puffer placement; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
@@ -113,14 +113,14 @@
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "f4a466e7d6ee3c41e7e710b0481a0a48",
+      "hash": "036de46b2dbcc4a7681ef978094e2424",
       "exercises": "Targeting a live AI in flight: its quaternion-driven pose and its crewed rear turret's barrel feed fixed antialiased in-range brackets, the label below the plane and --debug-markers identity/health text; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "b9609a0ca574bbfda2506316863df87c",
+      "hash": "5fa49909a9fe8ecd97427202dbdb17ed",
       "exercises": "A shot-down AI three seconds after the kill: quaternion flight state under frozen commands, the target's antialiased brackets, the handover fireball where randomdestseq inherits the hull's velocity, and the LOW ALT lamp lit inside its 60 m gate.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     },
