@@ -5522,7 +5522,12 @@ that matched nothing, which `Run` refuses before any suite starts. `SuiteShards`
 term that divides rather than selects; `Run` applies it AFTER the miss checks, so an empty shard is
 a legitimate division and an empty selector is still a typo. A sharded run's `ScratchDir` moves
 beside its `--log-file`, which is what keeps concurrent shards (and concurrent runs) off each
-other's report and artifacts. `TestContext.
+other's report and artifacts. The options store a `--run-tests` process reads and writes is a
+scratch directory named by process id, set in `Launcher` before the first `UserOptions()` call, so a
+suite driving an Options screen opens it on the shipped defaults whatever the player last saved at
+the controls. One directory per process, not one shared: the shards start together, and a shared
+directory deleted by a sibling mid-write threw out of `_Ready` and left that shard erroring in
+`_Process` until its timeout. `TestContext.
 EmitterFactory` (mutable, default null) forwards straight into `WorldSession.Options.EmitterFactory`
 for the next `WithWorld` build. `WithPrivateWorld` is what a suite installing one uses: never read
 from the shared cache and never written to it, freed when the body returns, so no build option a
