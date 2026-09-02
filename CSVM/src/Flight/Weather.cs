@@ -17,17 +17,20 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed class WeatherState
 {
+    /// <summary>The install's modal day <c>SUNLIGHT_DIFFUSE</c>, the fallback for a zone that
+    /// authors none and the day anchor both lighting mappings scale a zone against
+    /// (<c>WeatherRig.EnhancedEnergies</c>, <c>WeatherRig.FaithfulEnergies</c>). ⚠ Do not unify it
+    /// with <c>WorldLightFactor</c>'s own 1/0 defaults, which are the faithful collapse's and must
+    /// not move. All 53 shipped weather.json author both keys, so the fallback never fires.</summary>
+    public const float DefaultDiffuse = 1.5f;
+
+    /// <summary>The ambient half of <see cref="DefaultDiffuse"/>'s pair.</summary>
+    public const float DefaultAmbient = 0.5f;
+
     // A no-op fog (nothing fades) for missions/zones without a FOG_RANGES: near/far so far out
     // that smoothstep is 0 across the whole world. WorldLight 1 = fullbright (no darkening).
     private const float SunIncidence = 0.46f;
     private const float MinWorldLight = 0.15f;
-
-    // The fallback for a zone that authors no SUNLIGHT_DIFFUSE/AMBIENT: the install's modal day
-    // pair, which the enhanced lighting maps back onto the launcher's own hardcoded energies. It
-    // differs on purpose from WorldLightFactor's 1/0, which are the faithful collapse's defaults
-    // and must not move. All 53 shipped weather.json author both keys, so neither fires today.
-    private const float DefaultDiffuse = 1.5f;
-    private const float DefaultAmbient = 0.5f;
 
     // SunIncidence/MinWorldLight are a TUNE for the world-brightness scalar the original derives
     // from its per-zone SUNLIGHT_AMBIENT/DIFFUSE; see docs/org/weather.md for the calibration.

@@ -137,7 +137,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☐ `BL-678` Collision honours the polygon's own backface flag, as the original's test does
 12. ☐ `BL-613` An alpha-textured surface takes no sun term, as the original's light evaluation does
-13. ☐ `BL-332` The aircraft light takes the brightness the mission authors, not one hardcoded pair
+13. ☑ `BL-332` The aircraft light takes the brightness the mission authors, not one hardcoded pair
 
 ### Wave C — Feedback at the controls
 
@@ -374,7 +374,81 @@ storage-flag bits and the extractor field name; `BL-070` stays in `backlog.md` a
 exempt from the dim" half is settled by this rule, so its remainder after this lands is the
 billboard-axis question alone.
 
-## B13 ☐ `BL-332` The aircraft light takes the brightness the mission authors, not one hardcoded pair
+## B13 ☑ `BL-332` The aircraft light takes the brightness the mission authors, not one hardcoded pair
+
+**Landed.** The faithful path has its own arm of the zone apply. `WeatherRig.FaithfulEnergies` turns
+a zone's authored `SUNLIGHT_DIFFUSE`/`SUNLIGHT_AMBIENT` into the sun's `LightEnergy` and the
+Environment's `AmbientLightEnergy`, and `ApplyFaithfulLighting` writes them onto the session sun,
+the session Environment and every registered cockpit-pass clone, on every zone change. The
+launcher's two hardcoded values become `WeatherRig.DefaultEnergies`, the pair a viewer, a menu or a
+weather-less mission still flies under, and the day anchor the mapping scales a zone against.
+`GameSession.BuildCockpitPasses` now registers the interior pass in both graphics modes, since the
+faithful light moves per zone too.
+
+**The two constants are TUNE and owe the author's eyes**: sun 1.6 and ambient 0.9, each reached by
+a zone authoring the install's modal day pair (1.5 / 0.5) and **capped** there. Calibrated against
+today's accepted day level rather than against a screenshot: every shipped day zone keeps the exact
+energies the build has been flown at, and only a dimmer zone moves, so the change can darken a
+plane and never brighten one. The cap is the faithful path's own constraint and not a copy of
+enhanced mode's factors (Decision 6): this pass has no tonemap, so an energy past the day level
+clips a plane to flat white, where enhanced mode lights and tonemaps a whole world. There is
+deliberately no night gate either, because the faithful world light ignores `FOG_COLOR` as well, so
+capping C5 would sink its plane below its own fullbright terrain.
+
+**Verified.** `.\RunTests.ps1` exit 1, in the goldens stage alone and only on the four unpinned
+movers below: build PASS, units 3078/3078, engine 231/231 suites with engine errors clean, goldens
+"4 moved, 0 broken of 18". Nothing else regressed, and `analysis/goldens/manifest.json` is
+unmodified in the tree. A new `sun-energy` suite drives a rig per mission and reads the light back:
+C1B/IA1 `zone1` resolves sun 0.640 / ambient 0.270 against C1C/M01 `zone1`'s 1.600 / 0.900, and a
+C1C/MP1 zone crossing carries the new energy mid-flight. It is red on the unfixed tree by
+construction, where both missions leave the light at its Godot default. Five unit facts pin the
+mapping, the cap, the absent night gate and the shipped night/day pair. `--det` still isolates the
+graphics mode: a `config.json` asking for `enhanced` produced byte-identical hashes for all 18
+shots, movers included.
+
+**Goldens moved, UNPINNED and awaiting review.** Four, all C1/IA1 aircraft shots, all from the same
+cause: C1 authors diffuse 1.2, so the plane's sun energy drops 1.6 → 1.28. Measured against
+before-images reproduced from a neutralised build that returned HEAD's own hashes digit for digit.
+
+| shot | pixels changed | max channel delta | rows |
+|---|---|---|---|
+| `c1-destroy-effects` | 11172 (1.212 %) | 22 | 430–555 |
+| `c1-targeting-hud` | 10802 (1.172 %) | 21 | 247–547 |
+| `c1-ai-wreck` | 10393 (1.128 %) | 21 | 209–535 |
+| `c1-flight` | 2314 (0.251 %) | 14 | 418–533 |
+
+The pattern is the evidence (GOLD-5): a control run driving the launcher's sun to 0.5 moved seven
+shots, and the four missing from this list are exactly the ones the mapping cannot reach.
+`viewer-bhawk` and `empty-stage` fly no mission and keep the default pair; `campaign-4p-grid` flies
+C1/M02, whose `zone1` authors diffuse 1.5, which is the anchor itself. No shot without an aircraft
+moved.
+
+**⚠ The ambient half of the mapping is inert, and this is measured.** With
+`AmbientLightSource.Sky` at the default full sky contribution, Godot takes the ambient off the sky
+cubemap scaled by the background energy multiplier, so `AmbientLightEnergy` never reaches the
+shader: taking the launcher's 0.9 to 0.0 left all 18 goldens byte-identical, while the same
+experiment on the sun moved seven. The write is landed and correct, and only the sun half is
+visible today. Recorded as `WORLD-32` in `docs/verification.md`. Whether the faithful path should
+stop taking its ambient from the sky stays the out-of-scope rendering-design question this item
+named, and it now has a measured consequence: an aircraft's ambient fill is the same procedural
+daytime sky at night as by day.
+
+**The night/day reference exists, but not the pair this section asked for.** `CAP-11` shipped
+original stills at C1B IA1 that show the airframe: `playtest/CAP-11/t0.5-c1b-spawn-island.png` and
+`t5-c1b-moon-clouds.png`, chase view, red Bloodhawk, reading deep maroon against the night island;
+`OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png` and its `2` are the same airframe
+at night from a different pose. The day half of that airframe is
+`playtest/CAP-11/t0.5-c2-spawn-city.png`, bright red over C2's suburb. So the original plainly does
+light a plane by the mission, and our own matched-pose `playtest/CAP-11/csvm-c1b-spawn.png` shows
+the defect: our plane reads brighter than the terrain it sits on where the original's does not.
+**C1C has no capture at all** (`CAP-11`'s README: unreachable in Instant Action), and CAP-11's own
+measurement boxes deliberately avoid the plane, so no shipped capture answers the A/B
+quantitatively. What is owed is a matched-pose pair in the original at **one airframe and one
+livery**, C1B IA1 at night against a C1C campaign mission by day, chase view, with our build shot
+at the same poses and the same paint pinned; the existing stills cannot be measured against ours
+because the liveries differ.
+
+**Original approach (kept for reference).**
 
 **Goal.** A plane flying C1B's night mission is visibly darker than the same plane in C1C's daylight,
 because the light driving it reads the mission's own `SUNLIGHT_DIFFUSE` and `SUNLIGHT_AMBIENT`.
