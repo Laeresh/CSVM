@@ -711,6 +711,13 @@ public sealed record SessionSpec
     public bool TexCensus { get; private set; }
     public string TexCensusFilter { get; private set; } = "";
 
+    /// <summary><c>--graphics=original|enhanced</c>. Null when not given, which lets the
+    /// <c>graphics.mode</c> config key supply the value instead — an explicit flag always beats
+    /// the config file, including under <c>--det</c>, so a golden or a deterministic capture can
+    /// still ask for the enhanced path on purpose. An unrecognised word is null with a warning
+    /// (kept, not treated as given), the same rule <c>--collision=</c> uses for a bad value.</summary>
+    public string? GraphicsMode { get; private set; }
+
     // ---- Everything else ------------------------------------------------------------------------
 
     public bool Mute { get; private set; }
@@ -1089,6 +1096,18 @@ public sealed record SessionSpec
             else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
+            else if (arg.StartsWith("--graphics="))
+            {
+                string want = arg["--graphics=".Length..];
+                if (Utils.GraphicsMode.TryParse(want, out _))
+                {
+                    s.GraphicsMode = want;
+                }
+                else
+                {
+                    notes.Add(new Note("world", $"--graphics={want} is not original/enhanced — keeping the config key's value"));
+                }
+            }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
             else if (arg == "--dump-ai") { s.DumpAi = true; }

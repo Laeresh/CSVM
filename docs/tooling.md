@@ -169,7 +169,11 @@ Switches: **`-Suite <name>[,<name>]`** (exact in-engine suite names), **`-Filter
 (engine suite names only — `-Filter weapons` runs `weapons-defs` + `weapons-fire`),
 **`-UnitFilter <expr>`** (straight into `dotnet test --filter`), **`-Shards <n>`**, **`-Quick`**, **`-SkipUnits`**,
 **`-SkipEngine`**, **`-SkipGoldens`**, **`-RegenGoldens`**, **`-GoldenWorkers <n>`**, **`-Hitch`**,
-**`-SkipHitch`**, **`-Perf`** (+ `-PerfLabel`, `-PerfCompare`, `-PerfFilter`, `-PerfIterations`, `-PerfFrames`).
+**`-SkipHitch`**, **`-Perf`** (+ `-PerfLabel`, `-PerfCompare`, `-PerfFilter`, `-PerfIterations`, `-PerfFrames`),
+**`-Graphics original|enhanced`** (default `original`, appends `--graphics=enhanced` to the perf
+and hitch launches only — goldens and the engine suites stay original-mode by construction, and
+`original` appends nothing, so the default launch argument lists are byte-identical to a run that
+omits the parameter).
 
 **Every stage prints its wall time against a budget, and a budget never fails a run.** The numbers
 live in `analysis/verification-budgets.json`, one lane for the complete gate and one for `-Quick`,

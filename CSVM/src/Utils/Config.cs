@@ -245,6 +245,10 @@ public static class Config
             // warmup runs.
             GetString(EffectsLevel.Key, EffectsLevel.Default);
             GetBool(EffectsLevel.FadeKey, EffectsLevel.FadeDefault);
+            // The enhanced-lighting mode key: also read once at launch (GraphicsMode.Resolve),
+            // registered here so --dump-config documents it even on a --graphics= launch, which
+            // bypasses this read.
+            GetString(GraphicsMode.Key, GraphicsMode.Default);
             // The start grid is constructed only by a multiplayer stunt race or a co-op campaign
             // mission, neither of which the warmup builds — register its two keys here so
             // --dump-config documents them on any launch.

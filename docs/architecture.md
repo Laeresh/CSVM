@@ -494,6 +494,63 @@ clusters they delegate to.
 ⚠ **Every formatted number uses `CultureInfo.InvariantCulture`.** A German-locale machine renders
   `0,5` and corrupts logs, reports and parsed round-trips (Probes/Log/StuntMission precedent).
 
+## Rendering: the enhanced graphics mode (a documented divergence)
+
+Enhanced graphics mode is an opt-in [Divergence] in the BL-555 sense: a deliberate, recorded
+departure from the original, never presented as the original's own behaviour. It is gated by
+`graphics.mode` (`original`/`enhanced`, default `original`, `src/Utils/GraphicsMode.cs`) or by an
+explicit `--graphics=` flag (`docs/cli.md`) that survives `--det`, so a golden or a deterministic
+capture can ask for the enhanced path on purpose while every ordinary `--det` run, including the
+full golden sweep, stays on `original`.
+
+Original mode's rendering does not move under this mode: enhanced mode replaces the fullbright
+world with real Godot lighting. The world shades under decoded, pre-negated vertex normals as a
+matte material (`SceneBuilder.cs`'s lit-world arm); a `DirectionalLight3D` and the Environment's
+ambient are driven from the mission's authored `SUNLIGHT_DIFFUSE`/`SUNLIGHT_AMBIENT` values and
+colours instead of the launcher's hardcoded numbers (`WeatherRig.cs`); the sun casts PSSM shadow
+maps, with each zone's authored fog pushed out 2x and the shadow's max distance following that
+pushed far so shadows never end in clear air; `LIGHT_STATE` point lights are mirrored onto real
+`OmniLight3D` nodes that light the world and the aircraft, not only a fullbright spill texture
+(`WorldLights.cs`); the light-source class of glow-arm sprites (flares, beacons, signal lamps)
+scales its colour above 1.0 to feed an Environment glow pass, and an AgX tonemap rolls the
+resulting HDR scene off instead of clipping it; SSAO adds contact shading in ambient light, and
+SSR reflects the shoreline off water surfaces the engine already classifies as `"water"`
+(`Launcher.cs`'s `SetupLighting`); the sky those water surfaces reflect where SSR finds nothing is
+the flown zone's own `FOG_COLOR`, painted flat over Godot's procedural placeholder
+(`Launcher.cs`'s `UseMissionSky`, `WeatherRig.WriteSkyColor`). ⚠ That needs a `Sky` resource: a
+background COLOUR gives the specular no radiance at all, which reads as a plausible improvement
+because it removes the placeholder rather than replacing it. The cockpit interior pass and every splitscreen pane pick up
+the same settings and the same per-zone updates, since both duplicate or share the session's own
+sun and Environment (`CockpitOverlay.cs`, `SplitScreen.cs`).
+
+**Original mode's byte identity is proven, not assumed.** Every item that touched a shader-key
+generator dumped every reachable key's generated `Shader.Code` before and after the change and
+compared file size and SHA-256 (A2, B11, C21, C24); every item also ran the full 18-shot golden
+sweep and reported zero movers. Neither instrument alone would catch everything: the shader dump
+catches a text change the goldens' camera poses never frame, and the goldens catch a runtime
+effect (a light, a tonemap curve) the shader text cannot show.
+
+**Recorded disproofs.** Two hoped-for identifications did not hold up. C5's lit windows are not a
+separable surface: they are bright texels inside `lighting: true` wall textures, so no per-surface
+rule can hold them at their authored brightness without also relighting the wall around them
+(C21). And the model-level `lighting: false` bit does not identify "the emissive population": its
+general, non-glow-sprite population is about half non-luminous (a cloud deck, both skydome
+textures, baked ground-shadow decals, tree and bush cards) mixed in with the genuinely self-lit
+signs and lamps, so scaling that whole population would bloom a cloud deck and a skydome (C21,
+census in `docs/org/vertexLighting.md`).
+
+**Open judgements.** The energy mapping from authored SUNLIGHT units to Godot light energies, the
+2x fog-range push and the shadow distance that follows it, the night key read off `FOG_COLOR`
+luminance with its 0.25 separator and its 0.6 / 0.15 energy cap (a proxy the original never uses:
+it lights from SUNLIGHT and darkens from FOG_COLOR independently), and SSR's hard mirror on
+wave-less water planes are all TUNE: judged at the controls against captures, not derived from a
+decoded rule. `docs/plans/PLAN-enhanced-graphics.md`'s Open judgements list is where the user's at-the-controls
+pass tracks them.
+
+The options menu exposes `graphics.mode` through the menu plan's own options store
+(`docs/PLAN-menu-presentations.md`); every reader in this codebase consults the resolved
+`GraphicsMode.Enhanced` boolean only, so that layer can be slotted in later without touching them.
+
 ## CSVM.Tests/
 The xUnit project `dotnet test` runs (net8.0, `ProjectReference` to `CSVM.csproj`): engine-free
 reader units (`Zrdr`, `WavFile`, `SoundDefs`, `WeaponDefs`, `Messages`, `SessionPaths`, `GameZ`
@@ -601,8 +658,23 @@ contract, and `GetBiasShader` for how the model's `lighting`/`fog` flags select 
 instead of driving a uniform. The mesh, material and collider memos are per builder, since every
 override is baked into what they hold; the three SHADER memos are process-wide, because a generated
 text is a pure function of its key and Godot charges a compile for each fresh `Shader` a material
-takes (`docs/verification.md` PERF-22). Format/decode: docs/formats/gamez.md,
-docs/formats/world-structure.md, docs/formats/gotchas.md.
+takes (`docs/verification.md` PERF-22). Each of the three keys also carries `GraphicsMode.Enhanced`
+as its own bit. In enhanced mode `GetBiasShader`'s world arm for a surface authored `lighting: true`
+drops `unshaded` and shades off the decoded normals (pre-negated for `cull_front`) as a matte
+material, keeping the gamma modulate and the fog while dropping the `csky_world_light` multiply and
+the LIGHT_STATE spill; `lighting: false` surfaces and both billboard generators stay fullbright. That
+lit arm writes its fog ramp through the spatial shader's post-lighting `FOG` output instead of into
+`ALBEDO`, so the fog colour is never itself lit and a fully fogged fragment lands on the same value
+the fullbright arm's mix gives. In enhanced mode the two billboard generators' `glow` arm (the
+original's own camera-facing light-source
+class, plus the flare/fire/flame cylindrical facades) additionally scales its colour by
+`EmissiveScale` so the pixels exceed 1.0 for the glow pass; those arms are `unshaded`, where Godot
+discards EMISSION, so the scale is applied to the colour. Inside that lit world arm, a surface
+`ClassifySurface` calls water takes `WaterRoughness`/`WaterSpecular` in place of the matte values,
+which is what `Launcher.EnableWaterReflections`' screen-space reflection has to march against. See
+"Rendering: the enhanced graphics mode" above for the divergence record as a whole.
+Format/decode: docs/formats/gamez.md, docs/formats/world-structure.md, docs/formats/gotchas.md,
+docs/org/vertexLighting.md (the lighting-bit census enhanced mode's glow arm is keyed on).
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
@@ -1023,7 +1095,12 @@ uniform is session-global (a lit light is lit for every pane), but `Commit`'s 90
 its `MaxActive`-slot significance rank both answer to the NEAREST of every viewer position handed
 in, not one camera — a light beside player 4 stays lit even with player 1 far away (`BL-366`;
 `AnimRuntime.LightViewerPositions`, fed from `GameSession`'s `ViewerSet`). One position (single
-player) uses the single-viewer distance rule exactly.
+player) uses the single-viewer distance rule exactly. Given a parent `Node3D` (`WorldSession`
+passes its world root) and enhanced mode, the same `Commit` also mirrors `_pending[0..n)` onto a
+pooled `OmniLight3D` per committed light (position, `OmniRange` from range max, colour and energy
+from the already-faded linear colour), so the lit world and the aircraft receive the light for
+real; original mode passes no parent and spawns nothing. See "Rendering: the enhanced graphics
+mode" above for the divergence record as a whole.
 
 ## src/Pads.cs
 Single source of truth for gamepads — every reader goes through it, never `Input.GetConnectedJoypads()`.
@@ -2088,10 +2165,16 @@ zero, since those two cancel between the eye and the panel. The projection is th
 world's exactly, computed from small numbers instead of chapter-scale ones. The viewport is
 transparent-backed on `HudLayers.CockpitPass`, so the world draws under the panel and the whiteout,
 the screen wash and the HUD still draw over it. Lighting is a copy of the world's sun, re-aimed by
-the inverse plane attitude each frame, plus the world environment duplicated with its background
-cleared. `GameSession.BuildCockpitPasses` builds one per `PlayerRig`, on that rig's own `HudParent`;
-`FlightController._Process` calls `Sync` beside the camera write, and `Sync` follows the interior's
-own `Visible` so `CockpitVisibility` keeps deciding which views show a cockpit.
+the inverse plane attitude each frame, plus a `Duplicate()` of the world Environment. In enhanced
+graphics mode the clone also copies every shadow setting off the live sun (mode, splits, blend,
+biases), clamping `DirectionalShadowMaxDistance` to the pass's own 100 m camera far plane rather
+than the zone's kilometre-scale value; `GameSession.BuildCockpitPasses` then registers the clone
+with `WeatherRig.RegisterExtraLighting` so a later zone change reaches it too, alongside the
+session sun. Original mode is untouched: the clone's `ShadowEnabled` mirrors the live sun's, which
+never turns on there. `GameSession.BuildCockpitPasses` builds one per `PlayerRig`, on that rig's own
+`HudParent`; `FlightController._Process` calls `Sync` beside the camera write, and `Sync` follows
+the interior's own `Visible` so `CockpitVisibility` keeps deciding which views show a cockpit.
+See "Rendering: the enhanced graphics mode" above for the divergence record as a whole.
 
 ## src/Flight/ImpactOutcome.cs
 "What should happen when this weapon hits this surface id" as a value — `EffectName` (the row's
@@ -3113,7 +3196,8 @@ because the mission's waves, ace and zeppelin cannot be put back in place.
 `WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone
 `ZoneWeather` records holding fog (`FOG_COLOR`/`FOG_RANGES`/`FOG_ALTITUDE`), `SUNLIGHT_*` →
 `WorldLight` (`SunIncidence` 0.46 / `MinWorldLight` 0.15, TUNE) and `SUNLIGHT_ORIENTATION` →
-`SunOrientation`, plus the `CLOUD_COVER` whiteout band (`WhiteoutAmount` trapezoid), `WIND`, and
+`SunOrientation`, the same block's uncollapsed `SunDiffuse`/`SunAmbient` and their two colours
+(what the enhanced lighting drives a real sun from), plus the `CLOUD_COVER` whiteout band (`WhiteoutAmount` trapezoid), `WIND`, and
 precipitation → `PrecipData`. Schema + colours + zone names: weather.md.
 **The original's weather/sky/fog/light runtime is written up in [org/weather.md](org/weather.md)** —
 the camera weather state machine, the `zone_id` visibility gate, the zone apply's edge trigger, the
@@ -4698,7 +4782,11 @@ since W, A, S and D are letters there and the combined axes would move the curso
 ## src/UI/SplitScreen.cs
 The splitscreen rig for 2–4 players (1P never constructs it, keeping that path untouched): black
 gutter backdrop, one `SubViewport` pane per player sharing the main `World3D`, plus the
-`PlayerColor`/`PlayerTag` identity table.
+`PlayerColor`/`PlayerTag` identity table. Sharing the main `World3D` means every pane also shares
+the one sun and WorldEnvironment, so enhanced graphics mode's lighting, shadows and per-zone updates
+reach every pane with no pane-local plumbing; each pane computes its own directional shadow splits
+off its own camera, and `PositionalShadowAtlasSize` is moot since no omni casts a shadow (B14).
+See "Rendering: the enhanced graphics mode" above for the divergence record as a whole.
 **The pinned 3D audio listener model (2026-08-15): every pane is a listener**
 (`AudioListenerEnable3D`). Godot 4.7 takes the per-channel MAXIMUM over all listener-enabled
 viewports of the `World3D` and culls `max_distance` per listener, so an emitter is heard at its
@@ -5797,6 +5885,34 @@ own flush interval to write down what it already has queued.
 Measured render time is enabled once in `_Ready` (`ViewportSetMeasureRenderTime`) rather than per
 frame from `ReportPerf`, because the hitch record needs the CPU/GPU split on every run, not only a
 `--perf` one.
+`SetupLighting` keeps `_sun.ShadowEnabled = false` in the faithful path and calls `EnableSunShadows`
+in enhanced graphics mode only: PSSM 4 splits, blended, splits 0.06/0.17/0.42, bias 0.05 and normal
+bias 1.25 (TUNE, the pair judged against acne at C1's 25 degree sun and against peter-panning of the
+biased road decals), `LightAngularDistance` 2.0 degrees so a cast edge on flat water reads as a soft
+penumbra rather than a hard line, and a `DirectionalShadowMaxDistance` that is a FALLBACK: a flown mission
+overwrites it per zone from that zone's pushed-out fog far (`WeatherRig`). The world meshes and the
+aircraft are the only casters; every other population is already `ShadowCastingSetting.Off` or
+declares `shadows_disabled` in its shader. The front-culled world needs no `DoubleSided` casting:
+the source's visible side is Godot's back face, which is the face the sun sees. `EnableWaterReflections`
+is the same mode gate on the Environment's SSR, for the one glossy population `SceneBuilder` builds;
+what it can and cannot reflect is measured in `docs/plans/PLAN-enhanced-graphics.md` C24.
+`UseMissionSky` is the same mode gate on the Environment's sky: enhanced mode swaps Godot's
+placeholder `ProceduralSkyMaterial` for a flat `PanoramaSkyMaterial` carrying one colour, which
+`WeatherRig` rewrites per zone from that zone's `FOG_COLOR`, and takes the ambient off the sky so
+the authored `SUNLIGHT_AMBIENT` keeps it. The faithful path keeps the procedural sky, which it
+never shows: the dome is gamez geometry drawn over the background.
+`SetupLighting` also sets SSAO on the enhanced `_env` (radius 2.5, intensity 2.0, power 1.5, detail
+0.5, horizon 0.06, sharpness 0.98; all TUNE for this world's street-canyon scale). The faithful path
+never enables it, since SSAO reads ambient light and the unshaded path has none for it to modulate.
+`CockpitOverlay.NewOverlay` duplicates `_env` at build time, so the interior pass inherits the same
+settings automatically.
+`EnableGlowAndTonemap` is the same mode gate for `_env`'s glow and tonemap: `GlowHdrThreshold` 1.0
+with `GlowBloom` 0 so only the glow-arm sprites (`SceneBuilder`'s `col.rgb * 1.5`, the only pixels
+enhanced mode pushes above 1.0) bloom; `TonemapMode` AgX with its own white/contrast pair recovers
+the day chapters' far-ridge washout instead of clipping it (all TUNE, judged against C1/C4/C5
+captures in `docs/plans/PLAN-enhanced-graphics.md` C22). `CockpitOverlay`'s duplicated `_env` inherits
+this too, so the interior pass tonemaps once, the same as the world pass. See "Rendering: the
+enhanced graphics mode" above for the divergence record as a whole.
 Vsync resolves at the same `_Ready` site as the shader clock / `--perf` tick: `display.vsync`
 config key (default true) or `--no-vsync`, the flag always beating the key.
 The config read is unconditional even when the flag already decided, so the key still registers
@@ -6885,7 +7001,34 @@ written its zone): it writes only the fields the event carries onto the same fog
 next zone edge writes the zone back over it, the original's last-writer order. `FogGlobals` mirrors
 the last writes, since the renderer refuses to read a global back outside the editor. Proven by
 `CSVM.Tests/FogZoneStateTests.cs`, `DeckRegimeTests.cs`, `FlatColorTests.cs`,
-`FogVolumeWhiteoutTests.cs`, `BandFlickerTests.cs` and the `fog-state` suite.
+`FogVolumeWhiteoutTests.cs`, `BandFlickerTests.cs` and the `fog-state` suite. In enhanced graphics
+mode `ApplyZone` also drives the real sun and the Environment ambient from the zone's uncollapsed
+`SUNLIGHT_DIFFUSE`/`AMBIENT` and their colours (`EnhancedEnergies`, pinned by
+`CSVM.Tests/SunlightEnergyTests.cs`), and neutralises `csky_world_light` to 1.0 so the fullbright
+dimming does not land twice; original mode's path is unchanged. A zone whose authored `FOG_COLOR`
+is near-black is treated as a night zone (`IsNightZone`), which caps those two energies at the
+install's own night pair; every day zone is untouched. `WriteSkyColor` then paints the Environment's
+sky the zone's own `FOG_COLOR` as a flat panorama, so the water's specular reflects the mission's
+authored sky at every zone rather than a placeholder gradient (census in
+[org/weather.md](org/weather.md)).
+Enhanced mode also pushes the fog out. `FogRangeFor` scales a zone's authored near/far by
+`EnhancedFogRangeScale` (2.0, TUNE) and is identity in original mode; both fog-range writers
+(`ApplyZone` and `ApplyFogState`) go through it, so a FOG_STATE edge cannot snap the haze back to
+the authored distance mid-flight. The scaled NEAR (where the ramp starts, not the far edge of the
+haze) then drives the one session sun's `DirectionalShadowMaxDistance`, with `DirectionalShadowFadeStart`
+fading the last cascade out before that distance, so a shadow is gone before the ramp begins rather
+than running through it. Nothing else scales: the whiteout and cloud band read CLOUD_COVER altitudes, the zone
+gate is a `zone_id` cull mask with no distance in it, `WorldLights` fades on its own 900/1500 m
+pair, the skydome is fitted from the camera's far plane, and `ZoneWeather.ClipFar` is parsed and
+logged but reaches no consumer (the camera far plane is `Launcher`'s fixed 40000 m, past every
+pushed fog far).
+`RegisterExtraLighting` takes a second (sun, env) pair — the cockpit overlay's own clones — and
+`ApplyEnhancedLighting` writes the same energies and colours onto every registered pair beside the
+session sun/env, so a zone crossing mid-flight reaches the interior pass too. The shadow max
+distance is deliberately excluded from that mirroring: a registered clone owns its own
+camera-relative distance, set once at registration (`CockpitOverlay`'s 100 m far plane). The
+energy mapping and the fog-range scale are both open TUNE judgements; see "Rendering: the
+enhanced graphics mode" above.
 
 ## src/Session/LensFlareRig.cs
 The sun's lens flare: four screen-space sprites strung along the sun→screen-centre vector at
@@ -6916,7 +7059,26 @@ A second key, `graphics.clutterFarFade` (bool, default `true`), is the remake's 
 than an engine option: `false` resolves the same global to 0, which is a never-fades scale because
 the shader multiplies it into the squared camera distance, so no stamp reaches its near² and
 clutter draws out to the fog instead of ending at the authored metres. Both keys and the resolved
-scale are on the `[world] clutter fade:` launch line.
+scale are on the `[world] clutter fade:` launch line. Enhanced mode pushes the resolved scale by
+`WeatherRig.EnhancedFogScale()` squared, so clutter reaches as far as the pushed fog instead of
+standing at its authored distance underneath it; original mode's factor is identity, so its value
+is unchanged. `MapEdgeExtender`'s own clutter continuation shares this same global, so it follows
+without its own code.
+
+## src/Utils/GraphicsMode.cs
+The opt-in enhanced-lighting mode's config key, `graphics.mode` (`original`/`enhanced`, default
+`original`), resolved once by `Launcher._Ready` beside `EffectsLevel` into the single boolean
+`GraphicsMode.Enhanced` every later scene builder reads, rather than each reader querying `Config`
+itself — a future options-store layer (the menu plan's process-wide settings file) is the intended
+future source of the user-facing value, and this indirection is what lets that land without
+touching the readers. `--graphics=original|enhanced` (`docs/cli.md`) beats the config key outright,
+including under `--det`: `--det`'s `Config.ClearOverrides` (`Launcher.cs`) drops a `graphics.mode`
+config override the same way it drops `EffectsLevel`'s, since the resolution runs after that block,
+while an explicit `--graphics=` is carried on `SessionSpec` and never touches `Config`, so it
+survives `--det` and is the mechanism a golden or a deterministic capture uses to pin the mode on
+purpose. An unknown word on either source warns and falls back to `original`. Announced on the
+`[world] graphics mode:` launch line beside the clutter-fade line. The whole mode is written up as
+a divergence in "Rendering: the enhanced graphics mode" above.
 
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on

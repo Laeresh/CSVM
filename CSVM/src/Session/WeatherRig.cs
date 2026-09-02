@@ -20,6 +20,47 @@ namespace CSVM.Session;
 /// docs/org/weather.md.</summary>
 public sealed class WeatherRig
 {
+    // ⚠ TUNE, judged at the controls: the authored SUNLIGHT numbers are the original's own
+    // lighting units, not Godot energies. Both factors are anchored on the install's modal day
+    // zone (diffuse 1.5, ambient 0.5) landing on the 1.6 and 0.9 the faithful path hardcodes, so
+    // a day mission keeps today's level while the data alone carries C1B's night zone
+    // (0.6 / 0.15) down to 0.64 and 0.27.
+    private const float SunEnergyPerDiffuse = 1.07f;
+    private const float AmbientEnergyPerAuthored = 1.8f;
+
+    // ⚠ TUNE, enhanced mode only, and a PROXY the original never uses: it lights from SUNLIGHT and
+    // darkens from FOG_COLOR independently, so nothing in the game reads one off the other. What
+    // licenses it is that the two populations do not overlap: every zone under a night sky authors
+    // a fog luminance of 0.00 to 0.10 and every day zone 0.69 to 0.85, with nothing between across
+    // all 212 blocks. See docs/org/weather.md for the census.
+    private const float NightFogLuminance = 0.25f;
+
+    // ⚠ TUNE, and the install's OWN night pair (C1B's night zones, SUNLIGHT 0.6 / 0.15), used as a
+    // ceiling rather than a replacement: a night zone gets at most the light a night zone authors,
+    // so C5's day-level 1.5 / 0.5 under a black sky stops lighting the city like noon while a zone
+    // already authored dimmer keeps its own values.
+    private const float NightDiffuseCap = 0.6f;
+    private const float NightAmbientCap = 0.15f;
+
+    // The flat sky panorama's size, enhanced mode only. One texel would do for a colour that is
+    // uniform in every direction; a few keeps the equirectangular sampler and its mip chain off
+    // the degenerate case for nothing.
+    private const int SkyPanoramaWidth = 8;
+    private const int SkyPanoramaHeight = 4;
+
+    // ⚠ TUNE, judged at the controls, and enhanced mode ONLY. Shadowed ground reads badly through
+    // the authored haze: a cast shadow needs contrast to be seen at all, and the zones put full fog
+    // close enough that half of every shadow is already grey. Pushing near and far out together
+    // keeps the ramp's shape (and so the horizon's look) while giving the shadowed range clear air
+    // to live in. The faithful path keeps the authored ranges exactly, per the prohibition in
+    // ApplyZone.
+    private const float EnhancedFogRangeScale = 2f;
+
+    // TUNE, judged at the controls. The last shadow cascade fades out over this fraction of the
+    // sun's DirectionalShadowMaxDistance rather than cutting at a hard edge, so a shadow reads as
+    // dissolving into the coming haze instead of vanishing the frame before it starts.
+    private const float EnhancedShadowFadeStart = 0.8f;
+
     // ⚠ TUNE, and the FALLBACK only — a mission that authors CLOUD_COVER colours overrides it
     // (WeatherState.WhiteoutColor). It holds because the three reachable-band chapters that author
     // nothing measure right at this value: the original's C1 in-cloud interior reads 248 against
@@ -48,6 +89,10 @@ public sealed class WeatherRig
     // SetFogVolumes, because ApplyZone cannot do its job without it — the others are optional
     // refinements to a rig that already works, this is not.
     private readonly DirectionalLight3D _sun;
+    // The session's one Environment, written only by the enhanced lighting arm (ambient source,
+    // colour and energy). Optional because the suites build rigs without one, and because a rig
+    // in original mode never touches it.
+    private readonly Godot.Environment? _env;
     // One rig's deck tiles and which variant they currently carry, keyed by the deck node's
     // instance id — per rig, because each rig flies its own copy of the deck (AssignCloudDecks)
     // through its own altitude regime.
@@ -60,6 +105,10 @@ public sealed class WeatherRig
     // engaged and how hard, without a line every frame. Only the crossings of the 0/non-0 boundary
     // and moves of 0.05 or more are said out loud.
     private readonly Dictionary<int, float> _lastLoggedVolumeWhiteout = new();
+    // Extra (sun, env) pairs that mirror the session sun and Environment in enhanced mode — the
+    // cockpit overlay's own clones, registered once each is built, so a zone crossing mid-flight
+    // reaches the interior pass too rather than leaving it lit for the mission's first zone.
+    private readonly List<(DirectionalLight3D Sun, Godot.Environment? Env)> _extraLighting = new();
 
     private WeatherState? _weather;
     private string _activeZone;
@@ -104,11 +153,12 @@ public sealed class WeatherRig
     private AnimRuntime.FogStateChange? _pendingFogState;
 
     public WeatherRig(SessionSpec spec, Node3D worldRoot, DirectionalLight3D sun,
-        EffectAmbience? ambience = null, ViewerSet? viewers = null)
+        EffectAmbience? ambience = null, ViewerSet? viewers = null, Godot.Environment? env = null)
     {
         _spec = spec;
         _worldRoot = worldRoot;
         _sun = sun;
+        _env = env;
         _activeZone = spec.SkyZone;
         _ambience = ambience ?? new EffectAmbience();
         _viewers = viewers ?? new ViewerSet();
@@ -140,6 +190,60 @@ public sealed class WeatherRig
         int n = zoneName[^1] - '0';
         return n >= 1 && n <= ZoneGate.MaxZoneId ? n : null;
     }
+
+    /// <summary>The enhanced-mode Godot energies for one zone's authored SUNLIGHT: the sun's
+    /// <c>LightEnergy</c> and the Environment's <c>AmbientLightEnergy</c>. Pure, so the mapping is
+    /// pinnable without a live scene, and so a viewport holding its own copy of the sun can
+    /// resolve the same numbers.</summary>
+    public static (float Sun, float Ambient) EnhancedEnergies(WeatherState.ZoneWeather fog)
+    {
+        bool night = IsNightZone(fog);
+        float diffuse = night ? MathF.Min(fog.SunDiffuse, NightDiffuseCap) : fog.SunDiffuse;
+        float ambient = night ? MathF.Min(fog.SunAmbient, NightAmbientCap) : fog.SunAmbient;
+        return (diffuse * SunEnergyPerDiffuse, ambient * AmbientEnergyPerAuthored);
+    }
+
+    /// <summary>Whether a zone's authored <c>FOG_COLOR</c> puts it under a night sky, which is
+    /// what caps its enhanced energies. Pure and public so the rule can be pinned and so a log
+    /// line can say which side of it a zone fell on.</summary>
+    public static bool IsNightZone(WeatherState.ZoneWeather fog)
+        => (0.2126f * fog.FogColor.R) + (0.7152f * fog.FogColor.G) + (0.0722f * fog.FogColor.B)
+           < NightFogLuminance;
+
+    /// <summary>The fog range as written: the authored pair in the faithful path, pushed out by
+    /// <c>EnhancedFogRangeScale</c> in enhanced mode so shadowed ground is not already grey. Pure
+    /// and identity in original mode, which is what keeps that path byte-for-byte the authored
+    /// one.</summary>
+    public static Vector2 FogRangeFor(Vector2 authored)
+        => GraphicsMode.Enhanced ? authored * EnhancedFogRangeScale : authored;
+
+    /// <summary>The push factor <see cref="FogRangeFor"/> applies as a plain scalar (identity, 1,
+    /// in original mode), so another distance-gated population can follow the same pushed fog
+    /// without this class exposing <c>EnhancedFogRangeScale</c> itself.</summary>
+    public static float EnhancedFogScale() => GraphicsMode.Enhanced ? EnhancedFogRangeScale : 1f;
+
+    /// <summary>Paints one Environment's sky a single flat colour, enhanced mode's stand-in for
+    /// the mission's horizon dome. Godot draws a reflection off a <c>Sky</c> resource only, so the
+    /// colour goes in as a panorama; a background colour alone leaves the specular with no radiance
+    /// at all. Public because <c>Launcher</c> builds the Environment.
+    /// ⚠ Float format and an explicit linear value: an 8-bit texture's sRGB decode is the
+    /// renderer's choice, and a wrong one shifts every reflection.</summary>
+    public static void WriteSkyColor(Godot.Environment env, Color skyColor)
+    {
+        if (env.Sky?.SkyMaterial is not PanoramaSkyMaterial panorama)
+            return;
+        var image = Image.CreateEmpty(SkyPanoramaWidth, SkyPanoramaHeight, false, Image.Format.Rgbaf);
+        image.Fill(skyColor.SrgbToLinear());
+        panorama.Panorama = ImageTexture.CreateFromImage(image);
+    }
+
+    /// <summary>Registers a second (sun, env) pair — a cockpit overlay's cloned copies — so every
+    /// future enhanced-mode zone change reaches it too, not only the zone live when it was built.
+    /// <paramref name="env"/> may be null (a suite rig with no Environment); the shadow max
+    /// distance is excluded, since a clone's camera has its own far plane to respect
+    /// (<c>CockpitOverlay</c>).</summary>
+    public void RegisterExtraLighting(DirectionalLight3D sun, Godot.Environment? env)
+        => _extraLighting.Add((sun, env));
 
     /// <summary>Loads the mission's weather.json and resolves the rendered zone, builds the
     /// per-rig domes via <paramref name="buildDomes"/> (needs the resolved zone), then applies
@@ -177,7 +281,9 @@ public sealed class WeatherRig
             WriteFogColor(new Vector3(linear.R, linear.G, linear.B));
         }
         if (fog.Range is { } range && !_spec.NoFog)
-            WriteFogRange(range);
+            // Through the same push the zone's range takes, or crossing a FOG_STATE edge in
+            // enhanced mode would snap the haze back to the authored distance mid-flight.
+            WriteFogRange(FogRangeFor(range));
         if (fog.Altitude is { } altitude)
             WriteFogAltitude(altitude);
         GD.Print($"weather: FOG_STATE '{fog.Name}' over zone '{_activeZone}': "
@@ -385,9 +491,23 @@ public sealed class WeatherRig
                 GD.Print($"weather: camera state {change.State} -> fog zone '{change.Zone}' — "
                          + $"fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, "
                          + $"world light {fog.WorldLight:0.00}, sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}°/"
-                         + $"{Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° (dome built for '{_activeZone}')");
+                         + $"{Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° (dome built for '{_activeZone}')"
+                         + EnhancedLightSuffix(fog));
             }
         }
+    }
+
+    // The resolved enhanced energies said out loud beside the world light they replace, so a zone
+    // log says which lighting the flight got. Empty in original mode, where nothing reads them.
+    private static string EnhancedLightSuffix(WeatherState.ZoneWeather fog)
+    {
+        if (!GraphicsMode.Enhanced)
+            return string.Empty;
+        (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
+        return $"; enhanced sun energy {sunEnergy:0.00} (diffuse {fog.SunDiffuse:0.##}), "
+               + $"ambient energy {ambientEnergy:0.00} (ambient {fog.SunAmbient:0.##}), "
+               + $"shadows to {FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).X:0} m"
+               + (IsNightZone(fog) ? "; night zone, energies capped" : string.Empty);
     }
 
     // "zone2 0 meshes, zone1 3 meshes" — the evidence the pick was made on, not just its result.
@@ -397,6 +517,27 @@ public sealed class WeatherRig
         foreach (var z in horizonZones)
             counts.Add($"{z.Name} {z.MeshedNodes} meshes");
         return counts;
+    }
+
+    // The energy/colour half of ApplyEnhancedLighting, shared by the session sun/env and every
+    // registered clone, so the two can never drift onto different formulas.
+    private static void ApplyEnhancedSunAndEnv(DirectionalLight3D sun, Godot.Environment? env,
+        float sunEnergy, Color sunColor, float ambientEnergy, Color ambientColor, Color skyColor)
+    {
+        sun.LightEnergy = sunEnergy;
+        sun.LightColor = sunColor;
+        if (env == null)
+            return;
+        // The zone's own FOG_COLOR, which is the colour its horizon dome fades into and measures
+        // within a few units of that dome as drawn (docs/org/weather.md). Glossy water reflects
+        // this rather than a placeholder gradient, so a night zone mirrors its own sky.
+        WriteSkyColor(env, skyColor);
+        env.ReflectedLightSource = Godot.Environment.ReflectionSource.Bg;
+        // ⚠ Take the ambient off the sky: AmbientSource.Sky reads the placeholder procedural sky,
+        // not the mission's authored ambient colour, and would ignore both values written here.
+        env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
+        env.AmbientLightColor = ambientColor;
+        env.AmbientLightEnergy = ambientEnergy;
     }
 
     // Says out loud that one rig's in-volume whiteout engaged, and how hard — the
@@ -579,7 +720,8 @@ public sealed class WeatherRig
                  $"(authored {fog.FogNear:0}–{fog.FogFar:0}), " +
                  $"altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; " +
                  $"sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}° pitch / {Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° yaw; " +
-                 $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})");
+                 $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})"
+                 + EnhancedLightSuffix(fog));
         if (_fogWhiteout.Armed)
         {
             // Said out loud once per session, because "the curtain never fired" and "the chapter
@@ -604,12 +746,12 @@ public sealed class WeatherRig
         // space, so convert here. See docs/org/weather.md for the 176-gray measurement.
         var fogLinear = fog.FogColor.SrgbToLinear();
         WriteFogColor(new Vector3(fogLinear.R, fogLinear.G, fogLinear.B));
-        // ⚠ Do not scale the authored fog ranges. VIEWING_RANGE ships FOG_SCALE 1.0 at HIGH in
-        // every chapter, and no screenshot residual licenses re-opening it — see
-        // docs/org/weather.md.
+        // ⚠ Do not scale the authored fog ranges in the FAITHFUL path: VIEWING_RANGE ships
+        // FOG_SCALE 1.0 at HIGH in every chapter and no screenshot residual licenses re-opening it
+        // (docs/org/weather.md). FogRangeFor is identity there; only enhanced mode pushes them out.
         var fogRange = _spec.NoFog
             ? new Vector2(1e8f, 1e9f)   // out of reach; --no-fog writes the range, not the unused csky_fog_on toggle
-            : new Vector2(fog.FogNear, fog.FogFar);
+            : FogRangeFor(new Vector2(fog.FogNear, fog.FogFar));
         WriteFogRange(fogRange);
         // FOG_ALTITUDE: the fog cylinder's vertical extent — full fog below FogLow, fading to
         // none at FogHigh (FRAGMENT altitude, settled in C2 at the controls of the original —
@@ -624,7 +766,31 @@ public sealed class WeatherRig
         // It shades aircraft only; the world is fullbright and casts no shadow from it.
         // ⚠ One light for the whole session: in splitscreen both panes wear rig 0's zone.
         _sun.Rotation = fog.SunOrientation;
+        if (GraphicsMode.Enhanced)
+            ApplyEnhancedLighting(fog);
         return fogRange;
+    }
+
+    // Enhanced mode only: the authored SUNLIGHT drives a real sun and the Environment ambient
+    // rather than the fullbright dimming scalar, which is written back to 1.0 so the billboards
+    // and clutter that still read the global are not dimmed a second time.
+    private void ApplyEnhancedLighting(WeatherState.ZoneWeather fog)
+    {
+        RenderingServer.GlobalShaderParameterSet("csky_world_light", 1f);
+        // Shadows end where this zone's haze BEGINS, off the AUTHORED near, so a shadow fades out
+        // before the ramp rather than mixing with it (docs/architecture.md). The session sun only:
+        // a registered clone owns its own camera-relative distance (RegisterExtraLighting).
+        if (fog.FogFar > 0f)
+        {
+            _sun.DirectionalShadowMaxDistance = FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).X;
+            _sun.DirectionalShadowFadeStart = EnhancedShadowFadeStart;
+        }
+        (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
+        ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, fog.SunColorDiffuse, ambientEnergy,
+            fog.SunColorAmbient, fog.FogColor);
+        foreach (var (sun, env) in _extraLighting)
+            ApplyEnhancedSunAndEnv(sun, env, sunEnergy, fog.SunColorDiffuse, ambientEnergy,
+                fog.SunColorAmbient, fog.FogColor);
     }
 
     // The per-rig whiteout overlays and the mission's precipitation field — the half of

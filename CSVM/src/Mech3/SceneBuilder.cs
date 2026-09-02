@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -241,6 +242,29 @@ void fragment() {
     // distance leaves the authored +-49 range intact at that scale and cannot approach the near
     // plane. No unscaled surface comes near it (49 levels is 0.0098), so scale 1 is untouched.
     private const float MaxScaledBias = 0.25f;
+    // Enhanced mode only: how far above 1.0 a surface the original draws as a light source (a glow
+    // flare, a street lamp, a flame) writes its colour, so the glow pass has something to bloom.
+    // TUNE, judged at the controls: above 1.0 is what triggers the bloom at all, and the value
+    // decides how far it spreads. ⚠ Only the light-source arms take it; the general `lighting:
+    // false` population is not emissive (docs/org/vertexLighting.md).
+    private const float EmissiveScale = 1.5f;
+    // Enhanced mode only: what a surface <see cref="ClassifySurface"/> calls water gets instead of
+    // the matte world values, so screen-space reflection has a glossy surface to march against.
+    // TUNE, judged at the controls: roughness sets how far a reflection smears, specular how much
+    // of it survives at a glancing angle.
+    private const float WaterRoughness = 0.1f;
+    private const float WaterSpecular = 0.5f;
+    // ⚠ Format every scale invariantly; a comma decimal separator emits shader text that will not
+    // compile. Godot discards EMISSION on an `unshaded` material and the glow pass reads the HDR
+    // colour buffer, so these arms reach it by scaling the colour rather than by writing EMISSION.
+    private static readonly string EmissiveLiteral =
+        EmissiveScale.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static readonly string WaterRoughnessLiteral =
+        WaterRoughness.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static readonly string WaterSpecularLiteral =
+        WaterSpecular.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
 
     // ⚠ Process-wide, not per builder: Godot compiles a Shader the first time a material takes it,
     // and each generated text is a pure function of its key, so a per-builder memo made every later
@@ -1282,7 +1306,7 @@ void fragment() {
                 RegisterCycle(src, billboard); // same albedo_tex, see GetCylindricalMaterial
                 return billboard;
             }
-            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade);
+            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, ClassifySurface(texName) == "water");
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);
             return textured;
@@ -1316,7 +1340,7 @@ void fragment() {
     // The per-node draw-order term is added at instance level (see BuildSubtree).
     private ShaderMaterial BiasMaterial(int priority, int rank, bool noClutter, bool doubleSided, ImageTexture? tex,
         Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0,
-        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false)
+        UvClampAxes edgeClamp = UvClampAxes.None, bool clutterFade = false, bool water = false)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
         bool scrolls = tex != null && scroll != Vector2.Zero;
@@ -1325,7 +1349,7 @@ void fragment() {
         var mat = new ShaderMaterial
         {
             Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor, doubleSided,
-                scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade),
+                scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water),
         };
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         if (noClutter)
@@ -1354,13 +1378,24 @@ void fragment() {
     // rather than driving a uniform on purpose: a lit, fogged surface then emits byte-for-byte
     // the shader text it always did, so honouring the flags cannot perturb the overwhelming
     // majority of the world through float rounding in a mix().
+    // Key bits: 1/2/4/8/16/32/64 the flags above, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048
+    // clutterFade, 4096 DebugClutterFlag, 8192 enhanced, 16384 enhanced water; next free 32768.
     private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
-        bool clutterFade = false)
+        bool clutterFade = false, bool water = false)
     {
+        // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
+        // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
+        // fullbright arm, so `fullbright` rather than `!shaded` selects the terms that arm owns.
+        bool worldLit = GraphicsMode.Enhanced && !shaded && lit;
+        bool fullbright = !shaded && !worldLit;
+        // ⚠ The water arm exists only inside the lit world arm, so original mode never sets its key
+        // bit and its shader text cannot move.
+        bool waterLit = worldLit && water;
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
-            | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (DebugClutterFlag ? 4096 : 0);
+            | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (DebugClutterFlag ? 4096 : 0)
+            | (GraphicsMode.Enhanced ? 8192 : 0) | (waterLit ? 16384 : 0);
         if (BiasShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -1371,7 +1406,7 @@ void fragment() {
         sb.Append(doubleSided
             ? "render_mode skip_vertex_transform, cull_disabled"
             : "render_mode skip_vertex_transform, cull_front");
-        if (!shaded)
+        if (fullbright)
             sb.Append(", unshaded");
         sb.AppendLine(";");
         sb.AppendLine("uniform float depth_bias = 0.0;");
@@ -1388,7 +1423,7 @@ void fragment() {
             sb.AppendLine(ClutterFadeInclude);
             sb.AppendLine("varying flat float v_clutter_alpha;");
         }
-        if (!shaded)
+        if (fullbright)
             sb.AppendLine(LightsInclude); // LIGHT_STATE spill — fullbright passes only
         if (textured)
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the air,
@@ -1411,15 +1446,15 @@ void fragment() {
             sb.AppendLine("uniform vec2 uv_edge_inset = vec2(0.0);");
         if (!textured)
             sb.AppendLine("uniform vec4 albedo_color : source_color = vec4(1.0);");
-        // Fullbright world only: the original's DX7 pipeline multiplied texture × baked vertex
-        // colour in GAMMA space, so linearising the vertex colour first reproduces that product
+        // Both world arms: the original's DX7 pipeline multiplied texture × baked vertex colour in
+        // GAMMA space, so linearising the vertex colour first reproduces that product
         // (docs/formats/gotchas.md). A linear multiply washes out every baked-dark corner.
         if (!shaded)
             sb.AppendLine(SrgbInclude);
-        // ⚠ Keep NORMAL pre-negated on the shaded path. Every visible aircraft fragment is
-        // back-facing under cull_front and Godot negates NORMAL there, so without this every
-        // upward-facing surface shades as though lit from underneath (docs/formats/gotchas.md).
-        string normalSign = shaded ? "-" : "";
+        // ⚠ Keep NORMAL pre-negated on every lit path. Every visible fragment is back-facing under
+        // cull_front and Godot negates NORMAL there, so without this every upward-facing surface
+        // shades as though lit from underneath (docs/formats/gotchas.md).
+        string normalSign = shaded || worldLit ? "-" : "";
         // Past its far fade an instance collapses to its origin and costs no fragments; inside the
         // ramp the fragment stage dithers it out.
         string clutterVertex = clutterFade
@@ -1463,9 +1498,9 @@ void fragment() {{");
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
         // Per-mission SUNLIGHT dimming (world/deck/clutter), skipped for a model authored
-        // `lighting: false`. The shaded aircraft path never applies csky_world_light at all, so the
-        // flag has nothing to gate there.
-        if (!shaded && lit)
+        // `lighting: false`. Neither lit arm applies it: a real sun carries that energy there, and
+        // a scalar on ALBEDO would dim the surface a second time.
+        if (fullbright && lit)
             sb.AppendLine("    ALBEDO *= csky_world_light;");
         if (shaded)
         {
@@ -1473,15 +1508,30 @@ void fragment() {{");
             sb.AppendLine("    METALLIC = 0.0;");
             sb.AppendLine("    SPECULAR = 0.5;");
         }
+        else if (waterLit)
+        {
+            // Glossy, so screen-space reflection has a surface to march against (WaterRoughness).
+            sb.AppendLine($"    ROUGHNESS = {WaterRoughnessLiteral};");
+            sb.AppendLine("    METALLIC = 0.0;");
+            sb.AppendLine($"    SPECULAR = {WaterSpecularLiteral};");
+        }
+        else if (worldLit)
+        {
+            // Matte: the source authors no gloss for terrain or building walls, so any specular
+            // sheen here is invented, and it reads as wet plastic as the sun swings past.
+            sb.AppendLine("    ROUGHNESS = 1.0;");
+            sb.AppendLine("    METALLIC = 0.0;");
+            sb.AppendLine("    SPECULAR = 0.0;");
+        }
         // Distance fog, cylindrical: VERTEX is the view-space position here under
         // skip_vertex_transform, and INV_VIEW_MATRIX lifts it back to world. The fullbright path
         // needs that world position for the light spill, so an unfogged world surface computes it.
-        if (fogged || !shaded)
+        if (fogged || fullbright)
             sb.AppendLine("    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;");
         // Point lights go in before the fog mix and are not scaled by csky_world_light: a lamp does
         // not dim at night. ⚠ Keep the braces — unguarded this lands in the SHADED shader too,
         // where light_n does not exist and every aircraft falls back to Godot's default material.
-        if (!shaded)
+        if (fullbright)
         {
             // The world's normals reach here flipped for the same reason the aircraft's do: its
             // single-sided polygons render with cull_front, so every visible fragment is
@@ -1494,7 +1544,12 @@ void fragment() {{");
         if (fogged)
         {
             sb.AppendLine("    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
-            sb.AppendLine("    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
+            // ⚠ The lit arms fog through FOG, never ALBEDO: Godot lights whatever ALBEDO holds, so
+            // a fogged albedo still varies with its normal at full fog. csky_fog_color is linear,
+            // the space FOG.rgb resolves in and the one the fullbright arm's mix lands in.
+            sb.AppendLine(worldLit
+                ? "    FOG = vec4(csky_fog_color, csky_fog_on * fog_amt);"
+                : "    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
         }
         // The debug overlays' per-instance tint, a no-op at alpha 0. Under --debug-clutterflag the
         // fullbright world shows the flag colour EmitTriangle wrote into COLOR instead of the lit,
@@ -1524,12 +1579,14 @@ void fragment() {{");
         return mat;
     }
 
+    // Key bits taken: 1 blend, 2 scissor, 4 glow, 8 !lit, 16 !fogged, 32 clampUv, 64 enhanced
+    // mode. Next free bit is 128.
     private Shader GetBillboardShader(bool blend, bool scissor, bool glow, bool lit, bool fogged, bool clampUv)
     {
         // A glow variant already ignores csky_world_light, so `lit` cannot split its key.
         lit |= glow;
         int key = (blend ? 1 : 0) | (scissor ? 2 : 0) | (glow ? 4 : 0) | (lit ? 0 : 8) | (fogged ? 0 : 16)
-            | (clampUv ? 32 : 0);
+            | (clampUv ? 32 : 0) | (GraphicsMode.Enhanced ? 64 : 0);
         if (BillboardShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -1581,6 +1638,8 @@ void fragment() {
         // darker at night — it's what lights the scene), and neither is a model the artists
         // authored `lighting: false`. Clouds ride the world brightness.
         string lightTerm = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light";
+        if (glow && GraphicsMode.Enhanced)
+            lightTerm = $"col.rgb * {EmissiveLiteral}";
         sb.AppendLine(fogged
             ? $"    ALBEDO = mix({lightTerm}, csky_fog_color, fog_amt);"
             : $"    ALBEDO = {lightTerm};");
@@ -1612,12 +1671,14 @@ void fragment() {
         return mat;
     }
 
+    // Key bits taken: 1 axis, 2 blend, 4 scissor, 8 glow, 16 !lit, 32 !fogged, 64 clampUv,
+    // 128 enhanced mode. Next free bit is 256.
     private Shader GetCylindricalShader(CylAxis axis, bool blend, bool scissor, bool glow, bool lit, bool fogged,
         bool clampUv)
     {
         lit |= glow; // a glow variant already ignores csky_world_light — same key
         int key = (axis == CylAxis.X ? 1 : 0) | (blend ? 2 : 0) | (scissor ? 4 : 0) | (glow ? 8 : 0)
-            | (lit ? 0 : 16) | (fogged ? 0 : 32) | (clampUv ? 64 : 0);
+            | (lit ? 0 : 16) | (fogged ? 0 : 32) | (clampUv ? 64 : 0) | (GraphicsMode.Enhanced ? 128 : 0);
         if (CylindricalShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -1663,6 +1724,8 @@ void fragment() {{
             sb.AppendLine(@"    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
         string cylLight = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light";
+        if (glow && GraphicsMode.Enhanced)
+            cylLight = $"col.rgb * {EmissiveLiteral}";
         sb.AppendLine(fogged
             ? $"    ALBEDO = mix({cylLight}, csky_fog_color, fog_amt);"
             : $"    ALBEDO = {cylLight};");

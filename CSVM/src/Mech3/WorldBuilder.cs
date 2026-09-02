@@ -390,6 +390,9 @@ public sealed class WorldBuilder
             AddDeckAnnulus(deck, MergedLocalAabb(deck));
             root.AddChild(deck);
             CloudDeck = deck;
+            // The deck covers the whole map, so a shadow-casting one puts the entire world in
+            // shade. Its overcast is already in the authored SUNLIGHT the sun is driven from.
+            DisableShadows(deck);
             GD.Print($"cloud deck: {_deckNodes.Count} tiles at y={_deckAltitude} "
                      + $"({_deckCoverage:P0} of the map)");
         }
@@ -400,6 +403,10 @@ public sealed class WorldBuilder
         if (_cloudClusters.Count > 0)
         {
             GD.Print($"cloud clusters: {_cloudClusters.Count} placed 'cloudparent' subtree(s)");
+            // Cloud sprites are alpha billboards facing the camera, so their silhouette in a light
+            // pass is whatever they happen to be turned to; ground shade from them is not authored.
+            foreach (var cluster in _cloudClusters)
+                DisableShadows(cluster);
         }
 
         _builtWorld = world;
@@ -702,7 +709,8 @@ public sealed class WorldBuilder
         return null;
     }
 
-    // The dome would otherwise shadow the entire world (it covers the whole sky).
+    // The backdrop populations: the dome, the overcast deck and the ambient cloud sprites each
+    // span the whole sky or the whole map, so any of them casting puts the world in shade.
     private static void DisableShadows(Node node)
     {
         if (node is MeshInstance3D mi)
