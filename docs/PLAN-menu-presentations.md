@@ -1500,7 +1500,10 @@ journeys are the check's), **SRC-7** (the answer words and Quit's behaviour are 
 scripts that act on them, `MESSAGEBOX.SCRIPT`'s `DI` assignments and `MAINMENU.SCRIPT`'s
 `terminate`; the chooser, the disabled doors and the box's opening focus are recorded remake-only).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The plan tree with E41 landed passed the complete `.\RunTests.ps1` (3015 units, the
+coverage check among them, 212 engine suites across 4 shards, 18 goldens hash-identical, engine
+errors clean, 175.6s). The two remake choices the item left open (the delete box opening on No
+against the script's Yes focus, the Options chooser's placement) go to the user at E44.
 
 **⚠ Traps.** “Looks complete” is not inventory coverage. A screen with no Back/recovery path is a
 dead end even if its launch action works.
