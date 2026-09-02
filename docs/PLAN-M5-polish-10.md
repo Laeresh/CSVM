@@ -143,7 +143,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Feedback at the controls
 
-21. ☐ `BL-419` The sonic ground burst reads as one flat ring on the terrain
+21. ☑ `BL-419` The sonic ground burst reads as one flat ring on the terrain (the ring is authored on
+    the ground; a callee's translate on the caller's `sonic_emit1` carried it 30 m into the air)
 22. ☐ `BL-459` A damaged engine's loop waits out the original's re-arm delay before it restarts
 23. ☐ `BL-433` Numpad `+`/`−` drive the chase camera's zoom
 24. ☐ `BL-679` A staged airframe leaves no stale node behind in the name resolver
@@ -454,7 +455,48 @@ as decoded values; they are TUNE for a different scene. Do not touch `csky_world
 
 # Wave C — Feedback at the controls
 
-## C21 ☐ `BL-419` The sonic ground burst reads as one flat ring on the terrain
+## C21 ☑ `BL-419` The sonic ground burst reads as one flat ring on the terrain
+
+**Landed.** The lead was a decode question and it had a decode answer, in name resolution rather
+than in any authored number. Nothing in `sonic_rings.zrd`/`sonic_control.zrd` was touched.
+
+**What was wrong.** All five sonic rings are called `AT_NODE sonic_emit1, 0, -5, 0`, and
+`ring_down1` (the lasting ground ring, called at `SEQUENCE_OFFSET 1.2`) translates itself from +30
+to +6 in that frame over 0.3 s, so it belongs about a metre over the struck surface and grows 1→5
+there over 2.6 s. That is the reference's single flat annulus. The same `sonic_emit1` is also the
+site `sonic_puff1` is called on, and `sonic_puff1`'s own second sequence translates `sonic_emit1`
+from 0 to 30 m over 1.2 s: that rise is how the thin vapour column is drawn. In the original the two
+never meet, because a definition resolves node names inside the private subtree copy it is handed
+at load (`def+0x6c`/`def+0x48`) and reaches the call site only through the `INPUT_NODE` sentinel.
+Ours anchors a `CALL_ANIMATION`'s callee on the CALLER's node, so `sonic_puff1`'s translate drove
+the caller's `sonic_emit1` and carried the burst's whole second half up with it. Measured: the
+ground ring settled 31 m over the impact instead of 1 m, and the caller's anchor moved 30 m.
+
+**Verified.** `AnimRuntime.StagingAdmits`'s call-site allowance now stops at a definition that has a
+staged copy of its own in that pool slot (`HasOwnCopyBeside`), which drops the name to the own-root
+tier the original reads. The ground ring settles at +1.00 m and grows to 5× there, the vapour column
+still climbs its authored 30 m on `sonic_puff1`'s own copy, and the caller's `sonic_emit1` does not
+move. Filmed in the weapon lab against flat C1 dirt: the airborne cyan torus is gone and one flat
+pale ring lies on the terrain and expands. New regression `sonic-ground-ring`, red on all four of
+its claims before the change. Full `.\RunTests.ps1` green, no golden moved. Docs:
+`docs/org/sequences.md` (the tier chain), `docs/architecture.md` (`AdmissibleStaging`),
+`docs/formats/weapon-effects.md` (the burst's shape, and the `OPACITY_STATE OFF` correction below),
+`docs/verification.md` INSTR-38.
+
+**Two entry claims turned out wrong, and are corrected rather than acted on.** The "thick grey
+puffer column the original does not have" is the authored vapour column (`sonic_emit_puff1`,
+`watersquirt`, blue-white through to near-black), not smoke that should be removed; it read wrong
+only because it was drawn beside a ring that should have been under it. And
+`docs/formats/weapon-effects.md` claimed `ACTIVE` with `OPACITY_STATE OFF` was a way of "starting
+invisible"; the argument says whether translucency is ENABLED, so the sonic rings draw at full
+opacity from the first frame and each is taken away by its own ramp.
+
+**Still open, and not this item's.** The air detonation was not compared frame by frame: a level
+`--weapon-lab --weapon-fire` run detonates at `RANGE` in mid-air, which is what INSTR-38 now
+records, but the air burst's own shape against `CAP-23 Rocket SONIC Air.mp4` still owes a sitting at
+`D31`. `CAP-26`'s "look for" list should gain the flat-ring-against-airborne-hoops question.
+
+### Original approach (kept for reference)
 
 **Goal.** A sonic rocket striking flat ground reads as one flat pale-green ring lying on the terrain
 and growing for about three seconds, with no airborne torus and no smoke column, and the same

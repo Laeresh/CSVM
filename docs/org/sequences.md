@@ -255,6 +255,18 @@ every tier so a pooled copy answers only the definition that owns or reaches it
 (`docs/architecture.md`, that file's entry). The correction is to the SCOPE of the tiers, never their
 order.
 
+⚠ **A `CALL_ANIMATION` anchors its callee on the CALLER's node, and that is not a scope the original
+would search.** Tiers 1 and 2 read `def+0x6c` and `def+0x48`, both of them inside the copy the
+definition was handed; the call site is reachable only through the `INPUT_NODE` sentinel. So where a
+callee has a staged copy of its own, a name both copies carry must answer from the callee's, and
+`StagingAdmits` refuses the caller's copy for exactly that case (`HasOwnCopyBeside`). The sonic
+ground burst is the worked example. `sonic_puff1` is called on the caller's `sonic_emit1` and
+translates `sonic_emit1` from 0 to 30 m over 1.2 s, which is how the vapour column is drawn; the
+caller then hangs `ring_down1`, both light sequences and its second `call_flare` on that same name at
++1.2 s. Resolved against the caller's copy, the column drags the anchor and the ground ring is placed
+30 m into the air instead of the metre over the surface its own `-5` site offset and `+6` translate
+put it at.
+
 ## Three clocks, and which origin reads which
 
 An event's `START_TIME` carries an ORIGIN and a delay, and the origin selects the clock:
