@@ -80,7 +80,9 @@ public readonly record struct BindingControl
 
     /// <summary>One direction of one hat. Exactly one direction, because a binding on a diagonal
     /// would be a second, hidden combining rule beside the one the binding list already has.
-    /// </summary>
+    /// ⚠ Do not author one on this backend. Godot reports a d-pad as four buttons, so a hat binding
+    /// aliases a button binding that <see cref="ActionMap.SameControl"/> reads as different, and two
+    /// actions could then hold one d-pad direction (`DefaultBindings`).</summary>
     public static BindingControl Hat(int index, HatDirection direction)
     {
         if (direction is not (HatDirection.Up or HatDirection.Right or HatDirection.Down or HatDirection.Left))

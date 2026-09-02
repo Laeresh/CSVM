@@ -507,6 +507,10 @@ both sit on top of these types.
 - `src/Bindings/ActionMap.cs` — one player's keymap: which control fires which action, with assignment taking a control off its previous owner and naming the action that lost it.
 - `src/Bindings/ActionSnapshot.cs` — the tick's resolved values, so two consumers reading one action in one tick get the same answer. No edges and no history.
 - `src/Bindings/PlayerActions.cs` — the seam a polling site holds: a map, the tick's snapshot, and the pad-only keyboard gate for splitscreen players two to four.
+- `src/Bindings/InputContext.cs` — which set of controls a seat is reading (flight, menu, camera), because one control means different things in different modes and a map holds each control once.
+- `src/Bindings/DefaultBindings.cs` — the shipped keymap as data, one map per context, reproducing `docs/controls.md`; also the placeholder pad identity a default is authored on.
+- `src/Bindings/BindingProfile.cs` — one seat's whole input: a map and a `PlayerActions` per context, plus the keyboard gate that applies to all of them.
+- `src/Bindings/BindingStore.cs` — the versioned, human-readable JSON keymap file, one per player under `user://`, falling back per action to the shipped default for anything it cannot read.
 
 ### Session root and tests
 
@@ -8099,7 +8103,9 @@ One player's keymap, an action to a `BindingSet`. `Assign` is the winning half o
 returns the action that lost the control, so a screen can name the loss instead of performing it
 silently; `SameControl` is what "the same control" means there, ignoring an axis deadzone so
 re-binding an axis adjusts it rather than stacking a copy. `ResolveInto` reads every bound action
-once per tick into a reused snapshot. It holds no defaults and no device lookup. Coverage:
+once per tick into a reused snapshot. `Add` is the other half: it binds without stealing, for the
+shipped defaults and a loaded file, where a control is deliberately on two actions (a numpad
+snap-look diagonal). It holds no defaults and no device lookup. Coverage:
 `CSVM.Tests/ActionMapTests.cs`.
 
 ## src/Bindings/ActionSnapshot.cs
@@ -8116,3 +8122,44 @@ hardware is read. `ReadsKeyboard` is the existing player-1-only keyboard rule, k
 rather than in the map, so a pad-only splitscreen player keeps the shipped keyboard defaults in
 their map and simply reads none of them. Turning a device identity into live hardware belongs to the
 device registry; this type only reads the state it is handed.
+
+## src/Bindings/InputContext.cs
+
+Which controls a seat is reading: flight, menu, or the free camera. A seat holds one `ActionMap` per
+context rather than one map overall, because the shipped keymap gives one control several meanings
+(`W` pitches down in flight, moves a menu cursor up, and flies the spectator camera forward) while a
+map holds a control once. The steal rule therefore runs inside a context, which is also the scope a
+rebinding screen edits: a conflict is two flight actions wanting one button, not flight and the menu
+sharing it.
+
+## src/Bindings/DefaultBindings.cs
+
+The shipped keymap as data, one `ActionMap` per context, transcribed from `docs/controls.md`. Every
+action is either bound here or on the `Unbound` list, which stops a migrating site meeting a hole one
+call at a time: `FreeLook` is unbound because the model has no mouse-button kind, `MenuJoin` because
+joining is a gesture over controls the menu binds elsewhere. A pad default names the placeholder
+identity `AnyPad`, which no hardware reports, and `MapFor` puts the seat's own pad in its place. Two
+rules bind edits here: nothing authors a hat binding, since Godot reports a d-pad as four buttons and
+the two encodings are one control `ActionMap.SameControl` reads as two; and the numpad snap-look
+diagonals are deliberately one key on two actions, which is why the set is built through
+`ActionMap.Add` rather than `Assign`. Coverage: `CSVM.Tests/DefaultBindingsTests.cs`.
+
+## src/Bindings/BindingProfile.cs
+
+One seat's whole input: an `ActionMap` and a `PlayerActions` per context, and the keyboard gate that
+applies to all of them at once. This is what a polling site is handed and what a rebinding screen
+edits. `Poll` resolves every context on the tick rather than only the mode in front of the player,
+because a pause board and the aeroplane behind it are both live on one tick.
+
+## src/Bindings/BindingStore.cs
+
+The keymap file: versioned JSON, one per player, under `user://`. Named and versioned against the
+original, which writes 2400 unversioned raw bytes to the registry and points its live array at the
+loaded buffer (`docs/org/input.md`), so a record-layout change there reinterprets an old save. A
+binding is stored as `device/control` in words (`keyboard/key:Space`, `pad:<id>/axis:LeftY+@0.25`), so
+a player can correct one row by hand. Anything this build cannot read costs that action its saved
+bindings and nothing else: an unknown action or context name, an unreadable token, and a hat row (see
+`DefaultBindings`) all leave that action at its default while the rest of the file loads. Every
+action is written, the unbound ones included, so a deliberate unbind survives a reload. Whether a
+seat reads the keyboard is not persisted, or a saved file could hand a pad-only splitscreen player
+the keyboard back. Coverage: `CSVM.Tests/BindingStoreTests.cs`.

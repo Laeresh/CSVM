@@ -164,7 +164,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — defaults and persistence
 
-21. ☐ Persist the map: a versioned format, per player
+21. ☑ Persist the map: a versioned format, per player
 22. ☐ `docs/controls.md` becomes the shipped-defaults record
 
 ### Wave D — the screen
@@ -464,7 +464,55 @@ the rule that bites before quoting any number as a pass.
 
 # Wave C — defaults and persistence
 
-## C21 ☐ Persist the map: a versioned format, per player
+## C21 ☑ Persist the map: a versioned format, per player
+
+**Landed.** Four files in `CSVM/src/Bindings/`: `InputContext`, `DefaultBindings` (the shipped keymap
+as data, with `MapFor`, `ActionsIn`, `Retarget` and the `Unbound` list), `BindingProfile` (one seat:
+a map and a `PlayerActions` per context) and `BindingStore` (versioned JSON per player, written
+atomically through a temp file the way `OptionsStore` does).
+
+⚠ **One map per seat cannot hold this keymap, so a seat holds one map per `InputContext`.** Today's
+bindings give one control different meanings by mode: `W` is pitch-down, menu-up and camera-forward;
+`Space` is fire guns and menu accept; `Escape` is pause and menu back. `ActionMap` holds a control
+once and `Assign` steals, so a single map would make those collide. The steal rule now runs inside a
+context, and a context is the scope D31 edits. The plan's "a default `ActionMap` per seat" was
+wrong.
+
+Other calls settled here: a shipped pad default cannot name a hardware string, so defaults are
+authored on the placeholder identity `DeviceId.Joypad("*")` and `MapFor` substitutes the seat's pad,
+which keeps a saved file portable between machines; `ReadsKeyboard` is deliberately not persisted,
+since a saved file would otherwise hand a pad-only splitscreen seat its keyboard back; and one
+unreadable token costs an action its saved bindings and it keeps its default, while an empty array
+is a deliberate unbind and survives.
+
+**The d-pad decision (the trap above): never author a `Hat` binding, and keep `ControlKind.Hat`.**
+Every d-pad default is `Button(JoyButton.Dpad*)`, which is what Godot reports and what D31 capture
+produces, so the two encodings never coexist and `SameControl` never has to alias anything. The kind
+stays because dropping it would churn landed files for no gain and it is the right shape the moment
+a backend with real hats exists. The prohibition is stated on the `BindingControl.Hat` factory, in
+`DefaultBindings`, and in `docs/architecture.md`, and `BindingStore` treats a hat token as
+unreadable so a hand-edited file cannot reintroduce the alias.
+
+**Verified.** `CSVM.Tests/DefaultBindingsTests.cs` (8 facts, including the full-coverage gate that
+stops Wave B finding holes one call site at a time) and `CSVM.Tests/BindingStoreTests.cs` (15 facts:
+round-trips, a bumped-version file, unknown action, unknown context, a hat token, a malformed file,
+`pad:*` retargeting, per-player isolation, and a leftover temp file). Run with
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~DefaultBindingsTests|FullyQualifiedName~BindingStoreTests" -SkipEngine -SkipGoldens`.
+Complete `.\RunTests.ps1` in the item's worktree: PASS, exit 0, 3135 units, 230 engine suites, 18
+goldens hash-identical, 0 build warnings.
+
+**Coverage: 56 of `InputAction`'s 58 members** (Flight 35, Menu 10, Camera 13). `MenuJoin` is
+unbound because joining is "any control on a pad no seat owns" and every control it watches already
+belongs to another menu action. `FreeLook` is unbound for a reason that outgrew this item and became
+A4: it is the held right mouse button, and the model has no mouse control kind.
+
+Three places where the code and `docs/controls.md` disagreed were resolved toward the doc, per
+Decision 4: `CycleStuntTarget` is `Tab` only (`FlightController` also reads pad `X`, undocumented and
+colliding with `Nitro`), `TargetNearest` is keyboard `I` only (its pad route is the tap/hold splitter
+on d-pad up, which is one control dispatching to two actions inside the consumer), and the freecam
+`IJKL` directions take `SpectatorCamera`'s own sign.
+
+**Original approach (kept for reference).**
 
 **Goal.** Bindings survive a restart, and a future change to the model does not silently corrupt an
 existing user's map.
@@ -480,7 +528,11 @@ to that action's default rather than failing the load.
 
 **Model recommendation.** high. Format decisions are expensive to reverse once a user has a file.
 
-**Verify.** Round-trip test, plus a hand-written file from a bumped version loading without loss.
+**Verify.** `CSVM.Tests/BindingStoreTests.cs` (the round-trip whole, a rebind and an unbind through
+it, a hand-written file from a bumped version keeping the rows this build reads, and the per-action
+fallbacks) and `CSVM.Tests/DefaultBindingsTests.cs` (every `InputAction` bound or on the
+deliberately-unbound list, no hat default, one control per action inside a context). Run with
+`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~DefaultBindingsTests|FullyQualifiedName~BindingStoreTests" -SkipEngine -SkipGoldens`.
 
 **⚠ Traps.** ⚠ PowerShell 5.1 corrupts UTF-8 in BOM-less files. If any script touches this format,
 pass `-Encoding utf8` on both ends and keep the script itself ASCII (`CLAUDE.md`).

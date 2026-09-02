@@ -55,6 +55,13 @@ public sealed class ActionMap
         return stolenFrom;
     }
 
+    /// <summary>Gives a control to an action without taking it off anyone. The shipped defaults and
+    /// a loaded file both need this: a numpad snap-look diagonal is deliberately on two actions at
+    /// once, and <see cref="Assign"/> would undo the second one.
+    /// ⚠ Not for a rebinding screen. A control a player assigns goes through <see cref="Assign"/>,
+    /// which is the only path that keeps the steal rule.</summary>
+    public bool Add(InputAction action, Binding binding) => SetFor(action).Add(binding);
+
     /// <summary>Drops one control from one action, leaving every other action alone. This is the
     /// unbind a screen performs; it is not part of the steal rule.</summary>
     public bool Unassign(InputAction action, Binding binding) =>
