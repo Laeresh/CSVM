@@ -689,6 +689,44 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   numbers does not change that, and must not be used to try to.
   *Cross-refs:* `BL-296`, `docs/org/input.md`, `docs/org/targeting.md`, `docs/controls.md`.
 
+- `BL-696` `[Feature]` **The Original presentation has no way into the rebinding screen, so the
+  keymap is editable in Built-in alone.** *Evidence (traced):* `PF_B_CONTROLS` draws disabled
+  (`CSVM/src/UI/Menu/Original/OriginalShell.cs:178`), and the two pages behind it are decoded and
+  unbuilt: `ControlsPrefs` (12 rows, layout only) and `Keys` behind `CP_B_KEYS` (17 rows, the
+  composition of all seven category tabs, with `KB_B_ACCEPTCHANGES` / `KB_B_CANCELCHANGES` returning
+  to `ControlsPrefs`) — `docs/org/menu-inventory.md`:392-394, :482-483. Both were put out of scope of
+  the menu plan because no shared option stood behind them; `ControlsFeature` is now that option, so
+  the reason has expired. The feature, the capture, the staged Accept/Cancel, the steal rule and the
+  persistence are all shared and built, so what is missing is the presentation's screen graph alone.
+  *Fix shape:* the two pages over the extracted artwork, the seven tabs, the two control columns, the
+  three buttons, and `PF_B_CONTROLS` wired live.
+  *⚠ Traps:* **The seven tabs are the original's action groups, not this port's three input
+  contexts.** Movement, Throttle, Weapons, Targeting, Views 1, Views 2 and Other have no home for the
+  menu and free-camera actions, which the original does not bind at all, so a faithful tab strip
+  strands two contexts and needs a decision rather than a mapping. **Control A and Control B are
+  positions in a four-slot row, not two fields** (`docs/org/input.md`), and this port holds an
+  unbounded list: Built-in shows four and appends "+N more", while two authored columns would hide
+  bindings, which is the trap `BL-398`'s screen was written against.
+  *Cross-refs:* `BL-296`, `BL-398`, `docs/org/menu-inventory.md`, `docs/org/input.md`,
+  `docs/menu-presentations.md`.
+
+- `BL-697` `[Bug]` **Only player 1's keymap can be reached, because the rebinding screen registers
+  the seats that have joined and seats join at aircraft select.** *Evidence (traced):* `OpenControls`
+  registers one seat per entry of `_slots` (`CSVM/src/UI/LaunchMenu.cs:2338-2350`), and `_slots`
+  mirrors `PlayerSetupFeature`'s joined seats, which are claimed with the pad Start gesture on the
+  aircraft pick. The screen is reached from Options, off the main menu, where seat 0 is the only
+  seat, so the Player stepper offers player 1 alone and no other player's file can be edited. Player
+  2's keymap is written by `BindingStore` and read at launch by `LaunchBindings`, so the data path is
+  whole and only the way in is missing.
+  *Fix shape:* let the screen take the join gesture itself, so a pad pressing Start there claims the
+  next free player for editing, or reach the screen from where seats already exist.
+  *⚠ Traps:* **A seat with no pad is not the same as a seat with a pad that has not joined.** Capture
+  needs a pad to press and reads the seat's own pad list, so registering four seats up front would
+  offer three players nothing to capture with. **Which pad a press came from is a raw device read,
+  not an action** (`B12`'s nine deliberately raw sites, and why `MenuJoin` is unbound), so the join
+  here cannot be resolved through the seat's own bindings.
+  *Cross-refs:* `BL-296`, `BL-398`, `BL-375`.
+
 - `BL-399` `[Feature]` **Track Target's camera behaviour — `L` is reserved, the camera itself is
   undecided.** *Evidence:* the player-targeting plan's out-of-scope call (b), 2026-08-15: the
   original's `Views 1 → Track Target` binds `L` (free in our flight keymap; our `L` is the
