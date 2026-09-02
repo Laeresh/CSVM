@@ -89,7 +89,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☐ `BL-635` CM11: the stunt planes carry the objective marker their roster blocks author
 22. ☐ `BL-627` CM12: the Spruce Goose moves smoothly along its scripted legs
-23. ☐ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake
+23. ❌ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake (disproven: the ace is authored 79 m inside the hill, and the finding is recorded)
 24. ☐ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
 25. ☐ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
 26. ☐ `BL-632` CM15: the capture cutscene frames its Balmoral
@@ -428,7 +428,7 @@ attitude; the Goose's legs run at about 5 to 6 km from the origin, so float roun
 contributor to measure at non-zero heading, not an assumption. Any change to the script seed
 moves other scripted motion and may move goldens; baseline first.
 
-## C23 ☐ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake
+## C23 ❌ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake
 
 **Goal.** In CM12 (C2/M01) the ace, once OBJECTIVE67 wakes it, never flies inside the hills and
 never dies by ramming a tile from below.
@@ -470,6 +470,40 @@ watches the ace after its wake.
 single-sided collider premise; it is already double-sided. The ace's ram death did complete
 primary 3, so this is not an objective bug. `SweepCadence` is a faithful port of `FUN_0048d7f0`'s
 parity gate, so a change there needs the decode beside it.
+
+**Disproven.** The placement question the Approach puts first answers the whole item, and neither
+`AiModeMachine` nor `SweepCadence` is at fault, so nothing lands in either. `hkfirebrand_9` is
+authored at `(-4517.72, 150.0, -6232.58)` in `C2/M01`'s `aiv.zrd`, with `deactivated` (slot 21) set
+so `OBJECTIVE67`'s `WAKEUP_ENEMIES` puts it in play in place. The terrain surface at that x and z is
+**228.92 m**, on tile `g35052` (`x -5120..-4096`, `z -7168..-6144`, model 617, whose vertex bounds
+reproduce the node's own `model_bbox`), so the ace begins flying **78.9 m inside the hill**. It is
+the only roster block in the mission placed over land at all; every other aircraft spawns over open
+water, and the mission's one other land placement, `patrolboat_eg0` at `y 0.021`, sits within 5 cm
+of its surface. The built world agrees with the mesh read: an aeroplane placed at the ace's pose and
+flown level descends from 150 m through 16 m with no contact and no `agl=` field on any telemetry
+line, because there is no ground beneath a point that is under the surface; the same pose at 250 m
+reads `agl=21` and grazes then crashes into `g35052/col` at `y 229`; and the same pose at 150 m
+pulled up crashes into `g35052/col` at `y 229` from below, which is the reported death.
+
+Tunnelling is dead as an explanation. `SweepCadence.Advance` hands the skipped step's entry pose
+back as the sweep origin, and `SweepProbes` and `CenterRayContact` both run from that origin to this
+step's pose, so no span of motion goes untested. `FUN_0048d7f0` does the same: its parity gate
+(`((obj[0x1af] ^ frame) & 1) != 1`) adds the step's delta into the `obj+0x6B0` accumulator and
+returns, the sweeping frame subtracts that accumulator from the displacement it tests, and the tail
+resets it, so the original carries the skipped motion whole exactly as the port does. The 20 m floor
+is likewise not at fault: at 150 m it is correctly silent, and the oscillation the controls showed
+is the ace descending inside the hill until it crosses 20 m, climbing out, and diving again.
+
+What remains open is what the original does with an aircraft authored inside terrain, since the
+authored pose is the same data in both. The activation primitive `FUN_004b0f40` is more than the
+flag flip the objectives decode describes: on the activate branch it re-bases the vehicle's position
+through `FUN_00432010`, re-homes every collision probe in the `+0x6a4..+0x6a8` array onto it, clears
+the `+0x6B0` sweep accumulator and moves the scene node through `FUN_004d1d50`. That re-base
+preserves y, so it cannot lift the ace out of the hill by itself, and it is gated on `+0x2e4` and a
+match in the `DAT_0064f610` list, neither of which is decoded. This is the same "net-nearest snap
+the original skips" that `BL-522` records as undecoded.
+
+**Verified.** <pending orchestrator run>
 
 ## C24 ☐ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
 
