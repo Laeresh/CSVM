@@ -18,7 +18,7 @@ public sealed partial class SpectatorCamera : Node
     /// <summary>The identity this seat's pad bindings are authored on, standing for whichever pads
     /// this spectator owns rather than for one piece of hardware. A binding carries a single
     /// <see cref="DeviceId"/> while a seat reads a device set: `BL-375` gives each downed pilot its
-    /// own pads, and a single-seat freecam reads every unclaimed one. <see cref="SeatDevices"/>
+    /// own pads, and a single-seat freecam reads every unclaimed one. <see cref="SeatDeviceState"/>
     /// answers for this and nothing else, so no connection index reaches a binding. Same species as
     /// <see cref="DefaultBindings.AnyPad"/>.</summary>
     public static readonly DeviceId SeatPad = DeviceId.Joypad("spectator-seat");
@@ -58,8 +58,8 @@ public sealed partial class SpectatorCamera : Node
     // One merged read would have to pick a rate and would drop the sum, which is a behaviour change.
     private readonly PlayerActions _keyActions;
     private readonly PlayerActions _padActions;
-    private readonly SeatDevices _keyState;
-    private readonly SeatDevices _padState;
+    private readonly SeatDeviceState _keyState;
+    private readonly SeatDeviceState _padState;
     // Scratch for CycleLock, reused so a per-press lock costs no allocation.
     private readonly List<Node3D> _lockNodes = new();
     private readonly List<Vector3> _lockScan = new();
@@ -80,10 +80,12 @@ public sealed partial class SpectatorCamera : Node
         // One map behind both halves, so a rebinding screen edits a single object and the two
         // reads stay two views of the same keymap rather than two keymaps.
         var map = BindingProfile.Defaults(SeatPad, useKeyboard).Map(InputContext.Camera);
-        _keyActions = new PlayerActions(map, true);
-        _padActions = new PlayerActions(map, true);
-        _keyState = SeatDevices.ForKeyboard(useKeyboard);
-        _padState = SeatDevices.ForPads(padDevices);
+        // Each half mutes the other's devices: the keyboard reader is given no pads, and the pad
+        // reader no keyboard, so a key and a stick on one action keep their own look rates and sum.
+        _keyActions = new PlayerActions(map, useKeyboard);
+        _padActions = new PlayerActions(map, false);
+        _keyState = new SeatDeviceState(SeatPad, () => _padDevices, readsPads: false);
+        _padState = new SeatDeviceState(SeatPad, () => _padDevices);
         _camera.Position = position;
         var to = lookAt - position;
         // Only the direction survives, not the distance — a --lookat point or a --direction
@@ -220,6 +222,8 @@ public sealed partial class SpectatorCamera : Node
         float dt = (float)delta;
         // Both halves resolved before anything reads them, so every site this frame sees one
         // consistent tick.
+        _keyState.Refresh();
+        _padState.Refresh();
         _keyActions.Poll(_keyState);
         _padActions.Poll(_padState);
         // Locked onto a target: orbit it, unless the user asks to translate (WASD/QE / pad) —
@@ -265,10 +269,9 @@ public sealed partial class SpectatorCamera : Node
     {
         float yaw = _padActions.Axis(InputAction.CameraLookRight, InputAction.CameraLookLeft);
         float pitch = _padActions.Axis(InputAction.CameraLookDown, InputAction.CameraLookUp);
-        // ⚠ The dolly reads the boost/slow triggers, which carry a 0.5 threshold chosen for the
-        // digital boost. The trigger's first half is therefore inert here, unlike the raw read
-        // this replaced; a dolly of its own would need its own action.
-        float zoom = _padActions.Value(InputAction.CameraBoost) - _padActions.Value(InputAction.CameraSlow);
+        // Its own action pair rather than the boost and slow triggers, whose digital threshold would
+        // leave the first half of trigger travel inert and double the slope of the second.
+        float zoom = _padActions.Value(InputAction.CameraDollyOut) - _padActions.Value(InputAction.CameraDollyIn);
         _orbitYaw -= yaw * PadLookRate * dt;
         _orbitPitch = Mathf.Clamp(_orbitPitch - (pitch * PadLookRate * dt), -OrbitPitchLimit, OrbitPitchLimit);
         _orbitDist = Mathf.Clamp(_orbitDist * Mathf.Exp(OrbitZoomRate * zoom * dt), OrbitMinDist, OrbitMaxDist);
@@ -405,66 +408,4 @@ public sealed partial class SpectatorCamera : Node
         _camera.Basis = new Basis(Vector3.Up, _yaw) * new Basis(Vector3.Right, _pitch);
     }
 
-    // One half of this seat's hardware behind the binding seam: keys, or pads, never both, so the
-    // two halves of an action keep their own look rates. Pad reads answer for SeatPad alone, by
-    // ORing buttons across the seat's real pads and taking the largest-magnitude axis reading.
-    // ⚠ They go through Pads.For(_devices), not a device index from the registry: that gate is what
-    // --no-pads and an unfocused window act on, and it carries the phantom-device policy (span the
-    // set, never pads[0]). A registry index would lose both and would pin the seat to one pad.
-    private sealed class SeatDevices : IDeviceState
-    {
-        private readonly bool _keys;
-        private readonly bool _pads;
-        private readonly int[]? _devices;
-
-        private SeatDevices(bool keys, bool pads, int[]? devices)
-        {
-            _keys = keys;
-            _pads = pads;
-            _devices = devices;
-        }
-
-        public static SeatDevices ForKeyboard(bool enabled) => new(enabled, false, null);
-
-        public static SeatDevices ForPads(int[]? devices) => new(false, true, devices);
-
-        public bool IsKeyDown(DeviceId device, int keyCode) =>
-            _keys && device.Kind == DeviceKind.Keyboard && Input.IsKeyPressed((Key)keyCode);
-
-        public bool IsButtonDown(DeviceId device, int button)
-        {
-            if (!_pads || device != SeatPad)
-                return false;
-            foreach (int pad in Pads.For(_devices))
-            {
-                if (Input.IsJoyButtonPressed(pad, (JoyButton)button))
-                    return true;
-            }
-
-            return false;
-        }
-
-        // The spectator's mouse is event-driven (free-look, the wheel and the pick), so nothing here
-        // reads it and a polled mouse binding stays silent.
-        public bool IsMouseButtonDown(DeviceId device, int button) => false;
-
-        public float AxisValue(DeviceId device, int axis)
-        {
-            if (!_pads || device != SeatPad)
-                return 0f;
-            float best = 0f;
-            foreach (int pad in Pads.For(_devices))
-            {
-                float v = Input.GetJoyAxis(pad, (JoyAxis)axis);
-                if (Mathf.Abs(v) > Mathf.Abs(best))
-                    best = v;
-            }
-
-            return best;
-        }
-
-        // No camera default is a hat binding and none may be (DefaultBindings), so there is nothing
-        // to read; a d-pad arrives as buttons above.
-        public HatDirection HatState(DeviceId device, int hat) => HatDirection.None;
-    }
 }

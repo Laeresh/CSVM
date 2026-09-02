@@ -63,7 +63,10 @@ public class BindingModelTests
         state.Axes[(Pad, 1)] = 0.6f;
         var read = binding.Resolve(state);
         Assert.True(read.Pressed);
-        Assert.Equal(0.2f, read.Value, 5);
+
+        // The raw travel, not the remainder rescaled onto [0, 1]: no polling site this seam replaced
+        // rescaled, so keeping the deadzone number was not enough to keep the behaviour.
+        Assert.Equal(0.6f, read.Value, 5);
     }
 
     [Fact]

@@ -556,8 +556,8 @@ public partial class FlightController : Node3D
 
     public FlightController()
     {
-        _seatState = new SeatDeviceState(this, readsPads: true);
-        _padMutedState = new SeatDeviceState(this, readsPads: false);
+        _seatState = new SeatDeviceState(DefaultBindings.AnyPad, () => PadDevices);
+        _padMutedState = new SeatDeviceState(DefaultBindings.AnyPad, () => PadDevices, readsPads: false);
         _bindings = BindingProfile.Defaults(default, true);
         _actions = _bindings.Actions(InputContext.Flight);
         var map = _bindings.Map(InputContext.Flight);
@@ -3720,72 +3720,6 @@ public partial class FlightController : Node3D
         _mouseLookPrev = pos;
         bool looking = _actions.Held(InputAction.FreeLook);
         return looking && delta.LengthSquared() > 1f ? delta : Vector2.Zero;
-    }
-
-    // This seat's hardware, addressed the way the shipped defaults author it: a pad binding names
-    // the placeholder pad identity, which here means every pad Pads.For hands this player.
-    // ⚠ Do not narrow that to one device id. With PadDevices null (single player) it is every
-    // connected pad, never `pads[0]`: phantom joypad devices (wireless dongles enumerating with the
-    // pad asleep, non-pad HID like Razer boards) can occupy the early slots, which made a pad
-    // connected after launch dead. Splitscreen binds each player to its own device list instead.
-    private sealed class SeatDeviceState : IDeviceState
-    {
-        private readonly FlightController _rig;
-        private readonly bool _readsPads;
-        private readonly List<int> _pads = new();
-
-        public SeatDeviceState(FlightController rig, bool readsPads)
-        {
-            _rig = rig;
-            _readsPads = readsPads;
-        }
-
-        // The seat's pads for this tick, taken once. Pads.For re-reads the connected roster on
-        // every call, and a tick asks it once per pad binding rather than once.
-        public void Refresh()
-        {
-            _pads.Clear();
-            if (!_readsPads)
-                return;
-            foreach (int pad in Pads.For(_rig.PadDevices))
-                _pads.Add(pad);
-        }
-
-        public bool IsKeyDown(DeviceId device, int keyCode) =>
-            device.Kind == DeviceKind.Keyboard && Input.IsKeyPressed((Key)keyCode);
-
-        public bool IsMouseButtonDown(DeviceId device, int button) =>
-            device.Kind == DeviceKind.Mouse && Input.IsMouseButtonPressed((MouseButton)button);
-
-        public bool IsButtonDown(DeviceId device, int button)
-        {
-            if (device.Kind != DeviceKind.Joypad)
-                return false;
-            foreach (int pad in _pads)
-                if (Input.IsJoyButtonPressed(pad, (JoyButton)button))
-                    return true;
-            return false;
-        }
-
-        // The largest-magnitude reading across this seat's pads, so an idle phantom device reads
-        // ~0 and never masks the real stick.
-        public float AxisValue(DeviceId device, int axis)
-        {
-            if (device.Kind != DeviceKind.Joypad)
-                return 0f;
-            float v = 0f;
-            foreach (int pad in _pads)
-            {
-                float a = Input.GetJoyAxis(pad, (JoyAxis)axis);
-                if (Mathf.Abs(a) > Mathf.Abs(v))
-                    v = a;
-            }
-
-            return v;
-        }
-
-        // Nothing authors a hat binding on this backend: a d-pad arrives as the four buttons above.
-        public HatDirection HatState(DeviceId device, int hat) => HatDirection.None;
     }
 
     // This plane's half of a contact the resolver is deciding: the engine effects it has to

@@ -23,7 +23,7 @@ public sealed class MenuInput
     /// <summary>The identity this seat's pad bindings sit on. A placeholder like
     /// <see cref="DefaultBindings.AnyPad"/>, because a menu seat reads a SET of pads (player 1 holds
     /// every unclaimed one) rather than one device, and no binding may store a connection index.
-    /// <see cref="SeatDevices"/> is what answers for it.</summary>
+    /// <see cref="SeatDeviceState"/> is what answers for it.</summary>
     public static readonly DeviceId SeatPads = DeviceId.Joypad("menu-seat");
 
     /// <summary>Whether this player also flies the keyboard (player 1 only).</summary>
@@ -115,7 +115,7 @@ public sealed class MenuInput
     private readonly bool[] _textPrev = new bool[TextKeys.Length];
 
     // This seat's hardware, as the binding model addresses it.
-    private readonly SeatDevices _devices;
+    private readonly SeatDeviceState _devices;
 
     // The seat read three ways on one tick: keyboard live, keyboard minus the typeable keys, and
     // the pad alone. Three seats over two maps rather than one, because the pad-only twins and the
@@ -133,7 +133,7 @@ public sealed class MenuInput
 
     public MenuInput()
     {
-        _devices = new SeatDevices(this);
+        _devices = new SeatDeviceState(SeatPads, () => Pads);
         var map = DefaultBindings.MapFor(InputContext.Menu, SeatPads);
 
         // The keyboard gate follows the Keyboard field per tick (ReadDevices), not the value it
@@ -386,6 +386,7 @@ public sealed class MenuInput
     {
         _keys.ReadsKeyboard = Keyboard;
         _typingKeys.ReadsKeyboard = Keyboard;
+        _devices.Refresh();
         _live = TextEntry ? _typingKeys : _keys;
         _live.Poll(_devices);
         _padOnly.Poll(_devices);
@@ -413,50 +414,4 @@ public sealed class MenuInput
 
     private bool RawPresets() => _live.Held(InputAction.MenuPresets);
 
-    // This seat's hardware as the binding model addresses it: the keyboard, and SeatPads standing
-    // for whichever pads this player currently holds. Pad reads go through CSVM.Pads.For, so the
-    // focus and --no-pads gates still apply while the Pads field stays the player's binding.
-    private sealed class SeatDevices : IDeviceState
-    {
-        private readonly MenuInput _owner;
-
-        public SeatDevices(MenuInput owner) => _owner = owner;
-
-        public bool IsKeyDown(DeviceId device, int keyCode) =>
-            device.Kind == DeviceKind.Keyboard && Input.IsKeyPressed((Key)keyCode);
-
-        public bool IsButtonDown(DeviceId device, int button)
-        {
-            if (device != SeatPads)
-                return false;
-            foreach (int pad in CSVM.Pads.For(_owner.Pads))
-                if (Input.IsJoyButtonPressed(pad, (JoyButton)button))
-                    return true;
-            return false;
-        }
-
-        public bool IsMouseButtonDown(DeviceId device, int button) =>
-            device.Kind == DeviceKind.Mouse && Input.IsMouseButtonPressed((MouseButton)button);
-
-        // The largest-magnitude reading across this player's pads: an idle phantom device reads
-        // about zero and never masks a real stick.
-        public float AxisValue(DeviceId device, int axis)
-        {
-            if (device != SeatPads)
-                return 0f;
-            float value = 0f;
-            foreach (int pad in CSVM.Pads.For(_owner.Pads))
-            {
-                float a = Input.GetJoyAxis(pad, (JoyAxis)axis);
-                if (Mathf.Abs(a) > Mathf.Abs(value))
-                    value = a;
-            }
-
-            return value;
-        }
-
-        // Nothing can hand this a hat: no default authors one and BindingStore rejects the token,
-        // because Godot reports a d-pad as four buttons (DefaultBindings).
-        public HatDirection HatState(DeviceId device, int hat) => HatDirection.None;
-    }
 }

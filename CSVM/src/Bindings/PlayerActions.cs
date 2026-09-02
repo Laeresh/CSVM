@@ -6,7 +6,10 @@ namespace CSVM.Bindings;
 /// ⚠ <see cref="ReadsKeyboard"/> is the existing player-1-only keyboard rule, kept here rather than
 /// in the map: splitscreen players 2 to 4 share the shipped defaults and must still be pad-only, so
 /// the gate belongs to the seat and not to the bindings. Turning an identity into live hardware is
-/// the device registry's job; this type only reads the state it is handed.</summary>
+/// the device registry's job; this type only reads the state it is handed.
+/// Several of these over one <see cref="ActionMap"/> is the supported shape where the keyboard and
+/// pad halves of an action are processed apart and then summed rather than ORed. Give each reader
+/// the half it owns, through this gate or a pad-muted <see cref="SeatDeviceState"/>.</summary>
 public sealed class PlayerActions
 {
     private readonly ActionSnapshot _snapshot = new();

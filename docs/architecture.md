@@ -503,6 +503,9 @@ both sit on top of these types.
   resolver, since this module has no polling loop of its own. Godot exposes a d-pad as four
   `JoyButton` values rather than a raw hat, so hat index 0 is that d-pad and every other hat index is
   unbindable.
+- `src/Bindings/SeatDeviceState.cs` — the `IDeviceState` a seat reads: keyboard and mouse straight
+  from the platform, and the seat's whole pad set behind one placeholder identity, gated through
+  `Pads.For` so `--no-pads` and the focus gate still apply.
 - `src/Bindings/InputAction.cs` — the enum of named actions, one member per binding that exists at a polling site, contiguous because the snapshot indexes arrays by it.
 - `src/Bindings/ActionMap.cs` — one player's keymap: which control fires which action, with assignment taking a control off its previous owner and naming the action that lost it.
 - `src/Bindings/ActionSnapshot.cs` — the tick's resolved values, so two consumers reading one action in one tick get the same answer. No edges and no history.
@@ -3481,7 +3484,9 @@ additions `Frame(Aabb)`, the
 `FollowNode` orbit-lock (released by any translation input; `ExitFollow` keeps orientation) and
 a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 While locked, the orbit answers the mouse **and the pad**: right stick swings it, the triggers
-dolly it (`OrbitPad`, RT out / LT in, the sense `FlightController.OrbitInput` already uses). The
+dolly it (`OrbitPad`, RT out / LT in, the sense `FlightController.OrbitInput` already uses) on
+`CameraDollyOut`/`CameraDollyIn`, which read the whole of a trigger's travel rather than borrowing
+the boost gate's half-travel threshold. The
 target key `F` / pad `X` (`CycleLock`) re-locks onto what `LockCandidates` offers, nearest first
 then outward (`OrbitLock.Next`) — the only route back into a lock, since a release is otherwise
 one-way. `GameSession.LockCandidateAircraft` supplies the roster (every `InPlay` aircraft, AI and
@@ -4864,7 +4869,7 @@ state; `Poll(dt)` fills Move/MoveX/Accept/Back/PadBack/Start out of the `Menu` b
 (`src/Bindings/`), resolved once a tick through three readings of one seat: keyboard live,
 keyboard minus the typeable keys (`TypingMap`, what `TextEntry` reads), and the pad alone. Its pad
 rows sit on the seat-local `SeatPads` identity, since a seat reads a *set* of pads rather than one
-device and no binding may hold a connection index; `SeatDevices` answers for it through
+device and no binding may hold a connection index; `SeatDeviceState` answers for it through
 `Pads.For`, which is what keeps the focus and `--no-pads` gates. `JoinPressed` and `LastActivePad`
 stay raw polls: both answer which pad acted, which an OR across a seat's bindings cannot express,
 and typed text has no named action at all. `Pads` is nullable, null meaning every connected pad, which is the same binding
@@ -8148,15 +8153,30 @@ typed slots and its reasons are decoded in `docs/org/input.md`.
 only through `IDeviceState`, so the model is exercised without an engine. `ControlValue` is the
 held/how-far pair, with `Pressed` true exactly when `Value` is above zero, which is what lets an
 axis drive an action written as digital and a button drive one written as analogue. Structural
-equality is what a rebinding screen compares when it takes a control off its previous owner.
+equality is what a rebinding screen compares when it takes a control off its previous owner. Past
+its deadzone an axis reports its raw travel, deliberately not the remainder rescaled onto `[0, 1]`:
+no polling site this seam replaced rescaled, so a rescale moved every stick's response curve while
+keeping the deadzone number intact.
 
 ## src/Bindings/IDeviceState.cs
 
 The tick's raw hardware state, addressed by device identity rather than connection index: keys,
 buttons, axis travel with no deadzone applied, and a hat's full direction flags. Every member
 answers for an absent device instead of throwing, which is how an unplugged pad silences its
-actions without the map losing the rows. The live implementation over Godot is the device
-registry's.
+actions without the map losing the rows. Two implementations ship: `GodotDeviceState` for a single
+device identity through the registry, and `SeatDeviceState` for a seat that reads a whole pad set.
+
+## src/Bindings/SeatDeviceState.cs
+
+One seat's hardware behind the binding seam, which is what every polling site actually holds. A seat
+reads a SET of pads while a binding names one device, so pad defaults sit on a placeholder identity
+and this answers for it: buttons ORed, axes taken at the largest magnitude across the set. Pad reads
+go through `Pads.For`, never a registry index, because that gate is what `--no-pads` and an
+unfocused window act on and it carries the phantom-device policy; `GodotDeviceState` has neither,
+which is why a site on it would lose `--det`'s implied `--no-pads`. Only the pad half is gated:
+Godot polls joypads regardless of window focus while key state is focus-scoped, so a uniform gate
+would either under-protect pads or add a keyboard gate nothing needs. `Refresh` takes the pad list
+once a tick, since `Pads.For` re-reads the roster on every call.
 
 ## src/Bindings/BindingSet.cs
 
@@ -8183,7 +8203,7 @@ silently; `SameControl` is what "the same control" means there, ignoring an axis
 re-binding an axis adjusts it rather than stacking a copy. `ResolveInto` reads every bound action
 once per tick into a reused snapshot. `Add` is the other half: it binds without stealing, for the
 shipped defaults and a loaded file, where a control is deliberately on two actions (a numpad
-snap-look diagonal). It holds no defaults and no device lookup. Coverage:
+snap-look diagonal, flight's d-pad up). It holds no defaults and no device lookup. Coverage:
 `CSVM.Tests/ActionMapTests.cs`.
 
 ## src/Bindings/ActionSnapshot.cs
@@ -8191,7 +8211,9 @@ snap-look diagonal). It holds no defaults and no device lookup. Coverage:
 The tick's resolved held/how-far pair per action, so two consumers asking the same question in one
 tick cannot disagree. It carries no went-down and no went-up: edge detection stays in the consumer
 that already owns its previous-frame slot, because the sim is a level read on the fixed tick and
-scripted `--det` / `--hold` runs depend on that. The instance is reused every tick.
+scripted `--det` / `--hold` runs depend on that. The instance is reused every tick. `Axis` reads
+zero with both ends held, which is what the flight and camera pairs do; a menu cursor axis gives the
+negative end priority instead, so `MenuInput.Dir` reads those rather than this.
 
 ## src/Bindings/PlayerActions.cs
 
@@ -8199,7 +8221,10 @@ What a polling site holds: a player's `ActionMap`, the tick's snapshot, and `Pol
 hardware is read. `ReadsKeyboard` is the existing player-1-only keyboard rule, kept on the seat
 rather than in the map, so a pad-only splitscreen player keeps the shipped keyboard defaults in
 their map and simply reads none of them. Turning a device identity into live hardware belongs to the
-device registry; this type only reads the state it is handed.
+device registry; this type only reads the state it is handed. Several of these over one `ActionMap`
+is the supported shape, not a workaround: where the keyboard and pad halves of an action take
+different processing and are then summed rather than ORed (a ramp against a curve in flight, two
+look rates in the camera), one merged read would have to pick a rate and would drop the sum.
 
 ## src/Bindings/InputContext.cs
 
@@ -8218,9 +8243,13 @@ call at a time: `FreeLook` is unbound because the model has no mouse-button kind
 joining is a gesture over controls the menu binds elsewhere. A pad default names the placeholder
 identity `AnyPad`, which no hardware reports, and `MapFor` puts the seat's own pad in its place. Two
 rules bind edits here: nothing authors a hat binding, since Godot reports a d-pad as four buttons and
-the two encodings are one control `ActionMap.SameControl` reads as two; and the numpad snap-look
-diagonals are deliberately one key on two actions, which is why the set is built through
-`ActionMap.Add` rather than `Assign`. Coverage: `CSVM.Tests/DefaultBindingsTests.cs`.
+the two encodings are one control `ActionMap.SameControl` reads as two; and some controls are
+deliberately on two actions, which is why the set is built through `ActionMap.Add` rather than
+`Assign`. Those are the numpad snap-look diagonals, and flight's d-pad up, which cycles the stunt
+marker beside the target because a stunt target is an objective marker (`BL-686`). The camera's
+trigger pair carries a related case: boost and slow gate at half travel while the orbit dolly reads
+the same triggers from zero on its own actions, so neither reading has to carry the other's number.
+Coverage: `CSVM.Tests/DefaultBindingsTests.cs`.
 
 ## src/Bindings/BindingProfile.cs
 
