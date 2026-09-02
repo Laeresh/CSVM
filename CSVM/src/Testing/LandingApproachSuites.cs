@@ -162,7 +162,7 @@ internal static class LandingApproachSuites
     private static readonly string[] HookupPlanes =
     {
         "player_balmoral", "player_pfighter", "player_warhawk",
-        "player_brigand", "player_fury", "player_peacemaker",
+        "player_brigand", "player_fury", "player_peacemaker", "player_autogyro",
     };
 
     // The piratezep crane's own two inward-swinging side parts.
@@ -295,7 +295,7 @@ internal static class LandingApproachSuites
     internal static void CampaignCoopApproachRow(TestContext ctx) =>
         DriveMission(ctx, FirstSeq, "test-campaign-coop-approach-row", DriveCoopApproachRow);
 
-    /// <summary>Drives the hookup on two airframes and reads what it did to each: the flown
+    /// <summary>Drives the hookup on seven airframes and reads what it did to each: the flown
     /// aircraft's own subtree is in the runtime's node table, so the definition's per-airframe
     /// branches are decidable, and the episode ends with that airframe's docking hook extended, its
     /// authored mount offset applied, and its wings folded where the airframe authors a fold.
@@ -303,7 +303,7 @@ internal static class LandingApproachSuites
     // The hookup plays with no hook, the aeroplane too high and the wings unfolded when the
     // flown airframe's own subtree is not in the runtime's node table.
     [Suite("landings-hookup-airframe",
-        "the zeppelin hookup on two airframes over the first story mission's BUILT world, "
+        "the zeppelin hookup on seven airframes over the first story mission's BUILT world, "
         + "every value read from the aircraft archive's own definitions: the flown aircraft is "
         + "in the animation runtime's node table so the hookup's per-airframe branches can read "
         + "its active bit, it carries its own docking-hook group built retracted, and the "
@@ -720,6 +720,10 @@ internal static class LandingApproachSuites
 
         ctx.Check(reachable,
             $"the flown '{planeNode}' is in the animation runtime's node table, which is what the hookup's per-airframe branches read");
+        // A previous drive's airframe is freed before this one is staged, and the table's own
+        // ancestry walk hashes a row's node, so a stale row throws for some later query.
+        ctx.Same(0, world.Runtime.FreedNodeRows(),
+            $"and the stage that put it there left no row naming a freed node behind");
         ctx.Check(hook != null,
             $"and carries its own '{branch.HookAnim}' hook group rather than a skipped subtree");
         ctx.Check(hook is not { Visible: true }, $"which starts retracted");

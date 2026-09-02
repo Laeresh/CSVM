@@ -1450,9 +1450,17 @@ the memoized `FindAll`, the scoped tier chain (`Resolve`/`ResolveScoped`), the s
 match → symbol narrowing → root lift, policy inputs `NameResolveFallback`/`SuppressRootLift`/
 `MaxRootLift`), and the bind census (`OpenCensus`/`CloseCensus`, `ResolutionLines`). Node identity
 is constructor-supplied (`IEqualityComparer<TNode>`; the engine keys on `GetInstanceId()`), never
-the node type's inherited `Equals`. Nothing removes a row, so `FindAll` and the by-index map both
-skip a node the caller's liveness test rejects and the map gives that index up to the next `Add`:
-an airframe swap frees the aircraft it staged and re-stages the same cross-archive block. A claimed
+the node type's inherited `Equals`. `FindAll` and the by-index map both skip a node the caller's
+liveness test rejects, and the map gives that index up to the next `Add`: an airframe swap frees the
+aircraft it staged and re-stages the same cross-archive block. **Skipping is not enough on its own,
+because a freed node stays a dictionary KEY.** The ancestry map `IsWithin` walks and the memoized
+find cache are keyed by the supplied identity, so the comparer dereferences a freed node for any
+query whose key hashes into its bucket, and the throw lands in whatever query collided rather than
+at the free. `DropFreed` retires those rows, rebuilding the keyed collections rather than removing
+from them (a `Remove` hashes the dead key it is handed, which is the dereference being avoided);
+`FreedRows` counts what a stage would otherwise leave behind. The owner decides when:
+`AnimRuntime.IndexRebasedStage` sweeps before it grows the table, since it is the one staging entry
+that puts a subtree in over one its caller may have freed. A claimed
 index the build never created is answered by `SoleStagedCopy`: the one live pooled copy carrying
 that gamez index, and only when exactly one does, so a multi-copy effect pool stays anchor-scoped
 while a mission's single staged actor (CM07's pickup switch, sensor and passenger) is reachable by
@@ -5294,7 +5302,7 @@ add and activate them (`Props`). All carry a rebased gamez index (`PointerBaseOf
 next multiple of 2500), which is what makes a compiled definition's cross-archive symbol table
 bind them instead of claiming a name with no node. Built for every mission that plays a cutscene
 (`WorldSession`'s intro, approach-trigger or mission-list gate), so every other session's node
-census is exactly what it was. `StageFlown` puts the FLOWN aircraft's own airframe subtree in the runtime's node table under the same rebase, run when the rigs are built and again after an airframe swap: that is what makes a hookup definition's per-airframe branches decidable, since each tests one `player_<airframe>` node's active bit and then poses that airframe's own hook, wing fold and mount offset. That rebased index runs no general RESET_STATE pass, because a chapter definition anchoring on a generic airframe node name must not re-pose a live aeroplane, so `StageFlown` follows it with `AnimRuntime.ParkDockingHook`: the RESET_STATE of every definition anchored on a `*_hook` group inside that model, then every node that group's own `<x>_hook_extend` moves seeded from that definition's own FROM pose, which wins wherever a RESET_STATE omits a node or parks the wrong axis (five of eleven airframes do one or the other). The archive's inactive bit parks the group and nothing else, so without the seed an unparked node is drawn at its archive pose for the second before its own motion starts and then snaps, which reads as a second hook swing; a rotate-only and a scale-only FROM_TO on the same node in the same tick is `PoseChannel`/`FromToMotion`'s own case, carried forward rather than evicted unticked. The pose half is
+census is exactly what it was. `StageFlown` puts the FLOWN aircraft's own airframe subtree in the runtime's node table under the same rebase, run when the rigs are built and again after an airframe swap: that is what makes a hookup definition's per-airframe branches decidable, since each tests one `player_<airframe>` node's active bit and then poses that airframe's own hook, wing fold and mount offset. The airframe it replaces does not leave that table on its own: `IndexRebasedStage` retires every row naming a freed node first, because the rows survive the free and the resolver's own identity comparer dereferences one (`NameResolver.DropFreed`, its entry above). Driving six airframes in one process left 562 stale rows by the last of them, and threw an `ObjectDisposedException` on some runs and not others. That rebased index runs no general RESET_STATE pass, because a chapter definition anchoring on a generic airframe node name must not re-pose a live aeroplane, so `StageFlown` follows it with `AnimRuntime.ParkDockingHook`: the RESET_STATE of every definition anchored on a `*_hook` group inside that model, then every node that group's own `<x>_hook_extend` moves seeded from that definition's own FROM pose, which wins wherever a RESET_STATE omits a node or parks the wrong axis (five of eleven airframes do one or the other). The archive's inactive bit parks the group and nothing else, so without the seed an unparked node is drawn at its archive pose for the second before its own motion starts and then snaps, which reads as a second hook swing; a rotate-only and a scale-only FROM_TO on the same node in the same tick is `PoseChannel`/`FromToMotion`'s own case, carried forward rather than evicted unticked. The pose half is
 `Session/CutsceneController.cs`; the decode is
 `docs/formats/anim-definitions/cutscenes.md`.
 

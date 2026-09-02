@@ -164,6 +164,89 @@ public sealed class NameResolver<TNode>
     /// re-asked instead of standing stale.</summary>
     public void ClearFindCache() => _findCache.Clear();
 
+    /// <summary>Drops every row naming a node the liveness test now rejects, with the ancestry
+    /// entries and cached answers keyed on one. Nothing tells this index a node has gone, and the
+    /// identity comparer dereferences whatever it is handed. A dead key therefore throws for the
+    /// next query that hashes into its bucket, so the owner sweeps before it stages over freed
+    /// nodes. Returns the rows dropped.</summary>
+    // ⚠ Rebuild the keyed collections; never Remove a dead key. Remove hashes the key it is
+    // handed and walks its bucket, which is the dereference this exists to prevent.
+    public int DropFreed()
+    {
+        int dropped = 0;
+        var live = new List<IndexRow>(_index.Count);
+        foreach (var row in _index)
+        {
+            if (_isLive(row.Node))
+            {
+                live.Add(row);
+            }
+            else
+            {
+                dropped++;
+            }
+        }
+
+        if (dropped == 0)
+        {
+            return 0;
+        }
+
+        _index.Clear();
+        _index.AddRange(live);
+        var ancestry = new List<KeyValuePair<TNode, TNode?>>(_parentOf.Count);
+        foreach (var entry in _parentOf)
+        {
+            if (_isLive(entry.Key))
+            {
+                ancestry.Add(entry);
+            }
+        }
+
+        _parentOf.Clear();
+        foreach (var entry in ancestry)
+        {
+            // A freed parent leaves its live child rooted here: IsWithin hashes every step of the
+            // chain it walks, so a dead one on that chain is the same fault one row down.
+            var parent = entry.Value;
+            _parentOf[entry.Key] = parent is not null && _isLive(parent) ? parent : null;
+        }
+
+        var freedClaims = new List<int>();
+        foreach (var claim in _byIndex)
+        {
+            if (!_isLive(claim.Value))
+            {
+                freedClaims.Add(claim.Key);
+            }
+        }
+
+        foreach (int gamezIndex in freedClaims)
+        {
+            _byIndex.Remove(gamezIndex);
+        }
+
+        _soleCopyCache.Clear();
+        _findCache.Clear();
+        return dropped;
+    }
+
+    /// <summary>How many indexed rows name a node the liveness test rejects, the stale entries a
+    /// stage would leave behind. Walks the whole index, so read it at a seam rather than per
+    /// frame; zero after <see cref="DropFreed"/>.</summary>
+    public int FreedRows()
+    {
+        int freed = 0;
+        foreach (var row in _index)
+        {
+            if (!_isLive(row.Node))
+            {
+                freed++;
+            }
+        }
+        return freed;
+    }
+
     /// <summary>Every indexed node matching a NAME pattern, optionally restricted to one node's
     /// subtree. Wildcards: <c>*</c> any run, <c>#</c> a digit run including zero; a plain name
     /// compares case-insensitively, also against a <c>.flt</c>-stripped copy. Memoized on
@@ -181,8 +264,8 @@ public sealed class NameResolver<TNode>
         var result = new List<TNode>();
         foreach (var row in _index)
         {
-            // A freed node stays in the index; nothing removes rows, and an airframe swap frees
-            // the aircraft it staged. Handing it out would be handing out a disposed object.
+            // A node freed since the last DropFreed is still in the index, and an airframe swap
+            // frees the aircraft it staged. Handing it out would be handing out a disposed object.
             if (!_isLive(row.Node))
             {
                 continue;
@@ -653,6 +736,8 @@ public sealed class NameResolver<TNode>
 
     // node is within scope's subtree, inclusive of scope itself — walks the recorded parent chain
     // rather than the live tree (see FindAll's own remark on reparenting).
+    // ⚠ Never leave a freed node as a KEY in _parentOf. Every step here hashes against its
+    // buckets, so a dead key throws in this walk rather than in Add; DropFreed is the sweep.
     private bool IsWithin(TNode node, TNode scope)
     {
         for (TNode? p = node; p is not null; _parentOf.TryGetValue(p, out p))

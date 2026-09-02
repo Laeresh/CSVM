@@ -1146,9 +1146,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// generic node names must not re-pose it.</summary>
     public void IndexRebasedStage(Node3D subtree, int indexOffset)
     {
+        // ⚠ Retire first, and only here: this is the one stage that puts a subtree in over one
+        // its caller may have freed, an airframe swapped for another on the same rig.
+        DropFreedNodes();
         IndexWorld(subtree, indexOffset: indexOffset);
         _resolver.ClearFindCache();
     }
+
+    /// <summary>How many rows of the resolver's node table name a node that has since been freed.
+    /// Zero right after <see cref="IndexRebasedStage"/>, which retires them. A suite reads it to
+    /// assert that, because the fault a stale row causes needs a hash collision and so shows on
+    /// some runs only.</summary>
+    public int FreedNodeRows() => _resolver.FreedRows();
 
     /// <summary>Parks a flown airframe's docking hook where its own <c>&lt;x&gt;_hook_retract</c>
     /// RESET_STATE puts it, scoped to a <see cref="PlaneBuilder.IsDockingHook"/> group inside this
@@ -2338,6 +2347,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     Walk(c, n);
         }
         Walk(worldRoot, worldRoot.GetParent() as Node3D);
+    }
+
+    // Retires every row naming a node freed since the last stage, before this stage's own queries
+    // meet one. Nothing tells the resolver a node has gone, and its ancestry walk hashes each step
+    // of a chain. A dead key then throws for whatever later query lands in its bucket.
+    private void DropFreedNodes()
+    {
+        int dropped = _resolver.DropFreed();
+        if (dropped > 0)
+            Log.Info("anim", $"anim: node table retired {dropped} row(s) naming freed node(s)");
     }
 
     // Re-runs the quiet-stage RESET_STATE posing pass (bootstrap pass 1) for whatever now anchors
