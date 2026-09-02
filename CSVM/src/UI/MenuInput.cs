@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using CSVM.Bindings;
 using CSVM.Utils;
 using Godot;
 
@@ -8,15 +9,23 @@ namespace CSVM.UI;
 
 /// <summary>
 /// One launchscreen player's input source: the keyboard (player 1 only) and that player's own
-/// gamepads, polled every frame with edge detection and auto-repeat. Per-player rather than an
-/// any-pad OR across the roster, which is what makes the join flow possible at all.
-/// ⚠ Poll raw device state; do not move this to Godot's input map or focus system. Only raw
-/// polling can read a NAMED device, and the join flow needs to know which pad pressed.
-/// <see cref="Prime"/> seeds the edge flags from the current raw state, so a button still held
-/// from whatever brought us here is not read as a fresh press on the next frame.
+/// gamepads, resolved through the named-action seam every frame with edge detection and
+/// auto-repeat. Per-player rather than an any-pad OR across the roster, which is what makes the
+/// join flow possible at all.
+/// ⚠ <see cref="JoinPressed"/> and <see cref="LastActivePad"/> keep polling raw device state and
+/// must stay that way: both answer "which pad did that", which an OR across a seat's bindings
+/// cannot express. Do not move any of this to Godot's input map or focus system.
+/// <see cref="Prime"/> seeds the edge flags from the current state, so a button still held from
+/// whatever brought us here is not read as a fresh press on the next frame.
 /// </summary>
 public sealed class MenuInput
 {
+    /// <summary>The identity this seat's pad bindings sit on. A placeholder like
+    /// <see cref="DefaultBindings.AnyPad"/>, because a menu seat reads a SET of pads (player 1 holds
+    /// every unclaimed one) rather than one device, and no binding may store a connection index.
+    /// <see cref="SeatDevices"/> is what answers for it.</summary>
+    public static readonly DeviceId SeatPads = DeviceId.Joypad("menu-seat");
+
     /// <summary>Whether this player also flies the keyboard (player 1 only).</summary>
     public bool Keyboard;
 
@@ -86,7 +95,9 @@ public sealed class MenuInput
     // at the controls: join/lock feel reads right at 2P and 4P, no retune owed.
     private const float RepeatInitial = 0.42f;   // s before the first repeat
     private const float RepeatInterval = 0.12f;  // s between repeats after that
-    private const float StickDeadzone = 0.5f;    // |LeftY| past this counts as a d-pad press
+    // What ScanActivePad counts as somebody actually steering with a stick. The cursor axes take
+    // the same number from their own bindings (DefaultBindings), which is where it is tunable.
+    private const float StickDeadzone = 0.5f;
 
     // The keys a text field takes a character from: the letters, the digit row and the space bar.
     // Nothing else is typeable, because nothing else is a character a profile name may carry.
@@ -103,9 +114,35 @@ public sealed class MenuInput
     // buttons get.
     private readonly bool[] _textPrev = new bool[TextKeys.Length];
 
+    // This seat's hardware, as the binding model addresses it.
+    private readonly SeatDevices _devices;
+
+    // The seat read three ways on one tick: keyboard live, keyboard minus the typeable keys, and
+    // the pad alone. Three seats over two maps rather than one, because the pad-only twins and the
+    // text-entry aliasing are both narrower readings of the same bindings.
+    private readonly PlayerActions _keys;
+    private readonly PlayerActions _typingKeys;
+    private readonly PlayerActions _padOnly;
+
+    // Whichever of the two keyboard seats TextEntry selected this tick.
+    private PlayerActions _live;
+
     private bool _acceptPrev, _backPrev, _padBackPrev, _startPrev, _loadoutPrev, _presetsPrev;
     private bool _erasePrev;
     private int _dirPrev, _dirXPrev, _dirPadPrev, _dirPadXPrev;
+
+    public MenuInput()
+    {
+        _devices = new SeatDevices(this);
+        var map = DefaultBindings.MapFor(InputContext.Menu, SeatPads);
+
+        // The keyboard gate follows the Keyboard field per tick (ReadDevices), not the value it
+        // holds here: every caller sets it in an object initializer, after this runs.
+        _keys = new PlayerActions(map, true);
+        _typingKeys = new PlayerActions(TypingMap(map), true);
+        _padOnly = new PlayerActions(map, false);
+        _live = _keys;
+    }
 
     /// <summary>The single pad this player is bound to, or −1 when it has none or several
     /// (player 1's unclaimed set) — for logging and the join bookkeeping.</summary>
@@ -160,10 +197,39 @@ public sealed class MenuInput
         return move;
     }
 
+    /// <summary>One cursor axis out of a resolved seat: negative wins a frame where both ends are
+    /// held, which is the order the raw reads had. Public for the mapping unit tests, like
+    /// <see cref="StepAxis"/>; it reads no device itself.</summary>
+    public static int Dir(PlayerActions actions, InputAction negative, InputAction positive)
+    {
+        ArgumentNullException.ThrowIfNull(actions);
+        return actions.Held(negative) ? -1 : actions.Held(positive) ? 1 : 0;
+    }
+
+    /// <summary>The menu keymap with every binding on a typeable key dropped, which is what
+    /// <see cref="TextEntry"/> reads. A letter bound to a cursor action would otherwise walk the
+    /// cursor on every second character typed into a name field. The rule is the key's typeability
+    /// rather than a fixed list, so it still holds after a rebind.</summary>
+    public static ActionMap TypingMap(ActionMap full)
+    {
+        ArgumentNullException.ThrowIfNull(full);
+        var map = full.Clone();
+        foreach (var action in DefaultBindings.ActionsIn(InputContext.Menu))
+        {
+            foreach (var binding in full.Bindings(action))
+            {
+                if (binding.Device.Kind == DeviceKind.Keyboard && Array.IndexOf(TextKeys, (Key)binding.Control.Index) >= 0)
+                    map.Unassign(action, binding);
+            }
+        }
+
+        return map;
+    }
 
     /// <summary>Reads this player's devices and fills the result fields.</summary>
     public void Poll(float dt)
     {
+        ReadDevices();
         Move = StepAxis(RawDir(), ref _dirPrev, _repeat, dt);
         MoveX = StepAxis(RawDirX(), ref _dirXPrev, _repeatX, dt);
         PadMove = StepAxis(RawPadDir(), ref _dirPadPrev, _repeatPad, dt);
@@ -203,6 +269,7 @@ public sealed class MenuInput
     /// already held) and clears the last results.</summary>
     public void Prime()
     {
+        ReadDevices();
         _acceptPrev = RawAccept();
         _backPrev = RawBack();
         _padBackPrev = RawPadBack();
@@ -312,86 +379,84 @@ public sealed class MenuInput
 
     private bool KeyDown(Key key) => Keyboard && Input.IsKeyPressed(key);
 
-    // A key that means something here only because nothing else claimed it. A screen taking typed
-    // text claims it, so these go quiet there while the dedicated keys carry on.
-    private bool AliasDown(Key key) => !TextEntry && KeyDown(key);
-
-    // Button pressed on ANY of this player's pads (a set of one for a joined player,
-    // every unclaimed device for player 1). Through `CSVM.Pads.For` rather than the
-    // Pads field directly, so the read is gated on window focus and on
-    // `--no-pads` — the field stays the player's binding, which
-    // the join bookkeeping still needs while unfocused.
-    private bool PadButton(JoyButton button)
+    // One resolution of this tick for every read below. The snapshot guarantee is per Poll, so two
+    // reads in one frame cannot disagree the way two hardware reads could; the keyboard gate is
+    // taken from the live field because a caller sets it after construction.
+    private void ReadDevices()
     {
-        foreach (int pad in CSVM.Pads.For(Pads))
-            if (Input.IsJoyButtonPressed(pad, button))
-                return true;
-        return false;
+        _keys.ReadsKeyboard = Keyboard;
+        _typingKeys.ReadsKeyboard = Keyboard;
+        _live = TextEntry ? _typingKeys : _keys;
+        _live.Poll(_devices);
+        _padOnly.Poll(_devices);
     }
 
-    // The largest-magnitude value of the axis across this player's pads — idle phantom
-    // devices read ~0 and never mask a real stick.
-    private float PadAxis(JoyAxis axis)
+    private int RawPadDir() => Dir(_padOnly, InputAction.MenuUp, InputAction.MenuDown);
+
+    private int RawPadDirX() => Dir(_padOnly, InputAction.MenuLeft, InputAction.MenuRight);
+
+    private int RawDir() => Dir(_live, InputAction.MenuUp, InputAction.MenuDown);
+
+    private int RawDirX() => Dir(_live, InputAction.MenuLeft, InputAction.MenuRight);
+
+    private bool RawAccept() => _live.Held(InputAction.MenuAccept);
+
+    private bool RawBack() => _live.Held(InputAction.MenuBack);
+
+    private bool RawPadBack() => _padOnly.Held(InputAction.MenuBack);
+
+    // Start stays pad-only through its bindings: the keyboard is always player 1, who is joined
+    // from the start and has nothing to join.
+    private bool RawStart() => _live.Held(InputAction.MenuStart);
+
+    private bool RawLoadout() => _live.Held(InputAction.MenuLoadout);
+
+    private bool RawPresets() => _live.Held(InputAction.MenuPresets);
+
+    // This seat's hardware as the binding model addresses it: the keyboard, and SeatPads standing
+    // for whichever pads this player currently holds. Pad reads go through CSVM.Pads.For, so the
+    // focus and --no-pads gates still apply while the Pads field stays the player's binding.
+    private sealed class SeatDevices : IDeviceState
     {
-        float v = 0f;
-        foreach (int pad in CSVM.Pads.For(Pads))
+        private readonly MenuInput _owner;
+
+        public SeatDevices(MenuInput owner) => _owner = owner;
+
+        public bool IsKeyDown(DeviceId device, int keyCode) =>
+            device.Kind == DeviceKind.Keyboard && Input.IsKeyPressed((Key)keyCode);
+
+        public bool IsButtonDown(DeviceId device, int button)
         {
-            float a = Input.GetJoyAxis(pad, axis);
-            if (Mathf.Abs(a) > Mathf.Abs(v))
-                v = a;
+            if (device != SeatPads)
+                return false;
+            foreach (int pad in CSVM.Pads.For(_owner.Pads))
+                if (Input.IsJoyButtonPressed(pad, (JoyButton)button))
+                    return true;
+            return false;
         }
-        return v;
+
+        public bool IsMouseButtonDown(DeviceId device, int button) =>
+            device.Kind == DeviceKind.Mouse && Input.IsMouseButtonPressed((MouseButton)button);
+
+        // The largest-magnitude reading across this player's pads: an idle phantom device reads
+        // about zero and never masks a real stick.
+        public float AxisValue(DeviceId device, int axis)
+        {
+            if (device != SeatPads)
+                return 0f;
+            float value = 0f;
+            foreach (int pad in CSVM.Pads.For(_owner.Pads))
+            {
+                float a = Input.GetJoyAxis(pad, (JoyAxis)axis);
+                if (Mathf.Abs(a) > Mathf.Abs(value))
+                    value = a;
+            }
+
+            return value;
+        }
+
+        // Nothing can hand this a hat: no default authors one and BindingStore rejects the token,
+        // because Godot reports a d-pad as four buttons (DefaultBindings).
+        public HatDirection HatState(DeviceId device, int hat) => HatDirection.None;
     }
-
-    private int RawPadDir()
-    {
-        float stickY = PadAxis(JoyAxis.LeftY);
-        bool up = PadButton(JoyButton.DpadUp) || stickY < -StickDeadzone;
-        bool down = PadButton(JoyButton.DpadDown) || stickY > StickDeadzone;
-        return up ? -1 : down ? 1 : 0;
-    }
-
-    private int RawPadDirX()
-    {
-        float stickX = PadAxis(JoyAxis.LeftX);
-        bool left = PadButton(JoyButton.DpadLeft) || stickX < -StickDeadzone;
-        bool right = PadButton(JoyButton.DpadRight) || stickX > StickDeadzone;
-        return left ? -1 : right ? 1 : 0;
-    }
-
-    private int RawDir()
-    {
-        int pad = RawPadDir();
-        bool up = KeyDown(Key.Up) || AliasDown(Key.W) || pad < 0;
-        bool down = KeyDown(Key.Down) || AliasDown(Key.S) || pad > 0;
-        return up ? -1 : down ? 1 : 0;
-    }
-
-    private int RawDirX()
-    {
-        int pad = RawPadDirX();
-        bool left = KeyDown(Key.Left) || AliasDown(Key.A) || pad < 0;
-        bool right = KeyDown(Key.Right) || AliasDown(Key.D) || pad > 0;
-        return left ? -1 : right ? 1 : 0;
-    }
-
-    private bool RawAccept() =>
-        KeyDown(Key.Enter) || KeyDown(Key.KpEnter) || AliasDown(Key.Space) || PadButton(JoyButton.A);
-
-    private bool RawBack() => KeyDown(Key.Escape) || RawPadBack();
-
-    private bool RawPadBack() => PadButton(JoyButton.B);
-
-    // Start is the join gesture, so it is pad-only: the keyboard is always player 1,
-    // who is joined from the start and has nothing to join.
-    private bool RawStart() => PadButton(JoyButton.Start);
-
-    // L on the keyboard beside Y on the pad. Both are otherwise unread in menu context, so this
-    // adds a meaning rather than overloading one: W/A/S/D are the stepper axes and Space/Enter,
-    // Escape and Start are all spoken for.
-    private bool RawLoadout() => AliasDown(Key.L) || PadButton(JoyButton.Y);
-
-    // P on the keyboard beside X on the pad, the last free face button in menu context (A/B/Y and
-    // Start are all spoken for above). Same rule as RawLoadout: a new meaning, not an overload.
-    private bool RawPresets() => AliasDown(Key.P) || PadButton(JoyButton.X);
 }

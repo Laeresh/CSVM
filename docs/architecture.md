@@ -4810,8 +4810,14 @@ the combined back would act twice on one press.
 
 ## src/UI/MenuInput.cs
 One player's menu input source — keyboard flag (player 1 only), `Pads` binding, edge/auto-repeat
-state; `Poll(dt)` fills Move/MoveX/Accept/Back/PadBack/Start (polled: actions can't read a
-named device). `Pads` is nullable, null meaning every connected pad, which is the same binding
+state; `Poll(dt)` fills Move/MoveX/Accept/Back/PadBack/Start out of the `Menu` binding context
+(`src/Bindings/`), resolved once a tick through three readings of one seat: keyboard live,
+keyboard minus the typeable keys (`TypingMap`, what `TextEntry` reads), and the pad alone. Its pad
+rows sit on the seat-local `SeatPads` identity, since a seat reads a *set* of pads rather than one
+device and no binding may hold a connection index; `SeatDevices` answers for it through
+`Pads.For`, which is what keeps the focus and `--no-pads` gates. `JoinPressed` and `LastActivePad`
+stay raw polls: both answer which pad acted, which an OR across a seat's bindings cannot express,
+and typed text has no named action at all. `Pads` is nullable, null meaning every connected pad, which is the same binding
 `FlightController.PadDevices` takes — a single-player session has no per-player assignment to hand
 over. `PadBack` is the pad's B alone, for a reader whose Escape is spoken for elsewhere; a board
 menu's is. Serves both the launchscreen and the in-flight board menus.
