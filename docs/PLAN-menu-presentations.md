@@ -990,7 +990,11 @@ alone, since Original has no cabin until Wave D; and no real pad or keyboard typ
 screen. The hardware pass is owed at the controls: `.\RunDev.ps1 --presentation=original`, BUILD
 PLANE, a name typed, the tabs clicked and walked from the pad, a plane bought and sold.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The plan tree with C23 landed passed the complete `.\RunTests.ps1` (2967 units, 209
+engine suites across 4 shards with both hangar suites among them, 18 goldens hash-identical,
+engine errors clean, 148.8s). The user's custom-plane store holds no scratch plane afterwards.
+CAP-53 and the campaign-wallet door through an Original cabin remain owed, as the Verify
+paragraph states.
 
 **⚠ Traps.** Cancelling remains residue-free by dropping the scratch plane; do not replace that with
 an undo path. Presentation switching also discards the scratch flow without committing.
