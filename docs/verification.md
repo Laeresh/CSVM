@@ -538,6 +538,15 @@ loss. What the engine renders was decodable from the authored constants + oscill
   after-the-fix probe log showed the same reader files still loading as the before probe, with the
   gate line absent from both, until `--no-incremental` produced a real ~8 s rebuild and the gate
   showed up in the log.
+- **SHELL-17** — **A census script must not name its accumulator after one of its own parameters:
+  PowerShell variable names are case-insensitive, so `$nodes = @()` under `param([string]$Nodes)`
+  writes the empty array into the TYPED parameter, which coerces it to `""` and turns every
+  later `+=` into string concatenation.** The count then reads 1 whatever the data holds, and an
+  empty census is indistinguishable from a correct one that found nothing. Measured while sampling
+  terrain heights out of a chapter's `nodes.json`: the scan reported "terrain nodes: 1" and every
+  sample point answered "no terrain triangle", while the same parse inlined at the prompt found
+  231. Give the accumulator a name no parameter shares, and assert the census count against an
+  independent count of the same records before reading any result off it.
 
 ## INSTR — building instruments
 
