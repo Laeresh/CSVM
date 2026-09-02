@@ -851,7 +851,8 @@ chain; they must not be re-tuned to compensate for enhanced-mode bloom (they are
 original footage). WorldBuilder.cs:487-488 forbids a colour-grading stage for the *faithful* dome
 colour; the tonemap lives strictly behind the enhanced branch.
 
-**Verified.** <pending orchestrator run> `dotnet build CSVM/CSVM.sln`: clean, 0 warnings, 0 errors.
+**Verified.** The complete `.\RunTests.ps1` on the Wave C tree: 2796 units, 200 engine suites
+(errors clean), 18 goldens hash-identical, all passing in 144.8 s. During the item: `dotnet build CSVM/CSVM.sln`: clean, 0 warnings, 0 errors.
 `.\CheckCommentCaps.ps1 -Summary` and `.\CheckEncoding.ps1`: both clean over the whole tree.
 
 The landed change is `Launcher.EnableGlowAndTonemap`, called from `SetupLighting`'s existing
