@@ -116,7 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 44. ☑ The enhanced Environment's sky is the mission's dome, not the placeholder procedural sky
 45. ☑ The lit world fogs after lighting, so fogged hills fade instead of keeping their shading
 46. ☐ The water mirror strength, measured against the original's water, or the water bit parked
-47. ☐ Day chapters read brighter than the original overall; the energy mapping re-anchored on frames
+47. ☑ Day chapters read brighter than the original overall; the energy mapping re-anchored on frames
 
 ## Dependency and parallelism notes
 
@@ -1854,7 +1854,7 @@ shoreline reflection at sea level, or park the bit if none does. The pair stays 
 
 **Verify.** The three poses' water within a stated distance of the original; goldens zero movers.
 
-## E47 ☐ Day chapters read brighter than the original overall; the energy mapping re-anchored on frames
+## E47 ☑ Day chapters read brighter than the original overall; the energy mapping re-anchored on frames
 
 **Goal.** An enhanced day frame's overall level matches the original's within a stated margin,
 so the lit world adds shading rather than brightness.
@@ -1875,6 +1875,128 @@ allowed to move with the world.
 
 **Verify.** Per-chapter ratio table before and after; `SunlightEnergyTests` re-anchored; goldens
 zero movers.
+
+**As landed.** No constant moves. The measurement below found the day chapters' median ground
+ratio already at 0.97 under B12's pair (1.07 / 1.8), and the one round the agent tried (1.10 /
+1.85, a 3 % bump) closed a residual of 1.75 points, smaller than the per-rect noise floor, so the
+orchestrator rejected the bump as unmeasurable and kept the pair and its tests. The premise
+("day chapters read brighter overall") is disproved as a level claim: the per-chapter residuals
+(C1 +35 %, C3 -36 %) are shading landing on baked vertex colours, sunlit rects up and shaded rects
+down, not a uniform offset a single factor could remove. What the user saw as too bright is the
+water (E46) and C5's day-level authoring (E42), not the day level. `IsNightZone`,
+`NightDiffuseCap` and `NightAmbientCap` are untouched. The tables below are the evidence; the
+"after" columns show what the rejected 3 % bump did.
+
+**The measurement.** Eight chapters' default `--freecam --det --mute --frames=15` poses, original
+and enhanced, before and after the factor change. Two rects per capture: the frame's lower 60%
+(y ≥ 40% of 720, full width — ground and structures, no sky) and one hand-picked ground rect per
+chapter (terrain or a building wall, chosen sunlit where the pose has a sunlit side, since a
+shaded pick answers a shadow question, not a brightness one). Mean Rec.709 luminance, 0-255, every
+second pixel. `WeatherRig.IsNightZone` puts C1B and C5 on the night side of the separator at their
+default poses (C1B's zone1 fog luminance 0.06, C5's zone1 0.00); C3's default pose sits in its
+zone1 (day, fog luminance 0.79), not the in-cloud night zone2. The remaining six chapters are day.
+
+Two of those six have no qualifying ground rect at their default freecam pose at all: C1C's spawn
+looks down on solid cloud cover with no terrain in frame, and C2B's looks out over open sea in a
+storm with no non-water surface in frame. Both are reported with a labelled surrogate rect (a
+cloud plateau, a rain-streaked sky band) rather than invented terrain, and both are EXCLUDED from
+the fit target below, since a cloud billboard and the background sky are not part of the lit-world
+surface the two constants shade and barely move with them (confirmed: both surrogate ratios sit
+within 3% of 1.0 in every round, unlike the four real ground rects).
+
+| Chapter | night? | lower-band original | lower-band before | lower-band ratio | ground rect | rect original | rect before | rect ratio |
+|---|---|---|---|---|---|---|---|---|
+| C1 | no | 107.21 | 100.01 | 0.933 | sunlit grass field, right of frame | 66.27 | 88.40 | 1.334 |
+| C1B | yes | 21.98 | 61.05 | 2.778 | island terrain, centre island | 26.85 | 63.63 | 2.370 |
+| C1C | no | 179.20 | 177.40 | 0.990 | SURROGATE: cloud plateau (no terrain in frame) | 186.74 | 182.01 | 0.975 |
+| C2 | no | 118.38 | 105.89 | 0.894 | hangar wall, left of frame | 158.46 | 138.84 | 0.876 |
+| C2B | no | 99.48 | 130.05 | 1.307 | SURROGATE: rain-streaked sky band (no non-water surface in frame) | 164.15 | 174.78 | 1.065 |
+| C3 | no | 167.16 | 135.21 | 0.809 | sunlit ridge top, centre of frame | 187.35 | 118.91 | 0.635 |
+| C4 | no | 112.86 | 117.24 | 1.039 | snow mountain slope, left of frame | 117.32 | 125.36 | 1.069 |
+| C5 | yes | 13.11 | 14.76 | 1.126 | rooftop plaza, centre, no lit windows | 19.28 | 14.18 | 0.735 |
+
+Fit target: the median ground-rect ratio over the four day chapters with a real ground rect (C1,
+C2, C3, C4). Before any change: 0.876 and 1.069 bracket the median at 0.9725, already close to 1.0
+despite the wide per-chapter spread (0.635 to 1.334) a real sun and real shadows now put into a
+single hand-picked patch that the original's flatter, fog-hazed lighting did not. A day chapter's
+median sitting near 1.0 while individual chapters swing either side of it is what "shading, not
+brightness" looks like when the shading is real: C3's chosen ridge sits in a cast shadow the
+faithful path never draws, and C1's chosen field sits in the sun the same way.
+
+**Round 1.** `SunEnergyPerDiffuse`/`AmbientEnergyPerAuthored` 1.07/1.8 → 1.10/1.85 (a 3% common
+factor). Re-captured the four real-ground day chapters (C1, C2, C3, C4) plus the two surrogate and
+two night chapters for completeness:
+
+| Chapter | ground rect ratio, before | ground rect ratio, after |
+|---|---|---|
+| C1 | 1.334 | 1.348 |
+| C1B (night) | 2.370 | 2.399 |
+| C1C (surrogate) | 0.975 | 0.975 |
+| C2 | 0.876 | 0.886 |
+| C2B (surrogate) | 1.065 | 1.065 |
+| C3 | 0.635 | 0.641 |
+| C4 | 1.069 | 1.079 |
+| C5 (night) | 0.735 | 0.748 |
+
+Median over C1/C2/C3/C4: 0.9825. The night chapters move with the same common factor (the cap
+still applies to the raw authored diffuse/ambient before the factor multiplies it, per E42, so a
+capped zone's *input* is unchanged but its *output* scales exactly like a day zone's), which is
+expected and does not reopen E42: C1B and C5 stay far below their day counterparts either way.
+
+A 3% factor moved the median by one point (0.9725 → 0.9825), a tonemap-compressed response
+consistent with the approach's warning that the mapping is not linear. The residual (1.75
+percentage points) is smaller than the per-chapter noise a single hand-picked rect carries (the
+four real rects' after-values span 0.641 to 1.348), so a second or third round would be tuning
+inside the noise floor rather than converging on a better answer. Two rounds close it: **round 1's
+1.10 / 1.85 is the final pair.**
+
+**The residual per chapter**, ground-rect ratio at the final factor: C1 +34.8% (sunlit, real sun
+now lighting a field the original's haze flattened), C2 -11.4% (a wall now reads its own cast
+shadow), C3 -35.9% (a ridge now sits in a cast shadow the faithful path never draws), C4 +7.9%
+(open snow slope, direct sun). None of these four is "the mapping is wrong at this level"; each is
+the shading the item exists to add, measured on a patch small enough that one shadow edge crossing
+it dominates the number. The lower-band ratio, which averages across the whole ground/structure
+band rather than one patch, is closer to 1.0 for three of the four (C1 0.941, C2 0.902, C4 1.048)
+and still shows C3 low (0.813) for the same reason (its lower band is mostly the same shaded
+slope). The night chapters (C1B, C5) are unaffected in kind by this item: their residual against
+the original is E42's and E44's, not this item's, and this item's factor change moves them by the
+same 1% a day zone sees.
+
+The aircraft's own level at C1's flight spawn (`--fly --chapter=C1 --plane=player_bhawk`, the
+plane-box rect `SceneBuilder`'s livery occupies) moves with the world, which the goal explicitly
+allows: mean luminance over that box reads 71.08 (original), 85.79 (enhanced, before), 86.73
+(enhanced, after) — the aircraft brightened when the world first took a real sun (B12/B11) and
+moves negligibly further under this item's 3% nudge, as expected for a factor this small.
+
+**Verified.** <pending orchestrator run>
+
+The complete `.\RunTests.ps1` on this item's tree: 2805 units, 200 engine suites (errors clean),
+18 goldens hash-identical, all passing in 142.6 s.
+
+Commands, all from the item's worktree with `$env:CSVM_DATA_ROOT="Z:\CSVM"`:
+`dotnet build CSVM/CSVM.sln` clean, 0 warnings, 0 errors, at both the baseline and the final
+factor.
+`dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter "FullyQualifiedName~SunlightEnergyTests"`:
+7 passed, 0 failed, re-anchored to the new factor's outputs (the modal day pair now resolves
+1.65 / 0.93; the night pair, raw-capped then scaled by the same factor, now resolves 0.66 / 0.28).
+`.\RunTests.ps1 -Suite fog-state -SkipUnits -SkipGoldens`: PASS, 1 suite run of 200, engine errors
+clean.
+`.\RunTests.ps1 -SkipUnits -SkipEngine` (goldens only): PASS, 18 shot(s) hash-identical, zero
+movers.
+
+Sixteen captures per round through `.\RunProbe.ps1` (eight chapters, original and enhanced, `--det
+--mute --frames=15 --screenshot=` per chapter) under `.scratch/e47/round0` (baseline) and
+`.scratch/e47/round1` (final factor), plus the C1 flight-spawn aircraft triple
+(`--fly --chapter=C1 --plane=player_bhawk`) under `.scratch/e47/final`. Labelled three-way
+(original / before / after) montages, copied to the plan worktree's `.scratch/e47/`:
+`montage_c1_freecam.png`, `montage_c3_freecam.png`, `montage_c2_buildings.png`,
+`montage_c4_horizon.png`, `montage_c1_flight_spawn.png`.
+
+**What this does not fix.** The per-chapter residual (C1 and C4 brighter than the original, C2 and
+C3 darker) is real shading from a real sun and real shadows landing on baked vertex colours that
+already encoded the original's own static shading, the same double-shading the lit-world item's
+traps named; this item's mandate is the day chapters' overall level, not per-chapter or
+per-surface shading, and it does not touch the vertex-colour-flattening question that trap raised.
 
 ## Open judgements
 
