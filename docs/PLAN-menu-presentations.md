@@ -159,7 +159,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Setup features
 
-21. ☐ Extract Instant Action into a typed shared feature
+21. ☑ Extract Instant Action into a typed shared feature
 22. ☑ Extract shared player setup and deliver Dogfight in both presentations
 23. ☐ Separate hangar features from composition and deliver its Original screens
 
@@ -609,7 +609,7 @@ picture.
 
 # Wave C — Setup features
 
-## C21 ☐ Extract Instant Action into a typed shared feature
+## C21 ☑ Extract Instant Action into a typed shared feature
 
 **Goal.** Both presentations configure the same `InstantActionDef` through typed state and
 operations while retaining independent screen graphs.
@@ -631,9 +631,77 @@ Original Instant Action screen is another `OriginalScreen` member with its own `
 
 **Model recommendation.** high — dense decoded rules and many dependent fields.
 
-**Verify.** Run existing Instant Action wizard/preset units, add equivalent-operation tests across
-both presentation graphs, and launch representative ace, squadron, stunt and zeppelin sessions.
-<TODO: exact test classes/commands and Original reference journeys.>
+**Verify.** Characterization first, on the pre-extraction code: the new engine suite
+`menu-instant-action-journey` (`CSVM/src/Testing/MenuInstantActionSuites.cs`) drives a real
+`LaunchMenu` through `LaunchMenu.Drive(MenuCommands)` and the `Shown*` read-outs: Mode to
+Environment (seven rows, the region detail, the wrap), the Table of Contents (Contents opens it
+from Environment and nowhere else, Back leaves the fields untouched, Accept applies Girl Trouble and
+puts its name in the breadcrumb, reopening lands on the applied preset), Mission type with the
+lives stepper (clamped at unlimited and at nine), the ace skip forward to the Aircraft screen and
+back to Mission, Waves (cursor parked on Continue, the preset's waves read back), the wave editor
+(a count step, a militia step resetting the aircraft, a skill step, Back keeping the edit), Wingmen
+(the aircraft row hidden at zero, the loadout gated on wingmen, the wingman loadout's heading),
+Back at every step, the `LaunchExit` with its `InstantActionDef` (C4's own ace, the edited and
+preset waves, the unused slots as `InstantAction.EmptyWave`, the nominal player aircraft), the
+fields surviving a `HideMenu`/`ShowMenu` return, the aids `--menu=presets|environment|missiontype|waves|wingmen|wingmanloadout`
+forcing the mode, `DebugWaves(2)`/`DebugWingmen(3)`/`DebugPreset(2)` with a second launch through
+the ace skip, and the clouds' three-row mission list. Green before the extraction and green after
+it with one mechanical edit, the shared `MenuSuiteHost.Bare` setup line taking the data root the
+feature reads environment defs from (the same line in `menu-free-flight-journey`). Then the
+extraction: `dotnet build CSVM/CSVM.sln`, the whole `dotnet test CSVM.Tests/CSVM.Tests.csproj`
+(2909, of which 13 `InstantActionFeatureTests` over the option sets, the rules, a preset, the gate,
+the def and the discard against a fake environment loader; 13 `OriginalInstantActionTests` over the
+fixture's new `[@InstantAction@]` section covering the live top-level row, the opening rows,
+a preset on select and the title on View Story, the scrolling window, the dropdown list by click
+and by sideways step with the clouds barred under stunt flying, the enemy pages and the ace
+hiding, the radio pair, Back and Exit, Fly Mission's exit, the inks, and a layout with no section;
+`InstantActionPresetsTests` moved with the table into `CSVM.UI.Menu`; `OriginalShellTests` with four
+mechanical edits for the now-live Instant Action row (the enabled array and three cursor walks);
+`MenuNamespaceDependencyTests` green with the feature and the presets in the shared namespace),
+then `.\RunTests.ps1 -Suite "menu-instant-action-journey,menu-original-instant-action,menu-free-flight-journey,menu-host-tracer,menu-original-tracer,menu-zone-layout,menu-screenshot-key" -SkipUnits -SkipGoldens`
+(7 suites, 7 passed, engine errors clean), `.\CheckCommentCaps.ps1 -Summary` and
+`.\CheckEncoding.ps1`. `menu-original-instant-action` is the Original half over the install's own
+layout: `--presentation=original` selects Original, a pointer click on the live `MM_B_INSTANTACTION`
+plaque opens the decoded screen with the first environment's own def loaded, the contents window is
+the layout's fourteen rows, the player plane dropdown stands at its authored line with the
+Autogyro, the ace duel opens with no enemy row, Exit is the measured strip and Build and Weapon
+Loadout are disabled, keyboard frames cross from the contents column to the dropdown column, step
+the player plane sideways, open its eleven-row list and pick by Down and Accept, and show and hide
+the wingman plane with the count; then four presets (Me and My Big Mouth, Girl Trouble, Sour
+Grapes, The Angry Luau: an ace duel over C1B, a squadron over C4, a stunt run over C5, a zeppelin
+run over C3) are each selected by a click and flown by Fly Mission, leaving as one `LaunchExit`
+for seat 0 in the preset's airframe with the preset's def over the environment's own ace, from
+which `SessionSpec.FromMenu` derives the chapter, the scenario and the stunt flag the launcher
+would build, the host hiding the presentation on each exit and a top-level re-show re-entering
+with the setup kept. Shots: `.\RunProbe.ps1 --menu=<aid> [--debug-waves=2 | --debug-wingmen=2] --screenshot=<abs path>`
+for `presets`, `environment`, `missiontype`, `waves` and `wingmen` from the pre-extraction binary
+into `.scratch\c21-before\` and from the extracted one into `.scratch\c21-after\`, compared by
+decoded 32bpp pixels (SHA-256 over the rows): all five identical. The Plane screen was not shot,
+since its roster reads `user://` customs and a shot of it is only comparable against a baseline
+over the same store. Original: Godot launched on the hidden desktop with `--resolution WxH` ahead
+of the `--` and `--presentation=original --menu=instant-action --screenshot=` into
+`.scratch\c21-shots\` at 1024x768 and 1920x1080, plus the top level at 1024x768 with its Instant
+Action plaque live; the shots stand for composition on the opening state only, and cannot show the
+rollover and pressed frames, an open list, the second enemy page or a non-ace state, which the
+driven suites pin. `docs/verification.md` rules that bit: **SHOT-6** (decoded pixels, never PNG
+bytes), **SHOT-9**/**SHOT-10** (windowed probes on the hidden desktop, absolute paths, files checked
+present), **SHOT-32** (a shot proves the frame it drew, so behaviour is pinned by the driven suites
+and the shots stand for appearance), **METHOD-3** (the five compared aids avoid the store on
+purpose, so no baseline had to be re-measured), **SRC-7** (the paged enemy rows, the ace hiding, the
+militia reset, the preset on select and the title on View Story are the script's and the
+executable's stated behaviour; the open list under its box, both halves shown together, keyboard
+stepping and the two disabled buttons are recorded as remake-only until CAP-50 is filmed, in
+`docs/org/menu-inventory.md` Part 4 and `playtest.md`'s CAP-50 row).
+
+What this did not prove: the harness runs a suite before any session builds, so the four Original
+launches are typed exits and derived specs, not built worlds; the build is the same
+`OnMenuExit`/`StartSessionFromMenu` path Built-in's Instant Action launch takes, which
+`menu-instant-action-journey` proves up to the same exit. The real flights are exercised at the
+controls: `.\RunDev.ps1 --presentation=original`, Instant Action, a contents row, Fly Mission, then
+the pause board's Exit must re-enter Original's top level with the setup kept; and Built-in's own
+wizard flown once end to end.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Shared feature state does not imply a shared wizard. Preserve the ace skip in Built-in;
 Original follows its own evidenced navigation.
@@ -659,6 +727,16 @@ launches one `MenuSeatChoice` with no pads (`OriginalShell.ActivateFreeFlight`);
 is the eleven stock nodes from `OriginalRosters`, with no custom planes and no join strip. The
 join flow, the per-seat pointer mapping and the roster with customs are C22's to add on the same
 `OriginalScreen.FreeFlight` rows.
+
+Handoff from C21: Original's Instant Action screen (`OriginalInstantAction.cs`) launches seat 0 on
+the feature's `PlayerPlane` node with no pads and no fit, its `IA_D_PLANEP` dropdown lists the
+eleven stock airframes (the layout's 20-row window is authored for stock plus the saved customs),
+`IA_B_CHANGEWEAPONS` draws disabled and the Player/Wingman radio only records
+`OriginalShell.LoadoutTarget`, so the customs in that dropdown, the seat's fit and the loadout
+screen the button opens are C22's to add on the same rows. Built-in's `FireLaunch` still builds the
+Dogfight exit itself; the Instant Action branch is `InstantActionFeature.BuildExit(seats,
+nominalPlayerPlane)`, so a shared player setup that owns `SeatChoices` hands the same list to both
+features.
 
 **Model recommendation.** high — multiplayer device ownership and same-frame input races are fragile.
 

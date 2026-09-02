@@ -161,21 +161,45 @@ public class MenuLayoutReaderTests
     /// <summary>The probe fixture decoded and emitted by the extractor's own code, then read back.</summary>
     internal static MenuLayout ProbeLayout() => MenuLayout.Parse(MenuLayoutDecoder.ToJson(MenuLayoutDecoder.Decode(ProbeInput())));
 
-    /// <summary>The Original shell's fixture: a main menu and a flight-check plaque row with
-    /// invented geometry under the keys the shell reads.</summary>
+    /// <summary>The Original shell's fixture: a main menu, a flight-check plaque row and an
+    /// Instant Action section with invented geometry under the keys the shell reads.</summary>
     internal static MenuLayout OriginalLayout()
     {
         var input = new MenuLayoutInput
         {
             LayoutCsv = File.ReadAllText(TestData.Fixture("menu-layout-original", "LAYOUT.CSV"), Encoding.ASCII),
-            ResourceHeader = "#define IDS_PM_CHANGEPLANE 200\n",
-            Strings = new Dictionary<int, string> { [200] = "Change Plane" },
+            ResourceHeader = "#define IDS_PM_CHANGEPLANE 200\n#define IDS_PI_WEAPONS 201\n#define IDS_PI_FLY 202\n"
+                + "#define IDS_PI_VIEW 203\n#define IDS_PI_TABLE 204\n#define IDS_PI_TABLEINSTR 205\n"
+                + "#define IDS_PI_STORYINSTR 206\n#define IDS_PI_PILOT 207\n#define IDS_PI_WINGMEN 208\n"
+                + "#define IDS_PI_PLANE 209\n#define IDS_PI_MISSION 210\n#define IDS_PI_ENV 211\n"
+                + "#define IDS_PI_ENEMY 212\n#define IDS_PI_CONTINUED 213\n#define IDS_PI_GOBACK 214\n",
+            Strings = new Dictionary<int, string>
+            {
+                [200] = "Change Plane",
+                [201] = "Weapons",
+                [202] = "Fly",
+                [203] = "View",
+                [204] = "Contents",
+                [205] = "Pick a mission below.",
+                [206] = "Set the details below.",
+                [207] = "Pilot",
+                [208] = "Wingmen",
+                [209] = "Plane:",
+                [210] = "Mission:",
+                [211] = "Environment:",
+                [212] = "Enemy:",
+                [213] = "[more ...]",
+                [214] = "[back ...]",
+            },
             ArchiveFiles = new List<string>
             {
                 "GRAPHICS/PM_Logo.png", "GRAPHICS/PM_Frame.png", "GRAPHICS/PM_B_Campaign.png",
                 "GRAPHICS/PM_B_InstantAction.png", "GRAPHICS/PM_B_MultiPlayer.png",
                 "GRAPHICS/PM_B_Preferences.png", "GRAPHICS/PM_B_Credits.png", "GRAPHICS/PM_B_Quit.png",
-                "GRAPHICS/PM_B_Paper.png",
+                "GRAPHICS/PM_B_Paper.png", "GRAPHICS/PI_IA_Back.jpg", "GRAPHICS/PI_B_Exit.png",
+                "GRAPHICS/PI_B_Build.png", "GRAPHICS/PI_B_Paper.png", "GRAPHICS/PI_B_Radio.png",
+                "GRAPHICS/PI_B_Up.png", "GRAPHICS/PI_B_Down.png", "GRAPHICS/PI_B_ScrollBar.png",
+                "GRAPHICS/PI_B_ScrollUp.png", "GRAPHICS/PI_B_ScrollDown.png",
             },
         };
         return MenuLayout.Parse(MenuLayoutDecoder.ToJson(MenuLayoutDecoder.Decode(input)));

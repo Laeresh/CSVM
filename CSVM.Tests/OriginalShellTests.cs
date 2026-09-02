@@ -33,9 +33,9 @@ public class OriginalShellTests
             new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey, "MM_B_CAMPAIGN", "MM_B_INSTANTACTION", "MM_B_MULTIPLAYER", "MM_B_PREFERENCES", "MM_B_CREDITS", "MM_B_QUIT" },
             shell.Rows.Select(r => r.Key));
         Assert.Equal(OriginalShell.FreeFlightKey, shell.FocusedKey);
-        // The decoded rows with no remake destination yet are disabled; Preferences (the Options
-        // door) and Quit react.
-        Assert.Equal(new[] { true, true, false, false, false, true, false, true }, shell.Rows.Select(r => r.Enabled));
+        // The decoded rows with no remake destination yet are disabled; Instant Action,
+        // Preferences (the Options door) and Quit react.
+        Assert.Equal(new[] { true, true, false, true, false, true, false, true }, shell.Rows.Select(r => r.Enabled));
         // A decoded button's rectangle is its authored corner and its measured strip's frame.
         var quit = shell.Rows.Single(r => r.Key == "MM_B_QUIT");
         Assert.Equal((280f, 530f, 240f, 50f), (quit.X, quit.Y, quit.Width, quit.Height));
@@ -85,6 +85,8 @@ public class OriginalShellTests
 
         shell.Step(Down);
         Assert.Equal(OriginalShell.DogfightKey, shell.FocusedKey);
+        shell.Step(Down);
+        Assert.Equal("MM_B_INSTANTACTION", shell.FocusedKey);
         shell.Step(Down);
         Assert.Equal("MM_B_PREFERENCES", shell.FocusedKey);
         shell.Step(Down);
@@ -166,6 +168,7 @@ public class OriginalShellTests
         shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);
+        shell.Step(Down);
         Assert.Equal("MM_B_QUIT", shell.FocusedKey);
         Assert.IsType<QuitExit>(shell.Step(Accept).Exit);
     }
@@ -195,6 +198,7 @@ public class OriginalShellTests
     public void TheOptionsScreenTogglesThePresentationAndAppliesItAsASwitchExit()
     {
         var shell = Shell(out _);
+        shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);
         shell.Step(Accept);

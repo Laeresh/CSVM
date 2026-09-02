@@ -3,8 +3,8 @@ using System.Collections.Generic;
 
 namespace CSVM.UI.Menu.Original;
 
-/// <summary>The Original presentation's screens. The top level is decoded; the others are
-/// remake-only screens composed in the decoded chrome's conventions.</summary>
+/// <summary>The Original presentation's screens. The top level and the Instant Action screen are
+/// decoded; the others are remake-only screens composed in the decoded chrome's conventions.</summary>
 public enum OriginalScreen
 {
     /// <summary>The main menu: the decoded <c>[@MainMenu@]</c> rows plus the Free Flight and Dogfight doors.</summary>
@@ -18,6 +18,10 @@ public enum OriginalScreen
 
     /// <summary>The remake-only minimal Options screen: the presentation chooser.</summary>
     Options,
+
+    /// <summary>The decoded <c>[@InstantAction@]</c> setup screen: the Table of Contents, the
+    /// dropdowns, the paged enemy rows, the radio pair and its buttons.</summary>
+    InstantAction,
 }
 
 /// <summary>How a row draws and reacts.</summary>
@@ -31,6 +35,13 @@ public enum OriginalRowKind
 
     /// <summary>One entry of a text list.</summary>
     ListRow,
+
+    /// <summary>A decoded dropdown: its box shows the picked value, Accept opens its list, a
+    /// sideways step picks the next value.</summary>
+    Dropdown,
+
+    /// <summary>One button of a decoded radio pair, drawn from an eight-state strip.</summary>
+    Radio,
 }
 
 /// <summary>One interactive element of a screen in authored 800x600 pixels: what it is, where it
@@ -57,11 +68,12 @@ public sealed record OriginalInks(
 /// <summary>
 /// The Original presentation's screen graph, engine-free: the decoded top level with the
 /// remake-only Free Flight and Dogfight doors, the two sortie screens over the shared player
-/// setup, and the minimal Options screen, driven by each seat's semantic commands and composed
-/// into a <see cref="ComposedBoard"/> in the authored 800x600 space. Seat 0's pointer arrives
-/// already mapped into that space; hovering a live row moves the focus onto it, so keyboard, pad
-/// and pointer share one cursor. Every rectangle and art name comes from the layout; the art's
-/// pixel size, which the layout does not carry, comes from the measurer the presentation injects.
+/// setup (their own partial file), the minimal Options screen and the decoded Instant Action
+/// screen (its own partial file), driven by each seat's semantic commands and composed into a
+/// <see cref="ComposedBoard"/> in the authored 800x600 space. Seat 0's pointer arrives already
+/// mapped into that space; hovering a live row moves the focus onto it, so keyboard, pad and
+/// pointer share one cursor. Every rectangle and art name comes from the layout; the art's pixel
+/// size, which the layout does not carry, comes from the measurer the presentation injects.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -132,18 +144,20 @@ public sealed partial class OriginalShell
     private int _pickedChapter = -1;
     private string _choice = PresentationId.Original.Value;
 
-    /// <summary>A shell over <paramref name="layout"/>, the shared Free Flight feature and the
-    /// shared player setup. <paramref name="measure"/> answers an art name with its strip's pixel
-    /// size, or null when the file is not there; <paramref name="flightDevices"/> answers a seat
-    /// with the devices its launch binds (none when omitted); the chapters default to
-    /// <see cref="OriginalRosters"/>.</summary>
+    /// <summary>A shell over <paramref name="layout"/> and the shared Free Flight, player setup
+    /// and Instant Action features. <paramref name="measure"/> answers an art name with its
+    /// strip's pixel size, or null when the file is not there; <paramref name="flightDevices"/>
+    /// answers a seat with the devices its launch binds (none when omitted); the chapters default
+    /// to <see cref="OriginalRosters"/>; a shell given no Instant Action feature configures a
+    /// private one over the built-in defaults, for a test that reads the other screens.</summary>
     public OriginalShell(
         MenuLayout layout,
         FreeFlightFeature free,
         PlayerSetupFeature setup,
         Func<string, (int Width, int Height)?> measure,
         Func<PlayerSeat, IReadOnlyList<int>>? flightDevices = null,
-        IReadOnlyList<OriginalChapter>? chapters = null)
+        IReadOnlyList<OriginalChapter>? chapters = null,
+        InstantActionFeature? instantAction = null)
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _free = free ?? throw new ArgumentNullException(nameof(free));
@@ -151,9 +165,11 @@ public sealed partial class OriginalShell
         _measure = measure ?? throw new ArgumentNullException(nameof(measure));
         _flightDevices = flightDevices ?? (_ => Array.Empty<int>());
         _chapters = chapters ?? OriginalRosters.Chapters;
+        _instantAction = instantAction ?? new InstantActionFeature(_ => Mech3.InstantAction.Defaults());
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
         Inks = ReadInks(layout, plaqueRow);
+        InstantActionInks = ReadInstantActionInks(layout);
         _activePointer = new BoardArt(BoardArtLibrary.Ui, PointerArt(layout, "activepointerz.png"));
         _passivePointer = new BoardArt(BoardArtLibrary.Ui, PointerArt(layout, "passivepointerz.png"));
         for (int i = 0; i < _focus.Length; i++)
@@ -256,6 +272,13 @@ public sealed partial class OriginalShell
                 rows = Rows;
                 focus = EnsureFocus(rows);
             }
+            else if (pointer.Clicked && over < 0 && CloseInstantActionDropdown())
+            {
+                // A click off an open list closes it and picks nothing.
+                changed = true;
+                rows = Rows;
+                focus = EnsureFocus(rows);
+            }
         }
 
         if (commands.MoveY != 0)
@@ -266,7 +289,18 @@ public sealed partial class OriginalShell
 
         if (commands.MoveX != 0)
         {
-            focus = StepColumn(rows, focus, commands.MoveX);
+            // On the Instant Action screen a sideways step on a dropdown or a radio changes its
+            // value; anywhere else it crosses columns.
+            if (_screen == OriginalScreen.InstantAction && StepInstantActionValue(rows, focus, commands.MoveX))
+            {
+                rows = Rows;
+                focus = EnsureFocus(rows);
+            }
+            else
+            {
+                focus = StepColumn(rows, focus, commands.MoveX);
+            }
+
             changed = true;
         }
 
@@ -290,12 +324,14 @@ public sealed partial class OriginalShell
     {
         var rows = Rows;
         int focus = EnsureFocus(rows);
+        var backdrop = new List<BoardPicture>();
         var pictures = new List<BoardPicture>();
         var fills = new List<BoardFill>();
         var lines = new List<BoardLine>();
         var plaques = new List<BoardPlaque>();
+        var overlays = new List<BoardPanel>();
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
-        if (main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
+        if (_screen != OriginalScreen.InstantAction && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
         {
             pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, logo.Art[0], logo.Frames), logo.Int("X"), logo.Int("Y")));
         }
@@ -307,6 +343,9 @@ public sealed partial class OriginalShell
 
         switch (_screen)
         {
+            case OriginalScreen.InstantAction:
+                ComposeInstantAction(rows, focus, backdrop, pictures, fills, lines, plaques, overlays);
+                break;
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:
                 ComposeSortie(rows, lines);
@@ -319,7 +358,7 @@ public sealed partial class OriginalShell
                 break;
         }
 
-        for (int i = 0; i < rows.Count; i++)
+        for (int i = 0; _screen != OriginalScreen.InstantAction && i < rows.Count; i++)
         {
             var row = rows[i];
             if (!row.Visible)
@@ -361,10 +400,9 @@ public sealed partial class OriginalShell
             }
         }
 
-        var overlays = new List<BoardPanel>();
         if (_pointer is { } at)
         {
-            bool live = _hover >= 0 && rows[_hover].Enabled;
+            bool live = _hover >= 0 && _hover < rows.Count && rows[_hover].Enabled;
             overlays.Add(new BoardPanel(
                 Array.Empty<BoardFill>(),
                 new[] { new BoardPicture(live ? _activePointer : _passivePointer, at.X, at.Y) },
@@ -372,7 +410,7 @@ public sealed partial class OriginalShell
         }
 
         return new ComposedBoard(pictures, Array.Empty<BoardStroke>(), lines, plaques,
-            fills: fills, overlays: overlays);
+            backdrop: backdrop, fills: fills, overlays: overlays);
     }
 
     private static OriginalInks ReadInks(MenuLayout layout, MenuLayoutWidget? plaque)
@@ -532,6 +570,9 @@ public sealed partial class OriginalShell
                     case DogfightKey:
                         Open(OriginalScreen.Dogfight);
                         break;
+                    case "MM_B_INSTANTACTION":
+                        OpenInstantAction();
+                        break;
                     case "MM_B_PREFERENCES":
                         Open(OriginalScreen.Options);
                         break;
@@ -543,6 +584,8 @@ public sealed partial class OriginalShell
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:
                 return ActivateSortie(row);
+            case OriginalScreen.InstantAction:
+                return ActivateInstantAction(row);
             case OriginalScreen.Options:
                 switch (row.Key)
                 {
@@ -565,7 +608,8 @@ public sealed partial class OriginalShell
     }
 
     // Back on a sortie screen first undoes seat 0's own pick, a stage at a time; browsing, it
-    // leaves the screen.
+    // leaves the screen. On the Instant Action screen the first Back closes an open list; the
+    // next one leaves.
     private MenuExit? Back()
     {
         if (_screen == OriginalScreen.TopLevel)
@@ -574,6 +618,11 @@ public sealed partial class OriginalShell
         }
 
         if (IsSortie && Seat0 is { } seat && _setup.Back(seat) != SeatBack.Browsing)
+        {
+            return null;
+        }
+
+        if (_screen == OriginalScreen.InstantAction && CloseInstantActionDropdown())
         {
             return null;
         }
@@ -595,10 +644,13 @@ public sealed partial class OriginalShell
                 {
                     if (main?.Widget(key) is { } widget)
                     {
-                        rows.Add(Button(widget, key is "MM_B_QUIT" or "MM_B_PREFERENCES"));
+                        rows.Add(Button(widget, key is "MM_B_QUIT" or "MM_B_PREFERENCES" or "MM_B_INSTANTACTION"));
                     }
                 }
 
+                break;
+            case OriginalScreen.InstantAction:
+                BuildInstantActionRows(rows);
                 break;
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:

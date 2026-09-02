@@ -1000,6 +1000,7 @@ public partial class Launcher : Node3D
         var host = new MenuHost(registry, _menuAudio, OnMenuExit);
         host.Availability = OriginalAvailable;
         host.Features.Add(new FreeFlightFeature());
+        host.Features.Add(InstantActionFeature.ForDataRoot(_dataRoot));
         // Before the seat: the host lends the setup feature's seat list once the feature is in,
         // so seat 0 has to be joined through it.
         host.Features.Add(new PlayerSetupFeature());

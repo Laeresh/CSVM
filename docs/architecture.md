@@ -3945,46 +3945,39 @@ path, replacing H15's interim "map the picked mission type onto whichever of Fre
 behaviour it most resembles" (that mapping is gone; `FireLaunch` always passes `_mode` straight
 through now, and `SessionSpec.FromMenu`'s `iaDef` parameter is what actually decides
 Scenario/Stunt, precisely, off the wizard's own pick).
-`Environments` (7 rows, the decoded dropdown order, A5 — NOT `Chapters`' alphabetic one),
-`MissionTypes` (4 rows, the UI dropdown order — NOT the internal id order), `Militias` (13 rows,
-the `.BM` pattern-coverage aircraft lists, decision 7) and `Skills` (novice/veteran/ace) are the
-wizard's own tables. `Planes` is a fifth: the eleven airframes in the langui 3700 order, which the
-original stores an aircraft as an index INTO, so the order is decoded rather than cosmetic and the
-positional defaults (`slot.PlaneIndex`, `_wingmanPlaneIndex`, both index 0) resolve to the Autogyro
-that `gui_continue` itself selects. Each militia's own list is that same order filtered to
-`FUN_00410420`'s 11-byte mask, never a per-militia reordering.
-`CurrentMissionTypes` filters Stunt Flying out for whichever environment's
-chapter bars it via `disallow_missions` (decoded: only C2B, "the clouds"), read through the same
-`Chapters`-table `DangerZones` flag `ChapterCodesFor` already uses, so the two screens cannot
-disagree. `MenuInput.MoveX` also drives WaveEdit's four fields (Enemies/Militia/Aircraft/Skill, one
-focused at a time by `Move`) and Wingmen's count/aircraft; picking a new Militia resets
-`AircraftIndex` to 0 (the decoded `AV[BA].QG = 0`). A wave slot's own build step (`WaveFor`, static
-+ public) returns `InstantAction.EmptyWave` outright at 0 enemies, regardless of the
-militia/aircraft/skill cursors — they are not "configured" until a pilot raises the count.
-`FireLaunch` hands the built def to `InstantAction.BuildFromWizard`, using the environment's own
-`ia.zrd.json` (loaded once, on Environment's own Accept, cached as `_iaBaseDef`) as the
-ace/zeppelin/`disallow_missions` base — `SessionPaths.MissionZrdr(_dataRoot, code, "IA1")`, which
-is why `Build` now also takes `dataRoot`. `DebugWaves(N)`/`DebugWingmen(N)` (--debug-waves=/
---debug-wingmen=) are `DebugJoin`'s own screenshot-aid pattern, extended to the wizard's own
-screens.
+The wizard's fields are the shared `InstantActionFeature`'s (`src/UI/Menu/InstantActionFeature.cs`,
+read out of the host as `_ia`): the environment, the mission type, the lives, the four waves, the
+wingman count, airframe and fit, the applied preset and the confirmed environment's base def, plus
+every option set (environments, mission types, airframes, militias, skills, presets). This screen
+keeps only what a cursor wizard adds over a dropdown page: the Table of Contents cursor and its
+14-row window (`PresetWindow`, `_presetTop`, `ScrollPresetsToCursor`), the Waves list cursor, the
+edited wave and its field cursor, the Wingmen field cursor and the wingman fit row. The Environment
+and Mission cursors are the feature's picks themselves (`CurrentIndex` reads
+`_ia.EnvironmentIndex`/`_ia.MissionTypeIndex`), since a dropdown has no cursor apart from its
+value. `Planes`, the plane picker's roster, is built off the feature's airframes so the two cannot
+drift, and the public read-outs (`EnvironmentCodes`, `EnvironmentNames`, `MissionTypeKeysFor`,
+`PlaneNames`, `MilitiaNames`, `AircraftFor`, `SkillKeys`, `WaveFor`) delegate to it. The screens
+call the feature's operations where they used to write fields: `MenuInput.MoveX` on MissionType is
+`StepLives`, on WaveEdit `StepWaveCount`/`StepWaveMilitia`/`StepWaveAircraft`/`StepWaveSkill` on the
+edited wave, on Wingmen `StepWingmen`/`StepWingmanPlane`; Environment's Accept is
+`ConfirmEnvironment` (the mission cursor re-fitted onto the environment's roster, the environment's
+own `ia.zrd.json` loaded as the base); the ace skip forward and back reads `IsAceDuel`; `FireLaunch`
+leaves as `_ia.BuildExit(seats, NominalPlaneName(player 1's pick))`, the nominal name because a
+custom pick speaks its airframe's stock vocabulary. `DebugWaves(N)`/`DebugWingmen(N)`/`DebugPreset(N)`
+(--debug-waves=/--debug-wingmen=/--debug-preset=) are `DebugJoin`'s own screenshot-aid pattern
+writing through the same operations.
 `Screen.Presets` is the Table of Contents (`BL-352`), reached from step 1 by `MenuInput.Presets`
 (P / X) and nowhere else — the original picks a preset with a mouse on a list sharing its page with
 the dropdowns, so both the button and "opt in from step 1 rather than open on it" are stated
-divergences, not oversights. Accept calls `ApplyPreset` and returns to `Screen.Environment`, which
-is the original's own page order: the contents list is page 1, and View Story opens page 2, the
+divergences, not oversights. Accept calls `ApplyPreset` (the feature's, then player 1's plane
+cursor mirrored from the feature's player airframe: the original has one pilot and one aircraft
+dropdown, so players 2 to 4 are untouched) and returns to `Screen.Environment`, which is the
+original's own page order: the contents list is page 1, and View Story opens page 2, the
 configuration screen under the preset's name. `PresetCrumb` is that heading, carried through every
-Instant Action breadcrumb from a `_presetIndex` of −1 (custom) upward; nothing clears it when a
-field is then changed by hand, matching `IDS_IA_STORYTITLE`'s one-time format. `ApplyPreset` is
-deliberately partial — it writes the environment, mission type, waves, wingman count and aircraft,
-and PLAYER 1's plane cursor only. It does not touch `_lives` (INVENTED, no preset value, and a
-setting the preset has no authority over), other players' cursors (ours, not the original's), or
-`_iaBaseDef` (still loaded by Environment's own Accept). So a preset is exactly a set of field
-values: what flies is reachable by hand, and nothing about the built def says a preset was used.
-The list is the file's only scrolling one — `PresetWindow` is `LAYOUT.CSV`'s decoded 14 visible rows
-onto 19 items, `_presetTop` follows the cursor through `ScrollPresetsToCursor`, and `Rebuild` draws
-that slice while `Row` keeps taking the absolute index. `DebugPreset(N)` (--debug-preset=) applies
-one and opens on step 1, the aid for what units cannot see: a wrong aircraft or militia looks
-entirely plausible on screen.
+Instant Action breadcrumb while the feature's `PresetIndex` is not −1; nothing clears it when a
+field is then changed by hand, matching `IDS_IA_STORYTITLE`'s one-time format. The list is the
+file's only scrolling one, `PresetWindow` being `LAYOUT.CSV`'s decoded 14 visible rows onto 19
+items; `Rebuild` draws that slice while `Row` keeps taking the absolute index.
 The campaign's screens are the third layout, drawn through `ComposedBoardView` rather than rebuilt
 as controls, and the shell owns the two things a page cannot: the briefing's narration player and
 its reveal clock (`TickCampaignAudio`). A running reveal repaints the board every frame, because a
@@ -4045,10 +4038,12 @@ setup's `CanLaunch(mode)` otherwise, which is the static `CanLaunch(mode, allLoc
 rule kept for the tests. `FireLaunch` takes the setup's `Choices(MenuSeatDevices.FlightPads)`,
 one `MenuSeatChoice` per seat (the roster row's node, the pads the seat's source is bound to, its
 fit edits or null for stock, and a custom row's def as the roster was read), and hands the host one
-`LaunchExit`: the feature's own in Free mode, one built here with the wizard's `InstantActionDef`
-for Instant Action and the chapter for Dogfight, until those modes have features of their own.
-`RefreshRoster` sets the setup's roster (`PlayerSetupFeature.BuildRoster` over `Planes` and the
-store's customs) beside this screen's own `PickerPlane` list, so a saved plane appears in both. The cabin's FLY MISSION (`FlyCampaignMission`) leaves the same way as
+`LaunchExit`: the Free Flight feature's own in Free mode, the Instant Action feature's in Instant
+Action (`_ia.BuildExit(seats, nominalPlane)`, player 1's nominal stock name riding along as the
+def's label), and one built here with the chapter for Dogfight, until that mode has a feature of
+its own. `RefreshRoster` sets the setup's roster (`PlayerSetupFeature.BuildRoster` over `Planes`
+and the store's customs) beside this screen's own `PickerPlane` list, so a saved plane appears in
+both. The cabin's FLY MISSION (`FlyCampaignMission`) leaves the same way as
 a `CampaignMissionExit` (profile, story position, one seat choice per joined human with its stock
 node, joined pads, stored fit and hangar build). Back on the Mode screen leaves as a `QuitExit`.
 The Mode screen's last row is the Options door (`OptionsRow`, `--menu=options`): a two-row screen
@@ -4092,21 +4087,22 @@ its footer. Pure and public, so the rule is testable with no menu instance behin
 (`CSVM.Tests/MenuZonesTests.cs`). The property the layout rests on is that growing the middle's
 reference height leaves the other two bands where they were, as long as the content still fits.
 
-## src/UI/InstantActionPresets.cs
-The original's Table of Contents: the 19 preset scenarios decoded from 19 `0x230`-byte records at
-`0x0061b090` and applied by `FUN_004102c0` (docs/formats/instant-action.md, "Table of Contents
-presets"). The table is transcribed by NAME, not by the record's own dropdown indices, so it diffs
-line-for-line against the decode and a roster reordering cannot silently invalidate it; `Resolve`
-does the name-to-index step against `LaunchMenu`'s public rosters, which are the screen's single
-source of order. Three things it does beyond copying fields. The mission-type cursor indexes the
-FILTERED roster for the preset's environment, so a zeppelin run on "the clouds" is row 2, not row 3.
-Unused wave slots take `FUN_004102c0`'s own sentinel substitution (Fortune Hunter / Devastator /
-veteran at 0 enemies) rather than a zeroed default: it never reaches a flown mission, since
-`FUN_004175f0` skips any wave at 0 enemies, but it is what a pilot inherits on raising an empty
-wave's count. And a wingman aircraft is reported only where there are wingmen to fly it, `null`
-otherwise, because the decode reports no value for the five presets that fly alone. An unresolvable
-name throws, the same fail-loud policy `LaunchMenu.AircraftFor` applies to wizard-only data. Presets
-fly stock airframes, so nothing here waits on the hangar. Units in
+## src/UI/Menu/InstantActionPresets.cs
+The original's Table of Contents, in the shared menu namespace beside the feature that applies it:
+the 19 preset scenarios decoded from 19 `0x230`-byte records at `0x0061b090` and applied by
+`FUN_004102c0` (docs/formats/instant-action.md, "Table of Contents presets"). The table is
+transcribed by NAME, not by the record's own dropdown indices, so it diffs line-for-line against
+the decode and a roster reordering cannot silently invalidate it; `Resolve` does the name-to-index
+step against `InstantActionFeature`'s rosters, which are every presentation's single source of
+order. Three things it does beyond copying fields. The mission-type cursor indexes the FILTERED
+roster for the preset's environment, so a zeppelin run on "the clouds" is row 2, not row 3. Unused
+wave slots take `FUN_004102c0`'s own sentinel substitution (Fortune Hunter / Devastator / veteran
+at 0 enemies) rather than a zeroed default: it never reaches a flown mission, since `FUN_004175f0`
+skips any wave at 0 enemies, but it is what a pilot inherits on raising an empty wave's count. And
+a wingman aircraft is reported only where there are wingmen to fly it, `null` otherwise, because
+the decode reports no value for the five presets that fly alone. An unresolvable name throws, the
+same fail-loud policy `InstantActionFeature.AircraftFor` applies to wizard-only data. Presets fly
+stock airframes, so nothing here waits on the hangar. Units in
 `CSVM.Tests/InstantActionPresetsTests.cs`.
 
 The hangar (`HangarFlow`) has two doors, both through `OpenHangar`, which remembers the screen to
@@ -6965,33 +6961,37 @@ fixtures, plus the install's own census under `[ExtractedDataFact]`.
 
 ## src/UI/Menu/Original/OriginalShell.cs
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over
-`MenuLayout`, the shared `FreeFlightFeature` and `PlayerSetupFeature`, an injected art measurer
-(the layout carries no pixel sizes; the presentation reads them off the strips) and an injected
-flight-devices answer for the seat choices. Four screens (`OriginalScreen`): the top level,
-composed from `[MainMenu]`'s `MM_LOGO` and `BFRAME` panes and its six `B` rows at their authored
-corners with their four-frame strips (disabled, normal, rollover, depressed) plus the remake-only
-Free Flight and Dogfight doors, text buttons in the paper-plaque convention beside the frame; the
-two remake-only sortie screens, Free Flight and Dogfight (`OriginalSeats.cs`, the `partial`'s
-other half); and the remake-only minimal Options screen (the presentation toggle, APPLY, BACK),
-which the Preferences row opens until the decoded Preferences screens exist. Rows the remake has
-no destination for yet (Campaign, Instant Action, Multiplayer, Credits) draw frame 0 and take no
-input. The text button convention is read off `FlightCheck.FC_B_CHANGEPLANE` (its paper strip and
-its four label colours); the list and heading inks are the file-wide `DISABLED`/`ACTIVE` colours
-(`Inks`). `Step(MenuCommands)` applies seat 0's frame: a pointer (already in authored pixels) over
-a live, visible row takes the focus and, on a button, cues `menu.rollover` once; a click on a live
-row activates it; `MoveY` walks the enabled rows of the focused column with wrap (visible or not),
-`MoveX` crosses to the nearest row of the next column; `Accept` activates the focused row (a
-button cues `menu.click`); `Back` on a sortie screen first undoes seat 0's pick a stage at a
-time, then leaves for the top level, and quits from the top level. `StepSeat(index, frame)` is
-a later seat's frame. The Options screen's APPLY leaves as a `PresentationSwitchExit`.
-`Compose()` is the screen as a `ComposedBoard` with the pointer as the last overlay (the active
-pointer bitmap over a live row, the passive one elsewhere), skipping rows outside their window;
-`ReturnToTopLevel` (every return and cold start) keeps the list cursors and resets every seat's
-pick through the setup. Not decoded, so recorded as remake-only design: the doors' placement, the
-sortie and Options screens, keyboard and pad focus (the original is pointer-driven), list rows
-taking focus under the pointer without a cue, and the pointer's hotspot at its top-left.
-Off-engine coverage: `CSVM.Tests/OriginalShellTests.cs` and `OriginalSeatsTests.cs` over the
-invented `fixtures/menu-layout-original` layout.
+`MenuLayout`, the shared `FreeFlightFeature`, `PlayerSetupFeature` and `InstantActionFeature`, an
+injected art measurer (the layout carries no pixel sizes; the presentation reads them off the
+strips) and an injected flight-devices answer for the seat choices. Five screens
+(`OriginalScreen`): the top level, composed from `[MainMenu]`'s `MM_LOGO` and `BFRAME` panes and
+its six `B` rows at their authored corners with their four-frame strips (disabled, normal,
+rollover, depressed) plus the remake-only Free Flight and Dogfight doors, text buttons in the
+paper-plaque convention beside the frame; the two remake-only sortie screens, Free Flight and
+Dogfight (`OriginalSeats.cs`, one `partial` half); the remake-only minimal Options screen (the
+presentation toggle, APPLY, BACK), which the Preferences row opens until the decoded Preferences
+screens exist; and the decoded Instant Action screen, in its own partial file
+(`OriginalInstantAction.cs`, below), which `MM_B_INSTANTACTION` opens. Rows the remake has no
+destination for yet (Campaign, Multiplayer, Credits) draw frame 0 and take no input. The text
+button convention is read off `FlightCheck.FC_B_CHANGEPLANE` (its paper strip and its four label
+colours); the list and heading inks are the file-wide `DISABLED`/`ACTIVE` colours (`Inks`).
+`Step(MenuCommands)` applies seat 0's frame: a pointer (already in authored pixels) over a live,
+visible row takes the focus and, on a button, cues `menu.rollover` once; a click on a live row
+activates it (a click on nothing closes an open Instant Action list); `MoveY` walks the enabled
+rows of the focused column with wrap (visible or not), `MoveX` crosses to the nearest row of the
+next column, except on an Instant Action dropdown or radio, where it steps the value; `Accept`
+activates the focused row (a button cues `menu.click`); `Back` on a sortie screen first undoes
+seat 0's pick a stage at a time, on the Instant Action screen closes an open list, then leaves for
+the top level, and quits from the top level. `StepSeat(index, frame)` is a later seat's frame.
+The Options screen's APPLY leaves as a `PresentationSwitchExit`. `Compose()` is the screen as a
+`ComposedBoard` with the pointer as the last overlay (the active pointer bitmap over a live row,
+the passive one elsewhere), skipping rows outside their window; `ReturnToTopLevel` (every return
+and cold start) keeps the list cursors and resets every seat's pick through the setup. Not
+decoded, so recorded as remake-only design: the doors' placement, the sortie and Options screens,
+keyboard and pad focus (the original is pointer-driven), list rows taking focus under the pointer
+without a cue, and the pointer's hotspot at its top-left. Off-engine coverage:
+`CSVM.Tests/OriginalShellTests.cs`, `OriginalSeatsTests.cs` and `OriginalInstantActionTests.cs`
+over the invented `fixtures/menu-layout-original` layout.
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens over the shared player setup, the other half of the `partial`.
@@ -7015,25 +7015,71 @@ row (one tick selected, two confirmed), the hint between BACK and FLY naming wha
 and the controls line. Remake-only by design; the original ships no split-screen Dogfight and no
 join gesture.
 
+## src/UI/Menu/Original/OriginalInstantAction.cs
+The Original Instant Action screen, the shell's partial over the decoded `[@InstantAction@]`
+section and the shared `InstantActionFeature`; `OpenInstantAction` confirms the feature's
+environment (so the launch's base def is the environment's own) and opens it. Its rows are the
+section's widgets keyed by their layout keys: the Table of Contents (`IA_TL_Contents`, one
+`ListRow` per visible preset keyed `IA_TL_Contents:<index>` in the row's authored 14-row window,
+its `UpArrow`/`DownArrow` strips as the `:up`/`:down` buttons on the list's right edge, live only
+while there is more list that way, its `Slider` drawn as the thumb along the track), the dropdowns
+(`Dropdown` rows at their authored line, `Width` wide and `ItemHeight` high, labelled with the
+picked value and carrying the `DropDown` arrow strip: the player plane over the eleven stock
+airframes, the wingman count 0 to 5, the wingman plane hidden at zero wingmen, the mission type
+over the environment's filtered roster, the environment with the clouds unpickable under stunt
+flying, and per wave the enemy count 0 to 6, the militia, the skill and the militia's aircraft),
+the enemy pages (`EnemyPage` 0 shows the pilot, wingmen, mission and environment lines with the
+first wave's four fields and `IA_B_DOWN`; page 1 shows waves two to four and `IA_B_UP`, the two
+pages sharing the right column's authored lines exactly as the layout authors them), the
+`IA_B_PLAYER`/`IA_B_WINGMAN` radio pair (`Radio` rows from the eight-state strip, four unmarked
+states then four marked, recording `LoadoutTarget`), and the buttons: `IA_B_VIEW` (View Story
+writes the applied preset's name into `IA_T_STORYTITLE`, the decoded one-time format),
+`IA_B_FLY` (the feature's `BuildExit` for seat 0 on the feature's player airframe, no pads, no
+fit), `IA_B_Exit` (back to the top level), and `IA_B_BUILD` and `IA_B_CHANGEWEAPONS` drawn
+disabled until the Original hangar and loadout screens exist. A contents row's activation applies
+its preset (the list's own select callback) and re-confirms the environment; the ace duel hides
+every enemy control, the text rows beside them and both paging buttons. Accept or a click on a
+dropdown opens its list: the rows become the list's items alone (`<key>:<index>`, drawn as an
+overlay panel under the box), Up/Down walk them, Accept or a click picks and closes, a sideways
+step on the closed box picks the next allowed value, Back or a click off the list closes it.
+`Compose` draws `IA_BackGround` as the backdrop, the `T` rows at their authored positions in their
+authored justification (white rows as the dialog ink, the rest as the screen's text ink), the
+contents rows' picked and focused states as the list widget's own fill and frame, and the strips
+in their state frames. `InstantActionInks` is the screen's own colour reading (the text rows'
+`Color`, the paper buttons' label tail), which `OriginalPresentation.PaletteFor` turns into the
+palette this screen alone draws with. Decoded and bound: the option sets, the paged enemy rows,
+the ace hiding, the wingman plane hiding at zero, the militia resetting its aircraft, the clouds
+barring stunt flying, the preset applied on select, the title on View Story. Remake-only until
+`CAP-50` is filmed: both halves shown together, the open list under its box and its row count,
+keyboard and pad stepping, the radio pair with no wingmen, the paging buttons hiding under the
+ace duel, and the two disabled buttons. Off-engine coverage:
+`CSVM.Tests/OriginalInstantActionTests.cs` over the fixture's `[@InstantAction@]` section;
+in-engine, `menu-original-instant-action` (`src/Testing/MenuInstantActionSuites.cs`) over the
+install's own layout.
+
 ## src/UI/Menu/Original/OriginalPresentation.cs
 The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the
 board layer holding one `ComposedBoardView`, so every screen scales as the campaign boards do (one
 uniform 4:3 fit, centred, letterboxed, nearest-sampled). Constructed with seat 0's `MenuInput`
-(for `MenuSeatDevices`) and the `--debug-join` count. `Activate` builds the shell and the device
-bookkeeping on the first call, refreshes the setup's roster from the saved-plane store on every
-call (`Roster(customs)`: `OriginalRosters.Airframes` then the customs through the setup's roster
-rule, cursors clamped onto it), stands the shell on the top level (a `CabinReturn` or
-`DebriefReturn` also lands there, with a logged note, until Original has campaign screens),
-applies the `--menu=` aid on a top-level show (`free-flight`, `dogfight`, `options`), seats the
-debug players once (device-less, the last one selected), primes every seat, syncs the pads and
-hides the OS pointer, since the shell draws the original's own. `Tick` syncs the pad roster, scans
-the join gesture while a sortie screen is up (priming the edges on entering one), polls every
-seat of the host's live list, maps a window-pixel pointer into the authored space through the
-view's own `BoardFit`, steps the shell per seat, requests its cues through the host's audio and
-hands its exit to the host. `Hide` takes the layer off screen and restores the OS pointer;
-`Deactivate` frees it. `PaletteFor(inks)` is the shell's inks as a `BoardPalette`. In-engine
-coverage: `menu-original-tracer` (`src/Testing/MenuOriginalSuites.cs`) and the Original half of
-`menu-player-setup-seats` over the install's own layout.
+(for `MenuSeatDevices`) and the `--debug-join` count. `Activate` builds the shell (over the Free
+Flight, player-setup and Instant Action features) and the device bookkeeping on the first call,
+refreshes the setup's roster from the saved-plane store on every call (`Roster(customs)`:
+`OriginalRosters.Airframes` then the customs through the setup's roster rule, cursors clamped onto
+it), stands the shell on the top level (a `CabinReturn` or `DebriefReturn` also lands there, with
+a logged note, until Original has campaign screens), applies the `--menu=` aid on a top-level show
+(`free-flight`, `dogfight`, `instant-action`, `options`), seats the debug players once
+(device-less, the last one selected), primes every seat, syncs the pads and hides the OS pointer,
+since the shell draws the original's own. `Tick` syncs the pad roster, scans the join gesture
+while a sortie screen is up (priming the edges on entering one), polls every seat of the host's
+live list, maps a window-pixel pointer into the authored space through the view's own `BoardFit`,
+steps the shell per seat, requests its cues through the host's audio and hands its exit to the
+host. `Hide` takes the layer off screen and restores the OS pointer; `Deactivate` frees it.
+`PaletteFor(inks)` is the shell's inks as a `BoardPalette`; the Instant Action screen draws with
+its own, `PaletteFor(instantActionInks)`, every text in the screen's authored black over its paper
+page and the labels in the paper buttons' tail, since the top level's white inks would not read on
+it. In-engine coverage: `menu-original-tracer` (`src/Testing/MenuOriginalSuites.cs`),
+`menu-original-instant-action` and the Original half of `menu-player-setup-seats` over the
+install's own layout.
 
 ## src/UI/Menu/Original/OriginalAvailability.cs
 The minimal availability check Original makes before it can be selected, standing in for the full
@@ -7069,8 +7115,8 @@ order (C1, C1B, C1C, C2, C2B, C3, C4, C5), `For(mode)` (Stunt Flying only the si
 Zones, every other mode all eight), `Find` and `DangerZonesFor`. The codes are separate terrain
 databases, not lighting variants (`docs/formats/spawns.md`); the flag says whether the chapter's
 `ia.json` ships a `dzones` list, which is why Stunt Flying withholds the other two. Shared so that
-`LaunchMenu`'s Chapter screen, the Free Flight feature and the coming Instant Action feature read
-one roster; `LaunchMenu.Chapters` is this screen's row text zipped over it. Off-engine coverage:
+`LaunchMenu`'s Chapter screen, the Free Flight feature and the Instant Action feature read one
+roster; `LaunchMenu.Chapters` is this screen's row text zipped over it. Off-engine coverage:
 `CSVM.Tests/FreeFlightFeatureTests.cs`, which also checks the roster against
 `LaunchMenu.ChapterCodesFor` for all three modes.
 
@@ -7127,3 +7173,38 @@ Plane and Campaign screens, Original's two sortie screens). `PadOf(source)` read
 pad back off its `BuiltInSeat`; `FlightPads(seat)` is the binding a launch carries (seat 0's
 poller's set, a pad seat's one device, nothing for a device-less seat), the answer both
 presentations hand the feature's `Choices`.
+
+## src/UI/Menu/InstantActionFeature.cs
+Instant Action as a shared `IMenuFeature`, owned by the `MenuHost`'s feature set and configured by
+both presentations. The option sets are static and decoded (`docs/formats/instant-action.md`):
+`Environments` (seven, the launcher's dropdown order, C1C never among them), `AllMissionTypes`
+(four, the UI dropdown order) with `MissionTypesFor(chapter)` dropping stunt flying where the
+chapter bars it and `EnvironmentAllowed(row, missionKey)` clearing the clouds under stunt flying
+(the two sides of `FUN_004103b0`'s mask), `Airframes` (eleven, the langui 3700 order the original
+stores an aircraft as an index into, with their nodes), `Militias` (thirteen, each with the
+aircraft `FUN_00410420`'s mask allows, in the airframe order), `Skills`, and `Presets` (the
+`InstantActionPresets` table). The setup is typed state with semantic operations: `EnvironmentIndex`
+with `SelectEnvironment` and `ConfirmEnvironment` (which re-fits `MissionTypeIndex` onto the
+environment's roster and loads the chapter's own `IA1/ia.zrd.json` as `BaseDef` through the
+injected loader; `ForDataRoot` is the game's loader, falling back to the built-in defaults with a
+warning), `MissionTypeIndex`/`MissionType`/`IsAceDuel` with `SelectMissionType`, `Lives` with
+`StepLives` (0 unlimited to `MaxLives`), `Waves` (four `InstantActionWaveSetup` cursors) with
+`SetWave`, `StepWaveCount`, `StepWaveMilitia`/`SelectWaveMilitia` (a new militia resets the aircraft,
+the decoded `AV[BA].QG = 0`), `StepWaveAircraft`/`SelectWaveAircraft` within `WaveAircraft(wave)`,
+`StepWaveSkill`/`SelectWaveSkill`, `NumWingmen` with `StepWingmen`/`SetWingmen`, `WingmanPlaneIndex`
+with `StepWingmanPlane`/`SelectWingmanPlane` (a changed airframe drops `WingmanFit`, the one fit
+every wingman flies, edited in place by a presentation's loadout screen), `PlayerPlaneIndex` with
+`SelectPlayerPlane`, and `PresetIndex` with `ApplyPreset` (every field but the lives and the base
+def). `Refusal`/`CanLaunch(joined, confirmed)` is the gate (one seat joined, everyone confirmed;
+the setup is always complete), `BuildWaves`/`BuildDef(playerPlane)` hand the fields to
+`InstantAction.BuildFromWizard` over `BaseDef` (the built-in defaults when no environment was
+confirmed, which only an aid that skips the confirm reaches), and `BuildExit(seats, playerPlane)`
+is the typed `LaunchExit` (the environment's chapter, mode Stunt, the def), refusing a closed gate
+or a seat with no plane. `WaveFor` is the one wave build rule (the empty wave at 0 enemies whatever
+the cursors). `Discard` puts every field back to the screen's opening state (the first environment,
+the ace duel, one life, empty waves, no wingmen, the first airframe, no preset, no base def). The
+seats stay the presentation's: Built-in passes its joined seats and player 1's nominal stock name,
+Original passes seat 0 on `PlayerPlane`'s node. Off-engine coverage:
+`CSVM.Tests/InstantActionFeatureTests.cs`, which also checks `LaunchMenu`'s public rosters against
+the feature's; the characterization of Built-in's journey over it is `menu-instant-action-journey`
+(`src/Testing/MenuInstantActionSuites.cs`).

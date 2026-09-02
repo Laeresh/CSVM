@@ -199,6 +199,8 @@
     "menu-original-tracer": 0.2,
     "menu-player-setup-journey": 0.1,
     "menu-player-setup-seats": 0.2,
+    "menu-instant-action-journey": 0.6,
+    "menu-original-instant-action": 0.1,
     "perf-hud-layout": 0.009,
     "campaign-briefing-note": 0.161,
     "campaign-capture-group": 5.66,

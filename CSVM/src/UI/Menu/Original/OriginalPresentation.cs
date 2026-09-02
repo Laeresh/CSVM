@@ -28,6 +28,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the Options screen.</summary>
     public const string OptionsAid = "options";
 
+    /// <summary>The aid value that opens the Instant Action screen.</summary>
+    public const string InstantActionAid = "instant-action";
+
     private readonly Node _parent;
     private readonly string _dataRoot;
     private readonly MenuLayout _layout;
@@ -41,6 +44,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     private MenuSeatDevices? _devices;
     private IMenuHost? _host;
     private BoardPalette _palette = BoardPalette.Chalk;
+    private BoardPalette _paperPalette = BoardPalette.Paper;
     private bool _shown;
     private bool _joiningOpen;
 
@@ -77,6 +81,18 @@ public sealed class OriginalPresentation : IMenuPresentation
         LabelActivate: ToColor(inks.LabelDepressed),
         Hint: ToColor(inks.Disabled));
 
+    /// <summary>The Instant Action screen's palette: every text in the screen's own authored text
+    /// colour over its paper background, the button labels in the paper buttons' own tail.</summary>
+    public static BoardPalette PaletteFor(OriginalInstantActionInks inks) => new(
+        Row: ToColor(inks.Text),
+        Focus: ToColor(inks.Text),
+        Heading: ToColor(inks.Text),
+        Detail: ToColor(inks.Text),
+        LabelNormal: ToColor(inks.LabelNormal),
+        LabelRollover: ToColor(inks.LabelRollover),
+        LabelActivate: ToColor(inks.LabelDepressed),
+        Hint: ToColor(inks.Text));
+
     /// <summary>The roster both presentations pick from: the eleven stock airframes, then the
     /// saved customs, each flying its airframe's stock node.</summary>
     public static IReadOnlyList<MenuAircraft> Roster(IReadOnlyList<CustomPlaneDef> customs)
@@ -98,8 +114,10 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (_shell == null)
         {
             _devices = new MenuSeatDevices(_player1, setup);
-            _shell = new OriginalShell(_layout, host.Features.Get<FreeFlightFeature>(), setup, Measure, _devices.FlightPads);
+            _shell = new OriginalShell(_layout, host.Features.Get<FreeFlightFeature>(), setup, Measure, _devices.FlightPads,
+                instantAction: host.Features.Get<InstantActionFeature>());
             _palette = PaletteFor(_shell.Inks);
+            _paperPalette = PaletteFor(_shell.InstantActionInks);
         }
 
         if (_layer == null)
@@ -137,6 +155,9 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case OptionsAid:
                     _shell.Open(OriginalScreen.Options);
+                    break;
+                case InstantActionAid:
+                    _shell.OpenInstantAction();
                     break;
             }
         }
@@ -277,7 +298,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     {
         if (_shell != null && _view != null)
         {
-            _view.Show(_shell.Compose(), _palette, string.Empty, string.Empty);
+            // The Instant Action screen is a paper page with authored black text; the other
+            // screens write in the file-wide inks over the dark top level.
+            var palette = _shell.Screen == OriginalScreen.InstantAction ? _paperPalette : _palette;
+            _view.Show(_shell.Compose(), palette, string.Empty, string.Empty);
         }
     }
 

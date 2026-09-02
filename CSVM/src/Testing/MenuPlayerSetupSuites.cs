@@ -34,7 +34,7 @@ internal static class MenuPlayerSetupSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var exits = new List<MenuExit>();
-        var host = MenuSuiteHost.Bare(exits, out var seat);
+        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
         var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, host, seat.Input);
         ctx.Host.AddChild(menu);
         var launches = new Exits<LaunchExit>(exits);
@@ -51,6 +51,23 @@ internal static class MenuPlayerSetupSuites
             ctx.Host.RemoveChild(menu);
             menu.QueueFree();
         }
+    }
+
+    [Suite("menu-player-setup-seats",
+        "Scripted seats through the shared player setup in both presentations: in Built-in a "
+        + "second scripted seat joins on the real launchscreen, picks and confirms, and Free "
+        + "Flight and Dogfight launch for both seats, a return keeps the seats and drops the picks, "
+        + "a guest's Back unjoins, four seats close the join and a fifth is refused, a lock and an "
+        + "unjoin land on one frame, and Deactivate discards every seat but the first; in Original "
+        + "the Dogfight door opens the Dogfight screen, FLY waits for a second seat with the hint "
+        + "naming it, a joined seat walks, selects and confirms on the aircraft column, FLY leaves "
+        + "as a Dogfight launch for both seats, Free Flight launches both too, and a guest's Back "
+        + "unjoins from the top level")]
+    internal static void MenuPlayerSetupSeats(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        BuiltInSeats(ctx);
+        OriginalSeats(ctx);
     }
 
     // One seat: select, weapons, Back at each stage, then the launch, and the return that keeps
@@ -199,29 +216,12 @@ internal static class MenuPlayerSetupSuites
         Is(ctx, "and a plain re-entry lands on Mode", "Mode", menu.ShownScreen);
     }
 
-    [Suite("menu-player-setup-seats",
-        "Scripted seats through the shared player setup in both presentations: in Built-in a "
-        + "second scripted seat joins on the real launchscreen, picks and confirms, and Free "
-        + "Flight and Dogfight launch for both seats, a return keeps the seats and drops the picks, "
-        + "a guest's Back unjoins, four seats close the join and a fifth is refused, a lock and an "
-        + "unjoin land on one frame, and Deactivate discards every seat but the first; in Original "
-        + "the Dogfight door opens the Dogfight screen, FLY waits for a second seat with the hint "
-        + "naming it, a joined seat walks, selects and confirms on the aircraft column, FLY leaves "
-        + "as a Dogfight launch for both seats, Free Flight launches both too, and a guest's Back "
-        + "unjoins from the top level")]
-    internal static void MenuPlayerSetupSeats(TestContext ctx)
-    {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        BuiltInSeats(ctx);
-        OriginalSeats(ctx);
-    }
-
     // Built-in: later seats are scripted sources joined through the feature, their frames read by
     // the launchscreen's own frame (_Process, as the presentation's Tick runs it); player 1 drives.
     private static void BuiltInSeats(TestContext ctx)
     {
         var exits = new List<MenuExit>();
-        var host = MenuSuiteHost.Bare(exits, out var seat);
+        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
         var setup = host.Features.Get<PlayerSetupFeature>();
         var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, host, seat.Input);
         ctx.Host.AddChild(menu);
@@ -328,8 +328,7 @@ internal static class MenuPlayerSetupSuites
         registry.Register(PresentationId.Original, () => new CSVM.UI.Menu.Original.OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }));
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
-        host.Features.Add(new FreeFlightFeature());
-        host.Features.Add(new PlayerSetupFeature());
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
         host.AddSeat(seat0);
         var setup = host.Features.Get<PlayerSetupFeature>();
         try

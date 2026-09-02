@@ -28,7 +28,7 @@ internal static class MenuJourneySuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var exits = new List<MenuExit>();
-        var host = MenuSuiteHost.Bare(exits, out var seat);
+        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
         var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, host, seat.Input);
         ctx.Host.AddChild(menu);
         var launches = new Exits<LaunchExit>(exits);

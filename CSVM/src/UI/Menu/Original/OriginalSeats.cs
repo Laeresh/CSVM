@@ -136,6 +136,12 @@ public sealed partial class OriginalShell
             && int.TryParse(key.AsSpan(AirframeKeyPrefix.Length), out index);
     }
 
+    private static string SeatStatus(PlayerSeat seat, IReadOnlyList<MenuAircraft> roster)
+    {
+        string name = seat.Cursor < roster.Count ? roster[seat.Cursor].Name : string.Empty;
+        return seat.Confirmed ? $"{name}  READY" : seat.Locked ? name : "choosing";
+    }
+
     // The sortie screen's rows: the chapters and BACK in column 0, the aircraft window and FLY in
     // column 1. Rows outside the window keep their place in the column for the keyboard but are
     // neither drawn nor hit; the window slides so the focused row is always inside it.
@@ -309,12 +315,6 @@ public sealed partial class OriginalShell
         return seats.Count >= PlayerSetupFeature.MaxSeats
             ? "Four seats joined, the maximum. FLY when ready"
             : "FLY when ready, or press START on a free pad to join";
-    }
-
-    private static string SeatStatus(PlayerSeat seat, IReadOnlyList<MenuAircraft> roster)
-    {
-        string name = seat.Cursor < roster.Count ? roster[seat.Cursor].Name : string.Empty;
-        return seat.Confirmed ? $"{name}  READY" : seat.Locked ? name : "choosing";
     }
 
     // The sortie screen's own words: the heading, the column labels, the seat strip, the aircraft

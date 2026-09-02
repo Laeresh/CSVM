@@ -438,7 +438,7 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 
 | Original screen | Built-in counterpart | Layout | Script decoded | Capture | Interaction evidence |
 |---|---|---|---|---|---|
-| MainMenu | Mode | 9 rows | this page | **none** | composition only; script text gives the six buttons and their targets, nothing about rollover, music or the flag movie. **Built as Original's top level** from the two panes and the six `B` rows with their four-frame strips; rows with no remake destination yet draw the disabled frame, Quit and Preferences (the Options door) react, and the movie's place is black |
+| MainMenu | Mode | 9 rows | this page | **none** | composition only; script text gives the six buttons and their targets, nothing about rollover, music or the flag movie. **Built as Original's top level** from the two panes and the six `B` rows with their four-frame strips; rows with no remake destination yet draw the disabled frame, Instant Action, Quit and Preferences (the Options door) react, and the movie's place is black |
 | (none: remake-only) | Free Flight, Chapter, Plane | none | none | none | **Original's Free Flight door and screen, of our design under Decision 11.** The door is a text button in the `FC_B_CHANGEPLANE` paper-plaque convention beside the button frame, level with Campaign; the screen is the logo over two text lists (the shared chapter roster and the shared aircraft roster, the eleven stock airframes then the saved custom planes in an eleven-row window) with BACK and FLY plaques, a seat strip under the chapters and each later seat's tag on its aircraft row. Nothing on it is decoded |
 | (none: remake-only) | Dogfight, Chapter, Plane | none | none | none | **Original's Dogfight door and screen, of our design under Decision 11.** The door sits under the Free Flight door in the same plaque convention; the screen is the Free Flight screen's shape over the Dogfight gate (a second seat must join and confirm before FLY stands). The original's Multiplayer is network play and ships no split-screen Dogfight, so nothing here is decoded |
 | (none: remake-only) | the join strip and per-seat picks | none | none | none | **Original's join flow, of our design.** Start on an unclaimed pad joins a seat on either sortie screen (the same gesture and pad bookkeeping as Built-in's, through `MenuSeatDevices`); the joined pad walks its own cursor on the aircraft column, selects and confirms with A, and leaves with B while browsing; seat 0's mouse, keyboard or pad picks the map and the aircraft and presses FLY, which is its own confirmation. The original has no join gesture |
@@ -449,7 +449,7 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 | Video | (none) | 31 rows | no | **none** | layout only |
 | ControlsPrefs | (none) | 12 rows | no | **none** | layout only |
 | Keys | (none) | 17 rows | no | `Keybinds Movement/Throttle/Targeting/Weapons/Views 1/Views 2/Other.png` | composition of all seven tabs; no interaction |
-| InstantAction | Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, Presets | 48 rows | [`instant-action.md`](../formats/instant-action.md) | **none** | option sets, the ace's control hiding and the paged enemy rows are script-proven; the screen itself has never been seen |
+| InstantAction | Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, Presets | 48 rows | [`instant-action.md`](../formats/instant-action.md) | **none** | option sets, the ace's control hiding and the paged enemy rows are script-proven; the screen itself has never been seen. **Built as Original's Instant Action screen** from the section's rows over the shared feature: `IA_BackGround`, the `T` rows, the contents list in its 14-row window with its own scroll arrows and slider, the dropdowns on their authored lines, the enemy rows paged by `IA_B_UP`/`IA_B_DOWN`, the radio pair, View Story, Fly Mission and Exit; Build Custom Plane and Weapon Loadout draw disabled until their Original screens exist. What the data does not settle is listed under Part 4 for `CAP-50` |
 | Campaign (profile) | `CampaignScreen.Roster` | 6 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | `Campaign Player Profile.png` | full: roster fill, name validator, all four exits |
 | PassengerCabin | `Cabin` | 16 rows | same | `Campaign CAP-44 Cabin.png` | full for the six buttons; whether anything on the screen animates is open |
 | FlightCheck | `FlightCheck` | 25 rows | same | `Campaign Flight Check.png`, `… Change Plane Button.png` | full: both slots, four lists, the wingman gate, both plane-change rules |
@@ -593,6 +593,32 @@ plays on a rollover and which on a press, whether a disabled button makes either
 make a rollover sound (Original plays none on a list row), which pointer bitmap shows over a
 button, over a list and over nothing, and where each bitmap's hotspot is (Original draws the
 bitmap's top-left at the pointer).
+
+The Instant Action screen is built from what the layout and the script evidence: the widgets at
+their authored positions over `IA_BackGround`, the contents list's 14-row window with its own
+`UpArrow`/`DownArrow`/`Slider` art, a dropdown's box `Width` wide and `ItemHeight` high showing its
+picked value with the `DropDown` arrow strip, the enemy rows on two pages keyed off `IA_B_UP`/
+`IA_B_DOWN` (the script's mailbox 20002), the ace duel hiding every enemy dropdown (the script's
+`0 == WT` branch), the wingman plane hidden at zero wingmen, a changed militia resetting its
+aircraft (`AV[BA].QG = 0`), stunt flying clearing the clouds (`FUN_004103b0`'s mask), a contents
+row applying its preset on select (callback 2302) and View Story writing the preset's name as the
+story title (the `IDS_IA_STORYTITLE` format). Everything else is remake-only until filmed. `CAP-50`
+must confirm: whether the contents list and the dropdown half show together or View Story reveals
+the right half (Original shows both, the layout placing them on disjoint halves of one background);
+what a rollover previews, if anything (Original previews nothing: a contents row changes the fields
+only when selected); whether a changed militia visibly resets its aircraft field (Original resets
+it to the militia's first aircraft); what BUILD CUSTOM PLANE does from this screen (Original draws
+it disabled); how the screen reads before anything is chosen (Original opens on an airfield, the
+ace duel, an Autogyro, no wingmen, one life and no contents row selected, the screen's stored
+defaults); whether an opened dropdown lists below its box and how many rows it shows (Original
+lists every item below the box, and the layout's `TotalDisplayed` is read as the window); whether
+the Wingmen dropdown stays under the ace duel (Original keeps it, the script hiding only the enemy
+controls, and the parser forces the count to zero at launch); whether the up/down buttons and the
+"[continued ...]" text hide under the ace duel (Original hides them with the enemy rows); whether
+the Player/Wingman radio hides at zero wingmen and what WEAPON LOADOUT opens (Original keeps the
+radio and draws the button disabled); and whether keyboard or pad input reaches the screen at all
+(Original walks the widgets in two columns and steps a dropdown's value sideways, a remake
+equivalence).
 - **Built-in's Chapter screen is ours.** The original picks a map through Instant Action's
   environment dropdown; there is no standalone chapter list.
 - **The original's plane construction is a tab bar; Built-in's is a linear nine-screen walk.**

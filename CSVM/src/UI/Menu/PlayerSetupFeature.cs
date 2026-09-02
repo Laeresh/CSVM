@@ -4,15 +4,6 @@ using CSVM.Flight;
 
 namespace CSVM.UI.Menu;
 
-/// <summary>One row of the shared aircraft roster every seat picks from: the display name, the
-/// planes.zbd node a launch builds, and the saved custom plane behind the row where there is one
-/// (a custom row flies its airframe's stock node with the def riding along).</summary>
-public sealed record MenuAircraft(string Name, string Node, CustomPlaneDef? Custom = null)
-{
-    /// <summary>Whether this row is a saved custom plane rather than a stock airframe.</summary>
-    public bool IsCustom => Custom != null;
-}
-
 /// <summary>What a seat's Back undid.</summary>
 public enum SeatBack
 {
@@ -24,6 +15,15 @@ public enum SeatBack
 
     /// <summary>A confirmed airframe went back to selected.</summary>
     Unconfirmed,
+}
+
+/// <summary>One row of the shared aircraft roster every seat picks from: the display name, the
+/// planes.zbd node a launch builds, and the saved custom plane behind the row where there is one
+/// (a custom row flies its airframe's stock node with the def riding along).</summary>
+public sealed record MenuAircraft(string Name, string Node, CustomPlaneDef? Custom = null)
+{
+    /// <summary>Whether this row is a saved custom plane rather than a stock airframe.</summary>
+    public bool IsCustom => Custom != null;
 }
 
 /// <summary>

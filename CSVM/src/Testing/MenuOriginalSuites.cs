@@ -55,8 +55,7 @@ internal static class MenuOriginalSuites
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true }));
         var host = new MenuHost(registry, audio, exits.Add);
-        host.Features.Add(new FreeFlightFeature());
-        host.Features.Add(new PlayerSetupFeature());
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
         host.AddSeat(seat);
         try
         {
