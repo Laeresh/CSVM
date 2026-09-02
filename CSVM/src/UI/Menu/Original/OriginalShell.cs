@@ -170,10 +170,13 @@ public sealed partial class OriginalShell
     /// <summary>The Preferences pages' four doors, drawn disabled: no shared option stands behind them.</summary>
     public static readonly string[] PreferencesPageKeys = { "PF_B_GAMEOPTIONS", "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS" };
 
-    // The chooser's own words beside the decoded description rows, one line so they clear the
-    // RETURN TO MAIN MENU strip under them.
+    // The chooser's own words on the slot's first line, above the two plaques rather than beside
+    // them: the plaques are wide enough to reach the description column at every window size.
     private const string ChooserDescription = "Menu presentation. APPLY restarts the menu.";
     private const float ChooserGap = 8f;
+
+    // The description's line box inside the chooser's slot, which the plaques stand under.
+    private const float ChooserLine = 18f;
     private const float PreferencesTitleFont = 20f;
     private const float PreferencesTextFont = 14f;
     private const float ChooserFont = 12f;
@@ -530,8 +533,9 @@ public sealed partial class OriginalShell
             backdrop: backdrop, fills: fills, overlays: overlays);
     }
 
-    // Where the chooser stands on the Preferences page: the slot under the last page door, at
-    // the doors' own pitch, which the rows author and the panel has room for.
+    // Where the chooser's slot starts on the Preferences page: under the last page door, at the
+    // doors' own pitch, which the rows author and the panel has room for. Its first line is the
+    // description; the plaques stand a line under it.
     private static (float X, float Y) ChooserCorner(MenuLayoutScreen screen)
     {
         var first = screen.Widget(PreferencesPageKeys[0]);
@@ -725,8 +729,9 @@ public sealed partial class OriginalShell
 
     // The Options screen's chrome, [@Preferences@]'s own: its logo and background panes, its title
     // and the description beside each page door, plus the chooser's description in the same column
-    // and colour. The rows themselves (the four disabled doors, the chooser, APPLY and RETURN TO MAIN
-    // MENU) are drawn by the row loop. With no section the chooser stands alone over the top level's logo.
+    // and colour, on the first line of the chooser's own slot. The rows themselves (the four disabled
+    // doors, the chooser, APPLY and RETURN TO MAIN MENU) are drawn by the row loop. With no section
+    // the chooser stands alone over the top level's logo.
     private void ComposeOptions(List<BoardPicture> pictures, List<BoardLine> lines)
     {
         var screen = _layout.Screen(PreferencesSection);
@@ -767,10 +772,10 @@ public sealed partial class OriginalShell
             }
         }
 
-        var (_, chooserY) = ChooserCorner(screen);
+        var (_, slotY) = ChooserCorner(screen);
         float descriptionX = lastDescription?.Int("X") ?? OptionsX;
         float descriptionWidth = lastDescription?.Int("Width", 310) ?? 310;
-        lines.Add(new BoardLine(ChooserDescription, descriptionX, chooserY + 6f, descriptionWidth, ChooserFont, BoardInk.Row));
+        lines.Add(new BoardLine(ChooserDescription, descriptionX, slotY, descriptionWidth, ChooserFont, BoardInk.Row));
     }
 
     private int EnsureFocus(IReadOnlyList<OriginalRow> rows)
@@ -954,8 +959,8 @@ public sealed partial class OriginalShell
 
     // The Options screen over [@Preferences@]: the four page doors at their authored corners,
     // disabled since no shared option stands behind them; the chooser and APPLY as paper plaques
-    // in the slot under them; and the section's own RETURN TO MAIN MENU. Without the section the
-    // chooser stands alone with a BACK plaque.
+    // in the slot under them, a line below the slot's description; and the section's own RETURN TO
+    // MAIN MENU. Without the section the chooser stands alone with a BACK plaque.
     private void BuildOptionsRows(List<OriginalRow> rows)
     {
         string choice = _choice == PresentationId.Original.Value ? "ORIGINAL" : "BUILT-IN";
@@ -976,8 +981,9 @@ public sealed partial class OriginalShell
             }
         }
 
-        var (x, y) = ChooserCorner(screen);
+        var (x, slotY) = ChooserCorner(screen);
         var plaque = PlaqueSize();
+        float y = slotY + ChooserLine;
         rows.Add(TextButton(PresentationKey, choice, x, y, true, 0));
         rows.Add(TextButton(ApplyKey, "APPLY", x + plaque.Width + ChooserGap, y, true, 0));
         if (screen.Widget(OptionsBackKey) is { } back)

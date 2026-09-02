@@ -302,8 +302,8 @@ the contract above, not from Original's code. In particular it does not inherit:
   A presentation that lays out for the window's own aspect owes `BoardFit` nothing.
 - **The remake-only screens and rules.** Original's Free Flight, Dogfight and BUILD PLANE doors and
   screens, its Options chooser's placement on the Preferences page, its disabled Preferences page
-  doors, its two-button box opening on No, its keyboard and pad focus over a pointer-driven
-  original, and its pointer hotspot are readings recorded in the inventory as remake-only. A new
+  doors, its keyboard and pad focus over a pointer-driven original, and its pointer hotspot are
+  readings recorded in the inventory as remake-only. A new
   presentation makes its own choices for the same operations and records them the same way.
 - **The pointer bitmaps and the cue names.** The two extracted pointer bitmaps and the four cue
   names are what Original draws and asks for. A presentation with a pointer draws whatever it

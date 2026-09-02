@@ -68,7 +68,7 @@ requires Options and presentation switching; existing menu defects remain separa
 | 26 | What happens to existing `--menu=` aids? | **Their values and Built-in output remain stable.** A separate presentation override selects Original aids. |
 | 27 | What is selection precedence? | **Force Built-in, CLI presentation override, saved request, Built-in default;** availability then chooses the active presentation. |
 | 28 | Where are options stored? | **One process-wide, version-tolerant `user://` options file, independent of profiles.** This plan initially adds only options it needs. |
-| 29 | When is Original exposed normally? | **Only after every in-scope journey passes acceptance.** Incomplete work remains CLI-only. |
+| 29 | When is Original exposed normally? | **Original is normally selectable through both presentations' Options screens**, with no flag and no gate beyond registration and asset availability. The acceptance rows still owed are at the controls and are listed under E44. |
 
 ## ⚠ Read this before implementing anything
 
@@ -495,7 +495,7 @@ inventory marks that screen remake-only rather than evidenced.
 **Approach.** Build the Original shell over decoded layouts and the shared Free Flight feature.
 Implement pointer hit-testing/rollover and equivalent semantic navigation. Add the minimal Built-in
 Options route and Original chooser, discard unfinished setup on switch, and restart at the target
-presentation’s top level. Keep Original CLI-only.
+presentation’s top level. Keep Original's `--menu=` aids behind `--presentation=original`.
 
 Handoff from B12, what Original plugs into: registration is one more
 `registry.Register(PresentationId.Original, () => new OriginalPresentation(...))` beside Built-in's
@@ -1331,7 +1331,7 @@ the screen.
 ammo's and message box's button rows on invented lines, and a scratch profile store: the Campaign
 row's door, the box's typing with its cues, CONTINUE creating and seating, the empty-name refusal as
 the one-button dialog at `MB_B_CENTER`'s row, a roster row filling the box then starting with the
-selection bar and pointer frame, the delete confirm opening on NO and deleting on YES, the cabin's
+selection bar and pointer frame, the delete confirm opening on YES and deleting on it, the cabin's
 plaques under the pointer with their rollover and pressed frames and the keyboard wrapping them,
 RETURN TO MAIN MENU and Back closing the campaign, the briefing's three plaques, the flight check
 into ammo and back and FLY MISSION as a `CampaignMissionExit` with the profile saved, PLANE
@@ -1442,7 +1442,7 @@ worklist is the check's table read against it). Closed: **Options** is composed 
 `PF_BACKGROUND`, `PF_T_TITLE`, the four description rows in their authored colour, the four page
 doors at their corners drawn disabled, `PF_B_MAINMENU` as the way back) with the chooser as its
 content, two paper plaques (ORIGINAL or BUILT-IN, APPLY) in the slot under the doors at the doors'
-own pitch with a one-line description, and `OriginalPresentation` draws it in the page's own inks
+own pitch, a line below the slot's own one-line description, and `OriginalPresentation` draws it in the page's own inks
 (`PaletteFor(PreferencesInks, Inks)`); the Game Options, Audio, Video, Controls and Keys pages are
 out of this plan, since no shared option exists behind them (the store carries the menu
 presentation alone), and their doors' disabled state is a remake state recorded for `CAP-51`.
@@ -1454,12 +1454,11 @@ messagebox idiom is not applied to it). **The messagebox** is now one idiom over
 page) in the words `MESSAGEBOX.SCRIPT` assigns by button mask (langui 100 OK, 102 Yes, 103 No,
 replacing the invented YES/NO), and the inventory's Sell goes through it: the sell path's own
 langui 700 question as the two-answer box, 701 or 704 as the one-answer refusal. Every other row
-of the census was already closed by B13 to D33 and is exercised by the check. Remake-only readings
-added or kept, each in the inventory: the chooser's placement and words, the page doors' disabled
-frame, and a two-button box opening on No where the script focuses its left button (Yes) for the
-plain `0x4` mask the campaign passes. That last one is a standing remake choice the orchestrator
-may want to put to the user: the decode now says the original's keyboard focus opens on Yes, and
-Original keeps No so a repeated press after a mistaken DELETE PLAYER cannot destroy a campaign.
+of the census was already closed by B13 to D33 and is exercised by the check. A box opens on its
+first answer, the left button `MESSAGEBOX.SCRIPT` focuses for the plain `0x4` mask the campaign
+passes, so a two-answer box opens on Yes and Back still takes the declining one. Remake-only
+readings added or kept, each in the inventory: the chooser's placement and words, and the page
+doors' disabled frame.
 
 **Verify.** `dotnet build CSVM/CSVM.sln`; the whole `dotnet test` (3015, of which 2 are
 `OriginalCoverageTests`: the fixture run, 22 screens reached and left, 37 journeys by 3 families
@@ -1486,7 +1485,7 @@ confirm (`--menu=campaign-delete`) at 1024x768 and 1920x1080 into `.scratch\e41-
 What a pose cannot show: the pointer sits off the board, so no rollover or pressed frame is in
 any shot; the top level's shot shows Multiplayer and Credits in frame 0, which is what they draw,
 and the Options shot the four doors in frame 0 with ORIGINAL focused, so the toggle to BUILT-IN
-and the APPLY exit are the suites' to prove; the delete shot shows the box opened on No with the
+and the APPLY exit are the suites' to prove; the delete shot shows the box standing with the
 seeded box name behind it, and the Yes answer's deletion is `OriginalCampaignTests`' and the
 coverage check's. `docs/verification.md` rules that bit: **METHOD-6** (which binary each side
 used is named: `mp-d33` at `6d70d0e1` rebuilt for the run against this tree), **METHOD-3** (the
@@ -1499,12 +1498,12 @@ that), **SHOT-6**
 absolute paths, every file checked present), **SHOT-32** (a shot proves the frame it drew; the
 journeys are the check's), **SRC-7** (the answer words and Quit's behaviour are read off the
 scripts that act on them, `MESSAGEBOX.SCRIPT`'s `DI` assignments and `MAINMENU.SCRIPT`'s
-`terminate`; the chooser, the disabled doors and the box's opening focus are recorded remake-only).
+`terminate`; the chooser and the disabled doors are recorded remake-only).
 
 **Verified.** The plan tree with E41 landed passed the complete `.\RunTests.ps1` (3015 units, the
 coverage check among them, 212 engine suites across 4 shards, 18 goldens hash-identical, engine
-errors clean, 175.6s). The two remake choices the item left open (the delete box opening on No
-against the script's Yes focus, the Options chooser's placement) go to the user at E44.
+errors clean, 175.6s). The two remake choices the item left open (the box's opening answer, the
+Options chooser's placement) went to the user at E44 and are settled there.
 
 **⚠ Traps.** “Looks complete” is not inventory coverage. A screen with no Back/recovery path is a
 dead end even if its launch action works.
@@ -1741,9 +1740,9 @@ so the matrix should run that test's install case as its first row and then the 
 `menu-original-campaign` and the Original half of `menu-player-setup-seats`; what none of them
 reach and the at-the-controls pass must: a flown launch and its return through `Launcher` for every
 mode in Original, the frame-deferred `SwitchPresentation` both ways, a real pad's join and walk, the
-sounds, and the pointer's rollover and pressed frames. The two remake choices the matrix should
-put to the user are the delete box opening on No against the script's Yes focus, and the Options
-chooser's placement on the Preferences page.
+sounds, and the pointer's rollover and pressed frames. The two remake choices E41 left open are
+settled: a two-answer box opens on Yes, the left button `MESSAGEBOX.SCRIPT` focuses, and the
+Options chooser's one-line description stands above its two plaques inside the same slot.
 
 Handoff from E42: the acceptance matrix's asset half is `OriginalAssetManifest`, and the six cases
 the matrix must run are the ones `OriginalManifestTests` pins off engine, over the real install
@@ -1780,14 +1779,13 @@ whether Original is "exposed": `MenuHost.Select` gates on registration and the a
 delegate alone, and `PresentationResolution` never distinguishes a CLI override from a saved
 request. So the gate Decision 29 describes has been open since B13, the plan's "Keep Original
 CLI-only" was true of the aids alone (`--menu=` values under `--presentation=original`) and never
-of the saved option, and there is no flip left to make. The gate was not closed here: Decision 8
-requires Options on every presentation, and removing Original from Built-in's chooser would leave a
-player who saved `original` with no route back through the presentation they are in except
-`--force-builtin`. Were the user to want it closed until the at-the-controls pass is in, the change
-is two places, named in `docs/architecture.md`'s `Launcher.cs` entry: `LaunchMenu.TogglePresentationChoice`
-and `OriginalShell`'s chooser (both toggle over the two shipped tokens) and `OptionsStore`'s
-accepted token set. This finding goes to the user through the orchestrator; Decision 29 stands
-overtaken rather than satisfied.
+of the saved option, and there is no flip left to make. The decision is that it stays open: Original
+remains normally selectable through both Options screens while the at-the-controls rows below are
+still owed. Closing it would take two places, `LaunchMenu.TogglePresentationChoice` and
+`OriginalShell`'s chooser (both toggle over the two shipped tokens) plus `OptionsStore`'s accepted
+token set, and would leave a player who saved `original` with no route back through the presentation
+they are in except `--force-builtin`, against Decision 8's Options on every presentation. Decision
+29 is amended to say what stands rather than what was gated.
 
 **The Modern extension contract** is [`docs/menu-presentations.md`](menu-presentations.md), indexed
 from `PROJECT_CONTEXT.md`'s docs pointers and cross-linked from `docs/architecture.md`'s
@@ -1851,21 +1849,20 @@ tally the item's own gate reported. The user decided the three queued choices: O
 normally selectable, the two-answer box follows the script with Yes focused, and the Options
 chooser's description moves above its plaques; the at-the-controls rows remain owed.
 
-**What the user must do at the controls, and decide.** The nine owed rows above, in that order,
-each over `.\RunDev.ps1` and never against a real profile (copy one first) or the real extraction
-(copy `extracted\` first for the failed-build and repaired-tree rows). Then two remake choices E41
-queued, both recorded remake-only in `docs/org/menu-inventory.md`: the delete confirm's two-button
-box opens on No, where `MESSAGEBOX.SCRIPT` focuses its left button (Yes) for the plain `0x4` mask
-the campaign passes, kept so a repeated press after a mistaken DELETE PLAYER cannot destroy a
-campaign; and the Options chooser's placement as two paper plaques (ORIGINAL or BUILT-IN, APPLY) in
-the slot under the four disabled page doors on the Preferences page, where this item's shots show
-the APPLY plaque covering the first words of the chooser's one-line description at every window
-size (the layout is authored space), so the placement needs a decision or a move. One Built-in
-quirk outside this plan, reported by D31 and E43 and left for the backlog under Decision 16:
-`--menu=campaign-roster` draws the cabin rather than the roster in Built-in, because the aid walker
-seats the seeded profile before branching on the aid's name; Original's `campaign-roster` is the
-profile screen itself. And the exposure finding above: whether Decision 29's gate, open since B13,
-stays open through the at-the-controls pass or is closed at the two named places until it is in.
+**What the user must do at the controls.** The nine owed rows above, in that order, each over
+`.\RunDev.ps1` and never against a real profile (copy one first) or the real extraction (copy
+`extracted\` first for the failed-build and repaired-tree rows). The three questions this item put
+to the user are answered. The delete and sell confirms open on Yes, the left button
+`MESSAGEBOX.SCRIPT` focuses for the plain `0x4` mask, which makes the box a decode rather than a
+remake reading; Back still takes the declining answer, so a mistaken DELETE PLAYER still has a way
+out. The Options chooser keeps its slot under the four disabled page doors, with its one-line
+description moved onto the slot's first line above the two plaques, since a plaque is wide enough
+to reach the description column and covered its first words at every window size. And Decision 29's
+gate stays open: Original remains normally selectable through both Options screens while the rows
+above are owed. One Built-in quirk outside this plan, reported by D31 and E43 and left for the
+backlog under Decision 16: `--menu=campaign-roster` draws the cabin rather than the roster in
+Built-in, because the aid walker seats the seeded profile before branching on the aid's name;
+Original's `campaign-roster` is the profile screen itself.
 
 **⚠ Traps.** Two presentations prove replaceability only if shared features have no dependency on
 either. Do not add a token Modern screen; the extension contract is the deliverable.

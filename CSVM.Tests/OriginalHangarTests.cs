@@ -308,12 +308,12 @@ public class OriginalHangarTests : IDisposable
         shell.Step(Right);
         Assert.Equal(1, shell.InventoryIndex);
         Assert.Equal("Spare", shell.Rows[0].Label);
-        // Sell asks first, the two-answer messagebox opening on its declining answer; No keeps the
-        // plane, Yes sells it.
+        // Sell asks first, the two-answer messagebox opening on its first answer; No keeps the
+        // plane, Yes sells it, and Back declines.
         Click(shell, OriginalShell.InventorySellKey);
         Assert.NotNull(shell.Dialog);
         Assert.Equal(new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }, shell.Rows.Select(r => r.Key));
-        Assert.Equal(OriginalShell.DialogNoKey, shell.FocusedKey);
+        Assert.Equal(OriginalShell.DialogYesKey, shell.FocusedKey);
         Assert.Contains(shell.Compose().Overlays, o => o.Lines.Any(l => l.Text == shell.Dialog!.Message));
         shell.Step(Back);
         Assert.Null(shell.Dialog);

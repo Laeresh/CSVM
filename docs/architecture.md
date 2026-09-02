@@ -7185,7 +7185,8 @@ chrome (`PF_LOGO`, `PF_BACKGROUND`, `PF_T_TITLE`, the four description rows in t
 colour, `PreferencesInks`) with the four page doors (`PreferencesPageKeys`) at their corners drawn
 disabled, since no shared option stands behind them, the presentation chooser as its content (the
 ORIGINAL/BUILT-IN toggle and APPLY as paper plaques in the slot under the doors at the doors' own
-pitch, `ChooserCorner`, with a one-line description in the description column) and the section's
+pitch, `ChooserCorner`, a line below the slot's own one-line description in the description
+column, which a plaque is wide enough to reach and would otherwise cover) and the section's
 own `PF_B_MAINMENU` (`OptionsBackKey`) as the way back, the chooser standing alone with a BACK
 plaque when a layout has no such section; the decoded Instant Action
 screen, in its own partial file (`OriginalInstantAction.cs`, below), which `MM_B_INSTANTACTION`
@@ -7201,8 +7202,9 @@ leaves as a `QuitExit` on the press with no confirm, `MAINMENU.SCRIPT`'s own `te
 messagebox is one idiom over every screen (`Dialog`, raised by the campaign partial's
 `RaiseDialog`): while one stands its answers are the only rows, drawn at `[MessageBox]`'s own
 button rows through `CampaignBoards.Dialog`, in the words `MESSAGEBOX.SCRIPT` gives them (langui
-100 OK on the one-button box, 102 Yes and 103 No on the two-button pair), the two-button box
-opening on No, `Back` taking the declining answer, and every refusal and confirm goes through it:
+100 OK on the one-button box, 102 Yes and 103 No on the two-button pair), a box opening on its
+first answer as `MESSAGEBOX.SCRIPT` focuses its left button, `Back` taking the declining answer,
+and every refusal and confirm goes through it:
 the profile screen's refusals and delete, the plane screen's and zoom's messages, and the
 inventory's Sell (the sell path's own langui 700 question, then 701 or 704 as a refusal). The text
 button convention is read off `FlightCheck.FC_B_CHANGEPLANE` (its paper strip and its four label
@@ -7229,8 +7231,8 @@ and cold start) keeps the list cursors, resets every seat's pick through the set
 open campaign. Not
 decoded, so recorded as remake-only design: the doors' placement, the sortie screens, the Options
 chooser's placement and words and the page doors' disabled state, keyboard and pad focus (the
-original is pointer-driven), a two-button box opening on No, list rows taking focus under the
-pointer without a cue, and the pointer's hotspot at its top-left. Off-engine coverage:
+original is pointer-driven), list rows taking focus under the pointer without a cue, and the
+pointer's hotspot at its top-left. Off-engine coverage:
 `CSVM.Tests/OriginalShellTests.cs`, `OriginalSeatsTests.cs`, `OriginalInstantActionTests.cs`,
 `OriginalHangarTests.cs` and `OriginalCampaignTests.cs` over the invented
 `fixtures/menu-layout-original` layout, and `OriginalCoverageTests.cs`, the inventory's machine
@@ -7370,7 +7372,7 @@ the pointer) follow Original's, and its `Back`, `Move`, `Message` and `Modal` ar
 way of doing anything. The screen graph is this file's: the profile screen's box and CONTINUE
 start on the name in the box (Enter in the box included), a roster row fills the box and a second
 press on the filled row starts (the double-click), DELETE PLAYER asks with langui 201 as the
-two-button messagebox opening on NO, CANCEL and Back leave the campaign; the cabin's four plaques
+two-button messagebox opening on YES, CANCEL and Back leave the campaign; the cabin's four plaques
 (NEXT MISSION disabled once the campaign is complete, PLANE CONSTRUCTION opening the hangar over
 `Wallet()` through `OpenHangar(wallet)` with the cabin as its return, re-read on the way back);
 the briefing's three plaques (REPLAY BRIEFING restarting the reveal, whose start count the

@@ -450,9 +450,9 @@ public sealed partial class OriginalShell
         _dialog = new OriginalDialog(message, answers);
         _hover = -1;
         _pressed = -1;
-        // A two-answer box opens on its declining answer, so the press that follows a mistaken
-        // DELETE PLAYER cannot be the one that destroys a campaign.
-        _focus[(int)_screen] = answers.Length - 1;
+        // A box opens on its first answer, the left button MESSAGEBOX.SCRIPT focuses for the plain
+        // 0x4 mask. Back still takes the declining one, so a mistake has a way out.
+        _focus[(int)_screen] = 0;
     }
 
     private void AnswerDialog(string key)

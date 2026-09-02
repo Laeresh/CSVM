@@ -561,8 +561,8 @@ internal static class MenuHangarSuites
             $"picking it puts it in the box ({Row(shell, OriginalShell.InventoryPlanesKey)?.Label})");
         var sellButton = Row(shell, OriginalShell.InventorySellKey)!;
         Press(host, seat, Pointer(fit, sellButton.X + 5f, sellButton.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Dialog != null && shell.FocusedKey == OriginalShell.DialogNoKey && store.Load(scratch) != null,
-            $"Sell asks first with the two-answer messagebox opening on No ({shell.Dialog?.Message})");
+        ctx.Check(shell.Dialog != null && shell.FocusedKey == OriginalShell.DialogYesKey && store.Load(scratch) != null,
+            $"Sell asks first with the two-answer messagebox opening on Yes ({shell.Dialog?.Message})");
         var yes = Row(shell, OriginalShell.DialogYesKey);
         ctx.Check(yes != null, $"whose Yes stands at the messagebox's left row");
         if (yes == null)

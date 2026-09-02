@@ -186,6 +186,21 @@ public class OriginalCoverageTests : IDisposable
         Cover(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot, "install");
     }
 
+    [Fact]
+    public void TheOptionsChoosersDescriptionClearsBothPlaquesOverTheFixture()
+    {
+        ChooserDescriptionClearsThePlaques(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null);
+    }
+
+    [ExtractedDataFact]
+    public void TheOptionsChoosersDescriptionClearsBothPlaquesOverTheInstall()
+    {
+        string dataRoot = TestData.DataRoot!;
+        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
+        Assert.True(layout != null, reason ?? "the install's decoded layout reads");
+        ChooserDescriptionClearsThePlaques(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot);
+    }
+
     private static string[] Then(string[] route, params string[] more)
     {
         var steps = new List<string>(route);
@@ -576,6 +591,26 @@ public class OriginalCoverageTests : IDisposable
         }
 
         return 1;
+    }
+
+    // The chooser's description and its two plaques share one slot under the page doors, and a
+    // plaque is wide enough to reach the description column, so the two must not share a line.
+    // The authored space scales uniformly, so disjoint here is disjoint at every window size.
+    private void ChooserDescriptionClearsThePlaques(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
+    {
+        var shell = Fresh(layout, measure, dataRoot, out _, out _);
+        shell.Open(OriginalScreen.Options);
+        var description = shell.Compose().Lines.Single(l => l.Text.StartsWith("Menu presentation.", StringComparison.Ordinal));
+        foreach (string key in new[] { OriginalShell.PresentationKey, OriginalShell.ApplyKey })
+        {
+            var plaque = Row(shell, key)!;
+            bool clear = description.Y + description.Size <= plaque.Y
+                || plaque.Y + plaque.Height <= description.Y
+                || description.X + description.Width <= plaque.X
+                || plaque.X + plaque.Width <= description.X;
+            Assert.True(clear, $"{key} at ({plaque.X}, {plaque.Y}, {plaque.Width}, {plaque.Height}) covers " +
+                $"the description at ({description.X}, {description.Y}, {description.Width}, {description.Size})");
+        }
     }
 
     // A fresh shell over fresh scratch stores: a progressed player with three planes and a second

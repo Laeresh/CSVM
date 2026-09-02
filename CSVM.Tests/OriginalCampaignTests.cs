@@ -149,7 +149,7 @@ public class OriginalCampaignTests : IDisposable
     }
 
     [Fact]
-    public void TheBoxOpensOnTheLastPlayerSeatedAndDeletePlayerAsksWithTwoAnswersOpeningOnNo()
+    public void TheBoxOpensOnTheLastPlayerSeatedAndDeletePlayerAsksWithTwoAnswersOpeningOnYes()
     {
         _store.Save(CampaignProfileDef.NewProfile("Nathan"));
         _store.Save(CampaignProfileDef.NewProfile("Zachary"));
@@ -162,7 +162,7 @@ public class OriginalCampaignTests : IDisposable
         shell.Step(Pointer(delete.X + 2f, delete.Y + 2f, pressed: true, clicked: true));
         Assert.NotNull(shell.Dialog);
         Assert.Equal(new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }, shell.Rows.Select(r => r.Key));
-        Assert.Equal(OriginalShell.DialogNoKey, shell.FocusedKey);
+        Assert.Equal(OriginalShell.DialogYesKey, shell.FocusedKey);
         Assert.Equal((195f + 70f, 150f + 250f), (shell.Rows[0].X, shell.Rows[0].Y));
 
         shell.Step(Back);
@@ -171,6 +171,8 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal("DeletePlayer", shell.FocusedKey);
 
         shell.Step(Accept);
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.DialogNoKey, shell.FocusedKey);
         shell.Step(Up);
         Assert.Equal(OriginalShell.DialogYesKey, shell.FocusedKey);
         shell.Step(Accept);

@@ -231,15 +231,16 @@ public class OriginalShellTests
         shell.Open(OriginalScreen.Options);
 
         // The four decoded page doors at their authored corners, disabled; the chooser and APPLY
-        // in the slot under them at the doors' own pitch; the section's own RETURN TO MAIN MENU.
+        // in the slot under them at the doors' own pitch, a line under the slot's description; the
+        // section's own RETURN TO MAIN MENU.
         Assert.Equal(
             new[] { "PF_B_GAMEOPTIONS", "PF_B_AUDIO", "PF_B_VIDEO", "PF_B_CONTROLS", OriginalShell.PresentationKey, OriginalShell.ApplyKey, OriginalShell.OptionsBackKey },
             shell.Rows.Select(r => r.Key));
         Assert.Equal(new[] { false, false, false, false, true, true, true }, shell.Rows.Select(r => r.Enabled));
         var chooser = shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey);
-        Assert.Equal((110f, 460f), (chooser.X, chooser.Y));
+        Assert.Equal((110f, 478f), (chooser.X, chooser.Y));
         var apply = shell.Rows.Single(r => r.Key == OriginalShell.ApplyKey);
-        Assert.Equal((110f + 160f + 8f, 460f), (apply.X, apply.Y));
+        Assert.Equal((110f + 160f + 8f, 478f), (apply.X, apply.Y));
         var back = shell.Rows.Single(r => r.Key == OriginalShell.OptionsBackKey);
         Assert.Equal((460f, 500f, 240f, 50f), (back.X, back.Y, back.Width, back.Height));
 
@@ -248,7 +249,7 @@ public class OriginalShellTests
         Assert.Equal((100f, 200f), (board.Pictures[1].X, board.Pictures[1].Y));
         Assert.Contains(board.Lines, l => l.Text == "PREFERENCES" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Change the audio settings." && l.X == 340f && l.Y == 320f);
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Menu presentation.", System.StringComparison.Ordinal) && l.X == 340f && l.Y == 466f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Menu presentation.", System.StringComparison.Ordinal) && l.X == 340f && l.Y == 460f);
         Assert.Equal(0, board.Plaques.Single(p => p.Art.Name == "PP_B_Audio.png").Frame);
         Assert.Equal(2, board.Plaques.Single(p => p.Label == "ORIGINAL").Frame);
         Assert.Equal(new MenuLayoutColor(0xFF, 0xFF, 0xDD, 0xC4), shell.PreferencesInks.Text);
