@@ -5642,7 +5642,11 @@ request. A `PresentationSwitchExit` is acted on one frame later (`_pendingSwitch
 arrives inside the presentation's own tick): `SwitchPresentation` saves the request through
 `OptionsStore`, calls `Deactivate` (freeing the presentation and discarding transient feature
 state), re-selects with the saved request in place of any `--presentation=` override (the force
-flag still wins) and shows the top level. `ShowMenu(destination)` shows the host at a semantic
+flag still wins) and shows the top level. Nothing here gates a presentation on anything but
+registration and availability: a saved `original` request selects Original on a cold start with
+no flag, so Original's normal exposure is the two Options choosers' toggle plus `OptionsStore`'s
+accepted token set, and the whole contract a further presentation registers against is
+[`docs/menu-presentations.md`](menu-presentations.md). `ShowMenu(destination)` shows the host at a semantic
 `MenuReturnDestination`, then does what is the owner's: the `loadboard` aids, the menu music cue,
 and the one-shot `--debug-join=`/`--debug-waves=`/`--debug-wingmen=`/`--debug-preset=` aids
 through `BuiltInMenu`, the one door onto the launchscreen (`Active as BuiltInPresentation`, null
@@ -6929,7 +6933,9 @@ its own graph the semantic destination maps to, `Tick` drives it over the host's
 same instance with the return's destination, so cursors survive a flight. The host creates a
 fresh instance per switch, so a switch discards transient presentation state by construction and
 always lands on `MenuReturnDestination.TopLevel`. The Built-in presentation is
-`src/UI/Menu/BuiltIn/BuiltInPresentation.cs`; the host is `src/UI/Menu/MenuHost.cs`.
+`src/UI/Menu/BuiltIn/BuiltInPresentation.cs`; the host is `src/UI/Menu/MenuHost.cs`. The whole
+seam read end to end, with the checklist a further presentation follows, is
+[`docs/menu-presentations.md`](menu-presentations.md).
 
 ## src/UI/Menu/PresentationRegistry.cs
 Where presentations register: one factory per `PresentationId`, filled once at startup, duplicate

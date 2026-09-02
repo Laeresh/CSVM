@@ -174,7 +174,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 41. ☑ Complete Original top level, Options and every remaining transition
 42. ☑ Enforce the required/optional Original asset manifest
 43. ☑ Complete typed launch and semantic return routing across every journey
-44. ☐ Run acceptance, enable Original normally and publish the Modern extension contract
+44. ◐ Run acceptance, enable Original normally and publish the Modern extension contract
 
 ## Dependency and parallelism notes
 
@@ -1721,7 +1721,7 @@ the controls, as the Verify paragraph states.
 **⚠ Traps.** A semantic destination is not a shared concrete screen id. Presentations never hide
 themselves and construct `GameSession` directly.
 
-## E44 ☐ Run acceptance, enable Original normally and publish the Modern extension contract
+## E44 ◐ Run acceptance, enable Original normally and publish the Modern extension contract
 
 **Goal.** Original becomes selectable in normal Options only after complete acceptance; the proven
 contract and extension checklist make a future Modern presentation additive.
@@ -1769,9 +1769,99 @@ return. Every campaign row runs over a scratch profile copy, never the user's st
 
 **Model recommendation.** high — release gate and architectural audit require broad judgement.
 
-**Verify.** Run the complete `./RunTests.ps1` landing gate, every Original/Built-in menu capture,
-wide/tall/4:3 screenshots, mouse/keyboard/pad journeys, switching and missing-asset recovery. Record
-the at-the-controls results. <TODO: exact final commands and golden additions after suites exist.>
+**The exposure finding, the item's main result.** Original is already normally selectable, and
+has been since the Options route landed: Built-in's Options screen (the Mode screen's sixth row,
+`LaunchMenu.OpenOptions`/`TogglePresentationChoice`) reads the saved request from
+`OptionsStore.UserOptions()` and toggles it between `original` and `built-in`, its APPLY leaves as a
+`PresentationSwitchExit`, `Launcher.SwitchPresentation` saves that token through `OptionsStore`
+(whose accepted set already lists `original`) and re-selects, and `Launcher.BuildMenuHost` reads
+the saved request on every cold start with no flag. Nothing between the store and the host asks
+whether Original is "exposed": `MenuHost.Select` gates on registration and the availability
+delegate alone, and `PresentationResolution` never distinguishes a CLI override from a saved
+request. So the gate Decision 29 describes has been open since B13, the plan's "Keep Original
+CLI-only" was true of the aids alone (`--menu=` values under `--presentation=original`) and never
+of the saved option, and there is no flip left to make. The gate was not closed here: Decision 8
+requires Options on every presentation, and removing Original from Built-in's chooser would leave a
+player who saved `original` with no route back through the presentation they are in except
+`--force-builtin`. Were the user to want it closed until the at-the-controls pass is in, the change
+is two places, named in `docs/architecture.md`'s `Launcher.cs` entry: `LaunchMenu.TogglePresentationChoice`
+and `OriginalShell`'s chooser (both toggle over the two shipped tokens) and `OptionsStore`'s
+accepted token set. This finding goes to the user through the orchestrator; Decision 29 stands
+overtaken rather than satisfied.
+
+**The Modern extension contract** is [`docs/menu-presentations.md`](menu-presentations.md), indexed
+from `PROJECT_CONTEXT.md`'s docs pointers and cross-linked from `docs/architecture.md`'s
+`IMenuPresentation.cs` and `Launcher.cs` entries: what a presentation is and is not, registration,
+the lifecycle and the host, the five shared features and what each owns against what stays
+presentation-side, the input-source contract and the seats, options, selection and availability,
+audio, the four exits, the three destinations, the asset policy and the extraction stamp, the
+namespace seam and its two scans, the `--menu=` aid convention, the explicit list of what a new
+presentation does not inherit from Original, a thirteen-step extension checklist in order, and the
+five verification layers. No prototype code was written.
+
+**Verify.** The acceptance matrix, assembled from the four handoffs above and every item's Verify
+paragraph, run from this worktree at the plan tip `f8640192` (its `CSVM/` and `CSVM.Tests/` trees
+are the E43 landing's; this item changes documentation alone) with `$env:CSVM_DATA_ROOT="Z:\CSVM"`.
+Every row a machine can run was run; every row only a human can run reads owed.
+
+| Row | Command | Result |
+|---|---|---|
+| Build | `dotnet build CSVM/CSVM.sln` | 0 warnings, 0 errors |
+| Coverage check, fixture and install | `dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build --filter "FullyQualifiedName~OriginalCoverageTests"` | 2 passed (every `OriginalScreen` reached and left by pointer, keyboard and pad, the 46 edges whole, every exit typed, every drawn art required) |
+| Manifest cases, six over a scratch tree plus the install census | `--filter "FullyQualifiedName~OriginalManifestTests"` | 8 passed |
+| Seam scans | `--filter "FullyQualifiedName~MenuNamespaceDependencyTests"` | 6 passed (no presentation or engine type behind the shared namespace, no session or launcher type under `CSVM.UI`) |
+| Legal fixture tests, the decoder and the reader | `--filter "FullyQualifiedName~MenuLayoutDecoderTests\|FullyQualifiedName~MenuLayoutReaderTests"` | 29 passed (22 + 7) |
+| Options store and resolution | `--filter "FullyQualifiedName~OptionsStoreTests\|FullyQualifiedName~PresentationResolutionTests"` | 17 passed |
+| Host and seam fixtures | `--filter "FullyQualifiedName~MenuHostTests\|FullyQualifiedName~MenuSeamContractTests"` | 16 passed |
+| The five features' unit tests | `--filter` over `FreeFlightFeatureTests`, `InstantActionFeatureTests`, `PlayerSetupFeatureTests`, `HangarFeatureTests`, `CampaignFeatureTests` | 89 passed |
+| Original's shell tests over the fixture layout | `--filter` over `OriginalShellTests`, `OriginalSeatsTests`, `OriginalInstantActionTests`, `OriginalHangarTests`, `OriginalCampaignTests` | 58 passed |
+| Campaign layout reads and the cue table | `--filter "FullyQualifiedName~CampaignLayoutTests\|FullyQualifiedName~MenuCueTableTests"` | 13 passed |
+| The whole unit project | `dotnet test CSVM.Tests/CSVM.Tests.csproj --no-build` | 3024 passed, 0 failed, 0 skipped, 18 s |
+| Every `menu-*` and `campaign-*` suite, `campaign-layout-parity` and `menu-launch-return` among them | `.\RunTests.ps1 -Filter "menu,campaign" -SkipUnits -SkipGoldens` | 57 passed, 0 failed (14 `menu-*`, 43 `campaign-*`), engine errors clean, 105.7 s |
+| The complete landing gate | `.\RunTests.ps1` | PASS: 3024 units, 213 engine suites across 4 shards, 18 goldens hash-identical, engine errors clean, 147.5 s, exit 0 |
+| Comment caps and encoding | `.\CheckCommentCaps.ps1 -Summary`; `.\CheckEncoding.ps1` | all within cap; no mojibake |
+| Built-in's pixel identity | `.scratch\e44-shots.ps1` for `mode`, `chapter`, `plane`, `selected`, `options`, `loadboard`, `loadboard-campaign` and the twelve scratch-profile campaign aids at 1280x720, compared by decoded 32bpp pixels (`.scratch\e44-compare.ps1`) against `mp-e43\.scratch\e43-shots\builtin-after\` | 19 of 19 identical, zero differing pixels, the user's plane store holding the same eight planes before and after; with B11 to E43's own comparisons (each identical over the same store, `mode` moving once at B13 by the added Options row, the one intended Built-in change) this closes the chain across the plan |
+| Original's wide, tall and 4:3 shots | the same script with `--presentation=original` for `top`, `free-flight`, `dogfight`, `instant-action`, `options`, the five `plane-*` aids, `campaign-empty`, `campaign-roster`, `campaign-cabin`, `campaign-previous`, `campaign-scrapbook`, `campaign-briefing:24`, `campaign-flightcheck`, `campaign-ammo`, `campaign-planeselection` and `campaign-delete` at 800x600, 1280x720, 1920x1080 and 600x750, into `.scratch\e44-shots\original\` | 80 of 80 present, every run's log reading `menu presentation active=original requested=original`; `.scratch\e44-shots\NOTES.txt` says what each pose cannot show (the pointer off the board, so no rollover, pressed or pointer-bitmap frame; no sound; opening states only) |
+| Switching both ways through both Options screens, at the host's sink | `menu-original-tracer`, `menu-launch-return` and the coverage check's `apply-presentation` journey (rows above) | proven to the `PresentationSwitchExit` and the re-selection from the saved request; the frame-deferred `Launcher.SwitchPresentation` itself is owed at the controls |
+| Missing-asset recovery, six cases over a scratch data root | `.scratch\e44-recovery.ps1`: a copy of `extracted\VERSION.json`, `rof`, `zrdr`, `planes`, `rimage` and `soundsl` under `.scratch\e44-scratch-root`, one windowed probe of Original's top level per case with `--data-root=<copy> --presentation=original --menu --screenshot=` | complete: `active=original requested=original`; `MM_B_CAMPAIGN.PNG` moved out: `active=built-in requested=original reason='original' is not available: the Original asset manifest (schema 1) refuses 1 of 95 required files: MainMenu.MM_B_CAMPAIGN names MM_B_Campaign.png (not there)`; a ten-byte file at that name: the same line ending `(shorter than a PNG header)`; `GN_B_RETURNTOGAME.PNG` moved out: `active=original` and the degraded line reading `3 of 67 optional files`, the third naming `Preferences.PF_B_RETURNTOGAME`; the copy's stamp set to schema 1: `active=built-in requested=original reason=... the extraction tree is stamped schema=1 and this build reads schema=2 or later; re-run ExtractAssets.ps1 and ExtractRof.ps1`; everything restored: `active=original requested=original`. The user's tree was never written to; the copy is whole afterwards |
+| Each mode (Free Flight, Instant Action, Dogfight) to FLY and the pause board's Exit, in each presentation | `.\RunDev.ps1`, then `.\RunDev.ps1 --presentation=original` | **owed at the controls**: expect that presentation's top level (Built-in's Mode with its chapter and airframe cursors where they were and nothing selected; Original's top level with its list cursors kept and the pick dropped) |
+| A campaign mission flown to its end, won and lost, over a copied profile | copy one directory of `user://Profiles` to a new name first; `.\RunDev.ps1`, Campaign, that player, Next Mission, GO TO FLIGHT CHECK, FLY MISSION, the mission's end (once won, once lost); the same under `--presentation=original` | **owed at the controls**: expect the scrapbook on that mission with RETURN TO CABIN focused, then RETURN TO CABIN, Back to the roster and out |
+| Restart an Instant Action mission and a campaign mission from the pause board | as above, Restart instead of Exit | **owed at the controls**: expect a rebuild with no menu shown |
+| A failed build forced from the menu | a scratch data root copy with one chapter folder moved out, `.\RunDev.ps1 --data-root=<copy>`, Free Flight on that chapter, FLY; the same under `--presentation=original` | **owed at the controls**: expect Built-in's Mode screen with its error line, Original's top level bare with the `ui` line in the log |
+| A cold start on an aid in each presentation, then a return | `.\RunDev.ps1 --menu=chapter`, FLY, the pause board's Exit; `.\RunDev.ps1 --presentation=original --menu=free-flight`, the same | **owed at the controls**: expect the aid's screen on the cold start and the top level, not the aid's screen, on the return |
+| A real pad's join and walk in both presentations | a pad pressing Start on Built-in's aircraft screen and on Original's Free Flight and Dogfight screens; the joined pad walking, selecting and confirming; Back unjoining it; FLY launching two seats with each pad flying its own pane; a pad unplugged mid-setup | **owed at the controls**: expect the seat joined, tagged and freed as `menu-player-setup-seats` drives it, and the unplugged pad's seat gone |
+| The mouse over Original's every screen | `.\RunDev.ps1 --presentation=original`, the pointer moved slowly over every plaque, list row, dropdown, tab and scrap of every screen the inventory lists, one press held on a plaque | **owed at the controls**: expect the active pointer over a live button and the passive one elsewhere, the rollover frame on entering a plaque and the depressed frame while held, a list row taking focus with no frame change |
+| The sounds | the same run with audio | **owed at the controls**: expect `MOUSEOVER` on entering a plaque, `MOUSECLICK` on a press, nothing on a list row or a scrap, `ENTERTEXT` per character the profile screen's box takes and `ENTERTEXT_ERROR` per refused one, the briefing's narration starting on entry, restarting on REPLAY BRIEFING and stopping on RETURN TO CABIN and GO TO FLIGHT CHECK |
+| A switch both ways at the controls | `.\RunDev.ps1`, Options, Original, APPLY; then PREFERENCES, BUILT-IN, APPLY; then a restart of the game with no flag | **owed at the controls**: expect the other presentation's top level one frame after APPLY each time, unfinished setup gone, and the saved choice honoured on the restart; with a required file moved out of a scratch root copy and put back while the process is up, expect the switch to see the repaired tree |
+
+`docs/verification.md` rules that bit: **METHOD-6** (which binary each side of the Built-in
+comparison used is named: `mp-e43`'s build of the same `CSVM/` tree against this tree's),
+**METHOD-3** (the plane store was listed before and after the Built-in shots and the campaign aids
+read a scratch store emptied on every open), **METHOD-9** (the recovery pass is the manifest check
+failing under a perturbation, twice, and passing again once the fault is gone), **SHOT-6** (decoded
+pixels, never PNG bytes), **SHOT-9**/**SHOT-10** (windowed probes on the hidden desktop, absolute
+paths, every file checked present), **SHOT-32** (a shot proves the frame it drew; which presentation
+stood is read off the log line, and the rollover, pressed, pointer and sound behaviour is the
+suites' and the controls', never a picture's), **SRC-4** (the matrix is recorded once, here; the
+contract page states what is and cites no result).
+
+**Verified.** <pending orchestrator run>
+
+**What the user must do at the controls, and decide.** The nine owed rows above, in that order,
+each over `.\RunDev.ps1` and never against a real profile (copy one first) or the real extraction
+(copy `extracted\` first for the failed-build and repaired-tree rows). Then two remake choices E41
+queued, both recorded remake-only in `docs/org/menu-inventory.md`: the delete confirm's two-button
+box opens on No, where `MESSAGEBOX.SCRIPT` focuses its left button (Yes) for the plain `0x4` mask
+the campaign passes, kept so a repeated press after a mistaken DELETE PLAYER cannot destroy a
+campaign; and the Options chooser's placement as two paper plaques (ORIGINAL or BUILT-IN, APPLY) in
+the slot under the four disabled page doors on the Preferences page, where this item's shots show
+the APPLY plaque covering the first words of the chooser's one-line description at every window
+size (the layout is authored space), so the placement needs a decision or a move. One Built-in
+quirk outside this plan, reported by D31 and E43 and left for the backlog under Decision 16:
+`--menu=campaign-roster` draws the cabin rather than the roster in Built-in, because the aid walker
+seats the seeded profile before branching on the aid's name; Original's `campaign-roster` is the
+profile screen itself. And the exposure finding above: whether Decision 29's gate, open since B13,
+stays open through the at-the-controls pass or is closed at the two named places until it is in.
 
 **⚠ Traps.** Two presentations prove replaceability only if shared features have no dependency on
 either. Do not add a token Modern screen; the extension contract is the deliverable.
