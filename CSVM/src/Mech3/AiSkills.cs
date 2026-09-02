@@ -129,6 +129,13 @@ public sealed class AiSkills
     private const int AccentSlot = 65;
     private const int ArmorSlot = 66;
 
+    // Roster slot 37: objectiveTarget, a strict boolean over all 414 shipped blocks (406 author 0,
+    // exactly 8 author 1), not a target-node reference despite the name.
+    private const int ObjectiveTargetSlot = 37;
+
+    // Roster slot 39: helpLabel, the MSG_OBJ_* key an objective-flagged block's own marker carries.
+    private const int HelpLabelSlot = 39;
+
     // Roster slot 67: ace, the flag the debrief's kill-crediting reads to choose the starred
     // tally over the plain one (docs/formats/ai-rosters.md "Field table").
     private const int AceSlot = 67;
@@ -314,6 +321,19 @@ public sealed class AiSkills
     /// plain one (docs/org/debrief.md#what-the-tallies-count).</summary>
     public static bool RosterAce(IReadOnlyList<object?> fields) =>
         fields.Count > AceSlot && fields[AceSlot] is float f && f >= 1f;
+
+    /// <summary>Reads a roster block's <c>objectiveTarget</c> flag (slot 37): true on the 8
+    /// shipped blocks (of 414) that author 1. The block ITSELF carries the mission's objective
+    /// marker when this is set; gate <see cref="RosterHelpLabel"/> on it, since two blocks author
+    /// a non-key slot 39 string with this at 0 (docs/formats/ai-rosters.md "Field table").</summary>
+    public static bool RosterObjectiveTarget(IReadOnlyList<object?> fields) =>
+        fields.Count > ObjectiveTargetSlot && fields[ObjectiveTargetSlot] is float f && f >= 1f;
+
+    /// <summary>Reads a roster block's <c>helpLabel</c> (slot 39) raw: the MSG_OBJ_* key its own
+    /// objective marker carries where <see cref="RosterObjectiveTarget"/> is set, or designer text
+    /// (C4/M05's <c>blakepeace_3_1</c>/<c>_2</c> author <c>"Blake Aviation"</c> here with the flag
+    /// at 0) otherwise. Null when empty or unset.</summary>
+    public static string? RosterHelpLabel(IReadOnlyList<object?> fields) => StrSlot(fields, HelpLabelSlot);
 
     /// <summary>Reads a roster block's <c>rating_biases</c> (slot 33): the authored
     /// [pattern, bias, ?] entries in order, or an empty list when the slot is null, omitted or

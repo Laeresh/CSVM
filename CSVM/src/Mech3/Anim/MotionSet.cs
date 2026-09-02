@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3.Anim;
@@ -89,6 +90,11 @@ internal sealed class MotionSet
             }
 
             _motions[i].Tick(dt);
+            // Central, rather than in each motion class: every transform motion has the same
+            // render problem and the same answer, and one call here cannot be forgotten by a
+            // motion added later. Inert on any clock but the realtime one.
+            if (_motions[i].Channel == MotionChannel.Transform)
+                RenderPoses.Record(_motions[i].Target);
             if (!_motions[i].Finished)
                 continue;
             var done = _motions[i];
@@ -152,6 +158,14 @@ internal sealed class MotionSet
     /// answer exists.</summary>
     public bool DrivesTransform(Node3D target) =>
         _motions.Any(m => m.Target == target && m.Channel == MotionChannel.Transform);
+
+    /// <summary>The target's own still-live <see cref="FromToMotion"/>, if any: the seam
+    /// <see cref="PoseChannel"/> uses to carry a same-tick sibling event's channel into its
+    /// replacement instead of losing it to <see cref="Add"/>'s eviction. Null for a ballistic
+    /// <see cref="MotionRuntime"/> body, which has no channel of this shape to carry.</summary>
+    public FromToMotion? LiveFromToMotion(Node3D target) =>
+        _motions.FirstOrDefault(m => m.Target == target && m.Channel == MotionChannel.Transform)
+            as FromToMotion;
 
     /// <summary>Whether this exact spin is already running, so a <c>Loop{-1}</c> sequence
     /// re-asserting it is left alone instead of rebuilt. Checked before <see cref="Add"/>, whose

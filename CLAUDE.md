@@ -26,6 +26,11 @@ never changes the exit code.
   (3) `dotnet format` / `dotnet build` before `RunTests.ps1`, `dotnet test`, and `git commit`,
   blocking on remaining StyleCop warnings. (4) The content gate,
   [`CheckCommitContent.ps1`](CheckCommitContent.ps1), before `git commit`.
+  ⚠ **Hook (3) resolves its tree from the session's ambient cwd** (`git rev-parse --show-toplevel`),
+  not from the tree the command names, and a `cd` inside a compound command does not reach it. So a
+  build meant for your worktree can silently compile a different one, which is how a plan tree's DLL
+  got rebuilt under a battery. Put a real `git -C <your tree> rev-parse --show-toplevel` at the front
+  of the command, or `Set-Location` first as its own call.
 - **The content gate** runs four checks, each its own script you can also run by hand while
   editing: [`CheckEncoding.ps1`](CheckEncoding.ps1) (double-encoded UTF-8, whole tree),
   [`CheckItemIds.ps1`](CheckItemIds.ps1) (`backlog.md`/`playtest.md` defining the same

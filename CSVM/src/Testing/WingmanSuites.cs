@@ -100,6 +100,21 @@ internal static class WingmanSuites
     private const string EngageChapter = "C3";
     private const string EngageMission = "M05";
 
+    // CM05's own pairing, read out of its roster: wingman_2 escorts devastator_1, which flies
+    // M4Bravo, the eleventh net of the Hawaii chapter. The net id is the mission's, not a choice.
+    private const string LostLeaderChapter = "C3";
+    private const int LostLeaderNetId = 11;
+
+    // Long enough for the escort to join and the leader to walk onto a real edge before the
+    // leader is taken out of play, and then for the survivor to fly the net it inherits.
+    private const float LostLeaderJoinS = 8f;
+    private const float LostLeaderAfterS = 4f;
+
+    // What a pursuit leaves behind on a wingman whose quarry is then destroyed: the bearing to
+    // where that aeroplane was, and the altitude it died at, both far off the formation's own.
+    private const float LostLeaderStaleBearingDeg = 215f;
+    private const float LostLeaderStaleAltitudeM = 90f;
+
     [Suite("wingman-station",
         "the D34 campaign wingman (BL-362): the decoded netless mode-wingman escort law as " +
         "geometry (both body-frame stations, the rolled-leader frame, the 106.68/259.08 m " +
@@ -166,6 +181,39 @@ internal static class WingmanSuites
         try
         {
             FlyEngageLeg(ctx, planesGamez, textures);
+        }
+        finally
+        {
+            textures.Dispose();
+        }
+    }
+
+    [Suite("wingman-lost-leader",
+        "a wingman whose leader leaves play takes that leader's own net (BL-524): CM05's pairing, "
+        + "devastator_1 walking M4Bravo#11 with its wingman on the decoded station, the leader "
+        + "then deactivated so InPlay is really false, and the director's hand-off run over that "
+        + "roster; the survivor drops its escort, walks the leader's net and re-derives both order "
+        + "fields off a stale pursuit pair, while a wingman whose leader flies no net is left alone")]
+    internal static void WingmanLostLeader(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, LostLeaderChapter);
+        ctx.RequireData(chapterZrdr, $"{LostLeaderChapter} chapter zrdr");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, LostLeaderChapter);
+        ctx.RequireData(texturesPath, $"{LostLeaderChapter} textures");
+
+        if (AiNets.ById(AiNets.Load(chapterZrdr), LostLeaderNetId) is not { } leadersNet)
+        {
+            throw new SuiteSkippedException($"{LostLeaderChapter} carries no net #{LostLeaderNetId}");
+        }
+
+        float minActive = AiSkills.Load(ctx.ZrdrPath).MinAiActiveDist;
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        try
+        {
+            FlyLostLeaderLeg(ctx, planesGamez, textures, leadersNet, minActive);
         }
         finally
         {
@@ -310,6 +358,119 @@ internal static class WingmanSuites
         finally
         {
             bandit?.Free();
+            wing?.Free();
+            leader?.Free();
+            pool?.Free();
+        }
+    }
+
+    // The leg: a netted leader, its wingman on the station, a human leader with a wingman of its
+    // own as the control, and then both leaders taken out of play at once. Only the netted one has
+    // a route to pass on, which is what the hand-off is allowed to act on.
+    private static void FlyLostLeaderLeg(TestContext ctx, GameZ planesGamez, TextureArchive textures,
+        AiNet leadersNet, float minActive)
+    {
+        var stats = PlaneStats.Load(ctx.ZrdrPath, FlownPlaneNode);
+        var aiStats = PlaneStats.LoadForAi(ctx.ZrdrPath, FlownPlaneNode);
+        ProjectilePool? pool = null;
+        FlightController? leader = null, wing = null, human = null, humansWing = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var start = leadersNet.Nodes[0].Position;
+            var leaderPilot = new AiPilot
+            {
+                Patrol = new AiNetFollower(leadersNet, new System.Random(3)),
+            };
+            leader = Rig(ctx, planesGamez, textures, aiStats, live, start, false, leaderPilot,
+                FlightRoster.ShooterIdBase + 1, null, null, out _, FlownPlaneNode);
+            leader.Name = "devastator_1";
+
+            var station = AiEscort.FormationStation(start, Basis.Identity, playerLeader: false);
+            var wingPilot = AiPilot.HoldingCourse(station, station + Vector3.Forward);
+            wingPilot.Escort = new AiEscort { Leader = leader };
+            wingPilot.Machine = new AiModeMachine(new System.Random(7)) { ActivationRange = minActive };
+            wing = Rig(ctx, planesGamez, textures, aiStats, live, station, false, wingPilot,
+                FlightRoster.ShooterIdBase + 2, null, null, out _, FlownPlaneNode);
+            wing.Name = "wingman_2";
+
+            // The control pair: a human leader never carries a pilot, so it flies no net, which is
+            // the shape of all 21 player-led escort blocks in the shipped campaign.
+            var humanPos = start + (Vector3.Right * StartAbeamM);
+            human = Rig(ctx, planesGamez, textures, stats, live, humanPos, true, null,
+                FlightRoster.ShooterIdBase, null, null, out _, FlownPlaneNode);
+            human.Name = "player";
+            var humansStation = AiEscort.FormationStation(humanPos, Basis.Identity, playerLeader: true);
+            var humansWingPilot = AiPilot.HoldingCourse(humansStation, humansStation + Vector3.Forward);
+            humansWingPilot.Escort = new AiEscort { Leader = human };
+            humansWing = Rig(ctx, planesGamez, textures, aiStats, live, humansStation, false,
+                humansWingPilot, FlightRoster.ShooterIdBase + 3, null, null, out _, FlownPlaneNode);
+            humansWing.Name = "wingman_1";
+
+            for (int i = 0; i < (int)(LostLeaderJoinS / StepDt); i++)
+            {
+                live.SimStep(StepDt);
+                leader.SimStep(StepDt);
+                wing.SimStep(StepDt);
+                humansWing.SimStep(StepDt);
+            }
+
+            ctx.Check(leader.InPlay && leaderPilot.Patrol is { } walked && walked.Net.Id == LostLeaderNetId,
+                $"the leader walks its own net #{LostLeaderNetId}: node {leaderPilot.Patrol?.CurrentIndex}");
+            ctx.Check(wingPilot.Escort is { } held && ReferenceEquals(held.Leader, leader) && wingPilot.Patrol == null,
+                $"…and its wingman is a netless escort on it, {wing.WorldPosition.DistanceTo(leader.WorldPosition):0} m off");
+
+            wingPilot.TargetHeadingDeg = LostLeaderStaleBearingDeg;
+            wingPilot.TargetAltitude = LostLeaderStaleAltitudeM;
+            humansWingPilot.TargetHeadingDeg = LostLeaderStaleBearingDeg;
+            humansWingPilot.TargetAltitude = LostLeaderStaleAltitudeM;
+            leader.Inert = true;
+            human.Inert = true;
+            ctx.Check(!leader.InPlay && !human.InPlay, $"both leaders have left play");
+
+            var roster = new System.Collections.Generic.Dictionary<string, FlightController>
+            {
+                ["devastator_1"] = leader,
+                ["wingman_2"] = wing,
+                ["player"] = human,
+                ["wingman_1"] = humansWing,
+            };
+            int moved = CampaignDirector.TakeLostLeadersNets(roster, null, minActive,
+                new System.Collections.Generic.HashSet<string>());
+
+            ctx.Check(moved == 1, $"the hand-off moves the one wingman whose leader flies a net: {moved}");
+            ctx.Check(wingPilot.Escort == null && wingPilot.Patrol is { } taken && taken.Net.Id == LostLeaderNetId,
+                $"…'{wing.Name}' drops its escort and takes '{leadersNet.Name}#{leadersNet.Id}': net {wingPilot.Patrol?.Net.Id}");
+            ctx.Check(humansWingPilot.Escort != null && humansWingPilot.Patrol == null,
+                $"…while the human's wingman keeps its escort and is given no net");
+            ctx.Check(wingPilot.Machine is { AttackRange: > 1f },
+                $"…and the inherited net re-baselines the machine's gates: attack {wingPilot.Machine?.AttackRange:0} m");
+
+            for (int i = 0; i < (int)(LostLeaderAfterS / StepDt); i++)
+            {
+                live.SimStep(StepDt);
+                wing.SimStep(StepDt);
+                humansWing.SimStep(StepDt);
+            }
+
+            float heldBearing = Mathf.Abs(Mathf.Wrap(
+                humansWingPilot.TargetHeadingDeg - LostLeaderStaleBearingDeg, -180f, 180f));
+            float freshBearing = Mathf.Abs(Mathf.Wrap(
+                wingPilot.TargetHeadingDeg - LostLeaderStaleBearingDeg, -180f, 180f));
+            ctx.Note($"[lost leader] '{wing.Name}' node {wingPilot.Patrol?.CurrentIndex} heading {wingPilot.TargetHeadingDeg:0.0}° altitude {wingPilot.TargetAltitude:0} m; '{humansWing.Name}' heading {humansWingPilot.TargetHeadingDeg:0.0}° altitude {humansWingPilot.TargetAltitude:0} m");
+            ctx.Check(freshBearing > 1f && Mathf.Abs(wingPilot.TargetAltitude - LostLeaderStaleAltitudeM) > 1f,
+                $"…and the survivor re-derives both orders off the stale pursuit pair: {freshBearing:0.0}° and {Mathf.Abs(wingPilot.TargetAltitude - LostLeaderStaleAltitudeM):0} m away from it");
+            ctx.Check(wingPilot.SteeringPatrol, $"…flying the inherited net rather than a projected order");
+            ctx.Check(heldBearing < 1f,
+                $"…where the untouched wingman still holds its stale pair, the able-to-fail control: {heldBearing:0.0}° off");
+        }
+        finally
+        {
+            humansWing?.Free();
+            human?.Free();
             wing?.Free();
             leader?.Free();
             pool?.Free();

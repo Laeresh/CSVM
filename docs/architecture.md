@@ -975,11 +975,14 @@ slot 6; `RosterRatingBiases`: slot 33 as `AiRatingBias` — wildcard `Matches`, 
 a third element accepted and preserved raw, never acted on; the spawn-facing `Roster*` readers for
 slots 0–5, 20, 21, 31, 32, 40 and 65, every one defensive over a short block; `RosterAce`: slot 67,
 the debrief's kill-crediting flag; `RosterInitHealth`: slot 7, null unless authored > 0;
-`RosterArmor`: slot 66, null unless authored >= 0 or the block is too short to carry it) and the
-thin per-mission roster loader (`LoadRoster`), plus the positional-header join that exposes disabled
-generator parameter blocks (`LoadGeneratorRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
-slot 6/33 census goldens in `AiTargetRankingTests`; the spawn slots in `CampaignRosterPlanTests`;
-the two durability gates and the absent-slot case in `RosterDurabilityOverrideTests`.
+`RosterArmor`: slot 66, null unless authored >= 0 or the block is too short to carry it;
+`RosterObjectiveTarget`: slot 37, a strict boolean; `RosterHelpLabel`: slot 39 raw, gated on
+`RosterObjectiveTarget` by the caller, not here) and the thin per-mission roster loader
+(`LoadRoster`), plus the positional-header join that exposes disabled generator parameter blocks
+(`LoadGeneratorRoster`). Units + shipped-constant goldens in `AiSkillsTests`; slot 6/33 census
+goldens in `AiTargetRankingTests`; the spawn slots in `CampaignRosterPlanTests`; the two durability
+gates and the absent-slot case in `RosterDurabilityOverrideTests`; slots 37/39 in
+`RosterObjectiveMarkerTests`.
 
 ## src/Mech3/AiVolumes.cs
 `AiVolume` (radius, upper, lower) and `AiVolumeSet` (activation, attack, return): the one shape
@@ -1349,10 +1352,11 @@ visibility rationale on their declarations — read those before touching either
 
 ## src/Mech3/Anim/MotionSet.cs
 `AnimRuntime`'s live motions as a module: `Add` (owner stamp + `(Target, Channel)` eviction +
-`LaunchCount`), the per-frame `Tick` sweep, `DiscardFor`/`Reset`, and the two predicates the rest of
-the runtime asks — `OwesBounce` (the retirement hold `AnimRuntime.Retirable` consults) and
-`HasSpinOn` (the `Loop{-1}` spin re-assert guard). Never constructs a motion — `PoseChannel` builds
-them and hands them over. `Tick` drops a motion whose target node has been freed before touching it: a motion outlives the
+`LaunchCount`), the per-frame `Tick` sweep, `DiscardFor`/`Reset`, and the predicates the rest of
+the runtime asks — `OwesBounce` (the retirement hold `AnimRuntime.Retirable` consults),
+`HasSpinOn` (the `Loop{-1}` spin re-assert guard), and `LiveFromToMotion` (the target's still-live
+transform tween, so `PoseChannel` can carry an about-to-be-evicted channel into its replacement
+instead of losing it). Never constructs a motion — `PoseChannel` builds them and hands them over. `Tick` drops a motion whose target node has been freed before touching it: a motion outlives the
 node it drives (an airframe swap, a rig torn down), and writing a transform to a disposed object
 throws out of the whole runtime advance rather than losing one motion. `Node3D`-typed and otherwise
 never dereferenced: every other operation here is identity comparison, so the behaviour is
@@ -1572,9 +1576,12 @@ bootstrap, read by `ANIM_HEALTH` eval, escalated by `ApplyDamageStages`, damaged
 `Resolve(struck)` maps a raycast-hit node back to its instance, climbing to the nearest node a pool
 claims. A pool claims its own DAMAGE NODE (`Register`'s `damageNode`, which
 `AnimRuntime.DamageNodeOf` reads off the def's `ANIMATION_ROOT_NAME` inside that anchor) and its
-anchor only as a fallback, which is how two defs sharing one anchor are told apart; the rule and the
-`def+0x6c` decode behind it are in docs/formats/destructibles.md, "Which node takes the hit".
-Regression: the `campaign-balloon-death` suite. Schema: docs/formats/destructibles.md.
+anchor only as a fallback, which is how two defs sharing one anchor are told apart. That fallback
+answers only while the pool's own damage node stands in the world, so a round on the hatch over a
+stowed broadside cannon reaches no pool; the rule and the `def+0x6c` decode behind it are in
+docs/formats/destructibles.md, "Which node takes the hit" and "Remake node resolution".
+Regression: the `campaign-balloon-death` and `zeppelin-cannon-stowed` suites.
+Schema: docs/formats/destructibles.md.
 `Instance.Reseed(max)` re-seeds a pool from a mission record — the F18 zeppelin zones, where
 `zeppelins.json` hp beats the def's own `HEALTH` — and refuses once damaged, so a late wire-up
 cannot heal a fight in progress. `Instance.Team`, `Instance.Owner` and `Instance.Dormant` are what a mission
@@ -2746,10 +2753,11 @@ the pose onto the world node, and `ResumeAt` re-seats it in place after a script
 The stop-point half is the decoded approach (`FUN_004bf360`): full speed until the along-facing
 range to a halting node falls under 250 m, then linearly down to zero; inside the follower's
 30 m (`Dock`) the throttle is cut, the pitch holds, and the hull and heading decay onto the node
-and the leg's bearing at e^(−0.2·dt), which is what closes the last metre onto the hold sphere.
-Once the follower is `Holding`, a station-keep: pitch commanded to 0 and heading kept, both
-frozen by the speed factor at speed 0. Pinned by `ZeppelinMotionTests` + the `zeppelin-motion`
-and `zeppelin-pandora-dead-end` suites.
+and the leg's bearing at e^(−0.2·dt), which settles it ON the node in plan and in altitude. A
+follower still on its SEAT (`LegStartIndex` −1) takes the own-node law (`FUN_004bf500`) instead,
+a station-keep on the record's own pose: pitch commanded to 0 and heading kept, both frozen by
+the speed factor at speed 0. Pinned by `ZeppelinMotionTests` + the `zeppelin-motion` and
+`zeppelin-pandora-dead-end` suites.
 
 ## src/Flight/AiPilot.cs
 The non-player `FlightModel` driver: standing orders in (heading in the mission-data
@@ -2768,7 +2776,9 @@ original's laws build,
 an evasive maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks),
 and an optional `Escort` (`AiEscort`) which, whenever its leader is in play, takes the dispatch
 away from all of those but stunned and avoid crash, the original's own `mode wingman` fork,
-one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. Pure over
+one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. A leader
+that leaves play drops the pilot to the netless arm, which projects the orders it was left with
+and so holds them; `CampaignDirector` is what re-seats such a pilot, on the lost leader's net. Pure over
 the model state and its own fields, seeded randomness only, so a fixed-dt run is deterministic
 (`AiPilotTests`). The original's own steering law is `AiControlLaw`; this class is only its driver
 (docs/org/aiPilot.md). `Stun(seconds)` is the AI stun's entry (`FUN_004200d0`, reached by a
@@ -5268,18 +5278,23 @@ that state and parents it under the airship, while C1/M04's `pfighter11`..`pfigh
 on SI scripts, so a prop built switched off leaves that intro's wingman out of the launch and the
 dive; a bodiless `player` marker the flown aircraft is posed onto; `chuteman`'s parachutist
 subtree (`chutemanparent` → `pilot`/`stamp`), switched off (the shared `chuteman.zrd` RESET_STATE)
-until a mid-mission drop's own definition (e.g. C3/M01's `tdchute`) reparents and activates it; and
-`FigureNodes` (`rope_ladder`, `pickup_cpilot`) under a switched-off holder rather than switched off
-themselves, because nothing ever activates the wing-walking pilot: it is the capture's own
-`OBJECT_ADD_CHILD` into the shot that draws him, which is what the original gets from a library
-root its `world1` walk never reaches, and `PropNodes` (`anim_bloodhawk`, the Bloodhawk on the
+until a mid-mission drop's own definition (e.g. C3/M01's `tdchute`) reparents and activates it;
+`balmoral`, own `Visible` matching its archive ACTIVE state but staged under a switched-off
+holder like `FigureNodes` rather than at the world root the way `piratefighter` is, since C2/M05's
+capture drop is the only definition that ever names it and nothing else ever reparents it out from
+under that holder: built at the world root directly it drew, idle, at the archive's build origin
+in every OTHER mission that stages an aircraft, and moved a golden hash before this was caught;
+`FigureNodes` (`rope_ladder`, `pickup_cpilot`) under the same kind of switched-off holder rather
+than switched off themselves, because nothing ever activates the wing-walking pilot: it is the
+capture's own `OBJECT_ADD_CHILD` into the shot that draws him, which is what the original gets from
+a library root its `world1` walk never reaches, and `PropNodes` (`anim_bloodhawk`, the Bloodhawk on the
 hangar floor while the pilot parachutes in; `bloodhawk_gear`, the undercarriage the flown aeroplane
 wears on the lift), built switched off the way `chuteman` is because the hangar drop's own legs
 add and activate them (`Props`). All carry a rebased gamez index (`PointerBaseOf`: the chapter's node count rounded up to the
 next multiple of 2500), which is what makes a compiled definition's cross-archive symbol table
 bind them instead of claiming a name with no node. Built for every mission that plays a cutscene
 (`WorldSession`'s intro, approach-trigger or mission-list gate), so every other session's node
-census is exactly what it was. `StageFlown` puts the FLOWN aircraft's own airframe subtree in the runtime's node table under the same rebase, run when the rigs are built and again after an airframe swap: that is what makes a hookup definition's per-airframe branches decidable, since each tests one `player_<airframe>` node's active bit and then poses that airframe's own hook, wing fold and mount offset. That rebased index runs no general RESET_STATE pass, because a chapter definition anchoring on a generic airframe node name must not re-pose a live aeroplane, so `StageFlown` follows it with `AnimRuntime.ParkDockingHook`: the RESET_STATE of every definition anchored on a `*_hook` group inside that model, which is what parks the hook ARMS collapsed. The archive's inactive bit parks the group and nothing else, and an arm left at the archive's own full length is drawn extended for the second before its scale motion starts and then collapses, which reads as a second hook swing. The pose half is
+census is exactly what it was. `StageFlown` puts the FLOWN aircraft's own airframe subtree in the runtime's node table under the same rebase, run when the rigs are built and again after an airframe swap: that is what makes a hookup definition's per-airframe branches decidable, since each tests one `player_<airframe>` node's active bit and then poses that airframe's own hook, wing fold and mount offset. That rebased index runs no general RESET_STATE pass, because a chapter definition anchoring on a generic airframe node name must not re-pose a live aeroplane, so `StageFlown` follows it with `AnimRuntime.ParkDockingHook`: the RESET_STATE of every definition anchored on a `*_hook` group inside that model, then every node that group's own `<x>_hook_extend` moves seeded from that definition's own FROM pose, which wins wherever a RESET_STATE omits a node or parks the wrong axis (five of eleven airframes do one or the other). The archive's inactive bit parks the group and nothing else, so without the seed an unparked node is drawn at its archive pose for the second before its own motion starts and then snaps, which reads as a second hook swing; a rotate-only and a scale-only FROM_TO on the same node in the same tick is `PoseChannel`/`FromToMotion`'s own case, carried forward rather than evicted unticked. The pose half is
 `Session/CutsceneController.cs`; the decode is
 `docs/formats/anim-definitions/cutscenes.md`.
 
@@ -5351,6 +5366,21 @@ On a realtime session `AnimRuntime` is a `PhysicsDt` consumer too (its `_Physics
 authored motions step on the physics tick; its `_Process` takes over only under `SimHeld`, a halt,
 or a parent-driven mode unless authored animation itself is held. Regression: the `anim-clock-realtime`
 suite. Published as `GameClock.Current` (session-scoped, nulled on teardown; null = raw frame delta).
+
+## src/Utils/RenderPoses.cs
+The render half of the fixed-tick simulation, shared by every subsystem that moves something
+visible. A realtime session advances poses on the 60 Hz physics tick while the display redraws at
+its own rate, so a pose drawn raw is held for a frame and jumped the next, and it steps against the
+camera in proportion to speed. Two consumption shapes over one gate and one fraction: a node writer
+calls `Record(node)` right after writing it and `Draw()` places it between its last two simulation
+poses, while a subsystem holding its own coordinates (`Projectile`'s rounds) reads `Fraction` and
+interpolates its own pair. `Restore(tick)` opens every physics callback, putting the exact
+simulation pose back and rolling the pair once per tick, so nothing the simulation seeds from a
+node's transform can observe a drawn one. `Draw()` has one caller, `GameSession._Process`, which is
+why a suite stepping the simulation by hand always reads the simulation pose. Realtime only:
+`Fraction` is 1 elsewhere and the whole-step case takes the stored pose rather than an
+interpolation to 1, so fixed-step captures stay byte-identical. Regression: the `render-poses`
+suite. Static like `GameClock.Current` and cleared beside it on teardown.
 
 ## src/Utils/Log.cs
 The diagnostic log: `Log.Info("world", $"…")` / `Warn` / `Error` / `Debug` over nine categories
@@ -6132,32 +6162,42 @@ Format and decode: docs/formats/objectives.md.
 The flown campaign mission's objective sites, offered to each player's `TargetPool` as
 objective-flagged candidates: the original carries an objective as a companion flag on the Enemy
 cycle, so one site is drawn at a time and d-pad up steps between them. The set is `targets.zrd`'s
-own `objective` entries minus those a completed objective's `REMOVE_OBJECTIVE_TARGET` names, plus
-whatever `ADD_OBJECTIVE_TARGET` has added: `ObjectiveGraph.ObjectiveTargets` alone starts empty and
-a mission that only ever REMOVES its sites would offer nothing. One `ObjectiveSite` instance lives
-as long as the mission flags it, since the selection is held by source identity; its position and
-labels are re-read every frame, which is what tracks a site under a moving node. `PointFor` prefers
-the bare `TRAVELERS` point of the objective that edits a target over the world node of the same
-name, because C3/M01's village node stands at the world origin. A site on a world node is marked at
-`SiteAnchor`, the centre of the world bounding box of everything that node draws, which is what the
+own `objective` entries plus every roster block that authors the flag on itself
+(`CampaignDirector.RosterObjectiveMarkers`, aiv slot 37 — CM11's `secfury_5`/`secfury_6`, the
+shipped case), minus whichever of those a completed objective's `REMOVE_OBJECTIVE_TARGET` names,
+plus whatever `ADD_OBJECTIVE_TARGET` has added: `ObjectiveGraph.ObjectiveTargets` alone starts
+empty and a mission that only ever REMOVES its sites would offer nothing, CM11's own OBJECTIVE1
+included, which removes both stunt planes without ever adding them. One `ObjectiveSite` instance
+lives as long as the mission flags it, since the selection is held by source identity; its position
+and labels are re-read every frame, which is what tracks a site under a moving node. `PointFor`
+prefers the bare `TRAVELERS` point of the objective that edits a target over the world node of the
+same name, because C3/M01's village node stands at the world origin. Next, a roster marker reads
+its own spawned `FlightController`'s live `WorldPosition` (`RosterAircraftPosition`): a roster
+aircraft with no chapter-gamez library root under its own block name is never indexed on
+`AnimRuntime` (`RosterMarkers.Attach` only indexes one when that root exists), so `Resolve`/
+`SiteAnchor` below can never find it. Otherwise a site on a world node is marked at `SiteAnchor`,
+the centre of the world bounding box of everything that node draws, which is what the
 original publishes for a mission structure (`docs/org/targeting.md`); its own position is only the
 fallback for a node that draws nothing. C1/M05's balloon groups stand on the water with the balloon
 16 m above them and C2's `sghangar` stands at the world origin, so the node's position is not the
 site. A site carries the team of the node it stands on where that node is a mission structure, and
 neutral otherwise, which is the original's own split: a record naming a flagged node keeps that
 object's team, and a record that has to build its own builds it neutral. Almost every site is the
-second case, since a group is flagged on a child. A site is keyed by
+second case, since a group is flagged on a child (a roster-aircraft site is always this case, since
+`RosterAircraftPosition` resolves no `DestructibleRegistry` instance). A site is keyed by
 `ObjectiveTarget.Key`, and `ResolveTarget` walks a path one name at a time with `FindNodes` scoped
 to the node before, so `piratezep/rock_zeppelin` is the hull's own child and a bare name is the
 first global match; `targets.zrd` is looked up by the whole key first (a path-authored entry
-keys `parent/child` there too) and by the path's last node as the fallback, the help label by the
-whole key. The marker's verb, proper name and colour all come off that table through `Messages`
+keys `parent/child` there too) and by the path's last node as the fallback. The help label reads
+the graph's own `SET_HELP_LABEL` first, then the roster block's own slot 39, then `targets.zrd`'s.
+The marker's verb, proper name and colour all come off that table through `Messages`
 (`Zeppelin [Disable] -` over `Worker's Voyage` in red, `[Dock] -` over `Worker's Voyage Docking
 Hook` in blue), and a site whose key finds no entry falls back to its node name, which is what a
 table loaded from the wrong scope looks like. `GameSession` binds it through
 `FlightRoster.SetTargetObjectives`. Pinned by `campaign-objective-markers`,
-`campaign-objective-target-path`, `campaign-objective-labels` and `campaign-race-chain` (the
-hangar anchor, and C2/M03's race chain of per-zone objectives with a racer-death DEDG each).
+`campaign-objective-target-path`, `campaign-objective-labels`, `campaign-race-chain` (the
+hangar anchor, and C2/M03's race chain of per-zone objectives with a racer-death DEDG each) and
+`campaign-cm11-stunt-marker` (the roster-marker source, over CM11's own built roster and graph).
 
 ## src/Session/CampaignHumanField.cs
 Engine-free objective rules over every joined human, represented by `HumanState` position, captured
@@ -6246,7 +6286,11 @@ that way and always has.
 mission" contract `InstantActionDirector.TryCreate` has. `Attach(WorldInputs)` arms the graph once
 every runtime a directive can touch is up, applies the chapter's persist log and hands the world's
 `DangerZoneRibbons` to every roster pilot; `Step(dt)` is
-called from BOTH of `GameSession`'s drive paths. Every graph transition is one
+called from BOTH of `GameSession`'s drive paths. Each step also walks the roster for a wingman
+whose escort leader has left play and seats it on that leader's own patrol net
+(`TakeLostLeadersNets` through `SeatOnNet`, the body `SET_AI_NET` shares), since a netless escort
+holds the orders its last pursuit wrote once its leader is gone; a leader flying no net, which is
+every player-led escort, leaves its wingman untouched and is reported once. Every graph transition is one
 `[campaign] objective N woke|napped|completed|killed|slept|expired [by M] [for Ns] at Ts` line
 through `Log.Info`, so the file sink carries the chain a sortie report is about. `WireScoredShooter`
 registers the scripted player's aircraft into `ProjectilePool.ScoredShooters`, deferred into `Step`
@@ -6284,7 +6328,8 @@ woken definition may stage library roots), both sound-group directives through
 a named net, and the airship holds or leaves), and, over the spawned roster, `DEDG`
 (`GroupLiveCount`: not-crashed members of the block group, a parked one counting as alive) and
 `WAKEUP_ENEMIES`, one directive over two deactivated flags: an inert named aircraft re-activated at
-its spawn pose, or a dormant `ZeppelinRuntime` record put into the world.
+its PLACED pose (a world node of the block's name where one exists, its authored spawn otherwise,
+never a stale copy of the plan), or a dormant `ZeppelinRuntime` record put into the world.
 `SET_AI_NET` / `SET_AI_TEAM` / `SET_AI_ATTACK_RADIUS` share one lookup by roster block name
 (`Commanded`) and write the follower, the team and the attack range over the spawned roster; their
 zeppelin arm has no seam here, so an unmatched name is always reported.
@@ -6301,7 +6346,9 @@ authored `netids` becomes `AiPilot.Patrol` on the chapter's net with its trailer
 volumes and the `min_ai_active_dist` floor, the signature maneuvers, the rating biases and the
 accent, builds a `deactivated` block inert, places a `taxiPath` block held on its path
 (`PlaceOnPath`: re-pinned through `FlightController.PlaceHeld` each tick, `Activate`d at the
-handoff speed), and logs one `campaign: roster '<name>'` line per block. A block whose
+handoff speed), books a block's own objective-target flag and label into `RosterObjectiveMarkers`
+(`RegisterObjectiveMarker`, aiv slots 37/39, also called from the generator-launch and surface
+paths), and logs one `campaign: roster '<name>'` line per block. A block whose
 `primary_target` is not spawned holds its course; a leader that dies later is `AiPilot`'s own
 fallback. `Roster` is the spawned map by block name; the player's block is skipped. A surface
 vehicle (`mode ship`) plans as a hull and goes to `RosterInputs.SpawnSurface` instead of the
@@ -6383,9 +6430,12 @@ plan (volumes under the floor, signature maneuvers, the gunner's rating biases a
 shared by the campaign placement and the generator launch so the two cannot drift; ⚠ it leaves an
 escorting block's `primary_target` alone, because there it names a leader and not a target. A
 plan's `InitHealth`/`Armor` (`AiSkills.RosterInitHealth`/`RosterArmor`, aiv slots 7/66) travel
-through `SpawnFor` onto the `AiSpawn` record; `AiFlightAssembler.Assemble` is what applies them.
-Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs` and `RosterDurabilityOverrideTests.cs`; the
-placement half is the `campaign-roster` suite, the generator half the `generator-roster-params` suite.
+through `SpawnFor` onto the `AiSpawn` record; `AiFlightAssembler.Assemble` is what applies them. A
+plan's `ObjectiveTarget`/`HelpLabel` (slots 37/39) are not applied here at all: `CampaignDirector`
+reads them straight off the plan at spawn to book its own `RosterObjectiveMarkers`.
+Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`, `RosterDurabilityOverrideTests.cs` and
+`RosterObjectiveMarkerTests.cs`; the placement half is the `campaign-roster` suite, the generator
+half the `generator-roster-params` suite.
 
 ## src/Session/ScriptedPathVehicles.cs
 One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored

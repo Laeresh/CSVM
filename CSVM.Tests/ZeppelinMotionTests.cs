@@ -349,6 +349,72 @@ public class ZeppelinMotionTests
         Assert.Equal(0f, m.Speed);
     }
 
+    [Fact]
+    public void AnArmedStopAheadSettlesTheHullOnItsNodeNotOnTheHoldSphere()
+    {
+        // The hold latches on the 30 m sphere; the dock glide is what carries the hull the rest
+        // of the way onto the node, in altitude as well as plan. CM08's Pandora needs it: its
+        // cargo point is where a 54 m crane chain has to reach the freighter's deck.
+        var def = Def(position: new Vector3(0f, 500f, 300f));
+        var net = new AiNet
+        {
+            Id = 1,
+            Name = "TestNet",
+            Nodes = new[]
+            {
+                new AiNetNode(new Vector3(0f, 400f, 0f), Array.Empty<float>()),
+                new AiNetNode(new Vector3(0f, 300f, -4000f), new[] { 1f, 1f }),
+            },
+            Edges = new[] { (0, 1) },
+        };
+        var m = new ZeppelinMotion(def, new AiNetFollower(net, new Random(1), 250f,
+            observesStopPoints: true));
+
+        for (int i = 0; i < 60 * 900 && !m.Follower.Holding; i++)
+        {
+            m.Step(Dt);
+        }
+        Assert.True(m.Follower.Holding, "never reached the armed stop");
+        Assert.Equal(1, m.Follower.CurrentIndex);
+
+        for (int i = 0; i < 60 * 40; i++)
+        {
+            m.Step(Dt);
+        }
+        Assert.InRange(m.Position.DistanceTo(net.Nodes[1].Position), 0f, 0.5f);
+        Assert.Equal(net.Nodes[1].Position.Y, m.Position.Y, 1);
+    }
+
+    [Fact]
+    public void AZeppelinSeatedOnItsOwnArmedNodeHoldsWhereTheRecordPutIt()
+    {
+        // The other half of the decoded pair: the node the hull already sits on halts, so it
+        // holds station where it stands. Nothing draws it onto the node, or C1/M04's Pandora
+        // would slide off the pose its record authored the moment the mission started.
+        var def = Def(position: new Vector3(0f, 400f, 20f));
+        var net = new AiNet
+        {
+            Id = 1,
+            Name = "TestNet",
+            Nodes = new[]
+            {
+                new AiNetNode(new Vector3(0f, 400f, 0f), new[] { 1f, 1f }),
+                new AiNetNode(new Vector3(0f, 400f, -4000f), Array.Empty<float>()),
+            },
+            Edges = new[] { (0, 1) },
+        };
+        var m = new ZeppelinMotion(def, new AiNetFollower(net, new Random(1), 250f,
+            observesStopPoints: true));
+
+        for (int i = 0; i < 60 * 60; i++)
+        {
+            m.Step(Dt);
+        }
+        Assert.True(m.Follower.Holding);
+        Assert.Equal(0, m.Follower.CurrentIndex);
+        Assert.InRange(m.Position.DistanceTo(def.Position), 0f, 0.01f);
+    }
+
     private static ZeppelinDef Def(float yawDeg = 0f, float pitchDeg = 0f, Vector3? position = null) => new()
     {
         Node = "testzep",

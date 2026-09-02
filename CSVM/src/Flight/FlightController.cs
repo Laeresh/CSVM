@@ -1186,6 +1186,10 @@ public partial class FlightController : Node3D
         _throttle = 0f;
         _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
         GlobalTransform = _simCurr;
+        // A held airframe is re-placed rather than flown, so the pair above is collapsed and the
+        // frame callback skips its own interpolation for it. Hand the drawing to the session's
+        // pose book instead, which is what carries an aeroplane down a scripted taxi path.
+        RenderPoses.Record(this);
         if (_cam != null && IsInsideTree())
             SnapCamera();
     }
@@ -1777,11 +1781,11 @@ public partial class FlightController : Node3D
         if (!orbiting)
         {
             // Draw the plane between its last two sim poses (see the _simPrev/_simCurr fields).
-            // Skipped while crashed (the sim pair is stale; the wreck owns the visuals) and on a
-            // parent-driven clock, which steps the sim once per rendered frame anyway.
+            // Skipped while crashed: the sim pair is stale and the wreck owns the visuals.
+            // ⚠ The fraction is the session-wide one, never the engine's raw reading.
             if ((clock == null || !clock.ParentDriven) && !Crashed)
             {
-                _renderPose = _simPrev.InterpolateWith(_simCurr, (float)Engine.GetPhysicsInterpolationFraction());
+                _renderPose = _simPrev.InterpolateWith(_simCurr, RenderPoses.Fraction);
                 GlobalTransform = _renderPose;
             }
         }

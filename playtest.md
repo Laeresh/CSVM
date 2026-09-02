@@ -573,6 +573,19 @@ reasons that have nothing to do with any of these checks.
   hull is a fault; a boat mid-turn is led less, which is not one.
   *Blocks:* nothing; it confirms a landed item on screen.
 
+- `PT-109` `[Own]` **The Pandora halts over the beached freighter and cranes its cargo**
+  (`BL-597`). Klondike1's node 7 is the cargo point, and the hull now settles on the node itself
+  rather than a hold distance short of it. Getting there is the mission's own chain: destroy the
+  power hut so the freighter runs aground instead of sailing on, then sink all four patrol boats,
+  which completes the second primary and releases the Pandora from its first stop.
+  *Look for:* the airship arriving over the wreck and stopping with the ship under it rather than
+  short of or past it, and about 70 s after the last boat goes down the freighter's hold doors
+  swinging open, the Pandora's cargo doors following, and the crane riding its chain down to the
+  deck and back up. Judge the hover point by eye against the hull below it.
+  ⚠ Nothing starts until group 3 is empty. A Pandora sitting 2 km up the route with no sequence is
+  the authored wait, not a fault; check the boats first.
+  *Blocks:* `BL-597`'s acceptance.
+
 ### AI flight — external view, own build (F52 AI arm)
 
 - `PT-54` `[Own]` **AI plant A/B against the old plant.** Fly the new AI force path, then relaunch flipping AI aircraft back onto the player plant
@@ -807,9 +820,27 @@ is a judgement on our own remake.
   - (b) one growth from nothing to full length over the next second, then one outward swing;
   - (c) no second swing and no collapse-then-regrow; if a repeat is still visible it is on the
     shared fork rather than the airframe branch, which the suite does not cover;
-  - (d) in a Balmoral, whether the arms' authored step from full to half scale at one second reads
-    like the original (its retract authors no scale, and no Balmoral docking is on film).
+  - (d) in a Balmoral or Warhawk auto-land, the centre mast (`m_arm1`) and both side arms
+    (`l_arm1`/`r_arm1`) hold no full-length or half-turned flash before their own growth starts;
+    `OriginalScreenshots/Videos/CM04.mkv`'s docking around 3:18 is the reference.
   *Blocks:* nothing tracks the outcome; a fail reopens the symptom as a new `BL` against the fork.
+
+- `PT-116` `[A/B: OriginalScreenshots/Videos/CM04.mkv, ~198 s to the cut]` **A Balmoral or
+  Warhawk's docking hook swings its full authored travel and parks with no flash** (`BL-630`).
+  Two faults shared this symptom: the flown airframe's own hook arms held whatever raw pose the
+  archive shipped through the opening second (`AnimRuntime.ParkDockingHook` now seeds every node
+  from its extend definition's own FROM pose), and a same-tick rotate-then-scale pair on one arm
+  node left the rotate half frozen (`FromToMotion` now carries it forward instead of losing it to
+  eviction). Fly CM02 (or CM04) to its auto-land in a Balmoral or a Warhawk and watch the hook bay
+  from the moment it opens.
+  *Look for:*
+  - (a) no arm drawn at full length or on the wrong angle for the opening second, the same tell
+    `PT-97` (d) names;
+  - (b) the two side arms and the centre mast swing smoothly to their final angle once, with no
+    freeze partway and no jump back toward where they started;
+  - (c) the crane bay's own two side parts (not the airframe's arms) swing in and settle with no
+    overshoot, over the whole approach rather than only the opening second.
+  *Blocks:* nothing tracks the outcome at the controls; a fail reopens the symptom as a new `BL`.
 
 ### Any chapter · the campaign export, then Instant Action
 
@@ -837,6 +868,29 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   *Blocks:* nothing tracks the outcome. The write and the read are pinned by unit tests either
   side, but no scripted run crosses the menu boundary between them, so a fail mints a new `BL`.
 
+### CM05 (C3/M04) and CM07 (C1/M02) · the escorts after a leader is lost
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:4
+./RunGame.ps1 --campaign=<profile>:6
+```
+
+- `PT-113` `[Own]` **A wingman whose leader is shot down picks up that leader's patrol route**
+  (`BL-524`, closed). CM05 pairs `wingman_2` with `devastator_1` on `M4Bravo#11` and `wingman_3`
+  with `devastator_2` on `M4Charlie#12`; CM07 pairs `wingman_2` and `wingman_3` with
+  `devastator_2` and `devastator_3` on `M2Bravo#26` and `M2Charlie#25`. Fly until one of those
+  leaders is destroyed, then keep the surviving wingman in sight, above all after its own target
+  dies, which is the moment it used to leave on a fixed bearing.
+  *Look for:*
+  - (a) the survivor turning onto its lost leader's circuit and staying in the mission area,
+    rather than shrinking into the distance on one heading at one altitude;
+  - (b) `campaign: 'wingman_2' lost its leader 'devastator_1' and takes its net 'M4Bravo#11'` in
+    `.scratch/logs/fly-*.log`, once per lost leader rather than every frame;
+  - (c) the survivor still fighting from the inherited route: it engages what comes into range
+    instead of flying a patrol past a fight.
+  *Blocks:* nothing tracks the outcome; a wingman that still flies out of the mission reopens
+  `BL-524`, and one that holds its net while enemies shoot at it is `BL-523`, not this.
+
 ### CM09 (C1/M04) · to the docking
 
 ```powershell
@@ -856,8 +910,26 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   - (b) the Klondike drawn and intact after the intro hands off, since the whole endgame gates on
     that hull being switched on;
   - (c) the docking cutscene starting on its own once the last hostile dies.
-  *Blocks:* an absent line reopens `BL-581` as an AI-reachability question, not an objectives one;
-  a mission that ends in neither direction after a gasbag-only zeppelin kill is `BL-666`.
+  *Blocks:* an absent line reopens `BL-581` as an AI-reachability question, not an objectives one.
+
+- `PT-115` `[Own]` **A gasbag-only kill of the pirate zeppelin ends CM09, after about half a
+  minute of nothing.** Shooting the hull the briefing says to defend reaches OBJECTIVE41's
+  `INSTANTLOSS` rather than leaving the mission running: the burning bays and `killpzep`'s
+  water-gated engine destroys switch off all twelve engine `healthy` models, which is what
+  OBJECTIVE26 and OBJECTIVE27 count. The `campaign-cm09-gasbag-kill` suite measures 32.6 s from
+  the kill to the loss, and 30 s of that is the two authored naps (26 naps 27 for 10 s, 27 naps 41
+  for 20 s), so the wait is the design rather than a stall. Those are sim seconds, so a rig whose
+  sim clock lags wall time waits longer. What no headless run can say is whether that wait reads
+  as a hung mission at the controls. Kill three gasbags on the `piratezep`, then keep flying and
+  watch the clock instead of quitting.
+  *Look for:*
+  - (a) the mission-failed screen arriving about 33 s after the hull dies;
+  - (b) whether those 30 s of silence read as a hang, which would be a pacing item rather than a
+    chain one;
+  - (c) the wreck's own breakup still playing through the wait, since it is the only thing on
+    screen that says the mission is still running.
+  *Blocks:* nothing tracks the outcome today. An ending that never arrives mints a new `BL` for
+  the chain; an ending that arrives but reads as a hang mints one for the wait.
 
 ### CM10 (C1/M05) · the docking's walkway and the hospital ship
 
@@ -890,6 +962,39 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   *Blocks:* nothing tracks the outcome; a gun firing on the wrong side mints a new `BL` against
   the structure-team decode.
 
+- `PT-111` `[Own]` **A wave-1 attack balloon's marker stays legible as the wave arrives, never
+  reading as parked on the water** (`BL-656`, disproven). The marker already tracks the group's
+  live geometry with no staleness; the wave's own scripted entrance dives from a hidden altitude
+  to a low pass over the water, roughly 11-14 m under the marker, before climbing to attack
+  height, and that low pass is the one moment worth eyeballing. Watch OBJECTIVE10 wake (the first
+  attack-balloon site to appear) through its whole entrance.
+  *Look for:*
+  - (a) the marker sits visibly above the water throughout, including at the low pass;
+  - (b) nothing reads as the marker resting on or under the water surface;
+  - (c) the marker's motion looks continuous through the dive and the climb, with no snap or jump.
+  *Blocks:* nothing tracks the outcome; a marker that does read as resting on the water reopens
+  `BL-656` against the entrance flight's own authored path rather than against `ObjectiveSites.cs`.
+
+### CM11 (C2/M02) · the stunt planes' objective marker
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:10
+```
+
+- `PT-117` `[Own]` **Both stunt planes carry the objective marker and its Follow label from
+  mission start** (`BL-635`). `secfury_5` and `secfury_6` author the roster's own objective flag
+  and label (aiv slots 37/39) rather than a `targets.zrd` entry, and each marker now reads off the
+  aircraft's own live position instead of a world node. Fly the mission's opening over the studio
+  lot with both stunt planes in view, then continue to wherever the studio gate objective
+  completes.
+  *Look for:*
+  - (a) both planes carry a marker labelled Follow as they perform their routine;
+  - (b) the marker moves with each plane rather than sitting fixed at a spawn point;
+  - (c) once the gate objective completes, both markers clear rather than lingering on a plane
+    that has flown off or been shot down.
+  *Blocks:* nothing tracks the outcome; a missing marker, a wrong label, or one that lingers past
+  the gate objective reopens `BL-635`.
+
 ### CM12 (C2/M01) · the patrol boats and the Spruce Goose
 
 ```powershell
@@ -904,6 +1009,97 @@ ordnance that only the campaign fits, so the round trip is the only place the tw
   - (b) the Goose taking damage on its engines rather than nowhere;
   - (c) a boat that never fires at all, which is `BL-523`'s gunnery and not this item.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`.
+
+- `PT-114` `[Own]` **The Spruce Goose and a torpedo both read smooth** (`BL-627`, `BL-676`). Every
+  simulation-driven pose is now drawn between its last two simulation steps instead of on the
+  latest one, which is what the player's own aircraft already did and nothing else did. The
+  fastest movers are the ones to judge: the Goose at 11 to 37 m/s and ordnance in flight, which is
+  where the author first saw it. Blow the Kowloon gate, formate on the Goose and hold station
+  beside it from the harbour leg out, then fire a torpedo across your own view and watch it run.
+  *Look for:*
+  - (a) the Goose gliding rather than stepping while you hold station on it, worst when it fills
+    the view;
+  - (b) a torpedo or rocket tracking as one continuous line rather than a dotted one, judged from
+    abeam where the crossing speed is highest;
+  - (c) the A/B that separates a remaining fault from this one: fly the same leg again under
+    `--max-fps 60` and say whether it reads the same. It should now, where before the fix 60 was
+    the smoother of the two;
+  - (d) the Goose slowing almost to a stop at the end of the first leg and picking up again, which
+    is the authored `path2_decelerate` waiting on the barge and not a defect.
+  *Blocks:* `BL-627`, `BL-676`. Anything still stepping names a subsystem the survey put in the
+  "needs nothing" column, and reopens that one rather than the mechanism.
+
+- `PT-107` `[Own]` **The ace `hkfirebrand_9` after `OBJECTIVE67` wakes it** (`BL-669`, `BL-678`).
+  The ace is authored at `(-4518, 150, -6233)`, 78.9 m below the terrain surface there. That is
+  harmless in the original, which culls the single-sided faces it climbs out through, and fatal
+  here, which collides on them. Nothing was changed, so this row records what the build does rather
+  than checking a fix. Fly on until the Hollywood Knight ambush wakes, then watch the ace.
+  *Look for:*
+  - (a) whether the ace is ever seen in the air at all, or dies against the hills east of the
+    Goose's harbour leg without the player firing;
+  - (b) how long after the ambush wakes that happens, and whether the player was anywhere near it;
+  - (c) whether the mission still reads correctly afterwards, since the secondary counts group 2 as
+    wiped either way.
+  *Blocks:* nothing; it is the at-the-controls half of `BL-669`, and re-flying it after `BL-678`
+  lands is what shows the ace surviving its own wake.
+
+### CM13 (C2/M03) · the Pandora's dock
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:12
+```
+
+- `PT-108` `[Own]` **Both landing cones draw once the dock finishes** (`BL-618`, disproven as
+  filed). `pzhomebase` already binds each cone to its own gamez node and switches both on; the
+  suite's earlier `cones 0/2` reading was its own drive window ending before the choreography's
+  13 s completion, not a resolver defect. Win the race so OBJECTIVE8 wakes the dock, then give it
+  time to finish deploying the hook.
+  *Look for:*
+  - (a) both cones under the Pandora's hull visibly drawing once the hook and hangar bay have
+    deployed;
+  - (b) either cone staying invisible, which means the disproof above does not hold at the
+    controls.
+  *Blocks:* nothing tracks the outcome; a missing cone reopens `BL-618`.
+
+### CM14 (C2B/M04) · the Gemini's broadside cannons
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:13
+```
+
+- `PT-110` `[Own]` **A stowed broadside cannon takes no weapon damage, and the same cannon takes it
+  once deployed** (`BL-640`). The Gemini keeps all six left cannons behind shut hatches until the
+  two airships close to 1000 m and its `COMPLETED_ZEPCANNONS` arms them, and only then does a hatch
+  swing and the gun slide out. Fly abeam the Gemini's port side early, pick one `lbroad` hatch and
+  empty a long gun burst into it; then hold off until that cannon deploys against you and put the
+  same burst into the gun itself.
+  *Look for:*
+  - (a) the shut hatch taking hits with no smoke, no fire and no cannon death, so the objective
+    counter does not move;
+  - (b) the deployed gun dying to the same burst, with its fireball and the objective counter
+    stepping on;
+  - (c) how long the wait for the arming is, since the cannons are now immune until they deploy and
+    the mission's third primary wants five of the six.
+  *Blocks:* a stowed cannon that still dies reopens `BL-640`; a deployed one that will not die is a
+  new item.
+
+### CM15 (C2/M05) · the paratrooper drop
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:14
+```
+
+- `PT-112` `[Own]` **The capture cutscene shows the Balmoral it is filmed around** (`BL-632`,
+  closed). The archive's `balmoral` node was never staged, so the drop played with the shot
+  composed on empty air; `AircraftStage` now stages it and the suite reads it framed through the
+  shot, but the suite drives the definition directly rather than through the mission's own
+  objective chain. Fly the mission through to the paratrooper drop (past `cargozep2`, the cargo
+  zeppelin the fighters patrol around).
+  *Look for:*
+  - (a) the Balmoral itself visible in the shot, not an empty frame over the zeppelin;
+  - (b) it moving through the shot rather than sitting parked;
+  - (c) the paratroopers still dropping and the letterbox/handoff unchanged from before.
+  *Blocks:* nothing tracks the outcome; a fail reopens `BL-632`.
 
 ### CM18 (C4/M03) · the generator launches
 

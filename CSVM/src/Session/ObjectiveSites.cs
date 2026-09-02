@@ -39,11 +39,13 @@ public sealed class ObjectiveSite
 /// The flown campaign mission's objective sites, offered to each player's target pool as
 /// objective-flagged candidates: the original carries an objective as a companion flag on the
 /// Enemy cycle, so the ordinary selection draws one site at a time and d-pad up steps between
-/// them. The set is <c>targets.zrd</c>'s own <c>objective</c> entries, edited by
-/// <c>objectives.zrd</c>'s <c>ADD_/REMOVE_OBJECTIVE_TARGET</c> as objectives complete, with the
-/// labels resolved through <see cref="Messages"/> and <c>SET_HELP_LABEL</c>. Bound to the roster
-/// by <c>GameSession</c>; <see cref="Collect"/> runs once per pane per frame and re-reads each
-/// site's position, which is what keeps a site on a moving node marked where it actually is.
+/// them. The set is <c>targets.zrd</c>'s own <c>objective</c> entries plus every roster block
+/// that authors the flag on itself (<see cref="CampaignDirector.RosterObjectiveMarkers"/>, aiv
+/// slot 37), edited by <c>objectives.zrd</c>'s <c>ADD_/REMOVE_OBJECTIVE_TARGET</c> as objectives
+/// complete, with the labels resolved through <see cref="Messages"/>, the roster block's own
+/// slot 39 and <c>SET_HELP_LABEL</c>. Bound to the roster by <c>GameSession</c>;
+/// <see cref="Collect"/> runs once per pane per frame and re-reads each site's position, which is
+/// what keeps a site on a moving node, a flying aircraft included, marked where it actually is.
 /// </summary>
 public sealed class ObjectiveSites
 {
@@ -68,19 +70,32 @@ public sealed class ObjectiveSites
         _runtime = runtime;
     }
 
-    /// <summary>The target keys carrying the objective-target flag right now: every
-    /// <c>targets.zrd</c> entry the mission flags <c>objective</c> whose flag no completed
-    /// objective has removed, plus everything <c>ADD_OBJECTIVE_TARGET</c> has since added.
-    /// ⚠ Do not build this from <see cref="ObjectiveGraph.ObjectiveTargets"/> alone. That store
-    /// starts empty, and a mission whose sites are only ever REMOVED offers nothing at all.</summary>
+    /// <summary>The target keys carrying the objective-target flag: <c>targets.zrd</c>'s own
+    /// flagged entries and <paramref name="rosterMarkers"/> (aiv slot 37,
+    /// docs/formats/ai-rosters.md) not removed by a completed objective's own
+    /// <c>REMOVE_OBJECTIVE_TARGET</c>, plus everything <c>ADD_OBJECTIVE_TARGET</c> has added.
+    /// ⚠ Do not build this from <see cref="ObjectiveGraph.ObjectiveTargets"/> alone: that store
+    /// starts empty, and a mission whose sites are only ever removed offers nothing.</summary>
     public static void CollectTargets(ObjectiveScript script, ObjectiveGraph graph,
-        MissionTargets targets, List<string> into)
+        MissionTargets targets, List<string> into,
+        IReadOnlyDictionary<string, string>? rosterMarkers = null)
     {
         foreach (var entry in targets.ByNode)
         {
             if (entry.Value.Objective && !RemovedByCompletion(script, graph, entry.Key))
             {
                 into.Add(entry.Key);
+            }
+        }
+
+        if (rosterMarkers != null)
+        {
+            foreach (var key in rosterMarkers.Keys)
+            {
+                if (!RemovedByCompletion(script, graph, key) && !Listed(into, key))
+                {
+                    into.Add(key);
+                }
             }
         }
 
@@ -156,7 +171,7 @@ public sealed class ObjectiveSites
         }
 
         _live.Clear();
-        CollectTargets(_director.Script, graph, _targets, _live);
+        CollectTargets(_director.Script, graph, _targets, _live, _director.RosterObjectiveMarkers);
         foreach (var node in _live)
         {
             if (Where(node) is not { } at)
@@ -248,8 +263,32 @@ public sealed class ObjectiveSites
     private string Text(string? key) =>
         string.IsNullOrWhiteSpace(key) ? "" : _messages.Get(key).Trim();
 
-    private Vector3? Where(string key) =>
-        PointFor(_director.Script, key) ?? (Resolve(key) is { } node ? SiteAnchor(node) : null);
+    private Vector3? Where(string key)
+    {
+        if (PointFor(_director.Script, key) is { } point)
+        {
+            return point;
+        }
+
+        if (RosterAircraftPosition(key) is { } aircraft)
+        {
+            return aircraft;
+        }
+
+        return Resolve(key) is { } node ? SiteAnchor(node) : null;
+    }
+
+    // A roster-authored marker's own aircraft, live. AnimRuntime's node index carries only the
+    // mission's authored/animated world geometry (RosterMarkers.Attach indexes a spawned rig
+    // there ONLY when the chapter's gamez also carries a library-root copy under that exact block
+    // name, which an ordinary roster aircraft like a stunt plane does not), so Resolve/SiteAnchor
+    // can never find one. Reading the spawned FlightController's own position instead is what
+    // lets the marker fly with the block it belongs to.
+    private Vector3? RosterAircraftPosition(string key) =>
+        _director.Roster.TryGetValue(key, out var rig)
+        && GodotObject.IsInstanceValid(rig) && rig.IsInsideTree()
+            ? rig.WorldPosition
+            : null;
 
     // Cached: FindNodes walks the world index by name and this runs once per pane per frame.
     // ⚠ Re-resolve an invalid or detached node rather than caching the miss. `piratezep` is
@@ -297,8 +336,10 @@ public sealed class ObjectiveSites
 
         string name = Text(info.Description);
         string typeLabel = Text(info.CategoryLabel);
-        string category = Text(graph.HelpLabels.TryGetValue(key, out var written)
-            ? written
+        // The script's own SET_HELP_LABEL outranks a block's authored one, which outranks
+        // targets.zrd's: CM11's OBJECTIVE1 blanks secfury_6's label this way when the follow ends.
+        string category = Text(graph.HelpLabels.TryGetValue(key, out var written) ? written
+            : _director.RosterObjectiveMarkers.TryGetValue(key, out var rosterLabel) ? rosterLabel
             : info.HelpLabel);
         site.DisplayName = name.Length > 0 ? name : site.Target.Node;
         site.TypeLabel = typeLabel.Length > 0 ? typeLabel : null;

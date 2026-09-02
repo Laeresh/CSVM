@@ -53,9 +53,23 @@ public sealed class CampaignDirector
     // fold that included it opened the fort with the previous sortie's AA guns already wrecked.
     private readonly int? _carryThroughSeq;
     private readonly HashSet<string> _gapsLogged = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _leaderlessReported = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FlightController> _roster = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
+
+    // A block's actual placement, apart from its authored plan: a world node override at spawn,
+    // or the authored pose otherwise. WAKEUP_ENEMIES re-places a deactivated block here, not at
+    // the plan's authored pose, so a script-moved block wakes where it now stands.
+    private readonly Dictionary<string, (Vector3 Position, Vector3 Forward)> _rosterPlacedPose =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SurfaceVehicle> _vessels = new(StringComparer.OrdinalIgnoreCase);
+
+    // Roster blocks authoring their own objectiveTarget flag (aiv slot 37), keyed by block name,
+    // with the MSG_OBJ_* label their own slot 39 carries. The mission authors this ON the
+    // vehicle, not through a targets.zrd entry, so ObjectiveSites reads it as a third source
+    // alongside targets.zrd's own entries and the graph's ADD_OBJECTIVE_TARGET edits.
+    private readonly Dictionary<string, string> _rosterObjectiveMarkers =
+        new(StringComparer.OrdinalIgnoreCase);
 
     // The two per-airframe kill tallies (docs/org/debrief.md#what-the-tallies-count),
     // credited as the roster's own aircraft go down. Read into the mission-end attempt; never
@@ -159,6 +173,12 @@ public sealed class CampaignDirector
     /// <see cref="RosterInputs.SpawnSurface"/> built, plus a ship generator's hulls under their
     /// launch names.</summary>
     public IReadOnlyDictionary<string, SurfaceVehicle> Vessels => _vessels;
+
+    /// <summary>Roster blocks that carry their own objective-target flag (aiv slot 37), by block
+    /// name, with the MSG_OBJ_* label their own slot 39 authors. <see cref="ObjectiveSites"/>
+    /// reads this as a third source of objective-flagged keys, alongside <c>targets.zrd</c>'s own
+    /// entries and the graph's <c>ADD_OBJECTIVE_TARGET</c> edits.</summary>
+    public IReadOnlyDictionary<string, string> RosterObjectiveMarkers => _rosterObjectiveMarkers;
 
     /// <summary>The story position being flown.</summary>
     public int Seq => _mission.Seq;
@@ -285,6 +305,66 @@ public sealed class CampaignDirector
         int? carryThroughSeq = null) =>
         new(script, mission, profile, store, missionZrdrPath, carryThroughSeq);
 
+    /// <summary>Hands every wingman whose leader has left play the leader's own patrol net, and
+    /// returns how many were moved. A netless escort has no orders of its own once its leader is
+    /// gone: <see cref="AiPilot"/>'s netless arm projects the heading and altitude its last pursuit
+    /// wrote, so the pilot holds a bearing to a dead aeroplane. Every escort block in the shipped
+    /// campaign names a netted leader, so the leader's own route is authored data rather than an
+    /// invented fallback. <paramref name="reported"/> keeps the no-net case to one line per pilot.</summary>
+    internal static int TakeLostLeadersNets(IReadOnlyDictionary<string, FlightController> roster,
+        NetTrailerTargets? trailers, float minAiActiveDist, HashSet<string> reported)
+    {
+        int moved = 0;
+        foreach (var (name, rig) in roster)
+        {
+            if (rig.Pilot is not { Patrol: null } pilot
+                || pilot.Escort is not { Leader: { InPlay: false } leader })
+            {
+                continue;
+            }
+
+            // A leader that flies no net (a human, or a block a script re-seated) leaves the
+            // wingman exactly as it is: there is no second route in the data to give it, and
+            // guessing one would put the aeroplane somewhere nothing authored.
+            if (leader.Pilot?.Patrol?.Net is not { } net)
+            {
+                if (reported.Add(name))
+                {
+                    GD.Print($"campaign: '{name}' lost its leader '{leader.Name}', which flies no net: it holds its course");
+                }
+
+                continue;
+            }
+
+            SeatOnNet(rig, pilot, net, trailers, minAiActiveDist);
+            moved++;
+            GD.Print($"campaign: '{name}' lost its leader '{leader.Name}' and takes its net '{net.Name}#{net.Id}'");
+        }
+
+        return moved;
+    }
+
+    /// <summary>Seats a pilot on a patrol net: the assignment <c>SET_AI_NET</c> makes and the one a
+    /// lost leader makes. The escort buffer goes with it, since a net outranks wingman mode, and a
+    /// fresh walk seats itself at the node nearest wherever the aeroplane IS, so a mid-flight swap
+    /// captures the new route instead of restarting it. ⚠ Re-baseline the machine on the vehicle's
+    /// own ranges BEFORE the net's volumes: <see cref="CampaignRosterPlan.ApplyVolumes"/> skips a
+    /// radius the net authors as zero, and a stale gate keeps a bomb-run escort in patrol.</summary>
+    internal static void SeatOnNet(FlightController rig, AiPilot pilot, AiNet net,
+        NetTrailerTargets? trailers, float minAiActiveDist)
+    {
+        pilot.Escort = null;
+        pilot.Patrol = new AiNetFollower(net, Utils.Rng.NewSystemRandom(Utils.Rng.Ai),
+            trailerTarget: trailers?.For(net));
+        if (pilot.Machine is { } gates && rig.Stats is { } defs)
+        {
+            gates.AttackRange = defs.AiAttackRange;
+            gates.ReturnRange = defs.AiReturnRange;
+        }
+
+        CampaignRosterPlan.ApplyVolumes(pilot.Machine, net.Volumes, minAiActiveDist);
+    }
+
     /// <summary>The roster phase: spawns every non-player block of the mission's <c>aiv</c>
     /// roster, at the point of <c>GameSession</c>'s build where the human rigs exist. The plan is
     /// <see cref="CampaignRosterPlan"/>; this is the placement, the leader pass and the log.
@@ -364,6 +444,8 @@ public sealed class CampaignDirector
             }
             _roster[spawn.Name] = rig;
             _rosterPlans[spawn.Name] = spawn;
+            _rosterPlacedPose[spawn.Name] = (pos, fwd);
+            RegisterObjectiveMarker(spawn.Name, spawn);
             rig.Group = spawn.Group;
             rig.Downed += (_, killer) => CreditKill(spawn, killer);
             // The chapter's own copy of this vehicle is never placed, so anything it authors past
@@ -501,6 +583,7 @@ public sealed class CampaignDirector
         }
 
         StepPlayerLost();
+        TakeLostLeadersNets(_roster, _netTrailers, _minAiActiveDist, _leaderlessReported);
         Graph?.Step(dt);
         if (_dangerZones != null && _world is { } world)
         {
@@ -549,6 +632,7 @@ public sealed class CampaignDirector
         {
             return;
         }
+        RegisterObjectiveMarker(launchName, template);
         GD.Print($"campaign: launch '{launchName}' ({template.Name}) booked into the roster " +
                  $"team={template.Team?.ToString() ?? "-"} group={template.Group}");
     }
@@ -708,6 +792,7 @@ public sealed class CampaignDirector
         }
         _vessels[spawn.Name] = vessel;
         _rosterPlans[spawn.Name] = spawn;
+        RegisterObjectiveMarker(spawn.Name, spawn);
         if (spawn.Net is { } net)
         {
             vessel.Patrol(net);
@@ -719,6 +804,16 @@ public sealed class CampaignDirector
                      : "no net") +
                  (spawn.Inert ? " DEACTIVATED" : "") +
                  $" spawn=({vessel.Position.X:0},{vessel.Position.Y:0.##},{vessel.Position.Z:0})");
+    }
+
+    // Books a spawned block's own objective-target flag and label under its roster name, the way
+    // targets.zrd's own objective-flagged entries are already known by their target key.
+    private void RegisterObjectiveMarker(string name, RosterSpawnPlan spawn)
+    {
+        if (spawn.ObjectiveTarget && spawn.HelpLabel != null)
+        {
+            _rosterObjectiveMarkers[name] = spawn.HelpLabel;
+        }
     }
 
     // The wingman's aircraft and fit off the profile, for the mission that has one. Resolved here
@@ -1163,7 +1258,7 @@ public sealed class CampaignDirector
         public void WakeupEnemies(IReadOnlyList<string> names)
         {
             // The partner of BOTH deactivated flags (docs/formats/objectives.md): the roster's,
-            // which puts an inert aircraft back in play at its spawn pose, and a zeppelin record's,
+            // which puts an inert aircraft back in play at its placed pose, and a zeppelin record's,
             // which puts a hidden airship into the world. A name is one or the other, never both.
             int aircraft = 0, zeppelins = 0, vessels = 0;
             foreach (var name in names)
@@ -1171,7 +1266,9 @@ public sealed class CampaignDirector
                 if (_owner._roster.TryGetValue(name, out var rig) && _owner._rosterPlans.TryGetValue(name, out var plan)
                     && rig.Inert)
                 {
-                    rig.Activate(plan.Position, plan.Position + plan.Forward);
+                    var (pos, fwd) = _owner._rosterPlacedPose.TryGetValue(name, out var placed)
+                        ? placed : (plan.Position, plan.Forward);
+                    rig.Activate(pos, pos + fwd);
                     aircraft++;
                 }
                 else if (_owner._vessels.TryGetValue(name, out var vessel) && vessel.Wake())
@@ -1456,24 +1553,10 @@ public sealed class CampaignDirector
                     continue;
                 }
 
-                // A net outranks wingman mode, so the escort buffer goes with the assignment.
-                pilot.Escort = null;
-                // A fresh walk seats itself at the node nearest wherever the aeroplane IS, which is
-                // what makes a mid-flight swap capture the new route instead of restarting it.
-                pilot.Patrol = new AiNetFollower(net, Utils.Rng.NewSystemRandom(Utils.Rng.Ai),
-                    trailerTarget: _owner._netTrailers?.For(net));
-                // ⚠ Re-baseline on the vehicle's own ranges FIRST: ApplyVolumes skips a radius the
-                // net authors as zero, so a second net authoring none leaves the previous one's
-                // gates standing and an escort off a bomb-run net never leaves patrol (BL-504).
-                if (pilot.Machine is { } gates && rig.Stats is { } defs)
-                {
-                    gates.AttackRange = defs.AiAttackRange;
-                    gates.ReturnRange = defs.AiReturnRange;
-                }
-
-                // The net's own volumes overwrite the vehicle's where it authors them. Only the
-                // spawn runs the roster block's copy afterwards, so here the net wins outright.
-                CampaignRosterPlan.ApplyVolumes(pilot.Machine, net.Volumes, _owner._minAiActiveDist);
+                // The same seat a lost leader's net takes. The net's own volumes overwrite the
+                // vehicle's where it authors them: only the spawn runs the roster block's copy
+                // afterwards, so here the net wins outright.
+                SeatOnNet(rig, pilot, net, _owner._netTrailers, _owner._minAiActiveDist);
                 moved++;
                 GD.Print($"campaign: SET_AI_NET '{name}' onto '{net.Name}#{net.Id}'");
             }

@@ -968,6 +968,7 @@ public sealed partial class ProjectilePool : Node3D
             {
                 Alive = true,
                 Pos = muzzle.Origin,
+                PrevPos = muzzle.Origin,
                 Vel = vel,
                 Range = weapon.Range ?? DefaultRange,
                 IntersectOff = FlyoutUnhittableAtLaunch(weapon),
@@ -1202,6 +1203,7 @@ public sealed partial class ProjectilePool : Node3D
                 }
             }
             NearMissPass(prev, next, p.Shooter);
+            p.PrevPos = p.Pos;
             p.Pos = next;
             // The round's def ticks on the moved round: its trail puffs are laid along this step
             // and anything it switches on now homes at the new pose.
@@ -2993,16 +2995,23 @@ public sealed partial class ProjectilePool : Node3D
         float cfgWidth = Config.GetFloat("weapons.tracerWidth", TracerWidth);
         float minPixels = Config.GetFloat("weapons.tracerMinPixels", TracerMinPixels);
         System.Array.Clear(_tracerCounts, 0, _tracerCounts.Length);
+        // Rounds step at 60 Hz and this draws every frame, so a raw sim position is held then
+        // jumped while the camera moves smoothly. Draw part way through the current step instead
+        // (CSVM.Utils.RenderPoses). The fraction is 1 outside a realtime clock.
+        float tween = RenderPoses.Fraction;
         for (int i = 0; i < _projHigh; i++)
         {
             ref var p = ref _proj[i];
             if (!p.Alive)
                 continue;
+            // ⚠ Not Lerp at 1: a + (b - a) is not bit-identical to b in float, and a scripted
+            // capture must reproduce the simulation position exactly.
+            var drawPos = tween >= 1f ? p.Pos : p.PrevPos.Lerp(p.Pos, tween);
             // Carry the rocket body along with the round, nose down its velocity.
             var worldVel = WorldVelocity(in p);
             if (p.Model != null)
             {
-                var pose = FlyoutPose(p.Pos, worldVel);
+                var pose = FlyoutPose(drawPos, worldVel);
                 // The def's spinner (the sonic's ObjectMotion XYZ_ROTATION, 8.73 rad/s): a steady
                 // roll about the round's own nose axis — pure roll, so the nose stays on velocity.
                 if (p.RollRate != 0f)
@@ -3031,7 +3040,7 @@ public sealed partial class ProjectilePool : Node3D
             var xAxis = yAxis.Cross(zAxis).Normalized();
             // ⚠ This is the one place this pool knowingly contradicts the decode: the authored LOD
             // stops drawing past 600 m, while this floor keeps inflating it. See docs/org/tracers.md.
-            float floorSize = TracerFloor(p.Pos, minPixels);
+            float floorSize = TracerFloor(drawPos, minPixels);
             float width = Mathf.Max(cfgWidth, floorSize);
             float len = Mathf.Max(cfgLength, floorSize);
             // The mesh's local +Y is its front; the round's position is the streak's TAIL, hence
@@ -3039,7 +3048,7 @@ public sealed partial class ProjectilePool : Node3D
             var basis = new Basis(xAxis * width, yAxis * len, zAxis * width);
             var mm = _tracerMm[p.TracerIdx];
             int n = _tracerCounts[p.TracerIdx]++;
-            mm.SetInstanceTransform(n, new Transform3D(basis, p.Pos + yAxis * (len * 0.5f)));
+            mm.SetInstanceTransform(n, new Transform3D(basis, drawPos + yAxis * (len * 0.5f)));
             mm.SetInstanceColor(n, p.Tint);
             // The tip disc: perpendicular to flight (its quad spans the two width axes, its normal
             // is the flight direction), TracerTipOffset ahead of the round. Same instance index as
@@ -3047,7 +3056,7 @@ public sealed partial class ProjectilePool : Node3D
             var tip = _tipMm[p.TracerIdx];
             tip.SetInstanceTransform(
                 n,
-                new Transform3D(new Basis(xAxis * TracerTipSize, zAxis * TracerTipSize, yAxis), p.Pos + yAxis * TracerTipOffset));
+                new Transform3D(new Basis(xAxis * TracerTipSize, zAxis * TracerTipSize, yAxis), drawPos + yAxis * TracerTipOffset));
             tip.SetInstanceColor(n, p.Tint);
         }
         for (int i = 0; i < _tracerMm.Length; i++)
@@ -3082,6 +3091,9 @@ public sealed partial class ProjectilePool : Node3D
     {
         public bool Alive;
         public Vector3 Pos;
+        public Vector3 PrevPos;  // where the round stood one sim step ago. The render pass draws
+                                 // between the two: rounds step at 60 Hz while the camera moves
+                                 // every frame, so a torpedo drawn raw steps against it.
         public Vector3 Vel;      // m/s, world — the round's OWN velocity (heading × speed), which
                                  // ACCELERATION raises; the launcher's share rides in Inherited
         public Vector3 Inherited; // the launcher's velocity copied at spawn (FUN_005aef40's

@@ -86,6 +86,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
+- `BL-672` `[Fidelity]` **The remake attributes a weapon hit by climbing the node-parent chain;
+  the original attributes it only to the struck node's own handler.** *Evidence:* `FUN_005abcf0`
+  reads the hit record's struck node at `+0x24`, reads that node's handler at `+0xbc`, and returns
+  0 when it is null. There is no parent walk at all. `DestructibleRegistry.Resolve` instead climbs
+  to the nearest node a pool claims, which is the deliberate remake rule recorded in
+  `docs/formats/destructibles.md` under "Remake node resolution". Two visible consequences: a round
+  on the Gemini's *open* hatch still damages the cannon behind it, where the original's
+  `upper_br_door` registers no handler and the hit does nothing; and a round on `turret`
+  (model 865, under `gunback`) damages the cannon where the original ignores it. *Fix shape:*
+  decide whether the climb is kept as a deliberate forgiveness or narrowed to the decode. Narrowing
+  it needs `Probes.cs`'s deep-descendant walk-up assertion rewritten first, which is why it is not
+  a small change. *⚠ Traps:* the climb is what makes most destructibles hittable at all, so do not
+  narrow it without a per-chapter census of which pools stop answering. `BL-640`'s stowed-cannon
+  fix already carves out the one case that mattered (a fallback claim to a live pool whose damage
+  node is hidden), so this entry is the remaining, wider question, not that one again.
+  *Cross-refs:* `BL-640`'s closing commit, `docs/formats/destructibles.md` "Which node takes the
+  hit".
+- `BL-673` `[Bug]` **`AnimRuntime.DamageAt` never consults `Instance.Dormant`, so a deactivated
+  hull's pools can still be damaged by script.** *Evidence:* a deactivated zeppelin's pools
+  (C2B/M04's Gemini ships `deactivated: 1`) are correctly refused as AI *targets*, but a scripted
+  `DamageAt` reaches them anyway. Not reachable by weapon fire today, because a dormant hull's
+  colliders are off, so this is latent rather than a live symptom. *Fix shape:* have `DamageAt`
+  read `Dormant` the way the target scan already does, and add a unit that damages a dormant pool
+  and asserts nothing happens. *⚠ Traps:* a pool that is dormant at mission start and woken later
+  must still take damage after the wake, so the read has to be live rather than captured at build.
 - `BL-668` `[Bug]` **A downed zeppelin's wreck sinks 400 m under the sea and four gasbags fall
   through the water.** *Evidence:* the `zeppelin-breakup` suite's artifact records the wreck at
   rest at y = −411 with the water surface at y = 0, and gasbags 1 to 4 falling about 1228 m
@@ -831,6 +856,66 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
+- `BL-669` `[Research]` **CM12's ace `hkfirebrand_9` is authored under the terrain sheet, which is
+  harmless in the original and fatal here because we collide on the faces it culls.** `C2/M01`'s
+  `aiv.zrd` authors it at `(-4517.72, 150.0, -6232.58)` with `deactivated` set (slot 21), and
+  `OBJECTIVE67`'s `WAKEUP_ENEMIES` reactivates it in place. The terrain surface over that point is
+  228.92 m on tile `g35052` (model 617, whose vertex bounds reproduce the node's own `model_bbox`,
+  and whose collider the built world confirms at `y 229`), so the ace begins 78.9 m below it. It is
+  the only CM12 roster block placed over land; the mission's other land placement,
+  `patrolboat_eg0` at `y 0.021`, sits 5 cm above its surface. **Being below the sheet costs
+  nothing by itself:** terrain is a sheet with no underside, so the space under it is open, a
+  downward ray from the pose finds nothing, and `SweepProbes` registers only where the motion
+  crosses a face. **And the ace cannot fall there:** its authored range from the player is 3867 m,
+  so `WAKEUP_ENEMIES` puts it on the far-field plant, which computes no gravity and holds
+  `nose · (fd_speed · throttle + 5)`; a powered aircraft under the sheet stays where it is. What
+  ends it is the crossing on the way out. A level track along its authored yaw 120 meets the sheet
+  again 260 m out, about 5 s at the plant's 52.3 m/s hold, against the 55 s a mover would need to
+  close 2867 m to the far-field boundary, so the crossing is reached far-field and the plant flip is
+  not involved. **That crossing is a face taken from behind, and the original culls it:** all 37
+  polygons of `g35052` and all 23 of `tagged` clear `SHOW_BACKFACE`, so the original's ray test
+  returns no hit and the ace flies out; CSVM forces every world collider double-sided and reports
+  `AI ram into tagged/col`. The fix therefore belongs to `BL-678`, not to placement, and this entry
+  stays open only to confirm at the controls that nothing else about the ace is wrong once that
+  lands. `PT-107` gathers that half.
+  ⚠ *Traps:* not tunnelling (`SweepCadence` carries the skipped step's origin, and `FUN_0048d7f0`
+  accumulates into `obj+0x6B0` and subtracts it on the sweeping frame, so no span goes untested);
+  not the 20 m floor (`DAT_0071c3f0` is absolute, correctly silent at 150 m, and the original has no
+  AGL floor either); not the far-field boundary or its missing hysteresis, both decoded. Do not add
+  a blanket spawn lift. `BL-457` is closed and was never this question. A player-piloted rig at that
+  pose measures nothing about the ace: it is near-field by construction, so it is handed gravity the
+  ace never gets, and its descent is an artefact of the wrong plant.
+  *Cross-refs:* `BL-678` (the collision-side backface cull), `ace-wake-terrain` (the suite that
+  pins the pose, the sheet and the track), `BL-522`'s undecoded net-nearest snap `FUN_004b0f40`,
+  whose activate branch re-bases x and z through `FUN_00432010` but leaves y untouched.
+- `BL-678` `[Fidelity]` **The original backface-culls its collision test per polygon; CSVM forces
+  every world collider double-sided, so we take contacts the original does not have.**
+  *Evidence:* `FUN_0055c9c0`, the node mesh test, calls the ray-polygon routine as
+  `FUN_0055d6c0(param_2, &start, &end, verts, uVar17 & 0x3ff, uVar17 >> 10 & 1)`. Inside it, after
+  building the face normal from two edge cross products, the segment's END distance decides:
+  `if ((0.0 <= fVar14) && (param_6 == 0)) return 0;` culls the face outright, and only then does
+  the sign test `(((uint)fVar14 ^ (uint)fVar2) & 0x80000000) == 0` look for a crossing. `param_6`
+  is bit 10 of the packed word whose low ten bits are the vertex count, which is polygon flag bit 0,
+  documented in [`docs/formats/gamez.md`](docs/formats/gamez.md) as `unk2` / upstream
+  `SHOW_BACKFACE`. One flag governs both rendering and collision. CSVM sets
+  `BackfaceCollision = true` unconditionally in `SceneBuilder.CollidersForMesh`
+  (`CSVM/src/Mech3/SceneBuilder.cs:896`) and in `Clutter` (`CSVM/src/Mech3/Clutter.cs:1087`), on
+  the stated grounds that the source winding is inconsistent, and no query anywhere sets
+  `HitBackFaces` or `HitFromInside`, so every ray runs Godot's defaults where back faces hit.
+  *Census (C2):* 7656 of 12645 polygons (60.5 %) clear the flag, matching the install-wide figure
+  in [`docs/formats/gotchas.md`](docs/formats/gotchas.md); of terrain polygons specifically 2251 of
+  2325 (96.8 %) clear it, and both tiles CM12's ace meets are wholly single-sided (`g35052` 37/37,
+  `tagged` 23/23). *Why it matters at the controls:* an aircraft, a round or a probe approaching a
+  single-sided face from behind is stopped here and passes through in the original. `BL-669` is the
+  worked example, where it turns a harmless authored pose into a scripted death.
+  *Fix shape:* honour `poly.ShowBackface` on the collision shape, which the loader already decodes
+  (`GameZ.cs:481`), behind a census and an A/B rather than as a blanket flip.
+  ⚠ *Traps:* the render side shares the flag and is a separate known simplification, so a collision
+  fix must not silently change what draws; the 266 game-wide back-to-back pairs (one quad authored
+  as two opposite-wound polygons) make a naive per-face change collidable from both sides anyway;
+  weapon rays run the same test, so [`docs/org/weaponRay.md`](docs/org/weaponRay.md) is in scope;
+  and the change reaches every chapter, every aircraft and every clutter body, so it will move
+  goldens and suites and needs its own item.
 - `BL-443` `[Fidelity]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
   late.** `FUN_0048fc40` (call `0x48c883`) writes the delivered body-up G and the ramp reads it at
   `0x48ca1e` in the same tick, before the torques; `FlightModel.Step` rotates before it translates
@@ -1199,6 +1284,30 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
   file's own rule).
 
+- `BL-679` `[Bug]` **`NameResolver` keeps a disposed `Node3D` across a plane switch, so a suite
+  staging several airframes in one process throws intermittently.** *Evidence:* an
+  `ObjectDisposedException` inside `NameResolver.Add` reaching `Node3DIdentity.Equals`, seen on
+  roughly one run in four of the `landings` filter while `landings-hookup-airframe` drives six
+  airframes in sequence; the rate does not change with the number of planes driven, so it is a stale
+  entry surviving a switch rather than a capacity effect. *Fix shape:* find who owns removal from
+  the resolver's dictionary when a staged airframe is freed, and clear the entry there; a
+  `Node3DIdentity` that compares a freed node is the symptom, not the cause. *⚠ Traps:* do not
+  guard `Equals` with an `IsInstanceValid` check and call it fixed, which hides a stale entry that
+  will also answer a later lookup with the wrong node. This is non-deterministic, so a green run
+  proves nothing: reproduce it by driving the sequence repeatedly before and after.
+- `BL-680` `[Research]` **The compiled symbol table resolves nothing for `brig`/`fury`/`peace`'s
+  nested hook arms at `ParkDockingHook`'s staging point, though the same lookup succeeds later.**
+  *Evidence:* `_resolver.SymbolClaims` returns "claimed but unbuilt" for `l_arm1`/`r_arm1` under
+  `brig_hook`, `fury_hook` and `peace_hook` when `ParkDockingHook` runs, while the identical
+  node and definition pair resolves during ordinary animation dispatch afterwards.
+  `AnimRuntime.ParkDockingHook` works around it with a scoped plain-name walk (`FindNamedChild`).
+  *Fix shape:* find what the staging point has not yet built or indexed that the later dispatch
+  has, then decide whether the park should move after it or the index should be complete earlier.
+  *⚠ Traps:* the workaround is a name walk and will pick the wrong sibling if these airframes ever
+  gain a duplicate arm name, so it is a stopgap rather than an answer. The three airframes that
+  fail are exactly the three whose retract parks on the wrong axis, so check whether the two are
+  the same underlying data shape before treating them as separate questions.
+  *Cross-refs:* `BL-630`'s closing commit.
 - `BL-508` `[Research]` **The original never alpha-tests, so every alpha texture we scissor is an
   invention rather than a reproduction.** *Evidence:* decoded from `crimson.exe`
   (`analysis/alpha-classification/FINDINGS.md`, "The original has no cutout path"). The renderer is
@@ -1243,6 +1352,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   billboard-axis half), `docs/org/textures.md` (the storage-flag bits).
 
 ## Effects & animation runtime
+
+- `BL-674` `[Bug]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
+  during its scripted entrance.** *Evidence:* driving C1/M05's shipped `OBJECTIVE10` wake and
+  sampling the assembly every 0.1 s for 70 s traces its world Y from 990 m (the hidden entrance
+  altitude) to -0.26 m at about t = 57.3 s, then climbing again at the `rise` sequence's authored
+  3.33 units per second. The objective marker follows it down, which is the symptom `BL-656` was
+  filed on; that item is disproven because the marker is tracking the geometry correctly, and the
+  geometry is what goes to the water. The motion is the entrance's own SiScript-to-`rise` handoff,
+  so it lives in the animation runtime (`PoseChannel.cs`, `FromToMotion.cs`, `ScriptPlayback.cs`),
+  not in `ObjectiveSites.cs`. *Fix shape:* first decide whether the original does this at all, by
+  watching a CM10 wave arrive in footage or at the controls; a balloon that dips to the sea on its
+  way in may be authored. Only if it does not, find whether the handoff between the entrance script
+  and `rise` drops an altitude the original keeps. *⚠ Traps:* do not add an altitude floor to the
+  assembly, and do not offset the marker upward; both were removed on decoded evidence and the
+  balloons descend as they attack, so no constant is right at two altitudes. The anchor rule itself
+  is the original's (`FUN_004cf2c0`, midpoint of the node's active bounding box) and is correct.
+  *Cross-refs:* `BL-656`'s closing commit, `PT-111`, `docs/org/targeting.md` "Where a mission
+  structure is".
 
 - `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
   flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
@@ -2259,6 +2386,29 @@ usual.
 
 ## Missions, modes & campaign
 
+- `BL-670` `[Tuning]` **The invented `1.5 * turnCircle` arrival floor deforms zeppelin routes.**
+  *Evidence:* `ZeppelinRuntime.cs`'s `arrival = 1.5f * turnCircle`, where
+  `turnCircle = MaxSpeed / DegToRad(MaxRateYawDeg)`, is 515.7 m for CM08's Pandora
+  (`max_speed` 30, `max_rate_yaw` 5), not the 125 m the older paraphrase claimed. Measured: the
+  node walk advanced past node 4 while still 515 m short of it, so the hull flew 64 % of the
+  1443 m leg 3 to 4 and cut the corner; on the chain past the cargo point the legs are shorter
+  than the floor (7 to 8 is 628 m, 8 to 9 is 545 m, 9 to 10 is 640 m), so the walk advances
+  almost immediately at each node and the route is barely flown. *Fix shape:* the floor is
+  explicitly invented and only a floor, so it is tunable without touching a decode; measure what
+  radius lets the shortest shipped leg still be flown. *⚠ Traps:* it does not affect where an
+  armed stop parks the hull, which is the settling glide (`BL-597`), so a route that looks wrong
+  at a stop point is a different question. Do not confuse this floor with the aeroplane
+  executor's decoded along-leg test, which zeppelins do not use.
+  *Cross-refs:* `BL-597`'s closing commit, `docs/formats/mission-entities.md` "Steering".
+- `BL-671` `[Research]` **A holding zeppelin never levels its pitch, though the decode says it
+  should.** *Evidence:* `ZeppelinMotion` commands `desiredPitch = 0` while `Holding`, but
+  integrates it through `way = Speed / MaxSpeed`, which is zero at a stop, so the hull keeps
+  whatever pitch it arrived with. The original has the same speed scaling
+  (`docs/formats/mission-entities.md`), so this may be faithful rather than a defect. *Fix shape:*
+  decode whether `FUN_004bf500`'s station-keep levels the hull at zero speed before changing
+  anything; if it does not, the claim to correct is the documentation, not the code.
+  *⚠ Traps:* do not add a separate levelling term outside the speed factor to make a still hull
+  look right; that invents a law the original does not have.
 - `BL-501` `[Feature]` **Nothing exercises avoid-crash probing between aircraft flying one net in
   formation.** *Evidence:* flagged by G77, which fixed the branch draw that split CM02's three
   bombers and then measured them holding 82 m to 219 m apart on one route. That suite builds its
@@ -2446,10 +2596,11 @@ usual.
   has a netless friendly patrol, and the original has no netless-patrol and no leaderless-wingman
   branch at all: `FUN_0041d1f0` indexes -1 on an unresolved net with no guard, `FUN_0041e760`
   dereferences its leader at `+0x2fc` with no null check, and `FUN_0049c880`, which would release a
-  wingman onto the chapter's first net, has no callers. The remaining fly-away path in CSVM is
-  `AiPilot.FlyPatrol`'s netless arm reading `TargetHeadingDeg` and `TargetAltitude` after
-  `FlyPursuit` has overwritten them, so a pilot with no net and no leader holds the last bearing to
-  a dead target. The take-off hand-off is settled (`BL-594`'s closing commit): a launch is released 300 m
+  wingman onto the chapter's first net, has no callers. The netless fly-away that remained,
+  `AiPilot.FlyPatrol`'s netless arm holding the pair `FlyPursuit` last wrote, is closed on the host
+  side: a wingman whose leader leaves play is seated on that leader's own net
+  (`CampaignDirector.TakeLostLeadersNets`), so no campaign pilot reaches that arm with a dead
+  quarry's bearing. The take-off hand-off is settled (`BL-594`'s closing commit): a launch is released 300 m
   past its last waypoint at 53 m/s, climbing, and lives; the net-nearest snap the original skips
   (`FUN_004b0f40`) stays undecoded.
   *Cross-refs:* `BL-524`, `docs/org/aiPilot.md`, `BL-522`'s closing commit (`git log --grep=BL-522`).
@@ -2534,6 +2685,41 @@ usual.
 
 ## Tooling, platform & docs
 
+- `BL-675` `[Research]` **A `--campaign=<profile>:<n>` run launched through `RunProbe.ps1` from an
+  agent worktree reported no such profile, though the profile exists.** *Evidence:* a probe run
+  answered `--campaign=Gab: no such profile, flying without a mission` from
+  `CampaignDirector.TryCreate`, and repeated it against a fresh copy of the same profile. The store
+  is `CampaignProfileStore.UserProfiles()`, `user://Profiles/` globalized, and `user://` resolves by
+  the project name alone (`project.godot` sets `config/name="CSVM"`, and no custom user dir is set),
+  so a worktree should reach the same directory as the main checkout. That directory does hold the
+  profile, and a sibling agent's worktree run created a profile there in the same period, so the
+  store is reachable from a worktree at least for writing. **The cause is therefore not established
+  and the symptom is not reliably reproduced.** *Fix shape:* reproduce deliberately from a worktree
+  with nothing else running, print the globalized `user://` path at startup, and compare it against
+  the main checkout's. If they differ, the launch is picking up a different project name or user
+  dir; if they match, the fault is in the load rather than the path. *⚠ Traps:* do not "fix" this by
+  pointing the store at an absolute path; `user://` is what makes the release build's profiles land
+  in the right place. A `--campaign=` probe writes mission results back into the profile it names,
+  so any repro copies a profile under a new name and deletes the copy afterwards. *Impact:* while it
+  stands, an agent cannot take a screenshot deep inside a campaign mission from a probe, so items
+  whose verification wants one fall back to an engine suite plus an at-the-controls `PT-` row.
+- `BL-677` `[Fidelity]` **CSVM starts a `CALL_ANIMATION` callee inside the caller's own tick; the
+  original starts it on the next one.** *Evidence:* `AnimRuntime.Start` advances a new instance at
+  t=0 inside the `CallAnimation` dispatch (`CSVM/src/Mech3/AnimRuntime.cs:1763-1775`), so a callee's
+  first event runs before the caller's later events in the same sequence. The original does not:
+  `FUN_004ed8c0` appends the new instance at the tail of the action list its dispatcher walks
+  (`FUN_004d04e0`, the append store at `004d050d`), the walk re-reads `next` every iteration
+  (`FUN_004cffa0` at `004cffee`), and no start-guard flag exists, so the callee is reached only on a
+  later dispatcher invocation, after the caller's tick has returned. *Consequence:* a callee whose
+  first event is `INVALIDATE_ANIMATION` latches before the caller reaches the call that would have
+  started the invalidated definition, which cannot happen in the original. *Fix shape:* queue a
+  started instance and give it its first advance on the next tick, rather than advancing it in the
+  dispatch. *⚠ Traps:* the ordering is load-bearing for definitions that rely on a callee posing
+  something before the caller reads it, so this moves scripted motion across every mission and wants
+  the golden and campaign suites run before and after. The Spruce Goose chain is NOT an instance of
+  this: its branch is chosen by `ACTIVATION_PREREQUISITE` node states, not by a call race, and both
+  branches run (`docs/PLAN-M5-polish-9.md` C22). *Impact:* unknown breadth. No shipped symptom is
+  attributed to it yet; it is a decoded divergence looking for its missions.
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled
   SDL (3.2.28 up to Godot 4.7.1) hard-freezes the engine when a >255-button DirectInput device

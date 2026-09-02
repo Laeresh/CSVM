@@ -102,6 +102,12 @@ loss. What the engine renders was decodable from the authored constants + oscill
   alone left the captured Balmoral hidden and the suite green, while playing the mission's own
   `ww_balmoral1` showed the wing walk's `913`/`914` pair bracketing it and putting that aeroplane
   back **19.25 s** later, which is the defect a player sees.
+- **DIAG-24** — **A fixed sim window shorter than a `CallAnimation` chain's own completion time
+  reads as an unresolved bind, not a slow clock.** Measured: CM13's `pzhomebase` gates its two
+  landing-cone activations behind `pz_deploy_hook`'s own `WAIT_FOR_COMPLETION`, a 3 s offset plus
+  a 10 s rotate, so they are not due before t=13 s; `zeppelin-hull-activation`'s 12 s window read
+  `cones 0/2` and looked like a name-resolution defect (`BL-618`) that a longer window disproves
+  outright, both cones bound to their own gamez index already and drawing together at t=13 s.
 
 ## SHOT — screenshots and pixel evidence
 
@@ -502,6 +508,8 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **WORLD-27** — **`--play-anim` proves a definition RUNS; it says nothing about whether the game ever reaches it.** The anim lab starts a def the way bootstrap pass 3 starts a startanim, bypassing every gate in front of it, a `WeaponHit` def's damage routing above all. CM10's `lifefall11` played all eight of its motions in the lab while no shot in the mission could reach it, because a second pool on the same anchor owned the hit. Drive the real entry point (`--debug-damage=node=…,kill` for a destructible) before concluding the definition is at fault.
 - **WORLD-28** — **A suite world with no `ContactMask` wired silently poses every untimed `OBJECT_MOTION` at rest, so half a death can be invisible to it.** A launch with no `RUN_TIME` ends only at a contact tier, and no mask means no tier, so `HandleMotion` seeks it to t=0 instead of adding it. CM10's lifeboat drop reads 0.0 m fallen that way and 6.2 m with `collision: true` plus `runtime.ContactMask = CollisionLayers.World`; a real session wires the mask and the harness does not, so a suite that must see such a launch wires it itself.
 - **WORLD-29** — **A term you meant to redirect can leave instead, and the frame looks like a win either way: prove the new source arrives with a control colour.** Setting the Environment's background to a colour and its reflected light source to that background gives Godot no radiance map at all, so the water's specular vanished; the day sea darkened toward the original and read as a success. A pure-red sky rendered byte-identically to the fog-grey one, which is what caught it. The reflection needs a `Sky` resource (a flat `PanoramaSkyMaterial` is enough), and under one the red control tints the water red.
+- **WORLD-30** — **`Wake(n)` fires only that objective's wake verbs synchronously; `ADD_OBJECTIVE_TARGET` applies through its own completion, one `Step()` later when nothing else gates it.** CM10's OBJECTIVE10 gates on nothing once awake, so `Wake(10)` alone leaves its site unoffered until the next `Step()` completes it and applies the target. The gap is real in isolation but invisible in play, since both happen inside one Step call at normal frame rates.
+- **WORLD-31** — **A sibling object is a control only once you have censused every authored path that can reach it.** Six of CM09's twelve zeppelin engines are destroyed by `killpzep`, so the other six looked like the control that would prove the breakup did the work; all twelve went dark, because each burning gasbag's own death definition destroys the two engines beside it. Grep the whole mission's definitions for the target's name before calling anything untouched.
 
 ## SHELL — Windows, PowerShell, and processes
 
@@ -538,6 +546,15 @@ loss. What the engine renders was decodable from the authored constants + oscill
   after-the-fix probe log showed the same reader files still loading as the before probe, with the
   gate line absent from both, until `--no-incremental` produced a real ~8 s rebuild and the gate
   showed up in the log.
+- **SHELL-17** — **A census script must not name its accumulator after one of its own parameters:
+  PowerShell variable names are case-insensitive, so `$nodes = @()` under `param([string]$Nodes)`
+  writes the empty array into the TYPED parameter, which coerces it to `""` and turns every
+  later `+=` into string concatenation.** The count then reads 1 whatever the data holds, and an
+  empty census is indistinguishable from a correct one that found nothing. Measured while sampling
+  terrain heights out of a chapter's `nodes.json`: the scan reported "terrain nodes: 1" and every
+  sample point answered "no terrain triangle", while the same parse inlined at the prompt found
+  231. Give the accumulator a name no parameter shares, and assert the census count against an
+  independent count of the same records before reading any result off it.
 
 ## INSTR — building instruments
 
@@ -734,6 +751,61 @@ loss. What the engine renders was decodable from the authored constants + oscill
   900-frame (15 s) `--screenshot=` run logged the credit and nothing after it, while 3600 frames
   logged the door, the booking and the drop. Give a campaign probe a minute of sim, or read the
   `cutscene:` lines before concluding a step never ran.
+- **INSTR-33** — **A smoothness complaint about a sim-driven object cannot be reproduced under
+  `--det`, and a clean per-step pose trace does not clear it.** Under `FixedStep` every rendered
+  frame is exactly one sim step, so the render/sim rate ratio is pinned at 1 and
+  `FlightController`'s interpolation branch is skipped; the defect is a property of the ratio, so
+  the mode that makes a capture reproducible is the mode that removes the thing under test. This
+  reaches every `--shots=` and `--screenshot=` capture, which imply `--det`. Measured on CM12's
+  Spruce Goose: a fixed-dt `--anim-lab` trace of 2602 consecutive sim steps read a 0.2534 m
+  worst-case per-step displacement against a 0.62 m authored ceiling and a 0.0098 m step across
+  the leg hand-off, all clean, while the same mission on a Realtime clock logged `phys_hz` at a
+  steady 59.99 mean against `fps` at a 97.9 mean, above 60 in 163 of 190 `--perf` windows. Read
+  `fps` against `phys_hz` on a `--no-det` run first; a pose trace answers what the simulation
+  computed, never what the screen showed. The per-step pose itself is readable by naming a node in
+  `CSVM_TRACE_SISCRIPT`, which logs `sitrace` lines from `ScriptPlayback`. The same property is
+  what makes the fix safe to land: `RenderPoses` is inert on any clock but the realtime one, so all
+  18 goldens are hash-identical with it and without it.
+- **INSTR-34** — **Identify what is in original footage from the pixels alone. A remake log, a
+  livery name or a definition name is the remake's answer, not the film's, and using one to label
+  the film is circular.** A frame-by-frame comparison identified the aircraft docking in
+  `CM04.mkv` as a Devastator, citing `[paint] player_pfighter (dev): player_fortune` from **its own
+  CSVM probe log** plus a "central bubble canopy" silhouette call. The film shows twin wing-mounted
+  engines and a framed greenhouse canopy; the remake's Devastator has a single nose radial and a
+  bubble canopy, and its own montage put the two side by side. The misidentification then closed
+  the only available A/B as impossible ("no Balmoral docking is on film") and cleared the item's
+  stated defect on a comparison of two authored definitions of one family through one runtime,
+  which INSTR-31 already rules out as a correctness test. When an airframe, a livery or a mission
+  must be named from footage, name it from geometry that the remake cannot have supplied, and when
+  unsure put the frame in front of the author rather than resolving it from the repo.
+
+- **INSTR-35** — **A player-piloted rig cannot stand in for an AI aircraft, because the plant is
+  selected on range to the nearest human and a human rig is near-field by construction.**
+  `FlightModel.FarFieldPlant` is `UsesAiForcePath && NearestHumanDistSqM > FarFieldRangeM²`, and
+  `NearestHumanDistSqM` measures to the humans themselves, so a `--fly --pos=` probe parked at an
+  AI's pose reports zero range and flies the full aerodynamics with gravity, where the AI at that
+  same pose computes no lift, no drag, no thrust and no gravity and holds
+  `nose · (fd_speed · throttle + 5)`. Measured chasing CM12's ace: three player-rig probes at its
+  authored pose descended 150 m to 16 m and the descent was written up as the ace's behaviour, when
+  the ace 3.9 km from the player does not sink at all. The same trap sits on every AI-only term
+  (the AI ground blow, the AI wind, the skipped weathervane). Drive an AI rig with
+  `AiPilot.HoldingCourse` and a bound `HumanPositions` seam, and assert `FarFieldPlant` reads the
+  branch you meant before reading anything else off the run.
+- **INSTR-36** — **A golden that moves on your branch is not yours until you have run it without
+  your change.** A parallel wave merges siblings into your tree, and a shot one of them moved
+  arrives already broken; re-pinning it then buries their evidence under your name. Measured on
+  `campaign-intro-fill`: it moved `a8ebd3dc…` to `be23e13d…` under a render-interpolation change
+  that is provably inert in `--det`, and a detached worktree at the merge commit, with none of that
+  change present, produced the same `be23e13d…`. Attribution costs one `git worktree add --detach
+  <merge-commit>` and one golden stage. Do it before you touch `manifest.json`.
+- **INSTR-37** — **`Node3D.Scale` does not read back axis for axis off a basis carrying real
+  rotation, so a per-axis scale assertion fails on a rotated node while the pose is correct.**
+  Godot decomposes the basis, and a 90-degree-class rotation composed with a non-uniform scale
+  redistributes the factors across axes: an authored `(1, 0.25, 1)` on a rotated hook arm reads
+  back as `(1, 1, 0.25)`. Measured on `landings-hookup-airframe`'s switch-on check across six
+  airframes. Compare sorted magnitudes, or compare the whole basis, and never assert
+  `Scale.X == authored.X` on anything that also rotates. The same caution applies to reading a
+  rotation back off a node whose scale is non-uniform.
 
 ## SRC — sources and documents
 

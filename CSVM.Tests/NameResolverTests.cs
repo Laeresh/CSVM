@@ -278,6 +278,34 @@ public class NameResolverTests
         Assert.Same(consist, node);
     }
 
+    // ---- a mech3ax dedup suffix (~n) is resolved by the compiled index, never by name ----
+
+    [Fact]
+    public void SymbolLookupResolvesADedupSuffixToItsOwnSibling()
+    {
+        // pzhomebase's shape: two same-named "land_on" siblings under different parents. mech3ax
+        // dedups the second one to "land_on~2" in the def's own node table, but both keep the
+        // bare world name "land_on", so only the compiled index can tell them apart.
+        var manualLand = Node("pz_manual_land");
+        var landOn1 = Node("land_on");
+        var autoLand = Node("pz_auto_land");
+        var landOn2 = Node("land_on");
+        var resolver = new NameResolver<TestNode>();
+        resolver.Add(manualLand, "pz_manual_land", null);
+        resolver.Add(landOn1, "land_on", manualLand, gamezIndex: 3618);
+        resolver.Add(autoLand, "pz_auto_land", null);
+        resolver.Add(landOn2, "land_on", autoLand, gamezIndex: 3615);
+        var def = Def("piratezep");
+        def.NodeRefs["land_on"] = 3618;
+        def.NodeRefs["land_on~2"] = 3615;
+
+        Assert.Equal(2, resolver.FindAll("land_on", null).Count); // the bare name is ambiguous
+        Assert.True(resolver.SymbolClaims(def, "land_on", out var bound1));
+        Assert.Same(landOn1, bound1);
+        Assert.True(resolver.SymbolClaims(def, "land_on~2", out var bound2));
+        Assert.Same(landOn2, bound2);
+    }
+
     // ---- twin narrowing: a shared NAME resolves to the instance holding the def's symbol root ----
 
     [Fact]

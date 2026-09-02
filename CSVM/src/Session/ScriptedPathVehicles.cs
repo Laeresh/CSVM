@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -119,6 +120,9 @@ public sealed class ScriptedPathVehicles
 
         entry.Body.GlobalPosition = position;
         entry.Body.GlobalRotation = new Vector3(0f, heading, 0f);
+        // Only this branch. A SetPose callee owns its own node and its own draw path, which for
+        // an aeroplane on a taxi path is the already-interpolated flight controller.
+        RenderPoses.Record(entry.Body);
     }
 
     private readonly record struct Entry(PathFollower Follower, Node3D Body, Action<float>? OnComplete,

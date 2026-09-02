@@ -596,6 +596,9 @@ public partial class GameSession : Node3D
             // A static pointer, not a child: null it so a node outliving this teardown falls back
             // to its raw frame delta. The menu relaunch is a frame later, so the two never race.
             GameClock.Current = null;
+            // Beside the clock, and for the same reason: a static book of this world's nodes would
+            // otherwise be the next session's starting membership.
+            RenderPoses.Clear();
             // Clears csky_light_count so the next world does not inherit this one's light spill;
             // idempotent, and null-guarded (a failed build never set it).
             _worldLights?.Dispose();
@@ -728,6 +731,10 @@ public partial class GameSession : Node3D
             _edgeExtender.Update(_focusPoints);
         }
 
+        // ⚠ Last in the frame, and the ONLY call anywhere: a suite that steps the simulation
+        // itself must never reach this, so that it always reads the simulation pose
+        // (docs/architecture.md, src/Utils/RenderPoses.cs).
+        RenderPoses.Draw();
     }
 
     /// <summary>The realtime clock adapter: request one complete session-simulation step from
@@ -737,6 +744,9 @@ public partial class GameSession : Node3D
     {
         if (delta <= 0.0 || _clock is not { ParentDriven: false })
             return;
+        // Before the step, never after: everything below reads world poses, and a follower or a
+        // held pose seeded from a drawn one would feed the interpolation back into the simulation.
+        RenderPoses.Restore();
         _simulation?.Step((float)delta);
     }
 
