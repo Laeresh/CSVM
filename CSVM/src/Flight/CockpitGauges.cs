@@ -268,15 +268,15 @@ public sealed class CockpitGauges
     }
 
     /// <summary>The compass drum, node <c>compass</c> in the binary's own lookup string, <c>comp</c>
-    /// in the data on some airframes (docs/formats/hud.md). Turned about the node's Y axis, the
-    /// engine's own <c>FUN_004d1a30(node, 0, -heading, 0)</c> argument taken as-is: like
-    /// <see cref="Horizon"/> and unlike a <see cref="Needle"/>, this angle is the engine's own
-    /// value, not a screen-space clockwise degree the 3D drive negates a second time. A compass
-    /// card that stays pointed at true north while its parent (the cockpit, riding the plane) yaws
-    /// needs exactly this: rotating the node by −heading in the parent's own frame cancels the
-    /// parent's rotation, leaving the card's WORLD orientation constant as the aircraft turns.
-    /// <c>Vector3.Up</c> is the node's own Y axis under the importer's <c>Yxz</c> Euler convention,
-    /// the same one <see cref="Horizon"/> already relies on for X and Z.</summary>
+    /// in the data on some airframes (docs/formats/hud.md). The card stays pointed at true north
+    /// while its parent (the cockpit, riding the plane) yaws, so the local write must cancel the
+    /// parent's yaw. ⚠ That cancelling angle is <c>+heading</c> here, not the <c>-heading</c> the
+    /// engine passes to <c>FUN_004d1a30(node, 0, -heading, 0)</c>: <see cref="FlightController"/>
+    /// derives heading as <c>Atan2(nose.X, -nose.Z)</c>, under which the aircraft node's own yaw is
+    /// already <c>-heading</c>, so a second negation turns the drum the wrong way at the right rate
+    /// — a fault that hides at rest, where both signs read north. Do not "restore" the decode's
+    /// sign without redoing that derivation; the engine's value is right in the engine's Euler
+    /// frame, and the flip is the frame conversion, not a correction to the decode.</summary>
     private readonly struct CompassDrum
     {
         private readonly Node3D? _node;
@@ -303,7 +303,7 @@ public sealed class CockpitGauges
             {
                 return;
             }
-            var basis = new Basis(Vector3.Up, -Mathf.DegToRad(headingDeg)).Scaled(_scale);
+            var basis = new Basis(Vector3.Up, Mathf.DegToRad(headingDeg)).Scaled(_scale);
             _node.Transform = new Transform3D(basis, _origin);
         }
     }

@@ -398,8 +398,8 @@ internal static class WorldAndToolSuites
             }
 
             // The compass drum: found by the binary's own name first, the data's "comp"
-            // second (docs/formats/hud.md), then turned about Y by the engine's own -heading
-            // argument, unnegated a second time.
+            // second (docs/formats/hud.md), then turned about Y by +heading, which is what
+            // cancels an aircraft yaw that is itself -heading under this port's convention.
             var compass = FindNamed(interior, "compass") ?? FindNamed(interior, "comp");
             ctx.Check(compass != null, $"the interior carries the compass drum, by either name");
             if (compass != null)
@@ -413,16 +413,24 @@ internal static class WorldAndToolSuites
                 float heading = 40f;
                 cluster.HeadingDeg = heading;
                 panel.Apply(cluster);
-                var want = new Basis(Vector3.Up, -Mathf.DegToRad(heading)).Scaled(compassRest.Basis.Scale);
-                ctx.Check(compass.Transform.Basis.IsEqualApprox(want),
-                    $"the drum takes -heading about Y heading={heading:0.###} deg");
+
+                // ⚠ Pin the INVARIANT, never the local angle: a literal pins whichever sign was
+                // written and stays green when the drum turns backwards, which is how an inverted
+                // card shipped (docs/formats/hud.md).
+                var yawed = new Basis(Vector3.Up, Mathf.DegToRad(-heading));
+                var nose = -yawed.Z;
+                float probeBearing = Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
+                ctx.Check(Mathf.Abs(probeBearing - heading) < 0.01f,
+                    $"the probe yaw reads heading={heading:0.###} deg as FlightController derives it");
+                ctx.Check((yawed * compass.Transform.Basis.Orthonormalized()).IsEqualApprox(Basis.Identity),
+                    $"the drum cancels that yaw, holding the card's world orientation at heading={heading:0.###} deg");
                 ctx.Check(compass.Transform.Origin.IsEqualApprox(compassRest.Origin),
                     $"the drum's authored translation is untouched");
 
                 // A second write replaces the angle rather than accumulating onto it, the same
                 // shape the needle and horizon writes already guard.
                 panel.Apply(cluster);
-                ctx.Check(compass.Transform.Basis.IsEqualApprox(want),
+                ctx.Check((yawed * compass.Transform.Basis.Orthonormalized()).IsEqualApprox(Basis.Identity),
                     $"a second frame at the same heading writes the same absolute angle");
             }
         }
