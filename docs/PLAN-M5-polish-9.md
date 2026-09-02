@@ -92,7 +92,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☐ `BL-566` CM12: the ace `hkfirebrand_9` stays above the terrain after its wake
 24. ☐ `BL-618` CM13: a compiled anim addressing a `~n` dedup name resolves to the right sibling
 25. ☐ `BL-640` CM14: a broadside cannon stowed behind its hatch takes no weapon damage
-26. ☐ `BL-632` CM15: the capture cutscene frames its Balmoral
+26. ☑ `BL-632` CM15: the capture cutscene frames its Balmoral
 
 ### Wave D — Closing sortie
 
@@ -538,7 +538,7 @@ elsewhere. The `deploy_gmzep_lbroadNN` animations are the mission's progress cou
 `BL-629`'s routing fix chose between two definitions on one anchor; it is a precedent for the walk,
 not this bug. `BL-639` (the gasbag burn-out) stays blocked on `CAP-47`.
 
-## C26 ☐ `BL-632` CM15: the capture cutscene frames its Balmoral
+## C26 ☑ `BL-632` CM15: the capture cutscene frames its Balmoral
 
 **Goal.** In CM15 (C2/M05) the capture cutscene shows the Balmoral it is filmed around.
 
@@ -569,6 +569,32 @@ episode; D31 flies CM15 to the capture.
 **⚠ Traps.** Do not close this against `BL-625`'s cockpit-view fix; that is presentation code and
 cannot reach an NPC actor that was never staged. `BL-633` fixed the same definition's other
 defect (the pilot left on the world root) and its change must survive.
+
+**Landed.** `balmoral` is aircraft-archive node 2381 (a parentless `Object3d`, model-less, five
+children, shipped ACTIVE, no `RESET_STATE`), the same archive `piratefighter`/`chuteman` come
+from, confirmed absent from `planes.zip`'s node table under no other name and absent from C2's own
+chapter gamez entirely. `AircraftStage` now stages it beside `piratefighter`, built ACTIVE and
+rebased the same way, so the drop's own `OBJECT_ADD_CHILD`/`OBJECT_MOTION_FROM_TO`/
+`OBJECT_DELETE_CHILD` triple (authored inside `drop_paratroopers` itself, no intermediate caller)
+finds a node instead of a null binding. The `campaign-cm15-capture` suite drives that definition
+over C2/M05's built world and reads it drawn, reparented onto `cargozep2`, moved off the archive's
+own origin and inside the cutscene camera's frustum through the shot (best 1.7 deg off axis), then
+handed back to the world root. Neither `BL-596`'s nor `BL-621`'s shape applied directly: the actor
+is not a roster-spawned vehicle (`RosterMarkers.cs`'s resolution never enters this def, which is
+started by `PlayMissionTrigger` and reaches its anchor through the general name index the moment
+`AircraftStage` puts a node under that name), and the site-naming distinction `BL-621` decoded does
+not arise here since the drop's own `OBJECT_ADD_CHILD` always names its site (`cargozep2`)
+explicitly. `BL-633`'s guard is unexercised by this change: `CutsceneController.cs` was not
+touched, and the `cutscene-handoff-unposed` suite's own numbers are what would show a regression.
+
+**Evidence correction.** No suite named or shaped `chuteopen` exists for C2/M05, checked directly:
+neither `hooked_to_klondike` (the mission's other cutscene, also compiled for C3/M05 under the
+same shared name) nor its `cutscenes/chuteopen/` SI-script trio (`chutemanparent`/`pilot`/`stamp`)
+is driven by any suite in `CSVM/src/Testing/`. The plan's "the chuteopen suites cover the
+mission's other cutscene" does not hold; that cutscene remains unverified by any suite, mine
+included, and is out of this item's scope.
+
+**Verified.** <pending orchestrator run>
 
 # Wave D — Closing sortie
 
