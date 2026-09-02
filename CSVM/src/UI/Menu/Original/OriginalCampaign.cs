@@ -500,13 +500,13 @@ public sealed partial class OriginalShell
         switch (page)
         {
             case CampaignRosterPage:
-            {
-                var (x, y, width) = CampaignBoards.TextSlot(CampaignScreen.Roster, listIndex, _campaignLayout);
-                float height = row == 0
-                    ? _campaignLayout.Int(CampaignLayout.RosterSection, "CM_E_NAME", "Height", (int)FallbackFieldHeight)
-                    : _campaignLayout.Int(CampaignLayout.RosterSection, "CM_L_PLAYERS", "ItemHeight", 20);
-                return (x, y, width, height);
-            }
+                {
+                    var (x, y, width) = CampaignBoards.TextSlot(CampaignScreen.Roster, listIndex, _campaignLayout);
+                    float height = row == 0
+                        ? _campaignLayout.Int(CampaignLayout.RosterSection, "CM_E_NAME", "Height", (int)FallbackFieldHeight)
+                        : _campaignLayout.Int(CampaignLayout.RosterSection, "CM_L_PLAYERS", "ItemHeight", 20);
+                    return (x, y, width, height);
+                }
 
             case CampaignPreviousMissionsPage contents:
                 return contents.RowBox(row);
