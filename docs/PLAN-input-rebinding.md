@@ -1,4 +1,4 @@
-# Input rebinding — a named-action seam and a device model that outlives the original's
+﻿# Input rebinding — a named-action seam and a device model that outlives the original's
 
 **ACTIVE PLAN** (written 2026-09-02). It sits in `docs/`, which by this repo's convention makes it
 a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
@@ -1372,7 +1372,7 @@ too. Our three rows sit at the tail of one list rather than as a persistent stri
 presentation has one windowed list and no button band; that is a fit to our layout, not a decode
 result, and it is the author's to judge.
 
-**Verified.** `CSVM.Tests/ControlsFeatureTests.cs`, 22 facts, each asserting a specific resolution.
+**Verified.** `CSVM.Tests/ControlsFeatureTests.cs`, 24 facts, each asserting a specific resolution.
 Six are new and speak to this item directly: an edit is visible in the staged view and absent from
 the map the polling site holds until Accept; Accept writes it through and clears the dirty mark;
 Cancel leaves it in neither the live map nor the save (a counting save hook, asserted empty); a
