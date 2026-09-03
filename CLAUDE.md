@@ -39,7 +39,8 @@ never changes the exit code.
 - **The content gate** runs four checks, each its own script you can also run by hand while
   editing: [`CheckEncoding.ps1`](CheckEncoding.ps1) (double-encoded UTF-8, whole tree),
   [`CheckItemIds.ps1`](CheckItemIds.ps1) (`backlog.md`/`playtest.md` defining the same
-  `BL-`/`PT-`/`CAP-` ID twice), [`CheckGoldenProse.ps1`](CheckGoldenProse.ps1) (an `exercises`
+  `BL-`/`PT-`/`CAP-` ID twice, or a `backlog.md` header tag outside the vocabularies the file's
+  own header documents), [`CheckGoldenProse.ps1`](CheckGoldenProse.ps1) (an `exercises`
   field in `analysis/goldens/manifest.json` over 250 chars, or carrying an item id, a date or an
   "also exercises" clause — that field says what a shot covers *today* and is REWRITTEN on a
   re-pin, never appended to, since the history is `git log -p` on the file), and
