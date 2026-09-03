@@ -23,14 +23,19 @@ never changes the exit code.
   `/dev/null` sent to the **PowerShell** tool. (2) The **Bash** tool is blocked outright with
   "Use Powershell instead of bash" — the one exception is a command whose every `&&`/`||`/`;`/`|`
   segment starts with `git` or `gh`, since those behave identically in either shell.
-  (3) `dotnet format` / `dotnet build` before `RunTests.ps1`, `dotnet test`, and `git commit`,
-  blocking on remaining StyleCop warnings. (4) The content gate,
+  (3) The format gate, [`FormatBeforeTests.ps1`](FormatBeforeTests.ps1): `dotnet format` and a
+  `-t:Rebuild` that blocks on remaining StyleCop warnings, before an *invocation* of
+  `RunTests.ps1`, `dotnet test`, or `git commit`. A command segment counts only when it begins
+  with one of those, so reading, grepping or quoting the runner never builds. The Rebuild is
+  deliberate: analyzer warnings are emitted only when the compiler runs, and an incremental build
+  of an up-to-date tree reports nothing. (4) The content gate,
   [`CheckCommitContent.ps1`](CheckCommitContent.ps1), before `git commit`.
-  ⚠ **Hook (3) resolves its tree from the session's ambient cwd** (`git rev-parse --show-toplevel`),
-  not from the tree the command names, and a `cd` inside a compound command does not reach it. So a
-  build meant for your worktree can silently compile a different one, which is how a plan tree's DLL
-  got rebuilt under a battery. Put a real `git -C <your tree> rev-parse --show-toplevel` at the front
-  of the command, or `Set-Location` first as its own call.
+  ⚠ **Hook (3) formats the tree the command names.** An absolute `RunTests.ps1` path names its
+  own tree, a `git -C <tree>` anywhere in the command names one, and only a command naming
+  neither falls back to the session's ambient cwd. A `Set-Location` inside the same command is
+  invisible to it, since a `PreToolUse` hook runs before the command does; do it first as its own
+  call. `.\FormatBeforeTests.ps1 -ShowRoot -Command '…'` says which tree a command would build,
+  and `-SelfTest` exercises the trigger and the resolution.
 - **The content gate** runs four checks, each its own script you can also run by hand while
   editing: [`CheckEncoding.ps1`](CheckEncoding.ps1) (double-encoded UTF-8, whole tree),
   [`CheckItemIds.ps1`](CheckItemIds.ps1) (`backlog.md`/`playtest.md` defining the same

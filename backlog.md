@@ -2908,29 +2908,6 @@ usual.
   `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
   PERF-21.
 
-- `BL-685` `[Tooling]` **The format-before-tests hook fires a full `-t:Rebuild` on any command that
-  merely NAMES `RunTests.ps1`, in whichever tree the session is sitting in.** *Evidence (traced):*
-  the hook's guard in `.claude/settings.json` is a substring test over the whole command,
-  `if ($c -notmatch 'RunTests\.ps1|dotnet\s+test|git\s+commit') { exit 0 }`, so reading, grepping or
-  listing the script triggers it as surely as running it does. It then resolves a root and runs
-  `dotnet build $proj -t:Rebuild`, a Rebuild rather than an incremental build, so the assembly is
-  deleted and recreated. A concurrent battery reading that tree sees no assembly at all: two goldens
-  on `main` logged `Cannot instantiate C# script … Launcher.cs`, rendered nothing and hung to the
-  300 s ceiling, while the other sixteen hashed identical and a serial re-run returned all eighteen
-  ([`docs/verification.md`](docs/verification.md) `INSTR-42`).
-  *Fix shape:* anchor the trigger to an invocation rather than a mention, and decide whether a
-  StyleCop check needs `-t:Rebuild` at all when an incremental build would answer the same question
-  in a fraction of the window.
-  *⚠ Traps:* **the hook is not blind to the command, and `CLAUDE.md` currently reads as though it
-  were.** It parses one thing, `(?:^|\s)-C\s+("[^"]*"|\S+)`, and resolves that tree when it matches;
-  the ambient-cwd `git rev-parse --show-toplevel` is only the fallback. That is why putting a real
-  `git -C <tree> …` at the front of the command works, and the `CLAUDE.md` sentence saying the hook
-  resolves "not from the tree the command names" wants correcting in the same change. Do not remove
-  the ambient fallback: a bare `.\RunTests.ps1` run from the right tree must keep working. A
-  `Set-Location` inside the same command cannot help, because a `PreToolUse` hook runs before the
-  command does.
-  *Cross-refs:* `INSTR-42`, `CLAUDE.md`'s hook section, `BL-661` (the gate this sits beside).
-
 ## Misc
 
 - `BL-077` `[Feature]` **Visual prop spin-up/down** (`startprops`/`stopprops` disc crossfade) — spawning mid-air

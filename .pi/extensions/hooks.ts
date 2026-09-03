@@ -115,29 +115,19 @@ async function runPowerShellDotnetFormat(cwd: string, event: any): Promise<HookR
   const command = event.input.command;
   if (!command) return NOT_BLOCKED;
 
-  if (!command.match(/RunTests\.ps1|dotnet\s+test|git\s+commit/)) {
-    return NOT_BLOCKED;
-  }
-
-  // The project path must be absolute. A relative one resolves against this process's directory,
-  // which is not necessarily the tree the command writes to - and dotnet format WRITES, so a
-  // wrong root silently reformats a tree nobody is working in.
-  const root = await getCommandRoot(cwd, command);
-  if (!root) return NOT_BLOCKED;
-  const project = `${root}/CSVM/CSVM.csproj`;
+  // Only to LOCATE the gate. Whether the command invokes the runner, dotnet test or git commit
+  // (rather than merely naming one), and which tree to format, are the gate's own decisions, so
+  // every harness fires on the same commands and formats the same tree.
+  const here = await getGitRoot(cwd);
+  if (!here) return NOT_BLOCKED;
+  const gate = `${here}/FormatBeforeTests.ps1`;
 
   try {
     // A nonzero exit REJECTS with error.code; the resolved value carries only stdout/stderr, so
     // there is no exit code to test on the success path.
     await pExecFile(
       "powershell",
-      [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        `if (-not (Test-Path -LiteralPath ${psLiteral(project)})) { exit 0 }; dotnet format ${psLiteral(project)} --verbosity quiet; $buildOutput = dotnet build ${psLiteral(project)} --verbosity quiet --nologo -t:Rebuild 2>&1; $remaining = $buildOutput | Select-String -Pattern 'SA\\d{4}' | Where-Object { $_.Line -notmatch 'SA0001' }; if ($remaining) { $remaining | ForEach-Object { [Console]::Error.WriteLine($_.Line) }; [Console]::Error.WriteLine('StyleCop warnings dotnet format could not auto-fix remain above (SA0001 excluded) - fix them by hand, then retry.'); exit 2 }; exit 0`
-      ],
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", gate, "-Command", command],
       { cwd, timeout: 300000 }
     );
   } catch (error: any) {
@@ -182,21 +172,6 @@ async function runContentGate(cwd: string, event: any): Promise<HookResult> {
   }
 
   return NOT_BLOCKED;
-}
-
-// The tree the command names with -C, else the tree this process sits in.
-async function getCommandRoot(cwd: string, command: string): Promise<string | null> {
-  const m = command.match(/(?:^|\s)-C\s+("[^"]*"|\S+)/);
-  if (m) {
-    const named = m[1].replace(/^"|"$/g, "");
-    try {
-      const { stdout } = await pExec("git rev-parse --show-toplevel", { cwd: named });
-      return stdout.trim();
-    } catch {
-      // fall through to this process's tree
-    }
-  }
-  return getGitRoot(cwd);
 }
 
 async function getGitRoot(cwd: string): Promise<string | null> {

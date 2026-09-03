@@ -18,45 +18,20 @@ if (-not $command) { exit 0 }
 # Codex has one canonical shell matcher (Bash), including Windows shell commands.
 # The Claude Bash-vs-PowerShell guard is not copied because Codex does not expose that distinction.
 
-# The tree a command writes to is not always the directory this hook runs in: git -C names another
-# one. Formatting the wrong tree is worse than checking it, because dotnet format WRITES.
-function Get-CommandRoot {
-    param([string]$CommandLine)
-    $m = [regex]::Match($CommandLine, '(?:^|\s)-C\s+("[^"]*"|\S+)')
-    if ($m.Success) {
-        $named = $m.Groups[1].Value.Trim('"')
-        if (Test-Path -LiteralPath $named) {
-            $top = git -C $named rev-parse --show-toplevel 2>$null
-            if ($top) { return [string]$top }
-        }
-    }
-    $top = git rev-parse --show-toplevel 2>$null
-    if ($top) { return [string]$top }
-    return ''
-}
+# Only to LOCATE the gates; each derives the tree(s) it acts on for itself.
+$here = git rev-parse --show-toplevel 2>$null
+if (-not $here) { exit 0 }
 
-if ($command -match 'RunTests\.ps1|dotnet\s+test|git\s+commit') {
-    $repo = Get-CommandRoot -CommandLine $command
-    if ($repo) {
-        $proj = Join-Path $repo 'CSVM/CSVM.csproj'
-        if (Test-Path -LiteralPath $proj) {
-            dotnet format $proj --verbosity quiet
-            $buildOutput = dotnet build $proj --verbosity quiet --nologo -t:Rebuild 2>&1
-            $remaining = $buildOutput | Select-String -Pattern 'SA\d{4}' | Where-Object { $_.Line -notmatch 'SA0001' }
-            if ($remaining) {
-                $remaining | ForEach-Object { [Console]::Error.WriteLine($_.Line) }
-                [Console]::Error.WriteLine('StyleCop warnings dotnet format could not auto-fix remain above (SA0001 excluded) - fix them by hand, then retry.')
-                exit 2
-            }
-        }
-    }
+# Format and StyleCop-check before a test run or a commit. The trigger (an invocation, never a
+# mention) and the tree resolution live in FormatBeforeTests.ps1, shared with the other harnesses.
+$format = Join-Path $here 'FormatBeforeTests.ps1'
+if (Test-Path -LiteralPath $format -PathType Leaf) {
+    & $format -Command $command
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
 if ($command -notmatch 'git\s+commit') { exit 0 }
 
-# Only to LOCATE the gate; the gate derives the trees to check for itself.
-$here = git rev-parse --show-toplevel 2>$null
-if (-not $here) { exit 0 }
 $gate = Join-Path $here 'CheckCommitContent.ps1'
 if (-not (Test-Path -LiteralPath $gate -PathType Leaf)) { exit 0 }
 & $gate -Command $command
