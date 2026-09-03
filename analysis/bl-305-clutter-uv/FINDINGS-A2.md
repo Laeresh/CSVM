@@ -1,7 +1,7 @@
 # A2 — the template ground quad's UV parameterisation, and the UV→world orientation
 
-**Read-only measurement, 2026-08-09**, for [`docs/PLAN-clutter-uv-placement.md`](../../docs/PLAN-clutter-uv-placement.md)
-item A2. Instrument: [`uv_orient.py`](uv_orient.py) in this directory, over `extracted/` only — no
+**Read-only measurement, 2026-08-09**, for PLAN-clutter-uv-placement
+A2. Instrument: [`uv_orient.py`](uv_orient.py) in this directory, over `extracted/` only — no
 engine run, no C# source touched. This is the verification
 [`analysis/bl-058-clutter-doubling/FINDINGS.md:121-127`](../bl-058-clutter-doubling/FINDINGS.md)
 named as the reason `match_footprints.py` was inconclusive.

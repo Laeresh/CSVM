@@ -80,7 +80,7 @@ deferred half. The player's own crash wreck is the cheap repro: crash and watch 
 in C5 but lost from sight between buildings. The C1B airframes do not spawn in Instant Action, so
 they are unreachable today.
 
-> ✅ **Answered 2026-08-09 — `PLAN-ground-contact` (`docs/plans/`), which this census scoped.** All
+> ✅ **Answered 2026-08-09 — PLAN-ground-contact, which this census scoped.** All
 > 16 pairs are ground-tested now: a swept trajectory segment ends a flagged body on the first
 > collider, `RUN_TIME` demoted to a ceiling, and the `BOUNCE_SEQUENCE` branch picked from the struck
 > surface. They are **not** `BL-245`'s deferred half — that half is the 379 events authoring
@@ -132,6 +132,6 @@ own update, which retires this page's interpretation of `do_intersections` and o
 `analysis/object-motion-flags/` (the flag word named from the parser, and the census re-derived) ·
 `analysis/bl-257-nulled-launch/` (the termination-field split these shapes come from) ·
 `analysis/object-motion-range/` (the 2026-08-01 azimuth/elevation/speed decode) ·
-[`docs/plans/PLAN-ground-contact.md`](../../docs/plans/PLAN-ground-contact.md) (what `BL-059`
+PLAN-ground-contact (what `BL-059`
 item 1 became, and where this census's strict test set was discharged) ·
 `docs/formats/destructibles.md` "Debris tumbles"

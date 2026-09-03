@@ -1,6 +1,6 @@
 # `BL-058` — does C5 draw doubled clutter buildings?
 
-**Read-only measurement, 2026-08-04, for `docs/PLAN-m3-polish-6.md` item A3.** Run after A1
+**Read-only measurement, 2026-08-04, for PLAN-m3-polish-6 A3.** Run after A1
 (`BL-051`, node `active`) and A2 (`BL-056`, overlay passes) both landed, per the plan's dependency
 note. No engine code was changed for this item — the question is answered from a live build's own
 log plus the existing `analysis/item9-depth-bias/CBLOCK-LOD.md` geometry measurement.

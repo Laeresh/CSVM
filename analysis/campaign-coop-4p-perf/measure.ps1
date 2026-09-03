@@ -1,5 +1,5 @@
 <#
-D33 (PLAN-campaign-coop.md): the 4P cost of a heavy campaign mission.
+PLAN-campaign-coop D33: the 4P cost of a heavy campaign mission.
 
 Runs --perf over CM18 (C4/M03, "Deceit at Devil's Horn", seq 17 -- chosen by roster_census.py,
 see FINDINGS.md) at 1 and 4 players, with and without cockpit view, following the same protocol

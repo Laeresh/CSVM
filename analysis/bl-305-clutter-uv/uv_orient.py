@@ -1,4 +1,4 @@
-"""A2 (docs/PLAN-clutter-uv-placement.md): the template ground quad's UV parameterisation,
+"""PLAN-clutter-uv-placement A2: the template ground quad's UV parameterisation,
 and the UV->world orientation of the world polygons those templates decorate.
 
 Two questions, measured over the extracted gamez JSON only. No engine run, no C# touched.

@@ -272,7 +272,7 @@ that is not a registry name is never read at all.
 
 ## 2026-08-11 — A1: what faithful crash-def selection actually resolves per chapter
 
-`PLAN-crash-surface-id.md` item A1. The section above settles the *mechanism* — a table lookup on
+PLAN-crash-surface-id A1. The section above settles the *mechanism* — a table lookup on
 the material's `soil` id, not a texture-name branch. This measures its *consequence*: joining
 materials → polygons → meshes by `soil` id (never by texture name — that would re-create the exact
 conflation the plan exists to undo), to know what a player actually flies over per id before B11
@@ -345,7 +345,7 @@ in-engine confirmation, and should be one of B11's targeted `--det` checks.
 
 **(c) Slot 0 share** — see the table's last column, 63.9–96.8%, i.e. **faithful selection makes
 `player_crash_default` the ground/building crash for the large majority of every chapter's
-collidable surface**, exactly as `PLAN-crash-surface-id.md`'s Decision 6 states.
+collidable surface**, exactly as PLAN-crash-surface-id's Decision 6 states.
 
 **Landmark cross-checks, per A1's verify criteria.** `docs/formats/weapon-effects.md`'s two named
 landmarks were looked up directly (not sampled from a top-5 list), to test whether the

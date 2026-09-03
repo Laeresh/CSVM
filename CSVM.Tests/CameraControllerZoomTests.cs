@@ -4,7 +4,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The numpad +/- zoom axis (BL-433, docs/plans/PLAN-cockpit-view.md "What the data actually
+/// The numpad +/- zoom axis (BL-433, PLAN-cockpit-view "What the data actually
 /// ships"): the target moves at 2/s on the two keys, clamped [0, 1], and the shown trim chases
 /// it at 1.5/s through <see cref="HeadLook.Approach"/>. <see cref="CameraController.ZoomTarget"/>
 /// is engine-free, so none of this needs a live camera.

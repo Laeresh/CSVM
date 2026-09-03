@@ -4,7 +4,7 @@ The `--tex-census` instrument gives every texture a unique flat colour so "is th
 drawing?" becomes a pixel count. Counting them back out of a rendered frame is the hard half: the
 world shader multiplies the flat by a baked per-vertex colour, so a census pixel is almost never the
 colour the palette assigned it. These are the scripts that chose the classifier, kept here because
-`docs/cli.md` and `docs/HISTORY.md` cite their numbers and `.scratch/` is swept.
+`docs/cli.md` and the archived development log cite their numbers and `.scratch/` is swept.
 
 Ground truth throughout is `--tex-override` on one texture, which paints exactly one surface: the
 C1/M04 moored zeppelin at `--pos=-5000,240,-5165 --lookat=-5248,200,-5165`, **113,947 px**.

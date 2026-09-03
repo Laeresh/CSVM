@@ -9,7 +9,7 @@ displayed. Starting the process on a second desktop therefore decides the questi
 runs — which rule 107 says is the only kind of placement that works. The open question was whether
 the GPU still produces the right pixels there. It does.
 
-Kept here because `HiddenDesktop.ps1`, `docs/tooling.md` and `docs/HISTORY.md` cite these numbers and
+Kept here because `HiddenDesktop.ps1`, `docs/tooling.md` and the archived development log cite these numbers and
 `.scratch/` is swept.
 
 ## The script

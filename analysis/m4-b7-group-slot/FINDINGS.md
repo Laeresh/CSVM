@@ -5,7 +5,7 @@ across every per-mission AI vehicle table and correlates shared group values wit
 target, spawn proximity, ace presence, and the activation flags. The binary half was read out of
 `crimson.exe` with Ghidra; function addresses below.
 
-This answers plan item B7's re-scoped question ([`docs/plans/PLAN-M4-ai.md`](../../docs/plans/PLAN-M4-ai.md)):
+This answers plan item B7's re-scoped question (PLAN-M4-ai B7):
 after slot 6 turned out to be `primary_target`, slot 4 was the last data candidate for a formation
 mechanism. **It is not one.**
 

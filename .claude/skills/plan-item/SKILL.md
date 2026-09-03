@@ -27,9 +27,10 @@ One authority; do not glob for candidates.
 - **No active plan named** → list any `docs/PLAN-*.md` files and ask which, or if there are none say
   so and point at `/new-plan`. Never guess.
 - **An explicitly named plan** (`/plan-item A1 in PLAN-m3-polish-5`, or a path) → honour it, but if
-  it carries a `COMPLETE` banner or lives in `docs/plans/`, explain it **read-only** and skip §5's
-  handoff entirely: retroactively starting or deferring a finished item is nonsense. Point at its landing
-  commit (`git log --grep`) or pre-freeze `docs/HISTORY.md` entry instead.
+  it no longer exists under `docs/` it is completed: read it from git (the retrieval commands are in
+  PROJECT_CONTEXT.md's repo layout), explain it **read-only** and skip §5's handoff entirely:
+  retroactively starting or deferring a finished item is nonsense. Point at its landing commit
+  (`git log --grep`) instead.
 
 ## 2. Resolve the item
 
@@ -63,8 +64,8 @@ Do the reading yourself; no Explore subagent. The item text and code need to sta
    re-locate symbols **by name**.
 
 While there, check whether the item **already landed** without its checklist being flipped — a
-landing commit (`git log --grep=<ID>`), a pre-freeze `docs/HISTORY.md` entry, or code that already
-does the thing.
+landing commit (`git log --grep=<ID>`), an entry in the archived development log, or code that
+already does the thing.
 
 **Confirmation is by reading, not by running.** When a claim can only be settled by executing
 something (a collider count printed at build, a per-chapter node census), say so under *The evidence,
@@ -107,7 +108,7 @@ Use these headings, in this order:
   against the tier you are running. **On a mismatch, say plainly that the item wants a different tier
   before the user picks *start it here*.** Older plans may carry no recommendation; then skip it.
 - **Status** — one line: still open, or looks already landed / superseded / moot. Cite the evidence
-  (a landing commit, a pre-freeze `docs/HISTORY.md` entry, the code state).
+  (a landing commit, an entry in the archived development log, the code state).
 - **Goal** — what will be true when the item is done.
 - **The problem** — what's wrong today, and why it matters at the controls.
 - **The evidence, and how far it goes** — the item's own confidence label (traced / direction-sound-
@@ -197,7 +198,7 @@ or symbols?
 2. **They do not** → hand to a **fresh-context subagent**. It prospects; it **reports and never
    writes**. Require every constant back **with the address it came from** and the condition it
    applies under, so the write-up carries provenance and any number can be re-checked at source.
-3. **It is genuinely large** — a body of work the size of `PLAN-weather-decompile-match.md`, not a
+3. **It is genuinely large** — a body of work the size of `PLAN-weather-decompile-match`, not a
    "what is this constant" question → say so and point at `/new-plan`. Rare; most decodes are not
    plan-sized.
 
@@ -237,9 +238,11 @@ The plan bookkeeping is this skill's; the `BL-NNN` side is not.
 - Then hand to **`/close-backlog-item <BL-NNN>`**, unmodified. It owns the closure kind, deleting the
   entry, the closure record in the closing commit's message, retiring any `CAP-nn`/`PT-nn`, and the
   restated-caveat sweep. Do not pre-empt its closure record.
-- **If that was the plan's last open item**, say so and *offer* the completion move — `COMPLETE`
-  banner, move to `docs/plans/`, add its row to `docs/plans/plans.md`. Don't do it unasked; but a
-  finished plan left in `docs/` still resolves as "active" for the next session.
+- **If that was the plan's last open item**, say so and *offer* the completion: delete the plan
+  file in the closing commit (git keeps it; no archive), record the completion in that commit's
+  message, clear PROJECT_CONTEXT.md's "Current status" pointer, and unlink any live prose that
+  linked the file by path (grep the filename). Don't do it unasked; but a finished plan left in
+  `docs/` still resolves as "active" for the next session.
 - **No commit.** Offer it in one line and stop.
 
 ### Option 4 — defer it

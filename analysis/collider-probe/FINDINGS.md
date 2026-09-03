@@ -4,7 +4,7 @@
 (`.scratch/probe_exempt.py`, swept by `CleanScratch.ps1` — `.scratch/` is gitignored, and it has
 no copy anywhere including git history: `git log --all -- **/probe_exempt*` returns nothing)
 reproduced the runtime world-collider count exactly in 6 of 8 chapters but predicted **6 too few**
-in C4 and **11 too few** in C5 (docs/HISTORY.md, "2026-07-22 — Polish-3 item 5", final table).
+in C4 and **11 too few** in C5 (the archived development log, 2026-07-22 entry "Polish-3 item 5", final table).
 The safety conclusion wasn't in doubt (the probe's candidate list was a strict superset — nothing
 it thought exempt was actually solid), but the gap itself was never explained. C22 asks for the
 probe back as a committed instrument, and for that gap to be resolved one way or the other.

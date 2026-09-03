@@ -137,7 +137,7 @@ Write to the entry that owns the question, in its own voice:
   retire, it is never reused — take new IDs from `New-ItemId.ps1 -Kind CAP`, never by scanning
   `playtest.md` for a free one.
 - Findings that change what we believe about the original are recorded in the closing commit's
-  message, per `/close-backlog-item` §4 (`docs/HISTORY.md` is frozen — never append to it).
+  message, per `/close-backlog-item` §4.
 
 ⚠ **A capture is evidence about appearance, not proof of a constant.** Record the honest limit: one
 take is not a distribution, a plateau is worth more than a transient, and what a single frame shows

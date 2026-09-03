@@ -104,8 +104,8 @@ never changes the exit code.
   original at the controls", never "judged at the controls on 2026-08-16" or "retired 2026-08-16".
   A date in live prose is a claim that ages and makes the reader rebuild a timeline instead of
   reading the current state. When closing an item, the evidence and its date go in the closing
-  commit's message, found later with `git log --grep=<ID>`. `docs/HISTORY.md` (frozen) and the
-  dated `### ⚠ … — RETIRED (yyyy-mm-dd)` headings in `docs/org/*.md` are the record of superseded
+  commit's message, found later with `git log --grep=<ID>`. The dated
+  `### ⚠ … — RETIRED (yyyy-mm-dd)` headings in `docs/org/*.md` are the record of superseded
   readings, and are the only place a date belongs; do not extend the pattern elsewhere.
 - Comments explain why. Length caps and what belongs in one are in
   [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md)'s coding conventions; the terms to use are in

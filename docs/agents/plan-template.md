@@ -8,9 +8,8 @@
 > confidence is capped by provenance, so discussion-derived items stay `lead-only`. Answer "scaffold
 > only" and you get structure alone. This file is that skill's source of truth, and is here to be
 > read as the canonical structure. To scaffold by hand instead: copy it to
-> **`docs/PLAN-<name>.md`** (note: `docs/` root, *not* `docs/plans/` — a plan there is *live*;
-> `docs/plans/` is only for completed ones), fill in the `<…>` placeholders, and **delete every
-> `<!-- guidance -->` comment and this banner**.
+> **`docs/PLAN-<name>.md`** (`docs/` root; a plan there is *live*), fill in the `<…>` placeholders,
+> and **delete every `<!-- guidance -->` comment and this banner**.
 >
 > **Naming:** milestone plans → `PLAN-M<n>-<name>.md`; feature/refactor plans → `PLAN-<name>.md`.
 >
@@ -19,9 +18,10 @@
 > was disproven, decisions were negotiated, or the plan rests on a reverse-engineering pass. When in
 > doubt, keep `[core]`, cut `[situational]`.
 >
-> Two reference plans show the range: [`PLAN-M3-weapons.md`](PLAN-M3-weapons.md) is a heavy plan
-> with every section; [`PLAN-M2-polish-4.md`](PLAN-M2-polish-4.md) is a routine run that carries the
-> `[core]` sections and thins the `[situational]` ones into per-item notes.
+> Two reference plans show the range: `PLAN-M3-weapons` is a heavy plan with every section;
+> `PLAN-M2-polish-4` is a routine run that carries the `[core]` sections and thins the
+> `[situational]` ones into per-item notes. Both are completed and read back from git
+> (`git show docs-archive:docs/plans/PLAN-M3-weapons.md`).
 
 ---
 
@@ -29,18 +29,18 @@
 
 # <Milestone N — short scope name, e.g. "Milestone 3 — Weapons and Destruction">
 
-<!-- [core] Status + location banner. While the plan is live it sits in docs/ and says so; when it
-     completes you move it to docs/plans/ and swap this for a ✅ COMPLETE banner (the skill handles
-     the archive step — see /new-plan). This one-liner is what tells the next session the plan is live. -->
+<!-- [core] Status + location banner. While the plan is live it sits in docs/ and says so; when
+     every item lands the closing commit deletes the file (git keeps it) and its message records the
+     completion. This one-liner is what tells the next session the plan is live. -->
 **ACTIVE PLAN** (written <YYYY-MM-DD>). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+a live plan; PROJECT_CONTEXT.md's "Current status" names it. When every item lands, the closing
+commit deletes this file, records the completion in its message, and clears the "Current status"
+pointer; any live prose linking this file by path is unlinked in the same commit.
 
 <!-- [core] Scope paragraph(s). State what this plan delivers, and — just as important — what it
      deliberately excludes and why. If the plan draws items from backlog.md, record that EACH was
-     re-verified still-open against BOTH the record (git log --grep, and pre-2026-08-06 entries in
-     docs/HISTORY.md) AND the code (a backlog entry is not proof
-     the work is undone). Convert any relative dates to absolute. -->
+     re-verified still-open against BOTH the record (git log --grep) AND the code (a backlog entry
+     is not proof the work is undone). Convert any relative dates to absolute. -->
 <One or two paragraphs: the goal, the explicit boundaries ("X is out of scope — it's M<n+1>"), and
 any assumptions the plan rests on.>
 
@@ -97,8 +97,7 @@ exact fields/keys. Cite files by path. This is the shared evidence the per-item 
   failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
   TUNE / lead-only).
 - **`PROJECT_CONTEXT.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
-  landed item; a landed item gets its record in the landing commit's message (`docs/HISTORY.md` is
-  frozen — never append) and is **deleted** from
+  landed item; a landed item gets its record in the landing commit's message and is **deleted** from
   `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
 - **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
   rule that bites per item.

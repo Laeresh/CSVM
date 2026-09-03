@@ -1,6 +1,6 @@
 # `OBJECT_MOTION_FROM_TO`'s `*_delta` channels are the sibling channel's RATE
 
-Measured 2026-08-04 for `BL-050` / `PLAN-m3-polish-6.md` item B11. **Verdict: no motion
+Measured 2026-08-04 for `BL-050` / PLAN-m3-polish-6 B11. **Verdict: no motion
 semantics were missing. The channels are redundant derived data and reviving them as a
 composed offset would have run every affected motion at double speed.**
 

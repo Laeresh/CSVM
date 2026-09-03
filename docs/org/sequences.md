@@ -908,7 +908,7 @@ them.
     plays (`camera1`/`player`/`cpilot` are cutscene machinery for cutscenes this project does not
     have), and `apassengers-rem_pas.json`'s
     `remove_passenger` detaches `apassengers` from `pass_st` — `pass_st` is not a gamez node in any
-    chapter (confirmed earlier, `docs/HISTORY.md`), so the parent can never resolve even if a handler
+    chapter (confirmed earlier, the archived development log), so the parent can never resolve even if a handler
     were written.
   - `player-cpeject1/2/cpejectstop.json` detach `cpilot` from `pilot_pos`. These ARE reached — they
     are called from the player's own `destroy_it` crash sequence

@@ -131,7 +131,7 @@
     silent-death --verbose retry still happens, serially, after the whole batch has reported. Pass
     1 for the serial reference path. This was measured on one machine only, so a hash that moves
     under N>1 elsewhere is a disproof for THAT machine, not a tuning problem to chase
-    (docs/plans/PLAN-fast-verification.md C21).
+    (PLAN-fast-verification C21).
 
 .PARAMETER Hitch
     Run the hitch-detector check (two scripted Godot launches probing HitchMonitor/HitchSidecar).
@@ -283,7 +283,7 @@ $ScratchDir = Join-Path $RepoRoot ".scratch"
 $Inv        = [System.Globalization.CultureInfo]::InvariantCulture
 $EngineTimeoutSec = 300
 # Shards for the FULL catalog when -Shards is not given. Measured on the development machine; the
-# sweep behind the number is in docs/plans/PLAN-fast-verification.md's B13. The watchdog above is per
+# sweep behind the number is in PLAN-fast-verification's B13. The watchdog above is per
 # launch, so it is not a budget the shard count may be tuned against.
 $DefaultEngineShards = 4
 

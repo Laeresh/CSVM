@@ -15,8 +15,8 @@ Retired IDs disappear from this file, so never mint a new ID by scanning the ent
 time**: it is not a once-per-session lookup, and deriving the next id by adding 1 leaves the counter
 behind the file, so the number you invented gets handed out again later. `-Count n` reserves a block
 in one call when you need several. Retired IDs' verdicts are in
-the retiring commit's message (`git log --grep=<ID>`); pre-2026-08-06 retirements are in
-`docs/HISTORY.md` (frozen).
+the retiring commit's message (`git log --grep=<ID>`); earlier retirements are in
+the archived development log.
 
 **Structure.** Section 0 lists owed captures as themed tables — one table per filming batch, the
 theme naming the capture setup (cockpit gauges in frame, external view, …) — with fixed columns
