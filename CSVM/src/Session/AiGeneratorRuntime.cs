@@ -203,27 +203,29 @@ public sealed partial class AiGeneratorRuntime : Node
         return fed;
     }
 
-    /// <summary>The named host died: permanently disable every generator whose host node (or
-    /// authored <c>healthy</c> node, the submarine's) carries this name — the decoded rule.
+    /// <summary>The named host died: every generator whose host node (or authored
+    /// <c>healthy</c> node, the submarine's) carries this name launches for
+    /// <see cref="GeneratorCycle.HostDeathGraceSeconds"/> more, then disables permanently.
     /// Fed by <c>ZeppelinRuntime.ZeppelinKilled</c> (F18); fixed-installation hosts still have
-    /// no death source. The door keeps its last state: the decoded loop early-outs a disabled
-    /// generator before any door rule runs. Returns how many generators this disabled.</summary>
+    /// no death source. A disabled generator's door keeps its last state (the decoded loop
+    /// early-outs before any door rule). Returns how many generators went on the grace.</summary>
     public int NotifyHostDied(string nodeName)
     {
-        int disabled = 0;
+        int dying = 0;
         foreach (var gen in _live)
         {
-            if (gen.Cycle.Disabled
+            if (gen.Cycle.Disabled || gen.Cycle.HostDead
                 || (!gen.Def.Node.Equals(nodeName, StringComparison.OrdinalIgnoreCase)
                     && !(gen.Def.HealthyNode?.Equals(nodeName, StringComparison.OrdinalIgnoreCase) ?? false)))
             {
                 continue;
             }
             gen.Cycle.HostDied();
-            disabled++;
-            GD.Print($"egen: generator '{gen.Def.Node}' disabled permanently: host died");
+            dying++;
+            GD.Print($"egen: generator '{gen.Def.Node}' host died: launches for " +
+                     $"{GeneratorCycle.HostDeathGraceSeconds:0} s more, then disabled permanently");
         }
-        return disabled;
+        return dying;
     }
 
     /// <summary>One session-simulation step of every live cycle, door transitions included.</summary>
@@ -238,7 +240,12 @@ public sealed partial class AiGeneratorRuntime : Node
             gen.LastHostPosition = hostPosition;
             // The altitude read is live off the host node, so the min_altitude gate holds (not
             // cancels) whenever F17's flown zeppelin sits below it.
+            bool wasDisabled = gen.Cycle.Disabled;
             bool spawned = gen.Cycle.Step(dt, hostPosition.Y);
+            if (gen.Cycle.Disabled && !wasDisabled)
+            {
+                GD.Print($"egen: generator '{gen.Def.Node}' disabled permanently: host died");
+            }
             if (gen.Cycle.DoorOpen != gen.DoorOpen)
             {
                 gen.DoorOpen = gen.Cycle.DoorOpen;

@@ -94,7 +94,18 @@ implementation (`Session/GeneratorCycle.cs`) assumes the full inter-wave gap
 (`ind_period + wave_period`), the conservative reading, and says so where F20 will revisit it.
 
 **The host's death disables the generator.** For a fixed installation that is the `healthy` node
-going inactive; for a zeppelin it is the zeppelin's own destroyed flag. Two further load-time
+going inactive; for a zeppelin it is the zeppelin's own destroyed flag, record byte +6, which the
+survivor check (`FUN_004bf0b0` → `FUN_004bd780`) sets on the tick survivors drop below
+`num_healthy_required`, together with a wreck timer of 3 s (`+8`) after which the hull starts its
+sink. The cycle (`FUN_00452640`) reads the flag at the top of every tick, and the objective credit
+(`FUN_00469af0`, `WAKEUP_GENERATOR`) only adds to the remaining capacity, so a credit landing after
+the kill launches nothing. ⚠ **CSVM deviates here on purpose: a killed host's bay launches for the
+wreck timer's 3 s, then disables** (`GeneratorCycle.HostDeathGraceSeconds`). C5/M04 authors the
+race: OBJECTIVE10 completes on three gasbags inactive and naps OBJECTIVE11, the credit for Miles's
+launch, 0.5 s later, while the Dante dies on the fourth gasbag. A torpedo salvo kills the fourth
+inside that half second, the decoded rule disables the bay before the credit arrives, Miles never
+launches, and OBJECTIVE38's `DEDG [5, 0]` fires the loss over an empty group. The designed path
+avoids it only because OBJECTIVE11's `all_dtzep_gasbags` spaces its pops 3 s apart. Two further load-time
 rejections: a generator whose `node` cannot be resolved is **dropped**, and so is one where **none**
 of its `vehicle.nets` names resolve — a generator with no valid net does not load inert, it does not
 load at all.
