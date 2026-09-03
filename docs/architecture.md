@@ -6093,8 +6093,10 @@ overrides. Constructed once per session build (`_liveryResolver` in `GameSession
 never across a menu rebuild — a relaunch gets a fresh instance over the fresh `_spec`).
 With no `--paint=`, every aircraft wears `LiveryResolver.DefaultPattern` (`player_fortune`, the
 Fortune Hunters livery the original's stock planes wear, and the only pattern covering all eleven
-airframes): flight rigs, AI spawns and the static `--plane`/`--damage`/`--viewer` views alike. That
-default is a straight catalog lookup and consumes no RNG draw, so pinned liveries are unmoved by it;
+airframes): flight rigs, AI spawns and the static `--plane`/`--damage`/`--viewer` views alike. An
+AI spawn wears an explicit scheme first (the Instant Action ace's `ace_*` livery), then its own
+def's `paint_*` scheme (`DefScheme`, via `AiFlightAssembler.MilitiaScheme`), and reaches this
+default only when neither is authored. That default is a straight catalog lookup and consumes no RNG draw, so pinned liveries are unmoved by it;
 `--paint=none` is the only way to the bare shipped skins, and an absent `player_fortune` catalog
 entry (no vehicle.json) falls back to them with a one-line note. The Instant Action enemies are the
 exception (`SchemeFor`'s `useDefaultPattern: false`) — see `InstantActionRuntime.cs`'s entry for why.

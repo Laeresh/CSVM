@@ -389,13 +389,13 @@ colour, and all of them are gone:
 
 ## Known limits
 
-- ~~**The "Shade" column.**~~ *Answered (user): Shade is simply the **brightness** of
-  the chosen colour.* The UI's Colour dropdown picks the hue family and Shade picks how light
-  or dark it is; their product is the single RGB that ends up in `paint_colorN`. There is no
-  fourth stored field and nothing extra to model — a scheme really is three colours, and the
-  masks giving each slot exactly one colour is consistent, not a contradiction. The swatch
-  table above is that Colour/Shade space made concrete, and the hangar's paint screen now
-  drives the original's own two dropdowns over it; the **livery lab** keeps its RGB sliders,
+- **The "Shade" column is the brightness of the chosen colour.** The UI's Colour dropdown
+  picks the hue family and Shade picks how light or dark it is; their product is the single RGB
+  that ends up in `paint_colorN`. There is no fourth stored field and nothing extra to model: a
+  scheme really is three colours, and the masks giving each slot exactly one colour is
+  consistent, not a contradiction. The swatch table above is that Colour/Shade space made
+  concrete, and the hangar's paint screen drives the original's own two dropdowns over it; the
+  **livery lab** keeps its RGB sliders,
   which span the same space and more. The pattern table's six per-pattern defaults and the
   50 decal names are transcribed to `CSVM/data/hangar_patterns.json` beside the swatches.
   Two shade-level divergences between a pattern's hangar defaults and its `vehicle.json` AI

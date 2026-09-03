@@ -2974,15 +2974,6 @@ usual.
 
 ## Misc
 
-- `BL-072` `[Feature]` **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`
-  "Known divergences"; these are the leftovers):
-  - **The paint UI's "Shade" column** is unmodelled — three Colour *and* three Shade
-    dropdowns exist in the UI, only three colours in the data. We ramp black → colour.
-  - **A livery picker in the launchscreen.** Selection is CLI-only (`--paint=`); flight
-    randomizes per player. Decide from playtest whether the menu should offer it.
-  - **AI/ace liveries.** `ia.json` `ace_*` and the AI defs' own `paint_*` are parsed into the
-    catalog but nothing flies them — there are no AI aircraft yet.
-
 - `BL-077` `[Feature]` **Visual prop spin-up/down** (`startprops`/`stopprops` disc crossfade) — spawning mid-air
   already turning is by design; becomes relevant with a landing/shutdown flow
   (`FlightAudio.OnEngineStop` is already wired for the audio half).
