@@ -528,6 +528,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
   parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
 
+- `BL-700` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A downed zeppelin's
+  hull comes to rest on the sea but its front and back sections still sink through it.** *Evidence:*
+  reported at the controls over water, on the build that landed `BL-668`. The upward ground-column
+  read that `BL-668` added holds the main hull at the surface and the gasbags with it, so the rest
+  answer is right for the piece it was measured on and wrong for the two end pieces.
+  *Fix shape:* find what the end sections rest against that the hull does not. The candidates in
+  order are a per-piece origin that sits outside the column the hull queries, a breakup piece that
+  never takes the rest path at all because it is spawned by a different route than the hull, and a
+  piece whose collision shape is authored around a centre the surface test does not use.
+  *⚠ Traps:* do not fix it by clamping every piece to sea level. `BL-668`'s record is explicit that
+  the column read is the mechanism and a height clamp is the fitted answer it replaced. The wreck
+  rest is also not the gasbag path: gasbags ride the hull and were confirmed resting in the same
+  sitting. *Playtest after fix:* a CM14 zeppelin killed over water, watched until every piece
+  settles, from outside. *Cross-refs:* `BL-668`'s closing commit (`git log --grep=BL-668`), which
+  carries the column decode and CM10's lifeboat.
+
 ## Weapons & combat
 
 - `BL-066` `[Feature]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
@@ -1354,6 +1370,30 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   world rotation transfers unchanged. Pre-existing and found while wiring the energy mirror, so it
   is not a regression of that work. *Cross-refs:* `BL-332`'s closing record, `docs/org/weather.md`.
 
+- `BL-701` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **A light-exempt
+  surface renders at full albedo, which reads far brighter than the original: C1B's coastline
+  sheets come out as a hard bright band instead of a soft edge.** *Evidence:* reported at the
+  controls in C1B on the build that landed `BL-613`, whose exemption takes 48 of C1B's 147 textured
+  materials out of the world light (the per-chapter census logs it per world build). C1B authors
+  `world_light=0.426`, so an exempted surface jumps by more than a factor of two, and it is the
+  night chapter where the reading is most visible. The exemption itself is decoded and is not in
+  question: `FUN_005524d0` skips the per-vertex light evaluation on the texture's alpha bit. What
+  is not decoded is what the original's unlit submission path then uses as the vertex term, and
+  "full albedo" is CSVM's assumption rather than a reading. *Fix shape:* decode the unlit branch's
+  own submission and find what it writes where the lit branch writes the evaluated light. If it
+  carries the polygon's authored vertex colours or a fixed base intensity, that is the term CSVM is
+  missing, and the exemption stays as it is with the intensity corrected under it.
+  *⚠ Traps:* the alpha blend is intact and is not the fault. `SceneBuilder` computes blend and
+  scissor from `LastHadAlpha`/`LastAlphaIsSoft` independently of `lit`, which is a separate shader
+  key bit, and the coastline sheets are in `SoftAlphaCoastline` so they blend. A blended soft ramp
+  at full brightness over dark water reads as a hard band, which is why the symptom presents as
+  lost blending; confirm the ramp is still there before changing any blend rule. Reverting `BL-613`
+  is also not the fix: the surfaces were wrong before as well, in the other direction.
+  *Playtest after fix:* C1B flown low along a coastline at night, and the same coast in daylight
+  where `world_light` is near 1 and the exemption cannot show. *Cross-refs:* `BL-613`'s closing
+  commit and `docs/org/vertexLighting.md`, which holds the two-gate decode and the per-chapter
+  census.
+
 ## Effects & animation runtime
 
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
@@ -2106,6 +2146,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `_Process`. The debug callers are not covered by an automated check: all three sites are private
   methods behind a live session, so the suites reach the seam but not its callers.
   *Cross-refs:* `git log --grep=BL-625` (the seam and why both edges belong to the caller).
+
+- `BL-702` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The chase camera's
+  zoom range sits inside the original's rather than on it: the original starts at its closest and
+  only zooms out, while ours starts mid-range and zooms both ways.** *Evidence:* reported at the
+  controls on the build that landed `BL-433`, which gave the axis its decoded keybind (numpad plus
+  and minus) but took the clamp ends from CSVM's existing chase distance rather than from the
+  original's. The axis works; the two ends and the rest position are what disagree.
+  *Fix shape:* decode the chase camera's authored default distance and its clamp pair, then set the
+  rest pose to the near end so the only travel available is outward. *⚠ Traps:* do not derive the
+  near end from the current default by subtracting the observed travel. The report says the
+  original's default IS the near end, so the near end is a datum to be read and the default follows
+  from it, not the reverse. *Playtest after fix:* chase view held at both ends of the clamp, and the
+  pose the view opens on before any zoom input. *Cross-refs:* `BL-433`'s closing commit
+  (`git log --grep=BL-433`), which carries the keybind decode.
 
 ## HUD & UI
 
