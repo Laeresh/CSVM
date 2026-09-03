@@ -2871,6 +2871,33 @@ usual.
   anomalies may share a cause. Neither should be changed on its own.
   *Cross-refs:* `BL-694`, `BL-639`.
 
+- `BL-699` `[Perf]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Every AI wave spawn hitches at the controls, and no test measures the
+  launch frame.** *Evidence (at the controls, and measured on one mission):* the author feels a
+  hitch on every wave spawn in every mission, not only CM18's generator launches. The measured
+  case is `BL-641`'s remainder (`docs/plans/PLAN-M5-polish-8.md` B14): with the crash rig
+  deferred behind the launch, a CM18 generator launch still costs 68 to 141 ms against a 40 ms
+  threshold, paired A/B under `--det` at 1P and 4P. What is left on the launch frame is the model
+  build and `FlightController.Bind`, 50 to 90 ms together, and neither moves behind the frame that
+  puts the aeroplane in the world without the aeroplane arriving late. The deferred frames carry one
+  `AnimRuntime.PrewarmEmitters` call over about 194 emitters at 15 to 103 ms, whose
+  `material_create` term (194 `ShaderMaterial` and `MultiMesh` builds in `Effects/EmitterRenderer.cs`)
+  is the PERF-22-shaped follow-up.
+  *Fix shape:* two halves. (1) A test first: a suite that spawns an AI aircraft mid-flight through
+  the roster's own wave path and asserts the launch frame against the hitch threshold, so the
+  hitch is a red bar and not a feel report; `ai-crash-rig-deferral` spawns through the assembler
+  and measures nothing. (2) Then build the assembly AHEAD of the launch, off the generator's and
+  the roster wave's own authored cycle, which is a change to `AiGeneratorRuntime`'s launch
+  declaration and to spawn-index allocation rather than to the assembler. The crash-rig queue
+  (`CrashRigQueue`, `FlightRoster.PumpDeferredCrashRigs`) is the pattern for work that can trail
+  the launch; the model and bind cannot trail it.
+  *⚠ Traps:* the aeroplanes a session builds BEFORE its first frame keep their rigs built in
+  place, and deferring them moved the two `--ai=` goldens; keep that rule. The sim clock lags wall
+  time on physics-bound late missions, so compare a hitch in sim frames under `--det` and read the
+  hitch lines before blaming a spawn (`docs/verification.md` PERF-12/13/21). `--det`'s numbers are
+  with nobody at the controls; the author's feel report is the acceptance.
+  *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same pass profiled), `BL-657`
+  (CM18's generator launching at the wrong time, which is where the measured case is flown).
+
 ## Tooling, platform & docs
 
 - `BL-675` `[Research]` `[S]` `[Next: data]` `[Impact: none]` `[Evidence: trace]` **A `--campaign=<profile>:<n>` run launched through `RunProbe.ps1` from an
