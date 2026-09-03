@@ -960,12 +960,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   moved row attributed. Bounded: the ramp bites near `highGs` (9) and the stock full pull peaks at
   5.83 G. Ledger row "the G ramp reads the SAME tick's delivered lift" in
   [`docs/org/flightModel.md`](docs/org/flightModel.md).
-- `BL-445` `[Tooling]` **Dump scenarios for the plant branches the envelope dump never enters.**
-  The dump drives 7 of 16 decoded branches (8 on the autogyro). Reachable but unentered:
-  `pitch-fade`, `g-clamp`, `g-ramp` (a sustained outside push), `dive-cap`, `stall` and the
-  low-speed authority ramp (a slow-flight decay). Each already has a unit instrument; the branch
-  coverage line in the ledger names it. Add scenarios only if whole-envelope coverage is wanted;
-  do not invent a manoeuvre to raise the number.
 - `BL-447` `[Fidelity]` **The eight unsupported nitro and shake edges in the parity ledger.**
   `docs/org/flightModel.md` "Parity ledger", class unsupported, beyond `BL-443`: the thin
   atmosphere band above 2000 m, the `level_off_rate` auto-level torque, the AI's `medium_aishake`
