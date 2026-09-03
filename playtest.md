@@ -791,25 +791,6 @@ is a judgement on our own remake.
 ./RunGame.ps1 --campaign=<profile>:17
 ```
 
-- `PT-102` `[Own]` **A generator launch no longer hitches, and an early kill still leaves a wreck**
-  (`BL-641`, partial). The crash rig is built on the frames after the launch instead of on it,
-  which halves the launch frame but does not reach the threshold.
-  ⚠ **What the mission authors, and what the build does.** The sortie opens with the player and
-  the Black Swan (`bswingman_1`) and no other ally; `cargozep1` launches five allied Furies on
-  `M3Allies` only after the docking film credits it (callback 800 in `cg_beauty_shot`, decoded on
-  `BL-657`). Today's build launches ten of them at the `cargobay` origin inside the opening
-  cutscene instead, which is `BL-657`'s bug. This row rides that free-run for now, since the
-  per-launch cost is the same wherever the launch happens: fly the first minute, where one aircraft
-  launches every four seconds, and do not look for something to shoot. The post-docking sortie is
-  `BL-657`'s *Playtest after fix:* line and is not flyable until it lands.
-  *Look for:*
-  - (a) the launches felt at the controls: a lighter hitch than before, and whether what remains is
-    still noticeable at the stick;
-  - (b) one shot down within its first quarter-second still showing its wreck and crash effects,
-    which is the forcing guard no suite watches at the controls. Use the debug kill rather than
-    firing on a friendly.
-  *Blocks:* nothing; `BL-641` stays partial with its remaining path recorded in the plan. A missing
-  wreck on an early kill mints a new `BL`.
 
 ## Everything else
 
