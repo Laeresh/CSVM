@@ -2412,44 +2412,46 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `BL-651` already owns the export-to-Instant-Action crossing and the picker that is not re-read.
   *Cross-refs:* `BL-651`, `PT-96`.
 
-- `BL-703` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Original's Dogfight
-  screen never activates FLY, so the mode cannot be launched from that presentation.** *Evidence:*
-  reported at the controls while flying `PLAN-menu-presentations` E44's first row, "dogfight in
-  original menu does not work. the fly button never activates". Free Flight on the same screen
-  launches, and Built-in's Dogfight launches, so the gate is Original's own.
-  `OriginalSeats.FlyEnabled` (`CSVM/src/UI/Menu/Original/OriginalSeats.cs:192`) requires four things
-  at once: a picked chapter, seat 0 locked onto an aircraft, at least
-  `PlayerSetupFeature.MinimumSeats(Versus)` seats, which is 2
-  (`CSVM/src/UI/Menu/PlayerSetupFeature.cs:148`), and every seat after the first confirmed.
-  It reproduces with a second controller connected and joined, so the gate is not a missing seat.
-  **The mechanism is `MenuSeatDevices.ClaimP1Pad` never being called from the Original
-  presentation.** Built-in calls it every frame it is off its plane screen
-  (`CSVM/src/UI/LaunchMenu.cs:1074`); Original calls it nowhere. `P1Pad` therefore stays −1 for the
-  whole session, `IsClaimed` answers false for the pad seat 0 is steering with, and `ScanJoins` lets
-  that same pad join as an extra seat, which `Sync` then removes from seat 0's poller
-  (`CSVM/src/UI/MenuSeatDevices.cs:55-125`, `:145`). The session logs show exactly this split, and
-  show it only under Original: every Built-in run tonight logs `P1 claimed pad 0` and no Original run
-  logs a claim at all; `.scratch/logs/menu-20260903-230250.godot.log` (Original, two pads) logs
-  `P2 joined on pad 1` and then `P3 joined on pad 0`, seat 0's own controller becoming a third seat,
-  and `menu-20260903-231339.godot.log` (Original, one pad) logs `P4 joined on pad 0` the same way.
-  So a player pressing START to add a second pilot does not get seat 0 plus a joiner: they get a
-  keyboard-only seat 0 and a pad seat holding the controller they were just steering with.
-  *Fix shape:* claim seat 0's pad in Original as Built-in does, before joining opens. Read the hint
-  line (`SortieHint`, `:295`) at the controls after the fix, since it names the first unmet
-  condition and is the cheapest confirmation that the gate now closes. *⚠ Traps:* **the pad theft
-  above is confirmed, but it does not by itself prove FLY unreachable**, since three seats over two
-  real pads can in principle all confirm; which seat never reached Confirmed is still open, and a
-  fix that claims the pad has to be re-flown rather than assumed.  **`--debug-join=` cannot reproduce or clear this item.** It seats
-  `MenuIdleSource` players that have no device to press Accept with, and `OriginalPresentation`'s
-  `DebugJoin` (`:564`) only `Select`s the last one, so the confirm condition is unsatisfiable under
-  the flag by construction; a dead FLY under `--debug-join=2` is the flag's own shape and says
-  nothing about this bug. Do not lower `MinimumSeats`; Dogfight is a versus mode and one seat is not
-  a match. Do not close this as working-as-intended on the strength of the hint line: it was read
-  past at the controls with the requirement already met.
-  *Playtest after fix:* `.\RunGame.ps1 --presentation=original --menu`, Dogfight, two real pads, the
-  second joining with START and pressing Accept twice, expecting FLY live once seat 0 has a chapter
-  and an aircraft; and with no second pad, expecting a legible reason rather than an inert plaque.
-  *Cross-refs:* `BL-704`, the same screen's selection layout; `PLAN-menu-presentations.md` E44 row 1.
+- `BL-703` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Original never says
+  who has joined, and its Instant Action lets nobody join at all.** *Evidence:* reported at the
+  controls over `PLAN-menu-presentations` E44's sortie and pad rows. Three findings on one seam.
+  (a) **Instant Action under Original takes no joiners.** `OriginalPresentation.JoiningOpen`
+  (`CSVM/src/UI/Menu/Original/OriginalPresentation.cs:453`) opens the per-pad join scan on Free
+  Flight, Dogfight and the campaign flight check alone, so the decoded Instant Action setup screen
+  never scans, and a pad pressing START there does nothing. Built-in opens joining on its Plane and
+  Campaign screens (`CSVM/src/UI/LaunchMenu.cs:1023`), and every mode including Instant Action
+  passes through the Plane screen, which is why the same pad joins there.
+  (b) **Original's campaign screens show no seat state.** Built-in carries one strip on every screen
+  (the breadcrumb, the join strip and the controls line, `CSVM/src/UI/LaunchMenu.cs:2753`, with
+  `JoinHint` at `:3289`) so a joined player and the keys that do something are always named.
+  Original's sortie screens have their own seat strip and join hint
+  (`CSVM/src/UI/Menu/Original/OriginalSeats.cs`), but the decoded campaign boards carry neither, so
+  a second player who has joined is invisible.
+  (c) **Seat 0's own pad can join as an extra seat.** `MenuSeatDevices.ClaimP1Pad` is called from
+  Built-in every frame it is off its plane screen (`CSVM/src/UI/LaunchMenu.cs:1074`) and from
+  Original nowhere, so `P1Pad` stays −1, `IsClaimed` answers false for the pad seat 0 is steering
+  with, and `ScanJoins` lets that pad join, which `Sync` then takes off seat 0's poller
+  (`CSVM/src/UI/MenuSeatDevices.cs:55-125`, `:145`). The logs show the split and show it only under
+  Original: every Built-in run logs `P1 claimed pad 0` and no Original run logs a claim;
+  `.scratch/logs/menu-20260903-230250.godot.log` (Original, two pads) logs `P2 joined on pad 1` and
+  then `P3 joined on pad 0`, and `menu-20260903-231339.godot.log` (Original, one pad) logs
+  `P4 joined on pad 0`. So pressing START to add a second pilot hands away the controller seat 0 was
+  steering with.
+  *Fix shape:* open joining on Original's Instant Action screen; claim seat 0's pad as Built-in
+  does, before joining opens; and give Original a seat and controls indication on the campaign
+  screens, either always or behind an option, since the decoded boards have no room the original
+  authored for one and painting over them is a fidelity cost the user should choose.
+  *⚠ Traps:* **the Dogfight FLY gate is not a bug and must not be re-filed as one.** A later seat
+  reaches Confirmed on its *second* Accept, one press to select and one to confirm
+  (`OriginalSeats.StepSeat`, `:129`), and FLY going live only then is the design; a first report of
+  "FLY never activates" was a missed second press. **`--debug-join=` cannot reproduce or clear any
+  of this.** It seats `MenuIdleSource` players with no device to press Accept with, and
+  `OriginalPresentation.DebugJoin` (`:564`) only `Select`s the last one, so nothing joined that way
+  can ever confirm. Do not lower `MinimumSeats`; Dogfight is a versus mode and one seat is not a
+  match. *Playtest after fix:* `.\RunGame.ps1 --presentation=original --menu` with two pads, one
+  joining with START on the Instant Action screen and on a campaign flight check, expecting the join
+  to take in both and to be visible on the screen it happened on. *Cross-refs:* `BL-704`, the same
+  presentation's aircraft column; `PLAN-menu-presentations.md` E44 rows 1 and 6.
 
 - `BL-704` `[Feature]` `[L]` `[Next: decide]` `[Impact: high]` `[Evidence: feel]` **Original's sortie
   screen puts every player's aircraft pick in one shared list, and it does not work with more than
@@ -2462,10 +2464,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* a design pass first, since this is a screen the original never drew (Dogfight is the
   remake's own mode and nothing here is decoded), so there is no reference to match and the decision
   is ours. Take the campaign plane-selection screen's shape as the starting point rather than
-  widening the shared list. *⚠ Traps:* the fix must not assume a pad per seat; whatever replaces the
-  shared list is also the route by which a seat reaches Confirmed, which is what `BL-703` is gated
-  on, so land the two together or land `BL-703` first and keep its gate intact. Nothing on this
-  screen is decoded, so do not go looking for an original layout to copy.
+  widening the shared list. *⚠ Traps:* the fix must not assume a pad per seat, and whatever replaces the
+  shared list is also the route by which a seat reaches Confirmed, so keep the two-press select-then
+  -confirm walk that FLY's gate reads. Nothing on this screen is decoded, so do not go looking for
+  an original layout to copy.
   *Cross-refs:* `BL-703`; `PLAN-menu-presentations.md` E44 row 1.
 
 ## Splitscreen
