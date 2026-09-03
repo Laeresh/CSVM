@@ -2470,6 +2470,87 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   an original layout to copy.
   *Cross-refs:* `BL-703`; `PLAN-menu-presentations.md` E44 row 1.
 
+- `BL-705` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The scrapbook's Best to
+  Date and Most Recent tabs cannot be clicked, because Original hit-tests only the page's scraps.**
+  *Evidence:* reported at the controls over `PLAN-menu-presentations` E44's pointer sweep. The tabs
+  are real rows (`RowKind.BestTab`/`MostTab`, `CSVM/src/UI/CampaignScrapbookPage.cs:64-65`) and the
+  keyboard reaches them, but `OriginalCampaign`'s hit-box switch answers for the scrapbook only
+  through `book.ScrapOf(row)` (`CSVM/src/UI/Menu/Original/OriginalCampaign.cs:567`), so any row that
+  is not a scrap gets no rectangle and the pointer passes over it.
+  *Fix shape:* give the scrapbook's non-scrap rows a box, the tabs first. The tab's drawn rectangle
+  is already known to the page, which centres the unselected tab's label in `TabWidth`
+  (`CampaignScrapbookPage.cs:34`). *⚠ Traps:* the same switch is what leaves every other non-scrap
+  row on that page unreachable, so fix the class of row rather than special-casing the two tabs.
+  *Cross-refs:* `BL-707`, the same page's scrolling.
+
+- `BL-706` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The PLANE NAME dialog
+  sits off-centre.** *Evidence:* reported at the controls over E44's pointer sweep, "Plane
+  Construction: The PLANE NAME Dialog should be centered". The screen draws its panes at the decoded
+  `PlaneName` section's authored positions (`ComposePlaneName`,
+  `CSVM/src/UI/Menu/Original/OriginalHangar.cs:1164`), so the placement is data rather than a
+  constant of ours. *Fix shape:* compare the drawn pane against the original's own PLANE NAME screen
+  before moving anything. *⚠ Traps:* **the authored coordinates are decoded, so an off-centre dialog
+  more likely means the board fit places a sub-screen pane wrong than that the data is wrong.**
+  Centring it by hand would hide that, and would be a departure from the layout on a screen every
+  other element of which is placed by it. *Cross-refs:* `PLAN-menu-presentations.md` E44 row 7.
+
+- `BL-707` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Nothing in Original
+  scrolls with the mouse wheel, and no scrollbar can be dragged; the arrows are the only way down a
+  list.** *Evidence:* reported at the controls over E44's pointer sweep against the scrapbook, the
+  decals in Plane Construction, and the aircraft column on Free Flight and Dogfight. No menu code
+  reads a wheel at all: `MouseButton.WheelUp`/`WheelDown` appear only in `Flight/SpectatorCamera.cs`
+  and `UI/OrbitCamera.cs`, nowhere under `UI/Menu/`. The thumb is drawn but is not a control: the
+  previous-missions page draws "the scrollbar's two arrows and its thumb"
+  (`CSVM/src/UI/CampaignPreviousMissionsPage.cs:376`) and hands out boxes for mission rows alone
+  (`RowBox`, `:448`, null for a button row). *Fix shape:* the pointer already carries what a drag
+  needs, a position with a held and a just-clicked flag (`PointerSeat.Poll`,
+  `CSVM/src/UI/Menu/Original/PointerSeat.cs`), so a thumb box plus a held-pointer delta is the whole
+  mechanism; the wheel is a separate frame field that no seat currently produces.
+  *⚠ Traps:* the wheel is a comfort the original never had, so it is an addition on top of the
+  decoded screens rather than a fidelity fix, and it must not change what the arrows do. Land it for
+  every list at once; a wheel that works on one screen and not the next reads as broken.
+  *Cross-refs:* `BL-705`.
+
+- `BL-708` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Original's Instant
+  Action screen draws Weapon Loadout and Build Custom Plane disabled, so neither can be opened.**
+  *Evidence:* reported at the controls over E44's pointer sweep. Both are deliberate placeholders
+  rather than a pointer failure: `AddStrip(..., BuildKey, ..., enabled: false, ...)`
+  (`CSVM/src/UI/Menu/Original/OriginalInstantAction.cs:260`) and the same for `WeaponLoadoutKey`
+  (`:294`), which the file's own summary states as "Build and Weapon Loadout disabled" (`:21`).
+  Built-in offers both, so the features they need exist and only the wiring is missing.
+  *Fix shape:* point the two buttons at the shared features Built-in already drives, the loadout
+  list for the seat the radio pair names (`LoadoutTarget`, `:114`) and the Build Custom Plane flow.
+  The user's own reading is that Build should be the top level's Build Plane door reached from here,
+  and asks whether the door belongs on this screen at all rather than only above it, which is a
+  decision to take before wiring. *⚠ Traps:* the radio pair decides whose loadout the button edits,
+  so the wiring is per seat and not per screen. *Cross-refs:* `BL-709`, the same screen's plane list.
+
+- `BL-709` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Instant Action's Pilot
+  Plane list offers the eleven stock airframes only, so a custom plane cannot be flown from it.**
+  *Evidence:* reported at the controls over E44's pointer sweep, "Instant Action: 'Pilot Plane'
+  selection does not let me select the exported planes". The dropdown is built over
+  `InstantActionFeature.Airframes` directly
+  (`CSVM/src/UI/Menu/Original/OriginalInstantAction.cs:356`, and the wingman list at `:360`), the
+  decoded stock table with nothing appended. The sortie screens do it the other way: `OriginalRosters
+  .Roster(customs)` appends the saved builds through `PlayerSetupFeature.BuildRoster`
+  (`CSVM/src/UI/Menu/Original/OriginalRosters.cs`), which is why the same planes appear on Free
+  Flight and not here. *Fix shape:* feed both dropdowns the same roster the sortie screens read.
+  *⚠ Traps:* a custom flies its airframe's stock node, so the list's node resolution has to go
+  through the roster rule rather than the name. Decide whether the wingman list takes customs too;
+  the two dropdowns are built by one call site and would otherwise drift.
+  *Cross-refs:* `BL-708`.
+
+- `BL-710` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Quitting flashes Godot's
+  default sky before the window closes.** *Evidence:* reported at the controls over E44's pointer
+  sweep, "Exiting the game shortly shows the godot skybox before closing the window". *Fix shape:*
+  `GetTree().Quit()` ends the frame rather than the process, so anything freed on the way out leaves
+  the engine's own environment drawing for the frames that remain; paint over the exit, or free
+  nothing until the window is gone. *⚠ Traps:* confirm which teardown uncovers it before reordering
+  anything, since `Quit()` is called from a dozen places
+  (`CSVM/src/Session/Launcher.cs`, `CSVM/src/Session/GameSession.cs`) and most of them are probes
+  that never draw. A fix that hides the flash by delaying the quit would slow every headless probe
+  and every suite that ends in one.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
