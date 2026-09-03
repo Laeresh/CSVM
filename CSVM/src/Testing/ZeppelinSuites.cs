@@ -485,6 +485,8 @@ internal static class ZeppelinSuites
                 nets, ctx.PlaneName, (d, p, l, pi) => SpawnPlane(d, p, l, pi),
                 (name, _) => { animPlays.Add(name); return 1; }, (_, _) => { });
             ctx.Same(1, gens.LiveCount, $"the generator is live (host + IAZep net resolve)");
+            ctx.Same(1, gens.GrantWaveCapacity("multiplayer1zep", 99),
+                $"credited, so the budget never enters the timing below");
 
             // Held below the gate: the unplaced host sits at y −20/0. Ten seconds of sim spawn
             // nothing and never open the door (the blocked branch only ever CLOSES it).
@@ -531,8 +533,8 @@ internal static class ZeppelinSuites
             ctx.Check(spawnPositions.Count == 2 && spawnPositions[1].DistanceTo(firstPos) > 5f,
                 $"…again at the live drop point, which has flown on dist={spawnPositions[1].DistanceTo(firstPos):0.#} m");
 
-            // max_active: a capacity-untouched clone capped at 1 live spawn blocks after its
-            // first drop (wave_size − spawned + active > max_active) for as long as it lives.
+            // max_active: a well-credited clone capped at 1 live spawn blocks after its first
+            // drop (wave_size − spawned + active > max_active) for as long as it lives.
             var cappedDef = new EnemyGeneratorDef
             {
                 Node = def.Node,
@@ -558,6 +560,7 @@ internal static class ZeppelinSuites
                 (name, scope) => name.Equals("multiplayer1zep", System.StringComparison.OrdinalIgnoreCase)
                     ? resolvedHost2 : null,
                 nets, ctx.PlaneName, (d, p, l, pi) => SpawnPlane(d, p, l, pi), (name, _) => 1, (_, _) => { });
+            capped.GrantWaveCapacity("multiplayer1zep", 99);
             for (int i = 0; i < 60 * 30; i++)
                 capped.SimStep(dt);
             ctx.Same(1, spawned.Count - before,

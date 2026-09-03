@@ -114,12 +114,12 @@ internal static class WorldFidelitySuites
                     launchedAt = pos;
                     return default(LaunchedVehicle);
                 });
-            ctx.Same(0, generators.RequireWakeupCredits("cargozep1"),
-                $"an unrelated mission host does not gate the submarine generator");
-            ctx.Same(1, generators.RequireWakeupCredits("barracuda"),
-                $"the campaign generator waits for WAKEUP_GENERATOR credit");
             generators.SimStep(10f);
-            ctx.Check(launchedDef == null, $"the submarine launches nothing before the patrol phase");
+            ctx.Check(launchedDef == null, $"the uncredited submarine launches nothing before WAKEUP_GENERATOR");
+            ctx.Same(0, generators.GrantWaveCapacity("cargozep1", 4),
+                $"an unrelated mission host credits nothing here");
+            generators.SimStep(0.01f);
+            ctx.Check(launchedDef == null, $"…and that credit releases nothing");
             // The decoded launch point: the first node of the submarine's own take-off path,
             // lifted 0.2 m, and riding the live hull because moving_path keeps it host-relative.
             var runway = First(world.Runtime.FindNodes(
@@ -487,6 +487,13 @@ internal static class WorldFidelitySuites
                 (name, host) => runtime.PlayWithin(host, name, applyReset: false).Count,
                 (name, host) => runtime.StopWithin(host, name));
             ctx.Check(generators.LiveCount > 0, $"{DoorChapter}/{DoorMission} authors live generators");
+            // The script's WAKEUP_GENERATOR for this hangar sits deep in the objective chain;
+            // granted here in its place, since the door lead and not the credit is under test.
+            if (defs.Count > 0)
+            {
+                ctx.Same(1, generators.GrantWaveCapacity(defs[0].Node, defs[0].WaveSize),
+                    $"'{defs[0].Node}' takes one wave of credit in place of its WAKEUP_GENERATOR");
+            }
 
             director.Attach(new CampaignDirector.WorldInputs
             {
@@ -841,8 +848,9 @@ internal static class WorldFidelitySuites
                     });
                 ctx.Same(1, generators.LiveCount, $"'{RunGenerator}' is live with its take-off path");
 
-                // The uncredited cycle launches on its own period, stepped at the sim rate so the
-                // launch frame is an ordinary one.
+                // Credited as the mission's WAKEUP_GENERATOR would, the cycle launches on its own
+                // period, stepped at the sim rate so the launch frame is an ordinary one.
+                generators.GrantWaveCapacity(def.Node, def.WaveSize);
                 const float dt = 1f / 60f;
                 for (int i = 0; launched == null && i * dt < def.IndPeriod + def.WavePeriod + 1f; i++)
                 {

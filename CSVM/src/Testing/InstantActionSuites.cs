@@ -444,8 +444,8 @@ internal static class InstantActionSuites
             ctx.Same(1, gens.UseInstantActionLaunches("multiplayer1zep", Release),
                 $"the objective zeppelin's generator takes the Instant Action launch arm");
 
-            // Uncredited: the decoded capacity rule is in force (the capacity-0 stand-in is OFF
-            // on this arm), so a full minute of sim above the altitude gate launches nothing.
+            // Uncredited: the decoded capacity rule holds every cycle from load, so a full minute
+            // of sim above the altitude gate launches nothing.
             const float dt = 1f / 60f;
             var hostVelocity = new Vector3(14f, 3f, -8f);
             void StepGenerators()

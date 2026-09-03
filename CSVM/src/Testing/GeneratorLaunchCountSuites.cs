@@ -227,7 +227,6 @@ internal static class GeneratorLaunchCountSuites
             report.AppendLine($"host: '{Generator}' gamez pose y={host.GlobalPosition.Y:0}, record pose y={record.Position.Y:0}, launch gate {def.MinAltitude?.ToString("0") ?? "-"} m");
             host.GlobalPosition = record.Position;
 
-            runtime.RequireWakeupCredits(Generator);
             ctx.Same(1, runtime.GrantWaveCapacity(Generator, 1), $"the script's WAKEUP_GENERATOR credit is granted");
             float waited = 0f;
             while (waited < SpawnWaitS && !director.Roster.ContainsKey(Launch))

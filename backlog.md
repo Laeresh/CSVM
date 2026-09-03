@@ -1500,56 +1500,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   question from which half of the reset dominates, which is `BL-535`'s. *Cross-refs:* `BL-535`
   (the measurement this came out of), `PoseChannel.ApplyOpacity`, the `effect-pool-reset` suite.
 
-- `BL-657` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The remake treats an authored `capacity 0` as unlimited, so every shipped
-  generator launches on its own cycle; the original starts every generator at zero credit and
-  launches only what a script, a film or a wave credits.** *Evidence:* decoded; the sortie that
-  raised it is `git log --grep=BL-641`. The loader `FUN_00452850` reads the authored `capacity`
-  only when the global `DAT_0071bb34` is non-zero, and that global is statically zero with no writer
-  in the executable (its other readers are the turret file loaders, which return nothing for the
-  same reason), so `+0x7c` is written 0 for all 23 generators and `capacityRemaining` (`+0x80`)
-  starts at 0. The cycle `FUN_00452640` blocks while
-  `wave_size - spawnedThisWave > capacityRemaining`, so an uncredited generator never launches.
-  Exactly four sites add credit: the objective apply `FUN_00469af0` (`WAKEUP_GENERATOR name n`),
-  the Instant Action wave director `FUN_0045b9d0` (one wave's member count), the console command
-  `kick <generator>` in `FUN_0043d640` (+1), and cutscene callback 800 in the mission-script host
-  `FUN_0047e080`, which looks `cargozep1` up by name and adds 5. That callback is authored once in
-  the shipped data, as the first event of CM18's `cg_beauty_shot`, the hangar-view camera the
-  docking film `cg_hookup_player` calls after the hook-up. So the five Furies of the briefing's
-  "Dock and free the crews" (`MSG_BRF_RMM3_OBJ4`) leave the moored hull's opened hangar doors one
-  every 4 s (`ind_period 3 + wave_period 1`) while the beauty shot plays, and nothing launches
-  before it. The mission opens with the player and the Black Swan (`bswingman_1`, the roster's only
-  enabled ally); `bsfury_1` is the disabled `Cargo_params` template the launches are built from,
-  net 13 (`M3Allies`), team 1. Which the report at the controls already said: "they should spawn
-  with capturing the cargozep and start from it. not sitting on where they could be attacked".
-  *What CSVM does instead:* `GeneratorCycle` switches the check off at authored `capacity <= 0`
-  unless `UseWaveCredits` armed it, so `cargozep1` launches ten Furies from mission start, one
-  every 4 s, all inside the opening cutscene and all at the generator's `cargobay` origin
-  `(-3840,558,-2543)`, about 81 m under the moored hull at `(-3840,639,-2624)` (the "spawned mostly
-  underground" report; `AiGeneratorRuntime` takes `gen.Origin.GlobalPosition` with no clearance
-  term, and the placement is a symptom of the free-run rather than a separate defect); and
-  `CutsceneController.Host` declines code 800, so the film credits nothing. The authored
-  `min_altitude` 250 is absolute world Y and is matched correctly; do not re-read it as height
-  above terrain. CM18 also pays the spawn cost ten times today, not the two `PLAN-M5-polish-8`'s
-  `B14` attributes the stalls to (`ai_spawn` hitches of 68.90, 68.41, 70.05 and 69.13 ms among
-  ten). *Fix:* start every generator's budget at zero and run the decoded rule whatever the
-  authored field says; host callback 800 as a +5 credit on the generator named `cargozep1` (the
-  original hardcodes the name, keep that); leave `WAKEUP_GENERATOR` and the wave top-up as they
-  are. *⚠ Traps:* this moves the opposition in every mission carrying an uncredited generator at
-  once, and that is the original's behaviour, not a regression: a generator no script credits is
-  decorative there too. Codes 801 to 803 in the same host are not credits: they reactivate the
-  first still-deactivated `bhatwarhawk_1..6`, `bhatbrigand_n` and `bhatgyro_1..3`, and are
-  authored once each in C4's `bhm_warhawks` definitions. `AiGeneratorRuntime` never frees a launched aircraft's `active` slot on death today;
-  five credits fit under `max_active 10`, so it does not block this item, but check it before
-  crediting more. The per-spawn cost is `BL-641`'s subject. *Playtest after fix:* CM18: (a) the
-  mission opens with only the Black Swan on the wing and nothing leaves the cargozep before the
-  hook-up; (b) during the beauty shot, Furies drop from the hull's opened hangar doors, five in
-  all, about 4 s apart, and fly off on `M3Allies`; (c) they come out of the doors of the moored
-  hull and not from under it. *Cross-refs:* `BL-641` (the per-spawn cost), `BL-523` (the AI mode
-  machine, which decides what the spawned aircraft then do),
-  [`docs/formats/mission-entities/enemy-generators.md`](formats/mission-entities/enemy-generators.md)
-  ("Capacity rule and limit"),
-  [`docs/formats/anim-definitions/cutscenes.md`](formats/anim-definitions/cutscenes.md) (code 800).
-
 - `BL-652` `[Research]` `[M]` `[Next: decode]` `[Impact: none]` `[Evidence: data]` **Why an authored fork's sensor nodes start inactive is not traced to a
   rule, so a fork placed away from the world origin may start open.** *Evidence:* found while
   verifying the node-active `ACTIVATION_PREREQUISITE` gate over C1C/M01 (`git log --grep=BL-525`).

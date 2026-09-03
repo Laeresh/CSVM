@@ -260,10 +260,14 @@ and is handed to the flight model at the final leg's 300 m point, climbing; a hu
 points and joins its
 net where they end (`Session/SurfaceVehicle.cs`).
 
-⚠ **CSVM does not run the capacity rule the original does (`BL-657`).** `Session/GeneratorCycle.cs`
-switches the check off at authored `capacity <= 0` unless the Instant Action path armed it, so an
-uncredited campaign generator free-runs from load, and C4/M03's launches its ten Furies inside the
-opening cutscene. Generators named by `WAKEUP_GENERATOR` receive its top-ups (`vehicle.params`
-resolving the disabled AIV template for each fresh spawn), the `zeppelin_run` path enables the rule
-from zero and grants one wave's capacity at each wave change, and the cutscene host declines code
-800.
+**CSVM runs the credit rule as decoded.** `Session/GeneratorCycle.cs` never reads the authored
+`capacity`: every cycle starts at zero remaining and blocks while the wave's remainder exceeds it,
+so an uncredited generator holds its timer and keeps its doors shut for the whole mission.
+`AiGeneratorRuntime.GrantWaveCapacity(host, n)` is the one credit, fed by the objective apply
+(`WAKEUP_GENERATOR`, with `vehicle.params` resolving the disabled AIV template for each fresh
+spawn), by the `zeppelin_run` director's one wave's member count at each wave change, and by
+cutscene callback 800, which the runtime answers from its place in the `CALLBACK` host chain as
+five launches on the generator named `cargozep1`, the original's literal. `--wake-generators`
+grants a script's whole `WAKEUP_GENERATOR` credit at build, the logged headless stand-in for
+playing up to the objective. Codes 801 to 803 stay declined. Pinned by the
+`generator-callback-credit` suite over C4/M03 and `GeneratorCycleTests`.
