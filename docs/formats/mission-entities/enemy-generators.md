@@ -12,7 +12,7 @@ has ground airfields `eairg31`/`eairg32`, a ship `eshipg31`, and a submarine `ba
 |---|---|---|
 | `node` | 23/23 | the host world node |
 | `vehicle` | 23/23 | nested: `params` (a designer label in the `aiv.json` HEADER's `(slotId, label)` pairs, e.g. `Eairg31_params`; authored on 15 of 23, see the typo note below), `nets` (one or more AI net names), `choose_nets` (`cyclic` throughout) |
-| `capacity` | 23/23 | `0` throughout — a lifetime spawn budget, decremented per launch. ⚠ **`0` does not obviously mean "unbounded"** — see [the capacity puzzle](#capacity-rule-and-limit) |
+| `capacity` | 23/23 | `0` throughout, and **dead data**: the loader reads it only behind a global that is statically zero, so every generator starts with a zero launch budget whatever is authored and launches only what a script, a film or a wave credits. See [Capacity rule and limit](#capacity-rule-and-limit) |
 | `max_active` | 23/23 | concurrent live spawns (1/4/5/6/10) |
 | `wave_size` | 23/23 | planes per wave (1, once 3) |
 | `wave_period` | 23/23 | seconds between waves (1–20) |
@@ -218,25 +218,38 @@ reusable while each launched aircraft carries a distinct identity.
 
 ## Capacity rule and limit
 
-`capacity` is `0` on all 23 generators. The decoded blocking rule is:
+`capacity` is `0` on all 23 generators, and the engine never reads it. The loader
+(`FUN_00452850`) takes the authored value only when the global `DAT_0071bb34` is non-zero; that
+global is statically zero and has no writer in the executable (its other readers are the turret
+file loaders `FUN_004ac170`/`FUN_004ac480`, which return nothing for the same reason, and
+`FUN_00453330`). Otherwise it writes `+0x7c` as 0, and `capacityRemaining` (`+0x80`) is copied
+from it. Every generator therefore starts with a zero launch budget, and the cycle's rule
 
 ```
 (wave_size - spawnedThisWave) > capacityRemaining     ->  blocked
 ```
 
-Taken literally, that rule blocks every shipped generator on its first tick: `wave_size` is at
-least 1 while `capacityRemaining` begins at 0. The data therefore does **not** establish that
-`0` means unlimited. Do not implement that interpretation from this field alone.
+holds it until something adds credit. **A generator nothing credits never launches.** Four sites
+add credit, and they are the whole list:
 
-For an Instant Action `zeppelin_run`, the wave sequencer credits the objective zeppelin's named
-generator with the member count of each newly-current wave. The generator uses the decoded budget
-rule in this mode: nothing launches before the first credit, and one wave's worth may launch after
-it. This accounts for `capacity 0` plus live capacity credits in this mission type.
+| Site | What it adds |
+|---|---|
+| `FUN_00469af0`, the objective wake-up apply | `WAKEUP_GENERATOR name n` adds `n` (default 1) to the named generator ([objectives.md](../objectives.md)) |
+| `FUN_0045b9d0`, the Instant Action wave director | each newly-current wave's member count, to the objective zeppelin's generator ([instant-action.md](../instant-action.md)) |
+| `FUN_0047e080`, the mission-script host | cutscene `CALLBACK 800` adds 5 to the generator named `cargozep1`, the name hardcoded; authored once in the shipped data, as the first event of C4/M03's `cg_beauty_shot` ([cutscenes.md](../anim-definitions/cutscenes.md)) |
+| `FUN_0043d640`, the console | `kick <generator>` adds 1 |
 
-Campaign objective scripts supply the same kind of live top-up through `WAKEUP_GENERATOR node n`.
-C3/M03 is the direct case: the patrol phase completes before the script credits `barracuda` by 4;
+C3/M03 is the script case: the patrol phase completes before the script credits `barracuda` by 4;
 its `vehicle.params BarracudaPlanes` then selects the authored-disabled `britpeace_5` AIV block,
 so launches are Peacemakers configured from that template and appear at the submarine's live pose.
+C4/M03 is the film case: the mission authors no `WAKEUP_GENERATOR`, so its `cargozep1` generator
+(`Cargo_params`, the disabled `bsfury_1` block on net `M3Allies`; `max_active 10`, `ind_period 3`,
+`wave_period 1`) sits idle from load until the docking film `cg_hookup_player` calls the
+hangar-view `cg_beauty_shot`, whose first event is code 800. It then launches its five credited
+Furies one every 4 s through the opened hangar doors: the freed crews of the briefing's "Dock and
+free the crews". Before that the mission's only allied aircraft is the Black Swan's own
+(`bswingman_1`). Instant Action's `zeppelin_run` credits per wave the same way: nothing launches
+before the first credit, and one wave's worth may launch after it.
 
 ## CSVM handling
 
@@ -247,12 +260,10 @@ and is handed to the flight model at the final leg's 300 m point, climbing; a hu
 points and joins its
 net where they end (`Session/SurfaceVehicle.cs`).
 
-CSVM applies the decoded capacity check when `capacity > 0`. Campaign generators named by a
-mission's `WAKEUP_GENERATOR` additionally start on the zero-credit budget and receive its top-ups;
-their `vehicle.params` label resolves the disabled AIV template used for each fresh spawn. A positive
-standalone value initializes `capacityRemaining`, decrements per spawn, and blocks when
-`wave_size - spawnedThisWave > capacityRemaining`.
-
-The Instant Action `zeppelin_run` path also enables the decoded rule from zero and grants the
-objective generator one wave's capacity at each wave change. That is the current evidence-backed
-release path for its already-built wave members.
+⚠ **CSVM does not run the capacity rule the original does (`BL-657`).** `Session/GeneratorCycle.cs`
+switches the check off at authored `capacity <= 0` unless the Instant Action path armed it, so an
+uncredited campaign generator free-runs from load, and C4/M03's launches its ten Furies inside the
+opening cutscene. Generators named by `WAKEUP_GENERATOR` receive its top-ups (`vehicle.params`
+resolving the disabled AIV template for each fresh spawn), the `zeppelin_run` path enables the rule
+from zero and grants one wave's capacity at each wave change, and the cutscene host declines code
+800.

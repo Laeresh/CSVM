@@ -793,25 +793,21 @@ is a judgement on our own remake.
 
 - `PT-102` `[Own]` **A generator launch no longer hitches, and an early kill still leaves a wreck**
   (`BL-641`, partial). The crash rig is built on the frames after the launch instead of on it,
-  which halves the launch frame but does not reach the threshold. Fly the first minute, where
-  `cargozep1` launches one aircraft every four seconds.
-  ⚠ **They are allied Black Swan Furies, not enemies.** The row and `BL-641` both described enemy
-  Black Swans, which is why the sortie read as a mission mix-up at the controls. The generator's
-  own record is `node cargozep1`, `params Cargo_params`, `nets M3Allies`, and the session log reads
-  `egen: 'cargozep1' spawn #1: 'bsfury_eg0' dropped ... patrolling net 'M3Allies'`. Nothing hostile
-  comes out of it, so do not look for something to shoot.
+  which halves the launch frame but does not reach the threshold.
+  ⚠ **What the mission authors, and what the build does.** The sortie opens with the player and
+  the Black Swan (`bswingman_1`) and no other ally; `cargozep1` launches five allied Furies on
+  `M3Allies` only after the docking film credits it (callback 800 in `cg_beauty_shot`, decoded on
+  `BL-657`). Today's build launches ten of them at the `cargobay` origin inside the opening
+  cutscene instead, which is `BL-657`'s bug. This row rides that free-run for now, since the
+  per-launch cost is the same wherever the launch happens: fly the first minute, where one aircraft
+  launches every four seconds, and do not look for something to shoot. The post-docking sortie is
+  `BL-657`'s *Playtest after fix:* line and is not flyable until it lands.
   *Look for:*
   - (a) the launches felt at the controls: a lighter hitch than before, and whether what remains is
     still noticeable at the stick;
-  - (b) a launched Fury appearing and flying away on its net exactly as before;
-  - (c) one shot down within its first quarter-second still showing its wreck and crash effects,
-    which is the forcing guard no suite watches at the controls — use the debug kill rather than
-    firing on a friendly;
-  - (d) where the Furies come out. They currently appear at the `cargobay` origin, about 81 m under
-    the moored hull and inside the opening cutscene, which is what "mostly underground" and "they are
-    not available to shoot down" describe (`BL-657`). Say whether the original launches them from the
-    flying zeppelin with its hangar doors opening, since that is the reading the fix would be built
-    against.
+  - (b) one shot down within its first quarter-second still showing its wreck and crash effects,
+    which is the forcing guard no suite watches at the controls. Use the debug kill rather than
+    firing on a friendly.
   *Blocks:* nothing; `BL-641` stays partial with its remaining path recorded in the plan. A missing
   wreck on an early kill mints a new `BL`.
 

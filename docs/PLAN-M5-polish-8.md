@@ -693,11 +693,11 @@ compared against their own printed thresholds; `HitchMonitor` quiet on the launc
 frame under `--det`, so it is not workstation noise (`docs/verification.md` PERF-12/13). The 4P
 threshold reads about 75 ms rather than 46 ms because the relative term rides a slower rolling
 median: compare frames against their own printed threshold. Do not re-derive the shader-compile
-term; it is gone, and PERF-22 records it. How OFTEN CM18 pays this is a separate open question
-(`GeneratorCycle` switches the capacity check off at authored `capacity <= 0` unless a
-`WAKEUP_GENERATOR` has armed it, CM18 authors none, so `cargozep1` launches every 4 s up to
-`max_active` 10 unasked; `docs/formats/mission-entities/enemy-generators.md` "Capacity rule and
-limit" says the data does not establish that reading). It stays out of this slot. Cross-refs:
+term; it is gone, and PERF-22 records it. How OFTEN CM18 pays this is `BL-657`'s question
+(`GeneratorCycle` switches the capacity check off at authored `capacity <= 0`, so `cargozep1`
+launches ten unasked from load; the original starts it at zero credit and the docking film's
+callback 800 credits five, `docs/formats/mission-entities/enemy-generators.md` "Capacity rule and
+limit"). It stays out of this slot. Cross-refs:
 `BL-434` (the per-viewport splitscreen cost the same measurement pass profiled).
 
 **Verified.** Full battery on the merged plan tree: build clean, units 2791 passed, engine 207 passed and 0 failed across 4 shards with engine errors clean, goldens 18 shots hash-identical (165 s total). Landed the crash-rig half and stopped there, because the
@@ -1119,9 +1119,10 @@ for something no shipped `ai.zrd` pattern gives the original either, its "turret
 is a no-`TEAM` `bbtur` behaving correctly, and `PT-101`(a)/(b) is unflyable because C2 carries no
 turret node at all. What those three did surface is real and is now `BL-687`: a `mode ship` hull
 gets no AI object, so it cannot fire the gun its def authors. `PT-104` failed on direction and is
-fixed. **Still owed: `PT-102`**, flown against a description that was wrong — `cargozep1` launches
-allied Furies on `M3Allies`, not enemy Black Swans — so `B14`'s acceptance needs the corrected row
-re-flown.
+fixed. **Still owed: `PT-102`**, flown against a description that was wrong twice over — `cargozep1`
+launches allied Furies on `M3Allies`, not enemy Black Swans, and the original launches five of them
+only after the docking film credits the generator (`BL-657`), where the build launches ten from
+load — so `B14`'s acceptance needs the corrected row re-flown.
 
 **⚠ Traps.** A live symptom is evidence about the build that was running: confirm which build and
 worktree flew before minting anything. The sim clock can lag wall time on physics-bound late-C2
