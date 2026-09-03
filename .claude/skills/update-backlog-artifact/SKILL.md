@@ -40,18 +40,24 @@ list; if a theme is renamed or a new one is added, the parse should pick it up a
 
 Within each theme, find every top-level bullet matching:
 
-    - `BL-NNN` `[Type]` [`[Status]`] **Title…** body…
+    - `BL-NNN` `[Type]` [`[Status]`] [`[S|M|L]`] [`[Next: …]`] [`[Impact: …]`] [`[Evidence: …]`] [`[Scope]`] **Title…** body…
 
 For each bullet, extract:
 
 - **id** — the `BL-NNN` token, verbatim.
-- **type** — the bracketed word right after the id: `Bug`, `Feature`, `Research`, `Tuning`, or
-  `Cleanup`.
-- **status** — the *next* bracketed tag if one immediately follows the type tag, else `null`.
-  Keep it verbatim, including the reason (`Owed-playtest`, or `Blocked: CAP-27` /
-  `Blocked: M4` / etc. — whatever text is inside the brackets). Don't shorten `Blocked: X` to
-  `Blocked`; the template already treats anything starting with `Blocked` as one status class and
-  displays the tag text as-is.
+- **type** — the bracketed word right after the id, one of the type vocabulary `backlog.md`'s
+  header lists (`Bug`, `Feature`, `Research`, `Tuning`, `Cleanup`, `Fidelity`, `Perf`, `Tooling`,
+  `Testing`).
+- **status** — a `Owed-playtest`, `Blocked: …` or `Divergence` tag among the tags after the type,
+  else `null`. Keep it verbatim, including the reason (`Blocked: CAP-27` / `Blocked: M4` / etc.
+  — whatever text is inside the brackets). Don't shorten `Blocked: X` to `Blocked`; the template
+  already treats anything starting with `Blocked` as one status class and displays the tag text
+  as-is.
+- **size**, **next**, **impact**, **evidence**, **scope** — the property tags the header
+  documents, each `null` when the item does not carry it. They are recognised by shape, not by
+  position: `[S]`/`[M]`/`[L]` is size, `[Next: x]`/`[Impact: x]`/`[Evidence: x]` carry their name,
+  and a bare mission or scene token (`[CM14]`, `[C5]`) is scope. A value outside the vocabulary
+  `build.py` and `CheckItemIds.ps1` share is a build failure, with the item named.
 - **title** — everything between the first `**` after the tags (skipping an optional `{SCOPE}`
   marker, as on `BL-037`/`BL-038`) and its matching closing `**`,
   even when the bold text wraps across multiple source lines. Collapse any internal newlines/runs
@@ -69,9 +75,12 @@ bullet or `## ` heading to prevent exactly that.
 
 ## 3. Serialization and injection
 
-Rows are serialized as a JSON array of 5-element arrays: `[theme, id, type, status, title]`,
-`status` being JSON `null` when absent, with real JSON string escaping — never hand-spliced into a
-JS literal, since titles routinely contain quotes, backticks, and em dashes.
+Rows are serialized as a JSON array of objects
+`{theme, id, type, status, size, next, impact, evidence, scope, title}`, every optional field
+JSON `null` when absent, with real JSON string escaping — never hand-spliced into a JS literal,
+since titles routinely contain quotes, backticks, and em dashes. The template builds its filter
+chips from the values present in `DATA`, so a new vocabulary value needs no template change; a
+property no item carries hides its filter group.
 
 That JSON replaces `__BACKLOG_DATA__` in `.claude/skills/update-backlog-artifact/template.html`,
 whose data line is:
