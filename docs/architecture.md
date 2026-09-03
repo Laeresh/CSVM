@@ -7162,7 +7162,8 @@ time-bounded), the `DAMAGE_SEQUENCE` stage pair `sputter_black_smoke_obj`/`sputt
 + `yellow_spark_01`, played by `FlightController.GrazeReaction` off `EffectCatalogue
 .TouchdownDefTable`'s surface-indexed vector, which `WorldEffectAnimNames` appends to the bind).
 This module still does the staging: `Subset` handles 8/30 destruction targets; 22 live-object
-choreography names remain local (`analysis/death-effect-closure/`), and the stage-call closure
+choreography names remain local (the retired `analysis/death-effect-closure/`,
+`git show analysis-archive:analysis/death-effect-closure/FINDINGS.md`), and the stage-call closure
 excludes C4's train-anchored `b_steamtrail`. Constructed once per session (`_worldEffectsFactory`,
 same lifetime as `LiveryResolver`/`SpawnPicker`) from
 `(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition, EffectAmbience?, Func<IReadOnlyList<Vector3>>? playerPositions)`,
@@ -7264,7 +7265,8 @@ The sun's lens flare: four screen-space sprites strung along the sun→screen-ce
 fractions 0.50/0.90/2.0, plus a full-screen white wash whose opacity is ~linear in the sun's screen
 distance from centre. Mirrors `WeatherRig` — constructed once per session beside it, `Build` once,
 `Tick` from the same per-rig block of `_Process`, one instance per pane. The whole spec is measured
-(`CAP-13`; method and calibration in `analysis/bl-165-lens-flare/`), and the per-pane state lives on
+(`CAP-13`; method and calibration in the retired `analysis/bl-165-lens-flare/`,
+`git show analysis-archive:analysis/bl-165-lens-flare/FINDINGS.md`), and the per-pane state lives on
 this class rather than on `PlayerRig` because an instance is several nodes plus fade state — the
 whiteout could live there only because it is a bare `ColorRect`.
 `--no-flare` suppresses the effect so C2/C3 captures stay usable for unrelated comparisons.

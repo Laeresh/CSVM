@@ -3,7 +3,8 @@
 **Read-only measurement, 2026-08-09**, for PLAN-clutter-uv-placement
 A2. Instrument: [`uv_orient.py`](uv_orient.py) in this directory, over `extracted/` only — no
 engine run, no C# source touched. This is the verification
-[`analysis/bl-058-clutter-doubling/FINDINGS.md:121-127`](../bl-058-clutter-doubling/FINDINGS.md)
+the retired `analysis/bl-058-clutter-doubling/FINDINGS.md:121-127`
+(`git show analysis-archive:analysis/bl-058-clutter-doubling/FINDINGS.md`)
 named as the reason `match_footprints.py` was inconclusive.
 
 Reproduce (from the repo root; from a worktree add `--extracted Z:/CSVM/extracted`):

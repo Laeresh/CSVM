@@ -33,7 +33,8 @@ def shape_of(v):
 def elevation_span(v):
     """(min, max) launch elevation in degrees, or None when the shape carries no elevation.
 
-    `translation_range` is polar (analysis/object-motion-range): `y` is an ELEVATION in
+    `translation_range` is polar (the retired analysis/object-motion-range, `git show
+    analysis-archive:analysis/object-motion-range/FINDINGS.md`): `y` is an ELEVATION in
     degrees, and it is applied LINEARLY -- v0y = (elev/90)*speed, not sin(elev)*speed
     (docs/org/objectMotion.md). `translation` is cartesian: its `initial.y` IS the vertical
     speed, so its sign answers 'upward?' directly and is reported as +90/-90.

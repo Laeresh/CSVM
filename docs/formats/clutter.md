@@ -132,7 +132,8 @@ every triangle painted with it.
 them. An exemption once stood there because the remake stamped both members of every coplanar
 overlay/base pair — matching a template
 to a polygon by texture name only, never reading the polygon's flag — which doubled the city's
-buildings (`analysis/bl-058-clutter-doubling/FINDINGS.md`). The real mechanism is the `no_clutter`
+buildings (the retired `analysis/bl-058-clutter-doubling/`,
+`git show analysis-archive:analysis/bl-058-clutter-doubling/FINDINGS.md`). The real mechanism is the `no_clutter`
 flag: flagged ground is dressed by `cblock4/5/6` (low-rise) and clear ground by `cblock1/2/3/7`
 (towers), measured at odds ratio 1,037× and confirmed at the controls
 (`analysis/bl-305-clutter-uv/FINDINGS-layer-pairing.md`). ⚠ Neither half works alone — the flag

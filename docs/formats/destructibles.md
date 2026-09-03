@@ -128,7 +128,8 @@ once its transitive call closure is counted: `large_30sec_fire` (1,035),
 `big_ripple` (1). The other 164 calls target 22 live-object choreography definitions —
 zeppelin/aircraft/vehicle motion, node swaps, or wrappers into that handled set — and must
 remain on the world runtime rather than be relocated as effect templates. The exhaustive
-classification and per-target shapes are in `analysis/death-effect-closure/`.
+classification and per-target shapes are in the retired `analysis/death-effect-closure/`
+(`git show analysis-archive:analysis/death-effect-closure/FINDINGS.md`).
 
 **`unknown_seq` is not the death sequence.** The compiled def carries one structurally-distinct
 trailing sequence slot the mech3ax fork surfaces as `unknown_seq` (see

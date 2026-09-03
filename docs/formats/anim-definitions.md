@@ -194,7 +194,8 @@ leg; a pooled effect copy is returned to its spawn pose by the checkout, not by 
 - `TRANSLATION_RANGE` is a ballistic launch in **polar form** — **`xz` is an AZIMUTH and `y` an
   ELEVATION, both in DEGREES, and `initial` is the launch SPEED in m/s** (`delta` the same constant
   acceleration, non-zero on 233 of 1,226). This is an acceleration, not a distance reading:
-  threw debris hundreds of metres; census + evidence in `analysis/object-motion-range/`.
+  threw debris hundreds of metres; census + evidence in the retired `analysis/object-motion-range/`
+  (`git show analysis-archive:analysis/object-motion-range/FINDINGS.md`).
   ⚠ **The elevation is LINEAR, not spherical**, and that was corrected: the direction
   is `dirY = elevation/90` with the horizontal taking the remainder `1 − |elevation|/90`, so it is
   deliberately **not unit length** (0.707 at 45°) and only the azimuth goes through trigonometry. Do
@@ -371,7 +372,8 @@ definition loops, so nothing in the landing path depends on this.
 ### `*_delta` is the same channel's RATE, not a second motion
 
 Decoded from an install-wide census of all 16,114 compiled anim files
-(`analysis/bl-050-fromto-delta/`). The compiled `*_delta` channels arrive as a bare `{x,y,z}`
+(the retired `analysis/bl-050-fromto-delta/`,
+`git show analysis-archive:analysis/bl-050-fromto-delta/FINDINGS.md`). The compiled `*_delta` channels arrive as a bare `{x,y,z}`
 vector, **not** a `{from,to}` pair, on **51** events (15 `translate_delta`, 17 `rotate_delta`,
 19 `scale_delta`; 29 in `cam_anim`, 22 in `mis_anim`; 33 distinct authored signatures). The
 reader sources spell no `*_DELTA` token at all — 0 of 1,355 reader JSON files contain the
@@ -666,7 +668,8 @@ the last site.
 
 **The offset triple needs no axis swap: it is already `(x, y, z)` in the mesh frame** — right-handed,
 Y up, nose −Z, exactly the convention [gotchas.md](gotchas.md) settles for coordinates. Censused
-over all 6,728 `AT_NODE`-style positions in the install (`analysis/at-node-axis-order/`), across
+over all 6,728 `AT_NODE`-style positions in the install (the retired `analysis/at-node-axis-order/`,
+`git show analysis-archive:analysis/at-node-axis-order/FINDINGS.md`), across
 every event kind that carries one: `CALL_ANIMATION`'s `parameters.AtNode.position`, `PUFFER_STATE`'s
 `translate`, `LIGHT_STATE`/`SOUND_NODE`'s `translate.AtNode.pos`, `SOUND`/`DETONATE_WEAPON`'s
 `at_node.pos`, and the reader's flat `AT_NODE [name, dx, dy, dz]`. 770 of them can tell a Y-up read
@@ -1292,7 +1295,8 @@ are not visible from the byte format alone, each measured against this install.
   belongs to the sequence and starts at zero whenever that sequence starts. They coincide only for
   a sequence the bootstrap starts with the instance — for one a later `CALL_SEQUENCE` starts, the
   animation clock is already running. Censused over the whole install
-  (`analysis/anim-interpreter-decode/start_origin_census.py`): of the 3,934 events carrying an
+  (`git show analysis-archive:analysis/anim-interpreter-decode/start_origin_census.py`, a
+  retired instrument): of the 3,934 events carrying an
   explicit `start`, **1,091 name `Animation`** — every one of them with a non-zero time, since the
   zero pair is what mech3ax collapses to `None` — and **191 of those sit in an `OnCall`
   sequence**, the reachable case (the other 900 are in `Initial` sequences, where the two clocks
