@@ -22,17 +22,29 @@ public readonly record struct LaunchedVehicle(FlightController? Aircraft, Surfac
 /// through the handed roster callback as its waves come due, dropping at the origin node's live
 /// position in the authored drop attitude and patrolling the cyclic net pick through
 /// <see cref="AiNetFollower"/>; a surface host's launch first flies its take-off path under
-/// <see cref="PathFollower"/>, and a launch that builds a <see cref="SurfaceVehicle"/> runs that
-/// path as a hull and joins its net. A generator whose host or whole nets list fails to resolve is
-/// dropped at load, never loaded inert (docs/formats/mission-entities.md). Every load drop, door
-/// transition and spawn prints an <c>egen:</c> line. <see cref="GeneratorCycle.DoorOpen"/>
-/// drives the authored door anims; <see cref="NotifyHostDied"/> updates the live host state.
-/// ⚠ <see cref="UseInstantActionLaunches"/>/<see cref="GrantWaveCapacity"/> choose the launch source — see
-/// this module's entry in docs/architecture.md before touching either.</summary>
+/// <see cref="PathFollower"/>, and a hull launch runs that path and joins its net. A generator
+/// whose host or whole nets list fails to resolve is dropped at load, never loaded inert. Every
+/// load drop, door transition and spawn prints an <c>egen:</c> line. Every cycle starts
+/// uncredited and launches only what <see cref="GrantWaveCapacity"/> feeds it (a script's
+/// <c>WAKEUP_GENERATOR</c>, an Instant Action wave, or cutscene callback 800 through
+/// <see cref="BindCallbackHost"/>). ⚠ <see cref="UseInstantActionLaunches"/> chooses the launch
+/// source — see this module's entry in docs/architecture.md before touching it.</summary>
 public sealed partial class AiGeneratorRuntime : Node
 {
+    /// <summary>The generator cutscene callback 800 credits, by host node. The original looks
+    /// the name up literally in its mission-script host (<c>FUN_0047e080</c>), so this is a
+    /// constant and not data.</summary>
+    public const string CallbackCreditedHost = "cargozep1";
+
+    /// <summary>The launches callback 800 adds, the original's literal.</summary>
+    public const int CallbackCredit = 5;
+
     /// <summary>The most recent spawn's net pick, per generator node.</summary>
     public readonly Dictionary<string, string> SpawnedNet = new(StringComparer.OrdinalIgnoreCase);
+
+    // The mission-script host's one credit callback. 801 to 803 live in the same host in the
+    // original (they reactivate the first still-deactivated bhat aircraft) and are unhosted here.
+    private const int CreditCallbackCode = 800;
 
     // The spawn basis needs a horizontal component (Basis.LookingAt with world up),
     // so the authored −90° drop pitch is clamped this far shy of vertical. Invented margin;
@@ -62,6 +74,8 @@ public sealed partial class AiGeneratorRuntime : Node
     private readonly Func<string, Node3D, int>? _playAnim;
     private readonly Action<string, Node3D>? _stopAnim;
     private readonly Func<AiNet, Func<Vector3?>?>? _trailerTarget;
+    private readonly Func<int, string?, string?, bool> _host;
+    private Func<int, string?, string?, bool>? _inner;
 
     /// <param name="trailerTarget">Where an anchored net's trailer target is, per net;
     /// null leaves every generated patroller on its net's authored coordinates. One generator's
@@ -79,6 +93,7 @@ public sealed partial class AiGeneratorRuntime : Node
         _playAnim = playAnim;
         _stopAnim = stopAnim;
         _trailerTarget = trailerTarget;
+        _host = Host;
         foreach (var def in defs)
         {
             // Load-drop 1: unresolved host node (decoded rule: dropped, not loaded inert).
@@ -145,27 +160,25 @@ public sealed partial class AiGeneratorRuntime : Node
     /// <summary>Launches still flying their host's take-off run, not yet handed to their net.</summary>
     public int RunningCount => _runs.Count;
 
-    /// <summary>Puts generators hosted on <paramref name="hostNode"/> behind their mission-authored
-    /// <c>WAKEUP_GENERATOR</c> credit. Returns the number armed.</summary>
-    public int RequireWakeupCredits(string hostNode)
+    /// <summary>Takes the runtime's <c>CALLBACK</c> host slot for the mission-script host's credit
+    /// code, chaining to whatever held it. ⚠ Bind once, after every other chained host has bound:
+    /// a host that re-binds after this one would chain to this host while this host still chains
+    /// to its old delegate, and an unanswered code would then loop between the two.</summary>
+    public void BindCallbackHost(AnimRuntime runtime)
     {
-        int armed = 0;
-        foreach (var gen in _live)
+        if (runtime.CallbackHost != _host)
         {
-            if (!gen.Def.Node.Equals(hostNode, StringComparison.OrdinalIgnoreCase))
-                continue;
-            gen.Cycle.UseWaveCredits();
-            armed++;
+            _inner = runtime.CallbackHost;
+            runtime.CallbackHost = _host;
         }
-        return armed;
     }
 
     /// <summary>Instant Action's zeppelin arm: every generator hosted on
-    /// <paramref name="hostNode"/> goes onto the wave-credit budget and releases an already-built
-    /// wave member through <paramref name="release"/> instead of spawning a fresh aircraft — the
-    /// decoded shape (this module's entry in docs/architecture.md). A null release is accounted
-    /// like a failed spawn. Returns how many generators this claimed; 0 means the selected
-    /// zeppelin carries no generator, so nothing on that mode will ever launch.</summary>
+    /// <paramref name="hostNode"/> releases an already-built wave member through
+    /// <paramref name="release"/> instead of spawning a fresh aircraft — the decoded shape (this
+    /// module's entry in docs/architecture.md). A null release is accounted like a failed spawn.
+    /// Returns how many generators this claimed; 0 means the selected zeppelin carries no
+    /// generator, so nothing on that mode will ever launch.</summary>
     public int UseInstantActionLaunches(string hostNode,
         Func<Vector3, Vector3, Vector3, FlightController?> release)
     {
@@ -177,15 +190,15 @@ public sealed partial class AiGeneratorRuntime : Node
                 continue;
             }
             gen.Release = release;
-            gen.Cycle.UseWaveCredits();
             claimed++;
         }
         return claimed;
     }
 
-    /// <summary>The decoded per-wave top-up (<c>FUN_0045b9d0</c>'s type-2 arm, F12): adds
-    /// <paramref name="count"/> to the remaining capacity of every generator hosted on
-    /// <paramref name="hostNode"/>. Returns how many generators were credited. ⚠ The original's
+    /// <summary>The credit every launch comes from: adds <paramref name="count"/> to the
+    /// remaining capacity of every generator hosted on <paramref name="hostNode"/>, the shape of
+    /// the objective apply (<c>FUN_00469af0</c>), the wave director's top-up (<c>FUN_0045b9d0</c>)
+    /// and callback 800 alike. Returns how many generators were credited. ⚠ The original's wave
     /// counter advances whether or not the top-up lands, so a wave whose zeppelin has no generator
     /// is simply lost — the caller reports it rather than compensating.</summary>
     public int GrantWaveCapacity(string hostNode, int count)
@@ -277,6 +290,20 @@ public sealed partial class AiGeneratorRuntime : Node
             points.Add(point);
         }
         return points.Count > 1 ? points : null;
+    }
+
+    // Answered whatever definition raised it: the original's mission-script host reads the code
+    // alone. True even when no generator carries the name, as there.
+    private bool Host(int code, string? animName, string? rootName)
+    {
+        if (code != CreditCallbackCode)
+        {
+            return _inner?.Invoke(code, animName, rootName) ?? false;
+        }
+        int fed = GrantWaveCapacity(CallbackCreditedHost, CallbackCredit);
+        GD.Print($"egen: callback {code} from '{animName ?? "?"}': '{CallbackCreditedHost}' " +
+                 $"+{CallbackCredit} credit (granted {fed})");
+        return true;
     }
 
     // The take-off run is the second movement law from its generator entry: the launched aircraft

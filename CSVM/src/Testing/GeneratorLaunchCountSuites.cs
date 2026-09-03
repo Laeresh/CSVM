@@ -235,7 +235,6 @@ internal static class GeneratorLaunchCountSuites
             report.AppendLine($"host: '{Generator}' gamez pose y={host.GlobalPosition.Y:0}, record pose y={record.Position.Y:0}, launch gate {def.MinAltitude?.ToString("0") ?? "-"} m");
             host.GlobalPosition = record.Position;
 
-            runtime.RequireWakeupCredits(Generator);
             // The bay has run uncredited since load (40 s in the logged run), so it is past its
             // first due point and a credit launches on the step it lands.
             for (int i = 0; i < (int)(PreRollS / StepDt); i++)

@@ -460,7 +460,7 @@ clusters they delegate to.
 - `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry, pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
 - `src/Session/ScriptedPathVehicles.cs` — one mission's scripted-path vehicles: the snap onto waypoint 0, the freeze, `START_TAXI`'s release, and the handoff back to the flight model.
 - `src/Session/CampaignRoster.cs` — the engine-free plan of a campaign mission's `aiv` roster: each block resolved to an airframe, its authored net or the decoded netless-wingman escort (never both), the merged volumes, the leader lookup and the roster's own `ace` flag (slot 67); `CampaignDirector.BuildRoster` places it and reads `Ace`/`Team`/`PlaneNode` back off the plan to credit a kill into the debrief's tallies.
-- `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in and F12's wave-credit budget that switches it back off.
+- `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, and the credit budget that starts at zero whatever the authored `capacity` says.
 - `src/Session/NetTrailerTargets.cs` — resolves a patrol net's trailer name (`player`, a zeppelin, a train) to a live position, so an anchored net rides its target (`BL-377`).
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (`--generators`): load-time drop rules, per-cycle stepping, spawns through the handed roster callback — or, on an Instant Action zeppelin run (F12), releases an already-built wave member instead.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
@@ -6786,10 +6786,11 @@ last state (the decoded loop early-outs before any door rule). `HostDied()` star
 `HostDeathGraceSeconds` grace (3 s, the decoded wreck timer) during which the bay still launches,
 and `Step` disables it once the grace has run: ⚠ a deliberate deviation from the decoded kill-tick
 disable, because C5/M04's fourth gasbag can die inside the 0.5 s between OBJECTIVE10 and the
-OBJECTIVE11 credit for Miles's launch (enemy-generators.md "The host's death"). `UseWaveCredits()`/`GrantCapacity`
-are F12's arm: an Instant Action `zeppelin_run` runs the decoded capacity rule regardless of the
-authored `capacity`, from zero remaining, topped up per wave. Format and decode, including the
-capacity-stand-in puzzle: `docs/formats/mission-entities/enemy-generators.md`.
+OBJECTIVE11 credit for Miles's launch (enemy-generators.md "The host's death"). The authored
+`capacity` is never read: every cycle starts at zero remaining, blocks while the wave's remainder
+exceeds it, and `GrantCapacity` is the one way launches arrive (a script's `WAKEUP_GENERATOR`, an
+Instant Action wave's member count, cutscene callback 800). Format and decode:
+`docs/formats/mission-entities/enemy-generators.md`.
 
 ## src/Session/NetTrailerTargets.cs
 Resolves a patrol net's TRAILER name to a live position supplier (`BL-377`), the session half of
@@ -6831,10 +6832,14 @@ this cycle's, not the mission script's (`hangar-door-wake` suite). Every drop/li
 line, which is the flag's observability. `NotifyHostDied(node)`: the zeppelin death aggregator
 (`ZeppelinRuntime.ZeppelinKilled`, F18) calls it and the matching cycles go on the 3 s launch
 grace, then disable permanently (one `egen:` line each way).
-Pinned by the `zeppelin-launch` suite; the credit-after-kill shape by `generator-launch-dedg`. For campaign missions, `RequireWakeupCredits(hostNode)`
-starts cycles named by a script's `WAKEUP_GENERATOR` empty, and
-`GrantWaveCapacity(hostNode, n)` is its top-up (`--wake-generators` grants the script's whole
-credit at build, the logged headless stand-in for playing up to the objective); the spawn
+Pinned by the `zeppelin-launch` suite; the credit-after-kill shape by `generator-launch-dedg`.
+Every cycle starts uncredited, and `GrantWaveCapacity(hostNode, n)` is the one credit: a script's
+`WAKEUP_GENERATOR` (`--wake-generators` grants the script's whole credit at build, the logged
+headless stand-in for playing up to the objective), an Instant Action wave, and cutscene callback
+800, which `BindCallbackHost` answers from the runtime's `CALLBACK` host chain as five launches on
+the generator named `cargozep1`, the original's literal, chaining every other code on (the
+`generator-callback-credit` suite over C4/M03; bound after the ladder switch's last bind, since a
+later re-bind of another chained host would loop an unanswered code between the two); the spawn
 callback receives the whole `EnemyGeneratorDef`, allowing `vehicle.params` to select its AIV
 template while position is still read from the live host. That selection is the mission spawner's
 roster read and runs on any generator session: `GameSession.SpawnFromGenerator` spawns the matched

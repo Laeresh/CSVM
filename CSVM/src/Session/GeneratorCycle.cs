@@ -5,10 +5,11 @@ namespace CSVM.Session;
 /// <summary>
 /// The decoded egen launch cycle for ONE generator: pure state over <c>Step</c> calls, no
 /// clocks, no randomness, no node reads, so the timing law is unit-testable off-engine.
-/// Decode, the hangar door timings and the capacity-stand-in rationale:
+/// Decode, the hangar door timings and the credit rule:
 /// docs/formats/mission-entities/enemy-generators.md.
-/// ⚠ The capacity check is a stand-in, off at authored <c>capacity ≤ 0</c> except after
-/// <see cref="UseWaveCredits"/>. Do not read that as "0 means unlimited".
+/// ⚠ Every cycle starts with no launch budget, whatever the authored <c>capacity</c> says: the
+/// original never reads that field, and a generator launches only what
+/// <see cref="GrantCapacity"/> credits it.
 /// </summary>
 public sealed class GeneratorCycle
 {
@@ -29,7 +30,6 @@ public sealed class GeneratorCycle
     /// (docs/formats/mission-entities/enemy-generators.md, "The host's death").</summary>
     public const float HostDeathGraceSeconds = 3f;
 
-    private readonly int _capacity;
     private readonly int _maxActive;
     private readonly int _waveSize;
     private readonly float _wavePeriod;
@@ -40,27 +40,23 @@ public sealed class GeneratorCycle
     private int _spawnedThisWave;
     private float _timer;
     private float _nextEvent;
-    private bool _waveCredited;
     private float? _sinceHostDeath;
 
-    public GeneratorCycle(int capacity, int maxActive, int waveSize, float wavePeriod,
-        float indPeriod, float? minAltitude)
+    public GeneratorCycle(int maxActive, int waveSize, float wavePeriod, float indPeriod,
+        float? minAltitude)
     {
-        _capacity = capacity;
         _maxActive = maxActive;
         _waveSize = waveSize;
         _wavePeriod = wavePeriod;
         _indPeriod = indPeriod;
         _minAltitude = minAltitude;
-        _capacityRemaining = capacity;
         // The decode does not pin the FIRST threshold; load is treated as "a wave just
         // completed" (the full inter-wave gap), the conservative reading until F20 confirms.
         _nextEvent = indPeriod + wavePeriod;
     }
 
     public GeneratorCycle(EnemyGeneratorDef def)
-        : this(def.Capacity, def.MaxActive, def.WaveSize, def.WavePeriod, def.IndPeriod,
-            def.MinAltitude)
+        : this(def.MaxActive, def.WaveSize, def.WavePeriod, def.IndPeriod, def.MinAltitude)
     {
     }
 
@@ -86,8 +82,7 @@ public sealed class GeneratorCycle
     /// <summary>The threshold the timer must reach for the next spawn.</summary>
     public float NextEvent => _nextEvent;
 
-    /// <summary>Launches this cycle still has budget for. Meaningless while the stand-in above
-    /// has the check switched off (authored <c>capacity</c> 0 and no wave credit).</summary>
+    /// <summary>Launches this cycle still has credit for. Zero at load.</summary>
     public int CapacityRemaining => _capacityRemaining;
 
     /// <summary>The host died: the bay keeps launching for <see cref="HostDeathGraceSeconds"/>,
@@ -95,19 +90,9 @@ public sealed class GeneratorCycle
     /// grace runs does not restart it.</summary>
     public void HostDied() => _sinceHostDeath ??= 0f;
 
-    /// <summary>Puts this cycle on Instant Action's wave-credit budget: the decoded capacity rule
-    /// applies from here on regardless of the authored <c>capacity</c>, starting from zero
-    /// remaining until <see cref="GrantCapacity"/> credits it. See "Capacity rule and limit" in
-    /// docs/formats/mission-entities/enemy-generators.md.</summary>
-    public void UseWaveCredits()
-    {
-        _waveCredited = true;
-        _capacityRemaining = 0;
-    }
-
-    /// <summary>The decoded per-wave top-up (<c>FUN_0045b9d0</c>'s type-2 arm adds the new group's
-    /// member count to the generator's <c>capacityRemaining</c> at <c>+0x80</c>). Only meaningful
-    /// after <see cref="UseWaveCredits"/>; the caller stamps the group itself.</summary>
+    /// <summary>The one way a cycle gains launches: a script's <c>WAKEUP_GENERATOR</c>, an
+    /// Instant Action wave's member count, or cutscene callback 800, each adding to the
+    /// remaining capacity the original keeps at <c>+0x80</c>.</summary>
     public void GrantCapacity(int count) => _capacityRemaining += count;
 
     /// <summary>A spawned aircraft left the fight (shot down); its max_active slot frees.</summary>
@@ -164,10 +149,7 @@ public sealed class GeneratorCycle
         {
             return false;
         }
-        if (_waveCredited || _capacity > 0)
-        {
-            _capacityRemaining--;
-        }
+        _capacityRemaining--;
         Active++;
         _spawnedThisWave++;
         _timer = 0f;
@@ -183,8 +165,9 @@ public sealed class GeneratorCycle
         return true;
     }
 
+    // The decoded block: the rest of the wave must fit under max_active AND under the credit.
     private bool Blocked(float hostAltitude) =>
         (_waveSize - _spawnedThisWave) + Active > _maxActive
-        || ((_waveCredited || _capacity > 0) && _waveSize - _spawnedThisWave > _capacityRemaining)
+        || _waveSize - _spawnedThisWave > _capacityRemaining
         || (_minAltitude is float gate && hostAltitude < gate);
 }

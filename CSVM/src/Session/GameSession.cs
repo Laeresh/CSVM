@@ -2594,6 +2594,12 @@ public partial class GameSession : Node3D
                 wr == null ? null : (name, host) => wr.StopWithin(host, name),
                 netTrailers.For);
             _worldRoot!.AddChild(_generators);
+            // Cutscene callback 800 credits through the runtime's host chain. Bound after the
+            // ladder switch's last bind, which its chaining requires.
+            if (wr != null)
+            {
+                _generators.BindCallbackHost(wr);
+            }
             if (_campaign is { } campaignGenerators)
             {
                 var wakeupCredits = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -2601,12 +2607,8 @@ public partial class GameSession : Node3D
                 {
                     if (objective.WakeupGenerator is { } wakeup)
                     {
-                        if (!wakeupCredits.ContainsKey(wakeup.Name))
-                        {
-                            wakeupCredits[wakeup.Name] = 0;
-                            _generators.RequireWakeupCredits(wakeup.Name);
-                        }
-                        wakeupCredits[wakeup.Name] += wakeup.Count;
+                        wakeupCredits.TryGetValue(wakeup.Name, out int sum);
+                        wakeupCredits[wakeup.Name] = sum + wakeup.Count;
                     }
                 }
                 // --wake-generators: the script's whole credit granted at build, the headless

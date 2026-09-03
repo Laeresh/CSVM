@@ -344,7 +344,6 @@ internal static class SurfaceVehicleSuites
                 is { Count: > 0 } points ? points[0].GlobalPosition : (Vector3?)null;
             ctx.Check(first != null, $"'{GenHost}' carries its first take-off point");
 
-            generators.RequireWakeupCredits(GenHost);
             generators.GrantWaveCapacity(GenHost, def.WaveSize);
             for (int i = 0; vessels.Vessels.Count == 0 && i * StepDt < def.IndPeriod + def.WavePeriod + 2f; i++)
             {

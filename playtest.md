@@ -762,6 +762,26 @@ is a judgement on our own remake.
 ./RunGame.ps1 --campaign=<profile>:17
 ```
 
+- `PT-118` `[Own]` **The freed crews launch from the cargozep after the hook-up, and nothing
+  before it (`BL-657`).** The generator on `cargozep1` starts with no credit, as in the original;
+  the docking film's beauty shot raises callback 800, which credits five launches, and the five
+  allied Furies (`bsfury_1`'s template, net `M3Allies`) drop through the opened hangar doors one
+  every 4 s. The mission's only ally at the start is the Black Swan on the wing. The Black Hat
+  brigands and warhawks after the docking are the mission's own roster, woken by its
+  `WAKEUP_ENEMIES` objectives, and not this generator's. *Look for:*
+  - (a) at the start, only the Black Swan on the wing, and nothing leaving the cargozep before
+    the hook-up;
+  - (b) during the beauty shot, Furies dropping from the moored hull's opened hangar doors, five
+    in all, about 4 s apart, flying off rather than sitting where they could be attacked;
+  - (c) that they come out of the doors of the moored hull and not from under it;
+  - (d) the launch hitch at the controls: each spawn is `BL-699`'s launch frame, and whether
+    five inside a film read as stalls where ten from load did;
+  - (e) a Fury killed early leaves a wreck through the normal chain (the debug kill on a launch
+    works for this).
+  *Blocks:* nothing tracks the outcome beyond `BL-657`'s closing commit (`git log
+  --grep=BL-657`): a launch that comes from under the hull, or a count other than five, mints a
+  new `BL`. The hitch on each launch is `BL-699`'s and is not this row's verdict.
+
 
 ## Everything else
 
