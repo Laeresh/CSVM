@@ -1,8 +1,9 @@
 # Menu Presentations
 
 **ACTIVE PLAN** (written 2026-08-31). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+a live plan; PROJECT_CONTEXT.md's "Current status" names it. When every item lands, the closing
+commit deletes this file, records the completion in its message, and clears the "Current status"
+pointer; any live prose linking this file by path is unlinked in the same commit.
 
 This plan separates menu behaviour from presentation, keeps the existing Built-in presentation as
 a permanent asset-independent route, and delivers a complete Original presentation over the
@@ -129,8 +130,7 @@ setup screen, Preferences, menu audio and pointer behaviour, and the plane-const
   failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
   TUNE / lead-only).
 - **`PROJECT_CONTEXT.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
-  landed item; a landed item gets its record in the landing commit's message (`docs/HISTORY.md` is
-  frozen — never append) and is **deleted** from
+  landed item; a landed item gets its record in the landing commit's message and is **deleted** from
   `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
 - **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
   rule that bites per item.

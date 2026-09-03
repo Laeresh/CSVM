@@ -89,8 +89,8 @@ The user's observed progression is real and is a **separate finding from the z-f
 > **Closed 2026-08-02 by `BL-055`.** `TextureArchive` now installs the authored levels
 > (`--mips=authored`, the default; `--mips=generated` restores this box filter). The measurement
 > above is repeatable two ways: `mip_census.py` in this directory censuses the shipped PNGs per
-> chapter, and `--dump-mips` reports the chain the engine installed. See `docs/HISTORY.md`
-> 2026-08-02 and the `_1`/`_2` bullet in `docs/formats/gamez.md`.
+> chapter, and `--dump-mips` reports the chain the engine installed. See the archived development
+> log, 2026-08-02 entry, and the `_1`/`_2` bullet in `docs/formats/gamez.md`.
 - Name resolution is safe: `Retrieve` takes the exact match first, so `cblock1.tif` can never
   resolve to `cblock1_1.png`. **[measured, code]**
 
@@ -346,7 +346,7 @@ correctly does not override it.
 
 ## 6. Proposed deltas to the files this analysis must not edit
 
-**`docs/plans/PLAN-M2-polish-4.md` item 9** — the fifth mechanism, and the one that survives:
+**PLAN-M2-polish-4 item 9** — the fifth mechanism, and the one that survives:
 
 > The C5 half is **not a depth-precision problem**. The polygon flag `unk3` (raw `0x0800`) is the
 > original's OpenFlight **subface** mark, and `support\init.gw` applies
@@ -385,7 +385,7 @@ correctly does not override it.
 **`docs/formats/`** — the `unk3` decode lands with a docs page in the same change, per the standing
 rule. It belongs beside the existing polygon-priority documentation.
 
-**`docs/HISTORY.md`** — dated entry when the fix lands, not for this analysis.
+**The landing commit's message** — carries the evidence and its date when the fix lands, not for this analysis.
 
 ---
 

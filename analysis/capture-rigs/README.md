@@ -16,7 +16,7 @@ being established is which view a key selects, not a number.
 ## Three rules that make a capture analysable
 
 The first two were learned the expensive way on `CAP-07`, whose first, hand-flown take had to be
-thrown out (`docs/HISTORY.md`, 2026-08-04). They generalise past the numpad rigs, so apply them to
+thrown out (the archived development log, 2026-08-04 entry). They generalise past the numpad rigs, so apply them to
 any new rig here.
 
 **1 · Script the input, and log it.** A rig's timestamped log removes event segmentation from the
@@ -51,7 +51,7 @@ Writes `sweep-log.txt` next to the script — one timestamped line per press and
   measured against the airframe.
 - **One key at a time is the whole point.** `CAP-07` take 1 was rejected because the presses
   overlapped — the camera lerped straight from one fixed position to the next without passing
-  through base, and most holds never settled. See `docs/HISTORY.md`, 2026-08-04.
+  through base, and most holds never settled. See the archived development log, 2026-08-04 entry.
 - **`Kp5` is in the sweep deliberately.** `BL-150`(e) records it as unbound on the strength of
   assumption; a held-with-no-movement clip is what makes that evidence.
 - **`Kp0` is not**, and should not be added: it is rudder-left, not a camera key.

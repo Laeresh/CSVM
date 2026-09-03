@@ -1,7 +1,7 @@
 # All-chapter fog/sky zone survey — `survey_zones.py`
 
-Read-only survey of every chapter's authored fog zones, written for `docs/plans/PLAN-overcast-match.md`
-item **B11** (2026-08-08). The instrument is `survey_zones.py`; run it with no arguments to
+Read-only survey of every chapter's authored fog zones, written for PLAN-overcast-match
+**B11** (2026-08-08). The instrument is `survey_zones.py`; run it with no arguments to
 reproduce every number quoted here and in the plan's B11 section:
 
 ```
@@ -31,7 +31,7 @@ byte triples are what the renderer receives, not what the JSON looks like.
 ## Findings
 
 The full argument, the complete table and the H1–H4 prediction matrix live in
-`docs/plans/PLAN-overcast-match.md` § `B11`. In brief:
+PLAN-overcast-match § `B11`. In brief:
 
 - **`FOG_ALTITUDE` is inert in the zone every chapter is currently flown in, except C2.** The
   bands are 4000–5000 / 9000–10000 / 10000–11000 in seven of the eight flown zones — above the
@@ -56,7 +56,7 @@ The full argument, the complete table and the H1–H4 prediction matrix live in
   matches 1.0.
 - **The cloud deck, the `fvol` volumes and every `cloudparent` cluster are authored
   `zone_id: 2`** in C1/C1C/C4 (C2B's deck likewise), the same tag as those chapters' moon/stars
-  dome, while `zone_id: 1` holds no node at deck altitude at all in C1. Under `docs/HISTORY.md`'s
+  dome, while `zone_id: 1` holds no node at deck altitude at all in C1. Under the archived development log's
   recorded reading of `zone_id` (`-1` = always, `1`/`2`/`3` = that zone only), that is a data-side
   argument that C1/C1C/C2B/C4 fly **zone 2** — and it contradicts the dome-content argument
   (their `zone2` dome carries `moon` + `stars` on daylit missions). Not resolved here; it is

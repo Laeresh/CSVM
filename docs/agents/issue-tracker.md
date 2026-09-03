@@ -7,7 +7,7 @@ distinct roles:
 | File | Holds |
 |---|---|
 | `backlog.md` | **Unscheduled work.** Blocked/deferred items, feature backlog, open fidelity questions, the TUNE list. The default landing place for a new issue. |
-| `docs/PLAN-<name>.md` | **The live plan** — scheduled work as a checklist. At most one exists at a time; there is none right now. `docs/plans/` is the *archive* of completed plans, banner-marked `COMPLETE` — read-only history, never file into it. |
+| `docs/PLAN-<name>.md` | **The live plan** — scheduled work as a checklist. At most one exists at a time. A completed plan is deleted in its closing commit and read back from git; there is no archive directory. |
 | `playtest.md` | **Owed at-the-controls checks** — the user-only playtest/TUNE list: what to look for, the launch command, what it blocks. |
 
 ## When a skill says "publish to the issue tracker"
@@ -31,7 +31,7 @@ Read the named section of `backlog.md`, or the checklist item in the live
 
 - **Delete the `backlog.md` entry.** A `FIXED`/closed entry does not stay there.
 - Record in the landing commit's message body: what landed, how verified, outcome.
-  (`docs/HISTORY.md` is frozen 2026-08-06 — never append to it.)
+  There is no history file to append to.
 - Tick the live plan's checklist and **swap** the "Current status" next-step
   pointer in `PROJECT_CONTEXT.md` — that section may only get shorter, never longer.
 - A way a *measurement* can mislead → a transferable rule in `docs/verification.md`.

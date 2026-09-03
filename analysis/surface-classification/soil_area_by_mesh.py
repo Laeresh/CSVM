@@ -1,7 +1,7 @@
 """Joins materials -> polygons -> meshes by the material's `soil` field (the engine's numeric
 surface type id, per FINDINGS.md 2026-08-11) and reports, per chapter, polygon count and
 triangulated area per id -- plus the node names of the meshes that carry each id. Answers
-PLAN-crash-surface-id.md item A1: what would faithful `player_crash_<name>` selection actually
+PLAN-crash-surface-id A1: what would faithful `player_crash_<name>` selection actually
 hit, and how much of each chapter falls back to slot 0 (`player_crash_default`)?
 
 Distinct from class_area_share.py, which answers the analogous question for

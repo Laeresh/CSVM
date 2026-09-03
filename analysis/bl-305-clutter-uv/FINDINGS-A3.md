@@ -1,7 +1,7 @@
 # A3 — the clutter-eligible polygon census: layers, UV coverage, coplanar overlaps
 
-**Read-only measurement, 2026-08-09**, for [`docs/PLAN-clutter-uv-placement.md`](../../docs/PLAN-clutter-uv-placement.md)
-item A3. Instrument: [`eligibility.py`](eligibility.py) in this directory; full raw run in
+**Read-only measurement, 2026-08-09**, for PLAN-clutter-uv-placement
+A3. Instrument: [`eligibility.py`](eligibility.py) in this directory; full raw run in
 [`_raw_output.txt`](_raw_output.txt). Static analysis over `extracted/`, plus two live engine runs
 for the reconciliation. No C# source touched.
 

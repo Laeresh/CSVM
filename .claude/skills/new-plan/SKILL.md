@@ -7,15 +7,14 @@ You start a new plan. Always the structure; and — when this session has alread
 the content too, written down from what the session established. You never *invent* content: you
 record what is already known, and mark every gap.
 
-`docs/plans/TEMPLATE.md` is the canonical structure — read it first; it is the source of truth for
+`docs/agents/plan-template.md` is the canonical structure — read it first; it is the source of truth for
 every section, the `[core]`/`[situational]` split, and the wave-letter + number item IDs (`A1`,
 `B11`, …). Do not restate its content here; follow it.
 
 ## 1. Settle name, weight, and whether to fill
 
 **Name / path.** A milestone plan → `docs/PLAN-M<n>-<name>.md`; a feature or refactor plan →
-`docs/PLAN-<name>.md`. Always `docs/` root (a plan there is *live*), never `docs/plans/` (that is for
-completed plans only). Kebab-case the `<name>`. Take it from the argument if it's obvious.
+`docs/PLAN-<name>.md`. Always `docs/` root (a plan there is *live*). Kebab-case the `<name>`. Take it from the argument if it's obvious.
 
 **Can you fill it?** Decide *before* asking. You may offer to fill only when **both** hold:
 
@@ -93,5 +92,7 @@ The process of *running* a plan lives in other tools; name them so the author kn
   carrying the what-landed/verification record, PROJECT_CONTEXT.md "Current status" refresh,
   `Co-Authored-By` trailer naming the acting agent, main only) is the **`commit-next`** skill — use
   it per item.
-- **Completing the plan** — swap the ACTIVE PLAN banner for a `✅ COMPLETE` banner, move the file to
-  `docs/plans/`, and append its row to `docs/plans/plans.md` (that file documents the archive step).
+- **Completing the plan** — the closing commit deletes the plan file (git keeps it; there is no
+  archive directory), records the completion in its message, clears PROJECT_CONTEXT.md's "Current
+  status" pointer (or names the next plan), and unlinks any live prose that linked the file by path
+  (grep the filename). Completed plans are cited by name and item, never by path.

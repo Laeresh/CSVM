@@ -48,8 +48,8 @@ follow-up questions and the handoff.
 - Read the entry **and its enclosing section heading** — the heading carries status (e.g. "Merged
   into `m3-polishing` — pending playtest").
 - Follow the references the entry actually names: code files and symbols (`AnimRuntime.cs:214-216`,
-  `FlightController.NextArmedHardpoint`) and doc sections in `docs/HISTORY.md` (frozen 2026-08-06 —
-  pre-freeze evidence only; later evidence lives in commit messages, `git log --grep=BL-NNN`),
+  `FlightController.NextArmedHardpoint`), commit messages (`git log --grep=BL-NNN`), the archived
+  development log (`git show docs-archive:docs/HISTORY.md`), and doc sections in
   `docs/architecture.md`, `docs/verification.md`.
 - Don't go hunting beyond what the entry cites.
 
@@ -81,7 +81,7 @@ them is noise that trains the reader to skip the flag.
 Use these headings, in this order:
 
 - **Status** — one line: still live, or looks landed/superseded. Cite the evidence (section heading,
-  a landing commit or pre-freeze `docs/HISTORY.md` entry, a merged-and-pending-playtest table).
+  a landing commit or an entry in the archived development log, a merged-and-pending-playtest table).
 - **Goal** — what will be true when the item is done.
 - **The problem** — what's wrong today, and why it matters at the controls.
 - **Traps** — the ⚠ notes plus anything the code reading reveals: wrong-mechanism "fixes", unsettled
@@ -146,7 +146,7 @@ unrun decode is an open question, not a licence to guess.
 2. **It does not** → hand to a **fresh-context subagent**. It prospects; it **reports and never
    writes**. Require every constant back **with the address it came from** and the condition it
    applies under, so the write-up carries provenance and any number can be re-checked at source.
-3. **It is genuinely large** — a body of work the size of `PLAN-weather-decompile-match.md`, not a
+3. **It is genuinely large** — a body of work the size of `PLAN-weather-decompile-match`, not a
    "what is this constant" question → `/new-plan`. Rare; most decodes are not plan-sized.
 
 ### What a decode reports: numbers, then formulas, then rules

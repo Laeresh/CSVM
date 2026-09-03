@@ -11,12 +11,12 @@ If an item id was passed as an argument (e.g. `B19`), treat that as the explicit
 
 ## 1. Commit the current changes (if there are some)
 
-First find the **active plan**: PROJECT_CONTEXT.md's "Current status / next step" section names it (none is active as of 2026-07-25 — every plan sits in `docs/plans/`). Everything below refers to that file.
+First find the **active plan**: PROJECT_CONTEXT.md's "Current status / next step" section names it. Everything below refers to that file.
 
 Before committing, confirm the plan reflects the work you just did — per the plan's own ground rules this is part of the change, not a follow-up:
 - The item you just finished is flipped to ☑ in the plan's `## Checklist`.
 - PROJECT_CONTEXT.md "Current status" is refreshed (current state + next step only).
-- Any docs/formats or architecture updates the item requires are in. (No `docs/HISTORY.md` entry — that file is frozen; the commit message body is the record now.)
+- Any docs/formats or architecture updates the item requires are in. (The commit message body is the record; there is no history file to append to.)
 
 If any of that is missing, make those edits **now**, before the commit, so they land together.
 
@@ -24,7 +24,7 @@ Then commit ALL current changes as one commit:
 - Run `git status --short` and `git diff --stat HEAD` to see the state. If there is nothing to commit, say so and skip to step 2.
 - `git add -A`, then `git commit`.
 - **Message style**: subject line matches `git log --oneline -5`: `M3 Wave <X> <item(s)>: <what landed>` (e.g. `M3 Wave B B18: weapon selectors`). Name the item(s) you actually implemented this session — you know them from context; don't reverse-engineer them from the diff.
-- **The message body is the durable record** (it replaced `docs/HISTORY.md`, frozen 2026-08-06): what landed, how it was verified (test counts, golden results, screenshot A/Bs), and any diagnosis dead ends worth not re-chasing. Write it while you still have the session context. Multi-line message → `Write` it to a file and `git commit -F <file>` (per CLAUDE.md).
+- **The message body is the durable record**: what landed, how it was verified (test counts, golden results, screenshot A/Bs), and any diagnosis dead ends worth not re-chasing. Write it while you still have the session context. Multi-line message → `Write` it to a file and `git commit -F <file>` (per CLAUDE.md).
 - End the message with a `Co-Authored-By:` trailer on its own line, naming whichever agent and
   model is actually running this session (not a fixed name) — e.g.
   `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.

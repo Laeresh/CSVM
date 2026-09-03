@@ -9,7 +9,7 @@ rows) as sorted `key = value` text; `capture.ps1` ran 50 command lines through i
 build moved exactly the rows that rule touched.
 
 **⚠ THE INSTRUMENT IS GONE.** `--dump-session` and `capture.ps1` were deleted with the last item of
-`docs/plans/PLAN-sessionspec.md`. What is left here is a RECORD, not a tripwire: `baseline.txt`
+PLAN-sessionspec. What is left here is a RECORD, not a tripwire: `baseline.txt`
 cannot be regenerated or re-checked, so nothing in it can fail any more. Do not cite it as evidence
 that the launch arguments still resolve this way — it is evidence of what they meant *before* the
 refactor, and of what the refactor was measured against.
@@ -91,7 +91,7 @@ After reverting both, `capture.ps1` reproduced `baseline.txt` byte for byte
 
 Neither is fixed here — the whole point of a baseline is to record current behaviour, including its
 warts, so the refactor can be shown not to have changed anything by accident. Both are for the
-resolution item of `docs/plans/PLAN-sessionspec.md`.
+resolution item of PLAN-sessionspec.
 
 1. **`--dump-flight` is missing from the `_mode` "dump" chain.** Row `probe-dump-flight` resolves
    `mode.name = menu`, where every other probe resolves to `test` or `dump`. Consequence: a

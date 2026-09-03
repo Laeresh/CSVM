@@ -13,7 +13,7 @@ heaviest modules). Entry order is historical, not grouped — the index is the m
 member it binds, under `PROJECT_CONTEXT.md`'s comment caps — that is where somebody about to make
 the edit is actually looking. Format and decode knowledge belongs in `docs/formats/` and
 `docs/org/`; a way a measurement misleads belongs in `docs/verification.md`. Narratives, diagnoses
-and landed-work stories go in the commit message (pre-2026-08-06: `docs/HISTORY.md`).
+and landed-work stories go in the commit message.
 
 ⚠ **A new or renamed module updates the index and its entry in the same edit.** Both are in this
   file precisely so they cannot drift apart; `PROJECT_CONTEXT.md` carries only the namespace-level
@@ -586,7 +586,7 @@ census in `docs/org/vertexLighting.md`).
 luminance with its 0.25 separator and its 0.6 / 0.15 energy cap (a proxy the original never uses:
 it lights from SUNLIGHT and darkens from FOG_COLOR independently), and SSR's hard mirror on
 wave-less water planes are all TUNE: judged at the controls against captures, not derived from a
-decoded rule. `docs/plans/PLAN-enhanced-graphics.md`'s Open judgements list is where the user's at-the-controls
+decoded rule. `PLAN-enhanced-graphics`'s Open judgements list is where the user's at-the-controls
 pass tracks them.
 
 Both Options screens expose the mode as a two-way row saved into the menu plan's options store
@@ -6074,7 +6074,7 @@ aircraft are the only casters; every other population is already `ShadowCastingS
 declares `shadows_disabled` in its shader. The front-culled world needs no `DoubleSided` casting:
 the source's visible side is Godot's back face, which is the face the sun sees. `EnableWaterReflections`
 is the same mode gate on the Environment's SSR, for the one glossy population `SceneBuilder` builds;
-what it can and cannot reflect is measured in `docs/plans/PLAN-enhanced-graphics.md` C24.
+what it can and cannot reflect is measured in `PLAN-enhanced-graphics` C24.
 `UseMissionSky` is the same mode gate on the Environment's sky: enhanced mode swaps Godot's
 placeholder `ProceduralSkyMaterial` for a flat `PanoramaSkyMaterial` carrying one colour, which
 `WeatherRig` rewrites per zone from that zone's `FOG_COLOR`, and takes the ambient off the sky so
@@ -6089,7 +6089,7 @@ settings automatically.
 with `GlowBloom` 0 so only the glow-arm sprites (`SceneBuilder`'s `col.rgb * 1.5`, the only pixels
 enhanced mode pushes above 1.0) bloom; `TonemapMode` AgX with its own white/contrast pair recovers
 the day chapters' far-ridge washout instead of clipping it (all TUNE, judged against C1/C4/C5
-captures in `docs/plans/PLAN-enhanced-graphics.md` C22). `CockpitOverlay`'s duplicated `_env` inherits
+captures in `PLAN-enhanced-graphics` C22). `CockpitOverlay`'s duplicated `_env` inherits
 this too, so the interior pass tonemaps once, the same as the world pass. See "Rendering: the
 enhanced graphics mode" above for the divergence record as a whole.
 Vsync resolves at the same `_Ready` site as the shader clock / `--perf` tick: `display.vsync`

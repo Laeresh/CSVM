@@ -69,7 +69,7 @@ public sealed class CameraController
     // radius and a full cut ~−7%, which is the term the eye actually sees.
     private const float DistTransientPerAccel = 0.105f;
 
-    // The numpad +/- zoom axis (docs/plans/PLAN-cockpit-view.md, "What the data actually ships"):
+    // The numpad +/- zoom axis (PLAN-cockpit-view, "What the data actually ships"):
     // the target moves at 2/s, clamped [0, 1]; the shown trim chases it at 1.5/s.
     private const float ZoomAxisRate = 2f, ZoomSmoothRate = 1.5f;
 

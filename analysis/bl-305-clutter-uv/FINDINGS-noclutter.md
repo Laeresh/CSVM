@@ -64,7 +64,7 @@ mech3ax does not claim it. The word "subface" **does not appear anywhere in the 
 (case-insensitive search of `Z:\CSVM\tools\mech3ax`: zero hits). `UNK3` is literally "unknown flag
 #3" — an ordinal, not a meaning; the only comment on it is `// 1, 0x0800 not in mechlib`.
 
-The SUBFACE reading is this project's own, from `docs/HISTORY.md` 2026-07-23 ("Polish-4 item 9"). It
+The SUBFACE reading is this project's own, from the archived development log, 2026-07-23 entry ("Polish-4 item 9"). It
 was reasoned, not measured: `support\init.gw` applies `GameGenSetSubfacePriorityOffset 1` globally,
 the OpenFlight-derived engine has a subface concept, and applying one priority level to the `unk3`
 set fixed C5's ground z-fight. That the fix *worked* is real, but it only shows the `unk3` set draws

@@ -28,7 +28,7 @@
 > project-wide and now lives in CLAUDE.md's top block.
 
 Prepared 2026-07-21. These are the **ready-to-open** upstream contributions for the work in
-`docs/plans/PLAN-mech3ax-cs-revival.md`. Per the project's division of labor (CLAUDE.md), the code
+`PLAN-mech3ax-cs-revival`. Per the project's division of labor (CLAUDE.md), the code
 here is prepared for the user, who owns all upstream/community communication — **nothing has
 been pushed or opened**. *(As written 2026-07-21, before the branches were pushed and the anim PR
 opened; the status table below is the accurate record.)*
@@ -96,7 +96,7 @@ defect, not just a bookkeeping change:
 - **The anim work did not stand on its own.** `metadata-gen` panicked at type resolution
   (`type mech3ax_api_types::anim::events::NodeBelowAlt required by Condition.NodeBelowAlt not
   found`) because the codegen registrations for four types the *anim* work introduced were
-  written later, during the *gamez* work, and so lived in the gamez commit. `docs/PLAN-…`
+  written later, during the *gamez* work, and so lived in the gamez commit. `PLAN-mech3ax-cs-revival`
   already diagnosed this correctly ("Track B item 4 added … but never registered them") but
   fixed it in the wrong place. The registration and its changelog line now sit in the anim
   branch, where the types are introduced; the gamez branch no longer touches `metadata-gen`

@@ -485,7 +485,7 @@ routine.
   binary `ExtractAssets.ps1` uses (`target/release/unzbd.exe`) and re-extract if anything in the
   output shape moved.
 
-The shelved upstream-contribution package is archived at [plans/upstream-pr/](plans/upstream-pr/) —
+The shelved upstream-contribution package is archived at [upstream-pr/](upstream-pr/) —
 kept because its PR bodies are the best description of what each branch actually contains.
 
 ### Window focus: scripted runs stay out of your way

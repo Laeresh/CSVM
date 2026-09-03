@@ -1,7 +1,7 @@
 # Verifying a change in this project
 
-This file contains transferable verification rules. Dated evidence belongs in commit messages
-(pre-2026-08-06: `docs/HISTORY.md`), analysis findings, or git history; module constraints belong
+This file contains transferable verification rules. Dated evidence belongs in commit messages,
+analysis findings, or git history; module constraints belong
 in `docs/architecture.md`.
 
 Read **METHOD** first, then only the relevant section. Rule IDs are permanent: append new rules
@@ -456,7 +456,7 @@ loss. What the engine renders was decodable from the authored constants + oscill
   `-GoldenWorkers` (default 4) is the same exception again: each concurrent shot still carries its
   own process, log, `.out`/`.err` and PNG, so nothing about the identity check changes — an A/B of
   1/2/3/4 workers, three repeats each, found every raw-pixel hash, `sim_frame`, size and adapter
-  bit-identical at every count (`PLAN-fast-verification.md` C21). What still does not
+  bit-identical at every count (`PLAN-fast-verification` C21). What still does not
   isolate is a suite whose store is deliberately outside `.scratch/` — two concurrent
   `RunTests.ps1` invocations fail `campaign-loop`, which reads a `user://` profile an earlier
   process wrote. `RunTests.ps1`'s hitch stage (`-Hitch`) applies the same rule to itself: it is the
@@ -741,7 +741,7 @@ loss. What the engine renders was decodable from the authored constants + oscill
   luminance centroid.** An axis-aligned basis multiplies by exact 0s and 1s, so float32 rounding of
   a large world transform is zero there at any distance, and a `--weapon-lab` hold pins the aircraft
   at exactly that attitude; a luminance-weighted centroid moves with shading, so its floor is never
-  the geometry. Measured on the cockpit panel (`docs/plans/PLAN-cockpit-panel.md` C20): the pinned heading-0 nudge read 0.03-0.12
+  the geometry. Measured on the cockpit panel (`PLAN-cockpit-panel` C20): the pinned heading-0 nudge read 0.03-0.12
   px at both the origin and 10 km and closed the fix unbuilt, while a flown `--det --shots=4`
   capture registered by bezel-only phase correlation against strut and dash control regions read
   0.02 px at the origin, 0.7 px at 10 km and 2.7 px at 20 km under `--direction=-0.743,0,-0.669`,

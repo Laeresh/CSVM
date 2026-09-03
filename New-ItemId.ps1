@@ -38,8 +38,8 @@ if ($LASTEXITCODE -ne 0 -or -not $gitCommon) {
 $counterPath = Join-Path $gitCommon 'item-id-counters.json'
 if (-not (Test-Path $counterPath)) {
     throw ("Counter file missing: $counterPath`n" +
-        'Re-seed it with the highest ID EVER used per kind (scan all *.md incl. docs/HISTORY.md ' +
-        'AND git log --all; retired IDs are never reused), e.g.: {"BL":282,"CAP":27,"PT":37}')
+        'Re-seed it with the highest ID EVER used per kind (scan all *.md AND git log --all, ' +
+        'since retired IDs live only in history and are never reused), e.g.: {"BL":282,"CAP":27,"PT":37}')
 }
 
 # Exclusive open is the lock: a concurrent minter gets IOException and retries.

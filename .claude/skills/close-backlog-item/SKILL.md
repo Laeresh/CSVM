@@ -42,7 +42,7 @@ Then check what the deletion breaks:
 - **Sibling entries that cite the ID.** Grep it. A citation inside a *narrative* ("split out of
   `BL-236`, now landed") is history and stays. A citation that sends a future reader to go *read*
   the deleted entry for evidence or traps must be rewritten to carry the fact itself, or point at
-  a pre-freeze `docs/HISTORY.md` entry / the closing commit (`git log --grep=BL-NNN`) instead.
+  the closing commit (`git log --grep=BL-NNN`) instead.
 - **A `*Playtest after fix:*` line** on the entry means an owed test that may now be actionable —
   if the fix landed and the test was not run, it moves to `playtest.md` rather than vanishing.
 
@@ -59,8 +59,8 @@ delete the folder with the item, or say you left it.
 
 ## 4. Log the outcome in the closing commit's message
 
-The closure record lives in the commit message of the commit that deletes the entry
-(`docs/HISTORY.md` is frozen as of 2026-08-06 — never append to it or edit it). Since this skill
+The closure record lives in the commit message of the commit that deletes the entry (there is no
+history file to append to). Since this skill
 does not commit unless asked, **draft the message now**, while the evidence is in context: `Write`
 it to a file so the eventual commit is `git commit -F <file>` (per CLAUDE.md), whether that commit
 happens on request here or later via `/commit-next`.
@@ -89,8 +89,7 @@ unscaled arc reads like the original at the controls", never "judged at the cont
 live prose — that is the whole point of step 4 holding the record. A doc line that narrates a past
 event ages, and sends the reader building a timeline instead of reading the current state.
 
-Finish with a grep of the ID across the repo: the only hits left should be pre-freeze entries in
-the frozen `docs/HISTORY.md` — no hits in any live file. (Post-freeze retirements live only in
+Finish with a grep of the ID across the repo: no hits in any live file. (Retirements live only in
 commit messages: `git log --grep=<ID>`.)
 
 ## 6. Verify and report

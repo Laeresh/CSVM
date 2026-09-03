@@ -1,5 +1,5 @@
 """Census over the 24 shipped campaign missions: roster size, generator count,
-zeppelin count. Used by D33 (PLAN-campaign-coop.md) to choose "the heaviest
+zeppelin count. Used by PLAN-campaign-coop D33 to choose "the heaviest
 shipped campaign mission" by data rather than impression.
 
 Reads extracted/<chapter>/<mission>/zrdr/{aiv,egen,zeppelins}.zrd.json under

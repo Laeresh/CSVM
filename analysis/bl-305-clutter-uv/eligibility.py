@@ -1,4 +1,4 @@
-"""Clutter-eligibility census (plan item A3, docs/PLAN-clutter-uv-placement.md).
+"""Clutter-eligibility census (PLAN-clutter-uv-placement A3).
 
 Answers, per chapter and with NO engine running: how many world polygons would the ORIGINAL
 engine's clutter stamper (`crimson.exe`, `cls_clutter.cpp`) visit that the REMAKE's
@@ -18,7 +18,7 @@ shape from scratch rather than risk a shared-module edit colliding with a siblin
 
 THE TWO RULE SETS
 ------------------
-Original (`crimson.exe`, addresses from `docs/PLAN-clutter-uv-placement.md`'s evidence table,
+Original (`crimson.exe`, addresses from PLAN-clutter-uv-placement's evidence table,
 read via the Ghidra MCP 2026-08-09):
 
   FUN_004de460  per NODE: requires flag bit 2 at node+0x24 (mech3ax `NodeFlags::ACTIVE = 1<<2`,

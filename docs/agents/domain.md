@@ -23,9 +23,10 @@ All binding:
   `gotchas.md` is the cross-cutting one, read before any reader/transform/shader work.
 - **`docs/verification.md`** — how to verify a change, and how the instruments lie.
   Read before measuring anything.
-- **`docs/plans/`** and **git log** — decision record. Completed plans keep their dead
-  ends; commit messages carry what landed and how it was verified (before the 2026-08-06
-  freeze, that record is `docs/HISTORY.md`'s dated entries).
+- **git history** — decision record. Commit messages carry what landed and how it was
+  verified; completed plans (deleted from the tree, read back with the commands in
+  `PROJECT_CONTEXT.md`'s repo layout) keep their dead ends, and the archived development
+  log holds the earlier dated entries.
 
 ## Use the project's vocabulary
 
@@ -52,9 +53,9 @@ Comment length and shape are capped; see `PROJECT_CONTEXT.md`'s coding conventio
 
 ## Flag decision conflicts
 
-Decisions here live in commit messages (pre-freeze: dated `docs/HISTORY.md` entries), `⚠` constraint lines in
-`docs/architecture.md`, rules in `docs/verification.md`, and the archived plans in
-`docs/plans/` (which deliberately keep their dead ends). If your output
+Decisions here live in commit messages, `⚠` constraint lines in
+`docs/architecture.md`, rules in `docs/verification.md`, and the completed plans in git
+history (which deliberately keep their dead ends). If your output
 contradicts one, surface it explicitly rather than silently overriding:
 
 > _Contradicts the `⚠` constraint on `src/Mech3/SceneBuilder.cs` — but worth reopening because…_

@@ -1,6 +1,6 @@
 # A1 — C1's terpat02 UV repeat in world metres, against the 512 m grid constant
 
-Repo-convention analysis writeup for PLAN-clutter-uv-placement item A1 (docs/PLAN-clutter-uv-placement.md), following the shape of analysis/collider-probe/FINDINGS.md. This is a permanent repo artifact the plan's checklist requires, not an ephemeral status report.
+Repo-convention analysis writeup for PLAN-clutter-uv-placement A1, following the shape of analysis/collider-probe/FINDINGS.md. This is a permanent repo artifact the plan's checklist requires, not an ephemeral status report.
 
 **Question.** Across C1's terpat02-textured world polygons, how many world metres does one full UV repeat of the terrain texture span, and how does that compare to the 512 m the remake currently tiles the template on (ClutterBuilder's GroundInfo, Clutter.cs:569-583)? Repeated for C5's cblock1/2/3/7 and, since the machinery is generic once built, every other registered template in all 8 chapters.
 

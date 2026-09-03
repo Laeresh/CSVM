@@ -1,6 +1,6 @@
 # The 4P cost of a heavy campaign mission (D33)
 
-Part of `PLAN-campaign-coop.md`'s D33: the frame cost and hitch behaviour of four panes over a
+Part of PLAN-campaign-coop's D33: the frame cost and hitch behaviour of four panes over a
 full campaign mission, measured rather than guessed. `BL-434` already flagged per-viewport
 cockpit interior cost at four players as unprofiled; this is that measurement, for the mission
 data itself picks out as the heaviest one shipped.

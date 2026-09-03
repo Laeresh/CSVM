@@ -207,7 +207,7 @@ kinds 1/2/5/6 get only that; kind 9 additionally tests `*(node+0x38)+0xe0 & 0x20
 `FUN_004cf8b0`; kind 10 delegates to `FUN_004e0b90`; anything else logs "Unrecognized" and
 returns error 3.
 
-⚠ **This is not the ground-LOD mechanism**, a claim [`docs/HISTORY.md`](../HISTORY.md)'s M2
+⚠ **This is not the ground-LOD mechanism**, a claim the archived development log's M2
 polish-4 entry still makes ("we draw both because the original selects between them via
 partition visibility"). The verb appears in no C5
 script at all; C5's coarse/fine ground selection is the **subface flag**

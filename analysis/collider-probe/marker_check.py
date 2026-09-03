@@ -1,7 +1,7 @@
 """One-off diagnostic (not part of the probe): counts marker-gizmo nodes that the collision
 walk reaches while still collidable (i.e. NOT already exempted by NoCollisionNode for an
 unrelated reason, such as being classified a billboard). Checks the hypothesis that the
-2026-07-22 off-by-6/11 gap (docs/HISTORY.md) was these nodes still building a collider,
+2026-07-22 off-by-6/11 gap (archived development log) was these nodes still building a collider,
 closed by 7c82b80 (2026-08-01, "Level-editor marker gizmos no longer render")."""
 import os
 import sys

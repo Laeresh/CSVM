@@ -426,7 +426,7 @@ degenerate ranges).
   are now CONSUMED — see [Consumed by the remake](#consumed-by-the-remake) below.**
 - ⚠ **`fog_zone` is not the sky/fog zone selector** — and as of it is no longer
   unidentified: the decompile (section above) shows it is a **bool** arming the in-volume
-  whiteout and the `ZONE3` camera state. The old record stands as history: `docs/HISTORY.md`
+  whiteout and the `ZONE3` camera state. The old record stands as history: the archived development log
   claimed "no chapter's copy has a `fog_zone` key" — wrong, five do — and the
   `zone_id` mismatches that blocked the "selector" reading (C1's 0 against `zone_id: 2`) were
   never a contradiction, because the value was never an index. `BL-277`'s geometry rule stands

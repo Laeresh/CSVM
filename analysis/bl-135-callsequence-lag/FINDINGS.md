@@ -4,7 +4,7 @@
 lag is gone and the drain measured in sections 2-5 was never the right mechanism. Those sections
 are kept as the record of what the drain cost, not as a description of the engine.
 
-Measured 2026-08-04 for `BL-135` / `PLAN-m3-polish-6.md` item B12. **Verdict: the bounded
+Measured 2026-08-04 for `BL-135` / PLAN-m3-polish-6 B12. **Verdict: the bounded
 same-pass drain works and is bounded by a number the data itself sizes — but it is no longer
 behaviour-neutral. It moves 4 of the 13 golden shots, one of them by 79.7 % of its pixels, and it
 fixes nothing observable: no content appears, disappears or ends up anywhere different. It is
