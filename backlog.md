@@ -984,6 +984,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   lost steps. *Cross-refs:* `docs/plans/PLAN-M5-polish-6.md` C22, `BL-606` (the same per-sim-step
   suspects seen as an allocator), `docs/verification.md` PERF-21 and PERF-23.
 
+- `BL-698` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` `[CM14]` **The Gemini's front and back gasbags sink through the sea while the middle three
+  stay on it.** *Evidence (at the controls, on the breakup the retired `PT-103` flew; `git log
+  --grep=PT-103`):* after `all_gmzep_gasbags` plays, five sections separate; the author counts "the
+  middle three stayed above water, the front and back sank through it", and the three that stay
+  rest at visibly different depths. The sortie log has `geminizep` dying on `gasbag2`, `gasbag5`
+  and `gasbag4` (`survivors 2 < required 3`) and `death plays 'all_gmzep_gasbags'`, so this is the
+  authored breakup, not a stray fall. `BL-668` (closed) fixed the same sinking on `piratezep` with a
+  second, upward column ray in `MotionRuntime.TryGroundColumn`, and its own diagnosis explains why a
+  bag is missed: the crossing step is built from the bag's ballistic origin through the CURRENT
+  parent transform, and a bag that arrives outside the ray's reach is never lifted back. The Gemini
+  differs in the two ways that diagnosis is sensitive to: it has five bags, not six, and the end
+  bags sit farthest from the pitch pivot, so they carry the most vertical speed at the break. Read
+  where `gasbag1` and `gasbag5` are on the frame `break1`/`break5` starts, against `ColumnDepth`,
+  before changing anything.
+  *⚠ Traps:* `zeppelin-breakup` pins `piratezep` only and would pass green while this ship sinks;
+  a fix owes this hull its own resting check (`BL-694`'s trap says the same about `killgmzep`). Do
+  not clamp bags to y = 0: `BL-668` tuned no constant and the fix here should not either.
+  *Cross-refs:* `BL-694` (the wreck's own rest, and the bays it drowns), `BL-668`, `CAP-55` (a).
+
 ## Environment & world
 
 - `BL-070` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **C5's `poleflare` clutter renders with the wrong billboard axis** (one of two residuals
@@ -2783,7 +2802,7 @@ usual.
   which is the better-founded half of the same item.
   *Cross-refs:* `BL-632`, `PT-112`.
 
-- `BL-694` `[Bug]` `[L]` `[Next: decide]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14 becomes unwinnable when the Gemini is killed before its cannon bays are,
+- `BL-694` `[Bug]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14 becomes unwinnable when the Gemini is killed before its cannon bays are,
   because the wreck comes to rest low enough to put the surviving bays under the sea.** *Evidence
   (traced, and reproduced twice at the controls with the two outcomes side by side):* the mission's
   third primary is the only route to a win. `OBJECTIVE13` is
@@ -2807,14 +2826,21 @@ usual.
   The author's own account of the difference: "the wreck sank under water blocking the mission
   because only the cannons count", and asked whether rounds reach a submerged gun, "stops at
   surface" — which `Projectile.SurfaceIsWater` confirms, water being a real collider.
-  *Fix shape:* not settled, and the choice matters. The wreck's rest is the contact tier parking the
-  body's ORIGIN on what it lands on, which is decoded behaviour
-  ([`docs/org/objectMotion.md`](org/objectMotion.md):40 — `FUN_004cf200` hands the column query the
-  flying node's origin, with no bounding-box term), so raising the rest height is not obviously
-  right. The authored route is `killgmzep/breakunder`, which switches `underneath` inactive.
-  ⚠ **Do not make a gasbag kill credit primary 3.** `MSG_BRF_HWM4_OBJ3` reads "Destroy the GEMINI by
-  shooting the open cannon hatches", and the original's own death def credits nothing, so crediting
-  it would invent a win condition.
+  The reachability half is confirmed at the controls on the breakup itself (the retired `PT-103`,
+  `git log --grep=PT-103`): the wreck's three middle sections rest on the sea at different depths,
+  and at least one bay sits under the water where no round reaches it.
+  *Fix shape (author's decision):* the bays stay where they are on the hull and are DESTROYED when
+  the gasbags explode; they do not ride along with the falling bags. That puts the `INVALID` state
+  on the `deploy_gmzep_lbroadNN` defs the same way a `WeaponHit` on `destroy_gmzep_lbroadNN-gunback`
+  does, so the credit for primary 3 arrives through the bays' own destruction. Raising the wreck's
+  rest height is not the fix: the rest is the contact tier parking the body's ORIGIN on what it
+  lands on, which is decoded behaviour ([`docs/org/objectMotion.md`](org/objectMotion.md):40,
+  `FUN_004cf200` hands the column query the flying node's origin, with no bounding-box term).
+  ⚠ **Do not credit primary 3 from the gasbag count itself.** `MSG_BRF_HWM4_OBJ3` reads "Destroy
+  the GEMINI by shooting the open cannon hatches", and `killgmzep` invalidates only the rocks, so a
+  direct gasbag-to-objective credit would invent a win condition. The credit goes through the bays
+  being destroyed, which is a destructible-state change and not an objective edit; `CAP-55` (d) and
+  (e) are what show whether the original's own breakup takes the bays with it.
   *⚠ Traps:* **`killgmzep` has never run under test.** `CSVM/src/Testing/ZeppelinBreakupSuites.cs:11,22`
   pins C1/M04 and `piratezep` only, asserts six bags where the Gemini has five, and would fail its
   12-of-12 engine check on a 14-engine hull, so a green suite is no evidence about this ship. There
@@ -2824,8 +2850,8 @@ usual.
   *Open question for whoever takes this:* in the winning run `objective 13` completed with only TWO
   bays destroyed. Two destroys invalidate four `deploy_*` defs and the objective is authored to need
   five, so something else supplied the fifth; find it before changing any counting.
-  *Cross-refs:* `BL-695` (the same ladder crediting with no cannon touched at all), `BL-639`,
-  `BL-640`, `BL-668`, `CAP-55`, `PT-103`.
+  *Cross-refs:* `BL-695` (the same ladder crediting with no cannon touched at all), `BL-698` (the
+  Gemini's end gasbags sinking through the same sea), `BL-639`, `BL-640`, `BL-668`, `CAP-55`.
 
 - `BL-695` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14's cannon-hatch ladder can complete with no Gemini cannon destroyed at
   all.** *Evidence (traced from a sortie log):* on one CM14 run the whole primary ladder completed
@@ -2843,7 +2869,7 @@ usual.
   *⚠ Traps:* do not "fix" this by tightening the count before `BL-694`'s open question is answered —
   that run completed `objective 13` on four invalidations where five are authored, and the two
   anomalies may share a cause. Neither should be changed on its own.
-  *Cross-refs:* `BL-694`, `BL-639`, `PT-103`.
+  *Cross-refs:* `BL-694`, `BL-639`.
 
 ## Tooling, platform & docs
 
