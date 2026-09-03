@@ -40,7 +40,7 @@ it owns: no `LaunchMenu`, no menu screens, no campaign board chrome. It also run
 closing sorties of [`PLAN-M5-polish-8.md`](PLAN-M5-polish-8.md) and
 [`PLAN-M5-polish-9.md`](plans/PLAN-M5-polish-9.md), and that is a scheduling constraint rather than a file
 one: see Decision 4. `A2` died at dispatch and its named first alternate `BL-405` was promoted into
-its place as `C25`. Remaining alternates if another item dies early: `BL-673` (latent, small),
+its place as `C25`. Remaining alternates if another item dies early:
 `BL-391` (an audio level the author has already reported), `BL-614` (the general form of a walk
 `C21`'s neighbourhood measured).
 
