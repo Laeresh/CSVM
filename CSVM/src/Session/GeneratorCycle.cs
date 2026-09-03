@@ -22,6 +22,13 @@ public sealed class GeneratorCycle
     /// away (hardcoded in the original), so a fast-cycling generator leaves its hangar open.</summary>
     public const float DoorEarlyCloseGapSeconds = 8f;
 
+    /// <summary>Seconds a launch bay stays open after its host's kill: the decoded wreck timer
+    /// (the kill stamps the zeppelin's sink for 3 s later). ⚠ A deliberate deviation: the
+    /// original disables the generator on the kill tick, and C5/M04 loses on it when the fourth
+    /// gasbag dies inside OBJECTIVE10's 0.5 s nap before OBJECTIVE11 credits Miles's launch
+    /// (docs/formats/mission-entities/enemy-generators.md, "The host's death").</summary>
+    public const float HostDeathGraceSeconds = 3f;
+
     private readonly int _capacity;
     private readonly int _maxActive;
     private readonly int _waveSize;
@@ -34,6 +41,7 @@ public sealed class GeneratorCycle
     private float _timer;
     private float _nextEvent;
     private bool _waveCredited;
+    private float? _sinceHostDeath;
 
     public GeneratorCycle(int capacity, int maxActive, int waveSize, float wavePeriod,
         float indPeriod, float? minAltitude)
@@ -60,8 +68,12 @@ public sealed class GeneratorCycle
     /// death frees its slot via <see cref="SpawnRemoved"/>.</summary>
     public int Active { get; private set; }
 
-    /// <summary>Permanently off: the host's death disables its generator for good.</summary>
+    /// <summary>Permanently off: the host's death disables its generator for good, once
+    /// <see cref="HostDeathGraceSeconds"/> have run since the kill.</summary>
     public bool Disabled { get; private set; }
+
+    /// <summary>The host's kill is recorded and the grace is running; launches still fire.</summary>
+    public bool HostDead => _sinceHostDeath != null;
 
     /// <summary>The hangar door, driven by <see cref="Step"/> under the decoded hardcoded
     /// timings. Closed at load; on the host's death it keeps its last state (the decoded loop
@@ -78,8 +90,10 @@ public sealed class GeneratorCycle
     /// has the check switched off (authored <c>capacity</c> 0 and no wave credit).</summary>
     public int CapacityRemaining => _capacityRemaining;
 
-    /// <summary>The host died: disable permanently (decoded rule, never re-enabled).</summary>
-    public void HostDied() => Disabled = true;
+    /// <summary>The host died: the bay keeps launching for <see cref="HostDeathGraceSeconds"/>,
+    /// then disables permanently (never re-enabled, as decoded). A second kill report while the
+    /// grace runs does not restart it.</summary>
+    public void HostDied() => _sinceHostDeath ??= 0f;
 
     /// <summary>Puts this cycle on Instant Action's wave-credit budget: the decoded capacity rule
     /// applies from here on regardless of the authored <c>capacity</c>, starting from zero
@@ -115,6 +129,15 @@ public sealed class GeneratorCycle
         if (Disabled)
         {
             return false;
+        }
+        if (_sinceHostDeath is float since)
+        {
+            _sinceHostDeath = since + dt;
+            if (since >= HostDeathGraceSeconds)
+            {
+                Disabled = true;
+                return false;
+            }
         }
         _timer += dt;
         if (Blocked(hostAltitude))

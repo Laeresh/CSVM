@@ -6782,7 +6782,11 @@ inside a wave and `ind_period + wave_period` gaps waves (they compose). `DoorOpe
 decoded hardcoded door timings inside the same `Step`: open 4 s before a due spawn, minimum 4 s
 open (measured on the same since-spawn timer), close early only when the next spawn is over 8 s
 away; while blocked ONLY the door closes, and a disabled (host-dead) generator's door keeps its
-last state (the decoded loop early-outs before any door rule). `UseWaveCredits()`/`GrantCapacity`
+last state (the decoded loop early-outs before any door rule). `HostDied()` starts the
+`HostDeathGraceSeconds` grace (3 s, the decoded wreck timer) during which the bay still launches,
+and `Step` disables it once the grace has run: ⚠ a deliberate deviation from the decoded kill-tick
+disable, because C5/M04's fourth gasbag can die inside the 0.5 s between OBJECTIVE10 and the
+OBJECTIVE11 credit for Miles's launch (enemy-generators.md "The host's death"). `UseWaveCredits()`/`GrantCapacity`
 are F12's arm: an Instant Action `zeppelin_run` runs the decoded capacity rule regardless of the
 authored `capacity`, from zero remaining, topped up per wave. Format and decode, including the
 capacity-stand-in puzzle: `docs/formats/mission-entities/enemy-generators.md`.
@@ -6825,8 +6829,9 @@ close is the open, as in the loader) through host-scoped hooks (`AnimRuntime.Pla
 `StopWithin`); a name resolving no def runs the timing machine log-only. A ground hangar's door is
 this cycle's, not the mission script's (`hangar-door-wake` suite). Every drop/live/door/spawn prints an `egen:`
 line, which is the flag's observability. `NotifyHostDied(node)`: the zeppelin death aggregator
-(`ZeppelinRuntime.ZeppelinKilled`, F18) calls it and the matching cycles disable permanently.
-Pinned by the `zeppelin-launch` suite. For campaign missions, `RequireWakeupCredits(hostNode)`
+(`ZeppelinRuntime.ZeppelinKilled`, F18) calls it and the matching cycles go on the 3 s launch
+grace, then disable permanently (one `egen:` line each way).
+Pinned by the `zeppelin-launch` suite; the credit-after-kill shape by `generator-launch-dedg`. For campaign missions, `RequireWakeupCredits(hostNode)`
 starts cycles named by a script's `WAKEUP_GENERATOR` empty, and
 `GrantWaveCapacity(hostNode, n)` is its top-up (`--wake-generators` grants the script's whole
 credit at build, the logged headless stand-in for playing up to the objective); the spawn
