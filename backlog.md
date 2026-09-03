@@ -2551,6 +2551,43 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   that never draw. A fix that hides the flash by delaying the quit would slow every headless probe
   and every suite that ends in one.
 
+- `BL-711` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A refused character in a
+  name box makes no sound, because the keyboard cannot deliver one to refuse.** *Evidence:* reported
+  at the controls over `PLAN-menu-presentations` E44's sound sweep, which expects `ENTERTEXT` per
+  accepted character and `ENTERTEXT_ERROR` per refused one. Both cues are wired
+  (`OriginalCues.TextError` → `ENTERTEXT_ERROR.WAV`, `CSVM/src/Session/MenuCueTable.cs:20`) and both
+  edit boxes cue them on the refusing branch (`CSVM/src/UI/Menu/Original/OriginalCampaign.cs:435`,
+  `CSVM/src/UI/Menu/Original/OriginalHangar.cs:562`), and the WAV is present in the extraction. What
+  never happens is the refusal: `MenuInput.BuildTextKeys` (`CSVM/src/UI/MenuInput.cs:335`) polls
+  A-Z, 0-9 and Space alone, so a character outside the box's set never reaches `Typed` and the box is
+  never asked to refuse it. Pressing an unaccepted key produces neither a letter nor a beep.
+  *Fix shape:* let the typed set be wider than the accepted set, so the box does the refusing and the
+  cue has something to fire on. *⚠ Traps:* **the cap overrun is a second, untested route to the same
+  cue** — a valid character typed into a full box should already refuse and beep, so check that
+  before concluding the cue is dead; if it beeps, this item is only about the character set.
+  Widening the polled keys touches text entry on both presentations, and the keys are edge-detected
+  per key in a fixed-length parallel array, so the array and the table have to grow together.
+  *Playtest after fix:* the profile name box, one accepted letter, one punctuation key, and one key
+  past the cap, expecting `ENTERTEXT`, `ENTERTEXT_ERROR` and `ENTERTEXT_ERROR`.
+
+- `BL-712` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A briefing re-entered
+  after a trip to the cabin resumes its reveal mid-way instead of playing from the start.**
+  *Evidence:* reported at the controls over E44's sound sweep, "Going back into the cabin during a
+  briefing and then back to the briefing does not reset the animation". The briefing is cached on the
+  feature by mission (`CampaignFeature.Briefing`, `CSVM/src/UI/Menu/CampaignFeature.cs:143-151`):
+  the script is rebuilt only when `MissionSeq` changes, so leaving and returning to the *same*
+  mission hands back the same `CampaignBriefing` with its program counter, clock and revealed set
+  where they were. The presentation then just advances it (`OriginalCampaign.AdvanceBriefing`,
+  `CSVM/src/UI/Menu/Original/OriginalCampaign.cs:221`). The narration does restart on entry, so the
+  two halves of the same screen disagree, which is the sharpest evidence this is not intended.
+  *Fix shape:* `BriefingScript.Restart` (`CSVM/src/UI/Menu/BriefingScript.cs:417`) already returns
+  the script to a blank map with the narration starting over, and REPLAY BRIEFING drives it; entry to
+  the briefing screen should do the same. *⚠ Traps:* **the `--menu=campaign-briefing:<seconds>` aid
+  depends on a reveal that can be advanced from zero**, so it must still land on the same frame after
+  the fix or every briefing shot moves. Do not reset by clearing the cache on `MissionSeq`, which
+  would reload the briefing from disk on every entry; reset the script, not the load.
+  *Cross-refs:* `PLAN-menu-presentations.md` E44 row 8.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
