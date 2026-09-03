@@ -68,12 +68,6 @@ never changes the exit code.
   `[IO.File]` with an explicit `UTF8Encoding`) and keep the script itself pure ASCII, building
   any non-ASCII characters from `[char]` codes. The encoding check above is the backstop, not the
   plan.
-- ⚠ **Leave `videodata/` alone entirely, and never let PowerShell near it.** These per-clip decode
-  sidecars are inert: the gauge-decode pipeline that wrote and read them went with footage-derived
-  flight analysis, so nothing consumes them and no result may be quoted from them. They are
-  git-ignored, so the encoding check *cannot* see them and a PS round-trip would mojibake them
-  with no backstop at all. Clip filenames under `OriginalScreenshots/` carry non-ASCII too
-  (`CAP-10 90° Banked Pith Up Down.mp4`), so the same care applies to those paths.
 - ⚠ **Multi-line commit messages: `Write` the message to a file, then `git commit -F <file>`.**
   Shell quoting is where this goes wrong: PowerShell's `@'…'@` needs its closing delimiter at
   column 0, and the same text handed to Bash (still allowed for `git`) is silently accepted as
