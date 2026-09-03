@@ -756,42 +756,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   = bracketed, inside = not), reusing the same hysteresis machinery already built.
   *Cross-refs:* `TargetHud.GunReaches`.
 
-- `BL-404` `[Research]` **Does the player's rocket get an aim component in the original, the way
-  the player's guns get the assist?** *Evidence:* our rocket launch spawns from the pylon marker's
-  transform with no aim direction at all (`FlightController.cs:1860-1865`), on the stated ground
-  that the original's aim assist `FUN_004b6530` is reached from the gun branch alone. That claim
-  was made from the assist's call sites, not from reading the ordnance branch of the shot routine
-  `FUN_004b6820` end to end, so it settles where the *assist* is called and not what direction an
-  ordnance round actually leaves along. The decoded mount model gives a concrete reason to doubt
-  it: an AI's round leaves along the mount's clamped aim, which tracks the lead to within the
-  5° gate, and the mount machinery (`FUN_004b7670`, `FUN_0041afe0`) is not AI-only.
-  *What to settle:* (a) whether `FUN_004b6820`'s ordnance path hands the projectile spawner the
-  mount's aim `+0x48`–`+0x50` or the vehicle's forward axis, and whether that differs for the
-  player; (b) whether any assist or lead solve runs for a player rocket, including the
-  `FUN_00440ad0` muzzle-position branch the decode leaves unread; (c) whether the player's own
-  ordnance skips the aim gate entirely the way it skips the `quick_draw_chance` roll
-  (`0x004b6b41`).
-  ✅ **ANSWERED, all three parts** ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), "Who
-  aims ordnance, and who does not"). **(a)** The player's ordnance branch hands `FUN_005aef40` a
-  direction built from the **aircraft's own basis axis**, negated (taken as-is for a `REAR` weapon);
-  the mount contributes the spawn position only, and its aim is never read. The AI's branch instead
-  passes mount `+0x3c`, which `FUN_004b7670` writes at the end of every mount update as the clamped
-  aim `+0x48`–`+0x50` rotated into world space, so an AI's round does leave along a target-tracking
-  direction. **(b)** No. The assist `FUN_004b6530` is reached from the `CANNON` branch only; both
-  ordnance branches bypass it, for the player and the AI alike. **(c)** The player skips the aim gate
-  outright, `FUN_004b6820` jumping the whole block when the shooter is the player; when it does run
-  the threshold is cos 5° for ordnance against cos 10° for guns.
-  ⚠ **The residual this raised is itself settled.** "No aim on rockets" is confirmed for the player,
-  so the shipped assumption holds in kind; the launch axis it left open is now
-  `FlightController.OrdnanceLaunchDir`, a human's round taking the aircraft's basis axis and an AI's
-  the clamped mount aim (`AiRocketeer.LaunchDirWorld`). That asymmetry is the original's, not a
-  decision of ours, and no shipped airframe cants a pylon marker, so it changes nothing a player
-  sees on the shipped fit.
-  *Cross-refs:* `AiRocketeer` (the AI ordnance trigger),
-  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md) ("The fire routine, and the aim
-  gate", and its "Open" note on the muzzle-position branch),
-  [`docs/org/aim-assist.md`](docs/org/aim-assist.md).
-
 - `BL-411` `[Feature]` **Force feedback is unimplemented, and it is the only thing the `TORPEDO` flag
   does.** *Evidence:* `FUN_00480f50` drives the Immersion TouchSense API (`CImmCompoundEffect`) and
   picks one of three launch effects, gated on `ROCKET`: `TORPEDO` gets direction 0 at magnitude 1.0,
@@ -850,8 +814,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   decision already computes, with the mounted body riding it as it does today. Ours would snap
   where the original slews unless `FUN_00460840`'s rate is read too.
   *Size:* localized, and probably closed as no-change.
-  *Cross-refs:* `AiRocketeer` (whose launch direction creates the mismatch), `BL-404` (whether the
-  player's rocket gets a direction at all), `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
+  *Cross-refs:* `AiRocketeer` (whose launch direction creates the mismatch);
+  `FlightController.OrdnanceLaunchDir` (a player's round takes the aircraft's own axis with no aim
+  at all, so the mismatch is the AI's alone; [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md),
+  "Who aims ordnance, and who does not"); `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
 
 - `BL-559` `[Research]` **Do the original's gun rounds carry the launcher's velocity?** *Evidence:*
   [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md) ("Launch velocity is inherited, and decays

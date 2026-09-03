@@ -409,7 +409,8 @@ the rounds must fly parallel to the nose rather than fanning.
 
 **⚠ Traps.** The **AI** is not wrong and must not be changed to match: its branch passes the mount's
 clamped aim in world space, which is what the original does for an AI. The player and the AI
-genuinely differ here (`BL-404`). This is not the aim-assist question either; no ordnance round of
+genuinely differ here ([`org/ordnanceTypes.md`](../org/ordnanceTypes.md), "Who aims ordnance, and
+who does not"). This is not the aim-assist question either; no ordnance round of
 any shooter is aim-assisted.
 
 # Wave B — Guidance and seeking

@@ -1074,8 +1074,9 @@ showing the body pointing where the round leaves. Full `.\RunTests.ps1` either w
 **⚠ Traps.** A fixed forward gun has no animated node and reaches the clamped direction the same
 frame; if the ordnance mounts are the same, there is nothing to build. Do not add a slew because it
 looks better: that invents motion the original does not have. Ours would snap where the original
-slews unless the rate is read too, so a half-port is worse than no port. `BL-404` (whether the
-player's rocket gets a direction at all) is a separate open question and is not in scope.
+slews unless the rate is read too, so a half-port is worse than no port. The player's rocket is not
+in scope: it takes the aircraft's own axis with no aim at all (`FlightController.OrdnanceLaunchDir`),
+so only the AI's mount can disagree with its round.
 
 ---
 
