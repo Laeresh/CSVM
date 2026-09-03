@@ -127,15 +127,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   node is hidden), so this entry is the remaining, wider question, not that one again.
   *Cross-refs:* `BL-640`'s closing commit, `docs/formats/destructibles.md` "Which node takes the
   hit".
-- `BL-673` `[Bug]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`AnimRuntime.DamageAt` never consults `Instance.Dormant`, so a deactivated
-  hull's pools can still be damaged by script.** *Evidence:* a deactivated zeppelin's pools
-  (C2B/M04's Gemini ships `deactivated: 1`) are correctly refused as AI *targets*, but a scripted
-  `DamageAt` reaches them anyway. Not reachable by weapon fire today, because a dormant hull's
-  colliders are off, so this is latent rather than a live symptom. *Fix shape:* have `DamageAt`
-  read `Dormant` the way the target scan already does, and add a unit that damages a dormant pool
-  and asserts nothing happens. *⚠ Traps:* a pool that is dormant at mission start and woken later
-  must still take damage after the wake, so the read has to be live rather than captured at build.
-
 - `BL-060` `[Feature]` `[L]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **Improve on the original crash — the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
   User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the
   faithful data-driven crash, so it was preserved on that branch rather than deleted. **The A/B playtest
