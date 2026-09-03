@@ -992,18 +992,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `analysis/collider-probe/`). The `cblock*` templates ship `lightpole` (`CylindricalY`) posts
   *and* `poleflare` (`SphericalY`) glows — 33,682 of each in `cblock1` alone. `ClutterBuilder.Kind`
   carries no per-kind billboard mode, so every kind goes through the one Y-axis shader: the glows
-  spin upright instead of facing the camera, and they get the SUNLIGHT night dim a light source
-  should be exempt from. Now *detectable* (the shared `SceneBuilder.ClassifyBillboard` distinguishes
-  the two), but fixing it means giving `Kind` a billboard mode and a second material path, and it
-  changes how 139,388 C5 sprites look with no reference shot to check against — so it needs an
-  original-game A/B.
-  *The "should be exempt from the dim" half is now decoded and survives.* `docs/org/vertexLighting.md`
-  finds the original's per-surface exemption and it lands on this family: `poleflare` ships texture
-  storage flags `0xab`, i.e. the alpha bit that makes `FUN_005524d0` skip the per-vertex light
-  evaluation outright, so the glows take no sun term at all in the original. So does `lightpole`, and
-  so do `lite_out`, `bliteon`/`bliteoff` and the rest of C5's lit-signage set. The exemption keys on
-  the **texture**, not on a kind, a `soil` id or a node name, so it is a general rule and not a
-  special case cut for this item. It also does not need the A/B: the billboard-axis half still does.
+  spin upright instead of facing the camera. Now *detectable* (the shared
+  `SceneBuilder.ClassifyBillboard` distinguishes the two), but fixing it means giving `Kind` a
+  billboard mode and a second material path, and it changes how 139,388 C5 sprites look with no
+  reference shot to check against — so it needs an original-game A/B.
+  *The "should be exempt from the SUNLIGHT dim" half is settled and no longer part of this item.*
+  The original's per-surface exemption keys on the texture's alpha bit rather than on a kind, a
+  `soil` id or a node name (`docs/org/vertexLighting.md`), `poleflare` and `lightpole` both carry it,
+  and both the world and the clutter material paths now honour it. What remains here is the
+  billboard-axis question alone, and it still needs the A/B.
 
 - `BL-076` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` **Star twinkle + undecoded light fields** (flags 523/…, the 0.17 float) — stars/beacons
   render as fixed-size soft sprites, no twinkle.

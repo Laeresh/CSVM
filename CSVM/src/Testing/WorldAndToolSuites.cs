@@ -14,6 +14,17 @@ namespace CSVM.Testing;
 /// censuses, world lighting and viewers, and the lab surfaces.</summary>
 internal static class WorldAndToolSuites
 {
+    private static readonly string[] AlphaClassChapters =
+        { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
+
+    // The two halves of docs/org/vertexLighting.md's readable statement of the rule: the flares and
+    // signage overlays carry the bit and draw unlit, the building skins and the water do not.
+    private static readonly (string Name, bool Exempt)[] AlphaClassExpectations =
+    {
+        ("poleflare", true), ("lightpole", true),
+        ("cblock1", false), ("bldg1", false), ("wtr00000", false),
+    };
+
     // Exports a built plane to a temp .glb and asserts the file lands and re-imports with at least one
     // textured mesh: the round trip the viewer's --export-gltf=/F10 path relies on, including that the
     // shader skins convert to a glTF-serializable material.
@@ -58,6 +69,38 @@ internal static class WorldAndToolSuites
         {
             plane?.Free();
             textures.Dispose();
+        }
+    }
+
+    // The plumbing behind the original's second lighting gate, which is a reader question and not a
+    // render one: the class comes off the extraction manifest's `alpha` field, and a pixel test
+    // cannot stand in for it. Able to fail: with the manifest read removed, every chapter falls back
+    // to the pixels and lightpole (a Simple texture in several chapters) classifies None.
+    [Suite("texture-alpha-class",
+        "every chapter's texture archive classifies alpha from the extraction manifest rather than "
+        + "the decoded pixels, and the named shipped textures land in the classes docs/org/"
+        + "vertexLighting.md pins: poleflare and lightpole carry the alpha bit, cblock1, bldg1 and "
+        + "wtr00000 do not")]
+    internal static void TextureAlphaClass(TestContext ctx)
+    {
+        foreach (var chapter in AlphaClassChapters)
+        {
+            string path = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+            ctx.RequireData(path, $"{chapter} textures");
+            using var textures = new TextureArchive(path);
+            ctx.Check(textures.ManifestTextureCount > 0,
+                $"{chapter}'s archive carries an extraction manifest count={textures.ManifestTextureCount}");
+            ctx.Check(textures.ManifestAlphaCount > 0,
+                $"{chapter} classifies textures as alpha-bearing count={textures.ManifestAlphaCount} of {textures.ManifestTextureCount}");
+        }
+
+        using var c5 = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C5"));
+        foreach (var (name, exempt) in AlphaClassExpectations)
+        {
+            c5.Find(name);
+            bool bit = c5.LastAlphaClass != TextureArchive.AlphaClass.None;
+            ctx.Check(bit == exempt,
+                $"C5 texture={name} class={c5.LastAlphaClass} carries the alpha bit={bit} expected={exempt}");
         }
     }
 

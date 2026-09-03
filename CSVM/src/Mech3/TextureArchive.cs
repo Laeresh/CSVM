@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
+using System.Text.Json;
 using CSVM.Utils;
 using Godot;
 
@@ -680,7 +681,10 @@ public sealed class TextureArchive : IDisposable
     // baseName (no extension) -> the PNG's retrieval name (a zip entry's FullName, or a file name under _dir).
     private readonly Dictionary<string, string> _byBaseName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ImageTexture?> _cache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, (bool HasAlpha, bool Soft)> _alphaInfo = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (bool HasAlpha, bool Soft, AlphaClass Class)> _alphaInfo = new(StringComparer.OrdinalIgnoreCase);
+    // Archive base name -> the extractor's own alpha class, off the extraction manifest. Empty when
+    // the tree ships PNGs alone, which is why every read of it falls back to the pixel test.
+    private readonly Dictionary<string, AlphaClass> _alphaClasses = new(StringComparer.OrdinalIgnoreCase);
     // Distinct texture names this archive failed to resolve, each already logged once.
     private readonly HashSet<string> _reportedMissing = new(StringComparer.OrdinalIgnoreCase);
     // Authored _N siblings whose dimensions disagreed with the level they claim, logged once each.
@@ -713,6 +717,7 @@ public sealed class TextureArchive : IDisposable
             }
         }
         AuthoredMipBases = new List<string>(bases);
+        ReadAlphaManifest();
         // An override naming a texture this archive does not hold would silently colour nothing,
         // which reads exactly like "the object is not drawing" — the answer the flag exists to give.
         TextureDropIn.CheckNames(path, _byBaseName.Keys);
@@ -730,6 +735,24 @@ public sealed class TextureArchive : IDisposable
         /// kept as <c>--mips=generated</c> so the two are A/B-able in
         /// one build and the goldens of either can be reproduced.</summary>
         Generated,
+    }
+
+    /// <summary>A texture's alpha class as the extractor read it out of the archive's own header
+    /// (storage flags at <c>+0x09</c>, docs/org/textures.md), not off the decoded pixels. The
+    /// original's per-surface lighting exemption keys on "not <see cref="None"/>"
+    /// (docs/org/vertexLighting.md).</summary>
+    public enum AlphaClass
+    {
+        /// <summary>No alpha channel: header bit <c>0x04</c>.</summary>
+        None,
+
+        /// <summary>An alpha channel carried in the pixel data: header bits <c>0x02</c> without
+        /// <c>0x08</c>. One to ten textures per chapter, invisible to a PNG alpha test.</summary>
+        Simple,
+
+        /// <summary>An alpha channel in a plane of its own: header bits <c>0x02</c> and
+        /// <c>0x08</c>.</summary>
+        Full,
     }
 
     /// <summary>Which mip policy every archive built afterwards follows (<c>--mips=</c>). A static
@@ -769,6 +792,30 @@ public sealed class TextureArchive : IDisposable
     /// genuine cutouts (fences, trees), which scissor correctly.</summary>
     public bool LastAlphaIsSoft { get; private set; }
 
+    /// <summary>The archive header's own alpha class for the last texture returned by
+    /// <see cref="Find"/>. ⚠ Not interchangeable with <see cref="LastHadAlpha"/>: this is the
+    /// extractor's field, so it holds for the <see cref="AlphaClass.Simple"/> textures a pixel
+    /// test misses. Falls back to the pixel test only where no manifest ships.</summary>
+    public AlphaClass LastAlphaClass { get; private set; }
+
+    /// <summary>Textures the extraction manifest classified, and how many of those carry an alpha
+    /// channel. Zero means no manifest shipped and <see cref="LastAlphaClass"/> is running on the
+    /// pixel fallback; the population per chapter is in docs/org/vertexLighting.md.</summary>
+    public int ManifestTextureCount => _alphaClasses.Count;
+
+    /// <inheritdoc cref="ManifestTextureCount"/>
+    public int ManifestAlphaCount
+    {
+        get
+        {
+            int n = 0;
+            foreach (var cls in _alphaClasses.Values)
+                if (cls != AlphaClass.None)
+                    n++;
+            return n;
+        }
+    }
+
     /// <summary>True if the name is a texture the retail game data itself lacks (see
     /// KnownAbsentFromGameData) — callers render a neutral fallback, not the debug magenta.</summary>
     public static bool IsKnownAbsent(string materialTextureName) =>
@@ -789,7 +836,7 @@ public sealed class TextureArchive : IDisposable
         // GetFileNameWithoutExtension strips ".t"; that is exactly the prefix we want.
         if (_cache.TryGetValue(baseName, out var cached))
         {
-            (LastHadAlpha, LastAlphaIsSoft) = _alphaInfo[baseName];
+            (LastHadAlpha, LastAlphaIsSoft, LastAlphaClass) = _alphaInfo[baseName];
             return cached;
         }
 
@@ -813,7 +860,7 @@ public sealed class TextureArchive : IDisposable
             }
         }
         _cache[baseName] = tex;
-        _alphaInfo[baseName] = (LastHadAlpha, LastAlphaIsSoft);
+        _alphaInfo[baseName] = (LastHadAlpha, LastAlphaIsSoft, LastAlphaClass);
         return tex;
     }
 
@@ -967,6 +1014,41 @@ public sealed class TextureArchive : IDisposable
         }
     }
 
+    // The extractor's class where the manifest ships, and the decoded pixels where it does not.
+    // ⚠ The fallback is a degradation, not an equivalent: it cannot see the `Simple` textures,
+    // which carry the alpha bit with no PNG alpha channel (docs/org/vertexLighting.md).
+    private AlphaClass AlphaClassOf(string archiveBaseName, bool hasPixelAlpha) =>
+        _alphaClasses.TryGetValue(archiveBaseName, out var stored)
+            ? stored
+            : hasPixelAlpha ? AlphaClass.Full : AlphaClass.None;
+
+    // The extraction manifest's `alpha` field per texture, and nothing else from it. Absent from a
+    // deployed PNG-only tree, which is not an error: AlphaClassOf falls back to the pixels there.
+    private void ReadAlphaManifest()
+    {
+        var bytes = ReadBytes("manifest.json");
+        if (bytes == null)
+            return;
+        try
+        {
+            using var doc = JsonDocument.Parse(bytes);
+            if (!doc.RootElement.TryGetProperty("texture_infos", out var infos)
+                || infos.ValueKind != JsonValueKind.Array)
+                return;
+            foreach (var info in infos.EnumerateArray())
+            {
+                if (info.TryGetProperty("name", out var name) && name.GetString() is { } texName
+                    && info.TryGetProperty("alpha", out var alpha)
+                    && Enum.TryParse(alpha.GetString(), out AlphaClass cls))
+                    _alphaClasses[texName] = cls;
+            }
+        }
+        catch (JsonException e)
+        {
+            Log.Warn("world", $"texture manifest would not parse: {e.Message}");
+        }
+    }
+
     // Decodes one texture and builds its whole mip chain. `resolved` says whether the name found a
     // PNG at all, so a decode failure is not reported as a missing texture.
     private Image? Build(string baseName, out bool resolved, out int authoredLevels)
@@ -974,6 +1056,7 @@ public sealed class TextureArchive : IDisposable
         authoredLevels = 0;
         LastHadAlpha = false;
         LastAlphaIsSoft = false;
+        LastAlphaClass = AlphaClass.None;
         var name = Resolve(baseName);
         var bytes = name != null ? ReadBytes(name) : null;
         resolved = bytes != null;
@@ -988,6 +1071,9 @@ public sealed class TextureArchive : IDisposable
             return null;
         }
         LastHadAlpha = ImageHasAlpha(img);
+        // ⚠ Read the class off the RESOLVED archive name, never the material's: a truncated or
+        // renamed material name is not a manifest key (see Resolve).
+        LastAlphaClass = AlphaClassOf(Path.GetFileNameWithoutExtension(name!), LastHadAlpha);
         // Before mipmaps: raw pixels only. The named coastline sheets are soft whatever the
         // pixel rule says about them (see SoftAlphaCoastline).
         LastAlphaIsSoft = LastHadAlpha && (AlphaIsSoft(img) || SoftAlphaCoastline.Contains(baseName) || baseName.Contains("trans"));

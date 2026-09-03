@@ -158,7 +158,9 @@ counted directly off the headers and matching the extractor's `alpha` classes ex
 
 ⚠ **The count is of the archive, not of the world.** Half of each archive is the hand-authored
 `_1`/`_2` mip levels and the cockpit, plane and effect art. Joined against C5's gamez materials,
-**234 of 583 textured world materials** carry the bit.
+**237 of 583 textured world materials** carry the bit off `texture.zbd`, and 239 off the
+`rtexture14` tier the engine actually loads, which classes the two gauge needles as alpha where the
+base archive does not. The per-chapter join is in "Where CSVM stands" below.
 
 ### What the exempted set looks like
 
@@ -178,22 +180,41 @@ and `bldgtrim1`, the water `wtr00000`–`wtr00015`, and the terrain and cliff fa
 The remake renders the world fullbright and dims it by one `csky_world_light` scalar, the
 data-driven collapse of the original's per-vertex `N·L` (see [`weather.md`](weather.md)). Gate 1 is
 reproduced: `SceneBuilder` reads the model's `lighting` flag and builds an unlit shader variant per
-model. **Gate 2 is not reproduced at all.** The per-model `lit` decision is applied to every
-surface of the model, overlay passes included, and nothing in the pipeline reads the texture
-storage-flags byte. `TextureArchive` classifies alpha from the decoded pixels rather than from the
-header, and the deployed texture tree is PNGs without the extractor's `manifest.json`, so the bit is
-not currently available at build time.
+model. Gate 2 is reproduced as the same variant choice, keyed on the texture instead of the model:
+`TextureArchive` reads the extractor's `alpha` field out of the archive's `manifest.json` and
+publishes it as an alpha class, and a textured surface whose class is not `None` is built without
+the `csky_world_light` term whatever its model's flag says. The clutter sprite cards take the same
+rule at their own material, since they carry their own shader rather than the world one.
 
-Reproducing gate 2 means: carrying the extractor's `alpha` field (or the raw storage byte) through
-to the material build, and treating `alpha != None` on a textured surface as "does not take
-`csky_world_light`", independently of the model's own flag. Note that the PNG alpha channel is not
-a substitute for the field: it distinguishes `Full` from `None` but loses the 1 to 10 `Simple`
-textures per chapter, which carry the bit too.
+⚠ **The PNG alpha channel is not a substitute for the field.** It distinguishes `Full` from `None`
+but loses the one to ten `Simple` textures per chapter, which carry the bit too, so the pixel
+classification `TextureArchive` already had for the blend/scissor choice cannot answer this
+question. The pixel test is the fallback for a deployed tree that ships PNGs with no manifest, and
+it is a degradation rather than an equivalent.
 
-The field is available where the extraction output is: each chapter's `texture.zip` and its
-unpacked sibling carry a `manifest.json` listing every texture's `alpha` as `None` / `Simple` /
-`Full`. Nothing in CSVM reads that file, so plumbing gate 2 is a reader to write, not a decode to
-find.
+⚠ **The rule is invisible wherever the mission's `WorldLight` is already 1.** C4 and C5 author
+`world_light=1` in every zone, so the exemption cancels a multiply by one there and changes no
+pixel; it is C1 (0.802), C1B (0.426), C1C and C2B (0.784) and C3 (0.99) where it shows. A
+C5 residual is therefore not this rule's to fix.
+
+Materials the exemption takes, counted over each chapter's whole gamez material table joined to its
+top-tier `rtextureN` manifest (the archive the engine loads, which classes `needle` and
+`smallneedle` as alpha where the base `texture.zbd` does not):
+
+| Chapter | Textured materials | Exempt | Unresolved names |
+|---|---|---|---|
+| C1 | 552 | 224 | 2 |
+| C1B | 310 | 145 | 2 |
+| C1C | 276 | 132 | 3 |
+| C2 | 480 | 176 | 2 |
+| C2B | 267 | 123 | 2 |
+| C3 | 456 | 189 | 4 |
+| C4 | 662 | 250 | 3 |
+| C5 | 583 | 239 | 3 |
+
+A `--freecam` build reaches fewer materials than the table holds, because it builds only what the
+placed world references: C5 reports 98 exempt of 330 built, C1 120 of 375. The unresolved names are
+the textures no archive ships (`pir_spinner`, `barngrill`, `cloud1`/`cloud2`, `snow16x16`).
 
 ### What the model's `lighting` bit selects, and what it does not
 
