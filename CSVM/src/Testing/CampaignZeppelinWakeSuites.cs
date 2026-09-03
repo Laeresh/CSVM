@@ -159,6 +159,21 @@ internal static class CampaignZeppelinWakeSuites
             ctx.Check(dormantParts > 0,
                 $"the live zeppelin still offers its own parts to the target pool ({dormantParts})");
 
+            // BL-673: a dormant pool is out of the world for a scripted DamageAt too, not only
+            // for the target scan. The read is live, so the same pool must die after the wake.
+            var asleepPool = PoolOf(world, DormantZep);
+            ctx.Check(asleepPool != null, $"'{DormantZep}' registers a damage pool to probe");
+            if (asleepPool != null)
+            {
+                float hp = asleepPool.Health;
+                bool landed = world.Runtime.DamageAt(asleepPool.DamageNode, asleepPool.MaxHealth + 1f);
+                report.AppendLine($"dormant DamageAt: landed={landed} hp {hp:0.##}->{asleepPool.Health:0.##} status={asleepPool.Status}");
+                ctx.Check(!landed, $"a lethal DamageAt on the dormant '{DormantZep}' finds nothing");
+                ctx.Check(Mathf.IsEqualApprox(asleepPool.Health, hp)
+                    && asleepPool.Status == DestructibleRegistry.State.Healthy,
+                    $"…and leaves the pool untouched: hp {asleepPool.Health:0.##}, {asleepPool.Status}");
+            }
+
             director.Attach(new CampaignDirector.WorldInputs
             {
                 Runtime = world.Runtime,
@@ -193,6 +208,14 @@ internal static class CampaignZeppelinWakeSuites
                 $"the woken zeppelin's parts join the target pool ({dormantParts} -> {wokenParts})");
             ctx.Check(wokenStructures > dormantStructures,
                 $"and its damage pools stop being refused as structure candidates ({dormantStructures} -> {wokenStructures})");
+
+            if (asleepPool != null)
+            {
+                bool landed = world.Runtime.DamageAt(asleepPool.DamageNode, asleepPool.MaxHealth + 1f);
+                report.AppendLine($"woken DamageAt: landed={landed} status={asleepPool.Status}");
+                ctx.Check(landed && asleepPool.Status == DestructibleRegistry.State.Destroyed,
+                    $"the same DamageAt after the wake lands and kills the pool ({asleepPool.Status})");
+            }
         }
         finally
         {
@@ -212,6 +235,20 @@ internal static class CampaignZeppelinWakeSuites
         var set = new AimCandidateSet();
         set.AddStructures(world.Runtime.Destructibles);
         return set.Structures.Count;
+    }
+
+    // The first pool the zeppelin's damage wiring fanned its name onto.
+    private static DestructibleRegistry.Instance? PoolOf(TestWorld world, string zep)
+    {
+        foreach (var inst in world.Runtime.Destructibles.All)
+        {
+            if (string.Equals(inst.Owner, zep, StringComparison.OrdinalIgnoreCase))
+            {
+                return inst;
+            }
+        }
+
+        return null;
     }
 
     private static Node3D? HostOf(TestWorld world, string node) =>

@@ -1674,7 +1674,8 @@ record can put on a pool: an owning side where the data names one (a pool with n
 so nobody's target), the name of the
 entity the pool is a PART of (a zeppelin's zones carry their hull's name, which is the only thing a
 `rating_biases` pattern naming the airship can match), and "registered but not in the world yet",
-which `AimCandidateSet.AddStructures` refuses outright.
+which `AimCandidateSet.AddStructures` refuses outright and `AnimRuntime.DamageAt` refuses as a hit
+that found nothing, read live so the pool takes damage once woken.
 Two writers author a team. `ZeppelinRuntime` fans a mission record's own over an airship, and
 `Register` reads one off the pool's damage node where `SceneBuilder` stamped it, which is how a
 pool standing on a mission-structure node becomes a candidate with a side rather than scenery: in

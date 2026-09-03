@@ -1524,11 +1524,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// escalates its visible damage. <paramref name="struck"/> resolves to the owning instance by
     /// walking up to the nearest registered anchor. World destructibles carry HEALTH only, with no
     /// armour pool (docs/formats/destructibles.md). At zero it marks the instance destroyed and
-    /// runs the death sequence. Returns true when the hit landed on a destructible.</summary>
+    /// runs the death sequence. Returns true when the hit landed on a destructible. A dormant pool
+    /// is out of the world, so the hit finds nothing and returns false, whatever the caller.</summary>
     public bool DamageAt(Node? struck, float healthDamage)
     {
         var inst = _destructibles.Resolve(struck);
         if (inst == null)
+            return false;
+        // Read live, never captured: a pool dormant at mission start wakes later and must then
+        // take damage. Checked before Destroyed so out-of-the-world wins unconditionally.
+        if (inst.Dormant)
             return false;
         if (inst.Status == DestructibleRegistry.State.Destroyed)
             return true;   // already dead — the death sequence owns it from here

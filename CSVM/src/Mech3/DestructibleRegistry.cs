@@ -240,7 +240,8 @@ public sealed class DestructibleRegistry
 
         /// <summary>Out of play: the pool exists, but its object is not in the world yet — a
         /// mission's <c>deactivated</c> zeppelin before its script wakes it. Refused as a target
-        /// while set. ⚠ Not a death state: <see cref="Status"/> stays healthy and the HP stands.</summary>
+        /// and by <c>AnimRuntime.DamageAt</c> while set. ⚠ Not a death state: <see cref="Status"/>
+        /// stays healthy and the HP stands.</summary>
         public bool Dormant { get; set; }
 
         /// <summary>The name of the mission entity this pool is a PART of, where one owns it — a
