@@ -104,6 +104,7 @@
     "sun-orientation": 0.036,
     "sun-energy": 0.18,
     "tex-dropin": 0.008,
+    "texture-alpha-class": 0.040,
     "gltf-export": 0.571,
     "plane-shader-reuse": 0.680,
     "cockpit-interior": 0.883,

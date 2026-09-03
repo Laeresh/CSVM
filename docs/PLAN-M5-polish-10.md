@@ -140,7 +140,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — What a surface is: collision and light
 
 11. ☑ `BL-678` Collision honours the polygon's own backface flag, as the original's test does
-12. ☐ `BL-613` An alpha-textured surface takes no sun term, as the original's light evaluation does
+12. ☑ `BL-613` An alpha-textured surface takes no sun term, as the original's light evaluation does
 13. ☑ `BL-332` The aircraft light takes the brightness the mission authors, not one hardcoded pair
 
 ### Wave C — Feedback at the controls
@@ -553,7 +553,51 @@ debris piece on the ground instead of sinking it. Re-pinned on the author's revi
 firebrand wave, and the mission finishes correctly. That closed `BL-669` and completed
 `PLAN-M5-polish-9`'s `D31`.
 
-## B12 ☐ `BL-613` An alpha-textured surface takes no sun term, as the original's light evaluation does
+## B12 ☑ `BL-613` An alpha-textured surface takes no sun term, as the original's light evaluation does
+
+**Landed.** The exemption is the texture's own answer, carried from the extractor rather than
+derived. `TextureArchive` reads the archive `manifest.json`'s `alpha` field at construction and
+publishes it as `LastAlphaClass` (`None`/`Simple`/`Full`), beside the existing pixel classification
+the blend/scissor choice reads and not in place of it. `SceneBuilder` builds a textured world
+surface without the `csky_world_light` term when that class is not `None`, whatever the model's own
+`lighting` flag says, and `Clutter` applies the same rule to a sprite card's own shader. Nothing is
+fitted and no name is listed: the two gates are ANDed exactly as `FUN_00551d90` and `FUN_005524d0`
+compose them. Where no manifest ships the class falls back to the decoded pixels, which is a
+degradation and is commented as one, since it cannot see the `Simple` textures.
+
+**Verified.** <pending orchestrator run>
+
+Own runs on the landed tree: `dotnet build` clean (0 warnings), `.\RunTests.ps1 -SkipGoldens` with
+`CSVM_DATA_ROOT` set gives 3,369 units and 236 engine suites passed, 0 failed, engine errors clean.
+The 8-chapter `--freecam` regression is clean in every chapter (exit 0, zero error lines) and each
+one reports a non-zero exemption: C1 120 of 375 built materials, C1B 48/147, C1C 38/118, C2 71/309,
+C2B 34/108, C3 66/240, C4 111/388, C5 98/330. The whole-table join behind those built counts is in
+`docs/org/vertexLighting.md`; against its C5 figure our join reads 237 of 583 off `texture.zbd` and
+239 off the `rtexture14` tier the engine loads, where the page previously said 234, so that number
+is corrected in the same change. The shipped-data expectation holds on the loaded archive:
+`poleflare` and `lightpole` are `Full` and exempt, `cblock1`, `bldg1` and `wtr00000` are `None` and
+lit. `texture-alpha-class` is the regression guard for the reader half, weighted in
+`analysis/engine-suite-weights.json`.
+
+**⚠ Twelve goldens moved and are UNPINNED.** `c1-waterfall`, `c1b-night-sea`, `c2-city`,
+`c3-island`, `c1-flight`, `c1-destroy-effects`, `c1-crash`, `c1-debris-rest`, `c1-targeting-hud`,
+`c1-ai-wreck`, `campaign-4p-grid` and `campaign-intro-fill`. Six are hash-identical: `c1c-rain`,
+`c2b-rain`, `c4-snow`, `c5-city-night`, `viewer-bhawk` and `empty-stage`. Every changed pixel in
+every moved shot got BRIGHTER and none darker, which is the exemption cancelling a multiply by a
+sub-1 `world_light` and nothing else. Magnitudes: `campaign-4p-grid` 7.31 % of the frame at a
+maximum channel delta of 22, `c1-waterfall` 4.95 % at 33, `c1-targeting-hud` 3.76 % at 36,
+`c1-ai-wreck` 2.94 % at 32, `c1-flight` 1.95 % at 32, `c1-crash` 1.92 % at 37, `c1-debris-rest`
+1.42 % at 30, `c3-island` 1.17 % at 3, `c1-destroy-effects` 0.39 % at 43, `c1b-night-sea` 0.30 % at
+93, `campaign-intro-fill` 0.13 % at 3, `c2-city` 0.09 % at 1. The per-shot magnitude tracks its
+chapter's `world_light` deficit exactly: C1B (0.426) carries the largest per-pixel delta, C3 (0.99)
+and C2 (1 in the shot's active zone) barely move, and C4 and C5 (1) cannot move at all. Before and
+after captures are in the branch's `.scratch/b12-before/` and `.scratch/b12-after/`, with a red
+change mask per moved shot in `.scratch/b12-diff/`.
+
+**⚠ This does not touch the CAP-11 C5 residual, and cannot.** C5 authors `world_light=1` in both its
+zones, so an exemption from a multiply by one changes no C5 pixel; `c5-city-night` is
+hash-identical. The README's C5 reading (tower faces ×0.66, lit low-rise ×0.58 of the original)
+stands untouched, which is consistent with Decision 5 rather than a new finding.
 
 **Goal.** Every alpha-textured surface in every chapter renders unlit, the way the original's light
 evaluation leaves it, instead of being modulated by the world light like an opaque one.

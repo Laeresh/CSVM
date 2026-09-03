@@ -312,6 +312,10 @@ void fragment() {
     // glowTexture predicate, the same delegate the spherical path uses, so one rule governs every
     // light-vs-scenery billboard in the renderer.
     private readonly Dictionary<(int Material, int Axis, bool Lit, bool Fogged, bool ClampUv), Material> _cylindricalMaterialCache = new();
+    // Source-material indices behind the two census counts, so one material built as several
+    // variants is counted once (see AlphaExemptMaterialCount).
+    private readonly HashSet<int> _texturedMaterialIndices = new();
+    private readonly HashSet<int> _alphaExemptMaterials = new();
     // Every textured material this builder made, paired with the texture name it resolved
     // from — the registry a live repaint needs (the viewer's livery lab re-runs the paint
     // and swaps each material's albedo in place, instead of rebuilding the whole aircraft
@@ -372,6 +376,15 @@ void fragment() {
     /// (a night chapter reporting zero means the flags are not reaching the materials).</summary>
     public int UnlitModelCount { get; private set; }
     public int UnfoggedModelCount { get; private set; }
+
+    /// <summary>Source materials the texture's own alpha class exempted from the world light, out
+    /// of the textured source materials built. ⚠ Counted per SOURCE material, not per built
+    /// variant, so the ratio is the one the census in docs/org/vertexLighting.md states; a chapter
+    /// reporting zero is not reading the class.</summary>
+    public int AlphaExemptMaterialCount => _alphaExemptMaterials.Count;
+
+    /// <inheritdoc cref="AlphaExemptMaterialCount"/>
+    public int TexturedMaterialCount => _texturedMaterialIndices.Count;
 
     /// <summary>Models built with a non-zero UV scroll rate, from either source (the model's own
     /// <c>texture_scroll</c> or the boot script). Logged per world build: it is the one-line
@@ -1308,6 +1321,12 @@ void fragment() {
             bool blend = _textures.LastHadAlpha && _textures.LastAlphaIsSoft;
             bool scissor = _textures.LastHadAlpha && !blend;
             bool glow = texName != null && _glowTexture != null && _glowTexture(texName);
+            _texturedMaterialIndices.Add(materialIndex);
+            if (LastTextureExemptFromLight())
+            {
+                lit = false;
+                _alphaExemptMaterials.Add(materialIndex);
+            }
             var billboard = CylindricalBillboardMaterial(tex, axis, blend, scissor, glow, lit, fogged, clampUv);
             // A billboard shader samples the same albedo_tex, so a flipbook drives it identically,
             // and the fire cycles land HERE rather than on the bias path: fire1/fire2/flame01 are
@@ -1335,6 +1354,14 @@ void fragment() {
         _materialCache[key] = mat;
         return mat;
     }
+
+    // The original's second lighting gate: a textured polygon whose texture carries an alpha
+    // channel skips the per-vertex light evaluation and is submitted unlit, whatever the model's
+    // own `lighting` flag says (docs/org/vertexLighting.md). Only the fullbright world pass carries
+    // a csky_world_light term for it to cancel; the shaded aircraft pass has none. ⚠ Reads the
+    // class the LAST Resolve installed, so call it only directly after one.
+    private bool LastTextureExemptFromLight() =>
+        _fullbright && _textures.LastAlphaClass != TextureArchive.AlphaClass.None;
 
     // The archive lookup every material goes through, plus the caller's optional substitution
     // (aircraft paint). ⚠ Find() must still run even when a substitute exists: it is what sets
@@ -1395,6 +1422,12 @@ void fragment() {
             bool blend = _textures.LastHadAlpha
                 && (_textures.LastAlphaIsSoft || (_blendTexture != null && _blendTexture(texName)));
             bool scissor = _textures.LastHadAlpha && !blend;
+            _texturedMaterialIndices.Add(materialIndex);
+            if (LastTextureExemptFromLight())
+            {
+                lit = false;
+                _alphaExemptMaterials.Add(materialIndex);
+            }
             // Cloud sprites face the camera and take a billboard material: no depth bias, since a
             // free-floating sprite has nothing coplanar to fight, but the SAME cylindrical fog, so
             // they fade into the fog wall instead of punching through it as crisp white.

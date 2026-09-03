@@ -108,6 +108,11 @@ public sealed class WorldBuilder
     public int UnlitModelCount => _scene.UnlitModelCount;
     public int UnfoggedModelCount => _scene.UnfoggedModelCount;
 
+    /// <summary>World materials exempted from the world light by their texture's alpha class, out
+    /// of the textured materials built — see <see cref="SceneBuilder.AlphaExemptMaterialCount"/>.</summary>
+    public int AlphaExemptMaterialCount => _scene.AlphaExemptMaterialCount;
+    public int TexturedMaterialCount => _scene.TexturedMaterialCount;
+
     /// <summary>Overlay-pass surfaces built, and overlay polygons declined for want of a biasable
     /// material — see <see cref="SceneBuilder.OverlayPassSurfaceCount"/>.</summary>
     public int OverlayPassSurfaceCount => _scene.OverlayPassSurfaceCount;

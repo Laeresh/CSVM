@@ -664,6 +664,11 @@ solidifies partial alpha above it, so only essentially-binary ink scissors faith
 dry-land half outvotes the feathered ramp that is the point of the texture.
 `Build` is the one construction path — decode, classify, drop-in, mip chain — and `Find` caches
 its result; `BuildMipped` hands the same Image to `--dump-mips` un-cached.
+`LastAlphaClass` is a second, unrelated alpha answer: the extractor's own `None`/`Simple`/`Full`
+field, read from the archive's `manifest.json` at construction, which is what the original's
+per-surface lighting exemption keys on (docs/org/vertexLighting.md). It is not interchangeable with
+`LastHadAlpha`, and the pixel test it falls back to where no manifest ships loses the `Simple`
+class.
 Two sets name the textures the retail data itself lacks, and they differ in what gets drawn:
 `KnownAbsentFromGameData` (`pir_spinner`, `barngrill`) takes a neutral gray card, while
 `AbsentAndUndrawn` (`cloud1`, `cloud2`, C3's skydome) drops the polygon in `SceneBuilder.BuildMesh`.
@@ -704,7 +709,10 @@ where `GameZ.VertexColorsRestateMaterialColor` detects the two are the same auth
 overrides that colour with the decoded `no_clutter` bit instead. Every shader on one instance
 shares the ordered preamble in `csky_instance_uniforms.gdshaderinc`; see that file for the
 contract, and `GetBiasShader` for how the model's `lighting`/`fog` flags select shader variants
-instead of driving a uniform. The mesh, material and collider memos are per builder, since every
+instead of driving a uniform. A textured surface takes a second, independent lighting exemption from
+its own texture's alpha class (`LastTextureExemptFromLight`), which is the original's per-texture
+gate; `AlphaExemptMaterialCount` is its per-chapter census. It applies on the fullbright world pass
+alone, since the shaded aircraft pass carries no world-light term for it to cancel. The mesh, material and collider memos are per builder, since every
 override is baked into what they hold; the three SHADER memos are process-wide, because a generated
 text is a pure function of its key and Godot charges a compile for each fresh `Shader` a material
 takes (`docs/verification.md` PERF-22). Each of the three keys also carries `GraphicsMode.Enhanced`
@@ -895,6 +903,11 @@ MultiMesh per kind, solids → `SceneBuilder.SharedMesh`; the split is `SceneBui
 The sprite shader takes the decoration model's own `lighting`/`fog` flags as variants (every tree and
 bush card in the install is `lighting: false`, so clutter does not dim with the mission SUNLIGHT),
 plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's own card UVs.
+`BuildKindInstance` applies the texture's alpha-class lighting exemption to that `lighting` flag as
+the world path does, so a card cannot take a sun term the world surface beside it is exempt from;
+on the shipped data it changes nothing, because the alpha-textured cards outside C5 are the tree and
+bush families, which already author `lighting: false`, and C5 authors `world_light` 1 in every zone
+(docs/org/vertexLighting.md).
 Every stamp carries its authored far fade as MultiMesh custom data (`Kind.Fades`, exported beside
 `Placements`), applied by the sprite shader and by `SceneBuilder.SharedMesh(clutterFade: true)`
 for the solid kinds, under the `EffectsLevel` global; the fade's draw is its own stream off the
