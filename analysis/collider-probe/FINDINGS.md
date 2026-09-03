@@ -50,7 +50,8 @@ The 2026-07-22 measurement was taken on a materially different collision pipelin
 counts (C4 2545, C5 4253) predate `597101f` ("water/buildings colliders split per surface class,
 not per whole mesh" — the `CollidersForMesh` multi-bucket system this probe now models directly
 replaced an area-weighted single-vote-per-mesh classifier), `85c67b2` (`intersect_surface`
-honoured — confirmed by `analysis/intersect-surface/FINDINGS.md`'s own before/after table, whose
+honoured — confirmed by the retired `analysis/intersect-surface/FINDINGS.md`'s own before/after
+table (`git show analysis-archive:` that path), whose
 *prior* numbers, C4 2638 / C5 4583, are themselves higher than the 2026-07-22 finals, so at least
 one more collision-affecting change landed between the two), `7c82b80` (marker gizmos no longer
 build a collider), and this plan's own Wave A (`active`-flag honouring, the depth-bias conflict

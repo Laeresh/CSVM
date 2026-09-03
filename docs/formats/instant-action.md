@@ -493,7 +493,8 @@ Instant Action, and nothing else. Nothing on this path converts them to a 1-to-9
 
 One function, ticked every frame, does two jobs. It advances the wave counter when the current wave
 is gone, and it decides whether the mission is over. M4 B7 traced its main path
-(`analysis/m4-b7-group-slot/FINDINGS.md`); the full read establishes
+(the retired `analysis/m4-b7-group-slot/`,
+`git show analysis-archive:analysis/m4-b7-group-slot/FINDINGS.md`); the full read establishes
 settled the three questions that pass left open.
 
 Two globals drive it. `DAT_00718cd8` is the setup record's first dword, the **`mission_type` id**,

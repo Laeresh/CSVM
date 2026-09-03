@@ -17,7 +17,8 @@ Two questions, measured over the extracted gamez JSON only. No engine run, no C#
        to recover XYZ from a lattice UV.  Is +U always world +X?  Is it rotated per polygon?
        Does it flip handedness?
 
-`analysis/bl-058-clutter-doubling/FINDINGS.md:121-127` records the earlier `match_footprints.py`
+The retired `analysis/bl-058-clutter-doubling/FINDINGS.md:121-127` (`git show analysis-archive:`
+that path) records the earlier `match_footprints.py`
 attempt as inconclusive for want of exactly this measurement, so the answers are written into
 `FINDINGS-A2.md` beside this file rather than left in a terminal buffer.
 

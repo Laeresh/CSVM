@@ -535,7 +535,8 @@ anim-system init with 200 calls to `rand() * 3.051851e-05` (1/32767, MSVC's `RAN
 stream it draws from is reseeded `srand(time(NULL))` on ordinary startup and level-load paths, so
 two runs of the original produce two different tables. There is no fixed sequence to match, and
 CSVM's session-seeded `_rng` is the correct-shape answer rather than a divergence. Disproven in
-full, with the two `srand` call sites, in `analysis/anim-interpreter-decode/FINDINGS.md`; the
+full, with the two `srand` call sites, in the retired `analysis/anim-interpreter-decode/`
+(`git show analysis-archive:analysis/anim-interpreter-decode/FINDINGS.md`); the
 comparison sense that came out of it, `draw <= weight` inclusive at both ends, is what CSVM runs.
 
 ## CALL_SEQUENCE and STOP_SEQUENCE: a sequence is a single instance
@@ -726,7 +727,8 @@ array, which is authored declaration order, so the authoring decides the timing.
 The data authors overwhelmingly call forward. Of the 22,173 compiled CALL edges the walk sees,
 **22,057 (99.48 %) target a higher index** and so dispatch in the same tick; 116 target a lower one
 and defer. 398 of the 403 definitions carrying a call have at least one forward edge, and exactly
-one is backward-only (census: `analysis/bl-135-callsequence-lag/call-index-order.ps1`). Among the
+one is backward-only (census: the retired
+`git show analysis-archive:analysis/bl-135-callsequence-lag/call-index-order.ps1`). Among the
 backward minority are `police_car`'s `start_walkin` → `siren_police`, which the original really does
 start a tick late, and the return hop of C2/M02's `marypickford` ring, which is what stops that ring
 resolving inside one tick.
@@ -878,7 +880,8 @@ outright by a later event, painted into every rendered view. Asserted by the `fb
 
 `Callback` (slot 35, `004ec5e0`), `ObjectCycleTexture` (slot 17, `004eabd0`), `ObjectDeleteChild`
 (slot 16, `004eab90`) and `CameraState` (slot 20, `004e85c0`) are the whole of what the census in
-`analysis/anim-interpreter-decode/FINDINGS.md` counts as shipped-but-unhandled. All four were
+the retired `analysis/anim-interpreter-decode/FINDINGS.md` (`git show analysis-archive:` that
+path) counts as shipped-but-unhandled. All four were
 missing from Ghidra's function list (reached only through the dispatch table, like `LOOP`) and were
 recovered by forcing a function at each dispatch address, then decompiled in full. None gets a
 handler: for each, either CSVM has no consumer of what the exe does, or the def(s) that carry it are
@@ -938,8 +941,8 @@ table — but was disassembled directly: it folds the sequence timer into `+0x2c
 second form (`flags & 2`, `LOOP_RUN_TIME`), on the accumulated time reaching the authored float,
 then calls the reset routine and returns 4. **The exe has that second form; nothing shipped builds
 it** — of 3,015 compiled defs' 1,018 `Loop` events, all 1,018 carry `Count` and none carries
-`RunTime`. Disproven, not merely unimplemented: see the census in
-`analysis/anim-interpreter-decode/FINDINGS.md`.
+`RunTime`. Disproven, not merely unimplemented: see the census in the retired
+`analysis/anim-interpreter-decode/FINDINGS.md` (`git show analysis-archive:` that path).
 
 The struct offsets above are otherwise mech3ax's `SeqDefInfoC` layout, taken as given rather than
 independently re-derived field-by-field; only the offsets the stepper and `LOOP` actually touch have

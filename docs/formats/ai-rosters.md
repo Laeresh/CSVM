@@ -116,7 +116,8 @@ C2/M01's `patrolboat_eg0` the generator-template one.
 ### `group` is a cohort id, not a formation
 
 The format is established; instrument and function addresses are in
-`analysis/m4-b7-group-slot/`). Slot 4 tags a block with a small integer so that mission logic can
+the retired `analysis/m4-b7-group-slot/`,
+`git show analysis-archive:analysis/m4-b7-group-slot/FINDINGS.md`). Slot 4 tags a block with a small integer so that mission logic can
 address a set of vehicles at once. The executable has exactly four consumers of the value, and
 none of them is flight behaviour:
 

@@ -512,7 +512,7 @@ desktop, the run continues visibly rather than failing.
 Measured: a full run passed 152 units, 9/9 suites and 11/11 goldens hash-identical while a probe
 sampling our own desktop every 50 ms saw a Godot window in **0 of 700 samples**, Godot alive in 697
 of them; perf draw counts are identical to a visible run. Evidence and the rejected alternatives:
-[`analysis/hidden-desktop/`](../analysis/hidden-desktop/FINDINGS.md).
+the retired `analysis/hidden-desktop/` (`git show analysis-archive:analysis/hidden-desktop/FINDINGS.md`).
 
 `RunGame.ps1` and `RunDev.ps1` hand the foreground to the new window themselves, so playing is
 unchanged. That grab lives in the launcher and not in the engine because Windows' foreground lock

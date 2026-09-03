@@ -197,7 +197,8 @@ A `PUFFER_STATE` whose `AT_NODE` is `INPUT_NODE`/`MAIN_ROOT_NODE` emits on the e
 relocated root (the sentinel = "the node this def was invoked on"; see
 [anim-definitions.md](anim-definitions.md)).
 
-**The staged set must be the closure's WHOLE anchor-root set** (`analysis/effect-anchor-roots/`).
+**The staged set must be the closure's WHOLE anchor-root set** (the retired `analysis/effect-anchor-roots/`,
+`git show analysis-archive:analysis/effect-anchor-roots/FINDINGS.md`).
 A definition anchors on the gamez node its `NAME` names, so a root the stage omits leaves every def
 anchored on it unanchored — it plays nothing, silently. Staging only 19 of the 28 roots the rocket
 IMPACT closure needs cost the per-type explosion rings below, all four smoke-trail columns

@@ -213,6 +213,7 @@ out of scope here (A1's own approach names only `MotionRuntime.cs:212` and
 
 ## Related
 
-`analysis/object-motion-ground-rest/FINDINGS.md` (do_intersections/RUN_TIME census this reads
+the retired `analysis/object-motion-ground-rest/FINDINGS.md` (`git show analysis-archive:` that
+path; the do_intersections/RUN_TIME census this reads
 `ap_radiotwr` and `player_crash_dirt` against) · `docs/verification.md` GOLD-4, GOLD-9, LOG-17 ·
 `analysis/goldens/manifest.json` · PLAN-object-motion-decode A1/D11.

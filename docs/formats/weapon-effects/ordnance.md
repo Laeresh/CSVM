@@ -84,7 +84,8 @@ two names known to differ:
 | Muzzle | `muzzle_burst`¹, `muzzle_burst_slug` / `_ap` / `_dum` / `_mag`, `muzzle_burst2` |
 | Impact / misc | `gunhit`, `dum_gunhit`, `mag_gunhit`, `gunshell`¹, `ballflare.flt`, `bsplsh.flt`, `splash1.flt` |
 
-¹ Measured across all 8 chapters (`analysis/weapon-effects-node-shape/`, `BL-140`): both roots
+¹ Measured across all 8 chapters (the retired `analysis/weapon-effects-node-shape/`,
+`git show analysis-archive:analysis/weapon-effects-node-shape/FINDINGS.md`, `BL-140`): both roots
 carry `model_index: -1` (no mesh of their own) and exactly one child. `muzzle_burst`'s child
 (`dummy`) is also `model_index: -1` — the whole subtree is genuinely meshless, so instancing
 this root alone lights/moves nothing visible. `gunshell`'s child (`g1`) carries a real mesh

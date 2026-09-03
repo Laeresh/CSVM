@@ -55,7 +55,8 @@ and the termination model from the parser's own side.
 ## The flag word at `motion+0xc`
 
 Every bit is the `OR` `FUN_00508590` executes on recognising the token, at the address given. The
-full table with its corroboration is in `analysis/object-motion-flags/FINDINGS.md`.
+full table with its corroboration is in the retired `analysis/object-motion-flags/`
+(`git show analysis-archive:analysis/object-motion-flags/FINDINGS.md`).
 
 | Bit | Token | Parser | What the update does with it |
 |---|---|---|---|
@@ -388,7 +389,8 @@ change, which the original never does.
 ## What the install actually authors
 
 Re-derived over all 8 chapters' `cam_anim`, walking **both** `sequences` and `unknown_seq` — the
-compiled destruction slot a real kill dispatches (`analysis/object-motion-flags/census.py`).
+compiled destruction slot a real kill dispatches (the retired
+`git show analysis-archive:analysis/object-motion-flags/census.py`).
 
 **3,066** `ObjectMotion` events, of which **1,983** are ballistic and **1,640** carry a `gravity`
 block; every gravity-bearing motion is ballistic. The three booleans take four combinations and no
