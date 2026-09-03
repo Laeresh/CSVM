@@ -1,6 +1,6 @@
 # The menu inventory: every in-scope screen, transition and asset
 
-The authoritative census behind [`PLAN-menu-presentations.md`](../PLAN-menu-presentations.md): what
+The authoritative census behind `PLAN-menu-presentations`: what
 Built-in draws today, what the original's own data ships, which of the two answers each other, and
 what neither answers yet. Part 1 is read out of `CSVM/src/UI`; part 2 out of the extracted UI
 archive at `extracted/rof/` and the format decodes that already cover parts of it; part 4 names the

@@ -2957,8 +2957,8 @@ usual.
   buttons when owned-minus-one falls below three (`:285-287`). Whether the wingman's button should
   have been offered depends on how many aeroplanes that profile owns. The gaps are the three named
   above, not "CM13 locks plane selection".
-  *Cross-refs:* [`docs/PLAN-menu-presentations.md`](docs/PLAN-menu-presentations.md) owns the
-  campaign screens; `PT-108`.
+  *Cross-refs:* [`docs/menu-presentations.md`](docs/menu-presentations.md) carries the campaign
+  screens' presentation contract; `PT-108`.
 
 - `BL-690` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` `[CM15]` **A staged cutscene aircraft is built with no painter, so CM15's Balmoral wears
   the shipped skins where the aeroplane it stands in for wears its scheme.** *Evidence (traced):*
