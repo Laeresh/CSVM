@@ -756,26 +756,6 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome (`A4` landed on an engine suite alone, with no scripted-input
   driver to fly a human into a world trigger headlessly): a fail mints a new `BL`.
 
-### CM12 (C2/M01) · the ace that wakes under the terrain
-
-```powershell
-./RunGame.ps1 --campaign=<profile>:11
-```
-
-- `PT-107` `[Own]` **The ace `hkfirebrand_9` after `OBJECTIVE67` wakes it** (`BL-669`, `BL-678`).
-  The ace is authored at `(-4518, 150, -6233)`, 78.9 m below the terrain surface there. That is
-  harmless in the original, which culls the single-sided faces it climbs out through, and fatal
-  here, which collides on them. Nothing was changed, so this row records what the build does rather
-  than checking a fix. Fly on until the Hollywood Knight ambush wakes, then watch the ace.
-  *Look for:*
-  - (a) whether the ace is ever seen in the air at all, or dies against the hills east of the
-    Goose's harbour leg without the player firing;
-  - (b) how long after the ambush wakes that happens, and whether the player was anywhere near it;
-  - (c) whether the mission still reads correctly afterwards, since the secondary counts group 2 as
-    wiped either way.
-  *Blocks:* nothing; it is the at-the-controls half of `BL-669`, and re-flying it after `BL-678`
-  lands is what shows the ace surviving its own wake.
-
 ### CM14 (C2B/M04) · the Gemini torpedoed down over water
 
 ```powershell

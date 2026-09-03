@@ -183,8 +183,9 @@ last. Contention rules for parallel worktrees:
 - **Scheduling, not files:** `B11` and `B12` land only after `PLAN-M5-polish-8`'s and
   `PLAN-M5-polish-9`'s `D31` sorties have been flown (Decision 4). Waves A and C are unaffected.
   **That gate is discharged:** all of `PT-86` and `PT-97` to `PT-117` were flown in one sitting, so
-  `B11` and `B12` are free to land. Both those `D31` items stay open for one re-fly each
-  (`PT-102` corrected, `PT-107` after `B11`), which is not a hold on this wave.
+  `B11` and `B12` are free to land. `PLAN-M5-polish-9`'s `D31` is complete (`PT-107` re-flown after
+  `B11`); `PLAN-M5-polish-8`'s stays open for one re-fly (`PT-102` corrected), which is not a hold on
+  this wave.
 - **`B11` carries a rider.** The CM12 ace was seen teleporting back to its authored pose repeatedly.
   The writer is `FlightController.cs:1752`'s under-map backstop, `Position.Y < UnderMapY` calling
   `Respawn()`, and it emits no log line at all, which is why a whole sortie's worth of teleports went
@@ -548,8 +549,9 @@ running reset count. One golden moved, `c1-debris-rest`, and a 2×2 attribution 
 change moves no golden at all: the mover is the `MotionRuntime` column, and the new frame rests a
 debris piece on the ground instead of sinking it. Re-pinned on the author's review of the A/B.
 
-**Still owed:** `PT-107` re-flown, which is the at-the-controls half and the last thing
-`PLAN-M5-polish-9`'s `D31` waits on.
+**Flown.** `PT-107` re-flown on the merged tree: the ace is seen in the air together with the
+firebrand wave, and the mission finishes correctly. That closed `BL-669` and completed
+`PLAN-M5-polish-9`'s `D31`.
 
 ## B12 ☐ `BL-613` An alpha-textured surface takes no sun term, as the original's light evaluation does
 

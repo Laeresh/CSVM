@@ -96,7 +96,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Closing sortie
 
-31. ◐ At-the-controls pass in mission order over every landed item that owes a judgement
+31. ☑ At-the-controls pass in mission order over every landed item that owes a judgement
 
 ## Dependency and parallelism notes
 
@@ -898,7 +898,7 @@ included, and is out of this item's scope.
 
 # Wave D — Closing sortie
 
-## D31 ◐ At-the-controls pass in mission order over every landed item that owes a judgement
+## D31 ☑ At-the-controls pass in mission order over every landed item that owes a judgement
 
 **Goal.** Every landed item whose acceptance needs eyes gets them, in mission order, and every
 finding becomes a same-day fix, a follow-up `BL`, or a recorded verdict. Each landed code item
@@ -934,9 +934,10 @@ neither can ever be seen drawing, here or in the original, and the author's "the
 visible to the player" is the correct reading. Three rows passed but surfaced defects beside them,
 all now filed: the marker faults behind `PT-112` and `PT-117` are one cause with CM02's double
 bracket (`BL-688`), CM15's unpainted cutscene Balmoral is `BL-690`, and CM13's flight check is
-`BL-689`. **Still owed: `PT-107`**, whose (a) confirmed the ace underground from the engine's own
-line (`roster 'hkfirebrand_9' ... terrain=229 (-79 above it)`, the only such aircraft in the
-session) and which re-flies once `BL-678` lands.
+`BL-689`. `PT-107`'s first flight confirmed the ace underground from the engine's own line
+(`roster 'hkfirebrand_9' ... terrain=229 (-79 above it)`, the only such aircraft in the session);
+re-flown after `BL-678` landed, the ace is seen in the air together with the firebrand wave and the
+mission finishes correctly, which closed `BL-669` at the controls. Nothing is owed.
 
 **⚠ Traps.** A live symptom is evidence about the build that was running: confirm which build and
 worktree flew before minting anything, and check for testing worktrees left over from run 8. The

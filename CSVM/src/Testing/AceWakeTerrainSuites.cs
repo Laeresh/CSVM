@@ -247,8 +247,8 @@ internal static class AceWakeTerrainSuites
                 $"the ace flies out of the hill with no contact at all over {LegSeconds} s");
             ctx.Check(leftAt >= 0,
                 $"and comes out from under the surface rather than being held under it clear_at={(leftAt >= 0 ? leftAt / 60f : -1f):0.0} s");
-            // BL-669's own symptom: FlightController's under-map backstop respawns anything below
-            // y = 0, which is what the repeated teleport to the spawn point was.
+            // FlightController's under-map backstop respawns anything below y = 0, which is what
+            // the repeated teleport to the spawn point was before the cull landed.
             ctx.Check(minY > 0f,
                 $"and never sinks to the under-map backstop that was teleporting it back min_y={minY:0} m");
 

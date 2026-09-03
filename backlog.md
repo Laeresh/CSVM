@@ -917,41 +917,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-669` `[Research]` **CM12's ace `hkfirebrand_9` is authored under the terrain sheet, which is
-  harmless in the original and fatal here because we collide on the faces it culls.** `C2/M01`'s
-  `aiv.zrd` authors it at `(-4517.72, 150.0, -6232.58)` with `deactivated` set (slot 21), and
-  `OBJECTIVE67`'s `WAKEUP_ENEMIES` reactivates it in place. The terrain surface over that point is
-  228.92 m on tile `g35052` (model 617, whose vertex bounds reproduce the node's own `model_bbox`,
-  and whose collider the built world confirms at `y 229`), so the ace begins 78.9 m below it. It is
-  the only CM12 roster block placed over land; the mission's other land placement,
-  `patrolboat_eg0` at `y 0.021`, sits 5 cm above its surface. **Being below the sheet costs
-  nothing by itself:** terrain is a sheet with no underside, so the space under it is open, a
-  downward ray from the pose finds nothing, and `SweepProbes` registers only where the motion
-  crosses a face. **And the ace cannot fall there:** its authored range from the player is 3867 m,
-  so `WAKEUP_ENEMIES` puts it on the far-field plant, which computes no gravity and holds
-  `nose · (fd_speed · throttle + 5)`. What used to end it was the crossing on the way out: a level
-  track along its authored yaw 120 met the sheet again 260 m out, about 5 s at the plant's 52.3 m/s
-  hold, against the 55 s a mover would need to close 2867 m to the far-field boundary, so the
-  crossing was reached far-field and the plant flip was never involved. **That crossing is a face
-  taken from behind, and the original culls it:** all 37 polygons of `g35052` and all 23 of `tagged`
-  clear `SHOW_BACKFACE`, so the original's ray test returns no hit and the ace flies out. `BL-678`
-  landed that rule on the collider: `ace-wake-terrain` now flies the authored pose for 40 s on both
-  plants with no contact, no crash and no descent from `y 150`, and its level track meets nothing
-  over 8 km, so both the `AI ram into tagged/col` and the repeated teleport to the spawn are gone.
-  The teleport's writer was `FlightController`'s under-map backstop (`Position.Y < UnderMapY`
-  calling `Respawn()`, `UnderMapY = 0f`), silent at the time and now writing a rate-limited line
-  with a running reset count. This entry stays open only to confirm at the controls that nothing
-  else about the ace is wrong. `PT-107` gathers that half.
-  ⚠ *Traps:* not tunnelling (`SweepCadence` carries the skipped step's origin, and `FUN_0048d7f0`
-  accumulates into `obj+0x6B0` and subtracts it on the sweeping frame, so no span goes untested);
-  not the 20 m floor (`DAT_0071c3f0` is absolute, correctly silent at 150 m, and the original has no
-  AGL floor either); not the far-field boundary or its missing hysteresis, both decoded. Do not add
-  a blanket spawn lift. `BL-457` is closed and was never this question. A player-piloted rig at that
-  pose measures nothing about the ace: it is near-field by construction, so it is handed gravity the
-  ace never gets, and its descent is an artefact of the wrong plant.
-  *Cross-refs:* `BL-678` (the collision-side backface cull), `ace-wake-terrain` (the suite that
-  pins the pose, the sheet and the track), `BL-522`'s undecoded net-nearest snap `FUN_004b0f40`,
-  whose activate branch re-bases x and z through `FUN_00432010` but leaves y untouched.
 - `BL-443` `[Fidelity]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
   late.** `FUN_0048fc40` (call `0x48c883`) writes the delivered body-up G and the ramp reads it at
   `0x48ca1e` in the same tick, before the torques; `FlightModel.Step` rotates before it translates
