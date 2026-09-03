@@ -1,9 +1,11 @@
 # M5 Polish Run 8
 
-**ACTIVE PLAN** (written 2026-09-01). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names the active plan when more than one is
-present. Move it to `docs/plans/` with a `COMPLETE` banner, and add its row to
-[`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE** (written 2026-09-01, every item landed, disproven or carried out, and `D31` flown
+2026-09-02 and 2026-09-03). Indexed in [`plans.md`](plans.md). Read as history: the shipped
+behaviour is in [`docs/architecture.md`](../architecture.md) and
+[`docs/verification.md`](../verification.md), and each item's record is its landing commit's
+message. Three items closed as disproven (`A1`, `A2`, `A4`); `B14` landed its crash-rig half and
+its remainder, the launch frame itself, is `BL-699` in `backlog.md`.
 
 Ten player-visible defects in the delivered M1 to M5 game, selected from `backlog.md` on
 2026-09-01 by the criteria the author approved that day: open, unblocked `[Bug]` items a player
@@ -15,7 +17,7 @@ against the record (`git log --oneline --all --grep=BL-nnn`), the current `backl
 drifted, the corrected `file:line` is in the item's Evidence below. The scheduled entries were
 moved out of `backlog.md` into this plan in the same change that created it.
 
-This plan runs beside the active [`PLAN-menu-presentations.md`](PLAN-menu-presentations.md) (Wave
+This plan runs beside the active [`PLAN-menu-presentations.md`](../PLAN-menu-presentations.md) (Wave
 A) and deliberately touches nothing that plan owns: no `LaunchMenu`, no menu screens, no campaign
 board chrome. Two clusters were left in the backlog on their own recorded grounds: the
 AI-mode-machine group (`BL-523`, `BL-550`, `BL-565`, `BL-566`), which three prior polish runs
@@ -75,7 +77,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ `BL-557` Roster `init_health`/`armor` overrides reach the named aces' spawns
 12. ☑ `BL-626` Turrets acquire the candidate classes the original's turret picker holds
 13. ☑ `BL-440` A downed zeppelin plays its authored breakup (`NodeUndercover` made real)
-14. ◐ `BL-641` Introducing one AI aircraft mid-flight stays under the hitch threshold
+14. ◐ `BL-641` Introducing one AI aircraft mid-flight stays under the hitch threshold (crash rig deferred and landed; the launch frame itself carried out as `BL-699`)
 15. ☑ `BL-664` Mission structures carry a team, so hostile guns engage the targets.zrd ships
 
 ### Wave C — Cockpit and flight feel
@@ -86,7 +88,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Closing sortie
 
-31. ◐ At-the-controls pass over every landed item that owes a judgement
+31. ☑ At-the-controls pass over every landed item that owes a judgement
 
 ## Dependency and parallelism notes
 
@@ -742,7 +744,9 @@ call over 194 emitters costing 15 to 103 ms with no seam of its own; splitting i
 `MultiMesh` builds in `Effects/EmitterRenderer.cs`) is the PERF-22-shaped follow-up. Reaching the
 threshold outright wants the assembly built AHEAD of the launch rather than after it, off the
 generator's own authored cycle, which is a change to `AiGeneratorRuntime`'s launch declaration and
-to spawn-index allocation, not to this file set.
+to spawn-index allocation, not to this file set. That remainder is carried out of this plan as
+`BL-699`, widened by the author's report that every wave spawn in every mission hitches at the
+controls, and it asks for a launch-frame test before the fix.
 
 Ran `dotnet build CSVM/CSVM.sln` (clean, StyleCop included), `dotnet format CSVM/CSVM.sln`,
 `.\CheckCommentCaps.ps1` and `.\CheckEncoding.ps1` (both clean), `dotnet test
@@ -1065,7 +1069,7 @@ orchestrator.
 
 # Wave D — Closing sortie
 
-## D31 ◐ At-the-controls pass over the landed items
+## D31 ☑ At-the-controls pass over the landed items
 
 **Goal.** Every landed item whose acceptance needs eyes or a judgement gets both, and every
 finding becomes a fix, a follow-up `BL`, or a recorded verdict. The checks are `playtest.md`'s
@@ -1119,10 +1123,15 @@ for something no shipped `ai.zrd` pattern gives the original either, its "turret
 is a no-`TEAM` `bbtur` behaving correctly, and `PT-101`(a)/(b) is unflyable because C2 carries no
 turret node at all. What those three did surface is real and is now `BL-687`: a `mode ship` hull
 gets no AI object, so it cannot fire the gun its def authors. `PT-104` failed on direction and is
-fixed. **Still owed: `PT-102`**, flown against a description that was wrong twice over — `cargozep1`
+fixed. `PT-102` was flown against a description that was wrong twice over — `cargozep1`
 launches allied Furies on `M3Allies`, not enemy Black Swans, and the original launches five of them
 only after the docking film credits the generator (`BL-657`), where the build launches ten from
-load — so `B14`'s acceptance needs the corrected row re-flown.
+load — and the author removed the row on that wrong premise rather than re-fly it; `B14`'s
+acceptance is the author's standing report that wave spawns hitch, which is `BL-699`. `PT-103`,
+B13's check, was repointed at CM14's Gemini (no Instant Action folder carries `killpzep`) and flown
+on 2026-09-03: the hull pitches over, five sections separate, and the gondola goes with the break,
+so the breakup plays on a hull no suite covers. What it turned up, the wreck drowning a broadside
+bay and the end gasbags sinking, is `BL-694` and `BL-698`.
 
 **⚠ Traps.** A live symptom is evidence about the build that was running: confirm which build and
 worktree flew before minting anything. The sim clock can lag wall time on physics-bound late-C2

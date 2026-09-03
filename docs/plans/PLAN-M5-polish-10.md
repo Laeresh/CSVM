@@ -1,9 +1,10 @@
 # M5 Polish Run 10
 
-**ACTIVE PLAN** (written 2026-09-02). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names the active plans when more than one is
-present. Move it to `docs/plans/` with a `COMPLETE` banner, and add its row to
-[`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE** (written 2026-09-02, all eleven items landed or disproven and `D31` flown 2026-09-03).
+Indexed in [`plans.md`](plans.md). Read as history: the shipped behaviour is in
+[`docs/architecture.md`](../architecture.md) and [`docs/verification.md`](../verification.md), and
+each item's record is its landing commit's message. Two items closed as disproven (`A2`, `C25`),
+and the closing sortie's three findings are `BL-700`, `BL-701` and `BL-702` in `backlog.md`.
 
 Ten player-visible defects in the delivered M1 to M5 game, selected from `backlog.md` on 2026-09-02
 by the criteria the author approved that day: open, unblocked defects a player meets in normal play,
@@ -154,7 +155,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Closing sortie
 
-31. ☐ At-the-controls pass, theme by theme, over every landed item that owes a judgement
+31. ☑ At-the-controls pass, theme by theme, over every landed item that owes a judgement
 
 ## Dependency and parallelism notes
 
@@ -1128,7 +1129,7 @@ so only the AI's mount can disagree with its round.
 
 # Wave D — Closing sortie
 
-## D31 ☐ At-the-controls pass over every landed item that owes a judgement
+## D31 ☑ At-the-controls pass over every landed item that owes a judgement
 
 **Goal.** Every item in this plan whose acceptance needs eyes has been seen, and each one is either
 confirmed, retuned with the author's number, or reopened with what was actually observed.
@@ -1156,8 +1157,31 @@ theme-spread. The checks each item owes:
   here only so the sitting can confirm nothing regressed. `A2` owes nothing at the controls; it
   closed as a disproof.
 
-`<TODO: mint the PT ids for these rows with ./New-ItemId.ps1 -Kind PT -Count <n> when the wave opens,
-and write them into playtest.md; do not hand-number them.>`
+**Verdicts.** The sortie was flown in one sitting and every row is answered, so no `PT` ids were
+minted: nothing here is still owed at the controls. Three rows produced findings, and each is a new
+`backlog.md` entry rather than a reopened item, since the behaviour each was written to deliver does
+work and what is left is a different question.
+
+- `A1` **partly confirmed, follow-up `BL-700`.** The hull rests, and the author's words are "front
+  and back part still sank". The column read holds the piece it was measured on; the two end
+  sections rest against something else.
+- `A3` **confirmed.** The Pandora flies its short legs.
+- `B11` **confirmed.** The ace survives its authored pose by passing up through the ground from
+  below, which is the backface rule doing what it was decoded to do.
+- `B12` **landed, follow-up `BL-701`.** The author's words are "the coastline textures of C1B are a
+  lot brighter then the original now, and it looks like the no longer alpha-blend". The exemption
+  reaches the right surfaces; the intensity it leaves them at is the open question, and the blend
+  is intact underneath a ramp too bright to read as one.
+- `B13` **confirmed by the author's decision to close it**, the poses being too close to call
+  either way. No follow-up.
+- `C21` **confirmed.** The sonic burst reads correctly.
+- `C23` **landed, follow-up `BL-702`.** The axis works and its ends do not: the author's words are
+  "in the original the default pose is already max zoom in and i can zoom out", where ours opens
+  mid-range and travels both ways.
+- `C22`, `C24` **confirmed by instrument, no regression.** `ai-engine-rearm` passes and the 31
+  `NameResolver` units pass on main. Neither writes a runtime line, so the session logs are silent
+  on both by design and their silence is not the evidence; the guards are.
+- `A2` and `C25` closed as disproofs and owed nothing here.
 
 **Model recommendation.** The author flies it; an agent prepares the launch commands, the reference
 frames and the per-row question, and writes up what the author reports. high for the write-up, since

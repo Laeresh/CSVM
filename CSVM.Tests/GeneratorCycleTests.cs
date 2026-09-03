@@ -250,11 +250,51 @@ public class GeneratorCycleTests
     }
 
     [Fact]
-    public void HostDeathDisablesPermanently()
+    public void HostDeathDisablesPermanentlyAfterTheGrace()
     {
+        // wave 1 every 1 s: a live bay would launch 30 times in 30 s. The kill leaves it
+        // launching for the 3 s grace only, and the grace never restarts on a repeat report.
         var cycle = Credited(maxActive: 99, waveSize: 1, wavePeriod: 1f, indPeriod: 1f);
         cycle.HostDied();
+        Assert.True(cycle.HostDead);
+        Assert.False(cycle.Disabled);
+        var spawns = SpawnTimes(cycle, seconds: 30f);
+        Assert.All(spawns, t => Assert.True(t <= GeneratorCycle.HostDeathGraceSeconds));
+        Assert.NotEmpty(spawns);
+        Assert.True(cycle.Disabled);
+        cycle.HostDied();
         Assert.Empty(SpawnTimes(cycle, seconds: 30f));
+    }
+
+    [Fact]
+    public void ACreditLandingInsideTheGraceStillLaunches()
+    {
+        // C5/M04's shape: the Dante's kill lands 0.3 s before OBJECTIVE11 credits Miles's
+        // launch. The bay is past its first due point (timer 40 s against a 4 s threshold), so
+        // the credit opens the door and launches on the same step, inside the grace.
+        var cycle = new GeneratorCycle(maxActive: 1, waveSize: 1, wavePeriod: 2f, indPeriod: 2f,
+            minAltitude: null);
+        Assert.Empty(SpawnTimes(cycle, seconds: 40f));
+        cycle.HostDied();
+        for (float t = Dt; t <= 0.3f; t += Dt)
+        {
+            Assert.False(cycle.Step(Dt, HighAltitude));
+        }
+        cycle.GrantCapacity(1);
+        Assert.True(cycle.Step(Dt, HighAltitude));
+        Assert.Equal(1, cycle.Active);
+    }
+
+    [Fact]
+    public void ACreditLandingAfterTheGraceIsLost()
+    {
+        var cycle = new GeneratorCycle(maxActive: 1, waveSize: 1, wavePeriod: 2f, indPeriod: 2f,
+            minAltitude: null);
+        Assert.Empty(SpawnTimes(cycle, seconds: 40f));
+        cycle.HostDied();
+        Assert.Empty(SpawnTimes(cycle, seconds: GeneratorCycle.HostDeathGraceSeconds + 1f));
+        cycle.GrantCapacity(1);
+        Assert.Empty(SpawnTimes(cycle, seconds: 10f));
         Assert.True(cycle.Disabled);
     }
 

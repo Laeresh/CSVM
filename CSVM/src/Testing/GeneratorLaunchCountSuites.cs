@@ -15,7 +15,9 @@ namespace CSVM.Testing;
 /// 5, launched off the Dante by the <c>dantezep</c> generator, and OBJECTIVE38's
 /// <c>DEDG [5, 0]</c> is the fuse on the instant loss. A launch the campaign roster does not
 /// hold reads that group as wiped out the moment he leaves the ship, and the mission is lost
-/// 15 s later with Miles alive in the player's brackets.</summary>
+/// 15 s later with Miles alive in the player's brackets. The launch itself must survive the
+/// Dante's kill: a torpedo salvo kills the fourth gasbag inside OBJECTIVE10's 0.5 s nap, before
+/// OBJECTIVE11 credits the bay, and a bay disabled on the kill tick never launches him.</summary>
 internal static class GeneratorLaunchCountSuites
 {
     private const string Chapter = "C5";
@@ -35,9 +37,15 @@ internal static class GeneratorLaunchCountSuites
     private const float SpawnWaitS = 30f;
     private const float SettleS = 2f;
 
+    // How far the kill leads the credit in the logged torpedo run: the fourth gasbag at 40.0 s,
+    // OBJECTIVE11 at 40.3 s. Inside GeneratorCycle.HostDeathGraceSeconds by design.
+    private const float KillLeadS = 0.3f;
+    private const float PreRollS = 5f;
+
     [Suite("generator-launch-dedg",
         "C5/M04's Miles over the mission's own BUILT world: the dantezep generator's launch "
-        + "stihellhound_5_eg0 enters the campaign roster under its launch name carrying the "
+        + "stihellhound_5_eg0 still fires when the credit lands 0.3 s after the Dante's kill, "
+        + "enters the campaign roster under its launch name carrying the "
         + "template's group 5, DEDG over that group counts 0 before the launch and 1 after it, "
         + "OBJECTIVE38 (DEDG [5, 0], the fuse on the INSTANTLOSS) stays incomplete while Miles "
         + "flies, and completes once he is shot down, napping OBJECTIVE39 awake")]
@@ -227,6 +235,20 @@ internal static class GeneratorLaunchCountSuites
             report.AppendLine($"host: '{Generator}' gamez pose y={host.GlobalPosition.Y:0}, record pose y={record.Position.Y:0}, launch gate {def.MinAltitude?.ToString("0") ?? "-"} m");
             host.GlobalPosition = record.Position;
 
+            // The bay has run uncredited since load (40 s in the logged run), so it is past its
+            // first due point and a credit launches on the step it lands.
+            for (int i = 0; i < (int)(PreRollS / StepDt); i++)
+            {
+                runtime.SimStep(StepDt);
+            }
+            ctx.Same(0, runtime.LaunchOrdinal, $"nothing launches uncredited in {PreRollS:0} s");
+            // The torpedo shape: the fourth gasbag dies inside OBJECTIVE10's 0.5 s nap, so the
+            // Dante's kill reaches the bay before OBJECTIVE11's credit does.
+            ctx.Same(1, runtime.NotifyHostDied(Generator), $"the Dante's kill puts '{Generator}' on the launch grace");
+            for (int i = 0; i < (int)(KillLeadS / StepDt); i++)
+            {
+                runtime.SimStep(StepDt);
+            }
             ctx.Same(1, runtime.GrantWaveCapacity(Generator, 1), $"the script's WAKEUP_GENERATOR credit is granted");
             float waited = 0f;
             while (waited < SpawnWaitS && !director.Roster.ContainsKey(Launch))
@@ -236,7 +258,7 @@ internal static class GeneratorLaunchCountSuites
             }
             report.AppendLine($"launch: '{Launch}' in the roster after {waited:0.00} s (ordinal {runtime.LaunchOrdinal})");
             ctx.Check(director.Roster.TryGetValue(Launch, out var miles),
-                $"the launch enters the campaign roster as '{Launch}' within {SpawnWaitS:0} s");
+                $"the launch enters the campaign roster as '{Launch}' within {SpawnWaitS:0} s, the credit landing {KillLeadS:0.0} s after the kill");
             if (miles == null)
             {
                 return;

@@ -6782,10 +6782,14 @@ inside a wave and `ind_period + wave_period` gaps waves (they compose). `DoorOpe
 decoded hardcoded door timings inside the same `Step`: open 4 s before a due spawn, minimum 4 s
 open (measured on the same since-spawn timer), close early only when the next spawn is over 8 s
 away; while blocked ONLY the door closes, and a disabled (host-dead) generator's door keeps its
-last state (the decoded loop early-outs before any door rule). The authored `capacity` is never
-read: every cycle starts at zero remaining, blocks while the wave's remainder exceeds it, and
-`GrantCapacity` is the one way launches arrive (a script's `WAKEUP_GENERATOR`, an Instant Action
-wave's member count, cutscene callback 800). Format and decode:
+last state (the decoded loop early-outs before any door rule). `HostDied()` starts the
+`HostDeathGraceSeconds` grace (3 s, the decoded wreck timer) during which the bay still launches,
+and `Step` disables it once the grace has run: ⚠ a deliberate deviation from the decoded kill-tick
+disable, because C5/M04's fourth gasbag can die inside the 0.5 s between OBJECTIVE10 and the
+OBJECTIVE11 credit for Miles's launch (enemy-generators.md "The host's death"). The authored
+`capacity` is never read: every cycle starts at zero remaining, blocks while the wave's remainder
+exceeds it, and `GrantCapacity` is the one way launches arrive (a script's `WAKEUP_GENERATOR`, an
+Instant Action wave's member count, cutscene callback 800). Format and decode:
 `docs/formats/mission-entities/enemy-generators.md`.
 
 ## src/Session/NetTrailerTargets.cs
@@ -6826,13 +6830,14 @@ close is the open, as in the loader) through host-scoped hooks (`AnimRuntime.Pla
 `StopWithin`); a name resolving no def runs the timing machine log-only. A ground hangar's door is
 this cycle's, not the mission script's (`hangar-door-wake` suite). Every drop/live/door/spawn prints an `egen:`
 line, which is the flag's observability. `NotifyHostDied(node)`: the zeppelin death aggregator
-(`ZeppelinRuntime.ZeppelinKilled`, F18) calls it and the matching cycles disable permanently.
-Pinned by the `zeppelin-launch` suite. Every cycle starts uncredited, and
-`GrantWaveCapacity(hostNode, n)` is the one credit: a script's `WAKEUP_GENERATOR`
-(`--wake-generators` grants the script's whole credit at build, the logged headless stand-in for
-playing up to the objective), an Instant Action wave, and cutscene callback 800, which
-`BindCallbackHost` answers from the runtime's `CALLBACK` host chain as five launches on the
-generator named `cargozep1`, the original's literal, chaining every other code on (the
+(`ZeppelinRuntime.ZeppelinKilled`, F18) calls it and the matching cycles go on the 3 s launch
+grace, then disable permanently (one `egen:` line each way).
+Pinned by the `zeppelin-launch` suite; the credit-after-kill shape by `generator-launch-dedg`.
+Every cycle starts uncredited, and `GrantWaveCapacity(hostNode, n)` is the one credit: a script's
+`WAKEUP_GENERATOR` (`--wake-generators` grants the script's whole credit at build, the logged
+headless stand-in for playing up to the objective), an Instant Action wave, and cutscene callback
+800, which `BindCallbackHost` answers from the runtime's `CALLBACK` host chain as five launches on
+the generator named `cargozep1`, the original's literal, chaining every other code on (the
 `generator-callback-credit` suite over C4/M03; bound after the ladder switch's last bind, since a
 later re-bind of another chained host would loop an unanswered code between the two); the spawn
 callback receives the whole `EnemyGeneratorDef`, allowing `vehicle.params` to select its AIV

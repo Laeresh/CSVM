@@ -528,6 +528,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
   parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
 
+- `BL-700` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A downed zeppelin's
+  hull comes to rest on the sea but its front and back sections still sink through it.** *Evidence:*
+  reported at the controls over water, on the build that landed `BL-668`. The upward ground-column
+  read that `BL-668` added holds the main hull at the surface and the gasbags with it, so the rest
+  answer is right for the piece it was measured on and wrong for the two end pieces.
+  *Fix shape:* find what the end sections rest against that the hull does not. The candidates in
+  order are a per-piece origin that sits outside the column the hull queries, a breakup piece that
+  never takes the rest path at all because it is spawned by a different route than the hull, and a
+  piece whose collision shape is authored around a centre the surface test does not use.
+  *⚠ Traps:* do not fix it by clamping every piece to sea level. `BL-668`'s record is explicit that
+  the column read is the mechanism and a height clamp is the fitted answer it replaced. The wreck
+  rest is also not the gasbag path: gasbags ride the hull and were confirmed resting in the same
+  sitting. *Playtest after fix:* a CM14 zeppelin killed over water, watched until every piece
+  settles, from outside. *Cross-refs:* `BL-668`'s closing commit (`git log --grep=BL-668`), which
+  carries the column decode and CM10's lifeboat.
+
 ## Weapons & combat
 
 - `BL-066` `[Feature]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
@@ -984,6 +1000,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   lost steps. *Cross-refs:* `docs/plans/PLAN-M5-polish-6.md` C22, `BL-606` (the same per-sim-step
   suspects seen as an allocator), `docs/verification.md` PERF-21 and PERF-23.
 
+- `BL-698` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` `[CM14]` **The Gemini's front and back gasbags sink through the sea while the middle three
+  stay on it.** *Evidence (at the controls, on the breakup the retired `PT-103` flew; `git log
+  --grep=PT-103`):* after `all_gmzep_gasbags` plays, five sections separate; the author counts "the
+  middle three stayed above water, the front and back sank through it", and the three that stay
+  rest at visibly different depths. The sortie log has `geminizep` dying on `gasbag2`, `gasbag5`
+  and `gasbag4` (`survivors 2 < required 3`) and `death plays 'all_gmzep_gasbags'`, so this is the
+  authored breakup, not a stray fall. `BL-668` (closed) fixed the same sinking on `piratezep` with a
+  second, upward column ray in `MotionRuntime.TryGroundColumn`, and its own diagnosis explains why a
+  bag is missed: the crossing step is built from the bag's ballistic origin through the CURRENT
+  parent transform, and a bag that arrives outside the ray's reach is never lifted back. The Gemini
+  differs in the two ways that diagnosis is sensitive to: it has five bags, not six, and the end
+  bags sit farthest from the pitch pivot, so they carry the most vertical speed at the break. Read
+  where `gasbag1` and `gasbag5` are on the frame `break1`/`break5` starts, against `ColumnDepth`,
+  before changing anything.
+  *⚠ Traps:* `zeppelin-breakup` pins `piratezep` only and would pass green while this ship sinks;
+  a fix owes this hull its own resting check (`BL-694`'s trap says the same about `killgmzep`). Do
+  not clamp bags to y = 0: `BL-668` tuned no constant and the fix here should not either.
+  *Cross-refs:* `BL-694` (the wreck's own rest, and the bays it drowns), `BL-668`, `CAP-55` (a).
+
 ## Environment & world
 
 - `BL-070` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **C5's `poleflare` clutter renders with the wrong billboard axis** (one of two residuals
@@ -1334,6 +1369,30 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   origin-relative pass, so check the bearing in that pass's own basis rather than assuming the
   world rotation transfers unchanged. Pre-existing and found while wiring the energy mirror, so it
   is not a regression of that work. *Cross-refs:* `BL-332`'s closing record, `docs/org/weather.md`.
+
+- `BL-701` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **A light-exempt
+  surface renders at full albedo, which reads far brighter than the original: C1B's coastline
+  sheets come out as a hard bright band instead of a soft edge.** *Evidence:* reported at the
+  controls in C1B on the build that landed `BL-613`, whose exemption takes 48 of C1B's 147 textured
+  materials out of the world light (the per-chapter census logs it per world build). C1B authors
+  `world_light=0.426`, so an exempted surface jumps by more than a factor of two, and it is the
+  night chapter where the reading is most visible. The exemption itself is decoded and is not in
+  question: `FUN_005524d0` skips the per-vertex light evaluation on the texture's alpha bit. What
+  is not decoded is what the original's unlit submission path then uses as the vertex term, and
+  "full albedo" is CSVM's assumption rather than a reading. *Fix shape:* decode the unlit branch's
+  own submission and find what it writes where the lit branch writes the evaluated light. If it
+  carries the polygon's authored vertex colours or a fixed base intensity, that is the term CSVM is
+  missing, and the exemption stays as it is with the intensity corrected under it.
+  *⚠ Traps:* the alpha blend is intact and is not the fault. `SceneBuilder` computes blend and
+  scissor from `LastHadAlpha`/`LastAlphaIsSoft` independently of `lit`, which is a separate shader
+  key bit, and the coastline sheets are in `SoftAlphaCoastline` so they blend. A blended soft ramp
+  at full brightness over dark water reads as a hard band, which is why the symptom presents as
+  lost blending; confirm the ramp is still there before changing any blend rule. Reverting `BL-613`
+  is also not the fix: the surfaces were wrong before as well, in the other direction.
+  *Playtest after fix:* C1B flown low along a coastline at night, and the same coast in daylight
+  where `world_light` is near 1 and the exemption cannot show. *Cross-refs:* `BL-613`'s closing
+  commit and `docs/org/vertexLighting.md`, which holds the two-gate decode and the per-chapter
+  census.
 
 ## Effects & animation runtime
 
@@ -2038,6 +2097,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   methods behind a live session, so the suites reach the seam but not its callers.
   *Cross-refs:* `git log --grep=BL-625` (the seam and why both edges belong to the caller).
 
+- `BL-702` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The chase camera's
+  zoom range sits inside the original's rather than on it: the original starts at its closest and
+  only zooms out, while ours starts mid-range and zooms both ways.** *Evidence:* reported at the
+  controls on the build that landed `BL-433`, which gave the axis its decoded keybind (numpad plus
+  and minus) but took the clamp ends from CSVM's existing chase distance rather than from the
+  original's. The axis works; the two ends and the rest position are what disagree.
+  *Fix shape:* decode the chase camera's authored default distance and its clamp pair, then set the
+  rest pose to the near end so the only travel available is outward. *⚠ Traps:* do not derive the
+  near end from the current default by subtracting the observed travel. The report says the
+  original's default IS the near end, so the near end is a datum to be read and the default follows
+  from it, not the reverse. *Playtest after fix:* chase view held at both ends of the clamp, and the
+  pose the view opens on before any zoom input. *Cross-refs:* `BL-433`'s closing commit
+  (`git log --grep=BL-433`), which carries the keybind decode.
+
 ## HUD & UI
 
 - `BL-496` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The aiv `ace` flag reaches the entity and nothing is known about what it
@@ -2733,7 +2806,7 @@ usual.
   which is the better-founded half of the same item.
   *Cross-refs:* `BL-632`, `PT-112`.
 
-- `BL-694` `[Bug]` `[L]` `[Next: decide]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14 becomes unwinnable when the Gemini is killed before its cannon bays are,
+- `BL-694` `[Bug]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14 becomes unwinnable when the Gemini is killed before its cannon bays are,
   because the wreck comes to rest low enough to put the surviving bays under the sea.** *Evidence
   (traced, and reproduced twice at the controls with the two outcomes side by side):* the mission's
   third primary is the only route to a win. `OBJECTIVE13` is
@@ -2757,14 +2830,21 @@ usual.
   The author's own account of the difference: "the wreck sank under water blocking the mission
   because only the cannons count", and asked whether rounds reach a submerged gun, "stops at
   surface" — which `Projectile.SurfaceIsWater` confirms, water being a real collider.
-  *Fix shape:* not settled, and the choice matters. The wreck's rest is the contact tier parking the
-  body's ORIGIN on what it lands on, which is decoded behaviour
-  ([`docs/org/objectMotion.md`](org/objectMotion.md):40 — `FUN_004cf200` hands the column query the
-  flying node's origin, with no bounding-box term), so raising the rest height is not obviously
-  right. The authored route is `killgmzep/breakunder`, which switches `underneath` inactive.
-  ⚠ **Do not make a gasbag kill credit primary 3.** `MSG_BRF_HWM4_OBJ3` reads "Destroy the GEMINI by
-  shooting the open cannon hatches", and the original's own death def credits nothing, so crediting
-  it would invent a win condition.
+  The reachability half is confirmed at the controls on the breakup itself (the retired `PT-103`,
+  `git log --grep=PT-103`): the wreck's three middle sections rest on the sea at different depths,
+  and at least one bay sits under the water where no round reaches it.
+  *Fix shape (author's decision):* the bays stay where they are on the hull and are DESTROYED when
+  the gasbags explode; they do not ride along with the falling bags. That puts the `INVALID` state
+  on the `deploy_gmzep_lbroadNN` defs the same way a `WeaponHit` on `destroy_gmzep_lbroadNN-gunback`
+  does, so the credit for primary 3 arrives through the bays' own destruction. Raising the wreck's
+  rest height is not the fix: the rest is the contact tier parking the body's ORIGIN on what it
+  lands on, which is decoded behaviour ([`docs/org/objectMotion.md`](org/objectMotion.md):40,
+  `FUN_004cf200` hands the column query the flying node's origin, with no bounding-box term).
+  ⚠ **Do not credit primary 3 from the gasbag count itself.** `MSG_BRF_HWM4_OBJ3` reads "Destroy
+  the GEMINI by shooting the open cannon hatches", and `killgmzep` invalidates only the rocks, so a
+  direct gasbag-to-objective credit would invent a win condition. The credit goes through the bays
+  being destroyed, which is a destructible-state change and not an objective edit; `CAP-55` (d) and
+  (e) are what show whether the original's own breakup takes the bays with it.
   *⚠ Traps:* **`killgmzep` has never run under test.** `CSVM/src/Testing/ZeppelinBreakupSuites.cs:11,22`
   pins C1/M04 and `piratezep` only, asserts six bags where the Gemini has five, and would fail its
   12-of-12 engine check on a 14-engine hull, so a green suite is no evidence about this ship. There
@@ -2774,8 +2854,8 @@ usual.
   *Open question for whoever takes this:* in the winning run `objective 13` completed with only TWO
   bays destroyed. Two destroys invalidate four `deploy_*` defs and the objective is authored to need
   five, so something else supplied the fifth; find it before changing any counting.
-  *Cross-refs:* `BL-695` (the same ladder crediting with no cannon touched at all), `BL-639`,
-  `BL-640`, `BL-668`, `CAP-55`, `PT-103`.
+  *Cross-refs:* `BL-695` (the same ladder crediting with no cannon touched at all), `BL-698` (the
+  Gemini's end gasbags sinking through the same sea), `BL-639`, `BL-640`, `BL-668`, `CAP-55`.
 
 - `BL-695` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14's cannon-hatch ladder can complete with no Gemini cannon destroyed at
   all.** *Evidence (traced from a sortie log):* on one CM14 run the whole primary ladder completed
@@ -2793,7 +2873,34 @@ usual.
   *⚠ Traps:* do not "fix" this by tightening the count before `BL-694`'s open question is answered —
   that run completed `objective 13` on four invalidations where five are authored, and the two
   anomalies may share a cause. Neither should be changed on its own.
-  *Cross-refs:* `BL-694`, `BL-639`, `PT-103`.
+  *Cross-refs:* `BL-694`, `BL-639`.
+
+- `BL-699` `[Perf]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Every AI wave spawn hitches at the controls, and no test measures the
+  launch frame.** *Evidence (at the controls, and measured on one mission):* the author feels a
+  hitch on every wave spawn in every mission, not only CM18's generator launches. The measured
+  case is `BL-641`'s remainder (`docs/plans/PLAN-M5-polish-8.md` B14): with the crash rig
+  deferred behind the launch, a CM18 generator launch still costs 68 to 141 ms against a 40 ms
+  threshold, paired A/B under `--det` at 1P and 4P. What is left on the launch frame is the model
+  build and `FlightController.Bind`, 50 to 90 ms together, and neither moves behind the frame that
+  puts the aeroplane in the world without the aeroplane arriving late. The deferred frames carry one
+  `AnimRuntime.PrewarmEmitters` call over about 194 emitters at 15 to 103 ms, whose
+  `material_create` term (194 `ShaderMaterial` and `MultiMesh` builds in `Effects/EmitterRenderer.cs`)
+  is the PERF-22-shaped follow-up.
+  *Fix shape:* two halves. (1) A test first: a suite that spawns an AI aircraft mid-flight through
+  the roster's own wave path and asserts the launch frame against the hitch threshold, so the
+  hitch is a red bar and not a feel report; `ai-crash-rig-deferral` spawns through the assembler
+  and measures nothing. (2) Then build the assembly AHEAD of the launch, off the generator's and
+  the roster wave's own authored cycle, which is a change to `AiGeneratorRuntime`'s launch
+  declaration and to spawn-index allocation rather than to the assembler. The crash-rig queue
+  (`CrashRigQueue`, `FlightRoster.PumpDeferredCrashRigs`) is the pattern for work that can trail
+  the launch; the model and bind cannot trail it.
+  *⚠ Traps:* the aeroplanes a session builds BEFORE its first frame keep their rigs built in
+  place, and deferring them moved the two `--ai=` goldens; keep that rule. The sim clock lags wall
+  time on physics-bound late missions, so compare a hitch in sim frames under `--det` and read the
+  hitch lines before blaming a spawn (`docs/verification.md` PERF-12/13/21). `--det`'s numbers are
+  with nobody at the controls; the author's feel report is the acceptance.
+  *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same pass profiled), `BL-657`
+  (CM18's generator launching at the wrong time, which is where the measured case is flown).
 
 ## Tooling, platform & docs
 
