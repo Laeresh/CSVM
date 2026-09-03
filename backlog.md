@@ -2853,7 +2853,7 @@ usual.
   something before the caller reads it, so this moves scripted motion across every mission and wants
   the golden and campaign suites run before and after. The Spruce Goose chain is NOT an instance of
   this: its branch is chosen by `ACTIVATION_PREREQUISITE` node states, not by a call race, and both
-  branches run (`docs/PLAN-M5-polish-9.md` C22). *Impact:* unknown breadth. No shipped symptom is
+  branches run (`docs/plans/PLAN-M5-polish-9.md` C22). *Impact:* unknown breadth. No shipped symptom is
   attributed to it yet; it is a decoded divergence looking for its missions.
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled

@@ -1,9 +1,11 @@
 # M5 Polish Run 9
 
-**ACTIVE PLAN** (written 2026-09-02). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names the active plans when more than one is
-present. Move it to `docs/plans/` with a `COMPLETE` banner, and add its row to
-[`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE** (written 2026-09-02, all 12 items landed or disproven and `D31` flown 2026-09-03).
+Indexed in [`plans.md`](plans.md). Read as history: the shipped behaviour is in
+[`docs/architecture.md`](../architecture.md) and [`docs/verification.md`](../verification.md), and
+each item's record is its landing commit's message. Four items closed as disproven (`B12`, `B14`,
+`C23`, `C24`); what `C23` turned up landed under `BL-678` in `PLAN-M5-polish-10` and closed with
+`BL-669` at the controls.
 
 Twelve campaign defects walked in mission order, CM02 to CM15, selected from `backlog.md` on
 2026-09-02 by the criteria the author chose that day: the per-mission `CMnn` campaign defects,
@@ -24,9 +26,9 @@ is traced and whose remainder is a design decision; and `BL-665`, traced and sma
 two of the entries' own hypotheses died in that pass (see the Traps of C22 and C23). The scheduled
 entries were moved out of `backlog.md` into this plan in the same change that created it.
 
-This plan runs beside [`PLAN-menu-presentations.md`](PLAN-menu-presentations.md) (Wave A) and
+This plan runs beside [`PLAN-menu-presentations.md`](../PLAN-menu-presentations.md) (Wave A) and
 touches nothing that plan owns: no `LaunchMenu`, no menu screens, no campaign board chrome. It
-also runs beside [`PLAN-M5-polish-8.md`](PLAN-M5-polish-8.md)'s open `D31` sortie; D31's checks
+also runs beside [`PLAN-M5-polish-8.md`](../PLAN-M5-polish-8.md)'s open `D31` sortie; D31's checks
 (`PT-97` to `PT-106`) and this run's `D31` can be flown in one sitting, since both walk the
 campaign in mission order. The `BL-523`/`BL-550`/`BL-565` AI-mode-machine remainder stays in the
 backlog whole, on the grounds three prior runs recorded. First alternates if an item here dies

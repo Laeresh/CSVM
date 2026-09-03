@@ -38,7 +38,7 @@ moved out of `backlog.md` into this plan in the same change that created it.
 This plan runs beside [`PLAN-menu-presentations.md`](PLAN-menu-presentations.md) and touches nothing
 it owns: no `LaunchMenu`, no menu screens, no campaign board chrome. It also runs beside the open
 closing sorties of [`PLAN-M5-polish-8.md`](PLAN-M5-polish-8.md) and
-[`PLAN-M5-polish-9.md`](PLAN-M5-polish-9.md), and that is a scheduling constraint rather than a file
+[`PLAN-M5-polish-9.md`](plans/PLAN-M5-polish-9.md), and that is a scheduling constraint rather than a file
 one: see Decision 4. `A2` died at dispatch and its named first alternate `BL-405` was promoted into
 its place as `C25`. Remaining alternates if another item dies early: `BL-673` (latent, small),
 `BL-391` (an audio level the author has already reported), `BL-614` (the general form of a walk
