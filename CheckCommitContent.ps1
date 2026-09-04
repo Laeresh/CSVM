@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # The content gate every harness's pre-commit hook calls: encoding, item IDs, golden prose,
-# comment caps.
+# comment caps, doc entries.
 #
 # THE ROOT IS THE WHOLE POINT. A hook runs as its own process in whatever directory the session
 # happens to be in, which is not necessarily the tree the commit will write to. Deriving the root
@@ -43,7 +43,8 @@ $checks = @(
     @{ Name = 'encoding';        Script = 'CheckEncoding.ps1' },
     @{ Name = 'item IDs';        Script = 'CheckItemIds.ps1' },
     @{ Name = 'golden prose';    Script = 'CheckGoldenProse.ps1' },
-    @{ Name = 'comment caps';    Script = 'CheckCommentCaps.ps1' }
+    @{ Name = 'comment caps';    Script = 'CheckCommentCaps.ps1' },
+    @{ Name = 'doc entries';     Script = 'CheckDocEntries.ps1' }
 )
 
 # A path as written on the command line, minus the quoting.
@@ -258,6 +259,34 @@ function Invoke-SelfTest {
         Assert-Row 'row 10 duplicate item ID blocks' ($names -contains 'item IDs')
         Assert-Row 'row 10 golden prose blocks' ($names -contains 'golden prose')
         Assert-Row 'row 10 comment cap blocks' ($names -contains 'comment caps')
+
+        # Row 11: CheckDocEntries.ps1 as the fifth check. A minimal architecture split (one
+        # namespace file, one index bullet, one matching CSVM/src file) so the existence and
+        # coverage checks pass and only the cap violation under test fires.
+        $fxDoc = Join-Path $base 'fxdoc'
+        Write-Chars -File (Join-Path $fxDoc 'docs/architecture.md') -Codes ([int[]][char[]](
+            ('# Architecture' + [char]10 + [char]10 +
+             '## Module index' + [char]10 + [char]10 +
+             '### src/Test/' + [char]10 + [char]10 +
+             '- `src/Test/Thing.cs` - a thing that does things.' + [char]10)))
+        Write-Chars -File (Join-Path $fxDoc 'CSVM/src/Test/Thing.cs') -Codes (
+            [int[]][char[]]('// fixture only' + [char]10))
+        $overCapBody = (1..13 | ForEach-Object { 'line' + $_ }) -join ([char]10)
+        Write-Chars -File (Join-Path $fxDoc 'docs/architecture/Test.md') -Codes ([int[]][char[]](
+            ('## src/Test/Thing.cs' + [char]10 + [char]10 + $overCapBody + [char]10)))
+        $r11 = @(Invoke-Checks -Roots @($fxDoc))
+        $names11 = @($r11 | ForEach-Object { $_.Check })
+        Assert-Row 'row 11 an over-cap architecture entry blocks, naming the file' (
+            ($names11 -contains 'doc entries') -and
+            ($r11 | Where-Object { $_.Check -eq 'doc entries' } |
+                ForEach-Object { $_.Output -join [char]10 } |
+                Select-String -Pattern 'docs/architecture/Test\.md.*cap 8').Count -gt 0)
+
+        $withinCapBody = (1..8 | ForEach-Object { 'line' + $_ }) -join ([char]10)
+        Write-Chars -File (Join-Path $fxDoc 'docs/architecture/Test.md') -Codes ([int[]][char[]](
+            ('## src/Test/Thing.cs' + [char]10 + [char]10 + $withinCapBody + [char]10)))
+        Assert-Row 'row 11 a within-cap architecture split passes' (
+            (@(Invoke-Checks -Roots @($fxDoc)) | Where-Object { $_.Check -eq 'doc entries' }).Count -eq 0)
 
         # Row 9: the escape hatch.
         $env:CSVM_SKIP_CONTENT_CHECKS = '1'

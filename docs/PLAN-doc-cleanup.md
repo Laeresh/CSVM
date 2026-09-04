@@ -196,7 +196,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E: wire the gate and close
 
-41. ☐ E41 `CheckDocEntries.ps1` into `CheckCommitContent.ps1` and its `-SelfTest`; CLAUDE.md hook clause
+41. ☑ E41 `CheckDocEntries.ps1` into `CheckCommitContent.ps1` and its `-SelfTest`; CLAUDE.md hook clause
 42. ☐ E42 `PROJECT_CONTEXT.md` names the layout and the check; closing commit deletes this plan
 
 ## Dependency and parallelism notes
@@ -839,7 +839,7 @@ parser accepts but the index lacks is a defect this item must not paper over: ad
 
 # Wave E: wire the gate and close
 
-## E41 ☐ `CheckDocEntries.ps1` into the content gate
+## E41 ☑ `CheckDocEntries.ps1` into the content gate
 
 **Goal.** A commit that pushes an architecture entry over cap, an index bullet past one line, a
 new `.cs` without an entry, or a `docs/cli.md` bullet past 600 characters is refused with a

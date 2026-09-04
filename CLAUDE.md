@@ -32,17 +32,20 @@ landing gate for any change under `CSVM/`.
   invisible to it, since a `PreToolUse` hook runs before the command does; do it first as its own
   call. `.\FormatBeforeTests.ps1 -ShowRoot -Command '…'` says which tree a command would build,
   and `-SelfTest` exercises the trigger and the resolution.
-- **The content gate** runs four checks, each its own script you can also run by hand while
+- **The content gate** runs five checks, each its own script you can also run by hand while
   editing: [`CheckEncoding.ps1`](CheckEncoding.ps1) (double-encoded UTF-8, whole tree),
   [`CheckItemIds.ps1`](CheckItemIds.ps1) (`backlog.md`/`playtest.md` defining the same
   `BL-`/`PT-`/`CAP-` ID twice, or a `backlog.md` header tag outside the vocabularies the file's
   own header documents), [`CheckGoldenProse.ps1`](CheckGoldenProse.ps1) (an `exercises`
   field in `analysis/goldens/manifest.json` over 250 chars, or carrying an item id, a date or an
   "also exercises" clause — that field says what a shot covers *today* and is REWRITTEN on a
-  re-pin, never appended to, since the history is `git log -p` on the file), and
+  re-pin, never appended to, since the history is `git log -p` on the file),
   [`CheckCommentCaps.ps1`](CheckCommentCaps.ps1) over `CSVM/src` and `CSVM.Tests` (`-Summary` for
-  one line per file). A comment block over cap has outgrown its subject, so reflowing it is the
-  wrong fix: move the decode into `docs/` and leave the prohibition on the member it binds.
+  one line per file), and [`CheckDocEntries.ps1`](CheckDocEntries.ps1) (`docs/architecture/*.md`
+  entry caps and coverage against `CSVM/src`, one-line `docs/architecture.md` index bullets, and
+  `docs/cli.md`'s 600-character flag bullet cap). A comment block over cap has outgrown its
+  subject, so reflowing it is the wrong fix: move the decode into `docs/` and leave the
+  prohibition on the member it binds.
   ⚠ **The gate checks every worktree, not the one you are in.** A hook runs in whatever directory
   the session sits in, which is not always the tree the commit writes to, so a commit was cleared
   against one tree and written to another. When the command names a tree (`git -C`, `--work-tree`,
