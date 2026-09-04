@@ -188,9 +188,9 @@ class that builds no node of its own. `ResolveSpec` runs in `GameSession`'s cons
 a `--campaign=<profile>:<seq>` story position into an ordinary chapter and mission; `Attach` arms
 the graph once every runtime a directive can touch is up; `Step` runs the graph, the roster's
 escort repair and the mission's two music duties; `BuildRoster` plans and spawns the `aiv` blocks
-through `CampaignRoster.cs`. The nested `World` is the `IObjectiveWorld` implementation, where a
-directive with no seam in this session is a named no-op. Mission end records the attempt, folds
-the persist log into the profile and holds before the cabin. Debrief: [../org/debrief.md](../org/debrief.md).
+through `CampaignRoster.cs`. The nested `World` is the `IObjectiveWorld` implementation, a directive
+with no seam here a named no-op. Mission end records the attempt, folds the persist log into the
+profile and holds before the cabin behind `LeavingFade`, the ramp `UI.MissionEndFade` paints. Debrief: [../org/debrief.md](../org/debrief.md).
 
 ## src/Session/CampaignProgression.cs
 The campaign's progression rules over a profile: recording one mission attempt with the original's

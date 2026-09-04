@@ -294,6 +294,16 @@ a suite can compare against the graph. Self-mounting, and unlike `PerfHud`'s one
 window a splitscreen session builds one per rig. The decoded display mechanism it matches:
 [../formats/objectives.md](../formats/objectives.md).
 
+## src/UI/MissionEndFade.cs
+A full-screen `ColorRect` on a `CanvasLayer` at `HudLayers.MissionEndFade`, polling
+`CampaignDirector.LeavingFade` every frame and painting that straight onto the rect's alpha. That
+layer sits above the flight HUD and `SunWash` but under `Debug`/`Lab`, so the fade darkens the HUD
+and the wash the way the original's copied framebuffer does, while the debug instruments stay
+readable through it. This paints live over the running world instead of freezing a copy, since the
+hold already stops the sim clock underneath it. Self-mounting, one per rig's `HudParent`, hidden
+until the director's fade leaves 0. Decode: [../formats/objectives.md](../formats/objectives.md),
+"The mission-end path, and what the player sees after it".
+
 ## src/UI/LiveryLab.cs
 The `--viewer` livery editor (key L): a squadron stepper that loads the whole squadron livery,
 per-slot RGB sliders, decal steppers, a random livery and copy-CLI-args.

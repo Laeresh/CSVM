@@ -197,6 +197,13 @@ public sealed class CampaignDirector
     /// lands, which is <see cref="LeavingHoldS"/> before <see cref="ReturnToCabin"/>.</summary>
     public CampaignMissionResult? Result { get; private set; }
 
+    /// <summary>How black the mission-end overlay should sit right now: 0 before any ending, then
+    /// the same ramp <see cref="LeavingHoldS"/> counts down, reaching 1 the frame the hold ends and
+    /// staying there, since <see cref="Leaving"/> itself has already gone false by then. Reads
+    /// <see cref="Result"/> rather than a dedicated flag because the two are set together in
+    /// <see cref="OnMissionEnded"/>.</summary>
+    public float LeavingFade => Result is null ? 0f : _leaving > 0f ? (LeavingHoldS - _leaving) / LeavingHoldS : 1f;
+
     /// <summary>How many danger-zone gates <see cref="Attach"/> armed from a real
     /// <see cref="WorldInputs.Gamez"/>. 0 before <see cref="Attach"/>, or when the mission
     /// names no <c>DANGER_ZONES_COMPLETED</c> zone, or none resolved.</summary>

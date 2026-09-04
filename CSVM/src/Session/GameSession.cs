@@ -2737,17 +2737,18 @@ public partial class GameSession : Node3D
             () => _rigs.Count > 0 ? _rigs[0].Controller : null,
             () => _diagRuntime));
 
-        // The pause-screen objectives readout and the objective-site feed, both mounted only for a
-        // campaign session and both polling _campaign.Graph themselves once Attach (above) has
-        // built it. The sites go onto the player's target cycle, which is what marks them.
+        // The objectives readout, the mission-end fade and the objective-site feed: all campaign
+        // only, the first two polling _campaign once Attach (above) has built it, the sites landing
+        // on the player's target cycle.
         if (_campaign is { } campaign)
         {
             var objectiveMessages = Messages.Load(state.MessagesPath);
-            // One readout per rig, under that rig's own HudParent, so every pane draws its own
-            // copy over the one shared PauseState — the pattern every other per-rig HUD follows.
+            // One readout and one fade per rig, under that rig's own HudParent, so every pane
+            // draws its own copy — the pattern every other per-rig HUD follows.
             foreach (var rig in _rigs)
             {
                 rig.HudParent.AddChild(UI.ObjectivesHud.Build(campaign, objectiveMessages, _pauseState!));
+                rig.HudParent.AddChild(UI.MissionEndFade.Build(campaign));
             }
             var sites = new ObjectiveSites(campaign, objectiveMessages,
                 MissionTargets.Load(state.MissionZrdrPath,
