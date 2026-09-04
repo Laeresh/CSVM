@@ -817,7 +817,7 @@ filing, not a re-opening.
 | 3 | CM04 | `A3` | sink the sub, wait a wave period: no further launch from the bay |
 | 13 | CM14 | `C21` | fly to the Pandora with enemies alive, dock: no aircraft hanging in the sky during either film |
 | 16 | CM17 | `C22` | the first second after the intro: in flight at the authored spawn, no stall onto the terrain, no jump |
-| 17 | CM18 | `C23` | the Blacke drop from each side: one camera, a still stage, control back clear of the ground |
+| 17 | CM18 | `C23` | the Blacke drop from each side: one camera, a still stage, control back clear of the ground; the graze or crash into the Devil's Horn right after the film was the sweep's carried origin, fixed as `BL-737` (`git log --grep=BL-737`) |
 | 18 | CM19 | `D31` | the first two Warhawks appear off the hook (where they appear is the open question); whether anything sits on the hook before a launch is `BL-734` |
 | 20 | CM21 | `B12`, `B13` | destroy one beam and cycle targets: its marker gone; the Cabbie a blue Follow marker once the taxi starts, not offered as an enemy, its paint read too |
 | 23 | CM24 | `A2`, `B11` | kill two broadsides on one side: no further muzzle flash, skin fire on the panel above (a leak here is `BL-672`); Miles's marker before and after his death |
