@@ -1097,6 +1097,34 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   torpedo-armed pilot picking the gasbag; then the user's own flight of CM02 Instant Action seeing
   the wingmen attack the zeppelin, and of a Warhawk mission seeing torpedoes at the Pandora.
   *Cross-refs:* `BL-363`'s closing commit (D36), `BL-717`, `BL-714`.
+- `BL-741` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **A roster
+  `rating_biases` exclusion naming a mission structure never reaches the structure's parts, so
+  C4/M03's Black Swan wingman attacks the cargo zeppelin its own block excludes instead of the
+  Black Hat fighters.** *Evidence:* `bswingman_1`'s block in
+  `extracted/C4/M03/zrdr/aiv.zrd.json` authors `["cargozep1", -1.0]`, the hard exclusion, and
+  the user's flight had the Fury take the cargozep's engine `leng31` at bias 0 and launch rockets
+  at it. `cargozep1` is not a zeppelin record on this mission but a docked mission structure
+  (`targets.zrd`, `MSG_TRGT_CARGO_ZEP`, nodes `cargozep1`), so its engines and turrets are
+  separate `DestructibleRegistry` pools named `leng31`/`rturN` with no `Owner`, and
+  `AiTargetRanking.ObjectiveBiasFor` matches a pattern against the pool's own name and its
+  owner only; a zeppelin record fans its node name onto its zones, a structure fans nothing. The
+  cargozep's parts carry an enemy team from the gamez ownership slot, which is why the wingman
+  sees them at all and why the designers excluded them by name. The AI's structure pool is the
+  registry's every-pool list where the original's `TargetStruct` list is the mission-structure
+  objects (`docs/org/aiPilot.md` "Target acquisition"), so a part that is one struct object in
+  the original is many candidates here, none answering to the object's name. *Fix shape:* decode
+  what a `TargetStruct` candidate IS for a docked airship: one object per `targets.zrd` node or
+  one per damage pool, and what name `FUN_0041ae40` matches for it (a turret walks its parent
+  chain at `+0x54`/`+0x58`). Then either fan the structure's node name onto every pool under it
+  as `Owner`, the way `ZeppelinRuntime.WireZones` fans a record's, or offer the structure as one
+  candidate. *⚠ Traps:* `BL-400`'s curated `targets.zrd` list is the player's Non-Aircraft
+  cycle and a separate question; do not merge the two. The wingman +0.4 and the structure
+  handicap `struct_bias` (def `+0x13c`, applied to every turret and structure candidate as the
+  scorer's `+0x344`, −200 on the `w*` wingman defs and 0 elsewhere) are separate terms, not this
+  bug. *How you'd know it worked:* a unit on the bias match for a structure part, and the
+  `campaign-roster` shape on C4/M03: `bswingman_1` ranks no cargozep pool at all while the
+  Brigands still rank. *Cross-refs:* `BL-740`, `BL-400`, `BL-476`'s closing commit (the
+  zeppelin owner identity).
 
 ## Flight model & collision physics
 

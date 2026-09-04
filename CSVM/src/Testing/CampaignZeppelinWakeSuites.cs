@@ -162,9 +162,12 @@ internal static class CampaignZeppelinWakeSuites
             // BL-740: the gasbag identity is what the acquisition's ordnance gate and the
             // rocketeer's torpedo match read, so a zone pooled as a gasbag has to say so.
             int flaggedGasbags = GasbagParts(runtime);
-            report.AppendLine($"gasbag-flagged parts: {flaggedGasbags}");
+            int gasbagStructures = GasbagStructures(world);
+            report.AppendLine($"gasbag-flagged parts: {flaggedGasbags}, as AI structure candidates: {gasbagStructures}");
             ctx.Check(flaggedGasbags > 0,
                 $"the live zeppelin's gasbag zones carry the gasbag identity ({flaggedGasbags} flagged of {dormantParts} parts)");
+            ctx.Check(gasbagStructures > 0,
+                $"…and reach the AI's structure pool, where the ordnance gate reads them ({gasbagStructures} of {dormantStructures} candidates)");
 
             // BL-673: a dormant pool is out of the world for a scripted DamageAt too, not only
             // for the target scan. The read is live, so the same pool must die after the wake.
@@ -249,6 +252,13 @@ internal static class CampaignZeppelinWakeSuites
         var set = new AimCandidateSet();
         set.AddStructures(world.Runtime.Destructibles);
         return set.Structures.Count;
+    }
+
+    private static int GasbagStructures(TestWorld world)
+    {
+        var set = new AimCandidateSet();
+        set.AddStructures(world.Runtime.Destructibles);
+        return set.Structures.Count(c => c.Source is DestructibleRegistry.Instance { Gasbag: true });
     }
 
     // The first pool the zeppelin's damage wiring fanned its name onto.

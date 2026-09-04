@@ -3163,17 +3163,30 @@ public partial class FlightController : Node3D
     // Whether this pilot may be offered a gasbag at all: the decoded admission gate walks the
     // weapon list for a DAMAGES_ZEPPELIN slot with ammo whose two launch timers have run out
     // (FUN_00420070, docs/org/aiPilot.md). A pilot that launches nothing has no such slot.
-    private bool HasGasbagOrdnanceReady()
+    private bool HasGasbagOrdnanceReady() => GasbagOrdnanceState() == "ready";
+
+    // The gate's verdict as a word, for the acquisition breadcrumb: which of its four conditions
+    // withheld the gasbags is what a flight log has to say when the torpedoes never come.
+    private string GasbagOrdnanceState()
     {
-        if (Loadout is not { Hardpoints.Count: > 0 } || Pilot?.Rocketeer is not { } rocketeer)
-            return false;
+        if (Loadout is not { Hardpoints.Count: > 0 })
+            return "no pylons";
+        if (Pilot?.Rocketeer is not { } rocketeer)
+            return "no rocketeer";
+        string state = "no gasbag pylon";
         for (int i = 0; i < Loadout.Hardpoints.Count; i++)
         {
             var hp = Loadout.Hardpoints[i];
-            if (hp.Weapon.DamagesZeppelin && hp.Armed(InfiniteAmmo) && rocketeer.SlotReady(i))
-                return true;
+            if (!hp.Weapon.DamagesZeppelin)
+                continue;
+            if (!hp.Armed(InfiniteAmmo))
+                state = "gasbag pylon empty";
+            else if (!rocketeer.SlotReady(i))
+                state = "gasbag pylon locked";
+            else
+                return "ready";
         }
-        return false;
+        return state;
     }
 #pragma warning restore SA1204
 
@@ -3202,7 +3215,7 @@ public partial class FlightController : Node3D
             {
                 _gunnerLoggedTarget = true; // verification breadcrumb: who the gunner went after
                 Log.Info("flight",
-                    $"ai gunner: shooter {PlayerIndex} targets {TargetLabel(StandingTarget(gunner))} at {score.Distance:0} m ({how}: weight {score.Weight:0.0#} bias {score.Bias:0} rank {score.Rank:0})");
+                    $"ai gunner: shooter {PlayerIndex} targets {TargetLabel(StandingTarget(gunner))} at {score.Distance:0} m ({how}: weight {score.Weight:0.0#} bias {score.Bias:0} rank {score.Rank:0}; gasbag ordnance {GasbagOrdnanceState()}, {_gunnerScan.Structures.Count} structure(s) in the scan)");
             }
         }
         // ⚠ Only Pursue shoots. Lay off holds fire deliberately (the rubber-band assist) even
