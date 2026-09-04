@@ -62,16 +62,36 @@ Guns` resolves to just `["firepoint7"]`: it is the lone 7-firepoint airframe, it
 centreline mount with no fp8.
 
 **`hardpoints.count` → pylon numbers.** `Loadout.Bind` does **not** resolve `pylon1`…`pylonN`
-sequentially — it takes the first `count` entries of `Loadout.PylonFillOrder = {1,5,2,6,3,7,4,8}`
-(`BL-294`/`PT-31`, user-observed at the controls against the original's weapon-gauge belt lights:
-a partial stock fit leaves gaps rather than filling `pylon1`'s side contiguously). Read that
-sequence as gauge positions and nothing more: its two interleaved halves are **not** the wings,
-which are the odd and even numbers ([markers.md](markers.md)). `Hardpoint.Index`
-carries the resolved pylon NUMBER, not the loop position, and the weapon gauge's belt lights and
-arrow-target math (`GaugeCluster`/`FlightController.UpdateWeaponGauges`) key off that number against
-the dial's fixed 8-position ring — an unfitted physical position reads red, the gap the fill order
-predicts (`hud.md`'s belt-light rule). A full 8-pylon loadout (Balmoral, Warhawk) is unaffected: the
-fill order is a permutation covering all eight positions either way.
+sequentially. It takes the first `count` entries of `Loadout.PylonFillOrder = {1,5,2,6,3,7,4,8}`,
+so a partial stock fit leaves gaps rather than filling `pylon1`'s side contiguously.
+`Hardpoint.Index` carries the resolved pylon NUMBER, not the loop position, and the weapon gauge's
+belt lights and arrow-target math (`GaugeCluster`/`FlightController.UpdateWeaponGauges`) key off
+that number against the dial's fixed 8-position ring, so an unfitted physical position reads red
+(`hud.md`'s belt-light rule). A full 8-pylon loadout (Balmoral, Warhawk) is unaffected either way:
+the fill order is a permutation covering all eight positions.
+
+**Where that sequence comes from.** It is not an algorithm in the original, but authored
+per-airframe data. `crimson.exe` holds a table of 11 stock records of 204 bytes at `0x00619f58`
+(selected at `0x0040c293`, guarded to index < 11; higher indices are custom planes, which take a
+pointer table instead and do not use this path). Each record's eight ordnance cells sit at
+record `+0xA8`, and the value `11` is the empty-slot sentinel: `FUN_004440f0` returns -1 for it by
+`default:`, and `FUN_004b2550` then clears that pylon, which is what darkens its belt light. All
+eleven records fill the first `ceil(N/2)` cells of `{0,1,2,3}` and the first `floor(N/2)` of
+`{4,5,6,7}`, and the slot-to-node mapping is the identity: `FUN_004b2300` caches the nodes with
+`sprintf(buf, "pylon%d", i)` for `i` = 1 to 8, with no permutation anywhere in the chain. Those two
+facts together give the sequence `1,5,2,6,3,7,4,8`.
+
+⚠ **One index serves three roles and they must not be split apart.** Pylon node number, loadout
+slot and gauge belt position are the same number in the original: `FUN_00454ba0` caches eight belt
+lights named `mgindicator0`…`mgindicator7` and `FUN_00454d40` lights position `n` and sets the
+arrow to `n × (2π/8)`, with `n` taken straight from the raw ordnance slot index. Separating the
+gauge order from the physical assignment would be a divergence, not a fix.
+
+⚠ **The two interleaved halves are not the wings.** The wings are the odd and even numbers
+([markers.md](markers.md)); the halves `{1,2,3,4}` and `{5,6,7,8}` are the outboard and inboard
+pairs. A consequence worth stating because it looks like a bug: a 2-pylon fit takes pylons 1 and 5,
+both to port, so the original hangs the Hoplite's two rockets port-heavy and CSVM reproduces that
+faithfully. The odd counts are unbalanced of necessity. Do not "correct" this on geometry alone.
 
 ## Turrets
 

@@ -1017,28 +1017,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the Bloodhawk, read the hardpoint readout. *Cross-refs:* `BL-394`,
   `docs/org/hangar.md` ("special-plane template").
 
-- `BL-732` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` **`Loadout.PylonFillOrder` may hang a partial stock fit
-  lopsidedly: read as physical pylons it puts both of the Hoplite's two rockets on the port
-  wing.** *Evidence:* `--dump-markers` over all eleven player airframes: every model pairs its
-  pylons across the centreline, odd to port and even to starboard, with `|x|` falling as the
-  number rises (`docs/formats/markers.md`). Against that geometry the sequence
-  `{1,5,2,6,3,7,4,8}` reads port, port, starboard, starboard, port, port, starboard, starboard,
-  so a stock fit's prefix is unbalanced at every odd count and at 2: the Hoplite (count 2) hangs
-  1 and 5, both port; the Hellhound, Bloodhawk, Fury and Peacemaker (3) hang two port and one
-  starboard. The sequence was introduced as "the original's alternating-per-wing fill"
-  (`git show 8faa6b1d`), whose confirming evidence was the rockets dial cropped out of CSVM's own
-  golden render showing belt-light gaps rather than a contiguous run. That confirms the gauge
-  draws what the code intends, not that the intent matches the original. *Fix shape:* decode
-  which pylon nodes the original hangs a partial fit on, then either correct the sequence or
-  separate the two orders the code currently conflates: the gauge belt's position order and the
-  physical pylon assignment. *⚠ Traps:* the belt-light observation behind the current value is
-  real and must survive any change, so do not replace the sequence with `1..N` on geometry alone.
-  A full eight-pylon fit (Balmoral, Warhawk) is unaffected either way, since the sequence is a
-  permutation. Custom planes do not go through it: their pylons come from the record's two wing
-  counts. *Playtest after fix:* Instant Action in a Hoplite, external view, count rockets a side.
-  *Cross-refs:* `BL-294` (which introduced the sequence), `docs/formats/markers.md`,
-  `docs/formats/loadouts.md`, `docs/formats/hud.md` (the belt-light rule).
-
 ## Flight model & collision physics
 
 - `BL-443` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The G ramp reads the same tick's delivered lift; CSVM's is one step
