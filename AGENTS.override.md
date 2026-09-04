@@ -12,9 +12,9 @@
 - **Every landed commit carries a `Co-Authored-By:` trailer naming the acting agent + model**
   (e.g. `Co-Authored-By: DeepSeek V4 Flash <noreply@deepseek.com>`, taken from `PI_MODEL`).
   Body = what landed, how it was verified, the outcome — brief; not a narrative.
-- **Before touching any module, read it first:** its `## src/...` entry in `docs/architecture.md`
-  (grep for the module path + `-A 12`; **never read architecture.md whole — it is ~110 KB**),
-  `docs/verification.md` before measuring anything, and `docs/formats/gotchas.md` before writing
+- **Before touching any module, read it first:** its entry in `docs/architecture/<Namespace>.md`
+  (the index in `docs/architecture.md` routes there; grep `docs/architecture/` for the module
+  path), `docs/verification.md` before measuring anything, and `docs/formats/gotchas.md` before writing
   any reader/transform/shader. Read `docs/cli.md` before touching a flag's behaviour.
 - **Never commit game assets** (game files, extracted assets, ZBD contents, hexdumps with bulk
   asset data). Code + format docs only.

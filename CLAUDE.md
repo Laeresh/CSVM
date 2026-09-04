@@ -4,20 +4,16 @@ Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) first — it has the project des
 architecture decisions, repo layout, the Godot project + CLI reference, coding conventions, and
 the "Current status" pointer. This file holds only what's specific to Claude Code as a tool.
 
-Follow PROJECT_CONTEXT.md's **Development verification loop**: run the exact affected suite or unit
-while editing (`.\RunTests.ps1 -Suite <suite> -SkipUnits -SkipGoldens`, or `-UnitFilter <expr>
--SkipEngine -SkipGoldens`), use `.\RunTests.ps1 -Quick` for broad development confidence, and run
-the complete `.\RunTests.ps1` before landing a change under `CSVM/`.
-Quick and targeted runs never satisfy that landing gate; `CSVM.Tests/`-only changes do not require it.
-Stage times print against `analysis/verification-budgets.json`; `over budget` is awareness only and
-never changes the exit code.
+Follow PROJECT_CONTEXT.md's "Development verification loop"; the complete `.\RunTests.ps1` is the
+landing gate for any change under `CSVM/`.
 
 ## Claude Code specifics
 
-- **Skills** live in `.claude/skills/` (mirrored at `.agents/skills/` via a local junction for
-  other `.agents/`-aware tools — see [`AGENTS.md`](AGENTS.md)). Written by
-  `/setup-matt-pocock-skills`; edit the files directly. Invoke with their slash commands, e.g.
-  `/domain-modeling`, `/commit-next`, `/new-plan`.
+- **Skills** live in `.claude/skills/`, mirrored at `.agents/skills/` for other `.agents/`-aware
+  tools; see [`AGENTS.md`](AGENTS.md) for the mirror command. Edit the files directly. Invoke with
+  their slash commands, e.g. `/domain-modeling`, `/commit-next`, `/new-plan`.
+- When delegating to a subagent, use a cheaper model tier where appropriate, for example for
+  exploration.
 - **Hooks:** `.claude/settings.json` runs four `PreToolUse` hooks. (1) A shell-syntax guard that
   rejects a PowerShell here-string (`@'…'@`) sent to the **Bash** tool, and a heredoc or
   `/dev/null` sent to the **PowerShell** tool. (2) The **Bash** tool is blocked outright with
