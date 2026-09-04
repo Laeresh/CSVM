@@ -544,6 +544,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   settles, from outside. *Cross-refs:* `BL-668`'s closing commit (`git log --grep=BL-668`), which
   carries the column decode and CM10's lifeboat.
 
+- `BL-733` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A killed installation whose death sequence switches its `dbase` node off is revived to full health by the pool sync.**
+  *Evidence:* `AnimRuntime.SyncDestructiblePool` classifies a `dbase`-role node going inactive as
+  the `destroyed`-role node going inactive, since `dbaseRole` implies `destroyedRole` there, and
+  takes its revival branch. The Barracuda's own death sequence (`extracted/C3/M03`, the
+  `subhealthy` installation) deactivates `dbase` as an ordinary step of dying, so right after a
+  live kill `RunDeathSequence`'s own dispatch of that event sets `inst.Status` back to `Healthy`
+  and `inst.Health` to full, after the visible death has played. Found while landing the
+  generator's host-death notification (`git log --grep=BL-729`), which fires before the revert
+  and is unaffected. *Fix shape:* tell a `dbase` deactivation inside the def's own death sequence
+  apart from a scripted revival, by the running sequence's identity or by the transition's
+  direction, and pin it on the Barracuda with an `ANIM_HEALTH` read after the kill. *⚠ Traps:*
+  the bay's shutdown is not evidence either way; only a health read or a later `CarryState`
+  snapshot shows the revert. Which other installations author their death this way is not
+  surveyed. *Playtest after fix:* none needed; a headless CM04 kill with a health read after it.
+  *Cross-refs:* `docs/formats/destructibles.md`, `BL-672` (a healthy node that still answers a
+  hit after its gunback died, the same pool state read from the other side).
+
 ## Weapons & combat
 
 - `BL-066` `[Feature]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
@@ -1439,6 +1456,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   world rotation transfers unchanged. Pre-existing and found while wiring the energy mirror, so it
   is not a regression of that work. *Cross-refs:* `BL-332`'s closing record, `docs/org/weather.md`.
 
+- `BL-735` `[Bug]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: trace]` **The multiplayer zeppelins' belly rings stand over no hull collider in six of the eight chapter worlds.**
+  *Evidence:* on `multiplayer1zep` and `multiplayer2zep`, a plain unrestricted
+  `CollisionLayers.World` ray cast straight up from the `WorldPosition` of `ctur1`, `ctur2` and
+  `ctur3` finds nothing for over 100 m in the C1, C1B, C2, C2B, C3 and C4 worlds, while the same
+  models read solid in C1C and C5, which reads as a per-chapter revision of the shared vehicle
+  mesh rather than a runtime defect. The pirate zeppelin's seventeen rings all find hull where
+  their arcs say they should (`turret-hull-blocks-own-fire`, `git log --grep=BL-714`). Reachability
+  by a hostile ring in play is not confirmed: it needs the hull armed hostile in a skirmish.
+  *Fix shape:* compare the two hull meshes' collision-bearing nodes across chapters against the
+  gamez, say whether the six chapters ship a thinner mesh or the builder drops a node, and give
+  the belly rings a hull to hit. *⚠ Traps:* a ray through the hull node's origin is a
+  false-positive census, since a hull's origin is not its mesh centre; test on bearings inside a
+  ring's own arc. *Playtest after fix:* a Dogfight against a `multiplayer1zep` hull, flying the
+  belly. *Cross-refs:* `BL-714` (the pirate zeppelin's rings, cleared on a parked hull),
+  `docs/architecture/Mech3.md` (`WorldCollision.cs`, `WorldBuilder.cs`).
+
 ## Effects & animation runtime
 
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
@@ -1654,6 +1687,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* CM24, kill two adjacent engines on one side and watch the smoke from the
   external view. *Cross-refs:* `BL-121` (the `trail-world-anchor` suite), `BL-700` (the same
   zeppelin family's wreck rest).
+
+- `BL-734` `[Bug]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: trace]` `[CM19]` **CM19's launch hook shows no aircraft on it before a Black Hat launches.**
+  *Evidence:* `ai_warhawk_place` (`extracted/C4/M04/mis_anim/warlaunchhook-*.json`) parents the
+  display node `anim2_warhawk` under `bmhookpoint` and translates it, and `launch_warhawk`
+  switches that node on, runs the hook's SI script and switches it off again around raising 801.
+  No CM19 objective wakes the place definition and `launch_warhawk` never calls it, so the display
+  node is never under the hook, and the mission build still lists `ObjectAddChild` among the event
+  kinds not acted on. The launch itself is landed (`git log --grep=BL-730`); this is the hook's
+  appearance. *Fix shape:* read what starts `ai_warhawk_place` and `ai_brigand_place` in the
+  original (a startup pass, an anchored reset, or the hook's own bootstrap), act on
+  `ObjectAddChild` for a display node, and pin the node's parent before the first launch.
+  *⚠ Traps:* do not spawn the roster aircraft on the hook to fake it; the display node is a
+  separate model. *Playtest after fix:* CM19 to the first warning, watch the hook. *Cross-refs:*
+  `docs/formats/anim-definitions/cutscenes.md` (801 to 803), `BL-730`'s closing commit.
 
 ## Audio
 
@@ -3156,6 +3203,18 @@ usual.
   the direction the net is walked from the launch node. His objective marker is not part of this:
   the bay launch stamps it onto the aircraft like any roster spawn.
   *Cross-refs:* `docs/formats/mission-entities/enemy-generators.md`.
+
+- `BL-736` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Whether an Instant Action bootstrap parks the AI the way the imperative 913 parks it before a story intro.**
+  *Evidence:* `FUN_004654e0` runs code 913's body before any mission's `StartAnims` start, so
+  every story intro parks the AI whatever its own data authors, and `CutsceneController` now does
+  the same for an intro (`git log --grep=BL-719`). `camera1-player_setup` authors the same nine
+  codes outside a story mission (`docs/formats/anim-definitions/cutscenes.md`, "The codes do not
+  identify a cutscene"), and whether the Instant Action path runs the same imperative park before
+  it, or whether an Instant Action's AI is even alive at that moment, is not read. *Fix shape:*
+  read the Instant Action start path in the decompile for the same four calls, and if they are
+  there, extend the forced park to `player_setup`'s bootstrap with a suite over an Instant Action
+  wave. *⚠ Traps:* an Instant Action wave spawns after the bootstrap in CSVM, so a headless run
+  may show nothing to park; read the original first. *Cross-refs:* `BL-719`'s closing commit.
 
 ## Tooling, platform & docs
 

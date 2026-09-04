@@ -197,7 +197,11 @@ solid") says should be solid; this looks like a missing or thin collision mesh s
 multiplayer rig rather than a `TurretController` defect, and reachability from a hostile ring was
 not confirmed.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
 
 
 **Goal.** A destroyed Dante broadside leaves the volley, and whether a broadside's death should
@@ -255,7 +259,11 @@ nothing bespoke to add. The evidence does not extend to whether a real projectil
 resolves to the same pool the suite drove directly through `DamageAt`; that hit-routing question
 is `BL-672`'s, out of this item's scope.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
 
 ## A3 ☑ `BL-729` A destroyed submarine keeps launching fighters
 
@@ -300,7 +308,11 @@ deactivates a `dbase`-role node without a matching `destroyed`-role reactivation
 barracuda's own death does; the notification fires before that revert, so the generator disable is
 unaffected, but the pool's own `Status`/`Health` bookkeeping is left wrong afterward.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
 
 # Wave B — One aeroplane, one target
 
@@ -368,7 +380,11 @@ that relabels Miles, which only the mission run can show, and CM02's blank name 
 slot 20 (the CM02 suite records it reading "British Balmoral") and the marker has no "print no
 line" state. That fallback is `BL-637`'s question and is deliberately untouched here.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
 
 ## B12 ☑ `BL-726` A Destroy Support Beam marker leaves the cycle when its beam dies
 
@@ -410,7 +426,11 @@ gate to prove each assertion fails without it. `CampaignMarkerSuites` is untouch
 does not settle whether CM21's own flown approach to a beam reaches the kill fast enough to matter
 in play, which is `D33`'s to watch at the controls.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
 
 ## B13 ☑ `BL-725` CM21's Cabbie carries its objective marker as a friendly
 
@@ -471,7 +491,11 @@ eight blocks showed before that fix), and whether the Cabbie's paint scheme (`Sh
 `Team != PlayerTeam`) reads as enemy-liveried at a glance, which is a look judgement for `D33`, not
 a target/HUD mechanism.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
 
 # Wave C — Cutscene hand-backs
 
@@ -527,7 +551,11 @@ through the hold and resumes once the intro hands off. This does not settle whet
 imperative gap affects `player_setup`'s Instant Action bootstrap, which authors the same nine codes
 outside a story mission and is out of this item's scope.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
 
 
 **Goal.** After CM17's intro the player is in flight at the authored spawn, not against the
@@ -581,7 +609,11 @@ same zero-speed hand-back sat under all fourteen missions that open on a cutscen
 with this. The headless run still grazes a rise about 725 m from spawn a few seconds after control
 returns, which is the flown path at 18 m/s and a judgement for `D33`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
 
 ## C23 ☑ `BL-722` CM18's Blacke drop holds its stage still and hands back clear of the ground
 
@@ -644,7 +676,11 @@ above the surface measured under it. This does not settle whether the drop reads
 controls, only that one camera composes it over a stage that holds still; the shot's framing and
 `BL-699`'s separate launch-frame hitch on the same mission are for `D33`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
 
 # Wave D — Mission flow
 
@@ -700,7 +736,11 @@ authors 37 m below the terrain height there for all fifteen blocks. Both launche
 on their net without an under-map report, but whether the launch reads right at the controls is a
 judgement for `D33`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
 
 ## D32 ☑ `BL-727` Mission end fades to black over the hold
 
@@ -742,7 +782,11 @@ at the hold's own end (1, halfway, fully black), and `CampaignMissionLossKeepsOb
 the loss ending lands fully black too, so both endings are covered. No golden in
 `analysis/goldens/manifest.json` covers a mission end, so none needed a re-pin.
 
-**Verified.** <pending orchestrator run>
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
 
 ## D33 ☐ Closing sortie: every landed item judged at the controls
 
@@ -764,3 +808,21 @@ end for `D32`. Prepare the sitting's launch commands from the items' lines befor
 **⚠ Traps.** Do not close an item on an instrument alone when its line names something to watch
 for; the Gemini's bays and the AI evasion are not in this plan and a finding about them is a new
 filing, not a re-opening.
+
+**Sitting.** Copy and rename a profile first (`user://Profiles/`), then in this order, each
+`.\RunGame.ps1 --campaign=<profile>:<seq>`:
+
+| Seq | Mission | Item | Watch for |
+|---|---|---|---|
+| 3 | CM04 | `A3` | sink the sub, wait a wave period: no further launch from the bay |
+| 13 | CM14 | `C21` | fly to the Pandora with enemies alive, dock: no aircraft hanging in the sky during either film |
+| 16 | CM17 | `C22` | the first second after the intro: in flight at the authored spawn, no stall onto the terrain, no jump |
+| 17 | CM18 | `C23` | the Blacke drop from each side: one camera, a still stage, control back clear of the ground |
+| 18 | CM19 | `D31` | the first two Warhawks appear off the hook (where they appear is the open question); whether anything sits on the hook before a launch is `BL-734` |
+| 20 | CM21 | `B12`, `B13` | destroy one beam and cycle targets: its marker gone; the Cabbie a blue Follow marker once the taxi starts, not offered as an enemy, its paint read too |
+| 23 | CM24 | `A2`, `B11` | kill two broadsides on one side: no further muzzle flash, skin fire on the panel above (a leak here is `BL-672`); Miles's marker before and after his death |
+| any | any end | `D32` | a win and a loss: a smooth fade to black over the hold, the next screen opening on black |
+| IA | Dogfight, pirate zeppelin | `A1` | fly along the hull on the side away from its active ring, in motion: any sustained fire through the hull |
+
+`B11`'s other lines are CM02's Balmorals (one bracket each, the category, and the name line the
+airframe fallback still prints, which is `BL-637`'s decision), CM15's Tex, CM11's stunt planes.

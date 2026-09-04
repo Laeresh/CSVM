@@ -238,8 +238,8 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Where the project is.** Milestones 1 through 5 are delivered: 11 flyable aircraft over 8 animated chapter worlds, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI (aircraft that patrol, engage, evade and die, turrets, zeppelins, pilot voice), and all four Instant Action mission types plus the 2–4-player splitscreen Dogfight deathmatch are playable and scored. M5 added the single-player campaign: per-profile progression across the cabin, briefing and flight-check screens, and missions that run their authored `objectives.zrd` choreography with intro cutscenes, letterbox and campaign wingmen.
 
-**Active plan:** [`docs/PLAN-M5-polish-11.md`](docs/PLAN-M5-polish-11.md), Wave A open.
-Next: `A1` (`BL-714`); `BL-700` and `BL-702` carry polish run 10's closing sortie; `BL-693`, `BL-696` and `BL-697` carry what input rebinding left open; `BL-703` to `BL-712` carry what the menu plan's closing sortie found; `BL-699` carries the wave-spawn hitch; `BL-535` and CM13's race pace remain owed at the controls, as does the enhanced mode's pass against `PLAN-enhanced-graphics`'s Open judgements.
+**Active plan:** [`docs/PLAN-M5-polish-11.md`](docs/PLAN-M5-polish-11.md), `D33` open.
+Next: `D33`, judging `BL-714` too; `BL-700` and `BL-702` carry run 10's closing sortie; `BL-693`, `BL-696` and `BL-697` carry what input rebinding left open; `BL-703` to `BL-712` carry what the menu plan's closing sortie found; `BL-699` carries the wave-spawn hitch; `BL-535`, CM13's race pace and the enhanced mode's pass against `PLAN-enhanced-graphics`'s Open judgements remain owed at the controls.
 
 Use the targeted/quick development loop above, then verify landed code with the complete
 **`.\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.
