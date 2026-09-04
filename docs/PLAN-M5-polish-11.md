@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ `BL-688` The roster objective marker is a stamped flag on the aircraft's own candidate
 12. ☐ `BL-726` A Destroy Support Beam marker leaves the cycle when its beam dies
-13. ☐ `BL-725` CM21's Cabbie carries its objective marker as a friendly
+13. ☑ `BL-725` CM21's Cabbie carries its objective marker as a friendly
 
 ### Wave C — Cutscene hand-backs
 
@@ -346,7 +346,7 @@ controls (`D33`): CM21, destroy one beam, cycle targets.
 branch; do not start it before `B11` lands. `BL-400` (a curated Non-Aircraft cycle) is a feature,
 not this.
 
-## B13 ☐ `BL-725` CM21's Cabbie carries its objective marker as a friendly
+## B13 ☑ `BL-725` CM21's Cabbie carries its objective marker as a friendly
 
 **Goal.** From the mission's start the Cabbie shows an objective marker and is not offered as an
 enemy target.
@@ -374,6 +374,38 @@ CM21 to the taxi's take-off.
 **⚠ Traps.** `WAKEUP_ENEMIES` on a friendly is the verb's name, not its team; do not infer
 hostility from it. `BL-635`'s closing commit (`git log --grep=BL-635`) is CM11's stunt planes on the
 same marker path; read it before re-chasing the stamp.
+
+**Outcome.** Both open questions resolved against the mission's own data and `B11`'s already-landed
+mechanism, and neither named a runtime bug: `B11` fixed this block along with the other seven when
+it landed. `OBJECTIVE20`'s `TRAVELERS` condition on `autogyro_1` carries no `BEGIN_DORMANT` of its
+own and is live from the mission's start, but its target is the roster block itself, which ships
+`deactivated` and stays out of the world (`Inert`, no candidate on any cycle) until `OBJECTIVE28`'s
+`WAKEUP_ENEMIES` un-dormants it; `OBJECTIVE28` is itself dormant until `OBJECTIVE2` completes, on
+the player's own approach to `dz1`. So the original could not have shown a marker on this block
+from the mission's start either: the aeroplane does not exist yet, and the report's "from the
+mission's start" is read as "from the point the mission actually introduces it," which the traced
+timeline explains without any code being wrong. For "reads hostile": `autogyro_1` authors team 0,
+read verbatim by `CampaignRoster`'s spawn into `FlightController.Team`, and `TargetRef.Classify`
+already tests `objectiveTarget` before the team split (`B11`'s own order), so the block classifies
+Objective on the Enemy cycle regardless of its team, exactly as `docs/org/targeting.md`'s class
+model requires. Its help label, `MSG_OBJ_FOLLOW` ("Follow"), is not one of the four destructive
+categories the decode reds out, and `TargetHud.MarkerColor` already colours off the category alone,
+never off team, so the shipped marker draws blue, the decode's own "non-destructive objective"
+colour, not red or green. A traced run of a new suite (`campaign-cm21-cabbie-marker`) over C5/M01's
+own built roster and objective graph confirms all of this end to end: no candidate at all while the
+block sleeps, exactly one Objective-ranked candidate named "Cabbie" once `OBJECTIVE28` wakes it,
+labelled off its own slots with no category half, coloured blue by `TargetHud.MarkerColor`, and none
+again once it is shot down. `CampaignRosterObjectiveMarkerSuites.cs` (`CheckAuthored`/`Drive`) is
+generalised to take the block, labels and wake objective as parameters so this suite and CM15's
+share one drive rather than a second copy. No production code changed: this is a correct disproof
+of both hypotheses in the item's Evidence, standing entirely on `B11`'s mechanism. What the evidence
+does not settle: what the player actually saw at the controls that read as "hostile" before `B11`
+landed (no marker or label at all is also consistent with the report, and is what every one of the
+eight blocks showed before that fix), and whether the Cabbie's paint scheme (`ShippedSkins` off
+`Team != PlayerTeam`) reads as enemy-liveried at a glance, which is a look judgement for `D33`, not
+a target/HUD mechanism.
+
+**Verified.** <pending orchestrator run>
 
 # Wave C — Cutscene hand-backs
 
