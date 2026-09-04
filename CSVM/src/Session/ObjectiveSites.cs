@@ -96,6 +96,14 @@ public sealed class ObjectiveSites
         }
     }
 
+    /// <summary>Whether a site standing on this destructible state is still selectable: false once
+    /// the resolved node's own pool reads <see cref="DestructibleRegistry.State.Destroyed"/>, no
+    /// matter whether its objective has completed, the same read <c>ZeppelinRuntime.ZoneIsAlive</c>
+    /// makes for a gasbag or engine zone. Null (unresolved node, or no registered pool) is live: a
+    /// site that never was a destructible, or one not built yet, is not a dead one.</summary>
+    public static bool LiveDespiteState(DestructibleRegistry.State? state) =>
+        state != DestructibleRegistry.State.Destroyed;
+
     /// <summary>Where a target sits: the bare <c>TRAVELERS</c> point of the objective that edits
     /// that target, where the mission gives one, and null to fall back to the world node.
     /// ⚠ Prefer the point over the node. C3/M01's village target names a node standing at the world
@@ -167,16 +175,17 @@ public sealed class ObjectiveSites
                 continue;
             }
 
+            var resolved = Resolve(node);
             into.Add(new AimCandidate
             {
                 Position = at,
                 // A record naming a mission-structure node stamps its flags onto the object that
                 // node already built and keeps its team; one naming any other node builds its own,
                 // and the original builds those neutral, which is almost every site.
-                Team = (Resolve(node) is { } site
+                Team = (resolved is { } site
                     ? DestructibleRegistry.MissionStructureTeamOf(site)
                     : null) ?? AimAssist.NeutralTeam,
-                Live = true,
+                Live = LiveDespiteState(resolved is { } n ? _runtime?.Destructibles.Resolve(n)?.Status : null),
                 ConeOverride = AimAssist.NoConeOverride,
                 Source = SiteFor(node, graph, at),
             });

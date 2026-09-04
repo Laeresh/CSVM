@@ -149,9 +149,9 @@ objective-flagged candidates, which is what tells the player where to go. World 
 `targets.zrd`'s own `objective` entries, minus whichever a completed objective's
 `REMOVE_OBJECTIVE_TARGET` names, plus whatever `ADD_OBJECTIVE_TARGET` adds. A roster block that
 flags itself is not here, because its marker rides its own aeroplane's candidate. A site is keyed
-by `ObjectiveTarget.Key` and re-read every frame, so it tracks a moving node; `PointFor` and
-`SiteAnchor` decide where its marker stands, and `Messages` gives it its verb, proper name and
-colour. Bound by `GameSession`. Marker decode: [../org/targeting.md](../org/targeting.md).
+by `ObjectiveTarget.Key`, re-read every frame so it tracks a moving node, and reads `Live` off its
+resolved node's own `DestructibleRegistry` state (`LiveDespiteState`), leaving the cycle on a
+destroyed part alone. Bound by `GameSession`. Marker decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Session/CampaignHumanField.cs
 Engine-free objective rules over every joined human, represented by `HumanState` position, captured

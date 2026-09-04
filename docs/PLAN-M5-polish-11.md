@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — One aeroplane, one target
 
 11. ☑ `BL-688` The roster objective marker is a stamped flag on the aircraft's own candidate
-12. ☐ `BL-726` A Destroy Support Beam marker leaves the cycle when its beam dies
+12. ☑ `BL-726` A Destroy Support Beam marker leaves the cycle when its beam dies
 13. ☐ `BL-725` CM21's Cabbie carries its objective marker as a friendly
 
 ### Wave C — Cutscene hand-backs
@@ -322,7 +322,7 @@ line" state. That fallback is `BL-637`'s question and is deliberately untouched 
 
 **Verified.** <pending orchestrator run>
 
-## B12 ☐ `BL-726` A Destroy Support Beam marker leaves the cycle when its beam dies
+## B12 ☑ `BL-726` A Destroy Support Beam marker leaves the cycle when its beam dies
 
 **Goal.** A `targets.zrd` site whose resolved node is destroyed is no longer selectable, whether
 or not its objective has completed.
@@ -345,6 +345,24 @@ controls (`D33`): CM21, destroy one beam, cycle targets.
 **⚠ Traps.** This is the site branch of the same unconditional `Live` `B11` fixes on the roster
 branch; do not start it before `B11` lands. `BL-400` (a curated Non-Aircraft cycle) is a feature,
 not this.
+
+**Outcome.** A site candidate's `Live` now reads `ObjectiveSites.LiveDespiteState`, a pure function
+of its resolved node's own `DestructibleRegistry.State`, false only once that state is `Destroyed`
+and true for anything else (healthy, damaged, unresolved, or no registered pool at all) — the same
+state `ZeppelinRuntime.ZoneIsAlive` already reads for a gasbag or engine zone, reused rather than
+duplicated. `RemovedByCompletion`'s objective-side removal is unchanged and independent, so a
+destroyed site with its own `REMOVE_OBJECTIVE_TARGET` still pending is offered (kept in the cycle's
+list) but no longer selectable. Proven three ways: engine-free in `ObjectiveSitesTests` against the
+pure state function directly; in a new engine suite, `campaign-support-beam-destroyed`, against
+C5/M01's own `rfspt4` node and destructible wiring, its `ADD_OBJECTIVE_TARGET` reached through a
+synthetic objective appended to the mission's own shipped script (the real one gates on a flown
+TRAVELERS approach this suite has no leg to satisfy) and woken directly, then killed by a real
+`AnimRuntime.DamageAt` hit before any `REMOVE_OBJECTIVE_TARGET` runs; and by hand-reverting the
+gate to prove each assertion fails without it. `CampaignMarkerSuites` is untouched. The evidence
+does not settle whether CM21's own flown approach to a beam reaches the kill fast enough to matter
+in play, which is `D33`'s to watch at the controls.
+
+**Verified.** <pending orchestrator run>
 
 ## B13 ☐ `BL-725` CM21's Cabbie carries its objective marker as a friendly
 

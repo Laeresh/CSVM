@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using CSVM.Flight;
+using CSVM.Mech3;
 using CSVM.Session;
 using Xunit;
 
@@ -9,12 +10,13 @@ namespace CSVM.Tests;
 /// <summary>
 /// <see cref="ObjectiveSites.CollectTargets"/>'s two site sources: <c>targets.zrd</c>'s own
 /// <c>objective</c> entries and the graph's <c>ADD_OBJECTIVE_TARGET</c> edits, each dropped again
-/// once a completed objective's own <c>REMOVE_OBJECTIVE_TARGET</c> names its key. A site is
-/// offered from mission start with the graph's own store still empty, which is what reading
-/// <see cref="ObjectiveGraph.ObjectiveTargets"/> alone would miss. A roster block's own flag is
-/// NOT collected here at all: it rides the block's aircraft
-/// (<see cref="CSVM.Flight.FlightController.ObjectiveTarget"/>). Pinned off-engine: none of the
-/// three types here touch Godot.
+/// once a completed objective's own <c>REMOVE_OBJECTIVE_TARGET</c> names its key; and
+/// <see cref="ObjectiveSites.LiveDespiteState"/>, the resolved-node destroyed gate a live
+/// <c>Collect</c> applies beside it. A site is offered from mission start with the graph's own
+/// store still empty, which is what reading <see cref="ObjectiveGraph.ObjectiveTargets"/> alone
+/// would miss. A roster block's own flag is NOT collected here at all: it rides the block's
+/// aircraft (<see cref="CSVM.Flight.FlightController.ObjectiveTarget"/>). Pinned off-engine: none
+/// of the types here touch Godot.
 /// </summary>
 public class ObjectiveSitesTests
 {
@@ -77,6 +79,24 @@ public class ObjectiveSitesTests
         ObjectiveSites.CollectTargets(script, graph, TargetsWithObjectiveFlag("rfspt1"), into);
 
         Assert.Single(into, key => key == "rfspt1");
+    }
+
+    [Fact]
+    public void ASiteWhoseResolvedNodeReadsDestroyedIsNoLongerLive()
+    {
+        // CM21's six rfspt*/lfspt* Destroy Support Beam sites: their own REMOVE_OBJECTIVE_TARGET
+        // fires per-beam on that beam's own objective, not on a kill, so a beam shot down before
+        // its objective completes must leave the cycle on the destroyed read alone.
+        Assert.False(ObjectiveSites.LiveDespiteState(DestructibleRegistry.State.Destroyed));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(DestructibleRegistry.State.Healthy)]
+    [InlineData(DestructibleRegistry.State.Damaged)]
+    public void ASiteNotReadDestroyedStaysLive(DestructibleRegistry.State? state)
+    {
+        Assert.True(ObjectiveSites.LiveDespiteState(state));
     }
 
     private static MissionTargets TargetsWithObjectiveFlag(string node)
