@@ -52,6 +52,7 @@
     "carried-turrets": 0.646,
     "turret-vessel-targets": 3.25,
     "turret-structure-targets": 1.5,
+    "turret-hull-blocks-own-fire": 4.7,
     "graze-bounce": 0.774,
     "ai-spawn-jitter": 0.945,
     "ai-actor": 0.732,

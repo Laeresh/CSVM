@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — The zeppelin's guns and bays
 
-1. ☐ `BL-714` A zeppelin's own turrets fire through its own hull
+1. ◐ `BL-714` A zeppelin's own turrets fire through its own hull
 2. ☐ `BL-713` The Dante's destroyed broadsides keep firing, and their death lights no gasbag
 3. ☐ `BL-729` A destroyed submarine keeps launching fighters
 
@@ -138,7 +138,7 @@ the hold). `D33` is last and needs the author at the controls; it cannot be dele
 
 # Wave A — The zeppelin's guns and bays
 
-## A1 ☐ `BL-714` A zeppelin's own turrets fire through its own hull
+## A1 ◐ `BL-714` A zeppelin's own turrets fire through its own hull
 
 **Goal.** A ring on the far side of a zeppelin holds fire at a player the hull is between it and,
 for as long as the hull is between them; a ring with a clear line still fires.
@@ -173,6 +173,30 @@ active ring.
 **⚠ Traps.** A ring that fired once as the player crossed the hull's edge is the cache, not this
 bug. Do not make aircraft cover: the decode says world geometry only. Do not widen the exclusion
 to the vehicle; `PlatformOf`'s comment records that this is how rings shoot through their own hull.
+
+**Outcome.** Disproven against C1/M04's real `piratezep`. A probe suite (`turret-hull-blocks-own-fire`)
+gimbal-sweeps every emplacement's own authored yaw/pitch window for a direction its own hull
+should block (a `WorldRayBlocked`-shaped cast, world layer, own mount excluded), confirms each
+sweep-found obstruction with `WorldRayBlocked`'s own exact call shape (a fixed distance guess can
+clip a thin panel's edge, since `FlightController.WorldPosition` sits meters off the raw placed
+pose), then parks a hostile plane there and ticks the ring in isolation for 8 s. Fourteen of
+piratezep's seventeen emplacements confirm a genuine in-arc, hull-blocked direction, and every one
+holds fire and reads `Blocked`, deterministically across three runs. Both named candidates the
+Evidence had not yet ruled out read clean: the hull's colliders carry `CollisionLayers.World` (the
+engine default; nothing assigns it explicitly) and exist by the time a ring steps (built with the
+world, well before any turret ticks). The reported sustained fire does not reproduce on this rig in
+a static park. A moving-hull probe on the authored leg found no in-arc self-obstruction at the one
+point on the leg it sampled, so it tested nothing, and was not landed. The disproof is headless
+and static, against a report made in flight, so the item stays open until the closing sortie
+(D33) flies a pirate zeppelin's flank in real motion; a leak seen there re-opens the item on the
+collision side, not the turret side. Outside this item's scope: `multiplayer1zep`'s belly ring (`ctur2`) reads a raw,
+unrestricted, no-exclusion ray as clear for over 100 m straight up through where the hull should
+stand, on a hull this plan's own decoded rule ("terrain, water, buildings, zeppelins and trains stay
+solid") says should be solid; this looks like a missing or thin collision mesh specific to that one
+multiplayer rig rather than a `TurretController` defect, and reachability from a hostile ring was
+not confirmed.
+
+**Verified.** <pending orchestrator run>
 
 ## A2 ☐ `BL-713` The Dante's destroyed broadsides keep firing, and their death lights no gasbag
 
