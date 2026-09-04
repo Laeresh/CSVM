@@ -544,26 +544,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   settles, from outside. *Cross-refs:* `BL-668`'s closing commit (`git log --grep=BL-668`), which
   carries the column decode and CM10's lifeboat.
 
-- `BL-713` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` `[CM24]` **The Dante's broadside
-  cannons keep firing after they are destroyed, and killing them lights no gasbag.** *Evidence:*
-  reported at the controls on CM24 (C5/M04): "Destroyed broadside cannons still shooting?" and
-  "Gasbag not burning out with killing broadside cannons". The Dante's record
-  (`extracted/C5/M04/zrdr/zeppelins.zrd.json`) authors twelve broadsides `lbroad11`..`rbroad32`,
-  six gasbags and `num_healthy_required`; the mission's objectives name only the gasbags and
-  `killdtzep`, never a cannon, so any cannon-to-gasbag link is the zeppelin runtime's own and not
-  the script's. *Fix shape:* settle which half is a mechanism gap and which an expectation carried
-  over from CM14. Log `[anim] damage:` on the `lbroadNN`/`rbroadNN` nodes and the fire gate in
-  `ZeppelinRuntime.Cannons` for a destroyed cannon; read whether the original ties a cannon's death
-  to its gasbag anywhere (`pzep_broadsides.zrd` against `pzep_gasbags.zrd`) before making it do so.
-  *⚠ Traps:* the Gemini's cannon bays are the sibling mechanism and are mid-diagnosis (`BL-694`,
-  `BL-695`); do not port a CM14 answer here without reading the Dante's own record. A cannon whose
-  `gunback` is destroyed but whose `healthy` node still answers a hit is `BL-672`'s attribution
-  question, not this one. *Playtest after fix:* CM24, kill two broadsides on one side, watch for
-  further muzzle flash from them and for any skin fire on the gasbag above. *Cross-refs:* `BL-694`,
-  `BL-695`, `BL-639` (the Gemini's gasbag burn-out), `BL-681` (broadside target resolution),
-  `docs/formats/mission-entities/enemy-generators.md` (the Dante's launch-bay grace, a different
-  subsystem on the same zeppelin).
-
 ## Weapons & combat
 
 - `BL-066` `[Feature]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
@@ -965,23 +945,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `bbtur` or `b_turret` node, so no turret exists near the Goose to slew.
   *Cross-refs:* `BL-523` (the AI mode machine, which this is not), `BL-626`, `BL-664`, `BL-598`,
   `BL-637`, `PT-87`, `PT-100`, `PT-101`.
-
-- `BL-714` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A zeppelin's own turrets fire
-  through its own hull.** *Evidence:* reported at the controls: a ring on the far side of a
-  zeppelin fired at the player through the hull it is mounted on. The intent in
-  `TurretController.WorldRayBlocked` (`CSVM/src/Flight/TurretController.cs:679-711`) is a
-  world-layer ray from the turret to 0.2 m above the target that excludes only the platform section
-  the gun is mounted on, with the comment "the REST of the hull still blocks". The report says it
-  does not. *Fix shape:* find which of three things is true: `PlatformColliderRids` excludes more
-  than the mount section; the hull's colliders are not on `CollisionLayers.World` at the time of
-  the test; or a host-rig turret takes the `_worldQuery` path (`FlightController.WorldBlocksLine`)
-  with a wider exclusion. A headless probe that parks the player behind a zeppelin and asserts no
-  shot from the far ring is the test to add. *⚠ Traps:* the verdict is cached for a random 1 to 2 s
-  (decoded), so a ring that fired once as the player crossed the hull's edge is not this bug; the
-  report is sustained fire. Do not make aircraft cover: the decode says world geometry only.
-  *Playtest after fix:* any pirate zeppelin, fly along the hull on the side away from its active
-  ring. *Cross-refs:* `BL-626`'s closing commit (`git log --grep=BL-626`, turret acquisition),
-  `BL-573`'s closing commit (`git log --grep=BL-573`, the own-mount exclusion this reuses).
 
 - `BL-715` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **A custom Devastator built with
   six hardpoints flies with four: the mission rig caps a wing's count at what the stock fit
@@ -1676,23 +1639,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   answering with the wrong node. *Cross-refs:* `BL-679`'s closing record in
   `PLAN-M5-polish-10` `C24`, `PLAN-template-stage`.
 
-- `BL-719` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` `[CM14]` **CM14's aircraft hang
-  motionless in the air while a cutscene plays.** *Evidence:* reported at the controls on CM14
-  (C2B/M04): "Planes hanging in the air during cutscene". The mission's player cutscenes are
-  `generic_intro` and the shared `hooked_to_klondike`. The original's code 913 parks every AI
-  vehicle not in the cutscene and deactivates its scene node, and 914 reveals it
-  (`docs/formats/anim-definitions/cutscenes.md`, "CALLBACK code reference"); CSVM's park sets
-  `Parked` and `Inert` (`CSVM/src/Session/CutsceneController.cs:874-895`) and `ApplyPresence` hides
-  the pivot on inert (`CSVM/src/Flight/FlightController.cs:2230-2242`), so a parked aircraft should
-  not be visible at all. *Fix shape:* run the ending with the cutscene trace on and read which
-  aircraft stay drawn: an aircraft spawned after 913 by a wave or generator that the park never
-  touched (`RevealAi` only reveals what it parked), a roster aircraft `Inert` before the park and
-  so skipped, or a rig whose visible part is not what `ApplyPresence` hides. *⚠ Traps:* which
-  cutscene the report means is not recorded; check both the intro and the docking. Do not hide
-  aircraft by team or by distance. *Playtest after fix:* CM14, fly to the Pandora with enemies
-  alive, dock, watch the sky during the film. *Cross-refs:* `BL-632`'s closing commit
-  (`git log --grep=BL-632`, CM15's capture cutscene framing).
-
 - `BL-720` `[Bug]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` `[CM24]` **The Dante's engine-explosion
   puffers drift between the engines, and some sit at the wrong place.** *Evidence:* reported at the
   controls on CM24 (C5/M04): "puffers moving between engine explosions of dante" and "some puffers
@@ -2224,43 +2170,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   pose the view opens on before any zoom input. *Cross-refs:* `BL-433`'s closing commit
   (`git log --grep=BL-433`), which carries the keybind decode.
 
-- `BL-721` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` `[CM17]` **CM17 hands the player back
-  from its first cutscene against the terrain, and the plane jumps and hitches after the crash.**
-  *Evidence:* reported at the controls on CM17 (C4/M02): "Crash after first cutscene. Plane placed
-  against terrain" and "Some hitches after the crash. player plane jumped around". The mission's
-  `NEW_GAME_START` runs `generic_intro`, `pzep_engines_start` and `deactivate_bmhookup_node`
-  (`extracted/C4/M02/zrdr/startanims.zrd.json`), `location.zrd.json` is empty, and the intro raises
-  no 951, so the handoff is to the authored spawn rather than a re-placement
-  (`docs/formats/anim-definitions/cutscenes.md`, "The re-placement code 951"). `BL-633`'s fix
-  covered a 951 that names no `player` node (CM15, CM24), which this mission does not author.
-  *Fix shape:* run CM17 headless past the intro with the spawn and cutscene traces on, print the
-  pose the hand-back writes and the terrain height under it, and compare with the pose
-  `generic_intro`'s last `player` keyframe ends on. The post-crash jumping is the respawn path on
-  the same pose and is read from the same log. *⚠ Traps:* CM17's Blacke search warps the player
-  (`WARP_VEHICLE`, `git log --grep=CM17`); confirm the crash is at the intro and not after that
-  warp. *Playtest after fix:* CM17 from the briefing, watch the first second after the intro.
-  *Cross-refs:* `BL-633`'s closing commit (`git log --grep=BL-633`), `BL-722` (CM18's drop, the
-  other post-cutscene crash).
-
-- `BL-722` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: data]` `[CM18]` **CM18's Blacke drop cutscene
-  cuts its camera back and forth every frame, and the plane often crashes as control returns.**
-  *Evidence:* reported at the controls on CM18 (C4/M03): "drop off cutscene. Camera jumps back and
-  forth really fast and plane often crashes directly after cutscene". The drop's definition
-  `blacke_drop` (`extracted/C4/M03/mis_anim/blacke_marker-blacke_drop.json`) calls `bdplayer`,
-  `bdchute`, `rem_pas` and BOTH `bdrop_ew_cam` and `bdrop_we_cam` on `camera1`, and `bdplayer`
-  calls `blacke_drop_east` and `blacke_drop` in turn before its 951. If both camera scripts run at
-  once they write `camera1` alternately, which is the reported flicker; the original must pick one
-  by the approach direction through a gate the definition carries and CSVM does not honour.
-  *Fix shape:* read the two `CALL_ANIMATION`s' conditions in the definition (an active-node gate,
-  `blk_e_marker` against `blacke_marker`) and the `blacke_drop_east` reparent, host only the one
-  the gate selects, and assert it in a cutscene suite. The crash on hand-back is then re-read:
-  `bdplayer`'s 951 names `player`, so the re-placement pose is the last keyframe of
-  `bdrop_player`, and whether that pose is in terrain on the losing side of the gate is the second
-  half. *⚠ Traps:* `BL-699`'s launch-frame hitch is on the same mission and is not this. Do not fix
-  the flicker by muting one camera script by name: the mission has a symmetric pair for a reason.
-  *Playtest after fix:* CM18, approach the drop from each side. *Cross-refs:* `BL-721`, `BL-699`,
-  `docs/formats/anim-definitions/cutscenes.md` ("The re-placement code 951").
-
 ## HUD & UI
 
 - `BL-496` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The aiv `ace` flag reaches the entity and nothing is known about what it
@@ -2511,45 +2420,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   shot can move to a row and confirm on it. *Cross-refs:* the plane selection and ammo screens'
   open lists are unpinned by any golden until this exists.
 
-- `BL-688` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **A roster-authored objective marker is a second candidate beside the aircraft
-  rather than a flag stamped on it, so it is selectable before the plane wakes, again beside it,
-  after it dies, and under its raw node name.** *Evidence (traced):* four symptoms reported at the
-  controls, one mechanism. CM02: "i have double targeting for the balmorals, as enemy and objective
-  and the objective marker dont vanish after killing the balmorals". CM15: "the defend balmoral
-  objective marker is too early selectable (Balmoral not there yet)" and "it should say Balmoral not
-  balmoral_1". CM11: "the label should be `Stunt Plane` instead of secfury_5 and secfury_6".
-  A roster block's objective flag (aiv slot 37) is modelled as a second, always-live synthetic
-  candidate. `ObjectiveSites.Collect` writes `Live = true` unconditionally
-  (`CSVM/src/Session/ObjectiveSites.cs:191`) and reads the position off the live rig with no wake or
-  death gate (`:287-291`), where `CampaignDirector`'s own DEDG walk gates on
-  `!rig.Crashed && !rig.Deactivated` (`CSVM/src/Session/CampaignDirector.cs:1158`).
-  `TargetPool.Rebuild` walks vehicles then objectives with no identity comparison
-  (`CSVM/src/Flight/TargetPool.cs:60-93`), so one aeroplane is offered twice.
-  The name comes free with the same fix: the aircraft's own candidate **already** carries the right
-  string, slot 20 flowing `AiSkills.RosterTitle` → `RosterSpawnPlan.Title` → `AiSpawn.PilotName` →
-  `PlaneStats.AiTitle` → `TargetRef.DisplayName`. The screen reads `secfury_5` only because the
-  synthetic candidate sorts ahead of it on the decoded `key = -1`, and that candidate's own fallback
-  is the raw node key (`ObjectiveSites.cs:344`).
-  *Decided at the controls:* **one stop, one bracket, and Objective outranks Enemy Target** where an
-  entity is both.
-  *Fix shape:* stamp the objective flag onto the aircraft's existing candidate and delete the roster
-  branch out of `ObjectiveSites`; add a slot-38 reader for the category line, which has none today.
-  *⚠ Traps:* **CM02's three `britbalmoral_*` blocks author slot 20 EMPTY**, so the correct result
-  there is a box with a category and *no* name line ([`docs/org/targeting.md`](docs/org/targeting.md):668-670);
-  a naive "use the block's title" fix gets that wrong. The data's name for CM15's aeroplane is
-  `MSG_TEX_NAME` → "Tex" with `MSG_BOMBER_NAME` → "Bomber" beside it, **not** "Balmoral", which is
-  the airframe title the decode says the readout never reads; the author accepted "Tex". Slot 20 is
-  per roster BLOCK and never per class — `docs/org/targeting.md:686` is explicit that the
-  `vehicle.zrd` def's own `MSG_VEH_*` title is read by none of the three authors, so do not "fall
-  back to the class". `BL-686` is a `[Feature]` proposing this same seam and has **not** landed; it
-  merged no code.
-  CM24 restates the after-death half: "the [destroy] marker still stays active after miles is
-  destroyed". ⚠ Miles is `stihellhound_5_eg0`, a generator-launched template (roster `enabled` 0)
-  carrying the objective flag `M4Miles`, so the stamp has to reach an aircraft the bay launches,
-  not only one the roster spawns.
-  *Cross-refs:* `BL-686`, `BL-637`, `BL-635`, `BL-632`, `PT-112`, `PT-117` (whose (c) this
-  subsumes), `BL-726` (the site branch of the same unconditional `Live`).
-
 - `BL-691` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: footage]` **The export message box draws its OK button in ink the plaque behind it
   hides.** *Evidence (traced):* reported at the controls as "OK button is missing in the dialog"
   (`PT-96`(a)). The original draws it: `OriginalScreenshots/Campaign Flight Check Change Plane Export
@@ -2768,37 +2638,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   record keeps two dwords either way, so mission-side damage still reads per wing; couple the UI,
   not the model. A saved profile with unequal wings must still load. *Cross-refs:* `BL-723`,
   `docs/org/hangar.md`.
-
-- `BL-725` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: data]` `[CM21]` **CM21's Cabbie carries no
-  objective marker and reads as an enemy.** *Evidence:* reported at the controls on CM21 (C5/M01):
-  "Cabbie should have objective marker and probably be friendly". The roster block `autogyro_1`
-  titles itself `MSG_CABBIE_NAME` (`extracted/C5/M01/zrdr/aiv.zrd.json`), flies net `M1Cabbie`
-  (`docs/formats/ai-nets.md`), and the script names it in `OBJECTIVE20` (`TRAVELERS` approaching),
-  `OBJECTIVE28` (`WAKEUP_ENEMIES` and `START_TAXI`) and `OBJECTIVE58`
-  (`REMOVE_OBJECTIVE_TARGET autogyro_1 dz1`). A `REMOVE_OBJECTIVE_TARGET` on it means something
-  earlier adds it as one. *Fix shape:* read the roster block's team and objective-flag slots
-  against `docs/formats/ai-rosters.md`, find the objective that stamps the marker, and compare
-  with what `ObjectiveSites` and the roster spawn give the aircraft. *⚠ Traps:* `WAKEUP_ENEMIES` on
-  a friendly is the verb's name, not its team; do not infer hostility from it. `BL-688` reshapes
-  how a roster objective marker is stamped; land or read that first. *Playtest after fix:* CM21 to
-  the taxi's take-off. *Cross-refs:* `BL-688`, `BL-635`'s closing commit (`git log --grep=BL-635`,
-  CM11's stunt planes on the same marker path), `docs/org/aiPilot.md` (danger-zone nets).
-
-- `BL-726` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` `[CM21]` **A Destroy Support Beam
-  marker stays selectable after its beam is destroyed.** *Evidence:* reported at the controls on
-  CM21 (C5/M01): "the target marker for the warehouse (Destroy Support Beam) are still active after
-  the targeted part is destroyed and can be cycled". The six beams are `targets.zrd.json` rows
-  (`rfspt4 / healthy / spprt` and kin, description `MSG_TRGT_WH_SUPPORTBEAM`, help
-  `MSG_OBJ_DESTROY`). A site candidate leaves `ObjectiveSites.Collect` with `Live = true`
-  unconditionally (`CSVM/src/Session/ObjectiveSites.cs:191`), and the only removal is
-  `RemovedByCompletion`, an objective-completion read, so a beam that dies before its objective
-  completes keeps its marker. *Fix shape:* gate a site candidate's `Live` on the resolved node's
-  destroyed state (the `healthy` child inactive, the same read `DestructibleRegistry` makes), and
-  assert it in the targeting suites with a beam killed mid-ladder. *⚠ Traps:* this is the site
-  branch of the same unconditional `Live` that `BL-688` fixes on the roster branch; do the two
-  together or the second will re-touch the first. `BL-400` is the curated Non-Aircraft cycle and a
-  feature, not this. *Playtest after fix:* CM21, destroy one beam, cycle targets. *Cross-refs:*
-  `BL-688`, `BL-400`, `docs/org/targeting.md`.
 
 ## Splitscreen
 
@@ -3293,20 +3132,6 @@ usual.
   *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same pass profiled), `BL-657`
   (CM18's generator launching at the wrong time, which is where the measured case is flown).
 
-- `BL-727` `[Fidelity]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Mission end holds the world
-  for two seconds but paints no fade to black over it.** *Evidence:* asked at the controls: "Fade
-  to black when control is taken away after mission end?". The decode says yes: every ending
-  converges on `FUN_00443090`, which pushes a fade state that copies the framebuffer and blits it
-  under a black overlay ramping 0 to 1 over 2.0 s before the next screen
-  (`docs/formats/objectives.md`, "The mission-end path, and what the player sees after it").
-  `BL-623` landed the hold (`CampaignDirector.LeavingHoldS`) and recorded the fade as not built
-  (`git log --grep=BL-623`); `BL-622`'s closing commit restates the gap. *Fix shape:* a
-  full-screen black overlay ramped over the hold, on the same clock the hold reads, so a paused
-  world fades too; the scrapbook then opens on black. *⚠ Traps:* the original fades a copied
-  frame, not a live one, so the world need not keep rendering under it. A loss ending fades the
-  same way. *Playtest after fix:* any mission to its end. *Cross-refs:* `BL-622`'s and `BL-623`'s
-  closing commits, `docs/architecture/Session.md`.
-
 - `BL-728` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **AI aircraft rarely or never evade
   under fire.** *Evidence:* reported at the controls as "recheck evasive maneuvers", clarified as
   "AI never or rarely evades". This is the opposite reading from `BL-558`, which found a Fury
@@ -3319,37 +3144,6 @@ usual.
   together. *⚠ Traps:* the report is a feel over a whole sitting on campaign missions; do not tune
   the roll's threshold before the count says which way it errs. *Cross-refs:* `BL-558`,
   `docs/org/aiControlLaw.md`.
-
-- `BL-729` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` `[CM04]` **A destroyed submarine
-  keeps launching fighters.** *Evidence:* reported at the controls on CM04 (C3/M03): "Destroyed sub
-  should no longer launch planes". The generator `barracuda` authors `healthy [subhealthy]`
-  (`extracted/C3/M03/zrdr/egen.zrd.json`). The decode says a fixed installation's death is its
-  `healthy` node going inactive (`docs/formats/mission-entities/enemy-generators.md`, "The host's
-  death disables the generator"); `AiGeneratorRuntime.NotifyHostDied` matches on the `healthy`
-  node's name but is fed only by `ZeppelinRuntime.ZeppelinKilled` and says so ("fixed-installation
-  hosts still have no death source", `CSVM/src/Session/AiGeneratorRuntime.cs:219-227`).
-  *Fix shape:* raise the same notification when a destructible's `healthy` node goes inactive (the
-  `DestructibleRegistry` pool that owns `subhealthy`), and assert in `GeneratorCycleTests` that a
-  sub kill disables the bay after the 3 s grace. *⚠ Traps:* the 3 s grace is a deliberate
-  deviation for the Dante's race; keep it for the sub too unless the sub's script has its own
-  timing. *Playtest after fix:* CM04, sink the sub, wait a wave period. *Cross-refs:* `BL-657`'s
-  closing commit (`git log --grep=BL-657`, the credit rule), `git log --grep=CM24` (the grace).
-
-- `BL-730` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: data]` `[CM19]` **CM19's Black Hat fighters
-  never appear.** *Evidence:* reported at the controls on CM19 (C4/M04): "no enemies fighters
-  spawn". The mission authors no generator (`egen.zrd.json` is `[null]`); its six `bhatwarhawk_*`
-  and six `bhatbrigand_*` roster blocks are woken by objectives that author `BEGIN_DORMANT -1` and
-  `WAKE_ANIM launch_warhawk` / `WAKE_ANIM launch_brigand`
-  (`extracted/C4/M04/zrdr/objectives.zrd.json:1948-2362`), definitions on the `warlaunchhook` root
-  beside `ai_warhawk_place` and `ai_brigand_place` (`extracted/C4/M04/mis_anim/`). So a fighter
-  appears only if playing `launch_warhawk` places and releases the roster aircraft, a launch-hook
-  mechanism no other mission uses. *Fix shape:* run CM19 headless with the campaign trace on,
-  confirm the `WAKE_ANIM` fires (`campaign: WAKE_ANIM 'launch_warhawk' started`), then read what
-  the definition does to the aircraft node and what `AnimRuntime` does with an aircraft placed by
-  an `ai_*_place` definition. *⚠ Traps:* the mission also swaps the player onto the Warhawk (966),
-  so "no enemies" may be read after the swap; check the timeline. Do not fall back to spawning the
-  roster enabled. *Playtest after fix:* CM19 to the first warning. *Cross-refs:*
-  `docs/formats/objectives.md` (`WAKE_ANIM`), `docs/formats/ai-rosters.md` (`enabled`), `BL-523`.
 
 - `BL-731` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` `[CM24]` **Whether Miles flies
   stunts through Manhattan or cruises, and which way round his net runs.** *Evidence:* asked at
