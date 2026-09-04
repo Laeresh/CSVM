@@ -175,7 +175,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ C21 `docs/architecture/Effects.md` (5 entries; the rehearsal for the brief)
 22. ☑ C22 `docs/architecture/Utils.md` (17)
 23. ☑ C23 `docs/architecture/Bindings.md` (17)
-24. ☐ C24 `docs/architecture/Testing.md` (17 plus the `CSVM.Tests/` section)
+24. ☑ C24 `docs/architecture/Testing.md` (17 plus the `CSVM.Tests/` section)
 25. ☑ C25 `docs/architecture/Root.md` (3 entries plus Cross-module conventions and the enhanced-graphics section)
 26. ☐ C26 `docs/architecture/Session.md` (40)
 27. ☐ C27 `docs/architecture/Mech3.md` (62)
@@ -519,7 +519,7 @@ remaining pointer naming something the trimmed entry still holds.
 **⚠ Traps.** The versioned per-player keymap file format is format knowledge; if its entry
 describes the file, that description goes to `docs/formats/` or `docs/org/input.md`.
 
-## C24 ☐ `docs/architecture/Testing.md`
+## C24 ☑ `docs/architecture/Testing.md`
 
 **Goal.** 17 entries at cap; the `Testing/*Suites.cs` entry (135 lines) becomes a 12-line
 orientation; the `CSVM.Tests/` section's three traps find homes.

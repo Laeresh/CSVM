@@ -426,19 +426,21 @@ determinism repo-wide; read `docs/verification.md` first.
 `--run-tests` and the `--dump-*` probes. The units that need no running engine live in `CSVM.Tests/`
 instead.
 
-- `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a verdict, shared with the suites.
-- `src/Testing/EnvelopeMargins.cs` — one flight scenario's distance from every term that could bound it, plus which decoded branches it drove; the parity ledger's coverage half.
-- `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
-- `src/Testing/SuiteShards.cs` — the `shard:<index>/<count>` term and the deterministic weighted division behind it, over the measured weights in `analysis/engine-suite-weights.json`.
+- `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*` reports: one pass yields the report text and the verdict a suite asserts on.
+- `src/Testing/EnvelopeMargins.cs` — one flight scenario's distance from every term that could bound it, plus the decoded branches it drove.
+- `src/Testing/TestHarness.cs` — `--run-tests`: the suite registry, `TestContext`, the PASS/FAIL/SKIP table, `test-report.json` and the process exit code.
+- `src/Testing/SuiteShards.cs` — the `shard:<index>/<count>` term and the deterministic weighted division behind it, over `analysis/engine-suite-weights.json`.
+- `src/Testing/PhaseAttribution.cs` — buckets a build's `StartupProfile` phases into archive/decode, sound preparation and world construction for the report.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
-- `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
-- `src/Testing/SuiteCatalog.cs` — the registry of the in-engine suites, discovered from the `[Suite]` attribute on each body and ordered by name; domain scenario bodies live in `*Suites.cs` modules, while `SuiteConstants` holds their shared golden inputs. Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
-- `src/Testing/*Suites.cs` — the domain scenario modules: puffer, combat, ordnance, Instant Action, AI, the campaign, music, targeting, targeting candidates, wingmen, zeppelins, damage, destroy choreography, animation/effects, world/tools, mid-mission world fidelity, and the weapon-ray occluder census.
-- `src/Testing/SuiteConstants.cs` / `BurstTimeline.cs` / `SuiteViewers.cs` / `EffectStageSuiteHelper.cs` — the focused shared inputs, timeline values, pane-camera fixtures, and staged-effect fixture used by more than one suite module.
+- `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake: keeps a `Puffer`'s particles instead of drawing, so its modes are testable.
+- `src/Testing/SuiteCatalog.cs` — the registry of the in-engine suites, discovered from the `[Suite]` attribute on each body and ordered by name.
+- `src/Testing/*Suites.cs` — the domain scenario modules holding the marked suite bodies: puffer, combat, ordnance, Instant Action, AI, campaign, zeppelins.
+- `src/Testing/SuiteConstants.cs` / `BurstTimeline.cs` / `SuiteViewers.cs` / `EffectStageSuiteHelper.cs` — shared golden inputs, timeline values and fixtures.
+- `src/Testing/MenuSuiteHost.cs` — the launchscreen fixture a menu suite builds on: a `MenuHost` with the launcher's features, one seat and silent audio.
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
-- `src/Testing/GltfExporter.cs` — exports the viewer plane subtree to glTF (mesh + current livery + baked damage) for `--export-gltf=`/F10; converts shader skins on a throwaway duplicate.
+- `src/Testing/GltfExporter.cs` — exports the viewer plane subtree to glTF (mesh + livery + baked damage) for `--export-gltf=`/F10, on a throwaway duplicate.
 
 ### `src/Session/` — the launch/session layer
 

@@ -222,8 +222,9 @@ public static class TestHarness
     /// <summary>The suites a <c>--run-tests=</c> spec selects, in registry order and deduplicated.
     /// Comma-separated terms, unioned: <c>suite:&lt;name&gt;</c> exact, <c>tier:&lt;name&gt;</c> a
     /// checked-in tier, anything else a name substring. A term that selects nothing lands in
-    /// <paramref name="unmatched"/> instead of quietly narrowing the run. Pure, so a selector can
-    /// be proved outside the engine.</summary>
+    /// <paramref name="unmatched"/>, and <c>Run</c> refuses the whole run before any suite starts
+    /// rather than quietly narrowing it: an empty shard is a legitimate division, an empty selector
+    /// is a typo. Pure, so a selector can be proved outside the engine.</summary>
     public static IReadOnlyList<Suite> Select(IReadOnlyList<Suite> suites, string spec,
         out IReadOnlyList<string> unmatched)
     {
@@ -960,8 +961,8 @@ public sealed class TestContext
         RequireData(texturesPath, $"chapter {chapter} textures");
 
         var buildWatch = System.Diagnostics.Stopwatch.StartNew();
-        // A private StartupProfile the shared build code's own Mark/Record calls still reach —
-        // docs/architecture.md on why Current is otherwise left null here.
+        // A private StartupProfile the shared build code's own Mark/Record calls still reach --
+        // docs/org/startup-profile.md on why Current is otherwise left null here.
         var profile = new StartupProfile("test-suite", bootMs: 0);
         var previousProfile = StartupProfile.Current;
         StartupProfile.Current = profile;
