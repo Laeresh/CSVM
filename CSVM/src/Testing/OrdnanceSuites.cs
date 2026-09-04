@@ -1728,17 +1728,19 @@ internal static class OrdnanceSuites
         }
     }
 
-    // PT-67 on a live pool: a beeper bursting on its own fused target indexes the aircraft's
-    // IMPACT row (large_fireball), never the empty default row; a burst on a non-aircraft target
-    // still plays the authored nothing; and the seeker's ground impact hands ballflare.flt — a
-    // bound ON_CALL def anchored on a same-named gamez root — to the effects sink instead of
-    // standing a static instance of its template in for the authored white flare.
+    // A fused burst reads the default IMPACT row, never the fused aircraft's (FUN_005ac3a0's hit
+    // record carries surface id 0; docs/org/ordnanceTypes.md "Which row a burst reads"): a flak
+    // fused on a rig draws flak_effect, a beeper fused on the same rig draws its empty default
+    // row's nothing, and so does a burst on a bare mark; and the seeker's ground impact hands
+    // ballflare.flt — a bound ON_CALL def anchored on a same-named gamez root — to the effects
+    // sink instead of standing a static instance of its template in for the authored white flare.
     [Suite("ordnance-impact-effects",
-        "the beeper/seeker impacts play what the data authors (PT-67): a wep_10 bursting on its " +
-        "own fused target indexes the aircraft's IMPACT row and plays large_fireball, the same " +
-        "burst on a non-aircraft target plays the named-and-empty default row's nothing, and a " +
-        "wep_11 into the ground hands its authored ballflare.flt to the effects runtime — the " +
-        "white growing flare — instead of standing a static gamez-template instance in for it")]
+        "a fused burst reads the default IMPACT row (BL-716): a wep_07 fusing on its own target " +
+        "draws flak_effect at the round, a wep_10 fusing on the same target draws its named-and-" +
+        "empty default row's nothing rather than the player row's large_fireball, the same burst " +
+        "on a non-aircraft target draws nothing, and a wep_11 into the ground hands its authored " +
+        "ballflare.flt to the effects runtime — the white growing flare — instead of standing a " +
+        "static gamez-template instance in for it")]
     internal static void OrdnanceImpactEffects(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -1746,14 +1748,19 @@ internal static class OrdnanceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_10", out var beeper) || !weapons.TryGet("wep_11", out var seeker))
+        if (!weapons.TryGet("wep_10", out var beeper) || !weapons.TryGet("wep_11", out var seeker)
+            || !weapons.TryGet("wep_07", out var flak))
         {
-            ctx.Check(false, $"wep_10 and wep_11 resolve");
+            ctx.Check(false, $"wep_07, wep_10 and wep_11 resolve");
             return;
         }
 
         // The authored rows this suite performs, read off the data first so a failure below names
         // the mechanism and not a changed table.
+        ctx.Check(flak.ImpactFor(SurfaceRegistry.Default) is { Animation: "flak_effect", Sound: "snd_missile_flak" },
+            $"wep_07's default row authors flak_effect + snd_missile_flak");
+        ctx.Check(flak.ImpactFor(SurfaceRegistry.Player) is { Animation: "flak_effectplayer" },
+            $"wep_07's player row authors flak_effectplayer, a name no chapter defines");
         ctx.Check(beeper.ImpactFor(SurfaceRegistry.Default) == null,
             $"wep_10's default row is named-and-empty (a null row): a burst that strikes nothing plays nothing");
         ctx.Check(beeper.ImpactFor(SurfaceRegistry.Player) is { Animation: "large_fireball", Sound: "snd_missile_beeper" },
@@ -1819,12 +1826,20 @@ internal static class OrdnanceSuites
                 return effects.Count > 0 ? effects[0] : null;
             }
 
+            // The flak first: a 50 m fuse on the same head-on run bursts well short of the hull,
+            // and the DEFAULT row's flak_effect is what it draws there.
+            var flakBurst = Fly(flak, victim, muzzle);
+            float flakToPlane = flakBurst?.At.DistanceTo(victim.WorldPosition) ?? -1f;
+            ctx.Check(flakBurst is { Name: "flak_effect" },
+                $"a flak fusing on its own target draws the DEFAULT row's flak_effect (played={flakBurst?.Name ?? "nothing"})");
+            ctx.Check(flakToPlane > 5f && flakToPlane <= (flak.DetonationDistance ?? 0f) + 1f,
+                $"and the burst is a fuse burst inside DETONATION_DISTANCE, not a contact hit d={flakToPlane:0.#} m");
+
+            // The beeper on the same run: its default row is empty, so the fuse burst draws
+            // nothing, and the player row's large_fireball is a direct strike's alone.
             var onPlane = Fly(beeper, victim, muzzle);
-            float toPlane = onPlane?.At.DistanceTo(victim.WorldPosition) ?? -1f;
-            ctx.Check(onPlane is { Name: "large_fireball" },
-                $"a beeper bursting on its own fused target plays the PLAYER row's large_fireball (played={onPlane?.Name ?? "nothing"})");
-            ctx.Check(toPlane > 5f && toPlane <= (beeper.DetonationDistance ?? 0f) + 1f,
-                $"and the burst is a fuse burst inside DETONATION_DISTANCE, not a contact hit d={toPlane:0.#} m");
+            ctx.Check(onPlane == null,
+                $"a beeper fusing on its own target draws the empty DEFAULT row's nothing, not the player row's fireball (played={onPlane?.Name ?? "nothing"})");
 
             // CONTROL: the same fuse on a bare mark resolves no aircraft, so the beeper's
             // named-and-empty default row plays exactly nothing — no invented fallback effect.

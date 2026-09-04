@@ -985,25 +985,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   along the far hull in motion. *Cross-refs:* `BL-735` (the multiplayer hulls' belly rings over no
   collider at all), `BL-626`'s closing commit (`git log --grep=BL-626`, turret acquisition).
 
-- `BL-716` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **A flak round that hits a plane
-  plays no hit effect, and flak's damage, targeting, arming and burst radius are unverified at the
-  controls.** *Evidence:* reported at the controls: "FLAK has no animation on plane hit. Recheck
-  FLAK, dmg, targets, arming and explosion radius". `wep_07` (Flak rocket) authors ARMOR_DAMAGE 35,
+- `BL-716` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **Flak's damage, targeting,
+  arming and burst radius are unverified at the controls; the missing near-miss burst is decoded
+  and built.** *Evidence:* reported at the controls: "FLAK has no animation on plane hit. Recheck
+  FLAK, dmg, targets, arming and explosion radius". The effect half is decoded
+  (`docs/org/ordnanceTypes.md` "Which row a burst reads"): a fused burst reads the `default` IMPACT
+  row (`FUN_005ac3a0` builds its hit record with surface id 0) and only a direct strike reads the
+  struck material (`FUN_005b05c0`); `wep_07`'s `player` row names `flak_effectplayer`, which
+  resolves to nothing (`FUN_00523820`), so a direct strike on a plane plays the sound and no
+  animation in the original too. `ProjectilePool.Impact` reads `default` for every self-ended
+  round, so a flak near miss draws `flak_effect` at the round (suite `ordnance-impact-effects`).
+  What remains is the controls check of the numbers: `wep_07` authors ARMOR_DAMAGE 35,
   HEALTH_DAMAGE 35, DETONATION_DISTANCE 50 m and IMPACT_PROXIMITY 100 m
   (`extracted/zrdr/weapons.zrd.json`); the fuse is live at `AimAssist.cs:191` and the production
-  gather is asserted (`AlphaCutoutRaySuites.cs:245-254`). Its IMPACT effect is `flak_effect`
-  (`docs/formats/weapon-effects.md`), which `EffectCatalogue` lists
-  (`CSVM/src/Session/EffectCatalogue.cs:77`). *Fix shape:* fire flak at a parked AI in the lab with
-  the effect trace on and read whether the proximity burst spawns `flak_effect` at all, whether it
-  spawns at the round rather than at the plane, or whether a direct hit takes the bullet-hit path
-  and skips it. Then judge damage, the target pick and the radius against the `wep_07` numbers in
-  the same session. *⚠ Traps:* `wep_27` (AA flak, the emplacement's) is a different weapon with its
-  own effect; say which one a finding is about. `BL-573` fixed an emplacement's flak splashing its
-  own mount and is not this. "How much damage does a FLAK do against HE" is answered in the
-  BL-626 to BL-637 triage commit and is not owed again. *Playtest after fix:* Instant Action with
-  flak on both wings, a burst beside a Fury, then a direct hit. *Cross-refs:*
-  `docs/org/ordnanceTypes.md` ("Half two, the splash"), `docs/org/weaponImpact.md`, `BL-573`'s
-  closing commit.
+  gather is asserted (`AlphaCutoutRaySuites.cs:245-254`). *⚠ Traps:* `wep_27` (AA flak, the
+  emplacement's) is a different weapon with its own effect; say which one a finding is about.
+  `BL-573` fixed an emplacement's flak splashing its own mount and is not this. "How much damage
+  does a FLAK do against HE" is answered in the BL-626 to BL-637 triage commit and is not owed
+  again. A direct strike drawing no burst is the original's own behaviour, not a bug; do not alias
+  `flak_effectplayer` to the ground burst. *Playtest:* Instant Action with flak on both wings, a
+  burst beside a Fury (the `flak_effect` burst at the round, the Fury's gauge moving), then a
+  direct hit (sound, no burst). *Cross-refs:* `docs/org/ordnanceTypes.md` ("Which row a burst
+  reads", "Half two, the splash"), `docs/org/weaponImpact.md`, `BL-573`'s closing commit, `CAP-38`
+  (the beeper and seeker on-plane clip, whose fused half the same decode answers).
 
 - `BL-717` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` `[CM02]` **The Pandora's turrets fire
   at the Balmoral the player is about to capture.** *Evidence:* reported at the controls on CM02
