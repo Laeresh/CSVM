@@ -166,7 +166,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B: split architecture.md
 
-11. ☐ B11 Mechanical split into `docs/architecture/<Namespace>.md`, index file keeps the header and bullets
+11. ☑ B11 Mechanical split into `docs/architecture/<Namespace>.md`, index file keeps the header and bullets
 12. ☐ B12 `CheckDocEntries.ps1` (caps, existence, coverage; `-Summary`), not yet gated
 13. ☐ B13 Pointer sweep of the grep instructions in skills, agent docs and `AGENTS.override.md`
 
@@ -331,7 +331,7 @@ twice; E41's sweep re-runs both commands and must return only CLAUDE.md.
 
 # Wave B: split architecture.md
 
-## B11 ☐ Mechanical split into `docs/architecture/<Namespace>.md`
+## B11 ☑ Mechanical split into `docs/architecture/<Namespace>.md`
 
 **Goal.** Entries move byte-for-byte into nine namespace files; `docs/architecture.md` keeps its
 header and the Module index; `Grep "## src/<path>" -A 12 docs/architecture/` returns one entry.
