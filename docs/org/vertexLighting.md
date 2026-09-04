@@ -123,11 +123,12 @@ boot data turns it off.
 
 ## Gate 2: the texture's alpha bit, software draw only (`FUN_005524d0`)
 
-⚠ **This gate exists in the software draw and nowhere else.** It was decoded first and CSVM
-reproduced it, and the C1B coastline sheets rendering as a hard bright band was the symptom: they
-were the only surfaces skipping the world light, and the original hardware draw skips it for none.
-The hardware rule is in the next section; this one is kept as the record of what the software
-draw does. Even there it is narrower than it looks: the skip applies only while the palette-shading
+⚠ **This gate exists in the software draw and nowhere else, and CSVM does not reproduce it.** A
+renderer that does exempts exactly the alpha-textured surfaces from the world light, and at C1B's
+0.426 world light a blended coastline sheet at full brightness over dark water reads as a hard
+bright band, where the original's hardware draw dims it with the water. The hardware rule is in
+the next section; this one is kept as the record of what the software draw does. Even there it is
+narrower than it looks: the skip applies only while the palette-shading
 global `DAT_00a07000` is 0, and `FUN_0054dca0` sets it to 1 whenever the software draw is chosen
 (`FUN_0054e040`, the `SetPaletteShading` setter, is the only other writer), so an alpha polygon
 goes through the lighting block in software as well, with a flat-shade flag instead of a per-vertex
