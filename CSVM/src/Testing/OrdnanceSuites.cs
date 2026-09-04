@@ -1735,7 +1735,7 @@ internal static class OrdnanceSuites
     // ballflare.flt — a bound ON_CALL def anchored on a same-named gamez root — to the effects
     // sink instead of standing a static instance of its template in for the authored white flare.
     [Suite("ordnance-impact-effects",
-        "a fused burst reads the default IMPACT row (BL-716): a wep_07 fusing on its own target " +
+        "a fused burst reads the default IMPACT row (FUN_005ac3a0): a wep_07 fusing on its own target " +
         "draws flak_effect at the round, a wep_10 fusing on the same target draws its named-and-" +
         "empty default row's nothing rather than the player row's large_fireball, the same burst " +
         "on a non-aircraft target draws nothing, and a wep_11 into the ground hands its authored " +
