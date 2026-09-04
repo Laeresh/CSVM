@@ -113,6 +113,11 @@ public sealed class CampaignDirector
     private ProjectilePool? _projectiles;
     private FlightController? _scoredShooterWiredTo;
 
+    // This director's link in the anim runtime's CALLBACK host chain, and whatever held the slot
+    // before it. Kept so a re-bind neither chains to itself nor drops the rest of the chain.
+    private Func<int, string?, string?, bool>? _callbackHost;
+    private Func<int, string?, string?, bool>? _innerCallbackHost;
+
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
         CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath,
@@ -555,6 +560,19 @@ public sealed class CampaignDirector
                  (_dangerZones is { } dz ? $", {dz.Count} danger zone(s) armed" : ""));
     }
 
+    /// <summary>Takes the anim runtime's <c>CALLBACK</c> host slot, chaining to whatever held it.
+    /// A launch definition places no aircraft itself: it flies its hook, raises one code, and the
+    /// code is what puts the next aircraft of that block family into the air.</summary>
+    internal void BindCallbackHost(AnimRuntime runtime)
+    {
+        _callbackHost ??= LaunchHookCallback;
+        if (runtime.CallbackHost != _callbackHost)
+        {
+            _innerCallbackHost = runtime.CallbackHost;
+            runtime.CallbackHost = _callbackHost;
+        }
+    }
+
     /// <summary>One sim step of the objectives graph, the scripted-path vehicles and the music
     /// channel's own battle detector. ⚠ Called from BOTH of <c>GameSession</c>'s drive paths, like
     /// the Instant Action sequencer: a realtime session never enters the stepped path. Under a
@@ -649,6 +667,17 @@ public sealed class CampaignDirector
 
         return null;
     }
+
+    // The block family a launch-hook CALLBACK reactivates. The three codes and their families are
+    // the original host's own literals, the way `cargozep1` is 800's
+    // (docs/formats/anim-definitions/cutscenes.md). Any other code belongs further down the chain.
+    private static string? LaunchHookFamily(int code) => code switch
+    {
+        801 => "bhatwarhawk",
+        802 => "bhatbrigand",
+        803 => "bhatgyro",
+        _ => null,
+    };
 
     // Every human's death, subscribed on the first step that finds that seat's aircraft: the flight
     // rigs are built after Attach has run, the same reason the music channel's damage ping waits.
@@ -993,6 +1022,73 @@ public sealed class CampaignDirector
         }
     }
 
+    // This director's place in the CALLBACK host chain. Owning a code means answering it here even
+    // when the family is spent, or the declined code would fall through to a seam that never meant
+    // it.
+    private bool LaunchHookCallback(int code, string? animName, string? rootName)
+    {
+        if (LaunchHookFamily(code) is not { } family)
+        {
+            return _innerCallbackHost?.Invoke(code, animName, rootName) ?? false;
+        }
+
+        if (FirstDormantOf(family) is { } launched && ActivateDormantRoster(launched))
+        {
+            GD.Print($"campaign: CALLBACK {code} launched '{launched}' off the hook");
+        }
+        else
+        {
+            GD.Print($"campaign: CALLBACK {code} has no deactivated '{family}_n' left to launch");
+        }
+
+        return true;
+    }
+
+    // The lowest-numbered member of the family still deactivated, so a hook called six times
+    // launches _1 through _6 in order. Read off the block's own suffix rather than off the spawn
+    // dictionary, whose enumeration order is not part of its contract.
+    private string? FirstDormantOf(string family)
+    {
+        string? first = null;
+        int lowest = int.MaxValue;
+        foreach (var name in _rosterPlans.Keys)
+        {
+            if (name.Length <= family.Length + 1
+                || !name.StartsWith(family, StringComparison.OrdinalIgnoreCase)
+                || name[family.Length] != '_'
+                || !int.TryParse(name[(family.Length + 1)..], out int ordinal)
+                || ordinal >= lowest
+                || !_roster.TryGetValue(name, out var rig)
+                || !rig.Inert)
+            {
+                continue;
+            }
+
+            lowest = ordinal;
+            first = name;
+        }
+
+        return first;
+    }
+
+    // The one un-dormanting of a roster aircraft, shared by WAKEUP_ENEMIES and the launch hook: a
+    // deactivated block comes back where it now stands rather than at its authored plan pose, so a
+    // script that moved it keeps the move. False when the name is no dormant roster block.
+    private bool ActivateDormantRoster(string name)
+    {
+        if (!_roster.TryGetValue(name, out var rig) || !_rosterPlans.TryGetValue(name, out var plan)
+            || !rig.Inert)
+        {
+            return false;
+        }
+
+        var (pos, fwd) = _rosterPlacedPose.TryGetValue(name, out var placed)
+            ? placed
+            : (plan.Position, plan.Forward);
+        rig.Activate(pos, pos + fwd);
+        return true;
+    }
+
     // A directive whose consumer this session has no seam for. Logged once per kind so a mission
     // that fires it every reminder loop does not flood the sink.
     private void Gap(string directive, string detail)
@@ -1263,12 +1359,8 @@ public sealed class CampaignDirector
             int aircraft = 0, zeppelins = 0, vessels = 0;
             foreach (var name in names)
             {
-                if (_owner._roster.TryGetValue(name, out var rig) && _owner._rosterPlans.TryGetValue(name, out var plan)
-                    && rig.Inert)
+                if (_owner.ActivateDormantRoster(name))
                 {
-                    var (pos, fwd) = _owner._rosterPlacedPose.TryGetValue(name, out var placed)
-                        ? placed : (plan.Position, plan.Forward);
-                    rig.Activate(pos, pos + fwd);
                     aircraft++;
                 }
                 else if (_owner._vessels.TryGetValue(name, out var vessel) && vessel.Wake())

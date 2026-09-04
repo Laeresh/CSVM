@@ -43,7 +43,8 @@ public sealed partial class AiGeneratorRuntime : Node
     public readonly Dictionary<string, string> SpawnedNet = new(StringComparer.OrdinalIgnoreCase);
 
     // The mission-script host's one credit callback. 801 to 803 live in the same host in the
-    // original (they reactivate the first still-deactivated bhat aircraft) and are unhosted here.
+    // original and reactivate the first still-deactivated bhat aircraft, which CampaignDirector
+    // answers from its own link in this chain.
     private const int CreditCallbackCode = 800;
 
     // The spawn basis needs a horizontal component (Basis.LookingAt with world up),

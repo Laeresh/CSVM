@@ -184,13 +184,13 @@ animation. World seam: `IObjectiveWorld`. Decode: [../formats/objectives.md](../
 
 ## src/Session/CampaignDirector.cs
 The engine side of one campaign mission and the sibling of `InstantActionDirector`: a plain sealed
-class that builds no node of its own. `ResolveSpec` runs in `GameSession`'s constructor and turns
-a `--campaign=<profile>:<seq>` story position into an ordinary chapter and mission; `Attach` arms
-the graph once every runtime a directive can touch is up; `Step` runs the graph, the roster's
-escort repair and the mission's two music duties; `BuildRoster` plans and spawns the `aiv` blocks
-through `CampaignRoster.cs`. The nested `World` is the `IObjectiveWorld` implementation, where a
-directive with no seam in this session is a named no-op. Mission end records the attempt, folds
-the persist log into the profile and holds before the cabin. Debrief: [../org/debrief.md](../org/debrief.md).
+class building no node of its own. `ResolveSpec` runs in `GameSession`'s constructor and turns a
+`--campaign=<profile>:<seq>` position into a chapter and mission; `BuildRoster` plans and spawns
+the `aiv` blocks through `CampaignRoster.cs`; `Attach` arms the graph once every runtime a
+directive can touch is up; `BindCallbackHost` takes the `CALLBACK` slot ahead of the generator
+runtime's, where 801 to 803 reactivate the lowest-numbered still-deactivated Black Hat of their
+family, CM19's only launch path; `Step` runs the graph, the escort repair and the music. The
+nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op; mission end records the attempt, folds the persist log into the profile and holds before the cabin. Debrief: [../org/debrief.md](../org/debrief.md).
 
 ## src/Session/CampaignProgression.cs
 The campaign's progression rules over a profile: recording one mission attempt with the original's
