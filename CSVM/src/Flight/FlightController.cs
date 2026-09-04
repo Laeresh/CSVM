@@ -1193,6 +1193,7 @@ public partial class FlightController : Node3D
         _model.Reset(pos, attitude, speed, _model.Throttle);
         _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
         GlobalTransform = _simCurr;
+        _sweep.Reset(); // a warp is a teleport too; the carried origin must not span it
         if (_cam != null && IsInsideTree())
             SnapCamera();
     }
@@ -1283,6 +1284,10 @@ public partial class FlightController : Node3D
         _stagedFrom = null;
         GlobalTransform = home;
         _simPrev = _simCurr = _renderPose = home;
+        // The sweep's carried origin is where the last flown step entered, before the staging: a
+        // drop that hands back 250 m on would otherwise sweep from the trigger through the drop
+        // site and put the aeroplane back there on the contact (CM18's Devil's Horn).
+        _sweep.Reset();
         // A re-placement moves the flight model as well as the drawn pose: the pin the held steps
         // re-assert is what the aeroplane flies out of once the hold clears.
         if (_resumePlaced)
