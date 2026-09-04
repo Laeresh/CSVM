@@ -132,6 +132,23 @@ format comment at `0x00622508` lists them adjacently, and the mission-script ver
 `ADD_OTHER_TARGET` / `ADD_OBJECTIVE_TARGET` / their `REMOVE_` partners exist at `0x00626704`). The
 field-to-key binding is inference; the offsets and their effect are traced.
 
+**A roster block that flags itself is its own candidate, not a second one.** `objectiveTarget` is a
+field ON the entity, so an aeroplane whose `aiv` block authors slot 37 is offered once, as the
+aeroplane, with the flag set: the block's slot-20 name on line 2, its slots 38 and 39 as the two
+halves of line 1, Objective sorting it ahead of every Enemy Target, and the aeroplane's own presence
+deciding whether it is selectable at all, so it appears at its wake and leaves at its death. CSVM
+stamps the three slots onto the spawned `FlightController` (`Session/AiFlightAssembler.cs`), which is
+also what carries a marker to a block a bay launches; `Session/ObjectiveSites.cs` collects world
+sites only, and `CampaignDirector` owns the label from there on, so a completing objective's
+`REMOVE_OBJECTIVE_TARGET` clears the stamp and its `SET_HELP_LABEL` rewrites the category over the
+block's slot 39, resolved once at the write. That relabel is not decoration: CM02's three Balmorals
+read Destroy, then Dock, then Dock Escort as the mission advances, and CM24's Miles goes from Follow
+to Destroy under his LAUNCH name (`stihellhound_5_eg0`), which is the name the script writes and the
+name the launch is booked under. ⚠ Marking such
+a block by resolving its name to a world node instead produces two entries on one silhouette, the
+raw block name where the pilot's name belongs, and a target selectable before the aeroplane exists
+and after it is gone.
+
 `DAT_0071c47b` (the Objective flag) is set as a *companion* to whichever of the other two the
 player is in:
 

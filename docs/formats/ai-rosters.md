@@ -55,7 +55,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 35 | `engine` | engines.json row id ([vehicle.md](vehicle.md)) |
 | 36 | `otherTarget` | |
 | 37 | `objectiveTarget` | a strict boolean over all 414 blocks (406 author `0`, exactly 8 author `1`), not a target-node reference despite the name: `1` marks the block's own aircraft as carrying the mission's objective marker. Gate on this, not on slot 39 alone — C4/M05's `blakepeace_3_1`/`_2` author a non-empty slot 39 with this at `0` |
-| 38 | `categoryLabel` | |
+| 38 | `categoryLabel` | the MSG_* key the LABEL half of the marker's line 1 prints, beside slot 39's category half (`Bomber [Defend] -`). Exactly one shipped block authors it, C2/M05's `balmoral_1` (`MSG_BOMBER_NAME`); the other 413 leave it empty, which is why most flagged blocks show a bare `[Destroy] -` |
 | 39 | `helpLabel` | the objective-kind key — `MSG_OBJ_FOLLOW` / `MSG_OBJ_DESTROY` / `MSG_OBJ_DEFEND` — on every block that also authors slot 37 `1`; designer text (`blakepeace_3_1`/`_2`'s `"Blake Aviation"`) where slot 37 is `0` |
 | 40 | `taxiPath` | the authored waypoint path this vehicle is placed on instead of being flight-simulated, or `0` for none. Ten blocks across three missions carry one, all spelled `ppN`: C1/M04 `blakepeace_2_3`…`_6` (`pp1`…`pp4`), C2/M02 five, C5/M01 one. The waypoints are the chapter gamez's `ppN_aipath` subtree, its `ppN_aipM` children in ordinal order; the vehicle is frozen there until the mission's `START_TAXI` releases it. Law and lifecycle: [`org/flightModel.md`](../org/flightModel.md), "The scripted-path follower" |
 | 41 | `stickiness` | |
@@ -99,12 +99,19 @@ by its positional header label when the mission later credits that generator. Th
 name resolves to its `vehicle.json` def by stripping trailing `_N` ordinals (`blakepeace_2_1` →
 `blakepeace_2`), and the def's `mode` plus slot 0 decide the fork above. Read at spawn: slots 0–7,
 the twelve volume slots 8–19 (over the net's own, see [ai-nets.md](ai-nets.md)), 20, 21, 22–30,
-31, 32, 33, 34, 37, 39, 40, 65 and 66. Slots 37 and 39 book the block's own name into
-`CampaignDirector.RosterObjectiveMarkers`, which `Session/ObjectiveSites.cs` reads as a third
-objective-target source alongside `targets.zrd`'s own entries, over the block's own live aircraft
-rather than any world node — CM11's `secfury_5`/`secfury_6` are the shipped case, and it is what
-`RosterMarkers.Attach`'s `AnimRuntime` indexing never reaches, since neither carries a chapter
-gamez library root under its own block name. Slots 7 (`init_health`) and 66 (`armor`) reach `PlaneStats` via
+31, 32, 33, 34, 37, 38, 39, 40, 65 and 66. Slots 37, 38 and 39 are STAMPED onto the aeroplane the
+block spawns as (`CampaignRosterPlan.SpawnFor` into `AiSpawn`, resolved and applied by
+`AiFlightAssembler`), so the block's own ordinary vehicle candidate carries the marker: one target,
+under the block's slot-20 name, ranked Objective ahead of every Enemy Target, and gated on the
+aeroplane's own wake and death. `Session/ObjectiveSites.cs` collects world sites only, and
+`CampaignDirector` owns the label after the spawn: a completing objective's
+`REMOVE_OBJECTIVE_TARGET` clears the stamp and its `SET_HELP_LABEL` rewrites the category over slot
+39, keyed by the same name the roster books the aircraft under (a bay launch by its launch name,
+so C5/M04's write to `stihellhound_5_eg0` reaches the aeroplane block `stihellhound_5_7` built).
+CM11's `secfury_5`/`secfury_6` and CM15's `balmoral_1`
+are the shipped roster cases and C5/M04's `stihellhound_5_7` the bay-launched one; none of them is
+reachable by `RosterMarkers.Attach`'s `AnimRuntime` indexing, since none carries a chapter gamez
+library root under its own block name. Slots 7 (`init_health`) and 66 (`armor`) reach `PlaneStats` via
 `RosterSpawnPlan.InitHealth`/`Armor` and `AiSpawn`, applied at `AiFlightAssembler.Assemble` before
 the difficulty scale and the per-spawn jitter, the engine's own order
 (docs/org/vehicleDamage.md). A surface vehicle (`mode ship`: `patrolboat_N`, `t_truck_N`) has no

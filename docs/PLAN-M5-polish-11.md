@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — One aeroplane, one target
 
-11. ☐ `BL-688` The roster objective marker is a stamped flag on the aircraft's own candidate
+11. ☑ `BL-688` The roster objective marker is a stamped flag on the aircraft's own candidate
 12. ☐ `BL-726` A Destroy Support Beam marker leaves the cycle when its beam dies
 13. ☐ `BL-725` CM21's Cabbie carries its objective marker as a friendly
 
@@ -240,7 +240,7 @@ notification reaches the same code path the zeppelin's does.
 
 # Wave B — One aeroplane, one target
 
-## B11 ☐ `BL-688` The roster objective marker is a stamped flag on the aircraft's own candidate
+## B11 ☑ `BL-688` The roster objective marker is a stamped flag on the aircraft's own candidate
 
 **Goal.** An aircraft that carries a roster objective flag is offered once, under its own name,
 with Objective outranking Enemy Target where it is both; it is not selectable before it wakes or
@@ -279,6 +279,32 @@ box with a category and no name line (`docs/org/targeting.md:668-670`). CM15's n
 "Balmoral". Never fall back to the `vehicle.zrd` class title (`targeting.md:686`). Miles is a
 generator-launched template, so the stamp must reach an aircraft the bay launches. `BL-686` is a
 feature proposing this seam and has landed no code.
+
+**Outcome.** A roster block that authors `objectiveTarget` now carries its marker on its own
+aeroplane. `CampaignRosterPlan.SpawnFor` puts slots 37, 38 and 39 into `AiSpawn`,
+`AiFlightAssembler` resolves the two labels and stamps all three onto the spawned
+`FlightController`, and `TargetPool.Offer` reads that flag off a vehicle candidate, so one
+candidate reaches the Enemy cycle ranked Objective, named by the block's slot 20, labelled off
+slots 38 and 39, and present only while the aeroplane is. The roster branch is out of
+`ObjectiveSites` entirely (the `rosterMarkers` parameter, `RosterAircraftPosition` and the
+roster-label fallback), which leaves its site branch as the single unconditional `Live` `B12`
+gates. The traced hypothesis held in full: the raw block name, the double candidate and the
+missing wake/death gate were all the synthetic candidate, and deleting it fixed all three at once.
+Because the funnel is `SpawnFor`, a bay launch is stamped by the same call, which is what reaches
+CM24's Miles. `CampaignDirector` owns the label from the spawn on, so the two things the deleted
+per-frame branch used to do still happen: a completing `REMOVE_OBJECTIVE_TARGET` retires the marker
+(`RetireObjectiveMarkers`), and a `SET_HELP_LABEL` rewrites the category on the rig at the moment
+the directive runs (`ApplyHelpLabels` off the graph's `TargetsChanged`, re-applied at
+`RegisterObjectiveMarker` so a launch arriving after the write still gets it). The label key and
+the roster key are the same name in every shipped case, a bay launch included, since
+`stihellhound_5_7` is booked under the `stihellhound_5_eg0` the script writes to. Two things the
+evidence does not settle: whether CM24's generator credits the launch before or after the objective
+that relabels Miles, which only the mission run can show, and CM02's blank name line, since
+`PlaneRoster.PlaneDisplayName` still falls back to the AI def's title for a block with an empty
+slot 20 (the CM02 suite records it reading "British Balmoral") and the marker has no "print no
+line" state. That fallback is `BL-637`'s question and is deliberately untouched here.
+
+**Verified.** <pending orchestrator run>
 
 ## B12 ☐ `BL-726` A Destroy Support Beam marker leaves the cycle when its beam dies
 

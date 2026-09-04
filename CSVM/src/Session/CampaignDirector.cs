@@ -66,8 +66,8 @@ public sealed class CampaignDirector
 
     // Roster blocks authoring their own objectiveTarget flag (aiv slot 37), keyed by block name,
     // with the MSG_OBJ_* label their own slot 39 carries. The mission authors this ON the
-    // vehicle, not through a targets.zrd entry, so ObjectiveSites reads it as a third source
-    // alongside targets.zrd's own entries and the graph's ADD_OBJECTIVE_TARGET edits.
+    // vehicle, not through a targets.zrd entry, which is why the marker is stamped onto the
+    // spawned aeroplane and this stays the record of which blocks carry one.
     private readonly Dictionary<string, string> _rosterObjectiveMarkers =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -94,6 +94,7 @@ public sealed class CampaignDirector
     private float _minAiActiveDist = 2000f;
     private CampaignDangerZones? _dangerZones;
     private DangerZoneRibbons? _ribbons;
+    private Messages? _strings;
     private bool _cutsceneHold;
 
     // What is left of the leaving hold below, once an ending has started it.
@@ -175,9 +176,11 @@ public sealed class CampaignDirector
     public IReadOnlyDictionary<string, SurfaceVehicle> Vessels => _vessels;
 
     /// <summary>Roster blocks that carry their own objective-target flag (aiv slot 37), by block
-    /// name, with the MSG_OBJ_* label their own slot 39 authors. <see cref="ObjectiveSites"/>
-    /// reads this as a third source of objective-flagged keys, alongside <c>targets.zrd</c>'s own
-    /// entries and the graph's <c>ADD_OBJECTIVE_TARGET</c> edits.</summary>
+    /// name, with the MSG_OBJ_* label their own slot 39 authors. The mission's record of which
+    /// blocks carry a marker, for the sortie log and the suites. ⚠ Not what draws one: the marker
+    /// is stamped onto the block's own aircraft at the spawn
+    /// (<see cref="FlightController.ObjectiveTarget"/>), so a bay-launched block gets one too and
+    /// nothing here has to be looked up per frame.</summary>
     public IReadOnlyDictionary<string, string> RosterObjectiveMarkers => _rosterObjectiveMarkers;
 
     /// <summary>The story position being flown.</summary>
@@ -530,9 +533,11 @@ public sealed class CampaignDirector
         _paths ??= inputs.Runtime is { } animRuntime
             ? new ScriptedPathVehicles(name => animRuntime.FindNodes(name))
             : null;
+        _strings = inputs.Strings;
         Graph = new ObjectiveGraph(Script, _world);
         Graph.MissionEnded += OnMissionEnded;
         Graph.Transitioned += OnObjectiveTransition;
+        Graph.TargetsChanged += ApplyHelpLabels;
         _dangerZones = inputs.Gamez is { } gamez
             ? CampaignDangerZones.Load(Script, gamez, _missionZrdrPath)
             : null;
@@ -814,6 +819,45 @@ public sealed class CampaignDirector
         {
             _rosterObjectiveMarkers[name] = spawn.HelpLabel;
         }
+
+        // A bay launch can arrive AFTER the script wrote its label: C5/M04 sets Miles's to Destroy
+        // and only then credits the generator that builds him, and the launch is booked under the
+        // very name the write used (block 'stihellhound_5_7' launches as 'stihellhound_5_eg0').
+        ApplyHelpLabel(name);
+    }
+
+    // SET_HELP_LABEL over an aircraft that carries its own marker: the script's category outranks
+    // the block's slot 39, and the aeroplane owns the resolved string, so the write lands on the
+    // rig once here rather than being re-read against the graph on every frame of every pane.
+    private void ApplyHelpLabels()
+    {
+        if (Graph is not { } graph)
+        {
+            return;
+        }
+
+        foreach (var key in graph.HelpLabels.Keys)
+        {
+            ApplyHelpLabel(key);
+        }
+    }
+
+    private void ApplyHelpLabel(string name)
+    {
+        if (Graph is not { } graph
+            || !graph.HelpLabels.TryGetValue(name, out var key)
+            || !_roster.TryGetValue(name, out var rig)
+            || !GodotObject.IsInstanceValid(rig)
+            || !rig.ObjectiveTarget)
+        {
+            return;
+        }
+
+        // A blank write is how a mission clears a label, and an unresolved key printed verbatim is
+        // right for a readout and wrong for a marker: both read as no label at all.
+        string text = _strings == null || string.IsNullOrWhiteSpace(key) ? "" : _strings.Get(key).Trim();
+        rig.ObjectiveCategory =
+            text.Length == 0 || text.StartsWith("MSG_", StringComparison.Ordinal) ? null : text;
     }
 
     // The wingman's aircraft and fit off the profile, for the mission that has one. Resolved here
@@ -882,6 +926,34 @@ public sealed class CampaignDirector
         string nap = t.Kind == ObjectiveTransitionKind.Napped ? $" for {t.Seconds:0.#}s" : "";
         string gated = t.Gated ? " (held: TICK_DEPENDS_ON_OBJ dependency not awake)" : "";
         Log.Info("campaign", $"objective {t.Number} {kind}{by}{nap} at {t.Elapsed:0.0}s{gated}");
+        if (t.Kind == ObjectiveTransitionKind.Completed)
+        {
+            RetireObjectiveMarkers(t.Number);
+        }
+    }
+
+    // A completing objective's own REMOVE_OBJECTIVE_TARGET retires a roster block's marker the way
+    // it retires a targets.zrd site: CM11's OBJECTIVE1 does this to both stunt planes when the
+    // follow ends. The stamp lives on the aeroplane, so it is cleared once here rather than
+    // re-tested against the script on every frame of every pane.
+    private void RetireObjectiveMarkers(int number)
+    {
+        foreach (var def in Script.Objectives)
+        {
+            if (def.Number != number)
+            {
+                continue;
+            }
+
+            foreach (var target in def.RemoveObjectiveTarget)
+            {
+                _rosterObjectiveMarkers.Remove(target.Key);
+                if (_roster.TryGetValue(target.Key, out var rig) && GodotObject.IsInstanceValid(rig))
+                {
+                    rig.ObjectiveTarget = false;
+                }
+            }
+        }
     }
 
     // The single credit site, mirroring the original's one damage-resolver branch
@@ -1077,6 +1149,11 @@ public sealed class CampaignDirector
         /// gate read. Null leaves the mission's <c>DANGER_ZONES_COMPLETED</c> conditions
         /// unarmed, the same "no seam yet" shape as every other null here.</summary>
         public GameZ? Gamez;
+
+        /// <summary>The string table a <c>SET_HELP_LABEL</c> write is resolved through before it
+        /// reaches a marker-carrying aircraft's own label. Null leaves a written label unresolved
+        /// and so unprinted, the same "no seam yet" shape as every other null here.</summary>
+        public Messages? Strings;
 
         /// <summary>The SCRIPTED PLAYER's aircraft once one exists, for the music channel's damage
         /// ping and the lost ending. One aeroplane, always P1's. A delegate rather than a value

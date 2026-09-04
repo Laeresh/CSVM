@@ -605,6 +605,21 @@ public partial class FlightController : Node3D
     /// off their roster plans.</summary>
     public int? Group { get; set; }
 
+    /// <summary>This aircraft carries the mission's objective marker (the roster block's own
+    /// <c>aiv</c> slot 37, the original's entity <c>+0x4d</c>), so its ordinary candidate sorts
+    /// ahead of every enemy on the Enemy cycle instead of a second synthetic one standing beside
+    /// it. ⚠ Stamped at the spawn, never derived here: the aeroplane is the marker, which is what
+    /// gives it the wake and death gate for free (docs/org/targeting.md).</summary>
+    public bool ObjectiveTarget { get; set; }
+
+    /// <summary>The resolved label half of that marker's line 1 (slot 38, "Bomber"), or null where
+    /// the block authors none, which is every shipped block but one.</summary>
+    public string? ObjectiveTypeLabel { get; set; }
+
+    /// <summary>The resolved category half of that marker's line 1 (slot 39, "Follow"), or
+    /// null.</summary>
+    public string? ObjectiveCategory { get; set; }
+
     /// <summary>The weapon lab's hold: the airframe holds its pose while everything else in the
     /// session keeps running (props, guns, rounds, world sim). ⚠ NOT the P halt
     /// (<see cref="GameClock.Halted"/>), which stops the whole clock. Clearing it un-pins the

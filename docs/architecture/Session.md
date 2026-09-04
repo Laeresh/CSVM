@@ -145,13 +145,13 @@ directives and `SET_HELP_LABEL` read `ObjectiveTarget`s, where a nested list is 
 
 ## src/Session/ObjectiveSites.cs
 The flown campaign mission's objective sites, offered to each player's `TargetPool` as
-objective-flagged candidates, which is what tells the player where to go. The set is
-`targets.zrd`'s own `objective` entries plus every roster block that authors the flag on itself,
-minus whichever of those a completed objective's `REMOVE_OBJECTIVE_TARGET` names, plus whatever
-`ADD_OBJECTIVE_TARGET` has added. A site is keyed by `ObjectiveTarget.Key` and re-read every
-frame, so it tracks a moving node; `PointFor` and `SiteAnchor` decide where its marker stands,
-and `Messages` gives the marker its verb, proper name and colour. `GameSession` binds the set
-through `FlightRoster.SetTargetObjectives`. Marker decode: [../org/targeting.md](../org/targeting.md).
+objective-flagged candidates, which is what tells the player where to go. World SITES only:
+`targets.zrd`'s own `objective` entries, minus whichever a completed objective's
+`REMOVE_OBJECTIVE_TARGET` names, plus whatever `ADD_OBJECTIVE_TARGET` adds. A roster block that
+flags itself is not here, because its marker rides its own aeroplane's candidate. A site is keyed
+by `ObjectiveTarget.Key` and re-read every frame, so it tracks a moving node; `PointFor` and
+`SiteAnchor` decide where its marker stands, and `Messages` gives it its verb, proper name and
+colour. Bound by `GameSession`. Marker decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Session/CampaignHumanField.cs
 Engine-free objective rules over every joined human, represented by `HumanState` position, captured
@@ -416,8 +416,8 @@ finished node placed. The crash runtime is OPENED rather than built wherever the
 queue, so the launch frame carries no rig and the prop choreography plays from the queue's
 completion hook. It chains the roster's durability override ahead of the enemy scale and the spawn
 jitter, the engine's own order ([../org/vehicleDamage.md](../org/vehicleDamage.md)), resolves the
-def's authored title for the targeting readout, and owns the one AI skills cache the session's voice
-adapter borrows. Read `FlightRoster.cs` next.
+readout's title, stamps the block's objective marker (flag and both label halves) onto the aeroplane
+it builds, and owns the one AI skills cache the voice adapter borrows. Read `FlightRoster.cs` next.
 
 ## src/Session/HumanFlightAdapter.cs
 `FlightRoster`'s private human-aircraft path: one `Assemble` builds the painted model,

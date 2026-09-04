@@ -135,13 +135,15 @@ public readonly struct TargetRef
 
     /// <summary>A live aircraft. Team and liveness come off the candidate;
     /// <paramref name="cls"/> is <see cref="Classify"/>'s answer, passed in rather than
-    /// re-derived so the pool decides class exactly once.</summary>
+    /// re-derived so the pool decides class exactly once. <paramref name="objective"/> is the
+    /// roster block's own flag: this aeroplane IS the marker, labelled off its slots 38/39.</summary>
     /// <param name="displayName">The airframe's common name for the marker (<c>Fury</c>); null
     /// prints the node name, which is what a source with no roster entry has.</param>
     public static TargetRef ForAircraft(AimCandidate candidate, TargetClass cls, string name,
-        string? displayName = null, float? health = null, float? armor = null) =>
-        new(candidate, AimTargetKind.Vehicle, cls, objective: false, name, displayName, null, null,
-            health, armor);
+        string? displayName = null, float? health = null, float? armor = null,
+        bool objective = false, string? typeLabel = null, string? category = null) =>
+        new(candidate, AimTargetKind.Vehicle, cls, objective, name, displayName, typeLabel,
+            category, health, armor);
 
     /// <summary>A mission structure, which covers CSVM's zeppelin sub-parts, destructibles and
     /// objective sites. Health only: <c>DestructibleRegistry.Instance</c> carries
