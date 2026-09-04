@@ -1019,28 +1019,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the Bloodhawk, read the hardpoint readout. *Cross-refs:* `BL-394`,
   `docs/org/hangar.md` ("special-plane template").
 
-- `BL-738` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: trace]` `[CM24]` **CM24's zeppelin duel
-  cannot bring the Dante down: the Pandora's broadsides fire too rarely, and each ball does too
-  little, for a gasbag to fall without the player's torpedoes.** *Evidence:* a seven-minute
-  sitting's log: `COMPLETED_ZEPCANNONS` engages both hulls at 72 s, the Pandora fires four
-  six-round volleys at the Dante (ranges 759 to 1630 m against a 2000 m fire range and a 20 s
-  reload) and the Dante two at the Pandora, and no Dante gasbag falls until the player's torpedoes
-  at 499 s. A `wep_28` ball does 20 health (`extracted/zrdr/weapons.zrd.json`) against a 240 HP
-  gasbag, twelve hits per bag, and each cannon aims at a random in-arc bag
-  (`CSVM/src/Session/ZeppelinRuntime.Cannons.cs`, `InArcGasbags`), so 24 balls cannot fell one
-  even if every one lands; whether they land the log cannot say, its impact lines being capped.
-  The script wakes Miles on the third Dante gasbag alone (`OBJECTIVE10`,
-  `extracted/C5/M04/zrdr/objectives.zrd.json`), so the duel's yield decides whether the mission
-  is winnable without six torpedoes. Not read: how long the two hulls spend inside 2000 m and in
-  arc along `M4Piratezep` and `M4Dante`, and the original's own volley cadence and hit rate.
-  *Fix shape:* measure headless first: drive both nets with the duel engaged for ten minutes and
-  count volleys, hits and gasbag kills; set that against the original's duel from a capture of
-  the mission; then correct whichever the numbers name, the nets' spacing, the arc, or the aim.
-  *⚠ Traps:* the broadsides never target the player on this mission (`targets
-  [piratezep, blackswanzep]`), so a player hit from the flank is a turret ring, and a destroyed
-  cannon already thins the volley (`git log --grep=BL-713`). Killing engines or cannons wakes
-  nothing but radio lines. *Playtest after fix:* CM24, fight only the escorts and watch whether
-  the Pandora's volleys set the Dante's gasbags burning. *Cross-refs:* `BL-713`'s closing commit.
 - `BL-740` `[Bug]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **An AI aeroplane never flies at
   a turret or a zeppelin part: Instant Action wingmen walk the chapter's first net away from the
   fight, and no Warhawk ever runs a torpedo at the Pandora.** *Evidence:* in the original's CM02
