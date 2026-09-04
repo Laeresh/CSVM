@@ -963,6 +963,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-523` (the AI mode machine, which this is not), `BL-626`, `BL-664`, `BL-598`,
   `BL-637`, `PT-87`, `PT-100`, `PT-101`.
 
+- `BL-714` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A zeppelin's own turrets fire
+  through its own hull.** *Evidence:* reported at the controls, in flight along the far flank of a
+  pirate zeppelin in an Instant Action Dogfight: a ring on the far side fires at the player through
+  the hull it is mounted on, sustained, not the single shot the cached verdict allows at the hull's
+  edge. The static probe does not reproduce it (`turret-hull-blocks-own-fire`,
+  `git log --grep=BL-714`): on a parked C1/M04 `piratezep`, fourteen of seventeen emplacements
+  confirm a hull-blocked bearing inside their own arc and every one holds fire and reads `Blocked`
+  over 8 s, and the two candidates it cleared stay cleared (the hull's colliders carry
+  `CollisionLayers.World` and exist by the time a ring steps). What a parked hull cannot show: a
+  hull moving on its net, where the collider the ray meets may trail the drawn hull by a physics
+  step, and `TurretController.WorldRayBlocked`'s 1 to 2 s cache carrying a clear verdict taken
+  while the hull stood elsewhere; a probe that sampled one point of the authored leg found no
+  in-arc self-obstruction there and so tested nothing. *Fix shape:* the moving-hull probe: drive
+  `piratezep` along its net with the player parked on the far flank inside a ring's arc, log the
+  ray's hit list per ring per step across several cache periods against the collider's pose and
+  the drawn hull's, and fix on the collision side (pose sync or the cache's sampling), never the
+  exclusion. *⚠ Traps:* do not make aircraft cover, the decode says world geometry only; do not
+  widen the exclusion to the vehicle, `PlatformOf`'s comment records that this is how rings shoot
+  through their own hull. *Playtest after fix:* Instant Action Dogfight against a pirate zeppelin,
+  along the far hull in motion. *Cross-refs:* `BL-735` (the multiplayer hulls' belly rings over no
+  collider at all), `BL-626`'s closing commit (`git log --grep=BL-626`, turret acquisition).
+
 - `BL-716` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **A flak round that hits a plane
   plays no hit effect, and flak's damage, targeting, arming and burst radius are unverified at the
   controls.** *Evidence:* reported at the controls: "FLAK has no animation on plane hit. Recheck
@@ -1016,6 +1038,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   same code and should be asserted too. *Playtest after fix:* CM07 with flak rockets bought, take
   the Bloodhawk, read the hardpoint readout. *Cross-refs:* `BL-394`,
   `docs/org/hangar.md` ("special-plane template").
+
+- `BL-738` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: trace]` `[CM24]` **CM24's zeppelin duel
+  cannot bring the Dante down: the Pandora's broadsides fire too rarely, and each ball does too
+  little, for a gasbag to fall without the player's torpedoes.** *Evidence:* a seven-minute
+  sitting's log: `COMPLETED_ZEPCANNONS` engages both hulls at 72 s, the Pandora fires four
+  six-round volleys at the Dante (ranges 759 to 1630 m against a 2000 m fire range and a 20 s
+  reload) and the Dante two at the Pandora, and no Dante gasbag falls until the player's torpedoes
+  at 499 s. A `wep_28` ball does 20 health (`extracted/zrdr/weapons.zrd.json`) against a 240 HP
+  gasbag, twelve hits per bag, and each cannon aims at a random in-arc bag
+  (`CSVM/src/Session/ZeppelinRuntime.Cannons.cs`, `InArcGasbags`), so 24 balls cannot fell one
+  even if every one lands; whether they land the log cannot say, its impact lines being capped.
+  The script wakes Miles on the third Dante gasbag alone (`OBJECTIVE10`,
+  `extracted/C5/M04/zrdr/objectives.zrd.json`), so the duel's yield decides whether the mission
+  is winnable without six torpedoes. Not read: how long the two hulls spend inside 2000 m and in
+  arc along `M4Piratezep` and `M4Dante`, and the original's own volley cadence and hit rate.
+  *Fix shape:* measure headless first: drive both nets with the duel engaged for ten minutes and
+  count volleys, hits and gasbag kills; set that against the original's duel from a capture of
+  the mission; then correct whichever the numbers name, the nets' spacing, the arc, or the aim.
+  *⚠ Traps:* the broadsides never target the player on this mission (`targets
+  [piratezep, blackswanzep]`), so a player hit from the flank is a turret ring, and a destroyed
+  cannon already thins the volley (`git log --grep=BL-713`). Killing engines or cannons wakes
+  nothing but radio lines. *Playtest after fix:* CM24, fight only the escorts and watch whether
+  the Pandora's volleys set the Dante's gasbags burning. *Cross-refs:* `BL-713`'s closing commit.
 
 ## Flight model & collision physics
 
@@ -3193,6 +3238,22 @@ usual.
   there, extend the forced park to `player_setup`'s bootstrap with a suite over an Instant Action
   wave. *⚠ Traps:* an Instant Action wave spawns after the bootstrap in CSVM, so a headless run
   may show nothing to park; read the original first. *Cross-refs:* `BL-719`'s closing commit.
+
+- `BL-739` `[Bug]` `[S]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **A mission that ends inside a
+  docking film cuts back to the pilot's own view for the leaving hold, and the fade to black runs
+  over that instead of over the film.** *Evidence:* reported at the controls on a successful
+  docking: the film's last frame is followed by the cockpit or chase view, and only then does the
+  fade start. `CutsceneController.Act`'s handoff ends the presentation when the definition ends
+  (`CSVM/src/Session/CutsceneController.cs:746-754`), while `CampaignDirector` holds the world for
+  `LeavingHoldS` and `MissionEndFade` ramps over that hold (`git log --grep=BL-727`); nothing keeps
+  the film's camera when code 13 landed inside the episode. The decode note on
+  `CampaignDirector.Leave` says the original fades over the last frame; which camera that frame is
+  on after a film-ending 13 is not read. *Fix shape:* read `FUN_00443090`'s caller for the camera
+  the fade runs over after a code 13 raised inside a definition; if it is the film's, keep
+  `Presenting` and the episode's camera until `Leave` whenever the result landed during the
+  episode. *⚠ Traps:* a loss inside a film and a win in free flight are separate paths; the fade
+  case in `CampaignSuites` should assert all three. *Playtest after fix:* CM14, dock with the
+  objectives complete. *Cross-refs:* `BL-727`'s closing commit.
 
 ## Tooling, platform & docs
 
