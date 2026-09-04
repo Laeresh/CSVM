@@ -198,10 +198,9 @@ internal static class CampaignBlackeDropSuites
         {
             if (!cutscene.Playing)
             {
-                // The approach is placed along the axis so the trigger is reached at a known time
-                // on both sides, but each placement also takes two flown steps: a pilot reaching
-                // the trigger has a collision sweep in progress with a carried origin, and the
-                // hand-back has to be read against that state, not against a fresh rig.
+                // Placed along the axis so the trigger is reached at a known time on both sides.
+                // Each placement also flies two steps: a pilot reaching the trigger has a sweep in
+                // progress with a carried origin, and the hand-back is read against that state.
                 rig.WarpTo(entry + (heading * (FlySpeed * t)), headingDeg, FlySpeed);
                 rig.SimStep(StepDt);
                 rig.SimStep(StepDt);

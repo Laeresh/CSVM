@@ -1061,6 +1061,42 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   cannon already thins the volley (`git log --grep=BL-713`). Killing engines or cannons wakes
   nothing but radio lines. *Playtest after fix:* CM24, fight only the escorts and watch whether
   the Pandora's volleys set the Dante's gasbags burning. *Cross-refs:* `BL-713`'s closing commit.
+- `BL-740` `[Bug]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **An AI aeroplane never flies at
+  a turret or a zeppelin part: Instant Action wingmen walk the chapter's first net away from the
+  fight, and no Warhawk ever runs a torpedo at the Pandora.** *Evidence:* in the original's CM02
+  Instant Action the wingmen enter pursue at the start and attack the zeppelin's turrets and
+  engines; ours patrol net 10 (`M4ReinfAce`), which is anchored to something other than the
+  player, and leave. The net is the original's standing order too (`docs/org/aiPilot.md` "Instant
+  Action gives every actor a net"); what pulls a pilot off it is the acquisition sweep picking a
+  turret or structure and pursue flying at it, since pursue reads its victim through the `Target`
+  vtable whatever the class and only the 400 m merge rule gates on a jet or wingman. CSVM's D36
+  routes every non-aircraft winner into `AiGunner.GroundTarget` so that "the flight law sees
+  nothing and keeps flying its assigned course" (`CSVM/src/Flight/FlightController.cs`,
+  `AssignAcquired`), a scope containment from the D36 commit and not a decode. The same split
+  hard-codes `targetIsGasbag: false` into the rocketeer solve, so the torpedo gate
+  `AiRocketeer.Solve` already carries never opens, and the campaign's Black Hat Warhawks, whose
+  radio lines announce torpedo runs on the Pandora, cannot fire one. *Fix shape:* one standing
+  target of any class, read by the pursue arm, the mode machine's promotion and the lay-off test
+  through a quarry snapshot (position, velocity, forward axis, is-human, mode) built from a
+  `FlightController`, a `TurretController` or a `DestructibleRegistry.Instance`; decode what a
+  `TargetStruct`'s forward axis is, since the pursue aim point offsets along it. Port the three
+  acquisition gaps D36 named: the gasbag admission gate (a gasbag is offered only to a pilot with
+  a loaded `DAMAGES_ZEPPELIN` weapon whose cooldowns are clear, and then carries the −0.5 weight),
+  the +0.4 weight against a candidate in `wingman` mode, and the ahead/behind, above/below and
+  facing ±0.2 terms on the decoded half-metre deadband. Hand the gasbag identity
+  (`DestructibleRegistry.Instance.Gasbag`, already read by `TurretController`) to the rocketeer.
+  Correct the "unreachable" claims in `docs/org/aiPilot.md` "What CSVM ports of this" and the
+  rocketeer call. *⚠ Traps:* the escort law is the wrong fix; the original's Instant Action
+  wingmen are demoted to `jet` at spawn and fly no formation, and arming `AiEscort` would glue them
+  to the player without attacking anything. Pursuing a hull part will trip the crash-avoidance
+  ray on the zeppelin, which the original's does too. Enemy waves and campaign hostiles gain the
+  same behaviour, so missions with a friendly zeppelin get harder, which is the original's
+  difficulty. *How you'd know it worked:* units on the quarry snapshot per class, the gasbag gate
+  with and without loaded gasbag ordnance, and the three ranking terms; a headless suite with a
+  netted AI and a zeppelin in range asserting it leaves patrol, closes on a part and fires, and a
+  torpedo-armed pilot picking the gasbag; then the user's own flight of CM02 Instant Action seeing
+  the wingmen attack the zeppelin, and of a Warhawk mission seeing torpedoes at the Pandora.
+  *Cross-refs:* `BL-363`'s closing commit (D36), `BL-717`, `BL-714`.
 
 ## Flight model & collision physics
 
