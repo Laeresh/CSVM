@@ -284,11 +284,11 @@ sequence. Read `SurfaceVehicleRuntime.cs` for how one is built.
 The host a story mission's intro or landings definition raises its `CALLBACK` codes to, and the
 session state those codes describe: the world and objectives held, the chrome off and the view off
 the aircraft, the humans out of flight with the episode owner posed on the staged `player` marker,
-the AI parked, the mid-mission airframe swap, the re-placement, and one restore at the definition's
-end or at a skip. A `Node` only so it can tick last in the frame, after the animation advance that
-poses `camera1`. Which definition and which human an episode belongs to is the slot `Own` claims,
-not the raiser of the first code. Codes and their decode:
-[../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
+the AI parked (before any intro plays, whether or not its own data authors 913), the mid-mission
+airframe swap, the re-placement, and one restore at the definition's end or at a skip. A `Node`
+only so it can tick last in the frame, after the animation advance that poses `camera1`. Which
+definition and which human an episode belongs to is the slot `Own` claims, not the raiser of the
+first code. Codes and their decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 
 ## src/Session/LandingApproachRuntime.cs
 The mid-mission cutscene trigger: a story mission's resolved `LandingApproaches` are tested each
