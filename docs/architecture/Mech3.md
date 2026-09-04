@@ -428,12 +428,11 @@ never fatal. It owns the live definition instances and their condition evaluatio
 destructible-damage entries (`DamageAt`, which also raises `DestructibleKilled` on a healthy-role
 kill, `ApplyDamageStages`, `RunDeathSequence`, `CarryState`), the world-effects runtime
 (`PlayEffectAt` over a hidden template stage), the emitter prewarm, the range-deferred start sweep
-and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`.
-What binds a member is on that member: the pool-slot checkout reset, the prewarm's scope, the
-mission-trigger closure, the undercover probe's decode, the death call's site follow. Each dispatch
-axis is a sibling module; the router keeps the case labels and the public fields callers configure:
-`SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`,
-`Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. Decode: docs/org/sequences.md.
+and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`. Its
+range gates read the players through `RangePositions`: the last pose they flew, while
+`PlayerRangeHeld` says a cutscene is posing their aeroplanes. What binds a member is on that member:
+the pool-slot checkout reset, the prewarm's scope, the mission-trigger closure, the undercover
+probe's decode, the death call's site follow. Each dispatch axis is a sibling module; the router keeps the case labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. Decode: docs/org/sequences.md.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own namespace,

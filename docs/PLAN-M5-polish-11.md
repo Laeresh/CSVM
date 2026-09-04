@@ -114,7 +114,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ `BL-719` CM14's aircraft no longer hang in the sky during a cutscene
 22. ☑ `BL-721` CM17 hands the player back onto a pose the terrain allows
-23. ☐ `BL-722` CM18's Blacke drop runs one camera and hands back clear of the ground
+23. ☑ `BL-722` CM18's Blacke drop holds its stage still and hands back clear of the ground
 
 ### Wave D — Mission flow
 
@@ -565,7 +565,7 @@ returns, which is the flown path at 18 m/s and a judgement for `D33`.
 
 **Verified.** <pending orchestrator run>
 
-## C23 ☐ `BL-722` CM18's Blacke drop runs one camera and hands back clear of the ground
+## C23 ☑ `BL-722` CM18's Blacke drop holds its stage still and hands back clear of the ground
 
 **Goal.** The drop cutscene holds one camera for its length, and control returns on a pose that
 does not crash the player.
@@ -597,6 +597,36 @@ CM18, approach the drop from each side.
 **⚠ Traps.** Do not mute one camera by name; the pair is symmetric for a reason. `BL-699`'s
 launch-frame hitch is on this mission and is not this. A trace that shows one camera starting
 means the flicker is a different writer, and the item's title changes with it.
+
+**Outcome.** Fixed, and the item's title changed with the trace: the flicker is a different writer,
+not a second camera. A headless trace over CM18 (C4/M03), flying each approach side in at 60 m/s
+over the mission's own BUILT world with a real rig and a real cutscene host, shows exactly one
+camera definition starting per side and the correct one (`bdrop_ew_cam` from the east,
+`bdrop_we_cam` from the west). `AnimRuntime.Start`'s node-state gate honours the fork, so
+wrong-claim 1 is confirmed dead, and wrong-claim 2 held too: `bdplayer` stops and invalidates both
+drop definitions, but only after its own SI script, 4.45 s into the shot. That delay is where the
+defect lives. `blacke_drop_east` polls `If PlayerRange 4096` (64 m, the compiled value being metres
+squared) from `blk_e_marker` every 0.2 s for the whole shot, and each poll writes `blacke_marker`'s
+absolute yaw, 0 in the near branch and half a turn in the far one. `bdplayer` has meanwhile
+reparented `player` under `blacke_marker`, so the pilot the poll measures rides the very stage the
+poll re-poses: yawing the stage swings him from 15.9 m to 175.3 m from `blk_e_marker` and back, and
+the two chase each other at the poll rate for the rest of the drop. The camera hangs off the same
+stage, so it jumped about 297 m five times a second, which is the reported "camera jumps back and
+forth really fast", and the hand-back landed on whichever half of the limit cycle the shot ended
+in. A range gate now reads where the pilots last flew rather than where a film is putting them:
+`AnimRuntime.RangePositions` answers from a per-frame sample of the flying pose while
+`PlayerRangeHeld` is set, and `CutsceneController.ApplyOutOfFlight` sets it as the cutscene takes
+and returns flight. The hold is on out-of-flight and not on the world hold, because this drop
+raises code 11 and never code 20. The new `blacke-drop-cameras` suite drives both sides and was red
+on the stage-still assertion before the change (180 degrees of turn on each side) and green after
+(0 on each side); the one-camera and clearance assertions were already green, which is the evidence
+that the pair was never the cause. The hand-back is now mirrored per side as authored, at
+(-7753.9, 501.0, -2675.8) from the east and (-7691.2, 501.0, -2184.4) from the west, each over 130 m
+above the surface measured under it. This does not settle whether the drop reads well at the
+controls, only that one camera composes it over a stage that holds still; the shot's framing and
+`BL-699`'s separate launch-frame hitch on the same mission are for `D33`.
+
+**Verified.** <pending orchestrator run>
 
 # Wave D — Mission flow
 

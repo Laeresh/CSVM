@@ -104,7 +104,7 @@ internal static class CampaignLaunchHookSuites
         ctx.Check(wakes > 1, $"{wakes} objectives wake '{WarhawkAnim}', one per Black Hat the mission sends up");
 
         ctx.Check(ObjectiveNumbered(script, FirstWarhawkObjective) is
-            { BeginDormant: true, WakeAnim: { Anim: WarhawkAnim } },
+        { BeginDormant: true, WakeAnim: { Anim: WarhawkAnim } },
             $"OBJECTIVE{FirstWarhawkObjective} is dormant and its WAKE_ANIM is '{WarhawkAnim}'");
         ctx.Check(ObjectiveNumbered(script, SecondWarhawkObjective)?.WakeAnim is { Anim: WarhawkAnim },
             $"OBJECTIVE{SecondWarhawkObjective} wakes the same hook again");
