@@ -9,14 +9,12 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>BL-635: CM11's two stunt planes, <c>secfury_5</c>/<c>secfury_6</c>, author the
-/// roster's own <c>objectiveTarget</c> flag (aiv slot 37) and <c>MSG_OBJ_FOLLOW</c> label (slot
-/// 39) rather than a <c>targets.zrd</c> entry. Drives C2/M02's real roster and objective graph and
-/// checks both aircraft reach the pilot's Enemy cycle labelled Follow while OBJECTIVE1, the
-/// primary that starts the follow and is awake from mission start, is still open. OBJECTIVE1's own
-/// <c>REMOVE_OBJECTIVE_TARGET</c> retiring both markers the way it retires a <c>targets.zrd</c>
-/// site is pinned off-engine instead, since driving it here needs the studio approach's gate built
-/// for real (<c>CSVM.Tests/ObjectiveSitesTests.cs</c>).</summary>
+/// <summary>CM11's two stunt planes, <c>secfury_5</c>/<c>secfury_6</c>, author the roster's own
+/// <c>objectiveTarget</c> flag (aiv slot 37) and <c>MSG_OBJ_FOLLOW</c> label (slot 39) rather than
+/// a <c>targets.zrd</c> entry. Drives C2/M02's real roster and objective graph and checks both
+/// aircraft reach the pilot's Enemy cycle ONCE, labelled Follow and named by their own slot 20,
+/// while OBJECTIVE1, the primary that starts the follow and is awake from mission start, is still
+/// open.</summary>
 internal static class CampaignStuntMarkerSuites
 {
     private const string Chapter = "C2";
@@ -24,6 +22,7 @@ internal static class CampaignStuntMarkerSuites
     private const string PlaneA = "secfury_5";
     private const string PlaneB = "secfury_6";
     private const string FollowLabel = "Follow";
+    private const string StuntPlaneName = "Stunt Plane";
 
     // OBJECTIVE1, the shipped PRIMARY awake from mission start that starts the follow.
     private const int FollowObjective = 1;
@@ -146,6 +145,7 @@ internal static class CampaignStuntMarkerSuites
             {
                 Runtime = world.Runtime,
                 Gamez = world.Gamez,
+                Strings = messages,
                 Sounds = world.Runtime.Sounds,
                 Projectiles = live,
                 ListenerPosition = () => human.WorldPosition,
@@ -158,7 +158,7 @@ internal static class CampaignStuntMarkerSuites
                 $"OBJECTIVE{FollowObjective}, the objective that starts the follow, is awake from mission start");
 
             var sites = new ObjectiveSites(director, messages, targets, world.Runtime);
-            CheckOffered(ctx, sites, report, "while the follow is open");
+            CheckOffered(ctx, sites, rigs, report, "while the follow is open");
         }
         finally
         {
@@ -173,15 +173,20 @@ internal static class CampaignStuntMarkerSuites
     }
 
     // ⚠ OBJECTIVE1's own REMOVE_OBJECTIVE_TARGET (gate2/spy_switch inactive) is not driven here:
-    // it needs the studio approach built for real, which is out of this suite's reach, and the
-    // roster-marker/RemovedByCompletion interaction it exercises is pinned off-engine instead,
-    // cheaply and precisely, by CSVM.Tests/ObjectiveSitesTests.cs.
-    private static void CheckOffered(TestContext ctx, ObjectiveSites sites, StringBuilder report,
-        string when)
+    // it needs the studio approach built for real, which is out of this suite's reach.
+    private static void CheckOffered(TestContext ctx, ObjectiveSites sites,
+        IReadOnlyDictionary<string, FlightController> rigs, StringBuilder report, string when)
     {
         var candidates = new List<AimCandidate>();
         sites.Collect(candidates);
+        // The marker rides each aeroplane's OWN vehicle candidate now, so the scan has to hold the
+        // spawned rigs: a site collector that offered one beside them is what this item removed.
         var scan = new AimCandidateSet();
+        foreach (var rig in rigs.Values)
+        {
+            scan.AddVehicle(rig.WorldPosition, rig.WorldVelocity, rig.Team, rig.InPlay, rig);
+        }
+
         var selection = new TargetSelection();
         selection.Rebuild(scan, null, AimAssist.PlayerTeam, null, Vector3.Zero, Basis.Identity, candidates);
 
@@ -189,12 +194,32 @@ internal static class CampaignStuntMarkerSuites
         {
             var target = Find(selection.Pool.Enemy, name);
             report.AppendLine(target is { } t
-                ? $"{when}: '{name}' offered objective={t.Objective} category=\"{t.CategoryLine}\" at {t.Position}"
+                ? $"{when}: '{name}' offered objective={t.Objective} category=\"{t.CategoryLine}\" name='{t.DisplayName}' at {t.Position}"
                 : $"{when}: '{name}' NOT offered");
-            ctx.Check(target is { Objective: true }, $"'{name}' reaches the Enemy cycle as an objective site {when}");
+            ctx.Check(target is { Objective: true }, $"'{name}' reaches the Enemy cycle as an objective {when}");
             ctx.Check(string.Equals(target?.Category, FollowLabel, StringComparison.Ordinal),
                 $"'{name}'s marker carries its own roster block's Follow label {when}");
+            ctx.Check(Count(selection.Pool, name) == 1,
+                $"'{name}' is offered exactly once across all three cycles {when}");
+            ctx.Check(string.Equals(target?.DisplayName, StuntPlaneName, StringComparison.Ordinal),
+                $"'{name}'s marker prints its block's own slot-20 name '{StuntPlaneName}'");
         }
+    }
+
+    private static int Count(TargetPool pool, string name)
+    {
+        int n = 0;
+        foreach (var cls in new[] { TargetClass.Enemy, TargetClass.Ally, TargetClass.NonAircraft })
+        {
+            foreach (var target in pool.Of(cls))
+            {
+                if (string.Equals(target.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    n++;
+                }
+            }
+        }
+        return n;
     }
 
     private static TargetRef? Find(IReadOnlyList<TargetRef> cycle, string name)

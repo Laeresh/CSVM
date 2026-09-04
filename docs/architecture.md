@@ -332,6 +332,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BoardPalette.cs` — the ink a campaign board writes in, one palette per background family.
 - `src/UI/LoadBoard.cs` — the load screen a session builds behind: the original's chart sheet for a campaign launch, its blackboard for everything else.
 - `src/UI/ObjectivesHud.cs` — the campaign mission's objectives readout, drawn on the pause screen alone, one instance per rig.
+- `src/UI/MissionEndFade.cs` — the mission-end black-out, painting `CampaignDirector.LeavingFade` onto a full-screen rect every frame, one instance per rig.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron, colour and decal steppers, a live repaint and copy-CLI-args.
@@ -449,7 +450,7 @@ clusters they delegate to.
 - `src/Session/ObjectiveGraph.cs` — the objectives runtime, engine-free: the four-state machine, the rotating completion scan, the conditions, the four endings.
 - `src/Session/CampaignHumanField.cs` — the human field's rules, engine-free: what a condition naming one aeroplane asks once two to four humans fly.
 - `src/Session/ObjectiveSites.cs` — the flown campaign mission's objective sites as targeting candidates, rebuilt from their live source every frame.
-- `src/Session/CampaignDirector.cs` — the engine side of a campaign mission: the graph armed against the built world, the roster spawned, the attempt recorded.
+- `src/Session/CampaignDirector.cs` — the engine side of a campaign mission: the graph armed against the built world, the roster spawned and launched off its hooks, the attempt recorded.
 - `src/Session/CampaignDangerZones.cs` — a campaign mission's own danger zones: the `dzpathN` gates its script arms, tracked per human by the stunt gate rule.
 - `src/Session/AirframeSwap.cs` — the three `CALLBACK` codes that hand the player a different airframe in mid mission, and the def and node each names.
 - `src/Session/CutsceneController.cs` — the host a cutscene definition raises its `CALLBACK` codes to, and the session state those codes describe.

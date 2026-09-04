@@ -2626,6 +2626,13 @@ public partial class GameSession : Node3D
                 var generators = _generators;
                 _zeppelins.ZeppelinKilled += node => generators.NotifyHostDied(node);
             }
+            // A fixed installation (the submarine) has no destroyed flag of its own; its death is
+            // its healthy node going inactive, which DamageAt now raises the same way.
+            if (wr != null)
+            {
+                var generators = _generators;
+                wr.DestructibleKilled += node => generators.NotifyHostDied(node);
+            }
             GD.Print($"egen: {_generators.LiveCount} of {egenDefs.Count} generator(s) live for " +
                      $"{_spec.Chapter}/{_spec.Mission}, spawning '{_spec.GeneratorsPlane}'");
             state.What += $" + {_generators.LiveCount} generator(s)";
@@ -2698,6 +2705,9 @@ public partial class GameSession : Node3D
         // up, which is why it sits after the emplacement block rather than with the other
         // directors. It builds no node of its own.
         _diagRuntime = state.WorldRuntime;
+        // Loaded before the graph is armed rather than with the readouts below: a SET_HELP_LABEL
+        // write reaches a marker-carrying aircraft through the director, which needs the table.
+        var objectiveMessages = _campaign != null ? Messages.Load(state.MessagesPath) : null;
         _campaign?.Attach(new CampaignDirector.WorldInputs
         {
             Runtime = state.WorldRuntime,
@@ -2708,6 +2718,7 @@ public partial class GameSession : Node3D
             // The campaign's danger-zone gates are chapter-world geometry, so the
             // tracker needs the built gamez to resolve its dzpathN subtrees.
             Gamez = state.Gamez,
+            Strings = objectiveMessages,
             Sounds = state.WorldRuntime?.Sounds,
             Projectiles = _projectiles,
             ListenerPosition = () => _rigs.Count > 0 && _rigs[0].Controller is { } pilot
@@ -2719,6 +2730,13 @@ public partial class GameSession : Node3D
             BeginSpectate = BeginCampaignSpectate,
             Rng = Rng.NewSystemRandom(Rng.Ai),
         });
+
+        // The launch hook's CALLBACK codes, taken after the generator runtime's own bind so the
+        // director sits ahead of it and the rest of the chain still answers everything else.
+        if (state.WorldRuntime is { } callbackRuntime)
+        {
+            _campaign?.BindCallbackHost(callbackRuntime);
+        }
 
         // F15 / --debug-targets: who is aiming at whom. Reads the live gunners through closures
         // rather than a snapshot — waves activate, AI planes spawn and emplacements die long
@@ -2737,19 +2755,19 @@ public partial class GameSession : Node3D
             () => _rigs.Count > 0 ? _rigs[0].Controller : null,
             () => _diagRuntime));
 
-        // The pause-screen objectives readout and the objective-site feed, both mounted only for a
-        // campaign session and both polling _campaign.Graph themselves once Attach (above) has
-        // built it. The sites go onto the player's target cycle, which is what marks them.
-        if (_campaign is { } campaign)
+        // The objectives readout, the mission-end fade and the objective-site feed: all campaign
+        // only, the first two polling _campaign once Attach (above) has built it, the sites landing
+        // on the player's target cycle.
+        if (_campaign is { } campaign && objectiveMessages is { } objectiveStrings)
         {
-            var objectiveMessages = Messages.Load(state.MessagesPath);
-            // One readout per rig, under that rig's own HudParent, so every pane draws its own
-            // copy over the one shared PauseState — the pattern every other per-rig HUD follows.
+            // One readout and one fade per rig, under that rig's own HudParent, so every pane
+            // draws its own copy, the pattern every other per-rig HUD follows.
             foreach (var rig in _rigs)
             {
-                rig.HudParent.AddChild(UI.ObjectivesHud.Build(campaign, objectiveMessages, _pauseState!));
+                rig.HudParent.AddChild(UI.ObjectivesHud.Build(campaign, objectiveStrings, _pauseState!));
+                rig.HudParent.AddChild(UI.MissionEndFade.Build(campaign));
             }
-            var sites = new ObjectiveSites(campaign, objectiveMessages,
+            var sites = new ObjectiveSites(campaign, objectiveStrings,
                 MissionTargets.Load(state.MissionZrdrPath,
                     SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter)),
                 state.WorldRuntime);

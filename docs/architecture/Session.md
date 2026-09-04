@@ -145,13 +145,13 @@ directives and `SET_HELP_LABEL` read `ObjectiveTarget`s, where a nested list is 
 
 ## src/Session/ObjectiveSites.cs
 The flown campaign mission's objective sites, offered to each player's `TargetPool` as
-objective-flagged candidates, which is what tells the player where to go. The set is
-`targets.zrd`'s own `objective` entries plus every roster block that authors the flag on itself,
-minus whichever of those a completed objective's `REMOVE_OBJECTIVE_TARGET` names, plus whatever
-`ADD_OBJECTIVE_TARGET` has added. A site is keyed by `ObjectiveTarget.Key` and re-read every
-frame, so it tracks a moving node; `PointFor` and `SiteAnchor` decide where its marker stands,
-and `Messages` gives the marker its verb, proper name and colour. `GameSession` binds the set
-through `FlightRoster.SetTargetObjectives`. Marker decode: [../org/targeting.md](../org/targeting.md).
+objective-flagged candidates, which is what tells the player where to go. World SITES only:
+`targets.zrd`'s own `objective` entries, minus whichever a completed objective's
+`REMOVE_OBJECTIVE_TARGET` names, plus whatever `ADD_OBJECTIVE_TARGET` adds. A roster block that
+flags itself is not here, because its marker rides its own aeroplane's candidate. A site is keyed
+by `ObjectiveTarget.Key`, re-read every frame so it tracks a moving node, and reads `Live` off its
+resolved node's own `DestructibleRegistry` state (`LiveDespiteState`), leaving the cycle on a
+destroyed part alone. Bound by `GameSession`. Marker decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Session/CampaignHumanField.cs
 Engine-free objective rules over every joined human, represented by `HumanState` position, captured
@@ -184,13 +184,13 @@ animation. World seam: `IObjectiveWorld`. Decode: [../formats/objectives.md](../
 
 ## src/Session/CampaignDirector.cs
 The engine side of one campaign mission and the sibling of `InstantActionDirector`: a plain sealed
-class that builds no node of its own. `ResolveSpec` runs in `GameSession`'s constructor and turns
-a `--campaign=<profile>:<seq>` story position into an ordinary chapter and mission; `Attach` arms
-the graph once every runtime a directive can touch is up; `Step` runs the graph, the roster's
-escort repair and the mission's two music duties; `BuildRoster` plans and spawns the `aiv` blocks
-through `CampaignRoster.cs`. The nested `World` is the `IObjectiveWorld` implementation, where a
-directive with no seam in this session is a named no-op. Mission end records the attempt, folds
-the persist log into the profile and holds before the cabin. Debrief: [../org/debrief.md](../org/debrief.md).
+class building no node of its own. `ResolveSpec` runs in `GameSession`'s constructor and turns a
+`--campaign=<profile>:<seq>` position into a chapter and mission; `BuildRoster` plans and spawns
+the `aiv` blocks through `CampaignRoster.cs`; `Attach` arms the graph once every runtime a
+directive can touch is up; `BindCallbackHost` takes the `CALLBACK` slot ahead of the generator
+runtime's, where 801 to 803 reactivate the lowest-numbered still-deactivated Black Hat of their
+family, CM19's only launch path; `Step` runs the graph, the escort repair and the music. The
+nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.MissionEndFade` paints. Debrief: [../org/debrief.md](../org/debrief.md).
 
 ## src/Session/CampaignProgression.cs
 The campaign's progression rules over a profile: recording one mission attempt with the original's
@@ -283,12 +283,12 @@ sequence. Read `SurfaceVehicleRuntime.cs` for how one is built.
 ## src/Session/CutsceneController.cs
 The host a story mission's intro or landings definition raises its `CALLBACK` codes to, and the
 session state those codes describe: the world and objectives held, the chrome off and the view off
-the aircraft, the humans out of flight with the episode owner posed on the staged `player` marker,
-the AI parked, the mid-mission airframe swap, the re-placement, and one restore at the definition's
-end or at a skip. A `Node` only so it can tick last in the frame, after the animation advance that
-poses `camera1`. Which definition and which human an episode belongs to is the slot `Own` claims,
-not the raiser of the first code. Codes and their decode:
-[../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
+the aircraft, the humans out of flight with the episode owner posed on the staged `player` marker
+and the runtime's range gates reading where they last flew rather than where the film puts them,
+the AI parked (before any intro plays, whether or not its own data authors 913), the mid-mission
+airframe swap, the re-placement, and one restore at the definition's end or at a skip. A `Node`
+only so it can tick last in the frame, after the animation advance that poses `camera1`. Which
+definition and which human an episode belongs to is the slot `Own` claims, not the raiser of the first code. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 
 ## src/Session/LandingApproachRuntime.cs
 The mid-mission cutscene trigger: a story mission's resolved `LandingApproaches` are tested each
@@ -416,8 +416,8 @@ finished node placed. The crash runtime is OPENED rather than built wherever the
 queue, so the launch frame carries no rig and the prop choreography plays from the queue's
 completion hook. It chains the roster's durability override ahead of the enemy scale and the spawn
 jitter, the engine's own order ([../org/vehicleDamage.md](../org/vehicleDamage.md)), resolves the
-def's authored title for the targeting readout, and owns the one AI skills cache the session's voice
-adapter borrows. Read `FlightRoster.cs` next.
+readout's title, stamps the block's objective marker (flag and both label halves) onto the aeroplane
+it builds, and owns the one AI skills cache the voice adapter borrows. Read `FlightRoster.cs` next.
 
 ## src/Session/HumanFlightAdapter.cs
 `FlightRoster`'s private human-aircraft path: one `Assemble` builds the painted model,

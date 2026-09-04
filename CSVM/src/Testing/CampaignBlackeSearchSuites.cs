@@ -46,6 +46,29 @@ internal static class CampaignBlackeSearchSuites
     // mission picked and can assert the placement rather than describe it.
     private const int WarpSeed = 1;
 
+    // The mission's own opening cutscene, shared with every other story mission but for this one
+    // authoring no re-placement callback in its RESET_STATE, so the hand-back reads
+    // StagePlayerAircraft's captured pose rather than a definition-posed one.
+    private const string IntroAnim = "generic_intro";
+
+    private const float IntroStepDt = 1f / 60f;
+
+    // generic_intro's own scripts run under 40 s on either branch; the budget clears that with
+    // room to spare, and the loop leaves as soon as the episode hands off.
+    private const float IntroDriveBudgetS = 60f;
+
+    // How close the hand-back has to land to the aiv.zrd 'player' block's authored spawn.
+    private const float IntroPlacedToleranceM = 5f;
+
+    // The clearance the handed-back aeroplane needs over whatever surface is under it.
+    private const float IntroClearanceMinM = 10f;
+
+    // The surface probe: cast from this far above a point to this far below it, several chapter
+    // reliefs deep so "no hit" means off the map rather than out of reach.
+    private const float IntroCastUpM = 2000f;
+
+    private const float IntroCastDownM = 8000f;
+
     // The four search locations, and for each the spot check it wakes and the radio line that
     // kills that spot check two seconds later (targets.zrd names them Jimmy's Bar, McCoy's Diner,
     // the Shangri-La dancehall and the C9 brothel).
@@ -99,6 +122,216 @@ internal static class CampaignBlackeSearchSuites
         ctx.WriteArtifact($"test-campaign-blacke-search-{Chapter}-{Mission}.txt", report.ToString());
         ctx.Note($"{Chapter}/{Mission}: Blacke is warped, spotted at 500 m, and a miss reads false");
     }
+
+    // generic_intro's RESET_STATE reparents 'player' back to the world root and raises no 951, so
+    // CutsceneController.Restore hands the aeroplane back through StagePlayerAircraft's captured
+    // home rather than through a definition-posed placement (no 951 names 'player' here at all).
+    // The suite drives the real intro over CM17's own BUILT world, collision up, and reads where
+    // that leaves the pilot against the aiv.zrd 'player' block's authored spawn and the terrain
+    // under it.
+    [Suite("blacke-intro-handoff",
+        "C4/M02's own generic_intro over its BUILT world, collision up: the definition's "
+        + "RESET_STATE authors no re-placement callback, so the hand-back reads "
+        + "StagePlayerAircraft's captured pose, and the episode has to leave the aeroplane "
+        + "within tolerance of the aiv.zrd 'player' block's authored spawn, clear of the "
+        + "terrain measured under it")]
+    internal static void BlackeIntroHandoff(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
+        ctx.RequireData(texturesPath, $"{Chapter} textures");
+
+        var blocks = AiSkills.LoadRoster(missionZrdr);
+        var spawn = PlayerPose(blocks);
+        var report = new StringBuilder();
+        ctx.CutsceneRoots = true;
+        try
+        {
+            ctx.WithWorld(Chapter, collision: true, Mission,
+                world => DriveIntroHandoff(ctx, world, spawn, report));
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+        }
+
+        ctx.WriteArtifact($"test-blacke-intro-handoff-{Chapter}-{Mission}.txt", report.ToString());
+        ctx.Note($"{Chapter}/{Mission}: {IntroAnim} hands back onto the authored spawn, clear of terrain");
+    }
+
+    // A hand-back naming no re-placement (this mission's own generic_intro, and any other episode
+    // that raises no 951) was leaving the flight model at the zero speed and throttle Held pins it
+    // at for every held step, rather than the airspeed and power the aircraft actually carried the
+    // instant staging began. No mission data or cutscene definition needed: this is StageAt's own
+    // contract, isolated with a bare rig and a bare marker.
+    [Suite("cutscene-handoff-speed",
+        "a hand-back naming no re-placement resumes the airspeed and throttle the aeroplane held "
+        + "before a cutscene staged it, rather than the zero speed Held pins the model at for "
+        + "every held step")]
+    internal static void CutsceneHandoffSpeed(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter));
+        var pool = new ProjectilePool(textures, null, null);
+        ctx.Host.AddChild(pool);
+        Node3D? marker = null;
+        try
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            var pos = new Vector3(0f, 500f, 0f);
+            var rig = new FlightController
+            {
+                PlaneModel = model,
+                Collider = PlaneCollider.Build(model),
+                PlayerIndex = FlightRoster.ShooterIdBase - 1,
+                IsHumanPiloted = true,
+                Projectiles = pool,
+                UseKeyboard = false,
+                PadDevices = Array.Empty<int>(),
+                AllowPause = false,
+                Team = AimAssist.PlayerTeam,
+                Name = "CutsceneHandoffSpeedPlayer",
+            };
+            rig.AddChild(model);
+            ctx.Host.AddChild(rig);
+            rig.Setup(new FlightModel(stats), null, new CamParams(), pos, pos + Vector3.Forward,
+                spawnThrottle: 0.8f, spawnSpeed: 180f);
+            float speedBefore = rig.WorldVelocity.Length();
+
+            marker = new Node3D { Name = "CutsceneHandoffSpeedMarker" };
+            ctx.Host.AddChild(marker);
+            marker.GlobalTransform = new Transform3D(Basis.Identity, pos + (Vector3.Up * 2000f));
+
+            rig.StageAt(marker.GlobalTransform); // staging begins: captures the pose and the model
+            rig.Held = true;
+            for (int i = 0; i < 3; i++)
+            {
+                rig.SimStep(1f / 60f); // a held step pins the model at zero speed/throttle
+            }
+
+            rig.Held = false; // ApplyOutOfFlight(false), ahead of StagePlayerAircraft in Restore
+            rig.StageAt(null); // hand-back, no re-placement named
+
+            float speedAfter = rig.WorldVelocity.Length();
+            ctx.Check(speedBefore > 100f,
+                $"the rig spawns at its authored speed ({speedBefore:0.#} m/s)");
+            ctx.Check(speedAfter > speedBefore * 0.9f,
+                $"the hand-back resumes near that speed ({speedAfter:0.#} m/s) rather than the zero Held pinned it at");
+        }
+        finally
+        {
+            marker?.Free();
+            pool.Free();
+            textures.Dispose();
+        }
+    }
+
+    private static void DriveIntroHandoff(TestContext ctx, TestWorld world,
+        (Vector3 Position, Vector3 Forward) spawn, StringBuilder report)
+    {
+        if (world.Session.Aircraft is not { PlayerMarker: not null })
+        {
+            ctx.Check(false, $"the world build staged the '{AircraftStage.PlayerNode}' marker the intro poses");
+            return;
+        }
+
+        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+        var pool = new ProjectilePool(textures, null, null);
+        ctx.Host.AddChild(pool);
+        var cutscene = new CutsceneController();
+        ctx.Host.AddChild(cutscene);
+        try
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var rig = HumanRig(ctx, planesGamez, textures, pool, spawn.Position,
+                spawn.Position + spawn.Forward);
+            cutscene.BindWorld(world.Runtime, world.Session.Aircraft);
+            cutscene.BindRigs(
+                new[]
+                {
+                    new PlayerRig
+                    {
+                        Index = 0,
+                        Camera = ctx.Camera,
+                        HudParent = ctx.Host,
+                        Controller = rig,
+                    },
+                },
+                () => Array.Empty<FlightController>());
+            world.Runtime.CallbackHost = cutscene.Host;
+            // The bootstrap raised this before a host or a rig existed, which is the one thing the
+            // session's own BindRigs re-applies; the suite has to say it for the same reason
+            // (IntroAircraftSuites).
+            cutscene.Host(CutsceneController.CodeOutOfFlight, IntroAnim);
+
+            float? surfaceUnderSpawn = SurfaceUnder(world, spawn.Position);
+            float played = 0f;
+            var marker = world.Session.Aircraft!.PlayerMarker!;
+            var lastMarkerPose = Transform3D.Identity;
+            float markerFarthestFromSpawn = 0f;
+            float sampledAt = -1f;
+            for (float t = 0f; t < IntroDriveBudgetS && (played == 0f || cutscene.Playing);
+                t += IntroStepDt)
+            {
+                world.Runtime.Advance(IntroStepDt);
+                cutscene.Tick();
+                played += cutscene.Playing ? IntroStepDt : 0f;
+                if (cutscene.Playing)
+                {
+                    lastMarkerPose = AnimRuntime.WorldTransform(marker, out _);
+                    markerFarthestFromSpawn = Mathf.Max(markerFarthestFromSpawn,
+                        lastMarkerPose.Origin.DistanceTo(spawn.Position));
+                    if (t - sampledAt >= 1f)
+                    {
+                        sampledAt = t;
+                        string parent = marker.GetParent() is Node3D p ? AnimRuntime.NameOf(p) ?? "?" : "-";
+                        report.AppendLine($"  t={t:0.00} parent={parent} local={marker.Position} "
+                            + $"world={lastMarkerPose.Origin}");
+                    }
+                }
+            }
+
+            var handback = rig.WorldPosition;
+            float? surfaceUnderHandback = SurfaceUnder(world, handback);
+            float offSpawn = handback.DistanceTo(spawn.Position);
+            report.AppendLine($"'{IntroAnim}' episode ran {played:0.##} s, "
+                + $"codes {string.Join("/", cutscene.Codes)}");
+            report.AppendLine($"authored spawn {spawn.Position}, "
+                + $"surface under it {Height(surfaceUnderSpawn)}");
+            report.AppendLine($"'{AircraftStage.PlayerNode}' marker's last pose while playing: "
+                + $"{lastMarkerPose.Origin}, {markerFarthestFromSpawn:0.#} m from spawn at its farthest");
+            report.AppendLine($"handback pose {handback}, surface under it {Height(surfaceUnderHandback)}, "
+                + $"{offSpawn:0.#} m from the authored spawn");
+            ctx.Check(played > 0f && !cutscene.Playing,
+                $"'{IntroAnim}' runs to its handoff with the cutscene host answering its codes");
+            ctx.Check(offSpawn < IntroPlacedToleranceM,
+                $"the hand-back lands within {IntroPlacedToleranceM:0} m of the aiv.zrd 'player' block's authored spawn");
+            ctx.Check(surfaceUnderHandback is { } surface && handback.Y - surface > IntroClearanceMinM,
+                $"and above the surface measured under it, rather than through the single-sided terrain the pilot cannot climb back out of");
+        }
+        finally
+        {
+            cutscene.Free();
+            pool.Free();
+            textures.Dispose();
+        }
+    }
+
+    // The surface under a point, cast from well above it. Null when nothing is there at all.
+    private static float? SurfaceUnder(TestWorld world, Vector3 at)
+    {
+        var space = world.Stage.GetWorld3D().DirectSpaceState;
+        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+            at + (Vector3.Up * IntroCastUpM), at - (Vector3.Up * IntroCastDownM), CollisionLayers.World));
+        return hit.Count > 0 ? ((Vector3)hit["position"]).Y : null;
+    }
+
+    private static string Height(float? y) => y is { } h ? $"{h:0.#}" : "(nothing)";
 
     // The authored shape this suite consumes, read off the shipped file rather than restated. The
     // claim that matters is the last one: nothing but a spot check wakes the mission's PRIMARY 1,

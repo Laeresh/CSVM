@@ -100,26 +100,26 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — The zeppelin's guns and bays
 
-1. ☐ `BL-714` A zeppelin's own turrets fire through its own hull
-2. ☐ `BL-713` The Dante's destroyed broadsides keep firing, and their death lights no gasbag
-3. ☐ `BL-729` A destroyed submarine keeps launching fighters
+1. ◐ `BL-714` A zeppelin's own turrets fire through its own hull
+2. ❌ `BL-713` The Dante's destroyed broadsides keep firing, and their death lights no gasbag
+3. ☑ `BL-729` A destroyed submarine keeps launching fighters
 
 ### Wave B — One aeroplane, one target
 
-11. ☐ `BL-688` The roster objective marker is a stamped flag on the aircraft's own candidate
-12. ☐ `BL-726` A Destroy Support Beam marker leaves the cycle when its beam dies
-13. ☐ `BL-725` CM21's Cabbie carries its objective marker as a friendly
+11. ☑ `BL-688` The roster objective marker is a stamped flag on the aircraft's own candidate
+12. ☑ `BL-726` A Destroy Support Beam marker leaves the cycle when its beam dies
+13. ☑ `BL-725` CM21's Cabbie carries its objective marker as a friendly
 
 ### Wave C — Cutscene hand-backs
 
-21. ☐ `BL-719` CM14's aircraft no longer hang in the sky during a cutscene
-22. ☐ `BL-721` CM17 hands the player back onto a pose the terrain allows
-23. ☐ `BL-722` CM18's Blacke drop runs one camera and hands back clear of the ground
+21. ☑ `BL-719` CM14's aircraft no longer hang in the sky during a cutscene
+22. ☑ `BL-721` CM17 hands the player back onto a pose the terrain allows
+23. ☑ `BL-722` CM18's Blacke drop holds its stage still and hands back clear of the ground
 
 ### Wave D — Mission flow
 
-31. ☐ `BL-730` CM19's Black Hats launch from their hook
-32. ☐ `BL-727` Mission end fades to black over the hold
+31. ☑ `BL-730` CM19's Black Hats launch from their hook
+32. ☑ `BL-727` Mission end fades to black over the hold
 33. ☐ Closing sortie: every landed item judged at the controls
 
 ## Dependency and parallelism notes
@@ -138,7 +138,7 @@ the hold). `D33` is last and needs the author at the controls; it cannot be dele
 
 # Wave A — The zeppelin's guns and bays
 
-## A1 ☐ `BL-714` A zeppelin's own turrets fire through its own hull
+## A1 ◐ `BL-714` A zeppelin's own turrets fire through its own hull
 
 **Goal.** A ring on the far side of a zeppelin holds fire at a player the hull is between it and,
 for as long as the hull is between them; a ring with a clear line still fires.
@@ -174,7 +174,35 @@ active ring.
 bug. Do not make aircraft cover: the decode says world geometry only. Do not widen the exclusion
 to the vehicle; `PlatformOf`'s comment records that this is how rings shoot through their own hull.
 
-## A2 ☐ `BL-713` The Dante's destroyed broadsides keep firing, and their death lights no gasbag
+## A2 ❌ `BL-713` The Dante's destroyed broadsides keep firing, and their death lights no gasbag
+**Outcome.** Disproven against C1/M04's real `piratezep`. A probe suite (`turret-hull-blocks-own-fire`)
+gimbal-sweeps every emplacement's own authored yaw/pitch window for a direction its own hull
+should block (a `WorldRayBlocked`-shaped cast, world layer, own mount excluded), confirms each
+sweep-found obstruction with `WorldRayBlocked`'s own exact call shape (a fixed distance guess can
+clip a thin panel's edge, since `FlightController.WorldPosition` sits meters off the raw placed
+pose), then parks a hostile plane there and ticks the ring in isolation for 8 s. Fourteen of
+piratezep's seventeen emplacements confirm a genuine in-arc, hull-blocked direction, and every one
+holds fire and reads `Blocked`, deterministically across three runs. Both named candidates the
+Evidence had not yet ruled out read clean: the hull's colliders carry `CollisionLayers.World` (the
+engine default; nothing assigns it explicitly) and exist by the time a ring steps (built with the
+world, well before any turret ticks). The reported sustained fire does not reproduce on this rig in
+a static park. A moving-hull probe on the authored leg found no in-arc self-obstruction at the one
+point on the leg it sampled, so it tested nothing, and was not landed. The disproof is headless
+and static, against a report made in flight, so the item stays open until the closing sortie
+(D33) flies a pirate zeppelin's flank in real motion; a leak seen there re-opens the item on the
+collision side, not the turret side. Outside this item's scope: `multiplayer1zep`'s belly ring (`ctur2`) reads a raw,
+unrestricted, no-exclusion ray as clear for over 100 m straight up through where the hull should
+stand, on a hull this plan's own decoded rule ("terrain, water, buildings, zeppelins and trains stay
+solid") says should be solid; this looks like a missing or thin collision mesh specific to that one
+multiplayer rig rather than a `TurretController` defect, and reachability from a hostile ring was
+not confirmed.
+
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
+
 
 **Goal.** A destroyed Dante broadside leaves the volley, and whether a broadside's death should
 light the gasbag above it is settled from the Dante's own record, one way or the other.
@@ -209,7 +237,35 @@ watch for further muzzle flash from them and for any skin fire on the gasbag abo
 answer here. A cannon whose `gunback` is destroyed but whose `healthy` node still answers a hit
 is `BL-672`'s question. Say which half a finding is about.
 
-## A3 ☐ `BL-729` A destroyed submarine keeps launching fighters
+**Outcome.** Both halves are DISPROVEN as reported, on the Dante's own record, with no code
+change. Fire gate: a headless CM24 build logs `'dantezep' broadside wired`, `6+6 cannons`, and
+each of the twelve `lbroadNN`/`rbroadNN` nodes resolves its own `ExistingPool` instance even
+though `piratezep` and `blackswanzep` author the same twelve node names on the same mission,
+because the per-definition symbol-table narrowing (`NameResolver.NarrowToSymbolRoot`) tells the
+three hulls' identically-named cannons apart correctly. A new `zeppelin-broadside` case builds
+the Dante and a held `piratezep` target from C5/M04's own record, engages the broadside, volleys
+6 rounds at the target's in-arc gasbags, destroys one port cannon through `runtime.DamageAt` on
+its own pool, and the volley thins to 5, exactly as the single-zeppelin case already proved.
+Gasbag half: the premise that nothing ties a cannon's death to a gasbag is wrong, since
+`lbroad11`'s own compiled destroy def (`destroy_dtzep_lbroad11-gunback.json`) authors two delayed
+`CallAnimation` events inside its own death sequence, calling its paired panel's burn anim
+(`dtzepleft_gasbag1` at +1 s, `dtzepright_gasbag1` at +8 s), the same link every one of the twelve
+cannons carries to its own paired gasbag by pair number (11/12 to bag1, 21/22 to bag2, 31/32 to
+bag3). Driving `AnimRuntime.Advance` alongside the suite's own sim steps (the established pattern
+in `AnimationAndEffectsSuites.cs`, needed because `_Process`/`_PhysicsProcess` never tick during
+a synchronous suite body) confirms `dtzepleft_gasbag1` starts once the destroyed cannon's own
+sequence reaches it: the link is already live through ordinary `CallAnimation` dispatch, with
+nothing bespoke to add. The evidence does not extend to whether a real projectile's collision
+resolves to the same pool the suite drove directly through `DamageAt`; that hit-routing question
+is `BL-672`'s, out of this item's scope.
+
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
+
+## A3 ☑ `BL-729` A destroyed submarine keeps launching fighters
 
 **Goal.** Once the Barracuda's `subhealthy` node goes inactive, its generator stops launching
 after the same grace the Dante's bay takes.
@@ -238,9 +294,29 @@ sub kill disables the bay after the 3 s grace.
 deviation for the Dante's race. Match on the `healthy` node's name, not the generator's, so the
 notification reaches the same code path the zeppelin's does.
 
+**Outcome.** `AnimRuntime.DamageAt` now raises `DestructibleKilled` with the def's own healthy-role
+node name (found by scanning its Initial sequences, then its `RESET_STATE`, for the same
+healthy/destroyed role words `NotifyHostDied` already matches) the instant a live kill sets a
+pool's status to `Destroyed`, before `RunDeathSequence` runs the choreography. `GameSession` feeds
+it into `AiGeneratorRuntime.NotifyHostDied` beside `ZeppelinRuntime.ZeppelinKilled`, so the
+barracuda's `subhealthy` reaches the same disable-after-grace path the Dante's kill does; a fixed
+installation is no longer a dead end for that call. The evidence's premise held: nothing but the
+new event was needed, the matching and the grace timer were already correct. A pre-existing,
+unrelated defect surfaced while proving this: the same live kill's own death choreography (via
+`SyncDestructiblePool`) can revert a destroyed pool back to `Healthy` when its death sequence
+deactivates a `dbase`-role node without a matching `destroyed`-role reactivation, as the
+barracuda's own death does; the notification fires before that revert, so the generator disable is
+unaffected, but the pool's own `Status`/`Health` bookkeeping is left wrong afterward.
+
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
+
 # Wave B — One aeroplane, one target
 
-## B11 ☐ `BL-688` The roster objective marker is a stamped flag on the aircraft's own candidate
+## B11 ☑ `BL-688` The roster objective marker is a stamped flag on the aircraft's own candidate
 
 **Goal.** An aircraft that carries a roster objective flag is offered once, under its own name,
 with Objective outranking Enemy Target where it is both; it is not selectable before it wakes or
@@ -280,7 +356,37 @@ box with a category and no name line (`docs/org/targeting.md:668-670`). CM15's n
 generator-launched template, so the stamp must reach an aircraft the bay launches. `BL-686` is a
 feature proposing this seam and has landed no code.
 
-## B12 ☐ `BL-726` A Destroy Support Beam marker leaves the cycle when its beam dies
+**Outcome.** A roster block that authors `objectiveTarget` now carries its marker on its own
+aeroplane. `CampaignRosterPlan.SpawnFor` puts slots 37, 38 and 39 into `AiSpawn`,
+`AiFlightAssembler` resolves the two labels and stamps all three onto the spawned
+`FlightController`, and `TargetPool.Offer` reads that flag off a vehicle candidate, so one
+candidate reaches the Enemy cycle ranked Objective, named by the block's slot 20, labelled off
+slots 38 and 39, and present only while the aeroplane is. The roster branch is out of
+`ObjectiveSites` entirely (the `rosterMarkers` parameter, `RosterAircraftPosition` and the
+roster-label fallback), which leaves its site branch as the single unconditional `Live` `B12`
+gates. The traced hypothesis held in full: the raw block name, the double candidate and the
+missing wake/death gate were all the synthetic candidate, and deleting it fixed all three at once.
+Because the funnel is `SpawnFor`, a bay launch is stamped by the same call, which is what reaches
+CM24's Miles. `CampaignDirector` owns the label from the spawn on, so the two things the deleted
+per-frame branch used to do still happen: a completing `REMOVE_OBJECTIVE_TARGET` retires the marker
+(`RetireObjectiveMarkers`), and a `SET_HELP_LABEL` rewrites the category on the rig at the moment
+the directive runs (`ApplyHelpLabels` off the graph's `TargetsChanged`, re-applied at
+`RegisterObjectiveMarker` so a launch arriving after the write still gets it). The label key and
+the roster key are the same name in every shipped case, a bay launch included, since
+`stihellhound_5_7` is booked under the `stihellhound_5_eg0` the script writes to. Two things the
+evidence does not settle: whether CM24's generator credits the launch before or after the objective
+that relabels Miles, which only the mission run can show, and CM02's blank name line, since
+`PlaneRoster.PlaneDisplayName` still falls back to the AI def's title for a block with an empty
+slot 20 (the CM02 suite records it reading "British Balmoral") and the marker has no "print no
+line" state. That fallback is `BL-637`'s question and is deliberately untouched here.
+
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
+
+## B12 ☑ `BL-726` A Destroy Support Beam marker leaves the cycle when its beam dies
 
 **Goal.** A `targets.zrd` site whose resolved node is destroyed is no longer selectable, whether
 or not its objective has completed.
@@ -304,7 +410,29 @@ controls (`D33`): CM21, destroy one beam, cycle targets.
 branch; do not start it before `B11` lands. `BL-400` (a curated Non-Aircraft cycle) is a feature,
 not this.
 
-## B13 ☐ `BL-725` CM21's Cabbie carries its objective marker as a friendly
+**Outcome.** A site candidate's `Live` now reads `ObjectiveSites.LiveDespiteState`, a pure function
+of its resolved node's own `DestructibleRegistry.State`, false only once that state is `Destroyed`
+and true for anything else (healthy, damaged, unresolved, or no registered pool at all) — the same
+state `ZeppelinRuntime.ZoneIsAlive` already reads for a gasbag or engine zone, reused rather than
+duplicated. `RemovedByCompletion`'s objective-side removal is unchanged and independent, so a
+destroyed site with its own `REMOVE_OBJECTIVE_TARGET` still pending is offered (kept in the cycle's
+list) but no longer selectable. Proven three ways: engine-free in `ObjectiveSitesTests` against the
+pure state function directly; in a new engine suite, `campaign-support-beam-destroyed`, against
+C5/M01's own `rfspt4` node and destructible wiring, its `ADD_OBJECTIVE_TARGET` reached through a
+synthetic objective appended to the mission's own shipped script (the real one gates on a flown
+TRAVELERS approach this suite has no leg to satisfy) and woken directly, then killed by a real
+`AnimRuntime.DamageAt` hit before any `REMOVE_OBJECTIVE_TARGET` runs; and by hand-reverting the
+gate to prove each assertion fails without it. `CampaignMarkerSuites` is untouched. The evidence
+does not settle whether CM21's own flown approach to a beam reaches the kill fast enough to matter
+in play, which is `D33`'s to watch at the controls.
+
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
+
+## B13 ☑ `BL-725` CM21's Cabbie carries its objective marker as a friendly
 
 **Goal.** From the mission's start the Cabbie shows an objective marker and is not offered as an
 enemy target.
@@ -333,9 +461,45 @@ CM21 to the taxi's take-off.
 hostility from it. `BL-635`'s closing commit (`git log --grep=BL-635`) is CM11's stunt planes on the
 same marker path; read it before re-chasing the stamp.
 
+**Outcome.** Both open questions resolved against the mission's own data and `B11`'s already-landed
+mechanism, and neither named a runtime bug: `B11` fixed this block along with the other seven when
+it landed. `OBJECTIVE20`'s `TRAVELERS` condition on `autogyro_1` carries no `BEGIN_DORMANT` of its
+own and is live from the mission's start, but its target is the roster block itself, which ships
+`deactivated` and stays out of the world (`Inert`, no candidate on any cycle) until `OBJECTIVE28`'s
+`WAKEUP_ENEMIES` un-dormants it; `OBJECTIVE28` is itself dormant until `OBJECTIVE2` completes, on
+the player's own approach to `dz1`. So the original could not have shown a marker on this block
+from the mission's start either: the aeroplane does not exist yet, and the report's "from the
+mission's start" is read as "from the point the mission actually introduces it," which the traced
+timeline explains without any code being wrong. For "reads hostile": `autogyro_1` authors team 0,
+read verbatim by `CampaignRoster`'s spawn into `FlightController.Team`, and `TargetRef.Classify`
+already tests `objectiveTarget` before the team split (`B11`'s own order), so the block classifies
+Objective on the Enemy cycle regardless of its team, exactly as `docs/org/targeting.md`'s class
+model requires. Its help label, `MSG_OBJ_FOLLOW` ("Follow"), is not one of the four destructive
+categories the decode reds out, and `TargetHud.MarkerColor` already colours off the category alone,
+never off team, so the shipped marker draws blue, the decode's own "non-destructive objective"
+colour, not red or green. A traced run of a new suite (`campaign-cm21-cabbie-marker`) over C5/M01's
+own built roster and objective graph confirms all of this end to end: no candidate at all while the
+block sleeps, exactly one Objective-ranked candidate named "Cabbie" once `OBJECTIVE28` wakes it,
+labelled off its own slots with no category half, coloured blue by `TargetHud.MarkerColor`, and none
+again once it is shot down. `CampaignRosterObjectiveMarkerSuites.cs` (`CheckAuthored`/`Drive`) is
+generalised to take the block, labels and wake objective as parameters so this suite and CM15's
+share one drive rather than a second copy. No production code changed: this is a correct disproof
+of both hypotheses in the item's Evidence, standing entirely on `B11`'s mechanism. What the evidence
+does not settle: what the player actually saw at the controls that read as "hostile" before `B11`
+landed (no marker or label at all is also consistent with the report, and is what every one of the
+eight blocks showed before that fix), and whether the Cabbie's paint scheme (`ShippedSkins` off
+`Team != PlayerTeam`) reads as enemy-liveried at a glance, which is a look judgement for `D33`, not
+a target/HUD mechanism.
+
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
+
 # Wave C — Cutscene hand-backs
 
-## C21 ☐ `BL-719` CM14's aircraft no longer hang in the sky during a cutscene
+## C21 ☑ `BL-719` CM14's aircraft no longer hang in the sky during a cutscene
 
 **Goal.** While CM14's intro or docking cutscene plays, no AI aircraft is drawn motionless in the
 sky.
@@ -365,7 +529,34 @@ alive, dock, watch the sky during the film.
 
 **⚠ Traps.** Check both cutscenes. Do not hide aircraft by team or by distance.
 
-## C22 ☐ `BL-721` CM17 hands the player back onto a pose the terrain allows
+## C22 ☑ `BL-721` CM17 hands the player back onto a pose the terrain allows
+**Outcome.** Fixed for the intro; the docking cutscene reads clean. A headless trace over CM14
+(C2B/M04) killed all three named candidates as the direct cause: `SessionSimulation` returns
+before the generator phase whenever the world is held, so a wave cannot spawn mid-hold at all;
+`ParkAi`'s own `!ai.Inert` gate correctly leaves a genuinely dormant roster aircraft alone; and
+`ApplyPresence`'s pivot hide already works, proven separately by the passing wing-walk park in
+`CaptureGroupSuites`. The real cause sat upstream of all three: CM14's own intro definition
+(`generic_intro`, shared by twelve of the thirteen story missions) authors no `CALLBACK` 913 at
+all, only the bespoke C1/M04 intro does, yet the decode says the original parks every AI vehicle
+imperatively at every new-mission start regardless of what codes that mission's own intro data
+authors. `CutsceneController` only parked on a literal 913 dispatch, so an aircraft already flying
+when a non-C1/M04 intro opened (a Gemini fighter the mission's own generator had launched, over
+CM14) stayed drawn and motionless for the whole intro. `CutsceneController.Act`'s `CodeHoldsWorld`
+case now forces the park the instant an intro takes the session, whether or not 913 is later also
+authored. The docking cutscene (`hooked_to_klondike`) is untouched: it authors no 913 in the
+original either, and its background AI is meant to keep flying through a hookup or a drop. The new
+`cutscene-ai-park-intro` suite proves the fix over CM14's own generator and roster data, red before
+the change (the park assertion failed) and green after; it also proves the generator stays silent
+through the hold and resumes once the intro hands off. This does not settle whether the same
+imperative gap affects `player_setup`'s Instant Action bootstrap, which authors the same nine codes
+outside a story mission and is out of this item's scope.
+
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
+
 
 **Goal.** After CM17's intro the player is in flight at the authored spawn, not against the
 terrain, and no jump or hitch follows.
@@ -395,7 +586,36 @@ briefing, watch the first second after the intro.
 **⚠ Traps.** CM17's Blacke search warps the player (`git log --grep=CM17`); confirm the crash is
 at the intro, not after that warp. The respawn jumping is read, not fixed, until the pose is.
 
-## C23 ☐ `BL-722` CM18's Blacke drop runs one camera and hands back clear of the ground
+**Outcome.** The restored pose itself was never wrong: a headless run over CM17's own BUILT world
+(collision up) shows `StagePlayerAircraft`'s hand-back landing exactly on the aiv.zrd `player`
+block's authored spawn, both by position and by a direct print of `_stagedFrom`, with 78 m of
+clearance under it. What the same run shows going wrong is the flight model's speed and throttle:
+`Held` pins both at zero for every step it holds (its own weapon-lab contract, reused for the
+cutscene), and the no-951 hand-back never re-seeded them, so the aeroplane resumed on a dead
+engine at zero airspeed instead of on the speed and power it actually carried into the hold.
+`FlightController.StageAt` now captures the model's speed and throttle alongside `_stagedFrom` the
+instant staging begins, and restores them on a hand-back that names no re-placement, the same way
+the 951 branch already restores a resume speed. A new engine-free suite, `cutscene-handoff-speed`,
+isolates the mechanism with a bare rig and a bare marker (no mission data needed) and is red before
+this change, green after. A second suite, `blacke-intro-handoff`, drives CM17's real `generic_intro`
+over its own built world and pins the hand-back within 5 m of the authored spawn and 10 m clear of
+the terrain under it; it was already green before this change; and confirms the crash is at the
+intro's own hand-back, never reaching the mission's later `WARP_VEHICLE` (`campaign-blacke-search`
+covers that separately and is unchanged). The hand-back speed is the authored one: `PLAYER_INIT`'s
+180 decodes to 18 m/s through the original's 0.1 scale (`SpawnPoints.SpeedScale`), so the aeroplane
+resumes at the speed the mission authors, not under-powered. No story intro raises a 951, so the
+same zero-speed hand-back sat under all fourteen missions that open on a cutscene (the twelve on
+`generic_intro`, C1/M04's bespoke intro and C3/M03's `cgzep_camera`), and every one of them changes
+with this. The headless run still grazes a rise about 725 m from spawn a few seconds after control
+returns, which is the flown path at 18 m/s and a judgement for `D33`.
+
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
+
+## C23 ☑ `BL-722` CM18's Blacke drop holds its stage still and hands back clear of the ground
 
 **Goal.** The drop cutscene holds one camera for its length, and control returns on a pose that
 does not crash the player.
@@ -428,9 +648,43 @@ CM18, approach the drop from each side.
 launch-frame hitch is on this mission and is not this. A trace that shows one camera starting
 means the flicker is a different writer, and the item's title changes with it.
 
+**Outcome.** Fixed, and the item's title changed with the trace: the flicker is a different writer,
+not a second camera. A headless trace over CM18 (C4/M03), flying each approach side in at 60 m/s
+over the mission's own BUILT world with a real rig and a real cutscene host, shows exactly one
+camera definition starting per side and the correct one (`bdrop_ew_cam` from the east,
+`bdrop_we_cam` from the west). `AnimRuntime.Start`'s node-state gate honours the fork, so
+wrong-claim 1 is confirmed dead, and wrong-claim 2 held too: `bdplayer` stops and invalidates both
+drop definitions, but only after its own SI script, 4.45 s into the shot. That delay is where the
+defect lives. `blacke_drop_east` polls `If PlayerRange 4096` (64 m, the compiled value being metres
+squared) from `blk_e_marker` every 0.2 s for the whole shot, and each poll writes `blacke_marker`'s
+absolute yaw, 0 in the near branch and half a turn in the far one. `bdplayer` has meanwhile
+reparented `player` under `blacke_marker`, so the pilot the poll measures rides the very stage the
+poll re-poses: yawing the stage swings him from 15.9 m to 175.3 m from `blk_e_marker` and back, and
+the two chase each other at the poll rate for the rest of the drop. The camera hangs off the same
+stage, so it jumped about 297 m five times a second, which is the reported "camera jumps back and
+forth really fast", and the hand-back landed on whichever half of the limit cycle the shot ended
+in. A range gate now reads where the pilots last flew rather than where a film is putting them:
+`AnimRuntime.RangePositions` answers from a per-frame sample of the flying pose while
+`PlayerRangeHeld` is set, and `CutsceneController.ApplyOutOfFlight` sets it as the cutscene takes
+and returns flight. The hold is on out-of-flight and not on the world hold, because this drop
+raises code 11 and never code 20. The new `blacke-drop-cameras` suite drives both sides and was red
+on the stage-still assertion before the change (180 degrees of turn on each side) and green after
+(0 on each side); the one-camera and clearance assertions were already green, which is the evidence
+that the pair was never the cause. The hand-back is now mirrored per side as authored, at
+(-7753.9, 501.0, -2675.8) from the east and (-7691.2, 501.0, -2184.4) from the west, each over 130 m
+above the surface measured under it. This does not settle whether the drop reads well at the
+controls, only that one camera composes it over a stage that holds still; the shot's framing and
+`BL-699`'s separate launch-frame hitch on the same mission are for `D33`.
+
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
+
 # Wave D — Mission flow
 
-## D31 ☐ `BL-730` CM19's Black Hats launch from their hook
+## D31 ☑ `BL-730` CM19's Black Hats launch from their hook
 
 **Goal.** CM19's `bhatwarhawk_*` and `bhatbrigand_*` roster aircraft appear when their objectives
 wake `launch_warhawk`/`launch_brigand`.
@@ -462,7 +716,33 @@ warning.
 **⚠ Traps.** The mission also swaps the player onto the Warhawk (966), so "no enemies" may be
 read after the swap; check the timeline. Do not fall back to spawning the roster enabled.
 
-## D32 ☐ `BL-727` Mission end fades to black over the hold
+**Outcome.** A Black Hat now leaves the hook on the launch definition's own `CALLBACK`. The
+hypothesis that the place definition activates the roster rig is DEAD: `ai_warhawk_place` only
+parents the display node `anim2_warhawk` under `bmhookpoint` and translates it, and `launch_warhawk`
+switches that same display node on and off around an SI-script hook run. What ties the definition
+to the roster is the code it raises, 801, which the repo had already decoded
+(`docs/formats/anim-definitions/cutscenes.md`: 801 to 803 reactivate the first still-deactivated
+`bhatwarhawk`/`bhatbrigand`/`bhatgyro`, the primitive `WAKEUP_ENEMIES` uses) and then declined at
+runtime. `CampaignDirector.BindCallbackHost` takes the `CALLBACK` slot ahead of the generator
+runtime's and answers the three codes by activating the lowest-numbered still-deactivated member of
+that family, through the same un-dormanting path `WAKEUP_ENEMIES` uses, so the roster still spawns
+deactivated. A CM19 trace confirmed the front half before the change: `campaign: WAKE_ANIM
+'launch_warhawk' started 1 definition(s)` fired twice inside 60 s of sim with all twenty roster
+aircraft still `DEACTIVATED`; after it the same run logs `campaign: CALLBACK 801 launched
+'bhatwarhawk_1' off the hook`, then `bhatwarhawk_2`, and the second is tracked and engages.
+⚠ The evidence does not settle where a launched Black Hat should APPEAR: the original's 801 case
+reactivates in place and does not re-place, so the rig comes up at its roster spawn, which C4/M04
+authors 37 m below the terrain height there for all fifteen blocks. Both launched aircraft flew out
+on their net without an under-map report, but whether the launch reads right at the controls is a
+judgement for `D33`.
+
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
+
+## D32 ☑ `BL-727` Mission end fades to black over the hold
 
 **Goal.** Every mission ending, win or loss, fades the screen to black over the two-second hold,
 and the next screen opens on black.
@@ -491,6 +771,23 @@ controls (`D33`): any mission to its end, a win and a loss.
 Do not lengthen the hold. Every suite that advances the clock by `LeavingHoldS` must still pass
 unchanged.
 
+**Outcome.** `CampaignDirector.LeavingFade` reads `Result`/the counting-down `_leaving` field and
+returns 0 before any ending, the hold's own linear ramp while `_leaving` is still counting down,
+and 1 once it reaches zero and stays there (`Leaving` itself goes false at that point, so the
+property reads `Result` rather than that flag). `UI.MissionEndFade`, a new full-screen `ColorRect`
+on `HudLayers.Hud`, polls that property every frame and is built per rig beside `ObjectivesHud` in
+`GameSession`, mounted only for a campaign session; nothing in `CampaignDirector.Step` or `Leave`
+changed. `CampaignSuites`' `campaign-mission-end` now asserts the fade at 0 s, 1 s into the hold and
+at the hold's own end (1, halfway, fully black), and `CampaignMissionLossKeepsObjectiveBits` asserts
+the loss ending lands fully black too, so both endings are covered. No golden in
+`analysis/goldens/manifest.json` covers a mission end, so none needed a re-pin.
+
+**Verified.** On the merged plan branch with all eleven items in, the complete battery is
+green at zero warnings: 3380 units, 248 engine suites with engine errors clean, 18 goldens
+hash-identical, exit 0; the 8-chapter `--freecam` regression exits 0 in every chapter with no
+error line and the usual node and mesh counts. Each item's own red-then-green run and its
+branch battery are in its landing commit (`git log --grep=<BL id>`).
+
 ## D33 ☐ Closing sortie: every landed item judged at the controls
 
 **Goal.** Each landed item's *Playtest after fix* line, as written in its section above, is flown
@@ -511,3 +808,21 @@ end for `D32`. Prepare the sitting's launch commands from the items' lines befor
 **⚠ Traps.** Do not close an item on an instrument alone when its line names something to watch
 for; the Gemini's bays and the AI evasion are not in this plan and a finding about them is a new
 filing, not a re-opening.
+
+**Sitting.** Copy and rename a profile first (`user://Profiles/`), then in this order, each
+`.\RunGame.ps1 --campaign=<profile>:<seq>`:
+
+| Seq | Mission | Item | Watch for |
+|---|---|---|---|
+| 3 | CM04 | `A3` | sink the sub, wait a wave period: no further launch from the bay |
+| 13 | CM14 | `C21` | fly to the Pandora with enemies alive, dock: no aircraft hanging in the sky during either film |
+| 16 | CM17 | `C22` | the first second after the intro: in flight at the authored spawn, no stall onto the terrain, no jump |
+| 17 | CM18 | `C23` | the Blacke drop from each side: one camera, a still stage, control back clear of the ground |
+| 18 | CM19 | `D31` | the first two Warhawks appear off the hook (where they appear is the open question); whether anything sits on the hook before a launch is `BL-734` |
+| 20 | CM21 | `B12`, `B13` | destroy one beam and cycle targets: its marker gone; the Cabbie a blue Follow marker once the taxi starts, not offered as an enemy, its paint read too |
+| 23 | CM24 | `A2`, `B11` | kill two broadsides on one side: no further muzzle flash, skin fire on the panel above (a leak here is `BL-672`); Miles's marker before and after his death |
+| any | any end | `D32` | a win and a loss: a smooth fade to black over the hold, the next screen opening on black |
+| IA | Dogfight, pirate zeppelin | `A1` | fly along the hull on the side away from its active ring, in motion: any sustained fire through the hull |
+
+`B11`'s other lines are CM02's Balmorals (one bracket each, the category, and the name line the
+airframe fallback still prints, which is `BL-637`'s decision), CM15's Tex, CM11's stunt planes.

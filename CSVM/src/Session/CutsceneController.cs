@@ -711,6 +711,15 @@ public sealed partial class CutsceneController : Node
                 // skip is what the player is then offered.
                 Skippable = true;
                 WorldHeld?.Invoke(true);
+                // The original parks the AI before every mission's intro regardless of what codes
+                // that intro's own data authors; the shared generic_intro never raises 913, and
+                // the bespoke intros that do (C1/M04, C3/M03) restate a state already entered.
+                if (IsIntro(Anim) && !AiParked)
+                {
+                    AiParked = true;
+                    ParkAi();
+                }
+
                 break;
             case CodePresentation:
                 Presenting = true;
@@ -859,6 +868,14 @@ public sealed partial class CutsceneController : Node
             pilot.Held = on;
             pilot.Inert = on;
             pilot.Audio?.SetPaused(on);
+        }
+
+        // A pilot the film is posing is no longer where a PLAYER_RANGE poll should read him:
+        // the drop reparents his aeroplane onto the very marker one of the mission's own polls
+        // re-poses, and the two then chase each other (AnimRuntime.RangePositions).
+        if (_runtime != null)
+        {
+            _runtime.PlayerRangeHeld = on;
         }
 
         // ⚠ In the same instant, not on the next tick: the definition raising this code goes on

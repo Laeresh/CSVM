@@ -123,6 +123,10 @@ public sealed class RosterSpawnPlan
     /// on <see cref="ObjectiveTarget"/> before treating this as a message key.</summary>
     public string? HelpLabel { get; init; }
 
+    /// <summary>The block's own <c>categoryLabel</c> (slot 38) raw: the MSG_* key the label half of
+    /// its marker's line 1 prints, beside <see cref="HelpLabel"/>'s category half.</summary>
+    public string? CategoryLabel { get; init; }
+
     /// <summary>The menu-chosen loadout laid over the stock table, the campaign wingman's only.</summary>
     public LoadoutChoice? Fit { get; init; }
 
@@ -297,6 +301,7 @@ public sealed class CampaignRosterPlan
                 Title = AiSkills.RosterTitle(fields),
                 ObjectiveTarget = AiSkills.RosterObjectiveTarget(fields),
                 HelpLabel = AiSkills.RosterHelpLabel(fields),
+                CategoryLabel = AiSkills.RosterCategoryLabel(fields),
                 Fit = planeNode == wingmanNode ? wingmanFit : null,
                 Scheme = handover is { } paint
                          && name.Equals(AirframeHandover.WingmanName, StringComparison.OrdinalIgnoreCase)
@@ -336,12 +341,12 @@ public sealed class CampaignRosterPlan
         machine.ActivationRange = Mathf.Max(machine.ActivationRange, minAiActiveDist);
     }
 
-    /// <summary>The spawn record a planned block launches as. The block's own representative
-    /// rating arms the gunner and machine; its authored slots then outrank the def's inside the
-    /// spawner. A campaign enemy keeps its militia's skins; the player's side takes the default
-    /// pattern. ⚠ Leave <paramref name="nodeName"/> unset: the block's own name is what
-    /// <c>primary_target</c> and <c>rating_biases</c> are authored against; only a generator launch
-    /// overrides it. ⚠ Refuses a <see cref="RosterSpawnPlan.Surface"/> plan: a hull has no airframe.</summary>
+    /// <summary>The spawn record a planned block launches as, a generator launch included: its
+    /// representative rating arms the gunner and machine, its authored slots outrank the def's,
+    /// and its objective-marker slots ride onto the aeroplane. A campaign enemy keeps its militia's
+    /// skins; the player's side takes the default pattern. ⚠ Leave <paramref name="nodeName"/> unset
+    /// outside a generator launch: <c>primary_target</c> and <c>rating_biases</c> are authored
+    /// against the block's own name. ⚠ Refuses a Surface plan: a hull has no airframe.</summary>
     public static AiSpawn SpawnFor(RosterSpawnPlan plan, Vector3 pos, Vector3 lookAt, AiPilot pilot,
         string? nodeName = null) =>
         plan.Surface
@@ -351,7 +356,9 @@ public sealed class CampaignRosterPlan
             AiDef: plan.AiDef, Fit: plan.Fit,
             AttackRating: InstantActionRuntime.RepresentativeRating(plan.Skills),
             Nitro: plan.Nitro, RosterSkills: plan.Skills, NodeName: nodeName ?? plan.Name,
-            PilotName: plan.Title, InitHealth: plan.InitHealth, Armor: plan.Armor);
+            PilotName: plan.Title, InitHealth: plan.InitHealth, Armor: plan.Armor,
+            ObjectiveMarker: plan.ObjectiveTarget,
+            ObjectiveTypeLabel: plan.CategoryLabel, ObjectiveCategory: plan.HelpLabel);
 
     /// <summary>The generator parameter blocks of one mission, keyed by the
     /// <c>vehicle.params</c> label a generator names. Mission data, so a launch resolves its block

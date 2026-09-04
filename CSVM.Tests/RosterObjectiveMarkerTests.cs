@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -10,10 +10,11 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The roster's own objective-marker fields (docs/formats/ai-rosters.md "Field table"): slot 37
-/// <c>objectiveTarget</c>, a strict boolean, and slot 39 <c>helpLabel</c>, the MSG_OBJ_* key a
-/// flagged block carries. Pins the boolean gate, the raw pass-through of a non-key string when the
-/// flag is unset (C4/M05's <c>blakepeace_3_1</c>/<c>_2</c> author <c>"Blake Aviation"</c> here),
-/// and the seam that carries both into <see cref="RosterSpawnPlan"/>.
+/// <c>objectiveTarget</c>, a strict boolean, slot 38 <c>categoryLabel</c> and slot 39
+/// <c>helpLabel</c>, the two label halves a flagged block's marker prints. Pins the boolean gate,
+/// the raw pass-through of a non-key string when the flag is unset (C4/M05's
+/// <c>blakepeace_3_1</c>/<c>_2</c> author <c>"Blake Aviation"</c> here), and the seam that carries
+/// all three into <see cref="RosterSpawnPlan"/> and on to the aircraft the block spawns as.
 /// </summary>
 public class RosterObjectiveMarkerTests
 {
@@ -58,22 +59,44 @@ public class RosterObjectiveMarkerTests
         Assert.Null(AiSkills.RosterHelpLabel(new List<object?>()));
     }
 
-    // The seam: CampaignRosterPlan.Build reads both slots into RosterSpawnPlan, which
-    // CampaignDirector.BuildRoster's registration gates on ObjectiveTarget before booking a label.
+    // AiSkills.RosterCategoryLabel: slot 38, the label half of the marker's line 1. Exactly one
+    // shipped block authors it, so the empty case is the one a reader meets everywhere else.
     [Fact]
-    public void BothFieldsReachThePlannedBlock()
+    public void CategoryLabelReadsSlot38AndIsNullWhenEmpty()
+    {
+        Assert.Equal("MSG_BOMBER_NAME",
+            AiSkills.RosterCategoryLabel(Block(1f, "MSG_OBJ_DEFEND", "MSG_BOMBER_NAME")));
+        Assert.Null(AiSkills.RosterCategoryLabel(Block(1f, "MSG_OBJ_FOLLOW")));
+        Assert.Null(AiSkills.RosterCategoryLabel(new List<object?>()));
+    }
+
+    // The seam: CampaignRosterPlan.Build reads all three slots into RosterSpawnPlan, and
+    // CampaignRosterPlan.SpawnFor carries them onto the aircraft the block spawns as.
+    [Fact]
+    public void AllThreeFieldsReachThePlannedBlockAndItsSpawn()
     {
         var plan = CampaignRosterPlan.Build(new List<(string, List<object?>)>
         {
             ("secfury_5", Block(1f, "MSG_OBJ_FOLLOW")),
+            ("secfury_6", Block(1f, "MSG_OBJ_DEFEND", "MSG_BOMBER_NAME")),
             ("secfury_1", Block(0f, "")),
         }, Defs, Nets);
 
         var byName = plan.Spawns.ToDictionary(s => s.Name);
         Assert.True(byName["secfury_5"].ObjectiveTarget);
         Assert.Equal("MSG_OBJ_FOLLOW", byName["secfury_5"].HelpLabel);
+        Assert.Null(byName["secfury_5"].CategoryLabel);
+        Assert.Equal("MSG_BOMBER_NAME", byName["secfury_6"].CategoryLabel);
         Assert.False(byName["secfury_1"].ObjectiveTarget);
         Assert.Null(byName["secfury_1"].HelpLabel);
+
+        var spawn = CampaignRosterPlan.SpawnFor(byName["secfury_6"], Vector3.Zero,
+            Vector3.Forward, new AiPilot());
+        Assert.True(spawn.ObjectiveMarker);
+        Assert.Equal("MSG_BOMBER_NAME", spawn.ObjectiveTypeLabel);
+        Assert.Equal("MSG_OBJ_DEFEND", spawn.ObjectiveCategory);
+        Assert.False(CampaignRosterPlan.SpawnFor(byName["secfury_1"], Vector3.Zero,
+            Vector3.Forward, new AiPilot()).ObjectiveMarker);
     }
 
     private static List<object?> Props(params object?[] pairs)
@@ -89,7 +112,8 @@ public class RosterObjectiveMarkerTests
 
     // An 81-slot block, the shape the shipped rosters author: netids, position, yaw, team, group,
     // enabled, primary_target, then objectiveTarget at 37 and helpLabel at 39, -1/0 elsewhere.
-    private static List<object?> Block(float objectiveTarget, string helpLabel)
+    private static List<object?> Block(float objectiveTarget, string helpLabel,
+        string categoryLabel = "")
     {
         var fields = new List<object?>(81);
         for (int i = 0; i < 81; i++)
@@ -108,7 +132,7 @@ public class RosterObjectiveMarkerTests
         fields[21] = 0f;
         fields[33] = null;
         fields[37] = objectiveTarget;
-        fields[38] = "";
+        fields[38] = categoryLabel;
         fields[39] = helpLabel;
         fields[40] = 0f;
         fields[66] = -1f;

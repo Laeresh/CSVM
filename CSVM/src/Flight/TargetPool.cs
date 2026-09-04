@@ -48,11 +48,11 @@ public sealed class TargetPool
     }
 
     /// <summary>Rebuilds all three cycles through <see cref="TargetRef.Classify"/>, dropping
-    /// <paramref name="self"/> by reference. Selectable structures reach it through
-    /// <paramref name="subParts"/> and the mission's objective sites through
-    /// <paramref name="objectives"/>. ⚠ Never walk <see cref="AimCandidateSet.Structures"/>: it is
-    /// the destructible registry, so every crate would land on a cycle. ⚠ <paramref name="ownTeam"/>
-    /// is the <see cref="FlightController.Team"/> FIELD (see <see cref="TargetHud.OwnTeam"/>).</summary>
+    /// <paramref name="self"/> by reference. Structures reach it through
+    /// <paramref name="subParts"/> and the mission's <c>targets.zrd</c> SITES through
+    /// <paramref name="objectives"/>; a marker-carrying aeroplane arrives on its own vehicle
+    /// candidate, never twice. ⚠ Never walk <see cref="AimCandidateSet.Structures"/>: every crate
+    /// would land on a cycle. ⚠ <paramref name="ownTeam"/> is the <c>FlightController.Team</c> FIELD.</summary>
     public void Rebuild(AimCandidateSet scan, IReadOnlyList<AimCandidate>? subParts, int ownTeam,
         object? self, IReadOnlyList<AimCandidate>? objectives = null)
     {
@@ -149,7 +149,8 @@ public sealed class TargetPool
     /// (which is why an unrecognised source still lands in the right cycle with an empty name rather
     /// than vanishing); the source supplies only the strings and the health figures. This is the one
     /// place in the targeting path that reads a concrete source type at all.</summary>
-    private static TargetRef Describe(AimCandidate c, AimTargetKind kind, TargetClass cls)
+    private static TargetRef Describe(AimCandidate c, AimTargetKind kind, TargetClass cls,
+        bool objective)
     {
         string name = NameOf(c.Source);
         switch (kind)
@@ -163,7 +164,8 @@ public sealed class TargetPool
                 return TargetRef.ForAircraft(c, cls, name,
                     plane?.Stats is { } stats ? PlaneRoster.PlaneDisplayName(stats) : null,
                     dmg == null ? null : TargetRef.Fraction(dmg.WholeHealth, dmg.WholeHealthMax),
-                    dmg == null ? null : TargetRef.Fraction(dmg.WholeArmor, dmg.WholeArmorMax));
+                    dmg == null ? null : TargetRef.Fraction(dmg.WholeArmor, dmg.WholeArmorMax),
+                    objective, plane?.ObjectiveTypeLabel, plane?.ObjectiveCategory);
             case AimTargetKind.Turret:
                 // No health figure exists for an emplacement: the retail loaders read no HEALTH key
                 // and its aliveness is its healthy node's visibility.
@@ -206,21 +208,27 @@ public sealed class TargetPool
             return;
         }
 
+        // An aeroplane whose own roster block authors the flag is the mission's marker: one
+        // candidate, ranked Objective ahead of every Enemy Target, rather than a synthetic site
+        // beside the aeroplane it stands on (docs/org/targeting.md).
+        bool objective = objectiveTarget
+            || (kind == AimTargetKind.Vehicle && c.Source is FlightController { ObjectiveTarget: true });
+
         // ⚠ Plumb objectiveTarget, never fake it through otherTarget: that lands an objective site
         // on the Non-Aircraft cycle instead of the Enemy one. Only otherTarget is stood in for by
         // what the candidate is, a world emplacement and a sub-part being selectable.
-        bool otherTarget = !objectiveTarget && kind switch
+        bool otherTarget = !objective && kind switch
         {
             AimTargetKind.Turret => IsEmplacement(c.Source),
             AimTargetKind.Structure => true,
             _ => false,
         };
-        if (TargetRef.Classify(kind, c.Live, c.Team, ownTeam, otherTarget, objectiveTarget)
+        if (TargetRef.Classify(kind, c.Live, c.Team, ownTeam, otherTarget, objective)
             is not { } cls)
         {
             return;
         }
 
-        Add(Describe(c, kind, cls));
+        Add(Describe(c, kind, cls, objective));
     }
 }

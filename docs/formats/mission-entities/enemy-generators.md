@@ -280,5 +280,7 @@ spawn), by the `zeppelin_run` director's one wave's member count at each wave ch
 cutscene callback 800, which the runtime answers from its place in the `CALLBACK` host chain as
 five launches on the generator named `cargozep1`, the original's literal. `--wake-generators`
 grants a script's whole `WAKEUP_GENERATOR` credit at build, the logged headless stand-in for
-playing up to the objective. Codes 801 to 803 stay declined. Pinned by the
-`generator-callback-credit` suite over C4/M03 and `GeneratorCycleTests`.
+playing up to the objective. Codes 801 to 803 are no generator's: they belong to CM19's launch
+hook, and `CampaignDirector` answers them from its own link ahead of this one
+([cutscenes.md](../anim-definitions/cutscenes.md)). Pinned by the `generator-callback-credit`
+suite over C4/M03 and `GeneratorCycleTests`.

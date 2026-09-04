@@ -77,12 +77,12 @@ every sector. Pure data, no Godot node; pinned by the `target-ref` suite. Decode
 
 ## src/Flight/TargetPool.cs
 The player's classed candidate pool: three lists of `TargetRef` (`Enemy`, `Ally`, `NonAircraft`,
-reachable through `Of(TargetClass)`), rebuilt from scratch on every `Rebuild`, which is the
-original's own contract and why a runtime spawn appears and a death disappears with no extra
-plumbing. It walks three of the aim assist's four lists; selectable structures arrive through
-`Rebuild`'s separate `subParts` argument and the campaign's objective sites through its `objectives`
-one, and the two mission flags stay separate so a site lands on the Enemy cycle and a sub-part on the
-Non-Aircraft one. `TargetSelection` owns the instance and `FlightController.StepTargeting` feeds it.
+reachable through `Of(TargetClass)`), rebuilt from scratch on every `Rebuild`, the original's own
+contract and why a runtime spawn appears and a death disappears with no extra plumbing. It walks
+three of the aim assist's four lists; structures arrive through `subParts` and the mission's
+`targets.zrd` sites through `objectives`, and the two mission flags stay separate so a site lands on
+the Enemy cycle and a sub-part on the Non-Aircraft one; an aeroplane whose roster block flags itself
+carries the marker on its own vehicle candidate, never twice. `TargetSelection` owns the instance.
 Decode: [../org/targeting.md](../org/targeting.md) "The candidate list". Read `TargetSelection.cs`.
 
 ## src/Flight/TargetSelection.cs

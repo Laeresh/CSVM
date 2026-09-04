@@ -133,6 +133,10 @@ public sealed class AiSkills
     // exactly 8 author 1), not a target-node reference despite the name.
     private const int ObjectiveTargetSlot = 37;
 
+    // Roster slot 38: categoryLabel, the label half of the marker's line 1. Exactly one shipped
+    // block authors it (C2/M05's balmoral_1, MSG_BOMBER_NAME); the other 413 leave it empty.
+    private const int CategoryLabelSlot = 38;
+
     // Roster slot 39: helpLabel, the MSG_OBJ_* key an objective-flagged block's own marker carries.
     private const int HelpLabelSlot = 39;
 
@@ -334,6 +338,12 @@ public sealed class AiSkills
     /// (C4/M05's <c>blakepeace_3_1</c>/<c>_2</c> author <c>"Blake Aviation"</c> here with the flag
     /// at 0) otherwise. Null when empty or unset.</summary>
     public static string? RosterHelpLabel(IReadOnlyList<object?> fields) => StrSlot(fields, HelpLabelSlot);
+
+    /// <summary>Reads a roster block's <c>categoryLabel</c> (slot 38) raw: the MSG_* key the label
+    /// half of its marker's line 1 prints, beside <see cref="RosterHelpLabel"/>'s category half.
+    /// Null when empty or unset, which is all but one shipped block.</summary>
+    public static string? RosterCategoryLabel(IReadOnlyList<object?> fields) =>
+        StrSlot(fields, CategoryLabelSlot);
 
     /// <summary>Reads a roster block's <c>rating_biases</c> (slot 33): the authored
     /// [pattern, bias, ?] entries in order, or an empty list when the slot is null, omitted or

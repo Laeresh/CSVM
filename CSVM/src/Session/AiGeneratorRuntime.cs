@@ -43,7 +43,8 @@ public sealed partial class AiGeneratorRuntime : Node
     public readonly Dictionary<string, string> SpawnedNet = new(StringComparer.OrdinalIgnoreCase);
 
     // The mission-script host's one credit callback. 801 to 803 live in the same host in the
-    // original (they reactivate the first still-deactivated bhat aircraft) and are unhosted here.
+    // original and reactivate the first still-deactivated bhat aircraft, which CampaignDirector
+    // answers from its own link in this chain.
     private const int CreditCallbackCode = 800;
 
     // The spawn basis needs a horizontal component (Basis.LookingAt with world up),
@@ -218,10 +219,10 @@ public sealed partial class AiGeneratorRuntime : Node
 
     /// <summary>The named host died: every generator whose host node (or authored
     /// <c>healthy</c> node, the submarine's) carries this name launches for
-    /// <see cref="GeneratorCycle.HostDeathGraceSeconds"/> more, then disables permanently.
-    /// Fed by <c>ZeppelinRuntime.ZeppelinKilled</c> (F18); fixed-installation hosts still have
-    /// no death source. A disabled generator's door keeps its last state (the decoded loop
-    /// early-outs before any door rule). Returns how many generators went on the grace.</summary>
+    /// <see cref="GeneratorCycle.HostDeathGraceSeconds"/> more, then disables permanently. Fed by
+    /// <c>ZeppelinRuntime.ZeppelinKilled</c> and, for a fixed installation, by
+    /// <c>AnimRuntime.DestructibleKilled</c>. A disabled generator's door keeps its last state (the
+    /// decoded loop early-outs before any door rule). Returns how many went on the grace.</summary>
     public int NotifyHostDied(string nodeName)
     {
         int dying = 0;
