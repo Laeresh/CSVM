@@ -110,37 +110,39 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ShakeDefs.cs` — typed reader over shakes.json: the six shake-oscillator sources (law + per-source magnitude term).
 - `src/Flight/WeaponDefs.cs` — typed reader over `weapons.json` `BALLISTICS`: 48 `WeaponDef`s; inspect with `--dump-weapons`.
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
-- `src/Flight/WeaponBench.cs` — the world-less 48-weapon mount-and-fire pass check behind `--weapon-test` and `weapons-fire`; fires the whole `ForRig` rig, no lab node involved.
-- `src/Flight/FireControl.cs` — the engine-free fire-control state machine (BL-295): trigger edges, fire clocks, ammo draw-down, both selectors, dry cues; `FlightController` performs its `FireOutcome`.
-- `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass, the intercept solver, the four-list candidate scan, and the fire call's step order + 1° launch scatter.
-- `src/Flight/TargetRef.cs` — the player-targeting abstraction: one value over every selectable thing (aircraft, mission structure, turret), wrapping an `AimCandidate` for the pose/team/liveness/source half and adding class, label, optional health/armor, plus `Classify` (the decoded class model) and source-identity matching.
-- `src/Flight/TargetPool.cs` — the player's classed candidate pool: the three cycles (Enemy/Objective, Ally, Non-Aircraft) of `TargetRef`, rebuilt from scratch off the aim assist's `Vehicles`/`Turrets` lists plus an explicit sub-part list; the one place a concrete source type is read.
-- `src/Utils/TapHoldButton.cs` — one button carrying two actions, split by hold duration: edge-detects a level read, times it over `HoldToRepeat`, and answers tap / hold / nothing. The tap resolves on RELEASE; a press whose hold fired is spent. Pure, so the decoding unit-tests even though a gamepad does not.
-- `src/Flight/TargetSelection.cs` — the sticky player selection: owns a `TargetPool`, sorts it into the decoded cycle order, re-finds the selection by entity each frame, and carries every action (next/previous/nearest per class, nearest-crosshairs, target-nothing) plus the attacker queue and the lifecycle. `ApplyInitial` is `--target=`'s seam.
+- `src/Flight/LoadoutChoice.cs` — one pilot's slot-keyed edits to a fit, plus the Ammo Selection screen's two authored dropdown rosters.
+- `src/Flight/WeaponBench.cs` — the world-less 48-weapon mount-and-fire pass check behind `--weapon-test` and `weapons-fire`; fires the whole `ForRig` rig.
+- `src/Flight/FireControl.cs` — the engine-free fire-control state machine: trigger edges, fire clocks, ammo draw-down, both selectors, the dry cues.
+- `src/Flight/AimAssist.cs` — the gun aim assist: the per-muzzle slot state and catch-up pass, the intercept solver, the candidate scan, the launch scatter.
+- `src/Flight/TargetRef.cs` — the player-targeting abstraction: one value over every selectable thing, wrapping an `AimCandidate` and adding class and label.
+- `src/Flight/TargetPool.cs` — the player's classed candidate pool: the three cycles of `TargetRef`, rebuilt from scratch off the aim assist's own lists.
+- `src/Flight/TargetSelection.cs` — the sticky player selection: owns a `TargetPool`, sorts the decoded cycle order, re-finds by entity, carries every action.
 - `src/Flight/TargetHud.cs` — the per-pane targeting HUD: the selected target's bracket and label, the nearest-hostile fallback, and `--debug-markers`' overlay.
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
-- `src/Flight/TurretController.cs` — one carried turret gunner: acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
-- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver: mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional formation escort, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
-- `src/Flight/AiControlLaw.cs` — the original's own AI steering law (decoded in `docs/org/aiControlLaw.md`): aim point + that point's velocity + one of four decoded parameter tables → stick and throttle lever. Engine-free and pure.
-- `src/Flight/AiEscort.cs` — the formation-escort law a netless `mode wingman` flies (D34, decoded in `docs/org/aiPilot.md`): leader and selected-target snapshots in, one station point and its velocity out, over the engine's own five-state machine. Held by `AiPilot.Escort`, which dispatches to it in place of every other mode but stunned and avoid crash.
-- `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine, the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
-- `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: intercept lead via `AimAssist.TryIntercept`, the quick-draw cone and the engagement window as fire gates, the ±11° traverse clamp with its 10° residual gate, per-shot dead-eye scatter; two mutable target fields (D36, `BL-363`) — aircraft-only `Target`, `AiPilot`'s own pursuit quarry, and non-aircraft `GroundTarget` (a turret or a world/zeppelin structure) so the flight law never chases what it cannot dogfight — plus primary-target name and rating biases (the D12 script seams).
-- `src/Flight/AiRocketeer.cs` — the AI's ordnance employment: the quick-draw cone over the whole pass, then per pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the 200–800 m band and the traverse clamp with its 5° residual gate (tighter than the gun's 10°), then the vehicle-wide lockout stamped ahead of the `quick_draw_chance` roll; the lead is per pylon, a motor round on its `ACCELERATION` ramp in the launcher's frame and a round without one at `VELOCITY` in the world's. Holds no target of its own: the host walks it against `FlightController`'s standing-target lookup (`AiGunner.Target` or `GroundTarget`).
-- `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch, engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
-- `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula: rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching (a turret's flat `+37.5` handicap included, D36) and the allied-attacker deconfliction pick.
-- `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints: nearest node first, then edge-list neighbours, seeded branch draws, and an anchored net offset onto its live trailer target (`BL-377`); aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
-- `src/Flight/ZeppelinBroadside.cs` — the pure broadside law (M4 F19): the decoded 90° side arc (dot > 0.707 on the moving hull's lateral axis), the per-cannon stowed→deploy→ready→fire machine with its own re-fire timer, the ballistic lead solve (skip on no solution) and the seeded gasbag pick.
-- `src/Flight/ZeppelinDamage.cs` — the pure zeppelin kill arithmetic (M4 F18): the decoded survivor threshold over the `healthy` list, the engine recount, the DAMAGES_ZEPPELIN gasbag gate, the record-stage crossing helper.
-- `src/Flight/ZeppelinMotion.cs` — the kinematic zeppelin motion law (M4 F17): forward-only flight along a net under the record's speed/accel/rate/pitch limits, plus the decoded sqrt engine-loss curve behind the `AliveEngines` seam.
-- `src/Flight/ManeuverExecutor.cs` — plays one maneuver's attitude-step program as `FlightInput` per sim step: the input source D11's state machine runs during `evasive maneuver`.
+- `src/Flight/TurretController.cs` — one turret gunner, carried or emplaced: acquire, intercept, arc clamp, bounded slew, duty cycle, fire into the shared pool.
+- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver: standing orders, patrol, gunner, escort and mode machine into one `FlightInput` per sim step.
+- `src/Flight/AiControlLaw.cs` — the original's own AI steering law: an aim point, its velocity and one of four decoded tables into stick and throttle lever.
+- `src/Flight/AiEscort.cs` — the formation-escort law a netless `mode wingman` flies: leader and target snapshots into one station point and its velocity.
+- `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine over the engine's own mode vocabulary, with the steady-hand and sixth-sense reaction rolls.
+- `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: the intercept lead, the quick-draw cone and engagement window, the traverse clamp, the scatter.
+- `src/Flight/AiRocketeer.cs` — the AI's ordnance employment: the per-pylon gates, an aim cosine tighter than the gun's, the lockout, the per-pylon lead solve.
+- `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch: the talker roll, the bearing halving, the broadcast election, the damage tiers.
+- `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula, minimised over weight, distance and objective bias, plus the deconfliction pick.
+- `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints, nose-picked edges and along-leg arrival; shared by `AiPilot` and `ZeppelinMotion`.
+- `src/Flight/DangerZoneRibbon.cs` — one `dzpathN` route as a metre-parameterised spline with lanes, a pilot's cursor on it, and the rail integrator.
+- `src/Flight/DangerZoneRibbons.cs` — a mission's ribbon set off the chapter gamez with its inactive list; one per session, lanes being occupancy-counted.
+- `src/Flight/ZeppelinBroadside.cs` — the pure broadside law: the decoded side arc, the per-cannon deploy machine and re-fire timer, the lead and gasbag picks.
+- `src/Flight/ZeppelinDamage.cs` — the pure zeppelin kill arithmetic: the survivor count over the `healthy` list, the engine recount, the gasbag gate, stages.
+- `src/Flight/ZeppelinMotion.cs` — the kinematic zeppelin motion law: forward-only net flight under the record's limits, the eased steer law, the stop approach.
+- `src/Flight/ManeuverExecutor.cs` — plays one library maneuver's attitude-step program as `FlightInput` per sim step, for the `evasive maneuver` mode.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
-- `src/Flight/RocketTriggerLatch.cs` — the rocket trigger's consumed-press latch (`BL-583`): arms when flight regains input (a cutscene skip, a pause-menu Resume) while F/A is still down, and reads the trigger released until that button lets go. Public so its own unit tests can drive it; `FlightController`'s only caller.
+- `src/Flight/RocketTriggerLatch.cs` — the rocket trigger's consumed-press latch: a press still held when flight regains input reads as released.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
-- `src/Flight/DisablingIntensity.cs` — the decoded `SONIC`/`FLASH` intensity plateau and `FLASH`'s facing test, on squared distances; feeds the player's wash weight and the AI stun's duration.
-- `src/Flight/Difficulty.cs` — the difficulty setting as the engine's 0/1/2, its two naming vocabularies, and the enemy armour/health multiplier it scales spawns by; it reaches nothing else.
-- `src/Flight/TanglerChoke.cs` — the choker's engine-dead duration and the `ENGINE_DEAD` globals it reads; the original's squared-distance-over-raw-radius mismatch, reproduced.
-- `src/Flight/SmokeScreens.cs` — the smoke screen's stun trap: the world's active screens, walked over the roster every sim step to stun AI and wash humans behind the layer; the cone rule, the wash cadence and the three `player.json` tunables beside it.
-- `src/Flight/BeeperTags.cs` — the beeper's paint and the seeker's pick: the world's tag list with its countdown, dead-aircraft slam and five-second tail, the tagging gate, and the per-frame query with the original's inverted-dot, squared-distance selection rule.
+- `src/Flight/DisablingIntensity.cs` — the decoded `SONIC`/`FLASH` intensity plateau and `FLASH`'s facing test, on squared distances; feeds wash and stun.
+- `src/Flight/Difficulty.cs` — the difficulty setting as the engine's 0/1/2, its two naming vocabularies, and the enemy armour/health multiplier at spawn.
+- `src/Flight/TanglerChoke.cs` — the choker's engine-dead duration and the `ENGINE_DEAD` globals it reads; the squared-over-raw radius mismatch, reproduced.
+- `src/Flight/SmokeScreens.cs` — the smoke screen's stun trap: the world's active screens walked over the roster each sim step, the cone rule, the wash cadence.
+- `src/Flight/BeeperTags.cs` — the beeper's paint and the seeker's pick: the world tag list with its countdown and tail, the tagging gate, the selection rule.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
 - `src/Flight/PilotViewMode.cs` — the three selectable views (Chase/Cockpit/Nose = camera modes 0/6/7) and `PilotView`, the pure rules over them.
 - `src/Flight/CameraController.cs` — the flown plane's camera: chase, numpad fixed views, look-behind, the selected view mode and the lab's held-airframe orbit.
@@ -152,7 +154,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/Projectile.cs` — `ProjectilePool`, the weapon-fire subsystem: ballistics, guidance, fuses, the hit ray, tracers, impact and splash damage.
 - `src/Flight/ProjectileFlyoutAnim.cs` — `ProjectilePool`'s `FLYOUT MODEL_ANIMATION` half: every ordnance round runs its own def on the sequence interpreter.
 - `src/Flight/WarningShotCue.cs` — the shipped near-miss accumulator (player.json `warning_shot_*`) and the swept-segment/point distance; unit-testable alone.
-- `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig — a phantom shooter on each player's six, so the cue is reachable deterministically without an AI gunner.
+- `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig, a phantom shooter on each player's six, so the cue is reachable without an AI gunner.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/MissionTargets.cs` — mission `targets.json`: target key to its objective display keys, plus the marker flags a mission starts with.
 - `src/Flight/StuntMission.cs` — Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
@@ -313,7 +315,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/CampaignFlightCheckPage.cs` — the FLIGHT CHECK screen: each crew slot's plane, guns and rockets, the ammo and plane doors, and FLY MISSION.
 - `src/UI/CampaignAmmoPage.cs` — the AMMO SELECTION screen: four gun-group and eight pylon drop-downs over a working copy, written only by ACCEPT LOADOUT.
 - `src/UI/CampaignPlaneSelectionPage.cs` — the PLANE SELECTION screen: a drop-down, silhouette, ratings and weapon lists per slot, EXPORT, and its refusal.
-- `src/UI/Menu/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader and the interpreter running a state's beat sheet on a caller's clock.
+- `src/UI/Menu/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader and the interpreter that runs a state's beat sheet.
 - `src/UI/Menu/BriefingObjectives.cs` — the briefing's parchment note from a mission's `objectives.zrd`, ordered by priority, which a reveal opcode indexes.
 - `src/UI/CampaignPreviousMissionsPage.cs` — the scrapbook's contents list, one row per completed mission, plus the results page a mission's records compute.
 - `src/UI/CampaignScrapbookPage.cs` — the scrapbook itself: the browsed spread's scraps, the results card with its tabs and stamps, and the page arrows.
@@ -360,16 +362,16 @@ The things every subsystem depends on: the clock, the log, the seed. Changing on
 determinism repo-wide; read `docs/verification.md` first.
 
 - `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the caller's in-code `const`.
-- `src/Utils/EffectPools.cs` — the `effect_pools.json` reader: how many copies of each effect-template root the world and crash stages build, scaled by player count.
+- `src/Utils/EffectPools.cs` — the `effect_pools.json` reader: how many copies of each effect-template root the two stages build, scaled by player count.
 - `src/Utils/EffectsLevel.cs` — the original's EffectsLevel option and the clutter fade's squared distance scale it drives, plus the remake's far-fade switch.
 - `src/Utils/GameClock.cs` — the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt and single-step, time scale, the holds.
 - `src/Utils/GraphicsMode.cs` — the opt-in enhanced-lighting setting, resolved once at launch into the one boolean every scene builder reads.
-- `src/Utils/HitchMonitor.cs` — the always-on frame-hitch detector: a frame far costlier than its recent neighbours gets a record describing it; it logs nothing.
-- `src/Utils/HitchSidecar.cs` — the hitch detector's write path: queues a tripped record and drains it later to one `[perf] hitch` line plus one JSON sidecar line.
+- `src/Utils/HitchMonitor.cs` — the always-on frame-hitch detector: a frame far costlier than its recent neighbours gets a record; it logs nothing itself.
+- `src/Utils/HitchSidecar.cs` — the hitch detector's write path: queues a tripped record and drains it to one `[perf] hitch` line plus one JSON sidecar line.
 - `src/Utils/HoldToRepeat.cs` — tap-versus-hold timing for one button: an initial delay, then a repeat every interval until release.
-- `src/Utils/Log.cs` — the diagnostic log: a fixed category vocabulary over four levels, a quiet filtered console and an always-complete `.scratch/logs/` file sink.
+- `src/Utils/Log.cs` — the diagnostic log: a fixed category vocabulary over four levels, a filtered console and an always-complete `.scratch/logs/` file sink.
 - `src/Utils/OptionsStore.cs` — version-tolerant JSON persistence of the process-wide options in `user://options.json`, written atomically.
-- `src/Utils/PerfSample.cs` — ambient timed leaf scopes: `using (PerfSample.Scope(site))` accumulates per site per frame, and a hitch record carries the frame's named work.
+- `src/Utils/PerfSample.cs` — ambient timed leaf scopes: `PerfSample.Scope(site)` accumulates per site per frame, and a hitch record carries the frame's named work.
 - `src/Utils/PhysicsTickCost.cs` — the wall cost of one whole physics tick and the tick count a wall second got, measured by a bracket pair spanning the tick.
 - `src/Utils/PresentationResolution.cs` — the requested-versus-active menu presentation resolver, availability checked separately from the saved request.
 - `src/Utils/RenderPoses.cs` — the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.

@@ -190,6 +190,13 @@ vector divided by the path the round has flown by then, `0.5·a·t²` inside the
 the world-frame one. Nothing here consults `LOCK_ON`, so a dumbfire round that does inherit its
 launcher's velocity for `LOCK_ON` seconds is still led as though it never did.
 
+The two branches are far apart at the shipped numbers, which is why collapsing them onto one solver
+is not an option. `wep_04` authors `VELOCITY` 450 m/s off an `ACCELERATION` of 150 m/s², so the
+round needs three seconds to reach its cap; a 600 m shot at a target crossing at 100 m/s leads about
+26.5° through the ramp solver and about 12.8° through the constant-speed one. `AiRocketeer` takes
+the branch per pylon on the pylon's own weapon, and `AiGunner` keeps the relative-frame
+constant-speed solve, which is the `CANNON` row above.
+
 ## `gun_pitch`/`gun_yaw` clamp the mount, they do not gate the shot
 
 The aim quality the gate reads is produced by `FUN_004b7670`, the per-mount aim update run from the

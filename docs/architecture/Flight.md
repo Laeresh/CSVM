@@ -7,380 +7,192 @@ One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traf
 Traps do not live here; the rule is in `docs/architecture.md`.
 
 ## src/Flight/WeaponDefs.cs
-Typed reader over the shared `weapons.zrd.json` `BALLISTICS` block — 48 `WeaponDef`s (guns /
-rockets / ordnance) keyed by `wep_*`, plus the `NO_AMMO_WARNING` empty-clip sound. Ballistics,
-damage, allotment, the class flags, the specials, and the `FIRE`/`FLYOUT`/`IMPACT` bindings
-(`IMPACT` keyed by `SurfaceRegistry` id); `DESC` resolved through `Messages`. Modelled on PlaneStats.
-Schema: docs/formats/weapons.md. Verify/inspect with `--dump-weapons`.
-
-`RANGE`, `DETONATION_DISTANCE` and `IMPACT_PROXIMITY` are exposed twice: the authored metres, and
-`RangeSqM` / `DetonationDistanceSqM` / `ImpactProximitySqM`, squared once at parse as the original
-squares them (`FUN_005ad630`). Compare a `Sq` field against a squared distance and never square-root
-one to reach the authored field. The authored form is still the right one where a real length is
-wanted — the blast sphere-query radius, the reticle's `RANGE` path cap, a threshold on the authored
-number — and every comparison in the tree today measures through a geometry helper that already
-returns a plain distance, so none of them changed. `TANGLER`'s `RADIUS` has no square by design:
-the original stores it raw and compares it against a squared distance
-(docs/org/ordnanceTypes.md).
-
-`ImpactHook` is the per-weapon impact hook the detonation calls first (weapon `+0x20c`), an enum
-rather than a delegate because the binary installs exactly one, in the `TANGLER` parse; the parse
-here sets `ImpactHook.Tangler` where `FUN_004ba6f0` calls `FUN_005aec90`, and
-`ProjectilePool.RunImpactHook` is the dispatch. `TanglerData` carries the engine's defaults for a
-block omitting `TIME` (5.0) or `RADIUS` (10.0).
+Typed reader over the shared `weapons.zrd.json` `BALLISTICS` block: 48 `WeaponDef`s (guns, rockets,
+ordnance) keyed by `wep_*`, plus the `NO_AMMO_WARNING` empty-clip sound. It owns ballistics, damage,
+allotment, the class flags, the specials and the `FIRE`/`FLYOUT`/`IMPACT` bindings, `IMPACT` keyed by
+`SurfaceRegistry` id and `DESC` resolved through `Messages`. Modelled on `PlaneStats`. `RANGE`,
+`DETONATION_DISTANCE` and `IMPACT_PROXIMITY` are each exposed twice, authored and squared, and the
+rule for comparing them sits at the fields themselves; `ImpactHook` is the per-weapon detonation hook
+`ProjectilePool.RunImpactHook` dispatches. Schema: [../formats/weapons.md](../formats/weapons.md);
+behaviour: [../org/ordnanceTypes.md](../org/ordnanceTypes.md). Inspect with `--dump-weapons`.
 
 ## src/Flight/Loadout.cs
-Two layers over `CSVM/data/stock_loadouts.json`. `StockLoadouts.Load` parses the file (default
-`res://data/`) into per-plane `LoadoutDef`s; `Loadout.Bind(def, builtPlane, WeaponDefs)` resolves
-each gun slot's markers to live muzzle `Node3D`s and its caliber+ammo to a `WeaponDef` (via
-`GunWeaponId` = `wep_{N+k}`), and each hardpoint to its `pylon`, yielding `GunGroup`s (independent
-ammo counters from `CLUSTER_SIZE`) + `Hardpoint`s. Turret slots bind but `IsTurret` (inert, M4).
-Schema: docs/formats/loadouts.md. Verify/inspect with `--dump-loadout` (add `--weapon-lab` to bind
-the full-rig loadout below instead of the stock one). `StockLoadouts.Load`'s missing-file warning
-logs through `Log` (`Utils`), not `GD.PushWarning` (`engine-free-suites` A2).
+Two layers over `CSVM/data/stock_loadouts.json`. `StockLoadouts.Load` parses the file into per-plane
+`LoadoutDef`s; `Loadout.Bind(def, builtPlane, WeaponDefs)` resolves each gun slot's markers to live
+muzzle `Node3D`s and its caliber plus ammo to a `WeaponDef`, and each hardpoint to its `pylon`,
+yielding `GunGroup`s with their own ammo counters and `Hardpoint`s. Turret slots bind but stay inert.
+`Loadout.ForRig` synthesizes a lab loadout covering the airframe's whole rig rather than only what
+stock names, and runs it through the same `Bind`, so there is exactly one bind path. Inspect with
+`--dump-loadout`. Slot-to-firepoint binding: [../formats/markers.md](../formats/markers.md); schema:
+[../formats/loadouts.md](../formats/loadouts.md). Read `LoadoutChoice.cs` next.
 
-A third layer sits above those two: `src/Flight/LoadoutChoice.cs`. `LoadoutOptions` holds the Ammo
-Selection screen's two dropdown rosters, parsed from the same file's `selectable` block (the eleven
-offered ordnance types plus `none`, and the four ammo types plus `none`, both in the original's own
-order). `LoadoutChoice` records one pilot's edits keyed by **slot identity** — gun slots 1–4,
-pylons 1–8, the formats' own ceilings — and `ApplyTo(LoadoutDef)` lays them over a base handed in
-rather than looked up, dropping a pick for a slot the base lacks. That is what lets a custom plane's
-saved fit (`BL-354`) use the same path. `none` on a gun omits the group; on a pylon it keeps the
-array entry as a sentinel that `Bind` skips, because entry *i* binds to `PylonFillOrder[i]` and
-dropping it would move every later pylon to the other wing.
-
-`Loadout.ForRig(plane, WeaponDefs, LoadoutDef?)` synthesizes a lab loadout covering the
-airframe's **whole** rig rather than only what stock names: the 4 gun-group slots the reverse-index
-rule seats (`docs/formats/markers.md` "Slot → firepoint binding" — W1→fp(9−2n),(10−2n)), each
-populated with whichever of its firepoint pair the rig actually has (the Kestrel's W1 resolves to
-the lone centreline `firepoint7`), plus one hardpoint per `pylonN` present — then runs the
-synthesized `LoadoutDef` through the same `Bind`, so there is still exactly one bind path. A slot
-stock does name keeps its weapon/mount/caliber; one it doesn't defaults to the stock's first gun
-weapon (`wep_30` if the plane has no stock guns at all) under a generic mount label ("Gun Group N").
+## src/Flight/LoadoutChoice.cs
+One pilot's edits to a fit, and the rosters the Ammo Selection screen offers. `LoadoutOptions` holds
+the two dropdowns parsed from the same file's `selectable` block, authored in the original's own
+order and neither derived nor sorted. `LoadoutChoice` keys its picks by slot identity, gun slots 1 to
+4 and pylons 1 to 8, rather than by position in a def's arrays, and `ApplyTo` lays them over a base
+handed in rather than looked up, so a custom plane's saved fit takes the same path and a pick for a
+slot the base lacks is simply dropped. `None` is an explicit empty mount while a null entry is no
+choice at all, which is what makes reset-to-stock a clear rather than a rebuild.
+`Session/CampaignLoadout.cs` fills one from a profile. Read `Loadout.cs` for the bind it feeds.
 
 ## src/Flight/WeaponBench.cs
-The world-less "do all 48 weapons mount and fire without throwing" pass check behind
-`--weapon-test` and the `weapons-fire` in-engine suite: one static
-`Run(plane, Loadout, WeaponDefs, ProjectilePool)` over a **parked** plane that spawns straight into
-the caller's pool and returns the report plus the counts a suite asserts on (`Total`/`Ok`/`Errors`/
-`Skipped` + `GunMounts`/`PylonMounts`). Needs no world, no colliders and no frame — `Spawn` does the
-muzzle math and the pool insert synchronously. Hand it `Loadout.ForRig`'s loadout (both callers do)
-and every weapon fires from **every** mount of its class: measured on the Bloodhawk, 4 gun groups ×
-2 muzzles for each of the 31 guns and 8 pylons for each of the 17 hardpoint weapons — 48/48, 0
-errors, 0 skipped.
+The world-less "do all 48 weapons mount and fire without throwing" pass check behind `--weapon-test`
+and the `weapons-fire` in-engine suite: one static `Run(plane, Loadout, WeaponDefs, ProjectilePool)`
+over a parked plane that spawns straight into the caller's pool and returns the report plus the
+counts a suite asserts on. It needs no world, no colliders and no frame, since `Spawn` does the
+muzzle math and the pool insert synchronously. Both callers hand it `Loadout.ForRig`'s loadout, so
+every weapon fires from every mount of its class rather than only from what stock names. Read
+`Loadout.cs` for the rig it binds and `Projectile.cs` for the pool it fills.
 
 ## src/Flight/FireControl.cs
-The fire-control state machine (BL-295), a plain engine-free class: trigger edges (first shot on
-the press tick), per-group `FIRE_RATE` accumulators + muzzle rotation, ammo draw-down, both weapon
-selectors with their on-empty auto-advance, the rocket pull/cooldown gate and the two once-only dry
-cues. `Step(dt, FireInputs)` takes raw HELD booleans — every edge is detected inside — and returns
-decisions in one reused `FireOutcome` (spawn commands as (group, muzzle)/pylon indices, the
-declarative gun-loop state, the cues); `FlightController.ApplyFireOutcome` performs them against
-muzzle transforms, `ProjectilePool` and `FlightAudio`. Ammo mutates through the node-free
-`IGunSlot`/`IPylonSlot` views (`GunGroup`/`Hardpoint` implement them), so `Loadout` stays the single
-store the gauges read and a decision can never diverge from the counters mid-tick. `Refill` re-arms
-everything but deliberately keeps the gun pick; the pylon cursor doubles as the firing cursor, so it
-resets to pylon 0.
+The fire-control state machine, a plain engine-free class: trigger edges, per-group `FIRE_RATE`
+accumulators and muzzle rotation, ammo draw-down, both weapon selectors with their on-empty
+auto-advance, the rocket pull and cooldown gate, and the two once-only dry cues.
+`Step(dt, FireInputs)` takes raw held booleans, detects every edge inside, and returns decisions in
+one reused `FireOutcome`; `FlightController.ApplyFireOutcome` performs them against muzzle
+transforms, `ProjectilePool` and `FlightAudio`. Ammo mutates through the node-free
+`IGunSlot`/`IPylonSlot` views, so `Loadout` stays the single store the gauges read and a decision
+cannot diverge from the counters mid-tick. The slot index math is `WeaponCursor.cs`; read it next.
 
 ## src/Flight/AimAssist.cs
-The gun aim assist (`BL-342`, decoded in `docs/org/aim-assist.md`). `GunAimSlot` is one gun
-barrel's plane-local state — `Smoothed` (what the round fires along), `Target` (what `Smoothed`
-chases), `LastUpdate` (game-time seconds) — mirroring the original's eight `0x24`-byte slots at
-plane `+0x3a4`. `AimAssist.Tick` is the per-frame forget + catch-up pass
-(`FUN_004b3e50`): past `forgetInterval` seconds since the slot was last touched the target unwinds
-to local forward; otherwise `Smoothed` slerps toward `Target` at `catchupRate` per second, snapping
-outright once a single frame covers the whole turn (`catchupRate·dt ≥ 1`). A plain, engine-free
-static class — no `GameClock` read inside it, `now`/`dt` are always passed in — so it unit-tests
-without a `FlightController`; proven in the in-engine `aim-assist` suite (`Suites.cs`), which B3/B4/
-B5 add their own cases to. `FlightController` owns one `GunAimSlot[]` per firable gun group (indexed
-exactly as `FireControl`'s own `(group, muzzle)` pairs — no re-derivation of the original's
-`weaponGroup·2+barrelToggle` index), built alongside `_firableGuns`, and ticks every group's array
-immediately BEFORE performing `_fire.Step`'s outcome — the original restamps a slot's `lastUpdate`
-on every round that goes out (B5's job), so the forget pass must see the pre-shot state. Gated on
-`FlightController.IsHumanPiloted` (default true) — the original ticks this only for the local
-player, and an AI plane's dead-eye path has no slots at all. Every CSVM plane is human-piloted
-today, so the gate is a no-op until AI aircraft are active
-aircraft; `AssistedGunDirection` falls back to the unassisted muzzle axis for a non-human pilot,
-the same fallback a barrel with no slot already takes.
-
-`AimAssist.TryIntercept` (`FUN_00460e30`) is the constant-velocity intercept solver: given a
-muzzle position, the round's speed, a target position, and the target's velocity RELATIVE to the
-shooter (the caller subtracts before calling), it returns the fire direction and time of flight, or
-false for no solution. Frame-agnostic — every input in one space (world or plane-local), the answer
-comes out in that space; B5 supplies plane-local inputs. Internally solves for `u = 1/t` rather than
-`t` directly: `t`'s own quadratic has `|relVel|² − speed²` as its leading coefficient, which sits
-near zero whenever the target's closing speed is close to the round's (the common case), while `u`'s
-leading coefficient is `|displacement|²`, essentially never near zero for a real separation — that
-substitution, not the quadratic formula's own cancellation avoidance, is the "numerically stable"
-part. Fails on near-zero separation, a negative discriminant, or both `u` roots non-positive (no
-forward-time solution — the case that catches a target receding faster than the round in a straight
-line, which can still leave the discriminant positive). Proven in the `aim-assist` suite's
-dead-ahead/crossing/receding cases.
-
-`AimAssist.Scan` (`FUN_004b6530`'s scan half) picks the target the original would pick, or none.
-It takes an `AimScan` context (world muzzle, shooter velocity + team, the plane's forward axis, the
-weapon's speed/`RANGE²`/cone cosine, `dist_factor`) and an `AimCandidateSet`, and returns the
-highest-scoring survivor as an `AimScanResult` (which list it came from, the intercept direction,
-time of flight, score, and the candidate's `Source` object). One scorer runs over all four of the
-original's lists in its order — the engine ships four byte-identical scorers differing only in the
-container accessor. Gates, in the engine's order: the shooter itself (matched by reference against
-`AimScan.Self`), a candidate that is not live (the vtable `+0x14` predicate), same team **or either
-side unaffiliated**, no intercept, `speed²·t² > RANGE²`, outside the acceptance cone
-(`AimAssist.WeaponConeCos` = `cos(CANNON_SPREAD°)`, or the candidate's own `+0x50` half-angle in
-radians via `ConeCosFor`). Survivors rank by `alignment − distance × dist_factor`. All world-space:
-B5 rotates the winner world→local into the slot's target field. Proven in the `aim-assist` suite,
-every gate with its able-to-fail baseline.
-`AimCandidateSet` keeps the four lists **separately** and deliberately: `Vehicles` (the live
-`FlightController`s, joined by every built `SurfaceVehicle` through
-`SurfaceVehicleRuntime.CollectVehicles` — the decoded `VehicleList` holds "aircraft and AI
-ground/sea vehicles" alike, docs/org/aim-assist.md "The four lists"), `Turrets` (fed since M4 C9a by `ProjectilePool.CollectTurrets` — every
-registered aircraft's carried gunners, on their host's team), `Structures`
-(`AddStructures(DestructibleRegistry)` — an **approximation** of the original's `targets.zrd`
-`MStructList`, recorded as one; `MissionTargets` is not the analogue, it holds objective display
-strings and nothing damageable) and `Ordnance` (`ProjectilePool.CollectFusedOrdnance` — a FILTER
-over the rounds in flight, not a structure of its own). The ordnance filter is
-`FUN_00441830`'s two independent reasons to wrap a round: a fuse over `AimAssist.MinFuseDistance`,
-**or** `TARGETABLE`. Only a `TARGETABLE` round carries a `Source` (its `ProjectilePool.Flyout`),
-which is the admission byte the wrapper sets at `+0x6c` and the only thing `TargetPool` admits.
-
-`AimAssist.FireDirection` is the whole fire call in one place (`FUN_004b6530`'s step order):
-seed the slot's target with the plane's forward axis, run `Scan`, rotate the winner world→local into
-`GunAimSlot.Target`, restamp `LastUpdate`, rotate the slot's `Smoothed` local→world as the direction
-actually fired, and scatter it. `AimAssist.Scatter` (`FUN_004608a0`) is that scatter: a uniform roll
-about the aim axis, then a polar angle **uniform in `[0, inaccuracy]`**.
+The gun aim assist, decoded in [../org/aim-assist.md](../org/aim-assist.md). `GunAimSlot` is one gun
+barrel's plane-local state and `Tick` the per-frame forget and catch-up pass over it; `TryIntercept`
+is the constant-velocity lead solver every other module in the namespace consumes rather than
+re-deriving; `Scan` picks the target the original would pick out of an `AimCandidateSet`, whose four
+lists are kept separately and are fed by `ProjectilePool` and `DestructibleRegistry`; `FireDirection`
+is the whole fire call in one place and `Scatter` its launch cone. A static, engine-free class that
+reads no clock of its own, so it unit-tests without a `FlightController`, which owns one
+`GunAimSlot[]` per firable gun group. Read `FireControl.cs` for what fires along the answer.
 
 ## src/Flight/TargetRef.cs
 The one abstraction over everything the player can select: an enemy Fury, a zeppelin engine and a
-turret emplacement are three unrelated C# types, and every consumer downstream (the classed pool,
-the cycles, the label formatter, the marker) reads this and never the underlying type. It WRAPS an
-`AimCandidate` rather than restating it, adding what the aim assist has no use for: `Kind`, `Class` +
-`Objective`, `Name`/`DisplayName`/`TypeLabel`/`Category`, and optional `Health`/`Armor`. `Classify`
-is the decoded class model (`FUN_004b5cd0`); `CategoryLine` composes the marker's line 1;
-`SortsFirst` is `FUN_004bbd60`'s pair of `key = −1` overrides, an objective **or** a hostile round in
-flight. Pure data, no Godot node. Decode: [org/targeting.md](org/targeting.md). Pinned by the
-`target-ref` suite.
+turret emplacement are three unrelated C# types, and every consumer downstream reads this and never
+the underlying type. It wraps an `AimCandidate` rather than restating it, adding what the aim assist
+has no use for: `Kind`, `Class` and `Objective`, the display names and labels, and optional health
+and armor. `Classify` is the decoded class model, `CategoryLine` composes the marker's first line,
+and `SortsFirst` is the pair of overrides that put an objective or a hostile round in flight ahead of
+every sector. Pure data, no Godot node; pinned by the `target-ref` suite. Decode:
+[../org/targeting.md](../org/targeting.md). Read `TargetPool.cs` next.
 
 ## src/Flight/TargetPool.cs
 The player's classed candidate pool: three lists of `TargetRef` (`Enemy`, `Ally`, `NonAircraft`,
-reachable through `Of(TargetClass)`), rebuilt from scratch on every `Rebuild` call, which is the
+reachable through `Of(TargetClass)`), rebuilt from scratch on every `Rebuild`, which is the
 original's own contract and why a runtime spawn appears and a death disappears with no extra
-plumbing. It walks three of the aim assist's four lists (`Vehicles`, `Turrets`, `Ordnance`);
-selectable structures arrive through `Rebuild`'s separate `subParts` argument, filled only by
-`ZeppelinRuntime.CollectTargetParts`, and the campaign's objective sites through its `objectives`
-argument, filled by `ObjectiveSites.Collect`. The two mission flags stay separate: `objectiveTarget`
-comes in with the candidate and puts a site on the Enemy cycle, `otherTarget` is stood in for by
-what the candidate is and puts a sub-part on the Non-Aircraft one. An `Ordnance` entry is admitted only when its source is a
-`ProjectilePool.Flyout` with the `TARGETABLE` admission byte set and still live, so a round wrapped
-only because it is fused stays unselectable. `Describe` is the only place in the targeting path that reads
-a concrete source type, beside `NameOf`/`OwnerOf`, the identity pair the AI ranker's
-`rating_biases` match reuses so it grows no second switch of its own. `TargetSelection` owns the instance; `HumanFlightAdapter` wires one per human
-pane and `FlightController.StepTargeting` feeds it every frame. Decode:
-[org/targeting.md](org/targeting.md) "The candidate list". Pinned by the `target-pool` suite, with
-the carried-gunner exclusion on `turret-gunner`.
+plumbing. It walks three of the aim assist's four lists; selectable structures arrive through
+`Rebuild`'s separate `subParts` argument and the campaign's objective sites through its `objectives`
+one, and the two mission flags stay separate so a site lands on the Enemy cycle and a sub-part on the
+Non-Aircraft one. `TargetSelection` owns the instance and `FlightController.StepTargeting` feeds it.
+Decode: [../org/targeting.md](../org/targeting.md) "The candidate list". Read `TargetSelection.cs`.
 
 ## src/Flight/TargetSelection.cs
 One pilot's target selection: the sticky choice, the eleven actions and the lifecycle. One instance
-per pane; it OWNS its `TargetPool`. The split between the action handlers (which only mutate the
-class and the selection identity, stepping the list that already exists) and `Resolve` (the per-frame
-pass that re-sorts and re-finds the selection by entity, falling back to the list head) is the
-original's, and that one fallback is the entire lifecycle: auto-acquire, switch-on-death and
-drop-on-class-change are all the same failed re-find. `SectorKey` is the cycle comparator
-(`TargetRef.SortsFirst` ahead of every sector, then ahead, behind, left, right, nearest-first inside
-each); `Select`/`ApplyInitial` are `--target=`'s
-seam, the only things here with no counterpart in the original. No Godot node dependency. Decode:
-[org/targeting.md](org/targeting.md). Pinned by the `target-selection` and `target-flag` suites.
+per pane, and it owns its `TargetPool`. The split between the action handlers, which only mutate the
+class and the selection identity, and `Resolve`, the per-frame pass that re-sorts and re-finds the
+selection by entity before falling back to the list head, is the original's, and that one fallback is
+the entire lifecycle: auto-acquire, switch-on-death and drop-on-class-change are all the same failed
+re-find. `SectorKey` is the cycle comparator, and `Select`/`ApplyInitial` are `--target=`'s seam. No
+Godot node dependency; pinned by the `target-selection` and `target-flag` suites. Decode:
+[../org/targeting.md](../org/targeting.md). Read `TargetHud.cs` for what draws the result.
 
 ## src/Flight/TurretDefs.cs
-Typed reader over the shared `ai.zrd`'s `TURRET` section — 42 `TurretDef`s (docs/formats/turrets.md):
-the carried/standalone split (`CREATE_STANDALONE` present-and-zero = carried, looked up by `TITLE`
-from a host; `NODES` patterns = world emplacements), the `PARTS` kinematic chain (3-element
-`[yaw, pitch, firepoint(s)]` or 2-element with no traverse ring), the `WEAPON` sub-block
-(`NAME` is a BALLISTICS id), arcs, the attack/bored duty-cycle windows and `SOUNDS.CANNON`.
-Tolerates the eight engine-accepted never-authored keys. `FindByTitle` mirrors the engine's lookup:
-a titleless entry matches unconditionally. `TeamId` carries the decoded loader default — an
-absent TEAM is the first ENEMY team (id 2; the space is 0 neutral / 1 ally / 2+ enemy), and the
-four authored TEAM 1 standalone entries are the piratezep's own allied rings.
+Typed reader over the shared `ai.zrd`'s `TURRET` section, 42 `TurretDef`s: the carried/standalone
+split (`CREATE_STANDALONE` present and zero means carried, looked up by `TITLE` from a host, while
+`NODES` patterns mean world emplacements), the `PARTS` kinematic chain, the `WEAPON` sub-block whose
+`NAME` is a BALLISTICS id, the arcs, the attack and bored duty-cycle windows, and `SOUNDS.CANNON`. It
+tolerates the eight engine-accepted keys nothing authors, and `FindByTitle` mirrors the engine's
+lookup, where a titleless entry matches unconditionally. `TeamId` carries the decoded loader default.
+Schema: [../formats/turrets.md](../formats/turrets.md); the team space:
+[../org/targeting.md](../org/targeting.md). Read `TurretController.cs` next.
 
 ## src/Flight/TurretController.cs
-One `ai.zrd` turret gunner, both families: carried (`BuildCarried`, per host from
-the vehicle def's `thirdp` `TurretMount`s × `TurretDefs` × the built plane model, ticked from
-`FlightController.SimStep`) and world emplacement (`BuildEmplacements`, per matched `NODES`
-pattern node via `AnimRuntime.FindNodes` with multi-segment paths scoped to the prior match,
-ticked by `Session/TurretEmplacementRuntime`). Per tick: the nearest hostile entry of the whole
-`VehicleList` inside `DETECTION_RANGE`, read through `ProjectilePool.CollectVehicleList`, so an
-AI ground or sea vehicle is a candidate beside an aircraft the way the decoded picker holds both
-(docs/org/targeting.md "What a turret's candidate set holds"; `turret-vessel-targets` suite). A
-ship reaches it as the vessel it is, never registered as aircraft. Then the mission structures,
-through `ProjectilePool.CollectMissionStructures`, walked after the vehicles against the same
-running best with a tie going to them and a gasbag dropped, which is the decoded pass order
-(`turret-structure-targets` suite). The picker's other two pools (turrets, tracked ordnance) are
-decoded but unscanned. Team gate through `AimAssist.Hostile`; carried = host's
-`FlightController.Team`, emplacement = the authored/default `TurretDef.TeamId` with no conversion,
-since one integer space covers aircraft and emplacements alike, until `SetTeam` fans a zeppelin
-record's own team over the guns standing on that hull),
-`AimAssist.TryIntercept` lead (no solution ⇒ track, hold fire),
-wrap-aware directed yaw clamp + pitch clamp, bounded slew (3.0/s), pose written onto the PARTS
-nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution cone, cached
-1–2 s world-only line of sight, `FIRE_RATE` redraw. `Alive` reads the `HEALTHY_NODE` visible IN
-THE TREE, not its own flag: a mission `.gw` switches a site off at its root (C3/M03's
-`b_turret1..6`), and a gunner under it is dead to its tick and to every gunner's scan
-(`mission-off-turrets` suite). `PlatformOf`/`PlatformColliderRids` are what
-keep an emplacement's own mounting section out of its line-of-sight ray, and the same set rides
-each of its rounds as the pool's `ownerBodies`, so the flak neither strikes nor splashes the gun
-that fired it while a neighbouring gun's burst still lands (`turret-self-fire`).
-A carried gunner's line of sight runs through `WorldBlocksLine`, a static method mirroring
-`FlightController.WorldBlocksLine`'s exact call shape against the `IWorldQuery` `BuildCarried`
-hands the constructor (a `GodotWorldQuery` over the host); `_host` itself stays for what it alone
-gives (`WorldVelocity`, `InPlay`, `PlayerIndex`). An emplacement has no host and no `IWorldQuery`
-either, so it keeps its own `WorldRayBlocked` twin, deliberately left alone: a gunner mounted on
-world geometry needs its own section excluded from the ray, which a carried gunner never does.
-Format and decode: [formats/turrets.md](formats/turrets.md). Proven by the `carried-turrets`,
-`world-turrets` and `turret-vessel-targets` suites, `TurretDefsTests` and
-`TurretLineOfSightTests`.
+One `ai.zrd` turret gunner, both families: carried (`BuildCarried`, per host off the vehicle def's
+`TurretMount`s, ticked from `FlightController.SimStep`) and world emplacement (`BuildEmplacements`,
+per matched `NODES` pattern node, ticked by `Session/TurretEmplacementRuntime`). Per tick it takes
+the nearest hostile out of the vehicle list and then the mission structures in the decoded pass
+order, solves the lead through `AimAssist.TryIntercept`, slews the PARTS nodes inside the authored
+arcs, and runs the fire gates: activation, the attack window, the barrel-on-solution cone, a cached
+line of sight and the `FIRE_RATE` redraw. Aliveness, the team space and a platform's exclusion
+from its own fire state their rules at their members: [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/WeaponCursor.cs
-`FireControl`'s internal ammo-slot index math (an `internal` class — nothing else may call it):
-`NextArmed` is the firing cursor — the selected slot while it has rounds, else the next armed slot
-forward-wrapping (`-1` when all empty); `NextSelectable` is where the manual G/H step lands — the
-next armed slot strictly after the cursor, skipping empties. Each slot is its own position
-regardless of ordnance/weapon type, so H cycles even a uniform loadout. That per-hardpoint reading
-is confirmed against the original (user at the controls, 2026-08-14): the player picks a hardpoint,
-the game does not merely drain them in pylon order. Stateless; proven through
-`FireControl`'s interface (`FireControlTests`), not its own.
-The order it walks matches the original's (same observation), so the sequence is settled and not a
-knob.
+`FireControl`'s internal ammo-slot index math, an `internal` class nothing else may call: `NextArmed`
+is the firing cursor, the selected slot while it has rounds and otherwise the next armed slot
+forward-wrapping, and `NextSelectable` is where the manual G or H step lands, the next armed slot
+strictly after the cursor with empties skipped. Each slot is its own selectable position whatever it
+carries, so the selector steps across slots rather than ordnance types and H cycles even a uniform
+loadout, which is the per-hardpoint reading the original gives at the controls. Stateless, and proven
+through `FireControl`'s own interface rather than its own. Read `FireControl.cs` next.
+
+## src/Flight/RocketTriggerLatch.cs
+The rocket trigger's consumed-press latch. A cutscene skip or a pause-menu Resume can hand flight
+input back on the same frame the button that confirmed it is still physically down, and
+`FlightController`'s edge-free button read would take that still-down press as a fresh pull.
+`ArmIfHeld` is called at the moment input comes back and `Read` is the trigger's own read every frame
+after, reporting released until the button lets go. Pure state with no `Node` and no clock, public
+rather than `internal` so its own unit tests can drive it directly, since this project carries no
+`InternalsVisibleTo`. `FlightController` is the only caller. Read `FireControl.cs` for the machine
+the reading feeds.
 
 ## src/Flight/Ballistics.cs
 The VELOCITY/ACCELERATION/GRAVITY integration every round steps with: a static, Godot-`Node`-free
-class with `Step` (one round's per-frame advance, mutating pos/vel in place — `ProjectilePool.SimStep`
-owns the surrounding raycast/fuse-test loop and its own `dt`) and `March` (the reticle's whole capped
-walk — range cap and 4096-iteration bound included — called once per frame by
-`FlightController.BallisticImpactPoint` with its own fixed `dt`, for the distance the decoded pipper
-rule asks for). Extracted so the two callers cannot
-silently diverge; each still owns its own step size. The weapon census behind why a fixed `dt` is
-safe for `March`: [formats/weapons.md](formats/weapons.md).
-
-**The motor and its cap** (`FUN_005afd50`, org/ordnanceTypes.md): `ACCELERATION × dt` raises the
-round's own speed only while it is **below** `speedCap`, and clamps there. `LaunchSpeed` is the pair
-the pool and the march both seed from, and it is where the counter-intuitive half lives: a weapon
-with no motor is seeded AT its cap (nothing accelerates it), while a motor round leaves at its
-**launcher's** speed and climbs to `VELOCITY` above that. ⚠ **Nothing here may ever reduce a speed.**
-The original has no drag term — a round already faster than its cap is left alone rather than clamped
-down — and that absence is why its rounds carry so far; `NoStepEverSlowsARound` pins it. `grav` is
-the weapon's `GRAVITY` in m/s² directly, not a scale on world gravity, and every shipped entry
-authors 0.0. Both vectors are the round's OWN velocity: a launcher's share is the caller's to carry,
-so `March` advances position by `vel + inheritVel` while accelerating `vel` alone.
+class holding `Step`, one round's per-frame advance mutating position and velocity in place, and
+`March`, the reticle's whole capped walk with its range cap and iteration bound. Extracted so the
+live pool and the pipper cannot silently diverge, while each caller keeps its own step size and its
+own surrounding loop. `LaunchSpeed` is the seed pair both take, and the motor rule and the prohibition
+on ever reducing a speed are stated at the members that hold them. Behaviour:
+[../org/ordnanceTypes.md](../org/ordnanceTypes.md); the census behind a fixed `dt` for `March`:
+[../formats/weapons.md](../formats/weapons.md). Read `Projectile.cs` for the pool that steps it.
 
 ## src/Flight/DisablingIntensity.cs
-The shared `SONIC`/`FLASH` intensity (`FUN_0042e840`, decoded in
-[org/ordnanceTypes.md](org/ordnanceTypes.md)): a static, Godot-`Node`-free `TryResolve` returning the
-wash weight and the stun duration (five times it), plus `FacingDot` for the `FLASH` direction
-convention. The curve is a plateau, full strength to a squared ratio of 0.6 (77% of the radius) and
-fading over the last quarter, so **both distance inputs are squares** — the engine's distance routine
-returns a square and this path never takes a root. `FLASH` adds the facing test (nothing behind the
-victim, scaled by twice the dot below 0.5); `SONIC` does not, and that is the only behavioural
-difference between the flags. The consumers are the player's screen wash, the AI stun and the smoke
-screen; the module itself knows about none of them.
+The shared `SONIC`/`FLASH` intensity, decoded in
+[../org/ordnanceTypes.md](../org/ordnanceTypes.md): a static, Godot-`Node`-free `TryResolve`
+returning the wash weight and the stun duration, plus `FacingDot` for the `FLASH` direction
+convention. The curve is a plateau that fades over the last quarter of the radius, so both distance
+inputs are squares, the engine's own distance routine returning a square and this path never taking a
+root. `FLASH` adds the facing test and `SONIC` does not, which is the only behavioural difference
+between the two flags. The consumers are the player's screen wash, the AI stun and the smoke screen,
+and this module knows about none of them. Read `SmokeScreens.cs` next.
 
 ## src/Flight/Difficulty.cs
 The difficulty setting, as the engine's own 0/1/2, and the single thing it does: multiply an enemy
-vehicle's armour and health maxima at spawn by 0.75 / 1.0 / 1.25 (`FUN_0047c210`, decoded in
-[org/vehicleDamage.md](org/vehicleDamage.md)). `Parse` takes both shipped vocabularies, the campaign
-selector's Normal/Hard/Hardest and Instant Action's novice/veteran/ace, which name the same three
-tiers; `FactorForSpawn` owns the team gate, which is inequality with the player's team and not
-hostility, so a neutral or team-less spawn is scaled too. `PlaneStats.WithEnemyDurability` applies
-the factor, and the per-spawn jitter runs after it, banding around the scaled hull. The setting
-reaches nothing else: in the executable it is readable only through `FUN_00440710`, whose four
-callers are that spawn, the options screen, the settings save pass, and Instant Action's
-save/set/restore around the same spawn. No AI skill, accuracy or aggression is keyed to it.
+vehicle's armour and health maxima at spawn, decoded in
+[../org/vehicleDamage.md](../org/vehicleDamage.md). `Parse` takes both shipped vocabularies, the
+campaign selector's and Instant Action's, which name the same three tiers. `FactorForSpawn` owns the
+team gate, which is inequality with the player's team rather than hostility, so a neutral or
+team-less spawn is scaled too; `PlaneStats.WithEnemyDurability` applies the factor and the per-spawn
+jitter bands around the scaled hull afterwards. The setting reaches nothing else, and no AI skill,
+accuracy or aggression is keyed to it. Read `PlaneStats.cs` next.
 
 ## src/Flight/TanglerChoke.cs
-The choker's engine-dead duration (`FUN_004b9bc0`'s `TANGLER` branch, decoded in
-[org/ordnanceTypes.md](org/ordnanceTypes.md)): a static, Godot-`Node`-free `Duration` of
-`ENGINE_DEAD_max × (1 − d²/RADIUS)` floored at `ENGINE_DEAD_min`, plus `EngineDeadBounds`, which
-resolves the bounds the way the original does — they are a pair of GLOBALS every `TANGLER` parse
-overwrites, so the last entry carrying one wins for every choker in the install (this one authors
-exactly one, `wep_12` at `[5, 13]`). **The numerator is squared and the radius is raw**, an authentic
-unit mismatch that puts the full-strength zone of a 35 m weapon at about 4.6 m; the floor covers
-everything past it, so the curve alone never returns less than the minimum, and whether an aircraft
-is caught at all is the cloud's squared-radius test in `ProjectilePool.StepTanglerClouds`. The
-seconds go to `FlightController.TryChokeEngine`; this module knows nothing about aircraft.
+The choker's engine-dead duration, decoded in
+[../org/ordnanceTypes.md](../org/ordnanceTypes.md) "The choker, settled": a static,
+Godot-`Node`-free `Duration`, plus `EngineDeadBounds`, which resolves the bounds the way the original
+does, as a pair of globals every `TANGLER` parse overwrites so the last entry carrying one wins for
+every choker in the install. The curve's numerator is squared while its radius is raw, an authentic
+unit mismatch the floor covers, and whether an aircraft is caught at all is the cloud's own
+squared-radius test in `ProjectilePool.StepTanglerClouds`. The seconds go to
+`FlightController.TryChokeEngine`; this module knows nothing about aircraft. Read `Projectile.cs`.
 
 ## src/Flight/SmokeScreens.cs
-The `SMOKE_SCREEN` mechanism (`FUN_004b8fd0`, decoded in
-[org/ordnanceTypes.md](org/ordnanceTypes.md) "SMOKE_SCREEN is a stun trap"), three types in one
-file. `SmokeScreenRule` is static and Godot-`Node`-free: `Catches` (strictly inside the raw range
-AND the unit layer-to-victim line's dot with the layer's BACKWARD axis strictly above the stored
-half-angle cosine) and `StepWash` (the human wash's cadence over one re-arm timer: 0.97 on a first
-hit, 0.9 every 1.5 s while inside, 2 s duration, the grey-green `(0.2, 0.29, 0.145)`).
-`SmokeScreenTunables` reads `smokescreen_stun_range` / `_angle` / `_interval` off `player.json`
-with the loader's own image defaults (200 m, cos 0.8, 3 s) for an absent key; the angle is stored
-as `cos(angle/2)`, so the shipped 170° reaches 85° off axis. `SmokeScreens` is the world registry:
-`Lay(layer, timeSeconds)` is the fire path's entry (a `SMOKE_SCREEN` weapon spawns no round; it lays
-a screen for its `TIME`), `SimStep(dt)` runs the timer down, ends a screen whose layer is out of
-play on the spot, and walks the roster delegate for every running screen, hitting every in-play
-aircraft other than the layer inside the cone about the layer's LIVE pose: a human gets the wash
-through the `SmokeWashSink` (`ScreenFlash.PlayBlend` in the session) addressed to its own
-`PlayerIndex`, an AI gets `FlightController.TryStunPilot(interval)` refreshed every step it stays
-inside, so it goes limp for the whole screen and the interval beyond it. The wash re-arm timer is
-kept per victim per screen (the original's one slot is single-player), Decision 2. It is NOT an
-occluder: no collision, no visibility and no targeting role — the smoke is drawn, and stops nothing.
-Each screen carries its own emitter over the `ISmokeEmitter` seam: `Lay` asks the settable
-`Emitters` factory for one and homes it with a zero step at the launch pose, `SimStep` drives it at
-the layer's live pose every step, and the same teardown both end conditions reach stops it.
-`SmokeScreenEmitters` is the engine side of that seam, reading `generate_smokescreen`'s
-DISTANCE_INTERVAL `PUFFER_STATE`s out of the world `AnimProgram` (the session wires it once the
-chapter's textures exist) and pooling one `Puffer` per authored state, reused only once its previous
-screen's puffs have decayed. The compiled archive is where the definition is taken from; the reader
-normalizer now carries `DISTANCE_INTERVAL` too, so the reader form of the same definition is a trail
-rather than the no-trail sustain it used to read as. The cloud's look is the authored numbers through `Puffer` unchanged (`smokerpuff`:
-four puffs per 0.65 m, `SIZE_RANGE` 0.15–0.25 growing 85× over a 2.5–4 s life, `LOCAL_VELOCITY`
-10 m/s astern plus ±17 m/s of random, `NEAR_FADE 30,10` so a camera nearer than 30 m of depth
-sees none of it, the `53,74,37` ramp at alpha 0.8; `smokerpuff2` is the thin 1–1.3 s ribbon at the
-tail); the two `INACTIVE` events at `Animation 2.0` are not applied, since the emitter runs for the
-screen's `TIME` and the reference footage shows the cloud still being laid well past 2 s. Pinned
-by `SmokeScreenTests` (rules, tunables) and the `smoke-screen` suite (a live five-aircraft roster:
-the AI astern stunned throughout and recovering after expiry, the AI beyond 85° untouched, the
-human astern washed on its own pane while the layer's and a third human's stay clear, a downed
-layer's screen ending at once, the emitter started homed and stopped with the screen, the two
-authored trail states read off C1's compiled `cam_anim`, and `smokerpuff` driven at 100 m/s for
-four seconds through the particle runtime holding thousands of puffs live past its starting pool,
-tens of metres across near the end of life and blown down the host's own backward axis) and by
-the `ordnance-launch-axis` suite for the
-launch side (a `wep_13` pylon lays one screen, spends its ammo and puts no round in the pool). Not a
-`Node`; the session owns and steps it.
+The `SMOKE_SCREEN` mechanism, decoded in [../org/ordnanceTypes.md](../org/ordnanceTypes.md)
+"SMOKE_SCREEN is a stun trap", as three types in one file. `SmokeScreenRule` is static and
+Godot-`Node`-free, holding the catch test and the human wash's cadence; `SmokeScreenTunables` reads
+the three `player.json` keys with the loader's own image defaults; `SmokeScreens` is the world
+registry, where `Lay` is the fire path's entry (such a weapon spawns no round) and `SimStep` runs the
+timer down and stuns or washes every other in-play aircraft inside the cone about the layer's live
+pose. It is not an occluder: no collision, no visibility and no targeting role. Each screen drives
+its own emitter over the `ISmokeEmitter` seam, whose engine side is `SmokeScreenEmitters`.
 
 ## src/Flight/BeeperTags.cs
-The `BEEPER` / `BEEPER_SEEKER` pair (`FUN_004b88a0`, `FUN_004b8ad0`, `FUN_004b8ce0`, `FUN_004b8b50`,
-decoded in [org/ordnanceTypes.md](org/ordnanceTypes.md) "The beeper and the seeker, which are one
-weapon in two halves"), three types in one file. `IBeeperSubject` is the three facts a tag reads off
-its aircraft (`WorldPosition`, `InPlay`, `Team`); `FlightController` implements it through a partial
-declaration in this file, so the registry and its tests run without an engine. `BeeperTagRule` is
-static and Godot-`Node`-free: `Step` (the countdown: an aircraft out of play slams a still-painting
-tag to −1 before the frame's decrement, the frame that reaches or crosses zero ends the paint, and
-the original never slams again after that), `AlignmentDot` (the unit vector FROM the tag TOWARD the
-round, dotted with the round's heading, so a tag dead ahead scores −1 and LOWER is better aligned)
-and `Prefers`, the running-best comparison with the four literals: a better-aligned candidate
-replaces the best under a SQUARED-distance ratio of 1.2 (about 9.5% farther as a length); a
-worse-or-equally-aligned one must be strictly nearer (ratio under 1.0) AND either sit at or under a
-dot of 0.7 (anything less than about 134° off the round's nose) or give up under 0.1 of alignment.
-Net effect: the nearest painted aircraft, unless it is well behind the round, with a
-better-aligned one stealing only within the 20% squared window; and because it is a running best
-in tag order, a near-worse and a far-better pair inside that window resolves to whichever was
-tagged LATER. `BeeperTags<TAircraft>` is the world registry: `TryTag(shooterTeam, victim, seconds)`
-is the hit path's entry and holds every creation gate the original has (`AimAssist.Hostile` on the
-teams, the victim in play, no live tag on it already, and one tag per sim step, which is the
-original's clock stamp compared on the next creation); a second beeper hit on a live-tagged aircraft
-makes no tag and does NOT refresh the first, while an aircraft in its tail takes a fresh one.
-`SimStep(dt)` runs every tag through `Step` and deletes it once its countdown sits at or below −5,
-five seconds of tail after expiry (four after a slam) so nothing holding a reference sees it vanish.
-`PickTarget(roundPos, roundHeading)` is the seeker's per-frame query over tags with a countdown
-strictly above zero and returns the aircraft or null; an untagged aircraft is never returned, and
-in-play is not tested there because a dead aircraft's tag collapses on the next step. Pinned by
-`BeeperTagsTests` (every threshold from both sides, the slam, the tail, the gates, the order
-dependence, and `wep_10`'s `TIME 20` read off the extracted file). Not a `Node`; the session owns
-and steps it after every aircraft, in both step paths, and hands it to `ProjectilePool.BeeperTags`
-for the hit-side tagging and the seeker's retarget, which are the projectile integrator's.
+The `BEEPER` and `BEEPER_SEEKER` pair, decoded in
+[../org/ordnanceTypes.md](../org/ordnanceTypes.md) "The beeper and the seeker, which are one weapon
+in two halves", as three types in one file. `IBeeperSubject` is the three facts a tag reads off its
+aircraft, implemented by `FlightController` through a partial declaration here so the registry and
+its tests run without an engine. `BeeperTagRule` is the static arithmetic: the countdown with its
+dead-aircraft slam, the inverted alignment dot, and the running-best comparison with its four
+literals. `BeeperTags<TAircraft>` is the world registry holding every creation gate, the per-step
+list with its tail, and the seeker's per-frame `PickTarget`. Read `Projectile.cs` next.
 
 ## src/Flight/CamParams.cs
 One aircraft's camera tuning out of `camparam.json`
@@ -494,340 +306,176 @@ declaration. `ProjectilePool.NearMissTargets` is the registry whose aircraft eac
 travelled segment is measured against, its own shooter excluded. Read `Projectile.cs` next.
 
 ## src/Flight/AiNetFollower.cs
-Walks an `AiNet` patrol graph as a waypoint stream. Given the vehicle's nose it is the decoded
-walk (`FUN_00431e40`, `docs/org/aiPilot.md`): seat on the nearest node and fly the far end of the
-edge whose leg best lines up with that nose, then the same pick at every arrival with the edge just
-flown excluded. Nothing draws, so vehicles seated on one node facing one way leave it together,
-which is what makes a group sharing one net fly in formation (`BL-498`). A caller with no nose
-(`ZeppelinMotion`, and a zeppelin is not a vehicle in the original) keeps the older nearest-node
-seat with branches drawn from its own seeded `Random` (per
-plane off the `Rng.Ai` stream at spawn, never Godot's global rng). Aircraft-agnostic on purpose:
-positions in, target node out; its two consumers are `AiPilot.Patrol` (aircraft) and
-`ZeppelinMotion` (F17's kinematic node follow). Arrival is the decoded ALONG-LEG test — a tenth of
-the leg's horizontal length, floored at 10 m (`docs/org/aiPilot.md`) — so a vehicle that cannot
-turn tightly enough flows past its node instead of orbiting a capture sphere it never enters.
-A zeppelin raises that floor to clear its own turning circle, which is invented and only a floor.
-Also holds a net's live STOP-POINT flags, seeded from the file and rewritten by
-`COMPLETED_STOPPOINT` through `SetStopPoint`: an armed node is never advanced past, and once the
-walk is inside 30 m of it (`StopPointHoldM`, the zeppelin follower's own hold distance, not the
-leg's arrival radius) `Holding` goes true. ⚠ Off by default — `observesStopPoints` is set only by
-`ZeppelinRuntime`, because only the zeppelin follower reads the flag; the aircraft one reads a
-node's danger-zone fields instead (`docs/formats/ai-nets.md`).
-`StopsAt`/`Holding` also cover a STRUCTURAL dead end — the current node's only edge is the one just
-flown — for an observing follower: decoded (`FUN_004bf9d0`'s own-node gate calls the level/hold
-routine, `FUN_004bf500`, unconditionally, ahead of and regardless of any armed stop point), this is
-what stops a zeppelin on an open route whose far node authors no stop point at all from re-picking
-its only neighbour and shuttling the route forever (`BL-529`, `docs/formats/mission-entities.md`
-"Route ends and stop points"). The aircraft follower keeps its own decoded turn-back at a dead end
-(`PickOnward`'s degree-1 short-circuit) unchanged; the unconditional hold is opt-in on
-`ObservesStopPoints`.
-Pinned by `AiNetFollowerTests` + the `ai-net-follow` suite.
-`ArrivedNode` is the danger-zone report: the node the last `Update` reached and stepped past,
-which `AiPilot` reads for its tag, never the node being flown toward.
-`Reseat` is the original's activation snap (`FUN_004b0f40` into `FUN_00432010`): an Instant Action
-wave member ticks while it is inert, presence being no sim gate, so without it the member's first
-update latches a node near its parking pose and it flies back there after the teleport (`BL-364`).
-It optionally names an edge the next seat pick must refuse, which is how the danger-zone
-exit continues the course: the original's exit (`FUN_00490590`) hands `FUN_00431e40` the edge id
-the walk was on when the run began, so a racer set down by the ribbon beside its own entry node
-cannot fly that leg again and re-lock the zone it just flew (`BL-615`). An undirected neighbour
-list says the same thing by naming the edge's far end; the exclusion is spent on the seat it
-applies to.
+Walks an `AiNet` patrol graph as a waypoint stream, aircraft-agnostic on purpose: positions in and a
+target node out, with `AiPilot.Patrol` and `ZeppelinMotion` its two consumers. Given the vehicle's
+nose it is the decoded walk, seating on the nearest node and flying the far end of the edge whose leg
+best lines up with that nose, then repeating that pick at every arrival with the edge just flown
+excluded, which is what makes a group sharing one net fly in formation. Arrival is measured along the
+leg rather than as a capture sphere. It also holds a net's live stop-point flags and the structural
+dead-end hold, both gated on `ObservesStopPoints`, and `Reseat` is the original's activation snap.
+Decode: [../org/aiPilot.md](../org/aiPilot.md). Read `AiPilot.cs` next.
 
 ## src/Flight/DangerZoneRibbon.cs
-The decoded danger-zone run (`docs/org/aiPilot.md` "The danger-zone run"), engine-free:
-`DangerZoneRibbon` is one `dzpathN` route as the original builds it, the polygon's vertices joined
-by cubics parameterised in metres plus the lane table (the zero lane and one per child node);
-`DangerZoneRun` is a pilot's cursor on it (entered from the nearer end, walking the segments either
-way, `Done` past the exit); `DangerZoneRail` is the state-5 integrator that writes the pose off the
-ribbon in place of the flight model, closing the aeroplane's residual offset, banking the wings into
-the bend and settling on the 155 mph cruise. Every constant is read out of the image and named at
-its declaration. Pinned by `DangerZoneRibbonTests`.
+The decoded danger-zone run ([../org/aiPilot.md](../org/aiPilot.md) "The danger-zone run"),
+engine-free: `DangerZoneRibbon` is one `dzpathN` route as the original builds it, the polygon's
+vertices joined by cubics parameterised in metres plus the lane table; `DangerZoneRun` is a pilot's
+cursor on it, entered from the nearer end, walking the segments either way and `Done` past the exit;
+`DangerZoneRail` is the state-5 integrator that writes the pose off the ribbon in place of the flight
+model, closing the aeroplane's residual offset, banking the wings into the bend and settling on the
+cruise speed. Every constant is read out of the image and named at its declaration. Pinned by
+`DangerZoneRibbonTests`. Read `DangerZoneRibbons.cs` for the set a mission carries.
 
 ## src/Flight/DangerZoneRibbons.cs
 A mission's ribbon set read straight off the chapter gamez, independent of `--debug-dzpaths`: every
-`dzpathN` node's route polygon by the route-versus-gate-pair material rule (`docs/formats/missions.md`,
-never polygon index), its children as lanes, and `dzones.zrd`'s `disable` list as the inactive
-flag. `ByIndex` serves a numbered net tag, `NearestEnd` the negative one. One instance per session,
-shared through `AiPilot.DangerZones`, because lanes are occupancy-counted across pilots;
-`CampaignDirector.Attach` builds it and hands it to every roster pilot.
+`dzpathN` node's route polygon by the route-versus-gate-pair material rule
+([../formats/missions.md](../formats/missions.md)), never by polygon index, its children as lanes,
+and `dzones.zrd`'s `disable` list as the inactive flag. `ByIndex` serves a numbered net tag and
+`NearestEnd` the negative one. One instance per session, shared through `AiPilot.DangerZones`,
+because lanes are occupancy-counted across pilots; `CampaignDirector.Attach` builds it and hands it
+to every roster pilot. Read `DangerZoneRibbon.cs` for one route's geometry.
 
 ## src/Flight/ZeppelinBroadside.cs
-The pure zeppelin broadside law (M4 F19), engine-free: the decoded 90° arc
-(`dot(toTarget, sideNormal) > 0.707` against the MOVING hull's lateral axis, `SideNormal`/
-`TargetSide` — side alternation is geometric, the opposite cones never both bear, no cadence
-invented), the per-cannon stowed→deploy→ready→fire machine (`Step` emits deploy/retract/
-ready lists; deploy/retract durations come from the authored anim defs) with its own re-fire
-timer (`cannon_fire_delay`, armed by `Fired` per cannon), `TryAim` (the intercept solve,
-`AimAssist.TryIntercept` consumed), `PickGasbag` (the zeppelin-vs-zeppelin rand() pick over
-the target's in-arc live gasbags), `FirstLiveTarget` (the decoded candidate walk over the
-record's `targets` in authored order, `player` resolving like any zeppelin node, no team or
-hostility read) and `CannonsEngaged` (the decoded zeppelin byte `+0xc`: off at construction,
-written only by the script's `COMPLETED_ZEPCANNONS`; while clear `Step` deploys nothing and
-retracts any ready cannon outright, which is why no shipped broadside ever fires on the player;
-`formats/mission-entities.md` "Broadside firing" has the chain).
-`Session/ZeppelinRuntime.Cannons.cs` wires it. Pinned by
-`ZeppelinBroadsideTests` + the `zeppelin-broadside` suite.
+The pure zeppelin broadside law, engine-free: the decoded 90 degree arc against the moving hull's
+lateral axis, where side alternation is geometric and the opposite cones never both bear; the
+per-cannon stowed, deploy, ready and fire machine, whose `Step` emits the deploy, retract and ready
+lists on durations taken from the authored anim defs, with its own re-fire timer; `TryAim`, which
+consumes `AimAssist.TryIntercept`; `PickGasbag` and `FirstLiveTarget`, the decoded candidate walk in
+authored order with no team or hostility read; and `CannonsEngaged`, the decoded byte the mission
+script writes, while clear of which nothing deploys. `Session/ZeppelinRuntime.Cannons.cs` wires it.
+Chain: [../formats/mission-entities.md](../formats/mission-entities.md).
 
 ## src/Flight/ZeppelinDamage.cs
-The pure zeppelin kill arithmetic (M4 F18), engine-free: `Survivors`/`IsDead` over the record's
-`healthy` list (counted literally, entry by entry — C5/M01 ships `gasbag5` twice), the
-`AliveEngines` recount, `MayDamageGasbag` (= `WeaponDef.DamagesZeppelin`, the gasbag-only
-routing gate) and `CrossedStages` (the `cannon_health` 0.6/0.3 stage list, injure_anims
-semantics: every crossed threshold fires, once). The zone pools live in `DestructibleRegistry`;
-`Session/ZeppelinRuntime` supplies the aliveness views. Pinned by `ZeppelinDamageTests` + the
-`zeppelin-damage` suite.
+The pure zeppelin kill arithmetic, engine-free: `Survivors` and `IsDead` over the record's `healthy`
+list, counted literally entry by entry because a shipped chapter names one gasbag twice; the
+`AliveEngines` recount; `MayDamageGasbag`, the gasbag-only routing gate; and `CrossedStages` over the
+record's stage list, where every crossed threshold fires once. The zone pools live in
+`DestructibleRegistry` and `Session/ZeppelinRuntime` supplies the aliveness views. Pinned by
+`ZeppelinDamageTests` and the `zeppelin-damage` suite. Read `ZeppelinMotion.cs` next.
 
 ## src/Flight/ZeppelinMotion.cs
-The kinematic zeppelin motion law (M4 F17): flies a `ZeppelinDef` along its net through
-`AiNetFollower`, forward-only along the facing, speed by `max_accel` toward `max_speed`, yaw and
-pitch through the decoded steer law (`Steer`, `FUN_004bf530`/`FUN_004bf620`, one routine per
-axis): the target is the bearing and the raw slope from the hull to the current node, the rate
-asked for is the record's `max_rate_*` eased to `max_rate · (error/25°)²` inside 25° of error
-(`EaseRad`), the live rate moves toward it at `accel_*`, and the angle advances by that rate
-scaled by `speed / max_speed` (the authored one), so a stopped hull cannot turn. No per-step
-pitch band: the record's ±30 is a degree-valued pair the original compares against radians, so
-it neither clamps the initial pitch nor the drawn pose (`FUN_004bf950`), and the law here has no
-clamp either (`docs/formats/mission-entities.md` "Steering"). ⚠ The bang-bang rate this
-replaced (ask for `error/dt`, reach it at `accel_*`) rang up under `accel_pitch` 0.5°/s² into a
-standing ±30° swing on level legs, which read at the controls as the Pandora diving along its
-route; the ease is what damps it. Pure state — no Node, no flight model; `ZeppelinRuntime` writes
-the pose onto the world node, and `ResumeAt` re-seats it in place after a scripted motion.
-The stop-point half is the decoded approach (`FUN_004bf360`): full speed until the along-facing
-range to a halting node falls under 250 m, then linearly down to zero; inside the follower's
-30 m (`Dock`) the throttle is cut, the pitch holds, and the hull and heading decay onto the node
-and the leg's bearing at e^(−0.2·dt), which settles it ON the node in plan and in altitude. A
-follower still on its SEAT (`LegStartIndex` −1) takes the own-node law (`FUN_004bf500`) instead,
-a station-keep on the record's own pose: pitch commanded to 0 and heading kept, both frozen by
-the speed factor at speed 0. Pinned by `ZeppelinMotionTests` + the `zeppelin-motion` and
-`zeppelin-pandora-dead-end` suites.
+The kinematic zeppelin motion law: flies a `ZeppelinDef` along its net through `AiNetFollower`,
+forward-only along the facing, speed by `max_accel` toward `max_speed`, and yaw and pitch through the
+decoded per-axis steer law, whose commanded rate eases inside 25 degrees of error and whose angle
+advances scaled by the fraction of authored speed the hull is making, so a stopped hull cannot turn.
+There is no per-step pitch band, the record's pair being degree-valued and compared against radians.
+The stop-point half is the decoded approach, cutting the throttle inside the follower's hold distance
+and decaying the pose onto the node, while a follower still on its seat station-keeps. Steering:
+[../formats/mission-entities.md](../formats/mission-entities.md). Pure state, no `Node`.
 
 ## src/Flight/AiPilot.cs
-The non-player `FlightModel` driver: standing orders in (heading in the mission-data
-`SpawnPoint.HeadingDeg` convention, altitude, throttle, optional `Patrol` net follower, optional
-`Gunner` whose live target is chased at the decoded lead offset ahead of it, optional `Machine` —
-D11's nine-mode state machine, which when set is stepped first and picks this step's AIM POINT and
-parameter table: patrol flies the net node, a reached node's danger-zone tag starts a
-`DangerZoneRun` (approach on the emergency table, then `RailPose` published for the host to apply
-in place of the model step, then the net re-seated), pursue leads the gunner's target on
-the engaged table (or aims at it outright for the head-on firing solution), lay off holds its
-entry course and then walks the throttle toward `sixth_sense_factor` × the pursuer's speed so the
-human catches up, evade flies the machine's orders, avoid crash aims 1000 m up on the emergency
-arm, displaced 1000 m right of its own ground track (`ClimbOutBreakM`, invented and measured) for
-a netted pilot but purely vertical for an ESCORTING one, which is the decoded aim both of the
-original's laws build,
-an evasive maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks),
-and an optional `Escort` (`AiEscort`) which, whenever its leader is in play, takes the dispatch
-away from all of those but stunned and avoid crash, the original's own `mode wingman` fork,
-one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. A leader
-that leaves play drops the pilot to the netless arm, which projects the orders it was left with
-and so holds them; `CampaignDirector` is what re-seats such a pilot, on the lost leader's net. Pure over
-the model state and its own fields, seeded randomness only, so a fixed-dt run is deterministic
-(`AiPilotTests`). The original's own steering law is `AiControlLaw`; this class is only its driver
-(docs/org/aiPilot.md). `Stun(seconds)` is the AI stun's entry (`FUN_004200d0`, reached by a
-`SONIC`/`FLASH` burst and the smoke screen through `FlightController.TryStunPilot`, which holds the
-victim guards): the mask is neutral stick and rudder with the throttle lever left where it was, the
-three channels the original zeroes and the one it does not, so the aircraft stays on the flight
-model and coasts under power. With a `Machine` the stun is its `Stunned` mode; without one the pilot
-keeps its own countdown; `IsStunned` reads either and `ClearStun` is the respawn reset.
+The non-player `FlightModel` driver: standing orders in (heading, altitude, throttle, an optional
+`Patrol` net follower, an optional `Gunner` whose live target is chased at the decoded lead offset,
+an optional `Machine` and an optional `Escort`), one `FlightInput` per sim step out, read by a
+`FlightController` whose `Pilot` is set. A `Machine` is stepped first and picks this step's aim point
+and parameter table; an `Escort` whose leader is in play takes the dispatch away from every mode but
+stunned and avoid crash, which is the original's own wingman fork. `Stun` is the AI stun's entry,
+leaving the throttle lever where it was so the aircraft coasts under power. Pure and seeded, so a
+fixed-dt run is deterministic. Decode: [../org/aiPilot.md](../org/aiPilot.md).
 
 ## src/Flight/AiControlLaw.cs
-The original's own AI steering law, documented in `docs/org/aiControlLaw.md` — read
-that page before changing anything here. An aim point, that point's velocity and one of four
-parameter tables read out of the image in, one `FlightInput` out: a desired speed from the aim
-point's own speed plus range-weighted lead terms, an intercept solve (`AimAssist.TryIntercept`) for
-the direction, bank-to-turn with the elevator joining once the bank command is inside a deadband, a
-wings-level rule, a low-speed unload, and a per-axis scale/limit stage off `PlaneStats`. The
-throttle lever has one path, the walk toward the desired speed; the original's distance-gated
-open-loop branch is not ported (`docs/org/aiControlLaw.md`'s throttle section says why).
-Engine-free and pure over its arguments; pinned against the decode by `AiControlLawTests`.
+The original's own AI steering law, documented in
+[../org/aiControlLaw.md](../org/aiControlLaw.md); read that page before changing anything here. An
+aim point, that point's velocity and one of four parameter tables read out of the image in, one
+`FlightInput` out: a desired speed from the aim point's own speed plus range-weighted lead terms, an
+intercept solve for the direction, bank-to-turn with the elevator joining once the bank command is
+inside a deadband, a wings-level rule, a low-speed unload, and a per-axis scale and limit stage off
+`PlaneStats`. The throttle lever has one path, the walk toward the desired speed; the original's
+distance-gated open-loop branch is not ported. Engine-free and pure over its arguments.
 
 ## src/Flight/AiEscort.cs
 The formation-escort law a netless `mode wingman` aircraft flies, which in the shipped data is the
-campaign's `wingman_N` / `bswingman_N` roster blocks and nothing else (`docs/org/aiPilot.md`, "The
-escort law"). A leader snapshot (position, attitude basis, velocity, whether it is the player) and
-an optional target snapshot in, one station point and that point's velocity out, over the engine's
-own five-state machine: close on the leader, hold the body-frame station, fly a station on the
-target, and the two re-join states nothing in the law enters. Every constant is decoded, the two
-stations included ((6, 0, 18) off the player, (8, −2, −8) off an AI); the 80 m separation push is
-what makes the hold a weave rather than a tight join. Engine-free and deterministic, holding only
-its state and last station; the driver is `AiPilot.Escort`, the table `AiLawParams.Wingman`, and
-the live check is the `wingman-station` suite. The campaign hand-off is not a join problem: at the
-first stepped frame after C3/M01's intro the wingman reads 117.6 m and 53.6 m/s against the 700 m /
-20.576 m/s gate and is in `Station` on the next frame, so a wingman that ends up high and behind
-left the escort law rather than never entering it.
+campaign's `wingman_N` and `bswingman_N` roster blocks and nothing else. A leader snapshot (position,
+attitude basis, velocity, whether it is the player) and an optional target snapshot in, one station
+point and that point's velocity out, over the engine's own five-state machine: close on the leader,
+hold the body-frame station, fly a station on the target, and the two re-join states nothing in the
+law enters. Every constant is decoded, the two stations included, and the separation push is what
+makes the hold a weave rather than a tight join. Engine-free and deterministic; the driver is
+`AiPilot.Escort`. Decode: [../org/aiPilot.md](../org/aiPilot.md) "The escort law".
 
 ## src/Flight/AiModeMachine.cs
-The nine-mode AI state machine, owned by `AiPilot.Machine` and stepped from its `Next`:
-the mode list and vocabulary are the engine's own debug-readout dispatch (`NameOf` returns them
-verbatim; docs/formats/ai-rosters.md "AI modes, engine-side"). Decoded and wired: activation
-into pursue inside `min_ai_active_dist`/vehicle `attack` (both 2000 shipped, `AiSkills`/
-`PlaneStats`); a hit rolls steady-hand (`NotifyDamage`, called from
-`FlightController.TakeProjectileHit` for AI planes) and a FAILED test breaks off; a pursued AI
-target entering an evasive state rolls sixth-sense and a FAILED test stuns for
-`stun_recovery_interval`; `Stun(seconds)` is the one stun entry (the original's `FUN_004200d0`,
-shared by that roll, a `SONIC`/`FLASH` hit and the smoke screen): it enters `Stunned` from ANY
-mode, dropping a running maneuver or climb-out, and a stun landing on a stunned pilot OVERWRITES
-the remaining time (clock + seconds, no max), which is what lets the smoke screen refresh it every
-frame; the mode clears on its own clock and returns to the mode it interrupted, and an external
-`Enter` releases it with no stale expiry; an evasive maneuver is an `EligibleFor`-culled, signature-weighted,
-seeded library draw played to `ManeuverExecutor.Done`, then back; `lay off` is D15's rubber-band
-assist (decoded: the mode and `sixth_sense_factor` 0.994→1.07, "the ease-off while pursued") —
-pursue eases into it when a chasing HUMAN target has fallen behind, and it releases when the
-pursuer catches up or stops chasing; `AssistEnabled` false (`--no-assist`) never enters it.
-Transitions raise `ModeChanged` (the session's `ai mode:` log lines); rolls raise `RollLogged`
-in the engine's pass/fail wording. `avoid crash` runs the original's three altitude bands: below
-`AltitudeFloorM` (20) the climb-out arms with no ray at all, above `ProbeCeilingM` (8000) nothing
-is cast and a running one releases, and between them ONE ray along the aeroplane's own velocity,
-cast every 0.5–1.0 s per plane, decides, releasing on the first clear ray (docs/org/aiPilot.md).
-Engine-free; pinned by
-`AiModeMachineTests` + the `ai-modes` suite. Named inventions (evade's scramble run, the probe's
-minimum reach, lay off's entry/exit cones) are marked at
-their own declaration. The two danger-zone modes are entered only by `AiPilot`, off a reached net
-node's tag; `approaching` still runs the crash check and hands back to itself, `navigating` runs
-nothing (the pose is the ribbon's), and a stun or climb-out out of either returns to the approach.
+The nine-mode AI state machine, owned by `AiPilot.Machine` and stepped from its `Next`: the mode list
+and vocabulary are the engine's own debug-readout dispatch. Decoded and wired are the activation into
+pursue inside the shipped distances, the steady-hand roll a hit provokes and the break-off a failed
+test causes, the sixth-sense roll and its stun, the `Stun` entry every stun source shares, which
+enters `Stunned` from any mode and overwrites a remaining stun rather than capping it, the seeded
+library draw an evasive maneuver plays to `ManeuverExecutor.Done`, the rubber-band `lay off` mode
+`--no-assist` disables, and `avoid crash`'s three altitude bands. Engine-free, with named inventions
+marked at their declarations. Decode: [../org/aiPilot.md](../org/aiPilot.md).
 
 ## src/Flight/ManeuverExecutor.cs
-Plays one library maneuver's timed step program as `FlightInput` values — `Next(model,
-dt)` each sim step until `Done`, consumed the way `AiPilot` is; D11's state machine holds one per
-`evasive maneuver` run and switches back to its own law on `Done`. Steps are TARGET ATTITUDES in
-degrees (not stick deflections, not rates), composed onto the entry frame — level entry-heading
-frame normally, the full entry attitude for a `relative` maneuver; a positive-duration step is
-held for its time, a zero-duration step advances when the attitude is captured. Pure and
-engine-free; deterministic on a fixed dt (`ManeuverExecutorTests` demonstrates a real Bloodhawk
-flying the shipped dive and split_s).
+Plays one library maneuver's timed step program as `FlightInput` values: `Next(model, dt)` each sim
+step until `Done`, consumed the way `AiPilot` is, with the state machine holding one per
+`evasive maneuver` run and switching back to its own law on `Done`. Steps are target attitudes in
+degrees rather than stick deflections or rates, composed onto the entry frame, which is the level
+entry-heading frame normally and the full entry attitude for a `relative` maneuver; a
+positive-duration step is held for its time and a zero-duration step advances when the attitude is
+captured. Pure and engine-free, deterministic on a fixed dt (`ManeuverExecutorTests`).
 
 ## src/Flight/AiGunner.cs
-The AI's forward-gun gunnery: per sim tick the host `FlightController` hands it the
-fire geometry (`Solve`), it answers with the trigger (`WantsFire`) and the intercept, and each
-round leaves along `ShotDirection(muzzlePos)` — the line from THAT barrel to the intercept point
-(wing guns converge; parallel lines straddle a fuselage) perturbed inside the dead-eye cone, one
-seeded draw per shot. Gates in the engine's order: the quick-draw cone off the TARGET's nose/tail
-axis, the separation inside the slot's authored engagement window (1–900 m on every AI gun), then
-the airframe's ±11° `gun_pitch`/`gun_yaw` clamp on the lead (`AimAssist.TryIntercept`, consumed
-never re-derived) with the residual the clamp leaves gated at 10°, so the employable cone is the
-traverse limit plus the gate (`docs/org/aiPilot/aiWeapons.md`).
-Engine-free (`AiGunnerTests`); the live half is the `ai-gunnery` suite.
+The AI's forward-gun gunnery: per sim tick the host `FlightController` hands it the fire geometry
+(`Solve`), it answers with the trigger (`WantsFire`) and the intercept, and each round leaves along
+`ShotDirection(muzzlePos)`, the line from that barrel to the intercept point so wing guns converge,
+perturbed inside the dead-eye cone by one seeded draw per shot. Gates in the engine's order: the
+quick-draw cone off the target's nose-tail axis, the separation inside the slot's authored engagement
+window, then the airframe's traverse clamp on the lead with the residual the clamp leaves gated in
+turn, so the employable cone is the traverse limit plus that gate. Engine-free; the live half is the
+`ai-gunnery` suite. Decode: [../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md).
 
 ## src/Flight/AiRocketeer.cs
-The AI's ordnance employment, the gun path's twin (`docs/org/aiPilot/aiWeapons.md`): per sim tick
-the host `FlightController` (`DriveAiRocketeer`) ages the vehicle-wide lockout and hands over the
-fire geometry (`Solve`), which answers with the trigger (`WantsFire`), the hardpoint it chose
-(`SelectedPylon`) and the direction the round leaves along (`LaunchDirWorld`, the clamped mount aim
-rather than the raw lead). Gates in the engine's order: the quick-draw cone aborting the whole pass,
-then per pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the squared engagement band
-and the traverse clamp's residual against `AimQualityCos` = 0.9962, cos 5°. That constant is the
-ordnance half of a decoded pair and is deliberately not shared with `AiGunner.AimQualityCos` = 0.9848,
-cos 10°: a lead 18° off the nose clamps to 11° and is taken by the gun and refused by the ordnance.
-The lockout is stamped BEFORE the `quick_draw_chance` roll, so a failed roll spends the whole refire
-interval instead of retrying next tick.
-
-**The lead is solved in the frame the round flies in, per pylon** (`org/aiPilot/aiWeapons.md`, the
-branch table under the lead solver). A pylon whose weapon authors `ACCELERATION` (`RoundAccel`,
-`wep_04` among the AI's ordnance) takes `TryMotorIntercept`: the round starts at rest in its
-launcher's frame and climbs to `VELOCITY` at `ACCELERATION`, so the intercept is where the
-separation from the target's RELATIVE track equals the path flown, `0.5·a·t²` inside the ramp and
-`VELOCITY·t − VELOCITY²/(2a)` past it, bisected where the original roots a polynomial
-(`FUN_00462ce0`). A pylon without a motor takes `AimAssist.TryIntercept` at `VELOCITY` against the
-target's WORLD velocity, since such a round is seeded at its cap rather than off its launcher
-(`FUN_00460e30`, the world-frame call). The difference is large at the shipped numbers: `wep_04` at
-450 m/s off a 150 m/s² motor needs 3 s to reach its `VELOCITY`, and a 600 m shot at a 100 m/s
-crosser leads 26.5° where the constant-speed solve leads 12.8°. `AiGunner` keeps the relative-frame
-constant-speed solve, which is the original's third branch, the `CANNON` one.
-
-Three properties of the original hold here by construction rather than by a test. The aim gate is
-skipped for the player, and this class only runs for a non-human pilot, so player fire never reaches
-it (a human's rocket leaves along the aircraft's own axis through `FireControl`). It holds no target of its
-own, mirroring the original's single validated target across the whole weapon walk. And the
-`DAMAGES_ZEPPELIN` match's zeppelin side is unexercised in play: the AI acquisition admits aircraft
-alone (`BL-363`), so `targetIsGasbag` is always false at the call site, and no shipped stock loadout
-carries `wep_14` because the vehicle def's `weapons` tuple is not parsed yet (`BL-394`). Both halves
-of the match are pinned in tests against the Black Hat Warhawk's authored fit instead.
-Engine-free (`AiRocketeerTests`).
+The AI's ordnance employment, the gun path's twin: per sim tick the host `FlightController` ages the
+vehicle-wide lockout and hands over the fire geometry (`Solve`), which answers with the trigger, the
+hardpoint it chose and the direction the round leaves along, which is the clamped mount aim rather
+than the raw lead. Gates in the engine's order: the quick-draw cone aborting the whole pass, then per
+pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the squared engagement band and the
+traverse clamp's residual against an aim-quality cosine deliberately tighter than the gun's. The lead
+is solved per pylon in the frame that round flies in. Engine-free. Decode:
+[../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md).
 
 ## src/Flight/AiVoiceDispatcher.cs
-The E16 trigger dispatch, engine-free (`docs/formats/combat-voice.md`): events in, (speaker,
-clip, outcome) decisions out — the talker roll, the hardcoded halving on bearing ids 1–12, the
-broadcast speaker election (one line per event, a failed roll passes to the NEXT candidate,
-wrapping), the DI tiers at 70/50/30 % most-severe-first, the death cries (20/21) with force, and
-`BearingTriggerId` = 1 + 3·bearing + band. Availability comes from the injected resolver
-(`CombatVoice.PlayableFor` + `HasStream`), never def presence. Pinned by
-`AiVoiceDispatcherTests` + the `ai-voice` suite.
+The combat-voice trigger dispatch, engine-free
+([../formats/combat-voice.md](../formats/combat-voice.md)): events in, speaker, clip and outcome
+decisions out, over the talker roll, the hardcoded halving on the bearing ids, the broadcast speaker
+election where a failed roll passes to the next candidate, the damage tiers taken most-severe-first,
+the death cries with force, and the computed bearing trigger id. Availability comes from the injected
+resolver rather than from def presence. Pinned by `AiVoiceDispatcherTests` and the `ai-voice` suite.
 
 ## src/Flight/AiTargetRanking.cs
-The decoded target-ranking formula (docs/formats/ai-rosters.md "AI modes, engine-side"):
-`rank = weight × 1200 + distance + objectiveBias`, MINIMISED; player base weight 0.7, others
-1.0, ±0.2 weight terms for bearing / altitude sign / target facing, `1e21` beyond the
-activation radius (never picked). Snapshots in, index + `TargetScore` out, engine-free
-(`AiTargetRankingTests`); `SelectBest` prefers the best candidate no ally already holds and
-falls back to the overall best when the pool is exhausted (the design's deconfliction, minimum
-reading); `ObjectiveBiasFor` matches `rating_biases` patterns, first match wins, and saturates at
-both ends — 1.0 or more is always-target, −1.0 or less is the exclusion.
+The decoded target-ranking formula ([../formats/ai-rosters.md](../formats/ai-rosters.md) "AI modes,
+engine-side"): a rank built from a weight, the distance and an objective bias, and MINIMISED, with
+the player carrying a lower base weight than everyone else, small terms for bearing, altitude sign
+and target facing, and an effectively infinite rank beyond the activation radius. Snapshots in, index
+and score out, engine-free. `SelectBest` prefers the best candidate no ally already holds and falls
+back to the overall best when the pool is exhausted, and `ObjectiveBiasFor` matches `rating_biases`
+patterns, first match wins, saturating at always-target and at exclusion.
 
 ## src/Flight/IncomingFire.cs
-`--incoming[=metres[,wep_id]]` — the near-miss test rig: a phantom shooter 120 m on each player's
-six, alternating sides, firing the target's own gun (or the named weapon) into the shared pool under
-a shooter identity no player holds. Exists for deterministic near-miss testing: an AI gunner
-(D14's `--ai-attack`) is a real shooter but aims to hit, and a splitscreen pilot needs a second
-human. Aims along the target's own nose with a lateral offset, so the round overtakes on a
-parallel track and the pass distance holds without lead maths.
+`--incoming[=metres[,wep_id]]`, the near-miss test rig: a phantom shooter on each player's six,
+alternating sides, firing the target's own gun or a named weapon into the shared pool under a shooter
+identity no player holds. It exists for deterministic near-miss testing, since an AI gunner is a real
+shooter but aims to hit and a splitscreen pilot needs a second human. It aims along the target's own
+nose with a lateral offset, so the round overtakes on a parallel track and the pass distance holds
+with no lead maths. Read `WarningShotCue.cs` for what the near miss feeds.
 
 ## src/Flight/PhysicsConstants.cs
-`PhysicsConstants.NomGravity` — the single 20 m/s² player.json `nom_gravity` value, shared by
-`PlaneStats.Gravity`'s default and `ProjectilePool.WorldGravity` so the two can't drift apart.
+`PhysicsConstants.NomGravity`, the single player.json `nom_gravity` value shared by
+`PlaneStats.Gravity`'s default and `ProjectilePool.WorldGravity` so the two cannot drift apart.
 
 ## src/Flight/PlaneStats.cs
-Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain), the
-def's `turrets` block as `TurretMount`s (title + node per viewpoint rig — the host→`ai.zrd`
-gunner link) +
-engines.json stock engine power + player.json globals (the flight constants, the near-miss cue's
-`warning_shot_*` block, the gun aim assist's `sticky_bullet_catchup_rate`/`_forget_interval`
-(`AimAssist.cs`'s B2), `_dist_factor` (B4's scoring) and `_inaccuracy` (B5's launch scatter, stored
-in RADIANS as the original stores it), the Cockpit head's `autohead_turn_time`/`_turn_max`/
-`_turn_min_pitch` (C22, `HeadLook.AutoheadTarget`'s constants — `turn_max`'s authored-vs-default
-asymmetry, docs/formats/vehicle/player-globals.md), plus the decoded model's
-lift/AoA/G, turn/yaw-curve, pitch-fade and drag-fade-speed globals — docs/org/flightModel.md; converted
-exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G; the turn/yaw
-curves, the pitch fade, the G limiter and the AOA window are all live in the model, the first two
-neutral on the authored values and the window binding on all of them), the `crash` block's
-`bounce_factor` (a raw scalar, read one level down inside that block
-— the collision restitution's ceiling), the `engine_sound` def name with its
-volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
-records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per-part
-`injure_anims`), the def-level `VehicleInjureAnims`, and the `collision` probe list as
-`CollisionProbes` (nearest def in the damage chain: the player def's six points, or
-`basic_airplane`'s single origin probe on every AI load, which is the shape `FlightController`'s
-AI sweep carries). Schema: docs/formats/vehicle.md.
-Two flavours of one airframe: `Load` resolves everything down the player chain, `LoadForAi` takes
-  ONLY the damage model (pair, parts, def-level ladder) from the AI def's own chain — the player
-  def's name minus its leading `p`, validated — and leaves `DefName`, dynamics, turrets and the
-  model on the player chain. An AI aircraft is therefore **zone-less**: an authored `armor`/`health`
-  pair and NO `destroyable_parts`, which is what every roster-named def chain resolves in the
-  shipped game (`docs/org/vehicleDamage.md`'s 2026-08-16 correction). `DefName` stays the player
-  def on both flavours on purpose (`AiDefName`'s own doc); `damaged_engine_sound` and
-  `cockpit_engine_sound` both parse fully — `EngineAudioCurves.EngineDefFor` is what selects
-  between them and the plain `engine_sound` (see `src/Flight/EngineAudioCurves.cs` below).
-  `LoadForAi` also reads the AI chain's `title` message key into `AiTitleKey`, the authored name a
-  militia def carries ("MSG_VEH_MEDUSA_KESTREL") and a plain def inherits from its airframe;
-  `AiFlightAssembler` resolves it into `AiTitle` for the targeting readout.
-  `VehicleMode` carries the def chain's own `mode` key, and `WithAiSpawnJitter` is gated on it: the
-  original jitters the `jet` and `heli` classes only, so the `mode wingman` family flies its authored
-  dynamics (`docs/org/flightModel.md`, "The per-spawn jitter"). `WithRosterDurability` applies the
-  roster block's own `init_health`/`armor` override (aiv slots 7/66) to `VehicleHealth`/
-  `VehicleArmor` before `WithEnemyDurability`; both arguments arrive already gated, so null always
-  means unset, never an authored zero (`docs/org/vehicleDamage.md`).
-`DamagedTimer` (a `DamagedEngineTimer`, one mutable `Elapsed` field) is the damaged-engine
-re-arm timer's shared state (C22, `docs/formats/vehicle.md` "What makes an airframe damaged").
-⚠ Every `With*` method's `MemberwiseClone` carries the SAME reference forward from the cached
-def, on purpose: it is what makes every aircraft flying one airframe share one counter, as the
-original's own def field does. Do not reassign it in a new `With*` method.
+Typed per-plane stats ([../formats/vehicle.md](../formats/vehicle.md)), the one reader every flight
+consumer takes its numbers from: vehicle.json `dynamics` resolved through the `kind_of` def chain,
+the def's `turrets` block as `TurretMount`s, engines.json stock engine power, and player.json's
+globals, which are the flight constants plus the tuning the cue, aim-assist, head-look and damage
+paths read. It also carries the `crash` block's restitution ceiling, the engine sound defs and their
+curves, `destroyable_parts` as `DestroyablePart` records with the def-level injure anims, and the
+`collision` probe list. `Load` resolves down the player chain, `LoadForAi` takes only the damage
+model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on.
 
 ## src/Flight/SpawnPoints.cs
-Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a
-different archive than the shared `--zrdr`), two schemas both yielding
-`SpawnPoint(Position, HeadingDeg)`: `LoadIa` (instant-action ia.json `spawn_points` per scenario;
-only IA1 folders have one, the original picks one at random per launch) and `LoadPlayerInit`
-(story objectives.json `PLAYER_INIT`, position + yaw). Schema: docs/formats/spawns.md.
+Reads the flight spawn from a mission's OWN zrdr, a different archive than the shared `--zrdr`, in
+two schemas both yielding `SpawnPoint(Position, HeadingDeg)`: `LoadIa` for the instant-action
+`spawn_points` per scenario, which only some folders carry and the original picks one of at random
+per launch, and `LoadPlayerInit` for the story objectives' `PLAYER_INIT` position and yaw. Schema:
+[../formats/spawns.md](../formats/spawns.md).
 
 ## src/Flight/MissionTargets.cs
 A mission's `targets.json` as one table: target key to its objective display keys

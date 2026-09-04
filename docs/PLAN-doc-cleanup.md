@@ -180,7 +180,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 26. ☑ C26 `docs/architecture/Session.md` (40)
 27. ☑ C27 `docs/architecture/Mech3.md` (62)
 28. ☑ C28 `docs/architecture/UI.md` (78)
-29. ☐ C29 `docs/architecture/Flight.md` (108), then the complete `.\RunTests.ps1`
+29. ◐ C29 `docs/architecture/Flight.md` (108), then the complete `.\RunTests.ps1`
 
 ### Wave D: verification.md
 

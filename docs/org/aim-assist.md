@@ -230,6 +230,14 @@ or a negative discriminant — i.e. a target outrunning the round is simply not 
 root is the `(x >> 1) + 0x1fc00000` bit-trick approximation, so the lead is accurate to roughly a
 per-cent, not exactly.
 
+**Solving for `u = 1/t` is the stable part, not the root form.** The quadratic in `t` itself has
+`|relVel|² − speed²` as its leading coefficient, which sits near zero whenever the target's closing
+speed is close to the round's, and that is the common case in a dogfight; the `u` form's leading
+coefficient is `|displacement|²`, which is essentially never near zero for a real separation. The
+`a / (b ± √disc)` root form guards a different failure, the cancellation between `−b` and `√disc`,
+and swapping the substitution back for a direct solve in `t` reintroduces the first one whatever
+root form is used. `AimAssist.TryIntercept` carries the prohibition at the member.
+
 ### Where the two velocities come from, and why a boat is led
 
 `FUN_004bae60` takes the candidate's velocity from **vtable slot `+4`** on the candidate and the
