@@ -11,8 +11,9 @@ namespace CSVM.Mech3;
 ///
 /// Propellers have several representations under <c>dontmove</c> (see <see cref="PropParts"/>).
 /// The default (exterior) build keeps the still <c>staticpropN</c> disc and drops the blur
-/// layers; the <c>spinningProps</c> build (free flight) does the reverse — it hides the
-/// static disc and keeps the blur discs so a <see cref="Flight.PropAnimator"/> can spin them.
+/// layers; the <c>spinningProps</c> build (free flight) keeps BOTH rather than choosing one, so a
+/// <see cref="Flight.PropAnimator"/> can spin the blur discs while the startprops/stopprops
+/// choreography cross-fades between them and the static disc at spawn and at engine stop.
 /// The <c>nitropropN</c> boost disc is built hidden in a flight build, for the nitro_boost def.
 /// </summary>
 public sealed class PlaneBuilder
@@ -21,7 +22,7 @@ public sealed class PlaneBuilder
     /// the subtree is authored in its own units with the pilot's eye at its own origin, so the
     /// FRAMING is scale-invariant and this chooses only how the interior composites against world
     /// geometry. ⚠ The interior and the airframe are not a similarity apart — do not try to derive
-    /// this from the model; docs/architecture.md carries the decode.</summary>
+    /// this from the model. First-person decode: docs/org/cameraViews.md.</summary>
     public const float InteriorScale = 0.04f;
 
     // Non-prop subtrees that make no sense in an exterior view: cockpit interiors are
@@ -29,7 +30,7 @@ public sealed class PlaneBuilder
     // player_damage_off holds the intact duplicates (pdpNi) of the panels that
     // player_damage_on already provides as pdpN_h — the original engine shows exactly
     // one of the two groups (its vehicle-damage detail toggle); we model "damage on".
-    // `cockpit2` is defensive: no shipped tree carries one (docs/architecture.md).
+    // `cockpit2` is defensive: no shipped tree carries one.
     private static readonly HashSet<string> SkipNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "cockpit1", "cockpit2", "destroyed", "shadow", "player_damage_off",
@@ -418,8 +419,8 @@ public sealed class PlaneBuilder
         if (!_spinningProps)
             return PropParts.IsDynamic(kind);
         // nitropropN is built hidden (CollectWingFlares): the nitro_boost def activates and fades
-        // it in over the spinning discs, and nitro_decay parks it again.
-        // staticprop-vs-staticrotor build rule: this module's docs/architecture.md entry.
+        // it in over the spinning discs, and nitro_decay parks it again. ⚠ staticpropN is kept
+        // (see the class remarks); staticrotorN is not, that def naming propeller nodes only.
         return kind == PropParts.Kind.Static
             && !node.Name.StartsWith("staticprop", StringComparison.OrdinalIgnoreCase);
     }

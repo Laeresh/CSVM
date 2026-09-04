@@ -12,7 +12,8 @@ namespace CSVM.Mech3;
 /// ground texture, once per integer repeat of that texture across each triangle. Placement is
 /// computed in texture space, so clutter rotates, mirrors and stretches with the painted ground.
 /// Decode: docs/org/clutter.md. Authored side: docs/formats/clutter.md and templates.md.
-/// Plumbing and the remake-only rules: this module's entry in docs/architecture.md.
+/// Plumbing: this module's entry in docs/architecture.md. The remake-only rules (no world grid,
+/// the fixed placement seed, the seen dedup, shared collision shapes) are on their own members.
 /// ⚠ Do not add a world-space grid or a global clutter origin. The original has neither, and a
 /// fixed X/Z step costs C1 about four times its trees.
 /// ⚠ no_clutter does not mean bare ground. Where two coplanar layers are painted over each other
@@ -1097,9 +1098,9 @@ public sealed class ClutterBuilder
             int oneSided = AppendTriangles(_gamez.Meshes[kind.MeshIndex], tris);
             if (tris.Count == 0)
                 continue;
-            // ⚠ Two-sided where SceneBuilder's world colliders are one-sided, and not for want of the
-            // flag: this triangulation does not alternate a strip's winding, so these triangles have
-            // no agreed front to be solid from (docs/architecture.md, src/Mech3/Clutter.cs).
+            // ⚠ Two-sided where SceneBuilder's world colliders are one-sided, and not for want of
+            // the flag: this triangulation does not alternate a strip's winding, so the triangles
+            // have no agreed front. Whether the original holds these at all is undecoded.
             var shape = new ConcavePolygonShape3D { Data = tris.ToArray(), BackfaceCollision = true };
             shapes[kind.MeshIndex] = shape;
             SolidCollisionTriangles += tris.Count / 3;

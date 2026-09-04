@@ -7,247 +7,117 @@ One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traf
 Traps do not live here; the rule is in `docs/architecture.md`.
 
 ## src/Mech3/GameZ.cs
-Loads a mech3ax GameZ extraction (zip or unpacked dir): nodes/models/materials/textures JSON into
-plain C# objects, reading both the v0.6.1 "legacy" and the fork "unified" shapes (field mapping:
-docs/formats/gamez.md); `WorldTransformOf` resolves a node's world transform without building it.
-Carries the node's `flags.intersect_surface` as `IntersectSurface` (default true when flags are
-absent) — the original's collision-participation flag, honoured by WorldBuilder.NoCollisionNode.
-Carries `flags.active` as `Active` (same default) — initial runtime visibility, honoured by
-`WorldBuilder.Add`, which stages an inactive world-build root hidden so mission choreography can
-still resolve and activate it later.
-Carries the node's `zone_id` as `ZoneId` (default −1 when the field is absent, i.e. ungated) — the
-original's per-node visibility zone, honoured per node by `SceneBuilder` and per camera by
-`Mech3/ZoneGate.cs`.
-Carries the node's `field040` as `MissionTargetWord` (absent from the JSON when zero), the word the
-original reads a mission structure's flag and team out of: bit 31 flags it (`IsMissionStructure`),
-bit 22 marks a gasbag (`IsGasbagStructure`), and bits 0-21 are eleven two-bit ownership slots, one
-per mission of the chapter, so the team needs the mission number — `MissionStructureTeam(mission)`
-reads one slot, `MissionSlotOf` turns a mission folder name into that 1-based number, and
-`WorldObjectTeam` resolves a node the way the engine's factory does, taking the nearest ancestor's
-slot where the node itself authors none. `SceneBuilder` stamps the answer on the flagged nodes and
-`DestructibleRegistry` puts it on the pool (docs/org/targeting.md "What a mission structure's team
-is").
-Carries the World node's partition grid twice: `PartitionNodes` is the flat distinct set every
-placement walk uses, and `PartitionCellNodes` (with the grid origin and cell size read off the first
-cell's own bounds) keeps the per-cell membership an area query needs (see `WorldPartitionGrid`).
-`IsMarkerGizmo(meshIndex)` classifies a mesh as an authoring mark rather than scenery (one flat-
-coloured untextured triangle — see docs/formats/world-structure.md); SceneBuilder draws none.
-Carries each model's `flags.lighting`/`flags.fog` as `GameZMesh.Lighting`/`Fog` (default true) —
-the original's self-lit and unfogged marks, honoured by SceneBuilder's per-model shader variants.
-Carries each material's `soil` label as `GameZMaterial.SoilId` (the original's numeric surface type
-id — `player_crash_*`/`touchdown_*` selection indexes on it, `analysis/surface-classification/
-FINDINGS.md` 2026-08-11), mapped through `SoilLabelToId`. An unmapped label throws rather than
-defaulting to 0 — mech3ax's label is just its Soil enum variant name, and a new one means the
-extractor changed, not that the id is 0.
-Parses the WHOLE per-polygon `materials` list: element 0 is the base skin, the rest become
-`GameZPolygon.OverlayPasses` (`GameZPolygonPass`: material + its own UVs), which SceneBuilder draws
-as extra surfaces — 619 polygons install-wide, none in planes.zbd (docs/formats/gamez.md).
-Parses the per-polygon `zone_set` list into `GameZPolygon.ZoneSet` (`int?`, unified-only; at most
-one value per polygon install-wide — docs/formats/world-structure.md's census); nothing reads it
-yet, parse+census only (`BL-057`).
-`VertexColorsRestateMaterialColor(poly, materialIndex)` spots the redundantly-duplicated flat
-colour: an untextured (`Colored`) material whose colour every one of the polygon's vertex colours
-repeats. That is ONE authored value in two slots, so SceneBuilder applies it once instead of
-multiplying (which squares it — 176 → 120). 87 polygons install-wide, 85 of them the skydome
-skirts, censused per chapter by `CSVM.Tests/FlatColorTests.cs`.
+Loads a mech3ax GameZ extraction (zip or unpacked dir) into plain C# objects (nodes, models,
+materials, textures), reading both the v0.6.1 "legacy" and the fork "unified" shapes. It carries
+the fields the builders read: `IntersectSurface`, `Active`, `ZoneId`, `MissionTargetWord`,
+`SoilId`, `OverlayPasses`, `ZoneSet`, each model's `Lighting`/`Fog`, and the World node's partition
+grid as both a flat `PartitionNodes` and the per-cell `PartitionCellNodes` a `WorldPartitionGrid`
+query needs. It also answers what the JSON cannot: `WorldTransformOf`, `IsMarkerGizmo`,
+`VertexColorsRestateMaterialColor`, and `MissionStructureTeam`/`MissionSlotOf`/`WorldObjectTeam`.
+Fields: [../formats/gamez.md](../formats/gamez.md), [../formats/world-structure.md](../formats/world-structure.md); teams: [../org/targeting.md](../org/targeting.md). Read `SceneBuilder.cs` next.
 
 ## src/Mech3/TextureArchive.cs
-Texture lookup over an unzbd texture zip or unpacked PNG dir; absorbs the stored-name quirks
-(20-char truncation prefix match, legacy `.-N` renames, the fork's trailing doubled period — see
-docs/formats/gamez.md) and classifies each texture's alpha channel via LastHadAlpha /
-LastAlphaIsSoft ("soft" = the ink is mostly partial alpha: opaque/ink < 0.45, measured install-wide
-in `analysis/alpha-classification/`; drives blend-vs-scissor — scissor both erases sub-0.5 ink AND
-solidifies partial alpha above it, so only essentially-binary ink scissors faithfully).
-`SoftAlphaCoastline` names the five waterline sheets the ratio misreads, because their solid
-dry-land half outvotes the feathered ramp that is the point of the texture.
-`Build` is the one construction path — decode, classify, drop-in, mip chain — and `Find` caches
-its result; `BuildMipped` hands the same Image to `--dump-mips` un-cached.
-`LastAlphaClass` is a second, unrelated alpha answer: the extractor's own `None`/`Simple`/`Full`
-field, read from the archive's `manifest.json` at construction, which is what the original's
-per-surface lighting exemption keys on (docs/org/vertexLighting.md). It is not interchangeable with
-`LastHadAlpha`, and the pixel test it falls back to where no manifest ships loses the `Simple`
-class.
-Two sets name the textures the retail data itself lacks, and they differ in what gets drawn:
-`KnownAbsentFromGameData` (`pir_spinner`, `barngrill`) takes a neutral gray card, while
-`AbsentAndUndrawn` (`cloud1`, `cloud2`, C3's skydome) drops the polygon in `SceneBuilder.BuildMesh`.
-Anything on neither list stays loud (debug magenta plus a not-found line), since it is likelier our
-own name resolution failing. ⚠ `IsAbsentAndUndrawn` also requires the lookup to fail, so the seven
-chapters that do ship `cloud1`/`cloud2` keep drawing them — see docs/org/textures.md.
+Texture lookup over an unzbd texture extraction, a zip or an unpacked PNG dir. It absorbs the
+stored-name quirks (20-char truncation prefix match, legacy `.-N` renames, the fork's trailing
+doubled period) and classifies each texture's alpha twice, for two unrelated readers:
+`LastHadAlpha`/`LastAlphaIsSoft` from the decoded pixels, which is what blend-versus-scissor keys
+on, and `LastAlphaClass` from the extractor's own manifest field, which is what the original's
+per-surface lighting exemption keys on. `Build` is the one construction path (decode, classify,
+drop-in, mip chain) and `Find` caches its result; `BuildMipped` hands the same Image to
+`--dump-mips` un-cached. Names and alpha: [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
 
 ## src/Mech3/SceneBuilder.cs
-Shared GameZ-subtree → MeshInstance3D builder: triangulation, material/mesh
-caches, nearest-LOD only, skip predicate. Replicates the original's draw order as depth bias:
-priority, then subface, then overlay pass, then within-mesh surface rank, with the cross-node
-tie-break coming from `NodeBiasOf` — the world's `ConflictRank` map where the caller set one, the
-flat node index otherwise (aircraft, `--node=`). Every `node_bias` in the project goes through
-that one method. `BuildSubtree`'s `zoneGate` flag (off by default; on for the world walk and the
-map-edge extension) moves each built mesh instance onto its own node's `zone_id` visual layer
-(`Mech3/ZoneGate.cs`). It stays off for the cloud deck and the skydome, which are per-rig
-camera-anchored copies gated by `Node3D.Visible` instead.
-`CollidersForMesh` splits a mesh's colliding geometry into one trimesh per surface class actually
-present (water/buildings/untagged, each polygon's own texture deciding), each also carrying
-`SurfaceIdMeta`, the original's numeric surface id for the bucket's dominant material. A class
-splits again by SIDEDNESS, since `BackfaceCollision` is a whole-shape flag and the polygon's own
-`SHOW_BACKFACE` decides: the one-sided half is emitted with REVERSED winding, because the source's
-visible side is Godot's back face. Both halves go on ONE body, so body counts, names and metas are
-unchanged. Each collider-bearing node registers with `WorldCollision`, which owns its `Disabled`
-flag from then on. `CollisionSidedness` and `CollisionBackToBackPairs` are that split's census. A
-`GameZ.IsMarkerGizmo` mesh draws nothing but its Node3D is still built, since animations
-attach puffers and sounds to those nodes by name.
-A node the scene data flags as a mission structure carries `MissionStructureTeamMeta` (and
-`MissionStructureGasbagMeta` where it is a gasbag), the channel `DestructibleRegistry` reads a
-pool's team through, since the registry meets a pool as a Node3D with no gamez node to ask. The
-team is resolved HERE because a node authors one owner per mission of the chapter and only the
-build knows which mission it is: `MissionSlot` carries that number in, `WorldSession` sets it from
-the mission folder through `WorldBuilder.MissionSlot`, and a node authoring no owner for this
-mission is stamped with none.
-A surface's colour is `vertex colour × material` (the original's baked-lighting modulate), except
-where `GameZ.VertexColorsRestateMaterialColor` detects the two are the same authored value
-(mostly skydome skirts — docs/formats/weather.md). `DebugClutterFlag` (`--debug-clutterflag`)
-overrides that colour with the decoded `no_clutter` bit instead. Every shader on one instance
-shares the ordered preamble in `csky_instance_uniforms.gdshaderinc`; see that file for the
-contract, and `GetBiasShader` for how the model's `lighting`/`fog` flags select shader variants
-instead of driving a uniform. A textured surface takes a second, independent lighting exemption from
-its own texture's alpha class (`LastTextureExemptFromLight`), which is the original's per-texture
-gate; `AlphaExemptMaterialCount` is its per-chapter census. It applies on the fullbright world pass
-alone, since the shaded aircraft pass carries no world-light term for it to cancel. The mesh, material and collider memos are per builder, since every
-override is baked into what they hold; the three SHADER memos are process-wide, because a generated
-text is a pure function of its key and Godot charges a compile for each fresh `Shader` a material
-takes (`docs/verification.md` PERF-22). Each of the three keys also carries `GraphicsMode.Enhanced`
-as its own bit. In enhanced mode `GetBiasShader`'s world arm for a surface authored `lighting: true`
-drops `unshaded` and shades off the decoded normals (pre-negated for `cull_front`) as a matte
-material, keeping the gamma modulate and the fog while dropping the `csky_world_light` multiply and
-the LIGHT_STATE spill; `lighting: false` surfaces and both billboard generators stay fullbright. That
-lit arm writes its fog ramp through the spatial shader's post-lighting `FOG` output instead of into
-`ALBEDO`, so the fog colour is never itself lit and a fully fogged fragment lands on the same value
-the fullbright arm's mix gives. In enhanced mode the two billboard generators' `glow` arm (the
-original's own camera-facing light-source
-class, plus the flare/fire/flame cylindrical facades) additionally scales its colour by
-`EmissiveScale` so the pixels exceed 1.0 for the glow pass; those arms are `unshaded`, where Godot
-discards EMISSION, so the scale is applied to the colour. Inside that lit world arm, a surface
-`ClassifySurface` calls water takes `WaterRoughness`/`WaterSpecular` in place of the matte values,
-which is what `Launcher.EnableWaterReflections`' screen-space reflection has to march against. See
-"Rendering: the enhanced graphics mode" above for the divergence record as a whole.
-Format/decode: docs/formats/gamez.md, docs/formats/world-structure.md, docs/formats/gotchas.md,
-docs/org/vertexLighting.md (the lighting-bit census enhanced mode's glow arm is keyed on).
+Shared GameZ-subtree to MeshInstance3D builder: triangulation, material and mesh caches,
+nearest-LOD only, a skip predicate. It replicates the original's draw order as depth bias
+(priority, then subface, then overlay pass, then within-mesh surface rank, with the cross-node
+tie-break from `NodeBiasOf`: the world's `ConflictRank` map where the caller set one, the flat node
+index otherwise), applies CLAMP sampling per surface off `UvsWithinUnitSquare` rather than blanket,
+and colours a surface `vertex colour x material` except where a polygon's vertex colours restate
+that material's own value. `BuildSubtree`'s `zoneGate` flag moves each instance onto its `zone_id`
+visual layer (`ZoneGate.cs`); it stays off for the camera-anchored deck and dome. `CollidersForMesh`
+splits a mesh into one trimesh per surface class and then by sidedness, both halves on one body,
+each registering with `WorldCollision`. `MissionStructureTeamMeta` is the channel
+`DestructibleRegistry` reads a pool's team through. Shader selection, the alpha-class lighting
+exemption and the enhanced-mode arms: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md).
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
 with the zone set `{0, camera weather state}`; the walk draws a node iff its gamez `zone_id` is
 `-1`, or is in that set. Four members: `Draws(zoneId, state)` (the rule), `LayerFor(zoneId)` (the
-visual layer a gated zone's meshes are MOVED onto — 0 for `-1`/`0`, i.e. leave on the default
+visual layer a gated zone's meshes are MOVED onto, 0 for `-1`/`0`, i.e. leave on the default
 layer), `CullMask(mask, state)` (narrows the band to one zone, every other bit untouched) and
-`OpenCullMask(mask)` (the whole band back — `--no-zone-cull` and the launcher camera's per-session
+`OpenCullMask(mask)` (the whole band back, for `--no-zone-cull` and the launcher camera's per-session
 reset). Constraints and evidence live on the class itself; see `CSVM.Tests/ZoneGateTests.cs`.
 
 ## src/Mech3/ConflictRank.cs
 The world's cross-node draw-order tie-break. Buckets every built triangle by its world plane,
 finds the cross-node pairs that are coplanar, same-priority, same-subface and genuinely overlap
-(clipped area > 1 m², never an AABB touch), and layers that DAG by longest path — so a node's rank
+(clipped area > 1 m², never an AABB touch), and layers that DAG by longest path, so a node's rank
 counts conflicting layers beneath it, not nodes before it. Every edge runs low node index → high,
 so the layering is a topological order of the original's own draw order and cannot invert authored
 layering. `WorldBuilder.RankConflicts` runs it before the build; 11–45 ms per chapter.
 
 ## src/Mech3/WorldCollision.cs
 Owns every `SceneBuilder`-built collider's `Disabled` flag and derives it: enabled exactly while the
-owning node is visible in the scene tree and no ancestor is faded out. `Track` (called once per
-collider-bearing node as it is built) binds it to the node's `VisibilityChanged` — which Godot
-propagates to descendants — plus `TreeEntered`, because a world is assembled and bootstrapped while
-still detached, where visibility writes emit nothing. `SetFaded` is the second input: an
-`OBJECT_OPACITY_*` fade is a shader parameter visibility knows nothing about. `OwnerOf` reads the
-same relation backwards, naming the world object a collider body stands for: `SurfaceIdMeta` marks
-the per-surface-class bodies `SceneBuilder` carved from one mesh node, so they answer their shared
-parent, and anything else answers itself. Callers that must count objects rather than bodies
-(`ProjectilePool.ApplyDamage`'s splash shares) key on it.
+owning node is visible in the scene tree and no ancestor is faded out. `Track` binds that to the
+node's `VisibilityChanged` plus `TreeEntered`, since a world is assembled and bootstrapped while
+still detached; `SetFaded` is the second input, an `OBJECT_OPACITY_*` fade being a shader parameter
+visibility knows nothing about. `OwnerOf` reads the relation backwards, naming the world object a
+collider body stands for: the per-surface-class bodies `SceneBuilder` carved from one mesh node
+answer their shared parent (`SurfaceIdMeta`) and anything else answers itself, which is what a
+caller counting objects rather than bodies keys on. Read `SceneBuilder.cs` next.
 
 ## src/Mech3/PlaneBuilder.cs
-Builds one aircraft from its GameZ subtree (shaded, cullBackfaces: true — interior lattice must be
-backface-culled or it paints over the skin), skipping cockpit/destroyed/shadow subtrees, and
-`*_hook` unless `dockingHook` asks for it: a human rig gets the airframe's skyhook group built and
-parked at its archive-authored inactive bit, because the hookup cutscene's `<x>_hook_extend`
-activates that group rather than creating it (`docs/formats/anim-definitions/cutscenes.md`).
-Repaint(scheme) re-liveries the built plane in place; BuildDestroyed builds the wreck subtree with
-the plane-root→destroyed transform chain baked in; WingFlares/DamagePanels expose collected nodes.
-Flight (`spinningProps`) now builds the static `staticpropN` disc alongside the spinning blur discs
-it always built, not just one or the other — the startprops/stopprops choreography cross-fades
-between them at spawn/engine-stop (`FlightController`), so both must exist. `staticrotorN` (the
-autogyro) is unaffected and stays skipped in flight — that def only names propeller nodes.
-`Build` also reads `CockpitCameraOffset`, the plane-local `cockpit_camera` marker translate
-(`MarkerRig.FindNamedMarker`, fallback the origin), for `CameraController`'s first-person
-placement; the marker read walks past the alternate-state subtrees to the
-authored node in the top-level `markers` group.
-
-`cockpitInterior: true` takes `cockpit1` back out of the skip list for
-that build alone and mounts it hidden as `CockpitInterior`: local transform = the
-`cockpit_camera` offset, a uniform `InteriorScale`, and the fixed
-`CameraController.HeadPitchOffsetRad` tilt, then `ParkInteriorStates` walks it. Only a
-human rig asks for it — an AI plane never builds a cockpit. The subtree's `pcdp4`/`pcdp6` torn-skin
-panels build hidden alongside it, kept off `DamagePanels` (the exterior set the pairing walk
-measures mesh centers over) and exposed instead on their own `CockpitDamagePanels` list, which
-`DamageVisuals` flips off the same `pdpanel4`/`pdpanel6` entries as the exterior pair (B12).
-
-⚠ **The interior's off-states ship `active: true`.** Five windshield bullet-hole groups
-(`bullet1`…`bullet5`) and two warning lamps (`lowalt_on`/`stallwarning_on`) are authored visible on
-all 11 airframes and hidden engine-side until something drives them, so an unparked build paints
-bullet holes across the sky of a pristine plane and holds both lamps lit. `IsInteriorDrivenState`
-is that named set; `ParkInteriorStates` hides it plus anything the gamez marks `active: false` (the
-Devastator's `nitrogauge`, the only such node). ⚠ It is a NAMED set, not a blanket hide: the
-damage-dial zones, the belt segments and the needles are always-drawn geometry that changes
-COLOUR, which is `GaugeCluster`'s own decode of the same nodes.
-
-⚠ **The interior is authored in its own space, and the two spaces are not a similarity apart.**
-The eye sits at `cockpit1`'s origin looking down −Z (`extracted/zrdr/instruments.zrd.json` places
-the whole instrument panel at z −17.5 straight ahead of it), while the interior's own elevators sit
-at y −10.5 where the exterior's sit at −0.40 — it is a stylised model built to be looked at from
-one point, not a scaled copy of the aircraft. So the framing is scale-invariant and
-`InteriorScale` is a port TUNE choosing only how the interior composites against world geometry.
-`cockpit2` is skipped defensively and appears in no shipped tree.
-
-⚠ **The mount carries the −4.70° head-pitch tilt, and that is what puts the gunsight on the guns.**
-The offset tilts the WORLD view down; the pilot's relationship to his own cockpit does not tilt
-with it, because the original draws the interior in its own pass from the interior origin along the
-interior's own −Z. Mounting the subtree tilted is how a single-pass renderer says the same thing.
-Measured against `OriginalScreenshots/Videos/CAP-02 Cockpit Second10.mp4`: there the sight ring's
-crosshair sits 4.79° above screen centre and never moves by a pixel across the clip, which is the
-head-pitch offset itself — the sight is on the nose axis, and the gun pipper (which marks that same
-axis, `ImpactReticle`) sits on it in straight flight. Mounted untilted the sight rides 3.9° above
-the pipper and the two never meet. Head-look is NOT applied to the mount: the interior stays
-plane-fixed, so panning the head still swings the cockpit across the view, as the original does.
-⚠ A residual remains: the tilted mount overshoots by 0.60°, leaving the pipper ~6 px above the
-crosshair at 720p where the original has them coincident. The exact fit is a 3.82° tilt, but that
-is a Bloodhawk-fitted number with no decode behind it and the sight's height is per-airframe
-geometry, so the decoded constant is what ships. `BL-` follow-up: measure the same offset on a
-second airframe's cockpit footage before trading the constant for a TUNE.
+Builds one aircraft from its GameZ subtree, skipping the cockpit, damage, destroyed and shadow
+subtrees and the airframe's `*_hook` skyhook group unless `dockingHook` asks for it. `Repaint`
+re-liveries the built plane in place, `BuildDestroyed` builds the wreck subtree with the
+plane-root to destroyed transform chain baked in, and `WingFlares`, `DamagePanels` and
+`CockpitDamagePanels` expose the nodes the build collected. `spinningProps` selects the flight
+propeller set (`PropParts.cs`); `Build` also reads `CockpitCameraOffset` off the `cockpit_camera`
+marker for `CameraController`. `cockpitInterior` mounts `cockpit1` hidden at that offset under
+`InteriorScale` and the fixed head-pitch tilt, then `ParkInteriorStates` walks it. Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Mech3/PaintScheme.cs
-One aircraft livery: pattern name + three colours + three decal indices — the paint_* record a
-vehicle.json def carries (see docs/formats/paint.md). LoadCatalog keeps one scheme per pattern
-name (the 12 shipped patterns); Random() draws a plausible livery when none is given.
+One aircraft livery: the pattern name, three colours and three decal indices of the `paint_*`
+record a `vehicle.json` def carries. `LoadCatalog` keeps one scheme per pattern name (the 12
+shipped patterns); `Random` draws a plausible livery when none is given. Read `PlanePainter.cs`
+next. Authored side: [../formats/paint.md](../formats/paint.md); decode: [../org/paint.md](../org/paint.md).
 
 ## src/Mech3/PatternLibrary.cs
-Decodes the original's .BM paint patterns from extracted/rof/ASSETS/GRAPHICS/<PATTERN>/ (produced
-by ExtractRof.ps1; .BM layout in docs/formats/rof.md). PatternsFor(prefix) lists the patterns
-shipping skins for one aircraft — a pattern is per plane; Skin() caches per (pattern, skin) so
-several aircraft in one session share a decode.
+Decodes the original's `.BM` paint patterns from `extracted/rof/ASSETS/GRAPHICS/<PATTERN>/`, which
+`ExtractRof.ps1` produces. `PatternsFor(prefix)` lists the patterns shipping skins for one
+aircraft, a pattern being per plane; `Skin()` caches per (pattern, skin) so several aircraft in one
+session share a decode. `.BM` layout: [../formats/rof.md](../formats/rof.md).
 
 ## src/Mech3/PlanePainter.cs
-Applies a PaintScheme to one aircraft: composites its skins from the pattern's region masks and
-swaps the three decal placeholders. Read docs/formats/paint.md and rof.md first — the composite
-formula, the shading-plane choice, and the bottom-up .BM rows are documented there.
+Applies a `PaintScheme` to one aircraft: composites its skins from the pattern's region masks and
+swaps the three decal placeholders. The composite formula, the shading-plane choice and the
+bottom-up `.BM` rows are decode, and belong to [../formats/paint.md](../formats/paint.md),
+[../formats/rof.md](../formats/rof.md) and [../org/paint.md](../org/paint.md). Read those before changing a composite step.
+
+## src/Mech3/MilitiaPaint.cs
+Each militia's paint pattern, keyed by the militia half of a vehicle's display name, which is all a
+militia decides on the Instant Action path: the original builds every wingman, ace and wave member
+from the plain AI def of its aircraft and writes the setup screen's pattern, decals and colours over
+it, so no militia ever selects a vehicle def there. The pattern is read off whichever def of that
+militia names one, since every def of a militia wears the same one. `PatternForWave` answers for a
+single wave's `enemy_name`, or null where that militia names no pattern. Read `PaintScheme.cs`
+next. Decode: [../formats/instant-action.md](../formats/instant-action.md), [../formats/paint.md](../formats/paint.md).
 
 ## src/Mech3/PropParts.cs
-Classifies a plane's propeller/rotor subnodes by name (staticpropN/staticrotorN, nitropropN,
-propN/propNb, rotorN/rotorNb) and supplies each spinning kind's local axis + rate — the
-XYZ_ROTATION values (deg/s, docs/formats/anim-definitions.md) from plane_props.json (spinprops)
-and autogyro.json (agyro_rotors): props spin about local Z, rotors about local Y.
+Classifies a plane's propeller and rotor subnodes by name (`staticpropN`/`staticrotorN`,
+`nitropropN`, `propN`/`propNb`, `rotorN`/`rotorNb`) and supplies each spinning kind's local axis
+and rate: the `XYZ_ROTATION` values from `plane_props.json` (`spinprops`) and `autogyro.json`
+(`agyro_rotors`), props spinning about local Z and rotors about local Y. Units and keys:
+[../formats/anim-definitions.md](../formats/anim-definitions.md). `PlaneBuilder.cs` is the one caller.
 
 ## src/Mech3/ControlSurfaces.cs
-Classifies a plane's control-surface mesh nodes + hinge axes: the deflecting node (l/r_aileronN,
-l/r_elevatorN, l/r_rudderN, the Fury's l/r_rudder_rotate) hangs under a hinge parent group whose
-transform places/orients the hinge line; ailerons/elevators hinge about local X, rudders local Y.
-The name patterns are the original's own six `sprintf` node lists (docs/org/flightModel.md, "The
-original's control-surface animation"), which is why the elevators classify per side: they carry a
-differential roll term, so left and right settle at different angles.
+Classifies a plane's control-surface mesh nodes and their hinge axes: the deflecting node
+(`l/r_aileronN`, `l/r_elevatorN`, `l/r_rudderN`, the Fury's `l/r_rudder_rotate`) hangs under a
+hinge parent group whose transform places and orients the hinge line, ailerons and elevators
+hinging about local X and rudders about local Y. The name patterns are the original's own six
+`sprintf` node lists, which is why the elevators classify per side: they carry a differential roll
+term, so left and right settle at different angles. Decode: [../org/flightModel.md](../org/flightModel.md), "The original's control-surface animation".
 
 ## src/Mech3/WingLights.cs
 Single source of truth for wingtip nav lights: the flare-node predicate (wing_flare1/2), the glow
@@ -257,95 +127,68 @@ LIGHT_STATE COLOR), the blink period (1.5 s = its LOOP SEQUENCE_OFFSET) and the 
 as authored, no billboard); WingLightBlinker flashes them and emits a matching OmniLight3D per side.
 
 ## src/Mech3/WorldBuilder.cs
-Builds a chapter world (fullbright): World children + partition-referenced subtrees; skips `horizon`
-(`BuildHorizon` builds the camera-anchored skydome separately, unfogged per its authored
-`fog: false`), `fvol*` (`IsFogVolumeNode`, shared with `FogVolumeSpec.VolumesOf` so the skipped set
-and the cloud-scatter set are one list), `dzpaths`.
-
-Every world node the walk builds is stamped with its own `zone_id` visual layer (`SceneBuilder`,
-`zoneGate: true` — see `Mech3/ZoneGate.cs`), so the camera's weather state culls it. The **deck**
-and the **dome** are the two exceptions: both are per-rig camera-anchored copies with no shared
-visual layer to stamp, and take the zone rule through `Session/WeatherRig.Tick` instead. The deck
-(`CloudDeck`), its altitude, its SUNLIGHT dimming and its map-edge annulus, and the dome's
-per-chapter zone selection and dome count (`DomeZonesToBuild`), are all measured original
-behaviour — read docs/formats/weather.md before touching either, and docs/org/weather.md for the
-original's own zone-selection function map.
-
+Builds a chapter world (fullbright): the World node's children plus every partition-referenced
+subtree, skipping `horizon` (`BuildHorizon` builds the camera-anchored skydome separately),
+`fvol*` (`IsFogVolumeNode`, the one list `FogVolumeSpec.VolumesOf` also reads, so the skipped set
+and the cloud-scatter set cannot drift apart) and `dzpaths`. Every node the walk builds is stamped
+with its own `zone_id` visual layer (`SceneBuilder`, `zoneGate: true`), so the camera's weather
+state culls it; the cloud deck and the dome are the two exceptions, camera-anchored per rig and
+taking the zone rule through `Session/WeatherRig.Tick` instead.
 `HideUnplacedEntities`/`RestorePlacedEntities` switch off, then restore, the entities a chapter
-parks at the world origin awaiting mission placement. `NoCollisionNode` exempts sky/cloud/billboard
-geometry and anything authoring `intersect_surface: false` from colliders (docs/formats/gamez.md).
-Placed roots whose authored `active` flag is false are built and indexed but begin hidden; C3/M03's
-`barracuda` is activated later by `sub_movement`.
-A static probe (`analysis/collider-probe/probe.py`) reproduces `ColliderCount` independently
-(`BL-070`). `CreateEdgeExtender` hands off to `MapEdgeExtender.cs`; clutter decoration is
-`Clutter.cs`.
-
-Static helpers (`HorizonZonesOf`, `CloudDeckAltitudeOf`, `DomeZonesToBuild`, `DetachedWorldAabb`,
-`FogVolumeZoneIdOf`, `MatchNodes`) are pure over `GameZ`/a built subtree and testable off-engine
-(`CSVM.Tests/HorizonDomeTests.cs`, `DeckRegimeTests.cs`).
+parks at the world origin awaiting mission placement; `NoCollisionNode` exempts sky, cloud and
+billboard geometry and anything authoring `intersect_surface: false` from colliders. The static
+helpers (`HorizonZonesOf`, `CloudDeckAltitudeOf`, `DomeZonesToBuild`, `DetachedWorldAabb`,
+`FogVolumeZoneIdOf`, `MatchNodes`) are pure and test off engine. Deck and dome: [../formats/weather.md](../formats/weather.md), [../org/weather.md](../org/weather.md).
 
 ## src/Mech3/MapEdgeExtender.cs
-Rolling window (`Rings`=5 of 1024 m cells, diffed only on cell crossings) of repeated border tiles +
-clutter (grown from `ClutterBuilder.ExportedKinds`, each copy keeping its source stamp's fade
-thresholds) continuing the world past the map edge, one window per session shared by every player
-camera; the window's 5120 m reach exceeds the largest authored clutter fade at every detail level, and is unchanged by `graphics.clutterFarFade=false`, which simply leaves the window edge (under the mission's fog) as the extension's visible limit. `ClassifyGroundMesh`/`IsCompletionStrip`/
-`FoldAxis` are pure statics pinned by `MapEdgeTileTests`/`MapEdgeFoldTests`; `--dump-tilegrid` writes
-the per-cell acceptance census `WriteCensus` builds. The original's own continuation behaviour and
-the per-chapter fold measurements: docs/formats/world-structure.md.
+A rolling window of repeated border tiles and clutter continuing the world past the map edge, one
+window per session shared by every player camera and diffed only on a cell crossing. Clutter copies
+grow from `ClutterBuilder.ExportedKinds`, each keeping its source stamp's fade thresholds.
+`ClassifyGroundMesh`, `IsCompletionStrip` and `FoldAxis` are pure statics pinned by
+`MapEdgeTileTests`/`MapEdgeFoldTests`; `--dump-tilegrid` writes the per-cell acceptance census
+`WriteCensus` builds. The original's own continuation behaviour and the per-chapter fold
+measurements: [../formats/world-structure.md](../formats/world-structure.md). Read `Clutter.cs` next.
 
 ## src/Mech3/Clutter.cs
 Stamps the boot-script clutter templates across placed polygons carrying the template's ground
-texture, **at the polygon's own texture-UV lattice** — one stamp per integer UV repeat across each
-triangle; sprites → one fullbright Y-billboard
-MultiMesh per kind, solids → `SceneBuilder.SharedMesh`; the split is `SceneBuilder.ClassifyBillboard`.
-The sprite shader takes the decoration model's own `lighting`/`fog` flags as variants (every tree and
-bush card in the install is `lighting: false`, so clutter does not dim with the mission SUNLIGHT),
-plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's own card UVs.
-`BuildKindInstance` applies the texture's alpha-class lighting exemption to that `lighting` flag as
-the world path does, so a card cannot take a sun term the world surface beside it is exempt from;
-on the shipped data it changes nothing, because the alpha-textured cards outside C5 are the tree and
-bush families, which already author `lighting: false`, and C5 authors `world_light` 1 in every zone
-(docs/org/vertexLighting.md).
-Every stamp carries its authored far fade as MultiMesh custom data (`Kind.Fades`, exported beside
-`Placements`), applied by the sprite shader and by `SceneBuilder.SharedMesh(clutterFade: true)`
-for the solid kinds, under the `EffectsLevel` global; the fade's draw is its own stream off the
-placement seed. `TemplateNames` reads the chapter's `AddClutterTemplates` list **unfiltered** — which district
-dresses a given patch is the per-polygon `no_clutter` gate's decision (`PlaceOnMesh`), not a
-curated list here; `OverrideTemplateNames` is `--clutter-templates=`'s replacement for it — the caller's names,
-filtered to the ones this gamez carries a root for — so one district can be loaded alone and A/B'd
-against the original. It prints one line naming what was requested, what resolved and what this
-chapter does not carry, since an absent name is retail-data-normal and would otherwise read as an
-empty district.
-
-**The original's placement runtime is written up in [org/clutter.md](org/clutter.md)** — the
-function map, the template lookup's first-match scan, the UV-lattice stamp and its local triangle
-frame, the engine defaults no chapter authors, and the weight list's sum-and-divide. Read it before
-changing a placement rule; the authored side stays in [formats/clutter.md](formats/clutter.md) and
-[formats/templates.md](formats/templates.md). The remake-only rules (no world grid, the fixed
-placement seed, the `seen` dedup, shared collision shapes) are comments on the members that hold
-them. ⚠ The solid decorations' shapes stay TWO-SIDED where the world's honour `SHOW_BACKFACE`, for
-two reasons: `AppendTriangles` does not alternate a strip's winding, so its triangles have no agreed
-front to be solid from; and whether the original's intersection database holds a stamped decoration
-at all is undecoded, since [org/weaponRay.md](org/weaponRay.md)'s per-node gates are gamez node
-flags. `SolidCollisionOneSidedTriangles` sizes what that leaves (C2 1439 of 1439, C5 3156 of 3738);
-only those two chapters build solid decorations.
+texture, at the polygon's own texture-UV lattice, one stamp per integer UV repeat across each
+triangle: sprites become one fullbright Y-billboard MultiMesh per kind, solids go through
+`SceneBuilder.SharedMesh`, and `SceneBuilder.ClassifyBillboard` is the split. Every stamp carries
+its authored far fade as MultiMesh custom data under the `EffectsLevel` global. `TemplateNames`
+reads `AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding which patch a
+district dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement for that list.
+Placement runtime: [../org/clutter.md](../org/clutter.md); authored side: [../formats/clutter.md](../formats/clutter.md), [../formats/templates.md](../formats/templates.md).
 
 ## src/Mech3/ClutterTemplates.cs
 The chapter's `templates.zrd` (`ClutterTemplateSpec.Load`/`.Parse`): one `ClutterKindProps` per
-clutter DECORATION MODEL — `substitute`'s weighted roll, `scale_range`, `far_fade_range`, and the
-jitter/rotation/slope/damage keys the retail data leaves at their defaults. Schema, offsets and the
-per-chapter census: docs/formats/templates.md. Static over a reader list, so all eight chapters are
-pinned off-engine (`CSVM.Tests/ClutterTemplatesTests.cs`). Consumed by `ClutterBuilder` for
-`substitute`, `scale_range` and `far_fade_range`, the last through `FadeThresholds`, the pure
-per-stamp `(near², far², reciprocal)` the fade shaders read. See the class and member doc
-comments in the file, and docs/formats/templates.md, for the decode detail — the keying by
-decoration model rather than template, the nested-pair bound grouping, the slope-key inversion, and
-the substitute-roll/duplicate-name resolution rules are all there.
+clutter DECORATION MODEL, carrying `substitute`'s weighted roll, `scale_range`, `far_fade_range`
+and the jitter, rotation, slope and damage keys the retail data leaves at their defaults. Static
+over a reader list, so all eight chapters pin off engine (`CSVM.Tests/ClutterTemplatesTests.cs`).
+`ClutterBuilder` consumes `substitute`, `scale_range` and `far_fade_range`, the last through
+`FadeThresholds`, the pure per-stamp `(near squared, far squared, reciprocal)` the fade shaders
+read. Schema, offsets, the per-chapter census and the keying rules: [../formats/templates.md](../formats/templates.md). Read `Clutter.cs` next.
 
 ## src/Mech3/Zrdr.cs
 Zrdr extraction reader (zip or unpacked dir): `LoadFile`, `LoadFileOrEmpty`, content-sniffing
 `LoadMatchingFiles`, name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the
 `ne0*` nets), and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
+
+## src/Mech3/LandingApproaches.cs
+A chapter's `landings.zrd` approach table resolved against the gamez: each row names an animation
+and a world node, and that node carries a `cone`, `half_cone` or `sphere` child whose single
+authored triangle IS the condition volume, plus a `land_on` child a mission definition activates to
+arm the row. `Resolve` drops a row whose animation the mission does not carry, which is the
+original's own load-time rejection and why an Instant Action mission arms none of them. Each
+resolved row holds its volume in the approach node's own frame, its attitude cone and its speed
+band, and the geodesic attitude test beside them; the geometry is engine-free and
+`Session/LandingApproachRuntime.cs` flies a player against it. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
+
+## src/Mech3/Pickups.cs
+A mission's compact `pickups.zrd` sensor table as `PickupSpec` (node name, radius in metres): the
+spheres `Session/LadderSwitchRuntime.cs` tests the player against every frame. An absent or
+unreadable file resolves to an empty list rather than throwing. Nothing here starts the pickup
+timing; the train's own `train_on_track` definition calls `pickup_timing` at mission load. Decode:
+[../org/ladderSwitch.md](../org/ladderSwitch.md).
 
 ## src/Mech3/SurfaceRegistry.cs
 `Names[id]`: the id→name table a struck material's `soil` field indexes into, so a caller can build
@@ -357,8 +200,8 @@ Ids 0–5 are compiled into `crimson.exe`; ids 6–13 are the `LoadSoils`-loaded
 `0xe631c`, reproduced by `analysis/surface-classification/soils_list.py`.
 
 ## src/Mech3/AiNets.cs
-The chapter patrol-net reader (`docs/formats/ai-nets.md`): every `ne0NNNNN.zrd.json` in a chapter
-zrdr scope joined with its `neindex.zrd.json` name — nodes, the explicit edge list, raw per-node
+The chapter patrol-net reader ([../formats/ai-nets.md](../formats/ai-nets.md)): every `ne0NNNNN.zrd.json` in a chapter
+zrdr scope joined with its `neindex.zrd.json` name: nodes, the explicit edge list, raw per-node
 tags, the trailer attach target, and the net's own three volumes (`Volumes`, record elements 2–10
 as an `AiVolumeSet`). Plus the lookups both ways the data references nets:
 `ById` (aiv field 0), `ByName` (egen/zeppelins/objectives, case-insensitive), `Resolve` (either
@@ -367,15 +210,15 @@ spelling), and `ChapterFirst` (the net an Instant Action actor is given). Consum
 `CSVM.Tests/AiNetsTests.cs`.
 
 ## src/Mech3/Maneuvers.cs
-The shared maneuver-library reader (`docs/formats/ai-rosters.md`): `zrdr/maneuvers.zrd`'s 17
+The shared maneuver-library reader ([../formats/ai-rosters.md](../formats/ai-rosters.md)): `zrdr/maneuvers.zrd`'s 17
 entries as `Maneuver` (name, `natural_touch` difficulty, timed attitude steps, the
 autogyro/relative/nitro/bias flags), plus the selection cull (`EligibleFor`: difficulty ≤ the
-pilot's 1–9 `natural_touch`, no interpolation table — the stat has no `ai_skill_parameters`
+pilot's 1–9 `natural_touch`, with no interpolation table, the stat having no `ai_skill_parameters`
 entry by design) and the roster `signature_maneuvers` bitmask decode (`SignatureNames`, over
 `ExeTableOrder`). Consumers: `Flight/ManeuverExecutor.cs`; goldens in `ManeuversTests`.
 
 ## src/Mech3/EnemyGenerators.cs
-The mission `egen.zrd.json` reader (docs/formats/mission-entities.md): the enemy generators that
+The mission `egen.zrd.json` reader ([../formats/mission-entities.md](../formats/mission-entities.md)): the enemy generators that
 feed AI aircraft into a live mission, typed as `EnemyGeneratorDef` in the three shipped shapes
 (zeppelin launch 17, plain spawner 5, moving spawner 1); a `[null]` file reads as an empty list.
 An unauthored door pair takes the loader's node-name default (`DefaultDoorAnim`, `%.5s_open%.2s`),
@@ -383,8 +226,8 @@ the close being the open name, as the original's loader has it. Consumed by
 `Session/AiGeneratorRuntime`; golden counts in `CSVM.Tests/EnemyGeneratorsTests.cs`.
 
 ## src/Mech3/Zeppelins.cs
-The mission `zeppelins.zrd.json` reader (docs/formats/mission-entities.md): the 58 zeppelin
-instances typed as `ZeppelinDef` — motion limits, net name, targets, healthy zones +
+The mission `zeppelins.zrd.json` reader ([../formats/mission-entities.md](../formats/mission-entities.md)): the 58 zeppelin
+instances typed as `ZeppelinDef`: motion limits, net name, targets, healthy zones plus
 `num_healthy_required` (defaulted to 1 and clamped to the healthy count, the decoded load
 rule), engines, gasbags, cannons and `cannon_health`. Motion keys feed
 `Flight/ZeppelinMotion` (F17); the damage half feeds `Flight/ZeppelinDamage` +
@@ -392,66 +235,43 @@ rule), engines, gasbags, cannons and `cannon_health`. Motion keys feed
 in `CSVM.Tests/ZeppelinsTests.cs`.
 
 ## src/Mech3/InstantAction.cs
-`InstantActionDef` (docs/formats/instant-action.md) plus the three
-producers decision 2 names, converging on one record: `Load` for a chapter's shipped
-`ia.zrd.json`, `LoadFromJson` for a hand-authored `--ia=<path>` file — a plain JSON object using
-the same field names, not the zrdr archive's flat-alternating shape — and `BuildFromWizard` for
-the launchscreen's Instant Action wizard. `Load`/`LoadFromJson` funnel through one private
-`BuildDef(ZrdrDict)`; `LoadFromJson`'s only job is `FromJsonObject`, the small mapping from a JSON
-object onto the same key/[values…] shape `ZrdrDict` already wraps (a nested `group1`…`group4`
-object flattens the same way), so a JSON-authored mission parses through exactly the same
-field-population path a real chapter's does. `BuildFromWizard(baseDef, missionType, playerPlane,
-numWingmen, wingmanPlane, waves, lives)` takes a different shape: `baseDef` is the chosen
-environment's own `Load` result, and only the fields the wizard actually lets a pilot configure
-are overlaid — the ace, the zeppelin node names and `disallow_missions` carry over from `baseDef`
-unedited, since they are chapter-level facts with no wizard control. It applies the same
-`dogfight_ace` zero-forcing rule `BuildDef` does, so a stale wizard wingmen/waves state behind a
-just-switched-to-ace mission type can't produce a solo-breaking def. `EmptyWave` (`MakeWave(null,
-false)`) is what an unconfigured wizard wave slot resolves to — byte-identical to a JSON file's
-own omitted `groupN`, which is the whole point: `LaunchMenu.WaveFor` returns it outright for any
-slot at 0 enemies, regardless of what the militia/aircraft/skill cursors are sitting on.
-`Defaults()` is `BuildDef` over an empty `ZrdrDict` — the wizard's fallback if an environment's own
-file somehow fails to load. `spawn_points` and `dzones` stay where they already were
-(`Flight/SpawnPoints.LoadIa`, `Flight/StuntMission`) — this def does not repeat either.
-`PlaneNodeFor` is the eleven-entry display-name → gamez-node table
-(`"Bloodhawk"` → `"player_bhawk"`), a deliberate duplicate of `UI.LaunchMenu.Planes` rather than a
-shared one — the plan's file-contention notes reserved `LaunchMenu.cs` for H15/H16 alone. Fixture
-units + install goldens in `CSVM.Tests/InstantActionTests.cs`; the wizard's own build path is
-`CSVM.Tests/InstantActionTests.cs`'s "The wizard's own build path" region (a wizard-built def and
-its hand-authored `--ia=` equivalent compared field for field) and
-`CSVM.Tests/LaunchMenuWizardTests.cs` (the militia/aircraft/skill rosters, `WaveFor`).
-Every optional key resolves to the original's own reset-then-overlay default rather than null; see
-`InstantActionDef`'s class and member doc comments in the file, and docs/formats/instant-action.md
-"The built-in defaults", for the per-field rules (the `Devastator`/ace fallbacks, the
-`dogfight_ace` parse-time wingmen/wave zeroing, `ZeppelinType`'s lone undecoded default, and why
-`ground_target_name`/`ground_target_node` stay out).
+`InstantActionDef` plus the three producers that converge on it: `Load` for a chapter's shipped
+`ia.zrd.json`, `LoadFromJson` for a hand-authored `--ia=<path>` object, and `BuildFromWizard` for
+the launchscreen's Instant Action wizard. The first two funnel through one private
+`BuildDef(ZrdrDict)`, `LoadFromJson` doing nothing but mapping a JSON object onto the same
+key/[values] shape `ZrdrDict` already wraps, so a hand-authored mission parses through exactly the
+path a real chapter's does; the wizard overlays only the fields a pilot can configure onto the
+chosen environment's own `Load` result. `spawn_points` and `dzones` stay in `Flight/SpawnPoints`
+and `Flight/StuntMission`. Every optional key's default: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/Mech3/AiSkills.cs
-The AI pilot-skill constants (docs/formats/ai-rosters.md): player.json's
-`ai_skill_parameters` block as `[value@1, value@9]` endpoint pairs indexed by the 1–9 rating
-(`At`, plus named helpers for D14's two angles), the roster accessors
-(`RosterSkills`: aiv slots 22–30 by stat name, `-1`/omitted = null; `RosterPrimaryTarget`:
-slot 6; `RosterRatingBiases`: slot 33 as `AiRatingBias` — wildcard `Matches`, shipped pairs,
-a third element accepted and preserved raw, never acted on; the spawn-facing `Roster*` readers for
-slots 0–5, 20, 21, 31, 32, 40 and 65, every one defensive over a short block; `RosterAce`: slot 67,
-the debrief's kill-crediting flag; `RosterInitHealth`: slot 7, null unless authored > 0;
-`RosterArmor`: slot 66, null unless authored >= 0 or the block is too short to carry it;
-`RosterObjectiveTarget`: slot 37, a strict boolean; `RosterHelpLabel`: slot 39 raw, gated on
-`RosterObjectiveTarget` by the caller, not here) and the thin per-mission roster loader
-(`LoadRoster`), plus the positional-header join that exposes disabled generator parameter blocks
-(`LoadGeneratorRoster`). Units + shipped-constant goldens in `AiSkillsTests`; slot 6/33 census
-goldens in `AiTargetRankingTests`; the spawn slots in `CampaignRosterPlanTests`; the two durability
-gates and the absent-slot case in `RosterDurabilityOverrideTests`; slots 37/39 in
-`RosterObjectiveMarkerTests`.
+The AI pilot-skill constants from `player.json`: the `ai_skill_parameters` block as
+`[value@1, value@9]` endpoint pairs indexed by the 1 to 9 rating (`At`), plus the accessors that
+read one aiv roster block's slots, every one defensive over a short block. `RosterSkills` is the
+skill vector by stat name; `RosterPrimaryTarget`, `RosterRatingBiases`, `RosterAce`,
+`RosterInitHealth`, `RosterArmor`, `RosterObjectiveTarget` and `RosterHelpLabel` are the named
+single-slot reads, and the spawn-facing `Roster*` readers cover the rest. `LoadRoster` is the thin
+per-mission loader; `LoadGeneratorRoster` adds the positional-header join exposing disabled
+generator blocks. Slot numbers and meanings: [../formats/ai-rosters.md](../formats/ai-rosters.md).
 
 ## src/Mech3/AiVolumes.cs
 `AiVolume` (radius, upper, lower) and `AiVolumeSet` (activation, attack, return): the one shape
 both authors of an AI's range volumes are read into, a roster block's twelve slots 8–19
 (`FromRosterSlots`, three named per volume plus a flag no block authors) and a net record's nine
 floats at elements 2–10 (`FromNetRecord`). `Overlaid` is the engine's per-field non-zero test, so
-`net.Overlaid(block)` is the decoded order (docs/org/aiPilot.md "Net assignment"); the
+`net.Overlaid(block)` is the decoded order ([../org/aiPilot.md](../org/aiPilot.md), "Net assignment"); the
 `min_ai_active_dist` floor is `Session/CampaignRoster.cs`'s `ApplyVolumes`. The altitude bands are
 read and carried but have no consumer: `Flight/AiModeMachine.cs` gates on radii alone.
+
+## src/Mech3/RosterMarkers.cs
+Grafts a roster block's authored marker scaffolding onto the rig its spawn built. A chapter's own
+copy of a vehicle is a library root the world never places, so whatever that copy adds under
+`markers` past the shared airframe's is built here, hung under the airframe's mark of the same
+name, switched to its authored `active` bit and indexed on the world runtime. That is what gives an
+index-addressed definition a node to write and a condition volume that moves with its aircraft.
+`Attach` also makes the rig answer for the library root's own name and index
+(`AnimRuntime.IndexSpawnedVehicle`), so a definition posed `AT_NODE` the vehicle reaches the
+aeroplane the mission actually spawned. Read `LandingApproaches.cs` next.
 
 ## src/Mech3/VehicleDefs.cs
 The `vehicle.json` def table as an index, next to `Flight/PlaneStats.cs`'s full read of one def:
@@ -464,48 +284,71 @@ of the nearest ancestor, else of the chain's `nodename`), `BaseDefForPlayerNode`
 
 ## src/Mech3/FogVolumes.cs
 The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of
-`fvol*` volumes — the two halves of the authored ambient cloud field, rendered by
-`Effects/FogVolumeClutter`. Schema, per-chapter values and the decoded/inferred split:
-docs/formats/fogvol.md. Both halves are static over a `GameZ`/reader list, so the pair is testable
-off-engine (`CSVM.Tests/FogVolumeTests.cs` pins all eight chapters).
-
-`FogVolumeBox` carries the authored shape (its face planes), not just its axis-aligned bounds.
-`FogVolumeWhiteout` is the in-volume whiteout rule C5 alone arms, pure and off-engine-tested
-(`CSVM.Tests/FogVolumeWhiteoutTests.cs`); `Session/WeatherRig.Tick` is its one consumer.
-`FindMapSpanningSlab` is the data-driven test for a chapter's map-edge-continuation cloud slab.
-See the member doc comments in the file, and docs/formats/fogvol.md, for the decode detail.
+`fvol*` volumes: the two authored halves of the ambient cloud field `Effects/FogVolumeClutter`
+renders. `FogVolumeBox` carries the authored shape as its face planes rather than only its
+axis-aligned bounds; `FogVolumeWhiteout` is the in-volume whiteout rule C5 alone arms, with
+`Session/WeatherRig.Tick` its one consumer; `FindMapSpanningSlab` is the data-driven test for a
+chapter's map-edge-continuation cloud slab. Both halves are static over a `GameZ` or a reader list,
+so the pair pins off engine for all eight chapters (`CSVM.Tests/FogVolumeTests.cs`). Schema,
+per-chapter values and the decoded/inferred split: [../formats/fogvol.md](../formats/fogvol.md).
 
 ## src/Mech3/Messages.cs
 The game's localized string table: plain `System.Text.Json` over the extracted `messages.json`
 (NOT a zrdr reader), a case-insensitive key→value map resolving the `MSG_*` keys missions reference.
 `Fill`/`Format` substitute a template's `%1`…`%9` placeholders (the HUD strings' format).
 
+## src/Mech3/UiStrings.cs
+The original's UI string table by id, read from `extracted/rof/ui_strings.json`. Only the `langui`
+rows are kept, since ids repeat across the file's two merged tables and every menu range this
+remake reads sits in that one. `FormatMessage` positional placeholders (`%1!d!`) convert to
+composite format rather than going to printf, and a leading `[FONTID]` tag is stripped as a
+renderer directive rather than text. `Parse` takes the JSON itself, so the table and its formatting
+test off engine; `Empty` is the fallback that lets a menu draw on a missing extraction. Ids and
+rows: [../formats/strings.md](../formats/strings.md).
+
+## src/Mech3/TgaImage.cs
+The engine-free TGA decoder behind the hangar's art under `extracted/rof/ASSETS/GRAPHICS`, and the
+decoded-image type the whole menu art seam is written against: types 2 and 10 (RLE) truecolour at
+24 or 32 bits, both row orders, to top-down RGBA8. Anything else, or a malformed or absent file,
+decodes as null rather than throwing, because menu art is optional by design and a bad file must
+not take a screen down. `FromRgba` wraps an already-decoded buffer as one of these, which is how
+`PngImage.cs` reaches the same art path. Read `ArtImage.cs` next.
+
+## src/Mech3/PngImage.cs
+The engine-free PNG decoder behind the menus' `rimage` art, returning a `TgaImage` so both decoders
+feed one seam: 8 bits per channel, non-interlaced, truecolour with (colour type 6) or without
+(type 2) an alpha channel, all five row filters. That is every file the extraction ships; a
+palette, a 16-bit channel, an Adam7 file or a malformed one decodes as null rather than throwing.
+Read `ArtImage.cs` next.
+
+## src/Mech3/ArtImage.cs
+The one door menu art is loaded through: a path in, a decoded `TgaImage` or null out, with the
+decoder picked from the extension (`.PNG` to `PngImage`, `.TGA` to `TgaImage`). It exists so a
+screen names the file the extraction ships and stops caring what format it is. An extension no
+decoder here covers returns null, and so does a file the decoder it has cannot read; null is the
+correct answer, since a stand-in picture on a fidelity screen reads as a verdict about the
+original. The JPEG pictures a screen wants are board pictures, read through the shell's own loader
+in `UI/ComposedBoardView.cs`, which is why no JPEG decoder belongs here.
+
 ## src/Mech3/MarkerRig.cs
-A player airframe's weapon marker rig read from planes.zbd GameZ: `Extract` walks a `player_*`
+A player airframe's weapon marker rig read from the planes.zbd GameZ: `Extract` walks a `player_*`
 root, accumulating locals down to each `firepoint*`/`pylon*`/`target`, and reports plane-frame
-positions + co-located groups (two gun groups on one mount). `Format` prints one dump block per
-plane; `PlayerAirframes` is the model→display list. The committed instrument `docs/formats/markers.md`
-regenerates from, and the source of truth `--dump-markers` and `UI.MarkerOverlay` share.
-`FindNamedMarker` is the sibling read for one non-weapon node by name (e.g. `cockpit_camera`,
-`PlaneBuilder.CockpitCameraOffset`'s reader): the same accumulate-below-root walk, skipping
-`cockpit1`/`cockpit2`/`destroyed`/`player_damage_off` so a plane whose interior/wreck carries its
-own same-named node still resolves to the authored one in the top-level `markers` group.
+positions plus co-located groups (two gun groups on one mount). `Format` prints one dump block per
+plane and `PlayerAirframes` is the model to display list; together they are the instrument
+[../formats/markers.md](../formats/markers.md) regenerates from and the source `--dump-markers` and
+`UI/MarkerOverlay.cs` share. `FindNamedMarker` is the sibling read for one non-weapon node by name,
+skipping the alternate-state subtrees so a plane whose interior or wreck carries a same-named node
+still resolves to the authored one in the top-level `markers` group.
 
 ## src/Mech3/CompiledAnim.cs
-Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): typed defs, events,
-and the SI-script pool — `Script(index)` parses lazily, ordered by `metadata.json`. Decode facts
-(ptr = flat node index, shifted quat labels, half-angle cubics): docs/formats/anim-definitions.md.
-The `unknown_seq` destruction slot parses into `AnimDefinition.DeathSlot`, deliberately OFF
-`Sequences` (bootstrap and the sequence-walking derivations never see it); only
-`AnimRuntime.RunDeathSequence` dispatches it (`BL-276`, docs/formats/destructibles.md). The
-`ACTIVATION_PREREQUISITE` node-state form (a run of `Parent` entries closed by an `Object` leaf
-carrying `active_raw`/`required`) parses into `AnimDefinition.PrereqNodes` beside the anim-list
-form's `PrereqAnims`; `AnimDefs` reads the reader spelling into the same list. ⚠ The leaf's state
-is bit 0 of `active_raw`, never mech3ax's `active`: the word is two flags, bit 0 the
-ACTIVE/INACTIVE list and bit 1 the def's LOCAL_NODES_ONLY scope (`FUN_0051d7b0`), so the 726
-local INACTIVE entries (every `finish*gasbag*` panel finisher) compile as 2, which mech3ax reports
-active. Read as active, the finisher never starts after its burn switched the panels off, and no
-anim-authored zeppelin (C1/M04's `hk_zep`) can burn out and sink.
+Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): typed definitions,
+events, and the SI-script pool, where `Script(index)` parses lazily in `metadata.json` order. The
+`unknown_seq` destruction slot parses into `AnimDefinition.DeathSlot`, deliberately off `Sequences`
+so bootstrap and the sequence-walking derivations never see it and only
+`AnimRuntime.RunDeathSequence` dispatches it. The `ACTIVATION_PREREQUISITE` node-state form parses
+into `AnimDefinition.PrereqNodes` beside the anim-list form's `PrereqAnims`, and `AnimDefs.cs`
+reads the reader spelling into the same list. Decode, including the `active_raw` bit a leaf's state
+is read from: [../formats/anim-definitions.md](../formats/anim-definitions.md), [../formats/destructibles.md](../formats/destructibles.md).
 
 ## src/Mech3/AnimDefs.cs
 The zrdr front-end: ANIMATION_DEFINITIONS reader files normalized into CompiledAnim's
@@ -513,28 +356,21 @@ The zrdr front-end: ANIMATION_DEFINITIONS reader files normalized into CompiledA
 under `raw`). Exists because compiled archives are incomplete: `zepstate`/`startanims` are reader-only.
 Unit normalization happens HERE so handlers see one convention: reader rotations are DEGREES
 (ROTATE_STATE, FROM_TO rotate, XYZ_ROTATION → radians), PLAYER_RANGE metres (→ m²), ANIMATION_LOD
-tokens (→ numbers) — see docs/formats/anim-definitions.md.
+tokens (to numbers). See [../formats/anim-definitions.md](../formats/anim-definitions.md).
 
 ## src/Mech3/AnimProgram.cs
-Merges the compiled + reader front-ends for one mission — load both, prefer compiled on collision,
-keep the remainder — plus `StartAnims`; `ScriptFor` resolves an event slot to its archive SI script.
-The mission-scope gate against the compiled manifest (a library, not a full roster) and the
-shared-scope FILE gate (`ListedSharedFiles`: a shared reader file loads only when the shared
-`anim.zrd` index closure, the chapter's `cam_anim.zrd` or the mission's `mis_anim.zrd` names it,
-reported as `SharedFilesSkipped`) are decode knowledge: docs/formats/anim-definitions.md "Mission
-library scope". Both gates apply only with a compiled mission manifest present, so a reader-only
-extraction is untouched. Whatever survives them is then deduplicated on the (`NAME`,
-`ANIMATION_NAME`) pair in `Add`, and since the compiled archives load first the compiled form always
-wins: that third rule, absent from the census line, is what stops a plain-`NAME` shared definition
-coexisting with its compiled twin, and what makes the archives' own duplicate files free. Pinned by the `mission-off-turrets` suite (C3/M03 loads no balloon def,
-C3/M02 does). Which world ENTITIES a mission shows is MissionSetup
-plus the interp boot script, not this file. `Defs`, `StartAnims` and `MissionLibrarySkipped` are
-`IReadOnlyList` over private backing lists: one program is already shared by every runtime `Subset`
-binds from it, and may be shared by several world builds (`DecodeCache`).
+Merges the compiled and reader front-ends for one mission (load both, prefer compiled on a
+collision, keep the remainder) plus `StartAnims`; `ScriptFor` resolves an event slot to its archive
+SI script. Two gates run first, both only with a compiled mission manifest present so a reader-only
+extraction is untouched: the mission-scope gate against that manifest, and the shared-scope FILE
+gate (`ListedSharedFiles`, reported as `SharedFilesSkipped`). Whatever survives is deduplicated on
+the (`NAME`, `ANIMATION_NAME`) pair in `Add`, compiled winning because the archives load first.
+Which world ENTITIES a mission shows is `MissionSetup.cs` plus the interp boot script, not this
+file. Scope rules: [../formats/anim-definitions.md](../formats/anim-definitions.md), "Mission library scope".
 
 ## src/Mech3/TextureCycler.cs
 Runs the gamez material `cycle` flipbooks (water, surf, wakes, crowds) by swapping `albedo_tex`;
-frames resolve at build time while the TextureArchive is open — an incomplete flipbook stays static.
+frames resolve at build time while the TextureArchive is open, so an incomplete flipbook stays static.
 
 ## src/Mech3/EffectCycles.cs
 The `EFFECTS` block of the shared `effects.zrd`: the second source of material flipbooks, and the one
@@ -544,31 +380,24 @@ onto that `GameZMaterial` before the world build, leaving `SceneBuilder.Register
 unchanged. Two entries exist install-wide (`fire1.flt` 12@10, `fire2.flt` 6@5).
 
 ## src/Mech3/WorldSounds.cs
-`SOUND_NODE` ambient looping 3D emitters: one pooled AudioStreamPlayer3D per live emitter,
-following its host's pose per frame. `PlayOneShot(name, worldPos, rng)` is the one-shot `SOUND`
-half: fire-and-forget destruction/impact audio, resolving a `SOUND_GROUPS` name to a member
-first; the `Sound` anim event calls it. The `PlayOneShot(name, Node3D source, rng)` overload rides
-the source's pose per Tick (a voice line from a moving aircraft; a freed source leaves it finishing
-at its last position). `HasStream(name)` answers clip availability after the prewarm, which a def
-alone cannot. Who hears these emitters is the pinned per-pane listener model (`UI/SplitScreen`);
-`SetListeners` feeds the `--debug-anim` log alone, whose `dist` column names the NEAREST listener and
-the pane it belongs to, because that is the pane whose volume wins the engine's mix.
-`OneShotsStarted` (D33) counts every one-shot that actually started an `AudioStreamPlayer3D`, so a
-suite can assert a cue fired by counting rather than grepping the `Debug`-gated log line.
+`SOUND_NODE` ambient looping 3D emitters: one pooled `AudioStreamPlayer3D` per live emitter,
+following its host's pose each frame. `PlayOneShot(name, worldPos, rng)` is the one-shot `SOUND`
+half, fire-and-forget destruction and impact audio that resolves a `SOUND_GROUPS` name to a member
+first; the overload taking a `Node3D` rides that source's pose per Tick instead. `HasStream`
+answers clip availability after the prewarm, which a definition alone cannot. `OneShotsStarted`
+counts every one-shot that actually started a player, so a suite can assert a cue fired by counting
+rather than grepping a log line. Who hears an emitter is the pinned per-pane listener model
+(`UI/SplitScreen.cs`); `SetListeners` feeds the `--debug-anim` log alone. Read `SoundArchive.cs` next.
 
 ## src/Mech3/WorldLights.cs
-Packs the animated world's `LIGHT_STATE` point lights into the 2×N RGBAF texture the fullbright
-world shader reads as spill (global `csky_light_data`, loop bounded by `csky_light_count`); the
-uniform is session-global (a lit light is lit for every pane), but `Commit`'s 900–1500 m fade and
+Packs the animated world's `LIGHT_STATE` point lights into the 2xN RGBAF texture the fullbright
+world shader reads as spill (`csky_light_data`, its loop bounded by `csky_light_count`). The
+uniform is session-global, so a lit light is lit for every pane, but `Commit`'s distance fade and
 its `MaxActive`-slot significance rank both answer to the NEAREST of every viewer position handed
-in, not one camera — a light beside player 4 stays lit even with player 1 far away (`BL-366`;
-`AnimRuntime.LightViewerPositions`, fed from `GameSession`'s `ViewerSet`). One position (single
-player) uses the single-viewer distance rule exactly. Given a parent `Node3D` (`WorldSession`
-passes its world root) and enhanced mode, the same `Commit` also mirrors `_pending[0..n)` onto a
-pooled `OmniLight3D` per committed light (position, `OmniRange` from range max, colour and energy
-from the already-faded linear colour), so the lit world and the aircraft receive the light for
-real; original mode passes no parent and spawns nothing. See "Rendering: the enhanced graphics
-mode" above for the divergence record as a whole.
+in rather than one camera, which is why a light beside player four stays lit with player one far
+away (`AnimRuntime.LightViewerPositions`, fed from `GameSession`'s `ViewerSet`); one position
+reduces to the single-viewer rule exactly. Given a parent `Node3D` and enhanced mode, `Commit` also
+mirrors the committed lights onto pooled `OmniLight3D` nodes. Enhanced mode: [Root.md](Root.md).
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission
@@ -576,7 +405,7 @@ shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`/`Object3DTransla
 `WorldPartitionSetActive`, counts + reports every other verb. The area verb takes two calls, not one:
 `BindPartitions(gamez)` resolves its rectangles to gamez node indices through `WorldPartitionGrid`
 while the gamez is in hand, and `Apply`'s `setActiveByIndex` delegate switches them in the built
-world. Without the bind the verb is counted unapplied. Decode: docs/formats/interp.md.
+world. Without the bind the verb is counted unapplied. Decode: [../formats/interp.md](../formats/interp.md).
 
 ## src/Mech3/ScriptedPath.cs
 One authored waypoint path, resolved against the BUILT world through the runtime's own name
@@ -584,13 +413,13 @@ resolver rather than out of the gamez: the roster names `pp1`, the chapter carri
 subtree `pp1_aipath`, and its `pp1_aipN` children are the waypoints in ordinal order. Ten vehicles in
 three missions carry one. A missing subtree, or fewer than two waypoints, resolves to null so the
 caller reports it instead of inventing a route. Where the name comes from:
-docs/formats/ai-rosters.md's `taxiPath` slot.
+[../formats/ai-rosters.md](../formats/ai-rosters.md)'s `taxiPath` slot.
 
 ## src/Mech3/WorldPartitionGrid.cs
 The world's spatial cell grid as a query: which gamez nodes does a world-space XZ rectangle cover?
 Built from `GameZNode.PartitionCellNodes` (the per-cell membership `PartitionNodes` flattens away)
 and the cells' own bounds. Its one reader is `MissionSetup`'s area verb. The rectangle is half-open
-in cell space and the two axes run opposite ways; both are in docs/formats/interp.md.
+in cell space and the two axes run opposite ways; both are in [../formats/interp.md](../formats/interp.md).
 
 ## src/Mech3/AnimRuntime.cs
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP,

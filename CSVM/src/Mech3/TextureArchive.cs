@@ -787,8 +787,8 @@ public sealed class TextureArchive : IDisposable
     public bool LastHadAlpha { get; private set; }
 
     /// <summary>True when the last texture's alpha is "soft" — mostly partial alpha, which a
-    /// 1-bit scissor at 0.5 misrepresents (this module's entry in docs/architecture.md has the
-    /// threshold and the census). True for translucent art (shadows, fire, glow, neon); false for
+    /// 1-bit scissor at 0.5 misrepresents (threshold and census: docs/org/textures.md).
+    /// True for translucent art (shadows, fire, glow, neon); false for
     /// genuine cutouts (fences, trees), which scissor correctly.</summary>
     public bool LastAlphaIsSoft { get; private set; }
 
@@ -915,7 +915,7 @@ public sealed class TextureArchive : IDisposable
             : 0;
 
     // Fraction of ink texels (a >= 32) that are truly opaque (a >= 200); below the threshold is
-    // soft (this module's entry in docs/architecture.md has the value and the census).
+    // soft (the value and the census are on docs/org/textures.md).
     private static bool AlphaIsSoft(Image img)
     {
         var rgba = img;

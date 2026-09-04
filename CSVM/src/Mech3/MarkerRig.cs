@@ -10,7 +10,7 @@ namespace CSVM.Mech3;
 /// A player aircraft's weapon marker rig, read from planes.zbd GameZ: walks a
 /// <c>player_*</c> root, accumulating locals down to each <c>firepoint*</c>/<c>pylon*</c>/
 /// <c>target</c>, and reports plane-frame positions plus co-located groups. See
-/// <c>docs/architecture.md</c> and <c>docs/formats/markers.md</c> for the full decode.
+/// <c>docs/formats/markers.md</c> for the full decode.
 /// This is the committed instrument <c>markers.md</c> regenerates from; <c>--dump-markers</c>
 /// and <see cref="UI.MarkerOverlay"/> share it so the gizmos and the dumped table agree.
 /// </summary>

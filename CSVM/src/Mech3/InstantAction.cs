@@ -338,8 +338,8 @@ public static class InstantAction
 /// <summary>One Instant Action mission, fully resolved: every optional <c>ia.zrd.json</c> key
 /// filled from the original's own reset-then-overlay defaults (docs/formats/instant-action.md
 /// "The built-in defaults"), so a hand-authored <c>--ia=&lt;path&gt;</c> file can omit anything
-/// and still get the original's fallback. Plumbing and per-field rules: this module's entry in
-/// docs/architecture.md.
+/// and still get the original's fallback. The per-field rules are on that page; plumbing is this
+/// module's entry in docs/architecture.md.
 /// ⚠ Leaves out <c>ground_target_name</c>/<c>ground_target_node</c>: every chapter's own
 /// <c>disallow_missions</c> bars that mission type and this milestone does not implement it.</summary>
 public sealed class InstantActionDef

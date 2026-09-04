@@ -19,7 +19,7 @@ public static class ArtImage
     /// format no decoder here covers.
     /// ⚠ Do not add a JPEG decoder or an extract-time PNG sidecar for the 26 JPEG pictures: the
     /// shell's own loader reads all of them, so a screen that wants one names it as a board
-    /// picture instead (docs/architecture.md, this file's entry).</summary>
+    /// picture instead, through <c>UI/ComposedBoardView.cs</c>.</summary>
     public static TgaImage? TryLoad(string path) =>
         Path.GetExtension(path).ToLowerInvariant() switch
         {

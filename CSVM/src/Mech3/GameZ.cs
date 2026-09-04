@@ -147,8 +147,7 @@ public sealed class GameZ
 
     /// <summary>An untextured polygon whose vertex colours all restate its own material colour:
     /// one authored value in two slots, not two terms to multiply. Multiplying squares the colour
-    /// (176 → 120). 87 polygons install-wide, mostly skydome skirts. Decode: docs/formats/gamez.md
-    /// and this module's docs/architecture.md entry.</summary>
+    /// (176 → 120). 87 polygons install-wide, mostly skydome skirts. Decode: docs/formats/gamez.md.</summary>
     public bool VertexColorsRestateMaterialColor(GameZPolygon poly, int materialIndex)
     {
         if (materialIndex < 0 || materialIndex >= Materials.Count)

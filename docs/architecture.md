@@ -32,38 +32,39 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/SceneBuilder.cs` — shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
 - `src/Mech3/ZoneGate.cs` — the original's per-node `zone_id` visibility gate: the rule, its visual-layer allocation, and the per-camera cull mask.
 - `src/Mech3/ConflictRank.cs` — the world's cross-node draw-order tie-break: ranks nodes by their conflict graph, one slot per coplanar layer.
-- `src/Mech3/WorldCollision.cs` — derives every world collider's `Disabled` flag from its owner's tree visibility (+ the fade channel), so hiding anything drops its collision.
+- `src/Mech3/WorldCollision.cs` — derives every world collider's `Disabled` flag from its owner's tree visibility and the fade channel.
 - `src/Mech3/PlaneBuilder.cs` — builds one aircraft from its GameZ subtree (shaded, backface-culled); `Repaint` re-liveries it in place.
 - `src/Mech3/PaintScheme.cs` — one aircraft livery: pattern + 3 colours + 3 decals, parsed from vehicle.json or drawn at random.
 - `src/Mech3/PatternLibrary.cs` — decodes the original's `.BM` paint patterns from the extracted ROF archive; `PatternsFor` lists a plane's liveries.
 - `src/Mech3/PlanePainter.cs` — applies a `PaintScheme` to one aircraft: composites skins from the pattern's region masks, swaps decals.
+- `src/Mech3/MilitiaPaint.cs` — each militia's paint pattern by display name, which is all a militia decides on Instant Action.
 - `src/Mech3/PropParts.cs` — classifies prop/rotor nodes by name; spin axis + rate from the original anims (props Z, rotor Y).
 - `src/Mech3/ControlSurfaces.cs` — classifies left/right aileron, elevator and rudder mesh nodes and their hinge axes (X ailerons/elevators, Y rudders).
 - `src/Mech3/WingLights.cs` — the one source for wingtip nav lights: flare node names, glow texture, warm-amber colour, blink period.
 - `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud deck, camera-anchored skydome, edge extender.
-- `src/Mech3/MapEdgeExtender.cs` — rolling window of repeated border-cell blocks + clutter continuing the world past the map edge, per camera; block depth is per chapter (`DefaultBlockCells`).
-- `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain at the polygon's own UV lattice, gated per polygon by `no_clutter`: sprites, plus C2/C5's solid 3D city blocks.
-- `src/Mech3/ClutterTemplates.cs` — the `templates.zrd` reader: each clutter decoration model's authored substitution table, scale range and fade distances, plus the five keys no chapter authors.
+- `src/Mech3/MapEdgeExtender.cs` — rolling window of repeated border tiles and clutter continuing the world past the map edge, one per session.
+- `src/Mech3/Clutter.cs` — stamps the boot-script clutter templates onto matching-textured terrain at the polygon's own UV lattice.
+- `src/Mech3/ClutterTemplates.cs` — the `templates.zrd` reader: each clutter decoration model's authored substitution table, scale range and fade distances.
 - `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
-- `src/Mech3/LandingApproaches.cs` — a chapter's `landings.zrd` approach table resolved against the gamez: each row's condition volume (the `cone`/`half_cone`/`sphere` child's single authored triangle, expressed in the approach node's own frame), its attitude cone and its speed band, plus the geodesic attitude test. Engine-free geometry; `LandingApproachRuntime` flies a player against it. Decode: `docs/formats/anim-definitions/cutscenes.md`.
-- `src/Mech3/Pickups.cs` — a mission's compact `pickups.zrd` sensor/radius table, the spheres `LadderSwitchRuntime` tests the player against. Nothing starts the pickup timing off it: the train's own `train_on_track` definition calls `pickup_timing` at mission load. Decode: `docs/formats/anim-definitions/cutscenes.md`.
+- `src/Mech3/LandingApproaches.cs` — a chapter's `landings.zrd` approach table resolved against the gamez: volume, attitude cone, speed band.
+- `src/Mech3/Pickups.cs` — a mission's compact `pickups.zrd` sensor and radius table, the spheres the ladder switch tests against.
 - `src/Mech3/MissionCutscenes.cs` — the animation names a mission's own `cutscenes\` reader files define: the authored mark of mid-mission choreography.
-- `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer and the net's own three volumes included.
-- `src/Mech3/AiVolumes.cs` — `AiVolume`/`AiVolumeSet`: the activation/attack/return volumes as a roster block (slots 8–19) and a net record (elements 2–10) author them, with the engine's non-zero overlay.
-- `src/Mech3/RosterMarkers.cs` — grafts a roster block's authored marker scaffolding onto the rig its spawn built: the chapter's own copy of a vehicle is a library root the world never places, so whatever that copy adds under `markers` past the shared airframe's is built there, hung under the airframe's mark of the same name, switched to its authored `active` bit and indexed on the world runtime, which is what gives an index-addressed definition a node to write and a condition volume that moves with its aircraft. It also makes the rig itself answer for that library root's own name and index (`AnimRuntime.IndexSpawnedVehicle`), so a definition posed `AT_NODE` the vehicle reaches the aeroplane the mission actually spawned.
-- `src/Mech3/VehicleDefs.cs` — the `vehicle.json` def index a roster spawn resolves a block against: the def behind a block name, its `mode` through `kind_of`, and the player airframe node its model is built from.
-- `src/Mech3/Maneuvers.cs` — the shared maneuver library (`zrdr/maneuvers.zrd`): 17 timed attitude-step programs with `natural_touch` difficulty gates, the eligibility cull, and the `signature_maneuvers` bitmask decode.
+- `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs, the `neindex` id to name table, tags and volumes.
+- `src/Mech3/AiVolumes.cs` — `AiVolume`/`AiVolumeSet`: the activation, attack and return volumes both authors write, plus the overlay.
+- `src/Mech3/RosterMarkers.cs` — grafts a roster block's authored marker scaffolding onto the rig its spawn built, and indexes it.
+- `src/Mech3/VehicleDefs.cs` — the `vehicle.json` def index a roster spawn resolves a block against, and its airframe-node inverse.
+- `src/Mech3/Maneuvers.cs` — the shared maneuver library (`zrdr/maneuvers.zrd`): timed attitude-step programs and their gates.
 - `src/Mech3/CampaignSequence.cs` — the shared `cm_sequence.zrd` reader: the campaign's 24 flat mission entries and each one's storage address.
-- `src/Mech3/EnemyGenerators.cs` — the mission `egen.zrd.json` reader: the 23 enemy generators in their three shapes (zeppelin launch / plain / moving spawner), `[null]` files as empty.
-- `src/Mech3/Zeppelins.cs` — the mission `zeppelins.zrd.json` reader: the 58 zeppelin instances (motion limits, net, gasbags/healthy/engines, cannons), all values in authored units.
-- `src/Mech3/InstantAction.cs` — `InstantActionDef` + the `ia.zrd.json`/`--ia=` readers: mission type, wingmen, four waves, ace, with every optional key resolved to the original's own built-in default.
-- `src/Mech3/AiSkills.cs` — the `ai_skill_parameters` endpoint pairs from player.json (1–9 ratings, linear between the decoded endpoints) + the roster accessors: the skill vector (slots 22–30 by stat name), `primary_target` (slot 6), `rating_biases` (slot 33, `AiRatingBias` wildcards) and the spawn-facing slots (`netids`, pose, team, group, title, `deactivated`, `pref_engage_alt`, the signature mask, `taxiPath`, the accent).
+- `src/Mech3/EnemyGenerators.cs` — the mission `egen.zrd.json` reader: the enemy generators in their three authored shapes.
+- `src/Mech3/Zeppelins.cs` — the mission `zeppelins.zrd.json` reader: each instance's motion, net, damage zones and cannons.
+- `src/Mech3/InstantAction.cs` — `InstantActionDef` and its three producers: a chapter's file, `--ia=`, and the launchscreen wizard.
+- `src/Mech3/AiSkills.cs` — `player.json`'s `ai_skill_parameters` endpoint pairs by rating, plus the aiv roster block accessors.
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
-- `src/Mech3/UiStrings.cs` — the original's UI string table (`extracted/rof/ui_strings.json`) by id: langui rows only (ids repeat across the file's two tables), `FormatMessage` placeholders (`%1!d!`) converted to composite format, leading `[FONTID]` tags stripped.
-- `src/Mech3/TgaImage.cs` — the engine-free TGA decoder behind the hangar's art (`extracted/rof/ASSETS/GRAPHICS`): types 2 and 10 (RLE) truecolour at 24/32 bits, both row orders, to top-down RGBA8; anything else, or a malformed/absent file, is null. `FromRgba` wraps an already-decoded buffer as one of these, which is how `PngImage` reaches the same art path.
-- `src/Mech3/PngImage.cs` — the engine-free PNG decoder behind the menus' `rimage` art (the campaign briefing's maps and flag pins), returning a `TgaImage` so both decoders feed one seam: 8-bit non-interlaced truecolour with (colour type 6) and without (type 2) alpha, which is all 254 files that extraction ships, all five row filters; a palette, a 16-bit channel, an Adam7 file or a malformed/absent one is null rather than a throw.
-- `src/Mech3/ArtImage.cs` — the one door menu art is loaded through: a path in, a decoded `TgaImage` or null out, decoder picked from the extension (`.PNG` → `PngImage`, `.TGA` → `TgaImage`). A screen names the file the extraction ships and stops caring what format it is, which is what let the hangar's art seam stay TGA-only while the PNG art beside it went undrawn. **JPEG has no decoder and needs none.** `extracted/rof/ASSETS/GRAPHICS` holds 26 `.JPG` (11 `PC_P_HANGAR<n>`, 15 menu backgrounds, 14 of those 800x600 and `MP_ERRORMESSAGEBACKGROUND` 380x206), 24 of them baseline (SOF0) and two progressive (SOF2, `CR_BACKGROUND` and `MP_LOBBY_BACKGROUND`), so a hand-written baseline decoder several times the size of `PngImage` would leave two files blank. It is not needed and neither is an extract-time PNG sidecar: every JPEG picture a screen names is a **board** picture, and `ComposedBoardView.Load` reads it through Godot's own loader, both progressive files included, pixel-identical to a reference decode. A `.JPG` handed to this door still returns null, which is the correct answer: a stand-in picture on a fidelity screen reads as a verdict about the original.
+- `src/Mech3/UiStrings.cs` — the original's UI string table by id: `langui` rows, with its placeholders converted for composite format.
+- `src/Mech3/TgaImage.cs` — the engine-free TGA decoder behind the hangar's art, and the decoded-image type the art seam uses.
+- `src/Mech3/PngImage.cs` — the engine-free PNG decoder behind the menus' `rimage` art, returning a `TgaImage` into the same seam.
+- `src/Mech3/ArtImage.cs` — the one door menu art is loaded through: a path in, a decoded image or null out, decoder by extension.
 - `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
 - `src/Mech3/CompiledAnim.cs` — reader for the compiled `cam_anim`/`mis_anim` archives: anim defs, sequences/events, lazy SI-script pool.
 - `src/Mech3/AnimDefs.cs` — the zrdr front-end: ANIMATION_DEFINITIONS reader files, normalized into one `AnimDefinition` model.
@@ -77,7 +78,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Anim/MotionSet.cs` — the live motion collection: registration and eviction, the per-frame sweep, and the predicates the runtime asks it.
 - `src/Mech3/Anim/EmitterDirector.cs` — every `PUFFER_STATE` emitter's life on one runtime: start, the four stops, prewarm, respawn, follow and census.
 - `src/Mech3/Anim/SoundChannel.cs` — one runtime's `SOUND_NODE`/`SOUND` events: the pooled ambient emitters, the one-shot player, and the late-failure census.
-- `src/Mech3/Anim/LightChannel.cs` — one runtime's `LIGHT_STATE`/`LIGHT_ANIMATION` events: the live point-light table, the tween and the submission to `WorldLights`.
+- `src/Mech3/Anim/LightChannel.cs` — one runtime's `LIGHT_STATE`/`LIGHT_ANIMATION` events: the live point-light table, the tween, the `WorldLights` submission.
 - `src/Mech3/Anim/PoseChannel.cs` — one runtime's object-pose and visual events: the pose helpers, the opacity/fade machinery and the motion-builder role.
 - `src/Mech3/Anim/NameResolver.cs` — name to node resolution: the index, wildcard matcher, scope tier chain, symbol authority, anchors and the bind census.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock, LOOP, IF/ELSEIF, WAIT_FOR_COMPLETION) behind the `ISequenceHost` seam.
@@ -98,7 +99,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/CombatVoice.cs` — the combat-voice chain: roster `accentID` → `voice.zrd` pool → pilot VO id → clip defs, plus the mission's voice prewarm set.
 - `src/Mech3/Anim/TemplateStage.cs` — the effect-template stage as one module: pool-slot arithmetic, placement and following, copy identity, reveal and retire.
 - `src/Mech3/EffectCycles.cs` — the `EFFECTS` block of the shared `effects.zrd`: the second source of animated material cycles.
-- `src/Mech3/SurfaceRegistry.cs` — the original's compiled+level-supplied surface-name registry: material `soil` id → name, for building `player_crash_<name>`/`touchdown_<name>`.
+- `src/Mech3/SurfaceRegistry.cs` — the original's surface-name registry: a material's `soil` id to its name, and the direction back.
 
 ### `src/Flight/` — the flying aircraft
 

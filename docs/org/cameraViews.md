@@ -326,6 +326,17 @@ hardcoded 0.75), both first-person views sitting at it, the interior drawn + hea
 Cockpit, the interior hidden + head-look with autohead off + 60° for Nose, and 60° for every
 3rd-person mode except the still-unmigrated external 62° global.
 
+**The interior is authored in its own space, and the two spaces are not a similarity apart.** The
+eye sits at `cockpit1`'s origin looking down −Z (`extracted/zrdr/instruments.zrd.json` places the
+instrument panel at z −17.5 straight ahead of it), while the interior's own elevators sit at
+y −10.5 where the exterior's sit at −0.40. It is a stylised model built to be looked at from one
+point, not a scaled copy of the aircraft, so the framing is scale-invariant and
+`PlaneBuilder.InteriorScale` chooses only how the interior composites against world geometry. The
+original draws the interior in its own pass from the interior origin along the interior's own −Z,
+which is why a single-pass renderer says the same thing by mounting the subtree at the −4.70°
+head-pitch tilt: that tilt is what puts the gunsight on the guns, and head-look is deliberately not
+applied to the mount.
+
 ## Not resolved
 
 - **The non-selectable modes (`1`, `2`, `3`, `4`, `5`) still have no friendly name or
@@ -336,3 +347,8 @@ Cockpit, the interior hidden + head-look with autohead off + 60° for Nose, and 
 - Which of the 22 `cockpit_camera` offsets corresponds to each named player airframe by display
   name (the node→display map lives in `../formats/markers.md`); only `player_pfighter`'s is
   pinned here.
+- **The tilted interior mount overshoots by 0.60°.** It leaves the gun pipper about 6 px above the
+  sight ring's crosshair at 720p where the original has them coincident. The exact fit is a 3.82°
+  tilt, but that is a Bloodhawk-fitted number with no decode behind it and the sight's height is
+  per-airframe geometry, so the decoded constant is what ships. Measuring the same offset on a
+  second airframe's cockpit footage is what would settle whether the constant should become a TUNE.

@@ -278,6 +278,16 @@ the additive bit is not in our pipeline at all. `Puffer.Create` decides blend wi
 it draws a ramp-less unflagged sprite additively where the engine mixes, and mixes a flagged sprite
 that has a ramp where the engine adds. See `BL-335`.
 
+`TextureArchive.LastAlphaIsSoft` calls a texture's alpha **soft** when fewer than 45% of its ink
+texels (alpha >= 32) are truly opaque (alpha >= 200), measured install-wide in
+`analysis/alpha-classification/`. Soft ink must not scissor: a 1-bit cut at 0.5 both erases
+sub-threshold ink and solidifies the partial alpha above it, so only essentially-binary ink
+(fences, trees) survives the cut. `SoftAlphaCoastline` names the five waterline sheets the ratio
+misreads, whose solid dry-land half outvotes the feathered ramp that is the point of the texture;
+the inland transition sheets measure 0.81 to 0.93 binary and are genuine cutouts. This is a
+different question from `LastAlphaClass`, the extractor's own `None`/`Simple`/`Full` field, which
+is what the per-surface lighting exemption of [vertexLighting.md](vertexLighting.md) keys on.
+
 `TextureArchive` carries two absent-name sets rather than one, because the retail data lacks
 textures for two different reasons. `KnownAbsentFromGameData` (`pir_spinner`, `barngrill`) draws a
 neutral gray card; `AbsentAndUndrawn` (`cloud1`, `cloud2`) drops the polygon, which is what C3's

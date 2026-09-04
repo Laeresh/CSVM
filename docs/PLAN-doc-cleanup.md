@@ -178,7 +178,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 24. ☑ C24 `docs/architecture/Testing.md` (17 plus the `CSVM.Tests/` section)
 25. ☑ C25 `docs/architecture/Root.md` (3 entries plus Cross-module conventions and the enhanced-graphics section)
 26. ☑ C26 `docs/architecture/Session.md` (40)
-27. ☐ C27 `docs/architecture/Mech3.md` (62)
+27. ☑ C27 `docs/architecture/Mech3.md` (62)
 28. ☑ C28 `docs/architecture/UI.md` (78)
 29. ☐ C29 `docs/architecture/Flight.md` (108), then the complete `.\RunTests.ps1`
 
@@ -577,7 +577,7 @@ file split by entry range and merged by the orchestrator.
 **⚠ Traps.** `WorldEffectsFactory`'s pool paragraph is cited from `CSVM/data/effect_pools.json`'s
 `_references` field; update that pointer if the paragraph moves to `docs/org/`.
 
-## C27 ☐ `docs/architecture/Mech3.md`
+## C27 ☑ `docs/architecture/Mech3.md`
 
 **Goal.** 62 entries at cap, including `AnimRuntime.cs` (164), `SequenceRunner.cs` (64),
 `PlaneBuilder.cs` (60), `SceneBuilder.cs` (58), the `Mech3/Anim/` directory entry; plus
