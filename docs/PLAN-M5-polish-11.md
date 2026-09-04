@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — The zeppelin's guns and bays
 
 1. ☐ `BL-714` A zeppelin's own turrets fire through its own hull
-2. ☐ `BL-713` The Dante's destroyed broadsides keep firing, and their death lights no gasbag
+2. ❌ `BL-713` The Dante's destroyed broadsides keep firing, and their death lights no gasbag
 3. ☑ `BL-729` A destroyed submarine keeps launching fighters
 
 ### Wave B — One aeroplane, one target
@@ -174,7 +174,7 @@ active ring.
 bug. Do not make aircraft cover: the decode says world geometry only. Do not widen the exclusion
 to the vehicle; `PlatformOf`'s comment records that this is how rings shoot through their own hull.
 
-## A2 ☐ `BL-713` The Dante's destroyed broadsides keep firing, and their death lights no gasbag
+## A2 ❌ `BL-713` The Dante's destroyed broadsides keep firing, and their death lights no gasbag
 
 **Goal.** A destroyed Dante broadside leaves the volley, and whether a broadside's death should
 light the gasbag above it is settled from the Dante's own record, one way or the other.
@@ -208,6 +208,30 @@ watch for further muzzle flash from them and for any skin fire on the gasbag abo
 **⚠ Traps.** The Gemini's cannon bays (`BL-694`, `BL-695`) are mid-diagnosis; do not port a CM14
 answer here. A cannon whose `gunback` is destroyed but whose `healthy` node still answers a hit
 is `BL-672`'s question. Say which half a finding is about.
+
+**Outcome.** Both halves are DISPROVEN as reported, on the Dante's own record, with no code
+change. Fire gate: a headless CM24 build logs `'dantezep' broadside wired`, `6+6 cannons`, and
+each of the twelve `lbroadNN`/`rbroadNN` nodes resolves its own `ExistingPool` instance even
+though `piratezep` and `blackswanzep` author the same twelve node names on the same mission,
+because the per-definition symbol-table narrowing (`NameResolver.NarrowToSymbolRoot`) tells the
+three hulls' identically-named cannons apart correctly. A new `zeppelin-broadside` case builds
+the Dante and a held `piratezep` target from C5/M04's own record, engages the broadside, volleys
+6 rounds at the target's in-arc gasbags, destroys one port cannon through `runtime.DamageAt` on
+its own pool, and the volley thins to 5, exactly as the single-zeppelin case already proved.
+Gasbag half: the premise that nothing ties a cannon's death to a gasbag is wrong, since
+`lbroad11`'s own compiled destroy def (`destroy_dtzep_lbroad11-gunback.json`) authors two delayed
+`CallAnimation` events inside its own death sequence, calling its paired panel's burn anim
+(`dtzepleft_gasbag1` at +1 s, `dtzepright_gasbag1` at +8 s), the same link every one of the twelve
+cannons carries to its own paired gasbag by pair number (11/12 to bag1, 21/22 to bag2, 31/32 to
+bag3). Driving `AnimRuntime.Advance` alongside the suite's own sim steps (the established pattern
+in `AnimationAndEffectsSuites.cs`, needed because `_Process`/`_PhysicsProcess` never tick during
+a synchronous suite body) confirms `dtzepleft_gasbag1` starts once the destroyed cannon's own
+sequence reaches it: the link is already live through ordinary `CallAnimation` dispatch, with
+nothing bespoke to add. The evidence does not extend to whether a real projectile's collision
+resolves to the same pool the suite drove directly through `DamageAt`; that hit-routing question
+is `BL-672`'s, out of this item's scope.
+
+**Verified.** <pending orchestrator run>
 
 ## A3 ☑ `BL-729` A destroyed submarine keeps launching fighters
 
