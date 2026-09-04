@@ -161,7 +161,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ A1 `PROJECT_CONTEXT.md`: counts, size claim, dates, repeated rules, skills section
 2. ☑ A2 `CLAUDE.md`, `AGENTS.md`, `AGENTS.override.md`: pointer paragraphs, phantom skill, size claim
-3. ☐ A3 `docs/tooling.md`: dates, phantom path, golden counts, banned phrase
+3. ☑ A3 `docs/tooling.md`: dates, phantom path, golden counts, banned phrase
 4. ☐ A4 Whole-tree check that no entry doc states a date or a banned phrase
 
 ### Wave B: split architecture.md
@@ -279,7 +279,7 @@ AGENTS.override.md` returns nothing; the four hooks paragraph in `CLAUDE.md` is 
 **⚠ Traps.** The CLAUDE.md "Writing style" section contains dates as examples of what not to
 write; those stay.
 
-## A3 ☐ `docs/tooling.md`: dates, phantom path, golden counts, banned phrase
+## A3 ☑ `docs/tooling.md`: dates, phantom path, golden counts, banned phrase
 
 **Goal.** No date in live prose, no path that does not exist, no golden count, no banned phrase.
 

@@ -25,7 +25,7 @@ skip zip decompression. All four loaders (`GameZ`, `TextureArchive`, `Zrdr`, `So
 a zip or a directory; an explicit `--gamez=`/`--textures=`/`--zrdr=`/`--sounds=` is used verbatim.
 
 **Chapter textures load from the top `rtextureN` tier, falling back to `texture.zip`**
-(`SessionPaths.ChapterTextures`, 2026-08-04). The `N` in `rtextureN` is a **size budget in MB of
+(`SessionPaths.ChapterTextures`). The `N` in `rtextureN` is a **size budget in MB of
 video-card texture memory** (the file sizes give it away: rtexture2 ≈ 1.95 MB, rtexture4 ≈ 3.85,
 rtexture6 ≈ 5.7, rtexture8 ≈ 7.65 in every chapter); each chapter ships the 2/4/6/8 tiers plus one
 full-quality tier sized to whatever it needs (`rtexture15`/`11`/`10`/`14`/`9`/`12`/`14`/`14` for
@@ -61,7 +61,7 @@ type, writing output to the mirrored relative path under `extracted/` (basename 
 | `rimage`, `texture`, `rtexture*` | `textures` | `.zip` |
 | `cam_anim`, `mis_anim` | `anim` | `.zip` |
 
-**Extracts with the fork build since 2026-07-21** (`tools/mech3ax/target/release/unzbd.exe`).
+**Extracts with the fork build** (`tools/mech3ax/target/release/unzbd.exe`).
 `-Unzbd <path>` overrides it — e.g. back to the pinned `tools/mech3ax-v0.6.1-.../unzbd.exe`, which
 needs **no code change**, because the Godot loaders read either extraction shape (see
 `GameZ.cs` in [architecture.md](architecture.md)).
@@ -93,7 +93,7 @@ gap was found in the first sandbox clean-machine run).
 
 ## `ExtractRof.ps1` (repo root) — the non-ZBD half
 
-Added 2026-07-20 for everything `ExtractAssets.ps1` doesn't cover: the `.rof` UI resource archives
+Covers everything `ExtractAssets.ps1` doesn't: the `.rof` UI resource archives
 (`GOSDATA/ASSETS/crimson.rof` plus the `crimptch.rof` patch overlay) and the
 `langui.dll`/`language.dll` Win32 string tables, all into `extracted/rof/`.
 
@@ -281,7 +281,7 @@ the whole batch is awaited before the next one starts. Concurrency changes only 
 in flight; every shot still gets its own process, its own `--log-file`, its own `.out`/`.err`, and its
 own PNG, and the silent-death `--verbose` retry (BL-039) runs afterward, serially, over whichever shots
 died silently in their batch — never inside a batch, so a flaky retry never competes with fresh
-launches for the GPU. An A/B of 1/2/3/4 workers, three repeats each, over the complete 16-shot
+launches for the GPU. An A/B of 1/2/3/4 workers, three repeats each, over the complete
 manifest found every raw-pixel hash, `sim_frame`, size and adapter string bit-identical at every
 count, with the measured wall time falling from ~88 s serial to ~49 s (2), ~41 s (3) and ~29 s (4) —
 4 was chosen as the fastest count that stayed bit-identical on the one machine measured. Pass
@@ -381,7 +381,7 @@ verified.
 
 **Worktrees.** Extracted data is found through `CSVM_DATA_ROOT` by the engine and the unit tests
 alike, and Godot is resolved this tree first then `CSVM_DATA_ROOT` (as `RunGame.ps1` does), so
-`$env:CSVM_DATA_ROOT = 'Z:\Crimson Skies'; .\RunTests.ps1` from a git worktree behaves identically
+`$env:CSVM_DATA_ROOT = 'Z:\CSVM'; .\RunTests.ps1` from a git worktree behaves identically
 to the primary tree. Without it a worktree still builds and runs the units; the engine stage reports
 `SKIP` with the Godot path it looked at. Note the unit tests fall back to their own checkout when
 `CSVM_DATA_ROOT` names a directory holding no extraction, so pointing it at an empty folder skips
@@ -396,7 +396,7 @@ other Godot on this tree — a live playtest, another agent, a hand-run capture 
 is reported and left alone.
 
 **All three scripts set `SDL_JOYSTICK_DIRECTINPUT=0`**, respecting a pre-set value — the
-controller-disconnect freeze workaround (2026-07-19). Godot's bundled SDL hangs the main thread
+controller-disconnect freeze workaround. Godot's bundled SDL hangs the main thread
 forever when a >255-button DirectInput device disconnects (the 8BitDo Ultimate 2 dongle is one);
 disabling the dinput backend removes those phantom views, and real pads keep working via
 XInput/HIDAPI. Direct editor or exe launches don't get the workaround. Removal conditions are in
@@ -404,7 +404,7 @@ XInput/HIDAPI. Direct editor or exe launches don't get the workaround. Removal c
 
 ## Exporting a release build
 
-`CSVM/export_presets.cfg` (committed, added 2026-08-05, friends-release B11) holds one preset,
+`CSVM/export_presets.cfg` (committed, friends-release B11) holds one preset,
 **"Windows Desktop"**: release export, x86_64, `embed_pck=true` — a single `CSVM.exe` with the
 pck inside, plus the .NET publish output beside it as `data_CSVM_windows_x86_64/`
 (**self-contained**: `coreclr.dll`/`hostfxr.dll` ship in it, so a recipient installs no .NET
@@ -445,7 +445,7 @@ dotnet build CSVM/CSVM.sln
 Output lands at the path given on the command line (the preset's own `export_path` is
 `../.scratch/export/CSVM.exe`, git-ignored, used when exporting from the editor GUI).
 
-Two filters in the preset are load-bearing:
+Two filters in the preset are required:
 
 - `include_filter="data/*.json"` — `stock_loadouts.json`/`effect_pools.json` are non-imported
   resources the default export silently drops; without this every plane flies unarmed. Their
@@ -468,12 +468,12 @@ mech3ax fork checkout (below), and the Godot 4.7 .NET editor at
 
 ## The mech3ax fork (`tools/mech3ax/`)
 
-**Crimson Skies support lives in the fork, not upstream** (decided 2026-07-22). Upstream removed it
+**Crimson Skies support lives in the fork, not upstream.** Upstream removed it
 because they could not maintain it — bandwidth, not architecture — so the fork is its home, and
 upstream commits get merged *into* the fork if they appear.
 
-Upstream is **dormant**: its tip is `cbb838f` (rc3, 2025-11-17), and `upstream/main` was 0 commits
-ahead of the fork's `main` when last checked (2026-07-22). Syncing is a check-occasionally, not a
+Upstream is **dormant**: its tip is `cbb838f` (rc3), and `upstream/main` was 0 commits
+ahead of the fork's `main` the last time it was checked. Syncing is a check-occasionally, not a
 routine.
 
 - **Remotes:** `origin` = `git@github.com:Laeresh/mech3ax.git`,
@@ -497,7 +497,7 @@ launches the engine about twenty times, and before this it grabbed the foregroun
 Not taking focus is not the same as staying out of sight: an unfocused window still *opens in front*
 of what you are reading. So a scripted session also **hides its window** —
 `ScriptedWindow.Hide` calls `ShowWindow(SW_HIDE)` once `Launcher._Ready` knows the flags. Rendering
-is unaffected (all 11 goldens hash-identical); hiding is deliberately not *minimizing*, which stops
+is unaffected (every golden hash-identical); hiding is deliberately not *minimizing*, which stops
 rendering and blanks the captures (verification SHOT-16).
 
 That still leaves a **~1 s flash** for anything the engine launches by hand, because the window
@@ -509,7 +509,7 @@ which is the only kind of placement that works (SHELL-9). The summary line says 
 used, because a silent fallback to the visible one looks exactly like success. If the OS refuses the
 desktop, the run continues visibly rather than failing.
 
-Measured: a full run passed 152 units, 9/9 suites and 11/11 goldens hash-identical while a probe
+Measured: a full run passed 152 units, 9/9 suites and every golden hash-identical while a probe
 sampling our own desktop every 50 ms saw a Godot window in **0 of 700 samples**, Godot alive in 697
 of them; perf draw counts are identical to a visible run. Evidence and the rejected alternatives:
 the retired `analysis/hidden-desktop/` (`git show analysis-archive:analysis/hidden-desktop/FINDINGS.md`).
