@@ -220,9 +220,10 @@ public sealed partial class AiGeneratorRuntime : Node
     /// <summary>The named host died: every generator whose host node (or authored
     /// <c>healthy</c> node, the submarine's) carries this name launches for
     /// <see cref="GeneratorCycle.HostDeathGraceSeconds"/> more, then disables permanently.
-    /// Fed by <c>ZeppelinRuntime.ZeppelinKilled</c> (F18); fixed-installation hosts still have
-    /// no death source. A disabled generator's door keeps its last state (the decoded loop
-    /// early-outs before any door rule). Returns how many generators went on the grace.</summary>
+    /// Fed by <c>ZeppelinRuntime.ZeppelinKilled</c> (F18) and, for a fixed installation, by
+    /// <c>AnimRuntime.DestructibleKilled</c>. A disabled generator's door keeps its last state
+    /// (the decoded loop early-outs before any door rule). Returns how many generators went on
+    /// the grace.</summary>
     public int NotifyHostDied(string nodeName)
     {
         int dying = 0;

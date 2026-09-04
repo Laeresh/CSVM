@@ -171,6 +171,7 @@
     "campaign-roster": 8.875,
     "generator-roster-params": 0.766,
     "generator-launch-dedg": 5.56,
+    "generator-sub-kill-disables-bay": 2.9,
     "generator-callback-credit": 2.93,
     "campaign-bomber-formation": 7.420,
     "campaign-kill-credit": 5.500,

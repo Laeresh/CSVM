@@ -267,6 +267,19 @@ public class GeneratorCycleTests
     }
 
     [Fact]
+    public void FixedInstallationHostDeathUsesTheSameGraceAsAZeppelinKill()
+    {
+        // A fixed installation has no destroyed flag of its own; its death is its authored
+        // `healthy` node going inactive, which reaches this same HostDied() call a zeppelin's
+        // kill does. The state machine carries no notion of which named report triggered it.
+        var cycle = Credited(maxActive: 99, waveSize: 1, wavePeriod: 2f, indPeriod: 2f);
+        cycle.HostDied();
+        var spawns = SpawnTimes(cycle, seconds: GeneratorCycle.HostDeathGraceSeconds + 10f);
+        Assert.All(spawns, t => Assert.True(t <= GeneratorCycle.HostDeathGraceSeconds));
+        Assert.True(cycle.Disabled);
+    }
+
+    [Fact]
     public void ACreditLandingInsideTheGraceStillLaunches()
     {
         // C5/M04's shape: the Dante's kill lands 0.3 s before OBJECTIVE11 credits Miles's

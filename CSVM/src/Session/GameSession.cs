@@ -2626,6 +2626,13 @@ public partial class GameSession : Node3D
                 var generators = _generators;
                 _zeppelins.ZeppelinKilled += node => generators.NotifyHostDied(node);
             }
+            // A fixed installation (the submarine) has no destroyed flag of its own; its death is
+            // its healthy node going inactive, which DamageAt now raises the same way.
+            if (wr != null)
+            {
+                var generators = _generators;
+                wr.DestructibleKilled += node => generators.NotifyHostDied(node);
+            }
             GD.Print($"egen: {_generators.LiveCount} of {egenDefs.Count} generator(s) live for " +
                      $"{_spec.Chapter}/{_spec.Mission}, spawning '{_spec.GeneratorsPlane}'");
             state.What += $" + {_generators.LiveCount} generator(s)";

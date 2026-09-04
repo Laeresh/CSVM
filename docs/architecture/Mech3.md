@@ -425,15 +425,15 @@ in cell space and the two axes run opposite ways; both are in [../formats/interp
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP,
 startanims, a safety net), then dispatch-table event playback; an unhandled event kind is counted,
 never fatal. It owns the live definition instances and their condition evaluation, the
-destructible-damage entries (`DamageAt`/`ApplyDamageStages`/`RunDeathSequence`/`CarryState`), the
-world-effects runtime (`PlayEffectAt` over a hidden template stage), the emitter prewarm, the
-range-deferred start sweep and the vehicle/library-root index, and hands every construction site a
-sealed `TemplateStage`. What binds a member is on that member: the pool-slot checkout reset, the
-prewarm's scope, the mission-trigger closure, the undercover probe's decode, the death call's site
-follow. Each dispatch axis is a sibling module with its own entry, while the router keeps the case
-labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`,
-`Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`,
-`Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. Decode: docs/org/sequences.md.
+destructible-damage entries (`DamageAt`, which also raises `DestructibleKilled` on a healthy-role
+kill, `ApplyDamageStages`, `RunDeathSequence`, `CarryState`), the world-effects runtime
+(`PlayEffectAt` over a hidden template stage), the emitter prewarm, the range-deferred start sweep
+and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`.
+What binds a member is on that member: the pool-slot checkout reset, the prewarm's scope, the
+mission-trigger closure, the undercover probe's decode, the death call's site follow. Each dispatch
+axis is a sibling module; the router keeps the case labels and the public fields callers configure:
+`SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`,
+`Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. Decode: docs/org/sequences.md.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own namespace,

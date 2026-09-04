@@ -102,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☐ `BL-714` A zeppelin's own turrets fire through its own hull
 2. ☐ `BL-713` The Dante's destroyed broadsides keep firing, and their death lights no gasbag
-3. ☐ `BL-729` A destroyed submarine keeps launching fighters
+3. ☑ `BL-729` A destroyed submarine keeps launching fighters
 
 ### Wave B — One aeroplane, one target
 
@@ -209,7 +209,7 @@ watch for further muzzle flash from them and for any skin fire on the gasbag abo
 answer here. A cannon whose `gunback` is destroyed but whose `healthy` node still answers a hit
 is `BL-672`'s question. Say which half a finding is about.
 
-## A3 ☐ `BL-729` A destroyed submarine keeps launching fighters
+## A3 ☑ `BL-729` A destroyed submarine keeps launching fighters
 
 **Goal.** Once the Barracuda's `subhealthy` node goes inactive, its generator stops launching
 after the same grace the Dante's bay takes.
@@ -237,6 +237,22 @@ sub kill disables the bay after the 3 s grace.
 **⚠ Traps.** Keep the 3 s grace unless the sub's script has its own timing; it is a deliberate
 deviation for the Dante's race. Match on the `healthy` node's name, not the generator's, so the
 notification reaches the same code path the zeppelin's does.
+
+**Outcome.** `AnimRuntime.DamageAt` now raises `DestructibleKilled` with the def's own healthy-role
+node name (found by scanning its Initial sequences, then its `RESET_STATE`, for the same
+healthy/destroyed role words `NotifyHostDied` already matches) the instant a live kill sets a
+pool's status to `Destroyed`, before `RunDeathSequence` runs the choreography. `GameSession` feeds
+it into `AiGeneratorRuntime.NotifyHostDied` beside `ZeppelinRuntime.ZeppelinKilled`, so the
+barracuda's `subhealthy` reaches the same disable-after-grace path the Dante's kill does; a fixed
+installation is no longer a dead end for that call. The evidence's premise held: nothing but the
+new event was needed, the matching and the grace timer were already correct. A pre-existing,
+unrelated defect surfaced while proving this: the same live kill's own death choreography (via
+`SyncDestructiblePool`) can revert a destroyed pool back to `Healthy` when its death sequence
+deactivates a `dbase`-role node without a matching `destroyed`-role reactivation, as the
+barracuda's own death does; the notification fires before that revert, so the generator disable is
+unaffected, but the pool's own `Status`/`Health` bookkeeping is left wrong afterward.
+
+**Verified.** <pending orchestrator run>
 
 # Wave B — One aeroplane, one target
 
