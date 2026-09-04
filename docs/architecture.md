@@ -332,6 +332,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BoardPalette.cs` — the ink a campaign board writes in, one palette per background family.
 - `src/UI/LoadBoard.cs` — the load screen a session builds behind: the original's chart sheet for a campaign launch, its blackboard for everything else.
 - `src/UI/ObjectivesHud.cs` — the campaign mission's objectives readout, drawn on the pause screen alone, one instance per rig.
+- `src/UI/MissionEndFade.cs` — the mission-end black-out, painting `CampaignDirector.LeavingFade` onto a full-screen rect every frame, one instance per rig.
 - `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.
 - `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron, colour and decal steppers, a live repaint and copy-CLI-args.

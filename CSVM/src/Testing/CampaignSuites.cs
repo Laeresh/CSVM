@@ -348,8 +348,15 @@ internal static class CampaignSuites
             ctx.Check(director.Result != null, $"the mission ended and banked its result");
             ctx.Check(!director.ReturnToCabin,
                 $"but has not left the world yet: the leaving hold runs first");
-            Advance(director, CampaignDirector.LeavingHoldS + 0.2f);
+            ctx.Check(Mathf.Abs(director.LeavingFade - 0f) < 0.01f,
+                $"the mission-end fade starts at 0 the frame the ending lands, fade={director.LeavingFade:0.###}");
+            Advance(director, 1f);
+            ctx.Check(Mathf.Abs(director.LeavingFade - 0.5f) < 0.02f,
+                $"a second into the two-second hold the fade sits halfway to black, fade={director.LeavingFade:0.###}");
+            Advance(director, CampaignDirector.LeavingHoldS - 1f + 0.2f);
             ctx.Check(director.ReturnToCabin, $"the mission end raised the return-to-cabin exit");
+            ctx.Check(Mathf.Abs(director.LeavingFade - 1f) < 0.01f,
+                $"and the hold's own two seconds landed the fade fully black, so the scrapbook opens on it");
             var result = director.Result!.Value;
             ctx.Check(result.Outcome == MissionOutcome.Won, $"the outcome is the graph's own");
             ctx.Same(graph.CompletedMask | CampaignProgression.PrimaryObjectiveMask, result.Attempt.CompletedMask,
@@ -1286,6 +1293,8 @@ internal static class CampaignSuites
         graph.EndAfterPlayerLost();
         Advance(director, CampaignDirector.LeavingHoldS + 0.2f);
         ctx.Check(director.ReturnToCabin, $"a player-death loss still raised the return-to-cabin exit");
+        ctx.Check(Mathf.Abs(director.LeavingFade - 1f) < 0.01f,
+            $"the loss ending's own hold lands the fade fully black too, fade={director.LeavingFade:0.###}");
         var result = director.Result!.Value;
         ctx.Check(result.Outcome == MissionOutcome.Lost, $"the player's own death ends the mission lost");
         ctx.Check((result.Attempt.CompletedMask & CampaignProgression.PrimaryObjectiveMask) == 0,

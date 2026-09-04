@@ -36,6 +36,12 @@ internal static class HudLayers
     /// world.</summary>
     public const int SunWash = 2;
 
+    /// <summary>The mission-end black-out (<c>UI.MissionEndFade</c>). Above <see cref="SunWash"/>
+    /// so the fade darkens the HUD and the wash exactly as the original's copied framebuffer does,
+    /// but under <see cref="Debug"/> and <see cref="Lab"/> for the same reason those sit above
+    /// <see cref="SunWash"/>: the instruments the picture is judged with stay readable through it.</summary>
+    public const int MissionEndFade = 3;
+
     /// <summary>The debug overlays: node labels (T), class overlay, AI nets, markers (K),
     /// colliders (C), the selection gizmo and the tile grid.</summary>
     public const int Debug = 4;

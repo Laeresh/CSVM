@@ -119,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — Mission flow
 
 31. ☐ `BL-730` CM19's Black Hats launch from their hook
-32. ☐ `BL-727` Mission end fades to black over the hold
+32. ☑ `BL-727` Mission end fades to black over the hold
 33. ☐ Closing sortie: every landed item judged at the controls
 
 ## Dependency and parallelism notes
@@ -462,7 +462,7 @@ warning.
 **⚠ Traps.** The mission also swaps the player onto the Warhawk (966), so "no enemies" may be
 read after the swap; check the timeline. Do not fall back to spawning the roster enabled.
 
-## D32 ☐ `BL-727` Mission end fades to black over the hold
+## D32 ☑ `BL-727` Mission end fades to black over the hold
 
 **Goal.** Every mission ending, win or loss, fades the screen to black over the two-second hold,
 and the next screen opens on black.
@@ -490,6 +490,19 @@ controls (`D33`): any mission to its end, a win and a loss.
 **⚠ Traps.** The original fades a copied frame, so the world need not keep rendering under it.
 Do not lengthen the hold. Every suite that advances the clock by `LeavingHoldS` must still pass
 unchanged.
+
+**Outcome.** `CampaignDirector.LeavingFade` reads `Result`/the counting-down `_leaving` field and
+returns 0 before any ending, the hold's own linear ramp while `_leaving` is still counting down,
+and 1 once it reaches zero and stays there (`Leaving` itself goes false at that point, so the
+property reads `Result` rather than that flag). `UI.MissionEndFade`, a new full-screen `ColorRect`
+on `HudLayers.Hud`, polls that property every frame and is built per rig beside `ObjectivesHud` in
+`GameSession`, mounted only for a campaign session; nothing in `CampaignDirector.Step` or `Leave`
+changed. `CampaignSuites`' `campaign-mission-end` now asserts the fade at 0 s, 1 s into the hold and
+at the hold's own end (1, halfway, fully black), and `CampaignMissionLossKeepsObjectiveBits` asserts
+the loss ending lands fully black too, so both endings are covered. No golden in
+`analysis/goldens/manifest.json` covers a mission end, so none needed a re-pin.
+
+**Verified.** <pending orchestrator run>
 
 ## D33 ☐ Closing sortie: every landed item judged at the controls
 
