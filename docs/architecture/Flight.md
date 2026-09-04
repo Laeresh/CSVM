@@ -276,15 +276,15 @@ Decode: [../org/weaponImpact.md](../org/weaponImpact.md), [../formats/weapons.md
 `ProjectilePool`, the shared-world weapon-fire subsystem: a fixed pool of rounds integrated off the
 weapon data (launch and inherited velocity with its decay, acceleration, gravity, the steering step,
 the two fuses and the three end conditions), the swept hit ray over world and aircraft, and the
-impact that follows. It owns the visuals too, crossed-quad tracers and their tip discs, the muzzle
-flash triad with its casing, smoke and light secondaries, the per-surface `IMPACT` effect, sound and
-stand-in burst, and the water splash's authored playback. Damage and presentation leave through the
-sinks a session assigns (`DamageSink` behind `WorldDamageGate`, `EffectSink`, `WashSink`,
-`BeeperTags`); a burst gathers world bodies and aircraft into one nearest-first, cover-tested
-candidate list. The `Collect*` methods are the seams the aim assist and a scripted run read the
-pool's own state through. Two rules are the remake's own and are recorded where they bind: the
-inherited-velocity decay is not gated on a held target (`InheritedFraction`), and the tracer's
-pixel floor draws rounds the data's LOD would cut ([../org/tracers.md](../org/tracers.md)).
+impact that follows: the struck material's `IMPACT` row for a ray hit, the `default` row for a
+self-ended round ([../org/ordnanceTypes.md](../org/ordnanceTypes.md), "Which row a burst reads").
+Visuals: tracers and tip discs, the muzzle flash triad, the per-surface `IMPACT` effect, sound and
+stand-in burst, and the water splash. Damage and presentation leave through the sinks a session
+assigns (`DamageSink` behind `WorldDamageGate`, `EffectSink`, `WashSink`, `BeeperTags`); a burst
+gathers world bodies and aircraft into one nearest-first, cover-tested list; the `Collect*` methods
+are the seams the aim assist and a scripted run read the pool through. Remake-own rules, recorded
+where they bind: the inherited-velocity decay ignores the held target (`InheritedFraction`); the
+tracer's pixel floor draws rounds the LOD would cut ([../org/tracers.md](../org/tracers.md)).
 
 ## src/Flight/ProjectileFlyoutAnim.cs
 The `FLYOUT` `MODEL_ANIMATION` half of `ProjectilePool`, a partial-class file. Every ordnance round

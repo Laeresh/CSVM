@@ -663,6 +663,39 @@ and sound a row binds and how rows are filled. It does not cover what a detonati
   surface. CSVM: `ProjectilePool.SurfaceUpBasis` on the slot `ImpactOutcome.SurfaceOriented` names,
   handed to `AnimRuntime.PlayEffectAt` and the gamez-model spawn as the template's basis.
 
+### Which row a burst reads
+
+The surface id `FUN_005ac7a0` indexes the table with comes off the hit record it is handed
+(`hit+0x20` is the struck material, `material+0x20` its id), and the two ways a round ends build
+that record differently:
+
+- **A direct strike reads the struck material.** `FUN_005b05c0`, reached from the swept ray in
+  `FUN_005b03f0`, hands the ray's own hit record through, so an aircraft reads `player`(6) and a
+  chapter mesh its `soil` id.
+- **Every fused burst reads `default`(0).** Both fuse paths end in `FUN_005ac3a0`: the round's own
+  fuse against its held target in `FUN_005afd50` (squared distance to the target at or under
+  `+0x44`) and the vehicle-side sweep in `FUN_004b5fb0` (every live round whose `+0x44` exceeds
+  0.01, against every VehicleList entry but the shooter, under the optional dot gate of flag
+  `0x80000`). `FUN_005ac3a0` builds a synthetic hit record on its stack from the round's position and
+  a material stub whose id field is zero, and the aircraft the round fused on is not on it; that
+  aircraft takes its share through the splash gather like any other candidate. So a fuse burst
+  draws at the round, never on the plane, and out of the weapon's `default` row whatever its
+  `player` row authors. The range expiry and `DETONATION_TIME` end in the same call. The gate
+  `DAT_00a1d7d4` on that path's splash is set to 1 at init (`FUN_005ad4e0`) and only the `MINE`
+  walker `FUN_005b0970` toggles it around its own calls, so a fused burst splashes like a struck one.
+- **An `ANIMATION` name with no definition draws nothing.** `FUN_005ae990` resolves each name at
+  load through `FUN_00523820`, an exact-string scan of the anim-definition table, and stores the
+  pointer in the row (`+0x4`; `+0x1c` for `SURFACE_ANIMATION`). An unknown name stores 0 and
+  `FUN_005ac7a0` skips the spawn on a zero slot. Nothing falls back to `default` for a row the
+  weapon named: the copy in `FUN_005ad630` fills only ids it names no block for. `wep_07`'s `player`
+  row names `flak_effectplayer`, which no chapter defines, so a flak that physically strikes an
+  aircraft plays the row's sound and no animation, while its fused bursts, the common case at a
+  50 m fuse, draw `flak_effect` from `default`.
+
+CSVM: `ProjectilePool.Impact` reads the struck id for a ray hit only and `default` for every
+self-ended round; the fused aircraft rides along as the beeper's tag target and the blast's damage
+anchor, never as the row.
+
 ### Half two, the splash (`FUN_005aca30` then `FUN_005acac0`)
 
 Gated on `weapon +0x3c > 0`. `FUN_005aca30` runs a sphere query (`FUN_004cb420`) of radius

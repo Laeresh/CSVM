@@ -1191,7 +1191,7 @@ public sealed partial class ProjectilePool : Node3D
                 }
                 // Checked AFTER the ray, so a round that would strike its target keeps the direct
                 // hit. Damage arrives through the blast's aircraft pass, not this branch (shapeIdx
-                // -1 keeps it out of the direct-hit path).
+                // -1 keeps it out of the direct-hit path and off the aircraft's IMPACT row).
                 if (ProximityFuseTriggered(p.Weapon, p.Shooter, prev, next, vel,
                         out var fusePoint, out var fused, out var towardHull))
                 {
@@ -1522,7 +1522,7 @@ public sealed partial class ProjectilePool : Node3D
 
     // The three ways a round ends itself, in the original's own order (FUN_005afd50 from the RANGE
     // compare to LAB_005b0318). Range wins outright. `detonates` is false only for the quiet RANGE
-    // expiry; `targetFused` marks the own-target fuse, whose burst resolves on the fused aircraft.
+    // expiry; `targetFused` marks the own-target fuse, whose aircraft rides along to the burst.
     private static bool EndConditionMet(in Proj p, out bool detonates, out bool targetFused)
     {
         targetFused = false;
@@ -1943,7 +1943,10 @@ public sealed partial class ProjectilePool : Node3D
         // covers the decode's three hit sites without distinguishing them.
         if (weapon.IsCannon && ScoredShooters.Contains(shooter))
             CannonHits++;
-        int surface = SurfaceIdOf(collider);
+        // A ray hit reads the struck material; every self-ended round reads `default`, since
+        // FUN_005ac3a0's hit record carries surface id 0 and never the fused aircraft (org/
+        // ordnanceTypes.md "Which row a burst reads"). ⚠ Flak's `player` row draws nothing.
+        int surface = shapeIdx >= 0 ? SurfaceIdOf(collider) : SurfaceRegistry.Default;
         bool hasEffectsRuntime = EffectSink != null;
         // The weapon's own hook runs before anything else (FUN_005ac7a0's first act) and its mask
         // feeds the resolve, so Apply performs a row already stripped of what the hook silenced.
@@ -2262,11 +2265,11 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     // The one exit every self-ended round takes, so the range expiry and both fuses share the
-    // effect, sound and splash paths a struck surface gets. The own-target fuse hands its aircraft
-    // along so the burst indexes the aircraft's IMPACT row exactly as the sweep fuse's does (the
-    // beeper/seeker author their explosion on `player`, and only the empty default row answers a
-    // colliderless burst); every other end strikes nothing and the impact sprite falls back to the
-    // world-facing quad. The shooter rides along so the blast's aircraft pass attributes its kills.
+    // effect, sound and splash paths a struck surface gets, all of them off the `default` row
+    // (FUN_005ac3a0). The own-target fuse hands its aircraft along for what the sweep fuse's
+    // aircraft already gets, the beeper's tag and the blast's anchor, not for the row; every other
+    // end strikes nothing and the impact sprite falls back to the world-facing quad. The shooter
+    // rides along so the blast's aircraft pass attributes its kills.
     private void EndRound(ref Proj p, Vector3 at, bool detonate, AircraftBody? fused = null)
     {
         if (detonate)
