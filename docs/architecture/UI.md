@@ -1031,16 +1031,13 @@ throwing. Off-engine coverage: `CSVM.Tests/MenuSeamContractTests.cs`.
 
 ## src/UI/Menu/IMenuPresentation.cs
 One menu presentation: a screen graph plus its navigation, interaction, animation and cue
-selection over the shared features. `Activate(host, destination)` shows it at whatever screen of
-its own graph the semantic destination maps to, `Tick` drives it over the host's seats, and
-`Hide` takes it off screen after the host consumed its exit with its state kept, and
-`Deactivate` tears it down for good. A flight is not a switch: the host re-calls `Activate` on the
-same instance with the return's destination, so cursors survive a flight. The host creates a
-fresh instance per switch, so a switch discards transient presentation state by construction and
-always lands on `MenuReturnDestination.TopLevel`. The Built-in presentation is
-`src/UI/Menu/BuiltIn/BuiltInPresentation.cs`; the host is `src/UI/Menu/MenuHost.cs`. The whole
-seam read end to end, with the checklist a further presentation follows, is
-[`docs/menu-presentations.md`](menu-presentations.md).
+selection over the shared features. `Activate(host, destination)` shows it at the screen its own
+graph maps the semantic destination to, `Tick` drives it over the host's seats, `Hide` takes it
+off screen with its state kept, and `Deactivate` tears it down for good. A flight is a re-`Activate`
+on the same instance, so cursors survive it; a presentation switch builds a fresh instance, which
+is what discards transient state. Built-in's implementation is `BuiltIn/BuiltInPresentation.cs` and
+the host is `MenuHost.cs`; the seam end to end, with the checklist a further presentation follows,
+is [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/PresentationRegistry.cs
 Where presentations register: one factory per `PresentationId`, filled once at startup, duplicate
@@ -1052,43 +1049,28 @@ registry only says what exists in the build.
 ## src/UI/Menu/IMenuHost.cs
 What the process-lifetime menu host lends the active presentation: `Features`
 (`MenuFeatureSet`), `Audio` (`IMenuAudio`), `Seats` (one `IMenuInputSource` each, a live list the
-join flow grows: the `PlayerSetupFeature`'s `Sources` once that feature is registered), and
-`Exit(MenuExit)`, the only way out. The host owns all four across
+join flow grows) and `Exit(MenuExit)`, the only way out. The host owns all four across
 presentation switches; a presentation borrows them between `Activate` and `Deactivate` and keeps
 no reference past that. The implementation is `MenuHost` below.
 
 ## src/UI/Menu/MenuHost.cs
-The process-lifetime host, engine-free: `Launcher` owns one. Constructed over a
-`PresentationRegistry`, an `IMenuAudio` and an exit sink; the owner adds features (`Features.Add`)
-and seats (`AddSeat`/`RemoveSeat`). With a `PlayerSetupFeature` registered, `Seats` is that
-feature's live source list and `AddSeat` joins through it (a refused join throws: every seat
-taken, or the source already seated), so the feature must be added before seat 0 and a join made
-anywhere shows in `Seats`; without one the host keeps its own list, which is what the seam
-fixtures use. `Select(forceBuiltIn, cliOverride, savedRequest)` settles
-`Selected` through `PresentationResolution.Resolve` with registration plus the owner's
-`Availability` delegate as availability (a registered presentation whose assets are missing answers
-with a reason, which is appended to the fallback reason), keeps the pre-availability `Requested`
-for Options to show back, returns the fallback reason or null, reads a blank or unknown request as
-unavailable rather than throwing, and throws only when the resolved id (Built-in) is not
-registered, a wiring error. `Show(destination)` creates a fresh instance of
-`Selected` on the first call and re-activates the same instance on every later one, so a return
-from flight lands on the screens as they were left; `Tick` runs the presentation only while
-`Shown`; `Exit` clears `Shown`, hides the presentation and hands the exit to the sink;
-`Deactivate` ends the instance and calls `Features.DiscardTransient`, the first half of a switch.
-`Shown` is what the owner reads for "the menu is up". Off-engine coverage:
-`CSVM.Tests/MenuHostTests.cs` over the seam fixtures; in-engine, `menu-host-tracer`.
+The process-lifetime host, engine-free, one per `Launcher`: it owns the feature set, the audio
+service, the seats and the exit sink across every presentation switch. `Select` settles which
+presentation runs through `PresentationResolution.Resolve` over registration plus the owner's
+availability answer, keeps the pre-availability request for Options to show back, and answers a
+blank, unknown or unavailable request with a fallback reason rather than a throw. `Show` creates
+the selected presentation once and re-activates that instance on every later call, so a return
+from flight lands on the screens as they were left; `Tick` runs it only while `Shown`, and
+`Deactivate` ends it and discards the features' transient state, the first half of a switch.
 
 ## src/UI/Menu/BuiltIn/BuiltInPresentation.cs
 The Built-in presentation (`CSVM.UI.Menu.BuiltIn`): `LaunchMenu` registered under
-`PresentationId.BuiltIn`. Constructed with the parent node, the data paths, the `--menu=` aid and
-the raw `MenuInput` behind the host's first seat. `Activate` builds the launchscreen under the
-parent on the first call (switching its own process callback off), calls `ShowMenu(aid)` with the
-aid on that first call and with "" on every later one (the aid is consumed, so a return from flight
-lands on Mode with the cursors kept, as `menu-launch-return` pins), then maps the destination:
-`TopLevelReturn` is the Mode screen, `CabinReturn` opens the profile's cabin, `DebriefReturn` the
-scrapbook on the flown mission. `Tick` runs the menu's frame; `Hide` is `HideMenu`, called by the
-host alone; `Deactivate` removes and frees the node. `Menu` exposes the launchscreen for what is
-Built-in's alone (the launcher's one-shot debug aids and its failed-build note).
+`PresentationId.BuiltIn`. `Activate` builds the launchscreen under the parent node on the first
+call and maps the return destination onto it, the top level being the Mode screen, `CabinReturn`
+the profile's cabin and `DebriefReturn` the scrapbook on the flown mission; the `--menu=` aid is
+consumed on that first call, so a return from flight lands on Mode with the cursors kept. `Tick`
+runs the menu's frame, `Hide` takes it off screen and `Deactivate` frees the node. `Menu` exposes
+the launchscreen for what is Built-in's alone. Read `src/UI/LaunchMenu.cs` next.
 
 ## src/UI/Menu/BuiltIn/BuiltInSeat.cs
 A pad-side `IMenuInputSource`: wraps one `MenuInput`, polls it and translates the result into a
@@ -1116,11 +1098,16 @@ The device-neutral input seam: `MenuCommands` is one frame of one seat's semanti
 (auto-repeated cursor steps, edge presses, typed text, an optional window-pixel `MenuPointer`),
 and `IMenuInputSource` is the per-seat producer (`Poll`/`Prime`/`CapturingText`). A source is not
 synonymous with a pad: keyboard-plus-unclaimed-pads, one claimed pad, a mouse or a future
-HOTAS/HOSAS binding all sit behind the same contract, and a presentation never reads a device.
-`MenuInput` stays the raw pad-side poller; `BuiltInSeat` adapts it onto this seam for seat 0 and
-for every seat a pad joins on, `PointerSeat` adds the mouse, `MenuIdleSource` stands for a seat
-with no device, and the seats themselves are the `PlayerSetupFeature`'s, claimed by source
-identity.
+HOTAS/HOSAS binding all sit behind this contract, and a presentation never reads a device. The
+implementations are `BuiltIn/BuiltInSeat.cs`, `Original/PointerSeat.cs` and `MenuIdleSource.cs`;
+the seats themselves are the `PlayerSetupFeature`'s, claimed by source identity.
+
+## src/UI/Menu/MenuIdleSource.cs
+An `IMenuInputSource` with no device behind it: labelled "no device" and idle every frame. The
+screenshot aid that seats extra players on a one-controller machine joins one per seat, so the
+shot is deterministic and every seat still has a source to claim; each instance is its own claim,
+since a claim is an identity. Read `MenuCommands.cs` for the seam and `PlayerSetupFeature.cs` for
+the seats it is claimed by.
 
 ## src/UI/Menu/IMenuAudio.cs
 The shared menu audio contract: a presentation requests a `MenuCue` by semantic name and starts
@@ -1129,448 +1116,158 @@ handoff into a launching session. The host implementation is `MenuAudioService`
 (`src/Session/MenuAudioService.cs`); Built-in's one call site is the briefing narration.
 
 ## src/UI/Menu/MenuExit.cs
-The one typed menu exit, handed to `IMenuHost.Exit` and consumed by `Launcher`: `LaunchExit`
-(chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`),
+The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
+`LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
-`OptionsApplyExit` (the `PresentationId` and the graphics-mode word an Options screen applied; the
-consumer persists both, ends the active presentation and shows the selected one at its top level).
-Both values ride the exit rather than being saved by the screen that took them, so the options file
-keeps exactly one writer and no presentation driven through Apply can write the player's own. A
-custom plane arrives as its resolved `CustomPlaneDef`, never a store name, so the consumer reads no
-store. Presentations never construct sessions. `LaunchMenu` produces the first three and the apply,
-`OriginalShell` the launch, the campaign launch, the quit and the apply, and `Launcher.OnMenuExit`
-consumes them all; the return side is `MenuReturnDestination` alone, the `--menu=` aid reaching
-only the cold start. `CSVM.Tests/MenuNamespaceDependencyTests.cs` scans the compiled metadata so
-nothing under `CSVM.UI` names `GameSession`, `Launcher` or `LauncherContext`; `menu-launch-return`
-(`src/Testing/MenuLaunchReturnSuites.cs`) drives every launch and every return through a real
-`MenuHost` in both presentations.
+`OptionsApplyExit` (the `PresentationId` and the graphics-mode word an Options screen applied).
+An applied choice rides the exit rather than being saved by the screen that took it, so the
+options file keeps one writer; a custom plane rides it as a resolved `CustomPlaneDef`, never a
+store name. Presentations never construct sessions. The return side is `MenuReturnDestination`;
+the exit table and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/MenuLayout.cs
 The runtime reader of `extracted/rof/menu_layout.json`, the decoded menu layout `ExtractRof.ps1`
-emits (`docs/formats/menu-layout.md`), engine-free in the shared namespace. `TryLoad(path, out
-reason)` answers a missing or unreadable file with null and a reason, never an empty layout;
-`Parse(json)` builds the typed model: `WidgetTypes` (the artifact's own per-type field table with
-each field's `kind`), `Globals` (the file-wide macros, `Global`/`GlobalColor` by name), `Screens`
-(`Screen(section)`, case-insensitive), each with its `Widgets` (`Widget(key)`, case-insensitive
-since the scripts lowercase the layout's capitals), `Navigation` (the `ScriptToExe` edges),
-`ExternalAssets` (script-named files and fragments with `Present`) and `MissingArt`. A
-`MenuLayoutWidget` keeps every field's resolved string (`Field`), the raw macro token where one was
-substituted (`Authored`), the decoder's derived readings (`Art`, `ResIdSymbol`, `ResId`, `Text`,
-`TextSource`, `NavigateTo`, `Frames`) and typed accessors (`TryInt`/`Int`, `Bool`, `TryColor`)
-that consult the type table's kind and refuse a field of another kind, so the reader carries no
-field table of its own. `PathUnder(dataRoot)` is where the artifact sits. The reader is the first
-consumer of the artifact, which is why the extraction stamp is schema 2. Off-engine coverage:
-`CSVM.Tests/MenuLayoutReaderTests.cs`, which reads the artifact the decoder emits from the probe
-fixtures, plus the install's own census under `[ExtractedDataFact]`.
+emits, engine-free in the shared namespace. `TryLoad` answers a missing or unreadable file with
+null and a reason, never an empty layout; `Parse` builds the typed model of screens, widgets, the
+file-wide macros, the `ScriptToExe` navigation edges, the script-named external assets and the
+missing art. A `MenuLayoutWidget` keeps every field's resolved string beside the raw macro token
+and the decoder's derived readings, and its typed accessors consult the artifact's own per-type
+kind table and refuse a field of another kind, so the reader carries no field table of its own.
+Schema, kinds and the extraction stamp: [../formats/menu-layout.md](../formats/menu-layout.md).
 
 ## src/UI/Menu/HangarFeature.cs
-The hangar as a shared feature (`CSVM.UI.Menu`, engine-free, in the host's feature set), the
-rules and the store operations both presentations walk: one build at a time, opened by
-`Open(store, wallet)` over a `CustomPlaneStore` and an optional `IHangarWallet` (the interface
-`CampaignWallet` implements: funds, affordability, airframe availability, the special and
-sellable answers, the owned builds, purchase and sale), with `Saved` the roster a presentation
-offers (the store's planes wallet-free, the wallet's owned planes over one) and `IsNameTaken` over
-the whole build directory either way. The scratch plane has three starts: `StartNewPlane` (bare,
-nothing chosen), `StartDefaultPlane` (the `DefaultAirframe`, the Devastator, with its stock engine,
-guns, hardpoints and armour loaded and chosen, what the name screen's Load Default Configuration
-box means) and `StartFromSaved` (a copy through the store's canonical serialisation). `PickAirframe`
-switches, snaps the paint pattern onto one the airframe may wear and raises the defaults ask
-(`DefaultsAsk`, `DefaultsAskText` from langui 206, `AnswerDefaultsAsk` loading through
-`LoadAirframeDefaults`: engine 1, `LoadStockWeapons` off the stock fit read on first need, the
-stock armour off the zrdr scope), and returns false on the standing pick so a presentation can
-advance instead. The per-tab operations clamp and report change: `SetEngine`, `SetArmour` (zone,
-units), `SetGun` over the eleven-row `GunCycleRows` (`GunCycleIndex`/`GunOfCycle`),
-`SetHardpoints`, `SetPattern` over `WearablePatterns`, `SetColour` (resetting the shade),
-`SetShade`, `SetDecal`. `Refusal` is the gate in the original's words (203, 1182 with 1227 or
-1171, then over a wallet availability and 1226), `CanCommit` its answer, `Bill` the priced plane;
-`Commit` saves and then pays the wallet; `DeleteSaved` deletes, or sells through the wallet with
-its two refusals (704 composed by `CannotSellText`, 701). The labels every screen writes come from
-here too (`AirframeName`, `AirframeShortName`, `EngineName`, `GunName`, `GunCycleName`,
-`ArmourLabel`, `HardpointsLabel`, `PatternLabel`, `TotalsLine`), as do the name rules
-(`AcceptsNameChar`, `MaxNameLength`) and `Overwrites`. `Discard` drops the build, its store and
-wallet, the roster and the messages, and touches nothing saved; the presentation switch calls it
-through the feature set, and both presentations' cancels call it directly. Off-engine coverage:
-`CSVM.Tests/HangarFeatureTests.cs` with a fake wallet; the same rules reach Built-in through
-`HangarFlow` and Original through `OriginalHangar.cs`.
+The hangar as a shared engine-free feature in the host's feature set: the rules and the store
+operations both presentations walk, one build at a time. `Open` takes a `CustomPlaneStore` and an
+optional `IHangarWallet` (what `CampaignWallet` implements: funds, affordability, airframe
+availability, the owned builds, purchase and sale); the three starts pick how the scratch plane
+begins, the per-tab operations clamp and report change, and `Refusal`, `CanCommit`, `Bill` and
+`Commit` are the purchase gate and the write. It also owns every label the screens write, the
+name rules, and `Discard`, which drops the build and touches nothing saved. The economy, the
+strings and the decoded tables: [../org/hangar.md](../org/hangar.md). Read `HangarFlow.cs` next.
 
 ## src/UI/Menu/CampaignFeature.cs
-The campaign as a shared feature (`CSVM.UI.Menu`, engine-free, in the host's feature set): the
-state and the operations both presentations read and write, with none of Built-in's board shell in
-it. `Open(store, planes, stock, dataRoot)` opens a campaign over a `CampaignProfileStore` (the
-build store, the stock table and the data root optional, each degrading to absent art, stock fits
-and no mission data), reading `Roster` once; `Discard` drops all of it and touches no file. The
-roster operations are the original's own: `ContinuePlayer(name)` seats the named player, creating
-a fresh `CampaignProfileDef.NewProfile` when it is new, and returns the refusal in the original's
-words (200 empty, 707 the character rule, 212 the length, 202 the 24-slot roster) or null;
-`DeletePlayer(name)` removes that profile's own directory and nothing else; `SelectProfile` and
-`SeatProfile(name)` (the flight returns' door, re-reading the store) record the last-played
-player; `Resume` re-reads the seated profile after the hangar. The mission the screens after the
-cabin are about is `MissionSeq` (`SetMission`), with `Mission` the `cm_sequence` entry read once
-per mission, `MissionHasWingman`, `NextMissionSeq`, `CampaignComplete` and `ChangePlaneAllowed`
-(the two `FLIGHTCHECK.SCRIPT` rules: barred on the two story-grant missions and under three
-planes). `Briefing` is the mission's `CampaignBriefing` (below), loaded once per mission and kept
-with its reveal's progress. The intents between screens are `AmmoSlot`, `PlaneSlot`,
-`ScrapbookEntry` (`EnterScrapbook(seq)` counts every opening so a re-entry lands on spread 1) and
-`ZoomTarget`; the writes are `CommitLoadout(plane, ammo, ordnance)` (saving the profile for the
-seated player's aircraft and nothing for a guest's session-scoped record), `CommitPlanes(pilot,
-wingman)`, `ExportPlane(plane)` (into the build store only, refusing a stock record) and
-`BuildExit(padsPerPlayer)`, which saves the profile and returns the `CampaignMissionExit` with one
-seat per joined human. `SeatedPairClashes` is the plane selection's permit test by name;
-`AmmoTarget` resolves whose record the ammo screen edits; `Wallet()` is the seated profile as a
-`CampaignWallet` for `HangarFeature.Open`; `Field` is the sortie's `CampaignFlightField`;
-`CapturePath(fileName)` resolves a scrapbook capture in the profile's directory; `ValidName` and
-`AcceptsNameChar` are the name rule `CampaignTextEntry` forwards to. Not here, by classification:
-the screen stack and its return-to-open-screen rule, the cursor and its settle over unfocusable
-rows, the refusal line, the modal, the ammo and plane screens' working copies before ACCEPT, and
-the briefing's clock, all of which are how a presentation offers the operations. Off-engine
-coverage: `CSVM.Tests/CampaignFeatureTests.cs` pins every write's file contents over a scratch
-store; the same operations reach Built-in through `CampaignFlow` and its pages
-(`menu-campaign-journey`).
+The campaign as a shared engine-free feature in the host's feature set: the state and the
+operations both presentations read and write, with neither one's screen shell in it. `Open` opens
+a campaign over a `CampaignProfileStore`, each further dependency optional and degrading rather
+than failing. The roster operations create, seat, delete and record the last-played player in the
+original's own words; the mission operations settle which `cm_sequence` entry the screens after
+the cabin are about, with its briefing, its wingman flag and its change-plane rules; the writes
+save the loadout, the planes, an exported build and the mission exit. How a presentation offers
+them, cursors and working copies included, stays the presentation's. Read `CampaignFlow.cs` next.
+
+## src/UI/Menu/BriefingScript.cs
+The briefing reveal script, engine-free: the `Briefing.zrd` reader (`BriefingDialog`,
+`BriefingState`, `BriefingStep`) and `BriefingReveal`, the interpreter that runs a state's
+twelve-opcode beat sheet against a caller-advanced clock, blocking on an authored wait and on the
+narration's cue times and keeping each element's opacity, rotation and position as its tweens
+land. Elements come out in placement order, which is draw order; with no cue points every marker
+releases at once, so the map finishes under the narration rather than a timing being invented.
+Opcodes and their arguments: [../formats/briefing.md](../formats/briefing.md).
+
+## src/UI/Menu/BriefingObjectives.cs
+The briefing's parchment note, read from a mission's own `objectives.zrd`: every `IDENTITY`
+carrying a message key, ordered by priority ascending, which is the list an `Objective id index`
+opcode indexes 0-based. Takes the reader rather than a path, so it resolves without an extraction,
+and leaves an unresolved key visible as its raw `MSG_*` symbol rather than inventing English. Why
+keyless entries are not lines, and why file order is not the order, are recorded on the type
+itself. Decode: [../formats/objectives.md](../formats/objectives.md).
 
 ## src/UI/Menu/CampaignBriefing.cs
 One mission's briefing as the campaign feature holds it: the `cm_sequence` entry, the
-`BriefingState` the `brief_c<campaign><mission>` formula names, the narration wav its sound
-resolves to, the `BriefingObjectives` note, the `Messages` table the buttons are labelled from,
-and the running `BriefingReveal`, whose progress is feature state (`NarrationStarts`, `Complete`).
-`Load(dataRoot, seq)` reads everything once and degrades to a briefing with no state on a broken or
-absent extraction; `Advance(seconds)` and `Restart` are the presentation's, called on its own clock
-and on REPLAY BRIEFING, and when to draw stays the presentation's business. `BriefingScript.cs`
-(`BriefingDialog`, `BriefingState`, `BriefingStep`, `BriefingReveal`, `BriefingElement`) and
-`BriefingObjectives.cs` live beside it in `CSVM.UI.Menu`, since a reveal is authored campaign data
-both presentations run identically, not a drawing.
+`BriefingState` its formula names, the narration wav its sound resolves to, the objectives note,
+the messages the buttons are labelled from, and the running `BriefingReveal`, whose progress is
+feature state. `Load` reads everything once and degrades to a briefing with no state on a broken
+or absent extraction; `Advance` and `Restart` are the presentation's, called on its own clock and
+on REPLAY BRIEFING, and when to draw stays the presentation's business. `BriefingScript.cs` and
+`BriefingObjectives.cs` sit beside it, since a reveal is authored campaign data both presentations
+run identically rather than a drawing.
 
 ## src/UI/Menu/CampaignWallet.cs
 The seated campaign profile as the hangar's `IHangarWallet`, built by `CampaignFeature.Wallet()`
-for the cabin's Plane Construction and null on every wallet-free door: `Funds`, `CanAfford`,
-`IsAirframeAvailable` (the stat table's threshold against `MissionsCompleted + 1`, the comparison
-`FUN_00410120` makes), `IsSpecial` and `CanSell` (a reward aircraft is refused, and at least two
-planes remain), `OwnedBuilds` (each ownership record resolved to its stored build, else the award
-template, else the campaign's starting-Devastator spec), `SellPrice` (the full build cost, no
-depreciation), `Purchase` (funds deducted, ownership recorded once per name, the profile saved) and
-`Sell` (funds credited, the record removed, the profile saved, the build deleted). Off-engine
-coverage: `CSVM.Tests/CampaignWalletTests.cs` through `HangarFlow`, and the purchase and sale
-writes in `CSVM.Tests/CampaignFeatureTests.cs`.
+for the cabin's Plane Construction and null on every wallet-free door: the funds and the
+affordability answer, the airframe availability threshold against campaign progress, whether a
+plane is a reward and whether it may be sold, the owned builds resolved to their stored build or
+their award template or the campaign's starting spec, the sale price, and the purchase and sale
+writes that move the funds, the ownership record and the build together. Off-engine coverage:
+`CSVM.Tests/CampaignWalletTests.cs`. The thresholds, prices and decoded comparisons:
+[../org/hangar.md](../org/hangar.md).
 
 ## src/UI/Menu/CampaignAidProfiles.cs
 The scratch profile store the campaign screenshot aids read, in the shared namespace so both
 presentations' aids seat one player: `%TEMP%\CSVM\menu-aid-profiles`, emptied on every open,
-seeded with `Zachary` and `Nathan` when asked, the first progressed through the campaign's first
-three missions with every objective bit set (the story scraps are gated on the objectives that
-unlock them, so a bit-0-only run would leave every scrapbook page blank). `LaunchMenu`'s
-`campaign-*` aids and `OriginalPresentation`'s read it; nothing here can reach `user://Profiles`.
+seeded with two players when asked, the first progressed through the campaign's first three
+missions with every objective bit set. `LaunchMenu`'s `campaign-*` aids and
+`OriginalPresentation`'s read it; nothing here can reach `user://Profiles`.
 
 ## src/UI/Menu/Original/OriginalShell.cs
-The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over
-`MenuLayout`, the shared `FreeFlightFeature`, `PlayerSetupFeature`, `InstantActionFeature`,
-`HangarFeature` (with the saved-plane store its door opens over) and `CampaignFeature` (with the
-profile store, stock table and data root its door opens over), an injected art measurer (the
-layout carries no pixel sizes; the presentation reads them off the strips) and an injected
-flight-devices answer for the seat choices. The screens (`OriginalScreen`): the top level,
-composed from `[MainMenu]`'s `MM_LOGO` and `BFRAME` panes and its six `B` rows at their authored
-corners with their four-frame strips (disabled, normal, rollover, depressed) plus the remake-only
-Free Flight, Dogfight and BUILD PLANE doors, text buttons in the paper-plaque convention beside
-the frame; the two remake-only sortie screens, Free Flight and Dogfight (`OriginalSeats.cs`, one
-`partial`); the Options screen, which `MM_B_PREFERENCES` opens, composed over `[Preferences]`'s own
-chrome (`PF_LOGO`, `PF_BACKGROUND`, `PF_T_TITLE`, the four description rows in their authored
-colour, `PreferencesInks`) with the four page doors (`PreferencesPageKeys`) at their corners, the
-first live onto the Game Options page and the other three drawn disabled since no shared option
-stands behind them, and the section's own `PF_B_MAINMENU` (`OptionsBackKey`) as the way back; the
-Game Options page in its own partial file (`OriginalGameOptions.cs`, below), which that live door
-opens; the decoded Instant Action
-screen, in its own partial file (`OriginalInstantAction.cs`, below), which `MM_B_INSTANTACTION`
-opens; the campaign's nine screens (the profile screen, the cabin, the table of contents, the
-briefing, the flight check, ammo selection, plane selection, the book and a scrap's zoom) in their
-own partial file (`OriginalCampaign.cs`, below), which `MM_B_CAMPAIGN` opens; and the hangar's
-nine screens (the name screen, the hub with one of six tabs, the totals page, the inventory) in
-their own partial file (`OriginalHangar.cs`, below), which the BUILD PLANE door and the cabin's
-PLANE CONSTRUCTION open. The enum keeps the campaign's members together and the hangar's last,
-which is what the two branches are read off. Multiplayer and Credits draw frame 0 and take no
-input: the first is network play with no local counterpart, the second is out of scope. Quit
-leaves as a `QuitExit` on the press with no confirm, `MAINMENU.SCRIPT`'s own `terminate`. The
-messagebox is one idiom over every screen (`Dialog`, raised by the campaign partial's
-`RaiseDialog`): while one stands its answers are the only rows, drawn at `[MessageBox]`'s own
-button rows through `CampaignBoards.Dialog`, in the words `MESSAGEBOX.SCRIPT` gives them (langui
-100 OK on the one-button box, 102 Yes and 103 No on the two-button pair), a box opening on its
-first answer as `MESSAGEBOX.SCRIPT` focuses its left button, `Back` taking the declining answer,
-and every refusal and confirm goes through it:
-the profile screen's refusals and delete, the plane screen's and zoom's messages, and the
-inventory's Sell (the sell path's own langui 700 question, then 701 or 704 as a refusal). The text
-button convention is read off `FlightCheck.FC_B_CHANGEPLANE` (its paper strip and its four label
-colours); the list and heading inks are the file-wide `DISABLED`/`ACTIVE` colours (`Inks`).
-`Step(MenuCommands)` applies seat 0's frame: typed characters and Backspace feed the edit box
-showing, the name screen's or the profile screen's (`CapturingText` says when), each taken
-character cueing `menu.text` and each refused one `menu.text-error`; a pointer (already in
-authored pixels) over a live, visible row takes the focus and, on a button, cues `menu.rollover`
-once (an open campaign list's entry takes the list's highlight instead); a click on a live row
-activates it (a click on nothing closes an open list); `MoveY` walks the enabled rows of the
-focused column with wrap (visible or not), or an open campaign list's entries; `MoveX` crosses to
-the nearest row of the next column, except on an Instant Action dropdown or radio, where it steps
-the value, in the hangar, where it steps a dropdown or walks the tab bar, and on a campaign field,
-where it steps the pick; `Accept` activates the focused row (a button cues `menu.click`);
-`Back` on a sortie screen first undoes seat 0's pick a stage at a time, on the Instant Action
-screen closes an open list, in the hangar closes a list or the ask, returns from the totals page
-or the inventory to the tab, else cancels the build, in the campaign walks its own graph back
-(below), then leaves for the top level, and quits from the top level. `StepSeat(index, frame)` is
-a later seat's frame, which on the campaign's flight check drives that seat's own check.
-The Options screen over `[@Preferences@]` is the four page doors drawn disabled, two paper plaques
-side by side in the slot under them (the presentation chooser, then the graphics chooser), APPLY a
-plaque's height below them and the section's own RETURN TO MAIN MENU; two description lines above
-the plaques name them in that order and say the graphics choice takes effect on the next start.
-The graphics plaque opens on the saved word, read through the optional options reader the
-presentation hands the shell, and APPLY leaves as an `OptionsApplyExit` carrying both choices; the
-shell itself writes nothing. `Compose()` is the screen as a
-`ComposedBoard` with the pointer as the last overlay (the active pointer bitmap over a live row,
-the passive one elsewhere), skipping rows outside their window; `ReturnToTopLevel` (every return
-and cold start) keeps the list cursors, resets every seat's pick through the setup and closes an
-open campaign. Not
-decoded, so recorded as remake-only design: the doors' placement, the sortie screens, the Options
-chooser's placement and words and the page doors' disabled state, keyboard and pad focus (the
-original is pointer-driven), list rows taking focus under the pointer without a cue, and the
-pointer's hotspot at its top-left. Off-engine coverage:
-`CSVM.Tests/OriginalShellTests.cs`, `OriginalSeatsTests.cs`, `OriginalInstantActionTests.cs`,
-`OriginalHangarTests.cs` and `OriginalCampaignTests.cs` over the invented
-`fixtures/menu-layout-original` layout, and `OriginalCoverageTests.cs`, the inventory's machine
-check: every screen reached from the top level and left back to it by pointer, keyboard and pad
-with nothing left open, every in-scope `ScriptToExe` edge driven, drawn disabled or recorded out of
-scope, and every exit typed, once over the fixture and once over the install's own layout
-(`docs/org/menu-inventory.md`, Coverage).
+The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout`
+and the shared Free Flight, player-setup, Instant Action, hangar and campaign features, with the
+art measurer and the flight-devices answer injected. It owns the top level composed from
+`[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded
+Preferences chrome, and the messagebox idiom every refusal and confirm goes through; the Game
+Options, Instant Action, campaign and hangar screens are its four partials, below. `Step` applies
+one seat's frame (pointer, typed text, cursor walk, accept and back) and `Compose` is the screen
+as a `ComposedBoard`. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalGameOptions.cs
-The Game Options page, the shell's partial over the decoded `[@GameOptions@]` section;
-`OpenGameOptions` reads the saved options through the shell's injected reader and opens the page on
-its first row. Its content is a table (`GameOptions`): per option a key, a title, a description, the
-control kind, the store field's words and how that field is read and written, so a further option is
-one entry plus its field. The two shipped rows are the presentation as a dropdown over the two
-registered tokens and the graphics mode as a checkbox from the section's eight-state strip; the
-third authored row is left empty. `ReadGameOptionsPage` takes the row shape off the section's own
-widgets (title column, first row's line and pitch, dropdown box, the checkbox's offset from its row,
-description column), so a layout that moves a row moves ours. `GO_B_ACCEPTCHANGES` leaves as the
-`OptionsApplyExit` carrying both choices; `GO_B_CANCELCHANGES` and Back drop the edits for
-Preferences, Back closing an open list first. A screen never writes the store,
-`Launcher.ApplyOptions` does. The words and control kinds are remake-only readings, in
-`docs/org/menu-inventory.md`.
+The Game Options page, the shell's partial over the decoded `[@GameOptions@]` section. Its content
+is a table: per option a key, a title, a description, the control kind and how the store field is
+read and written, so a further option is one entry plus its field. The two shipped rows are the
+presentation as a dropdown over the registered tokens and the graphics mode as a checkbox off the
+section's own strip. The row shape is read off the section's own widgets, so a layout that moves a
+row moves ours. ACCEPT CHANGES leaves as the `OptionsApplyExit`; a screen never writes the store,
+`Launcher.ApplyOptions` does. The words and control kinds are remake-only readings, recorded in
+[../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeats.cs
-The shell's two sortie screens over the shared player setup, the other half of the `partial`.
-Rows: the chapter column (`OriginalRosters.Chapters`, all eight for both modes) and BACK in
-column 0; in column 1 the aircraft column, keyed `AIRFRAME:<index>` over the setup's roster (the
-stock airframes, then the saved customs), and FLY. The aircraft column is a window of
-`AirframeWindow` (11) rows: every row keeps its place in the column for the keyboard, rows outside
-the window are `Visible == false` (undrawn, unhit), and the window slides so the focused row is
-inside it, with scroll marks over and under it. Seat 0 picks a chapter (`PickedChapter` for Free
-Flight, handed to the feature; `PickedDogfightChapter` for Dogfight, the shell's own since Dogfight
-has no feature) and an aircraft (`Browse` then `Select`; another row re-picks, the same row again
-changes nothing). A later seat's frame (`StepSeat`) walks its own cursor over the roster with
-wrap, `Select`s then `Confirm`s on Accept, and on Back undoes a stage or, browsing, unjoins (from
-any screen, as a guest may). FLY is enabled once a chapter is picked, seat 0 has selected, every
-later seat has confirmed and the mode's minimum of seats is met (two for Dogfight); pressing it
-confirms seat 0 and leaves as the Free Flight feature's `LaunchExit` or, for Dogfight, the setup's
-`BuildExit(chapter, Versus)`, each seat's choice carrying the devices the injected answer names.
-Composed beside the rows: the heading, MAP/AIRCRAFT, the seat strip under the chapters (tag,
-`DeviceLabel`, choosing / the aircraft / READY), each later seat's tag at the right edge of its
-row (one tick selected, two confirmed), the hint between BACK and FLY naming what is waited for,
-and the controls line. Remake-only by design; the original ships no split-screen Dogfight and no
-join gesture.
+The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, the other
+half of the `partial`. Rows: the chapter column and BACK, then the aircraft column over the
+setup's roster and FLY. The aircraft column is an eleven-row window: every row keeps its place for
+the keyboard, rows outside the window are invisible and unhit, and the window slides to keep the
+focused row inside it. Seat 0 picks a chapter and an aircraft; a later seat walks its own cursor,
+selects, confirms, and on Back undoes a stage or unjoins. FLY is enabled once the mode's gate is
+met and leaves as the mode's own typed exit. Remake-only by design, the original shipping no
+splitscreen Dogfight and no join gesture: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalInstantAction.cs
 The Original Instant Action screen, the shell's partial over the decoded `[@InstantAction@]`
-section and the shared `InstantActionFeature`; `OpenInstantAction` confirms the feature's
-environment (so the launch's base def is the environment's own) and opens it. Its rows are the
-section's widgets keyed by their layout keys: the Table of Contents (`IA_TL_Contents`, one
-`ListRow` per visible preset keyed `IA_TL_Contents:<index>` in the row's authored 14-row window,
-its `UpArrow`/`DownArrow` strips as the `:up`/`:down` buttons on the list's right edge, live only
-while there is more list that way, its `Slider` drawn as the thumb along the track), the dropdowns
-(`Dropdown` rows at their authored line, `Width` wide and `ItemHeight` high, labelled with the
-picked value and carrying the `DropDown` arrow strip: the player plane over the eleven stock
-airframes, the wingman count 0 to 5, the wingman plane hidden at zero wingmen, the mission type
-over the environment's filtered roster, the environment with the clouds unpickable under stunt
-flying, and per wave the enemy count 0 to 6, the militia, the skill and the militia's aircraft),
-the enemy pages (`EnemyPage` 0 shows the pilot, wingmen, mission and environment lines with the
-first wave's four fields and `IA_B_DOWN`; page 1 shows waves two to four and `IA_B_UP`, the two
-pages sharing the right column's authored lines exactly as the layout authors them), the
-`IA_B_PLAYER`/`IA_B_WINGMAN` radio pair (`Radio` rows from the eight-state strip, four unmarked
-states then four marked, recording `LoadoutTarget`), and the buttons: `IA_B_VIEW` (View Story
-writes the applied preset's name into `IA_T_STORYTITLE`, the decoded one-time format),
-`IA_B_FLY` (the feature's `BuildExit` for seat 0 on the feature's player airframe, no pads, no
-fit), `IA_B_Exit` (back to the top level), and `IA_B_BUILD` and `IA_B_CHANGEWEAPONS` drawn
-disabled until the Original hangar and loadout screens exist. A contents row's activation applies
-its preset (the list's own select callback) and re-confirms the environment; the ace duel hides
-every enemy control, the text rows beside them and both paging buttons. Accept or a click on a
-dropdown opens its list: the rows become the list's items alone (`<key>:<index>`, drawn as an
-overlay panel under the box), Up/Down walk them, Accept or a click picks and closes, a sideways
-step on the closed box picks the next allowed value, Back or a click off the list closes it.
-`Compose` draws `IA_BackGround` as the backdrop, the `T` rows at their authored positions in their
-authored justification (white rows as the dialog ink, the rest as the screen's text ink), the
-contents rows' picked and focused states as the list widget's own fill and frame, and the strips
-in their state frames. `InstantActionInks` is the screen's own colour reading (the text rows'
-`Color`, the paper buttons' label tail), which `OriginalPresentation.PaletteFor` turns into the
-palette this screen alone draws with. Decoded and bound: the option sets, the paged enemy rows,
-the ace hiding, the wingman plane hiding at zero, the militia resetting its aircraft, the clouds
-barring stunt flying, the preset applied on select, the title on View Story. Remake-only until
-`CAP-50` is filmed: both halves shown together, the open list under its box and its row count,
-keyboard and pad stepping, the radio pair with no wingmen, the paging buttons hiding under the
-ace duel, and the two disabled buttons. Off-engine coverage:
-`CSVM.Tests/OriginalInstantActionTests.cs` over the fixture's `[@InstantAction@]` section;
-in-engine, `menu-original-instant-action` (`src/Testing/MenuInstantActionSuites.cs`) over the
-install's own layout.
+section and the shared `InstantActionFeature`. Its rows are the section's own widgets keyed by
+their layout keys: the Table of Contents list in its authored window with its arrows and thumb,
+the dropdowns at their authored boxes, the enemy rows on two pages, the loadout-target radio pair
+and the screen's buttons. A contents row applies its preset on select, the ace duel hides every
+enemy control, and `InstantActionInks` is the colour reading the presentation turns into this
+screen's own palette. Option sets: [../formats/instant-action.md](../formats/instant-action.md);
+the screen and what its capture must confirm: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalHangar.cs
 The Original hangar, the shell's partial over the shared `HangarFeature` and the decoded hangar
-sections. The top level's BUILD PLANE door (remake-only: the original reaches plane construction
-from the cabin alone) opens a wallet-free build over the saved-plane store and enters through the
-decoded `[@PlaneName@]` screen, as the cabin's `PC_B_PLANEX` edge does: `PN_E_NAME` as a
-`TextField` row fed by the seat's typed characters (the feature's character set and cap),
-`PN_B_DEFAULT` as a checkbox off the eight-state strip (checked as authored), `PN_B_OK` live once a
-name stands (langui 203 shown under the panel until then) and starting the build on the default
-configuration or, cleared, on a bare airframe under the typed name, `PN_B_CANCEL` dropping it. OK
-opens the Plane Construction hub: `[@PlaneConstruction@]`'s background, the plane at the four
-`PX_P_PLANE` panes' corner (the focused airframe's `PX_<n>_BLUEPRINT.TGA` on the airframe tab or
-before a pick, else the `PX_ICON_<airframe>_<pattern>_1..3` region masks tinted with the picked
-colours through `BoardPicture.Tint` under the `_0` plate; a pair with no set falls back to the
-blueprint), PLANE NAME with the name, PLANE COST with the bill's total (the running total, following
-every pick), AIRFRAME, WEIGHT CAPACITY, CURRENT WEIGHT (Pending before a pick), the agility and
-armour words with the first n of their five `PX_BarGraph` segments, `PX_T_CASHTITLE`/`PX_T_CASH`
-over a wallet only, and on the right page one of the six tab sections (`AirFrame`, `Engine`,
-`Armor`, `Guns`, `HardPoints`, `Paint`): its `_T_TITLE` in the title colour, its labels and
-`PX_Rule` panes, its `D` rows as `Dropdown` rows at their authored boxes labelled with the standing
-pick (the colour rows as swatches, the decal rows as tiles off `PT_P_DECALS`), the name line for
-the focused item and the `S` scroll-text box carrying the decoded figures. A dropdown's Accept or
-click opens its list under the box, every item keyed `<key>:<index>`, the row's `TotalDisplayed`
-as the window following the focus with the `DropUp`/`DropDown` strips as `:up`/`:down` arrows;
-a sideways step on the closed box picks the next value; a pick binds to the feature (`PickAirframe`,
-`SetEngine`, `SetArmour`, `SetGun`, `SetHardpoints`, `SetPattern`, `SetColour`, `SetShade`,
-`SetDecal`). A pick that changes the airframe raises the defaults ask as a dialog over the page
-(`ASK:OK`/`ASK:CANCEL` plaques on a panel carrying string 206). The tab bar is the layout's seven
-`0x1100` edges: the six `PX_Tab` `TextButton`s with the standing tab disabled (drawn in its
-`ColorDisabled`), `PX_B_Sell` opening the `[@Hangar@]` INVENTORY (`HA_D_PILOTPLANE` over the
-feature's `Saved`, the picked plane's `FC_PlaneIcons` frame, name, agility, armour, value and guns,
-`HA_B_SELLP` through `DeleteSaved`, `HA_B_EXPORTP` disabled until the campaign's EXPORT is a
-feature operation, `HA_B_DONE` back to the tab), `PX_B_Ready` opening the `[@Purchase@]` totals
-page (the column heads, one line per priced component at the authored lines and text lists, the
-totals, the problems text in the commit's words, `PUR_B_PURCHASE` live while `CanCommit`) and
-`PX_B_Cancel` dropping the build; the wallet-free door wears `PX_B_ReadyToExport`/
-`PX_B_CancelExport` when the extraction has them, the strips the Instant Action stills show. A
-commit refreshes the shared roster from the store (`OriginalRosters.Roster`), drops the build and
-returns to the entry screen; a cancel, Back off the name screen or a tab, and a presentation switch
-drop it through the feature's `Discard`. Keyboard and pad: `MoveY` walks the page's rows then the
-tabs and buttons, `MoveX` steps a dropdown or walks the bar. `HangarInks` is the screens' own
-colour reading (the right page's text and title, the left page's white, the tab label tail), which
-`OriginalPresentation.PaletteFor` turns into the hub's palette; the inventory draws in the paper
-palette. Decoded and bound: the sections' rows, the tab bar's edges, the strings, the economy and
-the paint tables. Remake-only until `CAP-53` is filmed: the door and the wallet-free entry, the
-export wording, the standing tab drawn disabled, the open list under its box and its arrows, the
-ask as a dialog, where the running total shows, nothing committing before Purchase Now, SELL PLANES
-reaching the inventory, keyboard and pad focus, and what Load Default Configuration loads.
-Off-engine coverage: `CSVM.Tests/OriginalHangarTests.cs` over the fixture's hangar sections;
-in-engine, `menu-original-hangar` (`src/Testing/MenuHangarSuites.cs`) over the install's own
-layout and the user's store, under a scratch name it removes.
+sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
+right page, the totals page and the INVENTORY, each composed from its own layout section. It owns
+the plane picture over the four blueprint panes (the airframe's blueprint, else the picked
+pattern's region masks tinted under its plate), the running total, the tab bar read off the
+layout's own edges, every dropdown's list under its box, and the airframe-switch ask as a dialog
+over the page; every pick binds straight to the feature. The economy and the paint tables:
+[../org/hangar.md](../org/hangar.md); the screens: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCampaign.cs
-The Original campaign, the shell's partial over the shared `CampaignFeature`: the decoded profile
-screen (`[@Campaign@]`), cabin (`[@PassengerCabin@]`), table of contents (`[@ScrapBook_TOC@]`),
-flight check, ammo selection, plane selection, book (`[@ScrapBook@]`), zoom and the briefing
-dialog. The Campaign row (`MM_B_CAMPAIGN`) opens the feature over the profile store, build store,
-stock table and data root the shell was given and lands on the profile screen with the name box
-pre-filled with the last player seated, `CAMPAIGN.SCRIPT`'s own pre-fill. What each screen draws
-is the shared board component: the shell hosts the Built-in campaign pages in a `CampaignFlow` of
-its own built over the feature and `CampaignLayout.Over(layout)`, composes through
-`CampaignBoards.For(page, focus, pressed, detail, null, layout)` and copies every layer, notes and
-strokes included, into its own board. That flow is never walked: `GoTo` mirrors the screen showing
-and `FocusRow` the focus, so the pages' own reads of the cursor (the contents' wash, the scrap under
-the pointer) follow Original's, and its `Back`, `Move`, `Message` and `Modal` are never Original's
-way of doing anything. The screen graph is this file's: the profile screen's box and CONTINUE
-start on the name in the box (Enter in the box included), a roster row fills the box and a second
-press on the filled row starts (the double-click), DELETE PLAYER asks with langui 201 as the
-two-button messagebox opening on YES, CANCEL and Back leave the campaign; the cabin's four plaques
-(NEXT MISSION disabled once the campaign is complete, PLANE CONSTRUCTION opening the hangar over
-`Wallet()` through `OpenHangar(wallet)` with the cabin as its return, re-read on the way back);
-the briefing's three plaques (REPLAY BRIEFING restarting the reveal, whose start count the
-presentation turns into narration); the flight check's CHANGE AMMO and CHANGE PLANE naming their
-crew slot, RETURN TO BRIEFING rewinding the field, FLY MISSION advancing to the next joined human's
-check or leaving as `BuildExit(pads)` with every seat's devices; and Back walking each screen to
-the one that opened it (the briefing to the cabin or the contents, the book to the contents or the
-cabin) keeping the focus on the plaque that opened what is being left. The pages whose editing
-state is their own (the contents' pick and window, the ammo working copy and its fields, the plane
-picks, the book's page turns and tabs, the zoom's export) take their press through
-`ICampaignPage.Accept`/`Step`/`Back`, and whatever the page named on the way is read off the flow
-and re-entered through this graph: a destination becomes a `ShowCampaign`, a `TakeModal` or
-`TakeMessage` becomes Original's dialog. Rows: one per page row at the rectangle the board draws it
-at (a button's `CampaignBoards.SlotOf` slot with its strip measured, a field's box at
-`ComboFieldHeight`, a roster row at `TextSlot` and the layout's item height, a mission row at
-`CampaignPreviousMissionsPage.RowBox`, a scrap at its `SCRAPBOOK.CSV` region or its picture's
-measured bounds, a capture at the quarter-size 164x123 the script forces), a row the page refuses
-focus on disabled, a focusable row with no rectangle (a mission row outside its window) unseen and
-unhit but walkable, then an open field's visible entries (`ENTRY:<index>`), which take the list's
-highlight under the pointer rather than the focus. A dialog's rows are its answers at
-`CampaignBoards.DialogSlot`, composed through `CampaignBoards.Dialog` in the frame and ink under
-the pointer, and Back takes the declining answer. The profile screen adds `CAMPAIGN.SCRIPT`'s own
-list drawing over the board: the `0xff800000` bar behind the row the box names and the
-`0xffff0000` frame around the row under the pointer, the box showing the typed name itself with a
-caret while focused. Cues: a plaque, field or dialog answer cues the rollover and the click, a
-roster row, mission row or scrap none, the box `menu.text`/`menu.text-error` per character. The
-two flight returns come in through `ShowCabin(profile)` and `ShowScrapbook(profile, seq)`
-(`SeatProfile` then `EnterScrapbook`); the aids through `OpenCampaignOver(store)`,
-`ShowCabin` and `ShowMissionScreen(screen)`; `AdvanceBriefing(seconds)` is the presentation's
-clock and `NarrationStarts`/`NarrationWav` its narration reads; `CloseCampaign` discards the
-feature and the pages, called by every door out and by `ReturnToTopLevel`. Remake-only until
-`CAP-52` is filmed: the cues on the campaign plaques and the silence on list rows and scraps, the
-edit box's two sounds, which pointer bitmap shows over a scrap, the narration restarting from the
-top on REPLAY and ending on RETURN TO CABIN and GO TO FLIGHT CHECK, a zero region hit-tested on
-the picture's bounds, YES and NO as the delete confirm's words, keyboard and pad focus, and Back
-returning onto the plaque that opened the screen. Off-engine coverage:
-`CSVM.Tests/OriginalCampaignTests.cs` over the fixture's campaign sections and a scratch store;
-in-engine, `menu-original-campaign` (`src/Testing/MenuOriginalCampaignSuites.cs`) over the
-install's own layout and a scratch store.
+The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,
+the cabin, the table of contents, the flight check, ammo and plane selection, the book, a scrap's
+zoom and the briefing dialog. What each screen draws is the shared board component, so the shell
+hosts the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer
+into its own board; that flow is never walked, its screen and cursor mirroring this file's. The
+screen graph, the rows at the rectangles the board draws them at, the pointer hit-testing, the
+cues and the dialogs are this file's. Read `src/UI/CampaignFlow.cs` for the pages; the screens and
+their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalPresentation.cs
 The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the
-board layer holding one `ComposedBoardView`, so every screen scales as the campaign boards do (one
-uniform 4:3 fit, centred, letterboxed, nearest-sampled). Constructed with seat 0's `MenuInput`
-(for `MenuSeatDevices`) and the `--debug-join` count. `Activate` builds the shell (over the Free
-Flight, player-setup, Instant Action, hangar and campaign features, the campaign over the store
-`CampaignProfiles` names, `user://Profiles` unless a suite set a scratch one, the stock table and
-the data root) and the device bookkeeping on the first call,
-refreshes the setup's roster from the saved-plane store on every call (`Roster(customs)`:
-`OriginalRosters.Airframes` then the customs through the setup's roster rule, cursors clamped onto
-it), stands the shell on the top level and then maps the destination: a `CabinReturn` reopens the
-campaign and seats the named profile on the cabin (`ShowCabin`), a `DebriefReturn` seats it and
-opens the book on the flown mission (`ShowScrapbook`), either landing on the profile screen with a
-logged warning when the profile cannot be read; the first show alone applies the `--menu=` aid,
-consumed so every later top-level show is the top level itself (`campaign`, the player's door onto
-the profile screen over the presentation's store, `free-flight`, `dogfight`, `instant-action`,
-`options`, the hangar's `plane-name`,
-`plane-construction`, `plane-paint`, `plane-purchase` and `plane-inventory`, each on a fresh build
-named Sample Plane that no aid commits, the campaign aids it shares with Built-in over
-`CampaignAidProfiles`' scratch store, `CampaignAids`, the briefing's seconds argument advanced in
-frame slices, and its own `campaign-delete`, the two-player profile screen with DELETE PLAYER
-pressed so the two-answer messagebox stands), seats the debug players once (device-less, the last one
-selected), primes every seat, syncs the pads and hides the OS pointer, since the shell draws the
-original's own. `Tick` syncs the pad roster, scans the join gesture while a sortie screen or the
-campaign's flight check is up (priming the edges on entering one), advances the briefing's reveal
-on the frame and begins the narration through the host's audio whenever the script's start count
-rises (entry, REPLAY BRIEFING, a re-entry), repainting while the reveal runs, sets seat 0's
-`CapturingText` from the shell before and after
-the frame (an edit box's letters are text, not cursor aliases), polls every seat of the host's
-live list, maps a window-pixel pointer into the authored space through the view's own `BoardFit`,
-steps the shell per seat, requests its cues through the host's audio, hands its exit to the
-host, and ends the narration the frame the shell is no longer on the briefing. `Hide` takes the
-layer off screen, releases the text capture, ends any narration (a launch from the briefing's
-flight check ends the voice with it) and restores the OS pointer;
-`Deactivate` frees it. `Measure` is the strip size the layout does not carry, read off the file
-once per art name and cached, so a file that does not read leaves the row a fallback rectangle and
-logs one `ui` line for that name, which is what an optional file's absence degrades to.
-`PaletteFor(inks)` is the shell's inks as a `BoardPalette`; the Options
-screen draws with `PaletteFor(preferencesInks, inks)`, the Preferences page's authored text and
-title colours with the paper plaque's label tail; the Instant
-Action screen and the hangar's inventory draw with `PaletteFor(instantActionInks)`, every text in
-the screen's authored black over its paper page and the labels in the paper buttons' tail, since
-the top level's white inks would not read on it; the hub draws with `PaletteFor(hangarInks)`, the
-right page's black and title colour with the tab bar's white labels and the standing tab's
-disabled colour; a campaign screen draws with `BoardPalette.For(screen)`, the palette its shared
-board component takes under Built-in. In-engine coverage: `menu-original-tracer`
-(`src/Testing/MenuOriginalSuites.cs`), `menu-original-instant-action`, `menu-original-hangar`,
-`menu-original-campaign` (`src/Testing/MenuOriginalCampaignSuites.cs`) and the Original half of
-`menu-player-setup-seats` over the install's own layout.
+board layer holding one `ComposedBoardView`, so every screen scales as the campaign boards do.
+`Activate` builds the shell and the device bookkeeping once, refreshes the roster from the
+saved-plane store on every call, stands the shell on the top level, maps the return destination
+onto it and applies the `--menu=` aid on the first show alone. `Tick` polls every seat, maps a
+window-pixel pointer into the authored space, steps the shell, requests its cues and drives the
+briefing's reveal and its narration. `Measure` is the strip size the layout does not carry, read
+off the file once per name; `PaletteFor` is each screen's own inks as a `BoardPalette`.
 
 ## src/UI/Menu/Original/OriginalAvailability.cs
 The availability answer Original is selected on: `Load(dataRoot, out reason, out degraded)` refuses
@@ -1582,19 +1279,29 @@ caller to log once. `ArtPath` is where a layout art name resolves, used by the p
 size read too. Off-engine coverage: `CSVM.Tests/OriginalManifestTests.cs`.
 
 ## src/UI/Menu/Original/OriginalAssetManifest.cs
-The versioned required/optional manifest, derived from the decoded layout rather than hand-listed.
-`Derive(layout)` classes every art name of the 23 sections Original composes required, minus a
-short table of rows it does not draw (the two backdrop movies, the Preferences page's in-flight way
-back, the cabin's memento and save rows, the messagebox's multiplayer and About variants); every
-other section's art, those rows' art and the media a script names are optional; the five files the
-scripts name and Original draws anyway (the two pointers, the font, the two export plaques) are
-required. `Check(dataRoot)` reads no bitmap: existence plus the PNG signature and IHDR size for
-required entries, existence alone for optional ones, and answers one `OriginalAssetReport` naming
-every fault with its section, row and file. `Schema` is bumped when the derivation or the check
-changes what Original needs. The classification is reconciled against what the screens actually
-draw by `CSVM.Tests/OriginalCoverageTests.cs`, which fails any art it draws that is classed
-optional; the required-but-undrawn side is printed, not asserted, since chrome like a scrollbar
-only draws on a state the journeys do not reach.
+The versioned required/optional asset manifest, derived from the decoded layout rather than
+hand-listed. `Derive` classes the art of the sections Original composes required, minus a short
+table of rows it does not draw, everything else optional, and the five files the scripts name and
+Original draws anyway required. `Check` reads no bitmap: existence plus the PNG signature and IHDR
+size for a required entry, existence alone for an optional one, and one report naming every fault
+with its section, row and file. `Schema` carries the rule for its own bumps. The classification is
+reconciled against what the screens draw by `CSVM.Tests/OriginalCoverageTests.cs`. The asset
+policy: [../menu-presentations.md](../menu-presentations.md).
+
+## src/UI/Menu/Original/OriginalRosters.cs
+The two rosters the Original sortie screens list. `Chapters` is the shared `MenuChapters` roster
+with a short label per code; `Airframes` is the eleven stock names in the string table's own
+order, resolved to their `planes.zbd` nodes through the Instant Action decode, so the
+name-to-node map has one home. `Roster(customs)` appends the saved custom planes through the
+shared player setup's roster rule, which is what both presentations pick from. Read
+`src/UI/Menu/PlayerSetupFeature.cs` next.
+
+## src/UI/Menu/Original/OriginalCues.cs
+The four cue names the Original presentation asks the shared audio service for: a button rollover,
+a button press, and an edit box's keystroke and reject sounds, which are the four the original's
+globals script binds. The names are semantic and the cue table owns which wav each resolves to, so
+the presentation names no file. The contract is `IMenuAudio.cs` and the table is
+`src/Session/MenuCueTable.cs`.
 
 ## src/UI/Menu/Original/PointerSeat.cs
 Seat 0 with a pointer: wraps the seat that polls the keyboard and the unclaimed pads and adds the
@@ -1606,130 +1313,70 @@ ignores the pointer; Original maps it into its authored space. Later seats are p
 pointer; a source that wants one wraps itself the same way.
 
 ## src/UI/Menu/MenuReturnDestination.cs
-Where the menu stands when it comes back, said semantically: `TopLevel`, `CabinReturn(profile)`,
-`DebriefReturn(profile, missionSeq)`. The host names the destination and the active presentation
-maps it into its own graph at `Activate`, so no presentation-specific screen id crosses the seam.
-A destination names where the player stands and never a store: the two campaign returns name a
-profile, and the store it is re-read from is the presentation's own (`user://Profiles`, or the
-scratch store a suite sets), the same choice the `--menu=` campaign values make through
-`CampaignAidProfiles.PlayerDoor`. The `--menu=` aid is not a destination either; it reaches the
-cold start alone, so a return is always one of these three.
-The dependency direction for this whole folder: types in the `CSVM.UI.Menu` namespace reference
-no `Godot` type and no `CSVM.UI` type outside that exact namespace, enforced by
-`CSVM.Tests/MenuNamespaceDependencyTests.cs` over compiled metadata (signatures and method-body
-IL alike, via `AssemblyDependencyScan`); presentations live in sub-namespaces
-(`CSVM.UI.Menu.BuiltIn`, `.Original`) and may depend on anything. `ComposedBoard` and the other
-board types stay presentation-side.
+Where the menu stands when it comes back, said semantically: `TopLevel`, `CabinReturn(profile)`
+and `DebriefReturn(profile, missionSeq)`. The host names the destination and the active
+presentation maps it into its own graph at `Activate`, so no presentation-specific screen id
+crosses the seam. A destination names where the player stands and never a store: the two campaign
+returns name a profile, and the store it is re-read from is the presentation's own. The `--menu=`
+aid is not a destination either, reaching the cold start alone, so a return is always one of these
+three. The namespace seam this whole folder is held to, and the two scans that enforce it, are in
+[../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/MenuChapters.cs
 The shared chapter roster: the eight chapter worlds as `MenuChapter(Code, DangerZones)` in code
-order (C1, C1B, C1C, C2, C2B, C3, C4, C5), `For(mode)` (Stunt Flying only the six with Danger
-Zones, every other mode all eight), `Find` and `DangerZonesFor`. The codes are separate terrain
-databases, not lighting variants (`docs/formats/spawns.md`); the flag says whether the chapter's
-`ia.json` ships a `dzones` list, which is why Stunt Flying withholds the other two. Shared so that
+order, with `For(mode)` (Stunt Flying only the six carrying Danger Zones), `Find` and
+`DangerZonesFor`. The codes are separate terrain databases, not lighting variants
+([../formats/spawns.md](../formats/spawns.md)); the flag says whether the chapter's `ia.json`
+ships a `dzones` list, which is why Stunt Flying withholds the other two. Shared so that
 `LaunchMenu`'s Chapter screen, the Free Flight feature and the Instant Action feature read one
-roster; `LaunchMenu.Chapters` is this screen's row text zipped over it. Off-engine coverage:
-`CSVM.Tests/FreeFlightFeatureTests.cs`, which also checks the roster against
-`LaunchMenu.ChapterCodesFor` for all three modes.
+roster. Off-engine coverage: `CSVM.Tests/FreeFlightFeatureTests.cs`.
 
 ## src/UI/Menu/FreeFlightFeature.cs
-Free Flight as a shared `IMenuFeature`, the first feature cut out of `LaunchMenu`: `Chapters`
-(the roster it offers, all eight), `Chapter` (the pick, null until `SelectChapter(code)`, a code
-outside the roster throwing), `Refusal`/`CanLaunch(joinedSeats, confirmedSeats)` (a chapter
-picked, at least one seat, every seat confirmed; a lone seat launches), `BuildExit(seats)` (the
-typed `LaunchExit` with mode Free and no Instant Action def, refusing a closed gate or a seat with
-no plane) and `Discard` (drops the pick). Free Flight is the remake's own mode, so nothing here is
-decoded; the rules are the launchscreen's, moved. The seats are the `PlayerSetupFeature`'s: this
-feature takes the confirmed `MenuSeatChoice`s that feature builds and never reads a roster, a lock
-or a store. Owned by the `MenuHost`'s feature set and read out of it by `LaunchMenu` and
-`OriginalShell`. Off-engine coverage: `CSVM.Tests/FreeFlightFeatureTests.cs`, which checks the
-gate against `LaunchMenu.CanLaunch(MenuMode.Free, ...)` case by case.
+Free Flight as a shared `IMenuFeature`, the first feature cut out of `LaunchMenu`: the chapter
+roster it offers, the pick (`SelectChapter`, a code outside the roster throwing), the launch gate
+(`Refusal`/`CanLaunch`: a chapter picked, at least one seat, every seat confirmed), `BuildExit`
+(the typed `LaunchExit` with mode Free, refusing a closed gate or a seat with no plane) and
+`Discard`. Free Flight is the remake's own mode, so nothing here is decoded; the rules are the
+launchscreen's, moved. The seats are the `PlayerSetupFeature`'s, so this feature never reads a
+roster, a lock or a store. Owned by the host's feature set and read out of it by `LaunchMenu` and
+`OriginalShell`. Off-engine coverage: `CSVM.Tests/FreeFlightFeatureTests.cs`.
 
 ## src/UI/Menu/ControlsFeature.cs
 The rebinding screen as a shared `IMenuFeature`, engine-free: which seat's keymap is being edited
-(`Player`, one registered `BindingProfile` per seat through `AddSeat`), which of the three contexts
-(`Context`), the row and slot cursors (`Focus`, `MoveSlot`), the capture in progress
-(`BeginCapture`/`Poll` over the seat's own `IDeviceState`) and the steal it is about to perform.
+(one registered `BindingProfile` per seat), which of the three contexts, the row and slot cursors,
+the capture in progress over the seat's own `IDeviceState`, and the steal it is about to perform.
 A capture that lands on a free control binds it; one that lands on a held control raises `Pending`
-naming every action that would lose it and moves nothing until `ConfirmSteal`, which is what keeps
-the original's conflict rule from happening behind the player's back. `UnbindSlot` drops one
-control, `ResetContext` restores the shipped keymap in the very map the polling site holds, and
-`Save` writes through the injected per-player store. Editing is scoped to one seat's profile, so
-two seats cannot reach each other's bindings. Coverage: `CSVM.Tests/ControlsFeatureTests.cs`.
+naming every action that would lose it and moves nothing until `ConfirmSteal`, which keeps the
+original's conflict rule from happening behind the player's back. `UnbindSlot`, `ResetContext` and
+`Save` are the rest. Editing is scoped to one seat's profile, so two seats cannot reach each
+other's bindings. The binding model itself: [../org/input.md](../org/input.md).
 
 ## src/UI/Menu/PlayerSetupFeature.cs
-Player setup as a shared `IMenuFeature`, device-neutral and engine-free. `Seats` are
-`PlayerSeat`s in join order, each bound to the `IMenuInputSource` that claimed it (`Join(source)`:
-null when the four seats, `MaxSeats`, are taken or the source already holds one, since a claim is
-one source, one seat, settled in arrival order; `Unjoin` never removes seat 0 and is a no-op on a
-seat already gone; `Sources` is the live source list the host lends as `Seats`; `Revision` bumps
-on every join and unjoin). `Roster` is the `MenuAircraft` list every seat picks from, set by the
-presentation (`SetRoster`) and built by the shared rule `BuildRoster(stock, customs,
-nodeOfAirframe)`: the stock rows in their given order, then one row per saved custom flying its
-airframe's stock node with the def on the row. Per seat: `Cursor` (a presentation may park it past
-the roster for a row of its own; `Select` refuses such a cursor and `Choices` throws on it),
-`Browse` (refused while selected; a moved cursor resets the fit), the two stages `Select` and
-`Confirm`, `Back` one stage down (`SeatBack.Unconfirmed`, `Unselected`, or `Browsing` for the
-presentation to decide), `OpenLoadout`/`CloseLoadout` (a selected, unconfirmed seat only;
-`Confirm` closes it), `ResetPicks(fits)`. The gate: `MinimumSeats(mode)` (two for Dogfight),
-`Refusal(mode)`/`CanLaunch(mode)` (every seat confirmed, the minimum met), matching the
-launchscreen's static rule. `Choices(flightDevices)` is one `MenuSeatChoice` per seat (node, the
-devices the presentation's answer names for the seat, fit or null, custom def); `BuildExit(chapter,
-mode, flightDevices)` is the typed exit for a mode with no feature of its own (Dogfight).
-`Discard` drops every seat but the first and every stage of its pick, cursor included. Nothing
-here reads a pad: a seat's devices are its source's detail, read on the presentation side by
-`MenuSeatDevices`. `MenuIdleSource` (`src/UI/Menu/MenuIdleSource.cs`) is the "no device" source
-the screenshot aid seats extra players over. Off-engine coverage:
-`CSVM.Tests/PlayerSetupFeatureTests.cs`, including the same-frame races (two claims, a lock and
-an unjoin, a confirm from a source that has left) and the host lending the seat list; in-engine,
-`menu-player-setup-journey` and `menu-player-setup-seats`.
+Player setup as a shared `IMenuFeature`, device-neutral and engine-free. `Seats` are `PlayerSeat`s
+in join order, each bound to the `IMenuInputSource` that claimed it: a claim is one source and one
+seat, settled in arrival order, and seat 0 never leaves. `Roster` is the `MenuAircraft` list every
+seat picks from, set by the presentation and built by the shared rule (the stock rows in their
+given order, then one row per saved custom flying its airframe's stock node). Per seat it owns the
+cursor, the two stages of the pick, the loadout door and the backing-out ladder; the gate is the
+mode's minimum of seats and every seat confirmed. `Choices` and `BuildExit` are the typed result.
+Nothing here reads a pad: that is `src/UI/MenuSeatDevices.cs`, below.
 
 ## src/UI/MenuSeatDevices.cs
 The pad side of the shared player setup, for any presentation, over seat 0's `MenuInput` and the
-feature. `P1Pad` is the pad seat 0 claimed by steering a screen with it (`ClaimP1Pad`, from
-`LastActivePad`; the keyboard claims nothing). `Sync` reconciles the seats with `Pads.Connected`:
-a seat whose pad vanished is unjoined, a vanished claimed pad frees seat 0, and seat 0's poller is
-bound to its claimed pad or to every unclaimed one (never `pads[0]`: phantom devices occupy the
-early slots), primed when the set changes. `PrimeJoins` seeds the per-pad Start edges;
-`ScanJoins` joins a `BuiltInSeat` over a one-pad poller for each unclaimed pad whose Start is a
-fresh edge while a seat is free (the caller decides on which screens joining is open: Built-in's
-Plane and Campaign screens, Original's two sortie screens). `PadOf(source)` reads a joined seat's
-pad back off its `BuiltInSeat`; `FlightPads(seat)` is the binding a launch carries (seat 0's
-poller's set, a pad seat's one device, nothing for a device-less seat), the answer both
-presentations hand the feature's `Choices`.
+feature. `P1Pad` is the pad seat 0 claimed by steering a screen with it. `Sync` reconciles the
+seats with the connected pads: a seat whose pad vanished is unjoined, a vanished claimed pad frees
+seat 0, and seat 0's poller is bound to its claimed pad or to every unclaimed one. `PrimeJoins`
+and `ScanJoins` are the join gesture, Start on an unclaimed pad while a seat is free, the caller
+deciding on which screens joining is open. `PadOf` reads a joined seat's pad back off its
+`BuiltInSeat`, and `FlightPads` is the binding a launch carries, the answer both presentations
+hand the feature's `Choices`. Read `src/UI/Menu/PlayerSetupFeature.cs` for the seats themselves.
 
 ## src/UI/Menu/InstantActionFeature.cs
-Instant Action as a shared `IMenuFeature`, owned by the `MenuHost`'s feature set and configured by
-both presentations. The option sets are static and decoded (`docs/formats/instant-action.md`):
-`Environments` (seven, the launcher's dropdown order, C1C never among them), `AllMissionTypes`
-(four, the UI dropdown order) with `MissionTypesFor(chapter)` dropping stunt flying where the
-chapter bars it and `EnvironmentAllowed(row, missionKey)` clearing the clouds under stunt flying
-(the two sides of `FUN_004103b0`'s mask), `Airframes` (eleven, the langui 3700 order the original
-stores an aircraft as an index into, with their nodes), `Militias` (thirteen, each with the
-aircraft `FUN_00410420`'s mask allows, in the airframe order), `Skills`, and `Presets` (the
-`InstantActionPresets` table). The setup is typed state with semantic operations: `EnvironmentIndex`
-with `SelectEnvironment` and `ConfirmEnvironment` (which re-fits `MissionTypeIndex` onto the
-environment's roster and loads the chapter's own `IA1/ia.zrd.json` as `BaseDef` through the
-injected loader; `ForDataRoot` is the game's loader, falling back to the built-in defaults with a
-warning), `MissionTypeIndex`/`MissionType`/`IsAceDuel` with `SelectMissionType`, `Lives` with
-`StepLives` (0 unlimited to `MaxLives`), `Waves` (four `InstantActionWaveSetup` cursors) with
-`SetWave`, `StepWaveCount`, `StepWaveMilitia`/`SelectWaveMilitia` (a new militia resets the aircraft,
-the decoded `AV[BA].QG = 0`), `StepWaveAircraft`/`SelectWaveAircraft` within `WaveAircraft(wave)`,
-`StepWaveSkill`/`SelectWaveSkill`, `NumWingmen` with `StepWingmen`/`SetWingmen`, `WingmanPlaneIndex`
-with `StepWingmanPlane`/`SelectWingmanPlane` (a changed airframe drops `WingmanFit`, the one fit
-every wingman flies, edited in place by a presentation's loadout screen), `PlayerPlaneIndex` with
-`SelectPlayerPlane`, and `PresetIndex` with `ApplyPreset` (every field but the lives and the base
-def). `Refusal`/`CanLaunch(joined, confirmed)` is the gate (one seat joined, everyone confirmed;
-the setup is always complete), `BuildWaves`/`BuildDef(playerPlane)` hand the fields to
-`InstantAction.BuildFromWizard` over `BaseDef` (the built-in defaults when no environment was
-confirmed, which only an aid that skips the confirm reaches), and `BuildExit(seats, playerPlane)`
-is the typed `LaunchExit` (the environment's chapter, mode Stunt, the def), refusing a closed gate
-or a seat with no plane. `WaveFor` is the one wave build rule (the empty wave at 0 enemies whatever
-the cursors). `Discard` puts every field back to the screen's opening state (the first environment,
-the ace duel, one life, empty waves, no wingmen, the first airframe, no preset, no base def). The
-seats stay the presentation's: Built-in passes its joined seats and player 1's nominal stock name,
-Original passes seat 0 on `PlayerPlane`'s node. Off-engine coverage:
-`CSVM.Tests/InstantActionFeatureTests.cs`, which also checks `LaunchMenu`'s public rosters against
-the feature's; the characterization of Built-in's journey over it is `menu-instant-action-journey`
-(`src/Testing/MenuInstantActionSuites.cs`).
-
+Instant Action as a shared `IMenuFeature`, owned by the host's feature set and configured by both
+presentations. The option sets are static and decoded: the environments, the mission types with
+the bans a chapter and stunt flying impose, the eleven airframes, the militias with the aircraft
+each allows, the skills and the preset table. The setup is typed state with semantic operations:
+select and confirm an environment (which re-fits the mission type and loads the chapter's own base
+def), the mission type, the lives, the four waves, the wingmen and both plane picks, and apply a
+preset. `Refusal`/`CanLaunch`, `BuildDef` and `BuildExit` are the gate and the launch, `Discard`
+resets every field, and the decode is [../formats/instant-action.md](../formats/instant-action.md).

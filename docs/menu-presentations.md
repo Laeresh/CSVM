@@ -2,8 +2,9 @@
 
 How the in-game menu is split between shared features and interchangeable presentations, what a
 new presentation (a Modern one, say) plugs into, and what it must not assume it inherits from the
-two that ship. The per-module detail is in [`architecture.md`](architecture.md), one `##` entry per
-file named below; this page is the seam read as a whole. The screen census and the evidence behind
+two that ship. The per-module detail is in the module index [`architecture.md`](architecture.md), which routes
+to one `##` entry per file named below under `docs/architecture/`; this page is the seam read as a
+whole. The screen census and the evidence behind
 the Original presentation are [`org/menu-inventory.md`](org/menu-inventory.md); the decoded layout
 format is [`formats/menu-layout.md`](formats/menu-layout.md).
 
