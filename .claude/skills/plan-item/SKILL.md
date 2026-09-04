@@ -58,8 +58,10 @@ Do the reading yourself; no Explore subagent. The item text and code need to sta
    (the heading carries status). Plan items summarise and delegate — "Full evidence: `backlog.md`
    `BL-051`" — so the counts, the rejected fixes, and the real traps live there.
 3. **Only what the item names** — the code files and symbols (`FromToMotion.cs:109-111`,
-   `WorldBuilder.NoCollisionNode`), the doc sections (`docs/architecture.md`, `docs/verification.md`
-   rule IDs), and any `analysis/*/FINDINGS.md` it cites. Read them to confirm the claim still holds.
+   `WorldBuilder.NoCollisionNode`), the doc sections (a module's entry in
+   `docs/architecture/<Namespace>.md`, found through the index in `docs/architecture.md`;
+   `docs/verification.md` rule IDs), and any `analysis/*/FINDINGS.md` it cites. Read them to confirm
+   the claim still holds.
    Don't hunt beyond the citations. ⚠ Line numbers in plan and backlog text predate later refactors —
    re-locate symbols **by name**.
 
@@ -163,15 +165,16 @@ keep them in sync.** They are what a fresh session pasting that prompt would be 
 them makes this path start identically.
 
 ~~~
-Before writing code: read that item's full "### <ID>" detail in the plan and the plan's "## Ground rules" and "## ⚠ Read this before implementing anything" sections, plus the docs/architecture.md entry for every module you'll touch. Verify data against the extracted JSON — never guess a value.
+Before writing code: read that item's full "### <ID>" detail in the plan and the plan's "## Ground rules" and "## ⚠ Read this before implementing anything" sections, plus each module's entry in docs/architecture/<Namespace>.md (found through the index in docs/architecture.md) for every module you'll touch. Verify data against the extracted JSON — never guess a value.
 
 Land it complete in the same turn: follow the plan's Verify step, update docs/formats or docs/architecture as the item requires, flip the checklist item to ☑, and refresh PROJECT_CONTEXT.md "Current status". The verification record goes in the commit message. Commit only when I ask (with /commit-next).
 ~~~
 
 Tiers 1–3 already satisfied most of the first paragraph — say so in one line rather than silently
-skipping it. What they did **not** cover is touched-module-dependent: **read the
-`docs/architecture.md` entry for every module you are about to modify**, since dead ends are recorded
-there precisely so they are not re-chased.
+skipping it. What they did **not** cover is touched-module-dependent: **read that module's entry in
+`docs/architecture/<Namespace>.md` (found through the index in `docs/architecture.md`) for every
+module you are about to modify**, then the comments on the members you touch; dead ends are in the
+landing commits (`git log --grep=<ID>`), so search those before re-chasing one.
 
 ### Option 2 — decode it in `crimson.exe`
 

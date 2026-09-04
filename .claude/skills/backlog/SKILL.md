@@ -49,8 +49,9 @@ follow-up questions and the handoff.
   into `m3-polishing` — pending playtest").
 - Follow the references the entry actually names: code files and symbols (`AnimRuntime.cs:214-216`,
   `FlightController.NextArmedHardpoint`), commit messages (`git log --grep=BL-NNN`), the archived
-  development log (`git show docs-archive:docs/HISTORY.md`), and doc sections in
-  `docs/architecture.md`, `docs/verification.md`.
+  development log (`git show docs-archive:docs/HISTORY.md`), and doc sections: a module's entry in
+  `docs/architecture/<Namespace>.md` (found through the index in `docs/architecture.md`),
+  `docs/verification.md`.
 - Don't go hunting beyond what the entry cites.
 
 ## 3. Explain it

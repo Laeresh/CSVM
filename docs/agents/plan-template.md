@@ -96,16 +96,18 @@ exact fields/keys. Cite files by path. This is the shared evidence the per-item 
   data/code before building on it; **a correct disproof that lands no code is a success here**, not a
   failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
   TUNE / lead-only).
-- **`PROJECT_CONTEXT.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
-  landed item; a landed item gets its record in the landing commit's message and is **deleted** from
+- **`PROJECT_CONTEXT.md` + the module's entry in `docs/architecture/<Namespace>.md` (plus its index
+  bullet in `docs/architecture.md`) / `docs/formats/` are updated in the same turn** as each landed
+  item; a landed item gets its record in the landing commit's message and is **deleted** from
   `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
 - **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
   rule that bites per item.
 - **Verify against a full 8-chapter `--freecam --chapter=<X>` regression** (zero errors, same
   mesh/node counts unless the change is meant to add coverage) plus a targeted capture at the
   location the report came from.
-- **Read the module's entry in `docs/architecture.md` before modifying it.** Dead ends are recorded
-  there precisely so they are not re-chased.
+- **Read the module's entry in `docs/architecture/<Namespace>.md` (found through the index in
+  `docs/architecture.md`) before modifying it,** then the comments on the members you touch; dead
+  ends are in the landing commits (`git log --grep=<ID>`), so search those before re-chasing one.
 
 ## Checklist <!-- [core] — the canonical task list. /commit-next reads this to find the next open item, so keep the ID + status shape exact. -->
 

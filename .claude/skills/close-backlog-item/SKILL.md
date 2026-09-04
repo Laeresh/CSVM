@@ -78,7 +78,8 @@ symbol name, `not a decode`, `TODO`, the TUNE constant's name). Doc bullets and 
 routinely restate an open question in full without ever naming the `BL-NNN`, and those are what
 survive an ID-only sweep.
 
-Everywhere it turns up — `docs/formats/*.md`, `docs/architecture.md`, `docs/verification.md`,
+Everywhere it turns up — `docs/formats/*.md`, `docs/architecture/*.md` (module entries) and
+`docs/architecture.md` (the index), `docs/verification.md`,
 `CLAUDE.md`/`PROJECT_CONTEXT.md`, and XML doc comments in `CSVM/src` — replace the hedge with the
 settled fact, in the present tense. Keep any ⚠ that is still true (a trap about *how* the
 mechanism works outlives the question of whether it was right).

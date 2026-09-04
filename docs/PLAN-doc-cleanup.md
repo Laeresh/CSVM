@@ -168,7 +168,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ B11 Mechanical split into `docs/architecture/<Namespace>.md`, index file keeps the header and bullets
 12. ☐ B12 `CheckDocEntries.ps1` (caps, existence, coverage; `-Summary`), not yet gated
-13. ☐ B13 Pointer sweep of the grep instructions in skills, agent docs and `AGENTS.override.md`
+13. ☑ B13 Pointer sweep of the grep instructions in skills, agent docs and `AGENTS.override.md`
 
 ### Wave C: trim every entry and index bullet to the cap
 
@@ -400,7 +400,7 @@ path and confirm the scope narrows. `.\CheckEncoding.ps1` clean (the script must
 `[char]` codes; a BOM-less `.ps1` with non-ASCII is mangled by the interpreter. Do not add the
 check to `.codex/` or `.pi/` harnesses; they call `CheckCommitContent.ps1`.
 
-## B13 ☐ Pointer sweep of the grep instructions
+## B13 ☑ Pointer sweep of the grep instructions
 
 **Goal.** Every instruction that tells an agent how to find a module's entry names the split
 layout; prose that merely says "its entry in `docs/architecture.md`" is left alone.

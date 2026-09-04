@@ -15,10 +15,11 @@ All binding:
 - **`PROJECT_CONTEXT.md`** — the compact authoritative project brief: charter, hard rules,
   module index, CLI flags, current status. `CLAUDE.md` / `AGENTS.md` are thin, tool-specific
   pointers into it — read whichever of those your tool uses, then this file.
-- **`docs/architecture.md`** — per-module purpose + still-binding `⚠` constraints,
-  one `##` entry per `CSVM/src` module. **Read a module's entry before changing it** —
-  it opens with a routing index; find the module there, then
-  `Grep "## src/<path>" -A 12`. Never read the file whole (~140 KB).
+- **`docs/architecture.md`** — the routing index into `docs/architecture/<Namespace>.md`, where
+  each module's purpose, what it owns and what to read next live, one `##` entry per `CSVM/src`
+  module (a still-binding constraint sits as a comment on the member it binds, not there).
+  **Read a module's entry before changing it** — find the module's namespace in the index, then
+  `Grep "## src/<path>" -A 12 docs/architecture/`.
 - **`docs/formats/`** — the validated reverse-engineered format reference;
   `gotchas.md` is the cross-cutting one, read before any reader/transform/shader work.
 - **`docs/verification.md`** — how to verify a change, and how the instruments lie.
@@ -41,9 +42,9 @@ uses it. The vocabulary has three authorities, and all three bind:
   `PUFFER_STATE` / `LIGHT_STATE` / `SOUND_NODE` and the rest of the anim-def
   vocabulary, chapter IDs `C1`–`C5`. These come from the shipped data. Never
   rename them to something tidier; the extraction and the docs both key off them.
-- **The engine's own terms** — as fixed by the module index and entries in
-  `docs/architecture.md` (destructible pool, gun group, hardpoint, pylon,
-  firepoint, livery/paint scheme, danger zone, chapter world).
+- **The engine's own terms** — as fixed by the module index in `docs/architecture.md` and the
+  module entries in `docs/architecture/<Namespace>.md` (destructible pool, gun group, hardpoint,
+  pylon, firepoint, livery/paint scheme, danger zone, chapter world).
 
 If the concept you need has no established term, that's a signal — either you're
 inventing language the project doesn't use (reconsider) or there's a real gap
@@ -53,8 +54,8 @@ Comment length and shape are capped; see `PROJECT_CONTEXT.md`'s coding conventio
 
 ## Flag decision conflicts
 
-Decisions here live in commit messages, `⚠` constraint lines in
-`docs/architecture.md`, rules in `docs/verification.md`, and the completed plans in git
+Decisions here live in commit messages, `⚠` constraint lines in module entries in
+`docs/architecture/<Namespace>.md`, rules in `docs/verification.md`, and the completed plans in git
 history (which deliberately keep their dead ends). If your output
 contradicts one, surface it explicitly rather than silently overriding:
 

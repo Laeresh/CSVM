@@ -62,7 +62,7 @@ Compose a self-contained prompt for the next item that stands on its own after a
 ~~~
 Implement item <ID> — <one-line title> — from <active plan path> (the M3 weapons plan).
 
-Before writing code: read that item's full "### <ID>" detail in the plan and the plan's "## Ground rules" and "## ⚠ Read this before implementing anything" sections, plus the docs/architecture.md entry for every module you'll touch. Verify data against the extracted JSON — never guess a value.
+Before writing code: read that item's full "### <ID>" detail in the plan and the plan's "## Ground rules" and "## ⚠ Read this before implementing anything" sections, plus each module's entry in docs/architecture/<Namespace>.md (found through the index in docs/architecture.md) for every module you'll touch. Verify data against the extracted JSON — never guess a value.
 
 Land it complete in the same turn: follow the plan's Verify step, update docs/formats or docs/architecture as the item requires, flip the checklist item to ☑, and refresh PROJECT_CONTEXT.md "Current status". The verification record goes in the commit message. Commit only when I ask (with /commit-next).
 ~~~

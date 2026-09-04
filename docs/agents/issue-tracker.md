@@ -35,7 +35,8 @@ Read the named section of `backlog.md`, or the checklist item in the live
 - Tick the live plan's checklist and **swap** the "Current status" next-step
   pointer in `PROJECT_CONTEXT.md` — that section may only get shorter, never longer.
 - A way a *measurement* can mislead → a transferable rule in `docs/verification.md`.
-- A still-binding module constraint → a `⚠` one-liner in `docs/architecture.md`.
+- A still-binding module constraint → a comment on the member it binds (prohibition first, reason
+  second); format or decode knowledge → `docs/formats/` or `docs/org/`. Not the architecture entry.
 
 ## Triage state
 
