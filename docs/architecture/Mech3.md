@@ -21,8 +21,8 @@ Texture lookup over an unzbd texture extraction, a zip or an unpacked PNG dir. I
 stored-name quirks (20-char truncation prefix match, legacy `.-N` renames, the fork's trailing
 doubled period) and classifies each texture's alpha twice, for two unrelated readers:
 `LastHadAlpha`/`LastAlphaIsSoft` from the decoded pixels, which is what blend-versus-scissor keys
-on, and `LastAlphaClass` from the extractor's own manifest field, which is what the original's
-per-surface lighting exemption keys on. `Build` is the one construction path (decode, classify,
+on, and `LastAlphaClass` from the extractor's own manifest field, the one reader that sees the
+`Simple` textures; no lighting decision keys on it. `Build` is the one construction path (decode, classify,
 drop-in, mip chain) and `Find` caches its result; `BuildMipped` hands the same Image to
 `--dump-mips` un-cached. Names and alpha: [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
 
@@ -37,8 +37,8 @@ that material's own value. `BuildSubtree`'s `zoneGate` flag moves each instance 
 visual layer (`ZoneGate.cs`); it stays off for the camera-anchored deck and dome. `CollidersForMesh`
 splits a mesh into one trimesh per surface class and then by sidedness, both halves on one body,
 each registering with `WorldCollision`. `MissionStructureTeamMeta` is the channel
-`DestructibleRegistry` reads a pool's team through. Shader selection, the alpha-class lighting
-exemption and the enhanced-mode arms: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md).
+`DestructibleRegistry` reads a pool's team through. A textured surface takes `csky_world_light` on
+its model's `lighting` flag alone. Shader selection and the enhanced-mode arms: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md).
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame

@@ -739,8 +739,9 @@ public sealed class TextureArchive : IDisposable
 
     /// <summary>A texture's alpha class as the extractor read it out of the archive's own header
     /// (storage flags at <c>+0x09</c>, docs/org/textures.md), not off the decoded pixels. The
-    /// original's per-surface lighting exemption keys on "not <see cref="None"/>"
-    /// (docs/org/vertexLighting.md).</summary>
+    /// original's hardware draw keys no lighting decision on it, only routing through the sorted
+    /// transparent queue (docs/org/vertexLighting.md); this reader is the one source that sees the
+    /// <see cref="Simple"/> textures at all.</summary>
     public enum AlphaClass
     {
         /// <summary>No alpha channel: header bit <c>0x04</c>.</summary>

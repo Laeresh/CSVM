@@ -294,11 +294,11 @@ at 0.426 / 0.784 / clamp-1.0 across three missions (CAP-11 matched-pose A/B, 202
 ⚠ **The scalar is a collapse, and the original's own machinery is decoded separately.** The
 `sunlight` node is one entry in the same light array as every `LIGHT_STATE` point light, and its
 contribution is computed per vertex inside the polygon loop rather than baked. Which surfaces
-receive it is decided by two gates, the model's `lighting` flag and the texture's alpha bit, both in
-[`vertexLighting.md`](vertexLighting.md). That page also settles the exemption question: **water is
-not exempt in the original** (its textures carry no alpha bit), while the lit-signage, glow and
-overlay families are. Night cloud sprites being moonlit directionally (`BL-325`) is a separate,
-still-open reading.
+receive it is decided on the hardware draw by one gate, the model's `lighting` flag; the texture's
+alpha bit exempts a polygon in the software draw only, which no retail capture shows. Both draws
+are in [`vertexLighting.md`](vertexLighting.md). **Water is lit in the original** and so is every
+textured surface whose model carries the flag, alpha class or not. Night cloud sprites being
+moonlit directionally (`BL-325`) is a separate, still-open reading.
 
 ### `FOG_COLOR` luminance as the night key (enhanced mode only)
 

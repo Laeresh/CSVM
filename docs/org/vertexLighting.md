@@ -251,7 +251,7 @@ joined to its top-tier `rtextureN` manifest (the archive the engine loads, which
 and `smallneedle` as alpha where the base `texture.zbd` does not), kept as the census of the alpha
 class rather than of anything the hardware draw treats differently:
 
-| Chapter | Textured materials | Exempt | Unresolved names |
+| Chapter | Textured materials | Carrying the alpha bit | Unresolved names |
 |---|---|---|---|
 | C1 | 552 | 224 | 2 |
 | C1B | 310 | 145 | 2 |
@@ -262,9 +262,8 @@ class rather than of anything the hardware draw treats differently:
 | C4 | 662 | 250 | 3 |
 | C5 | 583 | 239 | 3 |
 
-A `--freecam` build reaches fewer materials than the table holds, because it builds only what the
-placed world references: C5 reports 98 exempt of 330 built, C1 120 of 375. The unresolved names are
-the textures no archive ships (`pir_spinner`, `barngrill`, `cloud1`/`cloud2`, `snow16x16`).
+The unresolved names are the textures no archive ships (`pir_spinner`, `barngrill`,
+`cloud1`/`cloud2`, `snow16x16`).
 
 ### What the model's `lighting` bit selects, and what it does not
 

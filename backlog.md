@@ -1031,11 +1031,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `SceneBuilder.ClassifyBillboard` distinguishes the two), but fixing it means giving `Kind` a
   billboard mode and a second material path, and it changes how 139,388 C5 sprites look with no
   reference shot to check against — so it needs an original-game A/B.
-  *The "should be exempt from the SUNLIGHT dim" half is settled and no longer part of this item.*
-  The original's per-surface exemption keys on the texture's alpha bit rather than on a kind, a
-  `soil` id or a node name (`docs/org/vertexLighting.md`), `poleflare` and `lightpole` both carry it,
-  and both the world and the clutter material paths now honour it. What remains here is the
-  billboard-axis question alone, and it still needs the A/B.
+  *The "should be exempt from the SUNLIGHT dim" half is a data question, not a texture one.* The
+  original's hardware draw has no per-texture lighting exemption (`docs/org/vertexLighting.md`,
+  "The hardware draw"); the only exemption is the model's own `lighting` flag, and whether the
+  `poleflare` and `lightpole` decoration models carry it is read off the templates, not fitted.
+  What remains here is the billboard-axis question, and it still needs the A/B.
 
 - `BL-076` `[Feature]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` **Star twinkle + undecoded light fields** (flags 523/…, the 0.17 float) — stars/beacons
   render as fixed-size soft sprites, no twinkle.
@@ -1126,23 +1126,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clamp 1.0** (split out of `BL-303` at its close, 2026-08-08; measured `CAP-11`: tower faces 10.2
   vs 15.5, low-rise 21.7 vs 37.6). Explicitly NOT fog — `BL-303`'s own adjunct note, and the Wave
   B fog work moved none of it.
-  *Decoded, and the item's own premise is refuted:* the original's per-surface lighting exemption is
-  found and written up in `docs/org/vertexLighting.md`. It is two gates, the model's `lighting` flag
-  (`FUN_00551d90`) and the texture's alpha bit (`FUN_005524d0`), and **the measured facades are on
-  the lit side of both**: `cblock1`–`7`, `bldg1`–`4` and `bldgtrim1` all ship storage flags `0xa5`,
-  i.e. no alpha bit, so the original modulates them exactly as we do. Asking "should these facades
-  be modulated at all" therefore answers yes, and no exemption is available to close the measured
-  ratio. What the decode does hand over is a narrower, real gap: the overlays drawn **on top of**
-  those facades are exempt in the original and are not in ours, because the remake applies its
-  per-model `lit` decision to every overlay pass. In C5 that is `buildingspotlighted` (the lit
-  windows, 34 polygons over `cblock*`), `nypd`, `clock`, `fadedsign01`–`03`, `lightpole`, `lite_out`,
-  `bliteon`/`bliteoff` and `traffic_sign1`. Whether drawing those fullbright moves the tower-face and
-  low-rise boxes is untested and is the next step; it is a different mechanism from the one this item
-  was filed on, and the residual after it is not predicted.
-  *Blocked on plumbing:* the exemption keys on the texture header's storage byte, which the deployed
-  texture tree does not carry (PNGs only; the extractor's `alpha` field lives in `texture.zip`'s
-  `manifest.json`). A PNG alpha-channel test is not a substitute — it loses the 1–10 `Simple`
-  textures per chapter that carry the bit too.
+  *Decoded, and the item's own premise is refuted:* the original's surface lighting is written up in
+  `docs/org/vertexLighting.md`. On the hardware draw every retail capture shows (`FUN_00554550`) the
+  one gate is the model's `lighting` flag (`FUN_00552020`), and **the measured facades are on the
+  lit side of it**, so the original modulates them exactly as we do. Asking "should these facades be
+  modulated at all" therefore answers yes, and no exemption is available to close the measured
+  ratio. The texture's alpha bit exempts a polygon in the software draw alone (`FUN_005524d0`),
+  which no capture shows, so the overlays drawn on top of those facades (`buildingspotlighted`,
+  `nypd`, `clock`, `fadedsign01`–`03`, `lightpole`, `lite_out`, `bliteon`/`bliteoff`,
+  `traffic_sign1`) are lit in the original as they are here, and offer no lever either. The
+  residual is unexplained and not predicted by any decoded lighting term.
   *Playtest after fix:* the C5 night poses in `playtest/CAP-11/README.md`.
 
 - `BL-325` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` `[C1B]` **Night cloud sprites are directionally moonlit in the original; ours are
@@ -1505,7 +1498,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-538` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[C5]` **At what distance C5's city is meant to reach the dark level of its facade mip chain.** The dark band reported at the controls in C5 is not the clutter fade: it is the shipped hand-authored mip chain of the `cblock*` facade textures, whose level 1 is a non-monotone dip. `--dump-mips` reads `cblock1` at mean luminance 15.62 (L0) → 4.41 (L1) → 6.77 (L2) and `cblock2` at 9.60 → 0.83 → 1.84, so a facade near enough for L0 reads bright, one in the L1 band three to eleven times darker, and one far enough for L2 brighter again. `--mips=generated` removes the band completely; `graphics.clutterFarFade=false` does not touch it. The chain installs correctly (every `installed` line in the dump reads `== authored`), and the levels are the original's own art that must not be regenerated, so what is left is a judgement about *selection*: the artists tuned these levels against a 640×480 DX7 pipeline, and nothing yet says the remake reaches L1 at the distance they drew it for.
   *Where to look:* the sampler and any LOD bias on the world shader (`SceneBuilder.GetBiasShader` emits `filter_linear_mipmap_anisotropic`), and whether the original point-selected a level where the remake trilinearly blends L0 into L1 across a range. Instrument: `--dump-mips` for the installed chain, `--mips=generated` for the A/B. The judgement itself is the user's at the controls, over the pose in the entry below.
   *Reproduce:* `.\RunProbe.ps1 --freecam --chapter=C5 "--pos=-9491,140,-3479" "--direction=-0.588,-0.03,-0.809" --det --mute "--screenshot=.scratch\band.png"`, then the same with `--mips=generated`.
-  *Ruled out, do not re-chase:* collapsed clutter cards writing depth or a dark fragment (the fade-on frame is pixel-identical to `--no-clutter` in every row where the fade has culled every instance); C5's fog-volume clutter overlapping the templates fade (its field is 16,170 cloud sprites at `fade 1200-1800 m`, outside the 200–900 m the templates author); the gamez buildings carrying an ignored `far_fade_range` (`FUN_004d5de0` is reached only from the clutter instance list `FUN_004d5d90` and the clutter quadtree `FUN_004d6010`, both behind `CameraRenderClutter` in the world walk `FUN_004d5910`, while ordinary scene nodes draw through `FUN_004d4a20` and never reach the fade test); the alpha-texture lighting gate of `BL-613` (the band is a function of camera distance and lifts under a mip-policy switch that changes no lighting term); and decorrelating the dither lattice per stamp, which was probed and changes the frame barely at all.
+  *Ruled out, do not re-chase:* collapsed clutter cards writing depth or a dark fragment (the fade-on frame is pixel-identical to `--no-clutter` in every row where the fade has culled every instance); C5's fog-volume clutter overlapping the templates fade (its field is 16,170 cloud sprites at `fade 1200-1800 m`, outside the 200–900 m the templates author); the gamez buildings carrying an ignored `far_fade_range` (`FUN_004d5de0` is reached only from the clutter instance list `FUN_004d5d90` and the clutter quadtree `FUN_004d6010`, both behind `CameraRenderClutter` in the world walk `FUN_004d5910`, while ordinary scene nodes draw through `FUN_004d4a20` and never reach the fade test); a per-texture lighting term (the original's hardware draw has none, and the band is a function of camera distance that lifts under a mip-policy switch, which changes no lighting term); and decorrelating the dither lattice per stamp, which was probed and changes the frame barely at all.
   *Cross-refs:* `PT-85` (the flight that judges it, with the pose and the A/B), `BL-337` (closed; the fade), `docs/org/clutter.md`, `docs/formats/gamez.md` on the authored mip levels.
 
 - `BL-555` `[Feature]` `[Divergence]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A held key fast-forwards a mid-mission cutscene instead of

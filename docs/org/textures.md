@@ -67,7 +67,7 @@ Derived, not from the file: `+0x00` is `width * height` (`FUN_0052f700`), and `+
 | Bit | Meaning | Evidence |
 |---|---|---|
 | `0x01` | 2 bytes per pixel (16-bit rather than 8-bit paletted) | `FUN_0052f680` returns `1 + (flags & 1)`, and that is the multiplier in `FUN_0052f6b0`'s buffer size |
-| `0x02` | the texture has an alpha channel; **and it is the per-surface lighting exemption** | `FUN_005524d0` skips the per-vertex light evaluation for any textured polygon whose texture carries it — see [`vertexLighting.md`](vertexLighting.md) |
+| `0x02` | the texture has an alpha channel; the hardware draw routes a polygon carrying it through the sorted transparent queue, and the software draw alone skips its lighting | `FUN_00554550` tests it for sorting, blending and the shadow and lightmap passes only; `FUN_005524d0` skips the per-vertex light evaluation on it — see [`vertexLighting.md`](vertexLighting.md) |
 | `0x04` | the texture has none; complementary to `0x02` in every shipped header | read off all eight `texture.zbd` directories against the extractor's own `alpha` field |
 | `0x08` | a separate alpha plane follows the pixel data | `FUN_0052f860` reads `width*height` further bytes into `+0x14` only when set |
 | `0x10` | use the global palette, skip the local one | `FUN_0052f860` skips the local palette read when set |
@@ -79,10 +79,11 @@ The extractor's `alpha` enum (`None`/`Simple`/`Full`) is derived from bits `0x02
 third bit of the set, `0x08`, is what separates `Full` from `Simple`. A no-alpha texture ships
 `0xa5`, a full-alpha one `0xab`, a simple-alpha one `0xa3`.
 
-⚠ **Bit `0x02` is not only a storage property.** It is the original's per-surface lighting
-exemption: a textured polygon whose texture carries it is drawn without any per-vertex light term at
-all, sun included. That is [`vertexLighting.md`](vertexLighting.md), and it is the reason this byte
-matters to the renderer and not just to the loader.
+⚠ **Bit `0x02` is not only a storage property.** On the hardware draw, the one every retail capture
+shows, it routes a textured polygon through the sorted transparent queue with blending on and
+z-write off, and keeps it out of the shadow and lightmap passes; it never touches the polygon's
+colour. Only the software draw reads it as a lighting exemption. Both are in
+[`vertexLighting.md`](vertexLighting.md).
 
 ## The render-flags word (header `0x0E` → object `+0x0c`)
 
@@ -286,7 +287,8 @@ sub-threshold ink and solidifies the partial alpha above it, so only essentially
 misreads, whose solid dry-land half outvotes the feathered ramp that is the point of the texture;
 the inland transition sheets measure 0.81 to 0.93 binary and are genuine cutouts. This is a
 different question from `LastAlphaClass`, the extractor's own `None`/`Simple`/`Full` field, which
-is what the per-surface lighting exemption of [vertexLighting.md](vertexLighting.md) keys on.
+is the header bit itself and the only reader that sees the `Simple` textures; no lighting decision
+keys on it, since the original's hardware draw has none ([vertexLighting.md](vertexLighting.md)).
 
 `TextureArchive` carries two absent-name sets rather than one, because the retail data lacks
 textures for two different reasons. `KnownAbsentFromGameData` (`pir_spinner`, `barngrill`) draws a
