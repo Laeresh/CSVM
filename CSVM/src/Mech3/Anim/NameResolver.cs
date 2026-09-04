@@ -369,7 +369,17 @@ public sealed class NameResolver<TNode>
         {
             return false;
         }
-        node = BoundNode(idx) ?? (NameResolveFallback ? null : SoleStagedCopy(idx));
+        node = ClaimedNode(idx, name, anchor);
+        return true;
+    }
+
+    /// <summary>The world node a compiled gamez index binds, narrowed to <paramref name="anchor"/>'s
+    /// staged library copy the way <see cref="SymbolClaims(AnimDefinition, string, TNode?, out TNode?)"/>
+    /// narrows a symbol-table claim; null when this build never created it. For an index a
+    /// definition carries outside its symbol table, such as a node prerequisite's leaf.</summary>
+    public TNode? ClaimedNode(int idx, string name, TNode? anchor)
+    {
+        var node = BoundNode(idx) ?? (NameResolveFallback ? null : SoleStagedCopy(idx));
         if (node != null && anchor != null && _isLive(anchor)
             && _privateCopyOf(anchor) is { } copy && !IsWithin(node, copy))
         {
@@ -379,7 +389,7 @@ public sealed class NameResolver<TNode>
                 node = own[0];
             }
         }
-        return true;
+        return node;
     }
 
     /// <summary>The world node bound to a gamez node index, or null when this build never created

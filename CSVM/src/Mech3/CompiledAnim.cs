@@ -160,8 +160,10 @@ public sealed class AnimArchive
 
 /// <summary>One node-state activation prerequisite: the node <paramref name="Path"/> names must
 /// read <paramref name="Active"/> for the definition to start. An optional entry counts toward
-/// <see cref="AnimDefinition.PrereqMinToSatisfy"/> and is parsed but not enforced.</summary>
-public sealed record AnimNodePrereq(IReadOnlyList<string> Path, bool Active, bool Required);
+/// <see cref="AnimDefinition.PrereqMinToSatisfy"/> and is parsed but not enforced.
+/// <paramref name="Ptr"/> is the leaf's compiled gamez node index, the definition's OWN node of
+/// that name; null on a reader definition.</summary>
+public sealed record AnimNodePrereq(IReadOnlyList<string> Path, bool Active, bool Required, int? Ptr = null);
 
 /// <summary>
 /// One ANIMATION_DEFINITION — the UNIFIED model both front-ends produce (the compiled
@@ -316,7 +318,8 @@ public sealed class AnimDefinition
                 bool active = leaf.Num("active_raw") is { } raw
                     ? ((int)raw & 1) == 1
                     : leaf.Bool("active");
-                def.PrereqNodes.Add(new AnimNodePrereq(path.ToArray(), active, leaf.Bool("required")));
+                int? ptr = leaf.Num("ptr") is { } p && p >= 0 && p < 0xFFFFFFFu ? (int)p : null;
+                def.PrereqNodes.Add(new AnimNodePrereq(path.ToArray(), active, leaf.Bool("required"), ptr));
                 path.Clear();
             }
         }

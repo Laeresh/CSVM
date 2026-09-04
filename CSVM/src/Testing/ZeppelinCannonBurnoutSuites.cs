@@ -26,6 +26,9 @@ internal static class ZeppelinCannonBurnoutSuites
         ("lbroad2", "left_lkgasbag02", "finished_lkgasbag02"),
     };
 
+    // The Dante's ring on gasbag1: the cannon the suite kills, then the three the burns destroy.
+    private static readonly string[] DanteRing = { "lbroad11", "lbroad12", "rbroad11", "rbroad12" };
+
     [Suite("zeppelin-cannon-burnout",
         "the animation-authored zeppelin kill on C1/M04's hk_zep (no zeppelin record): its " +
         "sabotaged broadside doors are deployed from t=0, real gun rounds destroy one door and " +
@@ -189,5 +192,71 @@ internal static class ZeppelinCannonBurnoutSuites
         });
         ctx.WriteArtifact("test-zeppelin-cannon-burnout.txt", report.ToString());
         ctx.Note($"C1/M04's {Hull}: three door deaths burn three gasbags, the hull sinks and the primary completes");
+    }
+
+    [Suite("dante-cannon-burnout",
+        "C5/M04's Dante among nine other zeppelins sharing its node names: one broadside cannon " +
+        "killed through its pool calls both burns of its gasbag, each burn destroys the ring's " +
+        "other cannons (their pools read Destroyed, so the broadside drops them) and the engines " +
+        "behind it, and the finisher starts on the Dante's OWN panels, bound through the " +
+        "prerequisite's compiled node pointer rather than a name search that met the other " +
+        "zeppelins' intact panels, and switches gasbag1's panels off, OBJECTIVE10's read")]
+    internal static void DanteCannonBurnout(TestContext ctx)
+    {
+        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, "C5", "M04"), $"C5/M04 zrdr");
+        var report = new StringBuilder();
+        ctx.WithWorld("C5", collision: true, mission: "M04", world =>
+        {
+            var runtime = world.Runtime;
+            var dante = runtime.FindNodes("dantezep").FirstOrDefault();
+            var cannon = dante == null ? null : runtime.FindNodes(DanteRing[0], dante).FirstOrDefault();
+            var bag = dante == null ? null : runtime.FindNodes("gasbag1", dante).FirstOrDefault();
+            var pool = cannon == null ? null : runtime.Destructibles.PoolsOn(cannon).FirstOrDefault();
+            ctx.Check(dante != null && cannon != null && bag != null && pool != null,
+                $"dantezep, its {DanteRing[0]}, its gasbag1 and the cannon's pool resolve");
+            if (dante == null || cannon == null || bag == null || pool == null)
+                return;
+            int twins = runtime.FindNodes("panelleftb1").Count;
+            ctx.Check(twins > 1, $"the world holds {twins} nodes named panelleftb1, so a name search is ambiguous");
+
+            var started = new List<string>();
+            var saved = runtime.OnInstanceStarted;
+            runtime.OnInstanceStarted = (d, _) =>
+            {
+                if (d.AnimName != null && !started.Contains(d.AnimName))
+                    started.Add(d.AnimName);
+            };
+            try
+            {
+                runtime.DamageAt(cannon, pool.MaxHealth + 1f);
+                var panels = runtime.FindNodes("panels", bag).FirstOrDefault();
+                float offAt = -1f;
+                for (int i = 1; i <= 60 * 60; i++)
+                {
+                    runtime.Advance(Dt);
+                    if (offAt < 0f && panels is { Visible: false })
+                        offAt = i * Dt;
+                }
+                foreach (var name in new[] { "dtzepleft_gasbag1", "dtzepright_gasbag1", "finish_dtzepgasbag1" })
+                    ctx.Check(started.Contains(name), $"{name} started");
+                string when = offAt < 0f ? "never" : $"at {offAt:0.#} s";
+                ctx.Check(panels != null && !panels.Visible, $"gasbag1's panels are off {when}");
+                foreach (var ring in DanteRing)
+                {
+                    var node = runtime.FindNodes(ring, dante).FirstOrDefault();
+                    var ringPool = node != null ? runtime.Destructibles.PoolsOn(node).FirstOrDefault() : null;
+                    string status = ringPool == null ? "none" : ringPool.Status.ToString();
+                    ctx.Check(ringPool is { Status: DestructibleRegistry.State.Destroyed },
+                        $"{ring}'s pool reads Destroyed (status {status})");
+                }
+                report.AppendLine($"panels off {when}; started: {string.Join(", ", started)}");
+            }
+            finally
+            {
+                runtime.OnInstanceStarted = saved;
+            }
+        });
+        ctx.WriteArtifact("test-dante-cannon-burnout.txt", report.ToString());
+        ctx.Note($"C5/M04's Dante: one cannon kill burns gasbag1, its ring and its engines");
     }
 }

@@ -904,6 +904,14 @@ public sealed class TestContext
     /// before it, and therefore of which shard it landed in.</summary>
     internal void ResetForSuite()
     {
+        // Suites run back to back inside one frame, so a predecessor's QueueFree'd rigs are still
+        // under the host: a same-named spawn is renamed @Node3D@N and a lookup by name finds the
+        // dead one. Free them now, the flush the frame end would have done between suites.
+        foreach (var child in Host.GetChildren())
+        {
+            if (child.IsQueuedForDeletion())
+                child.Free();
+        }
         EmitterFactory = null;
         ExtraPrewarmSoundNames = null;
         CutsceneRoots = false;

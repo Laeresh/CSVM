@@ -2760,6 +2760,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             Count("CallAnimation(anim prerequisite unmet)");
                             continue;
                         }
+                        // A call naming a destructible's own death definition kills that
+                        // destructible (KillCalledDestructible); the wait, if any, is on the
+                        // death now running on its own anchor.
+                        if (!instant && !operandRedirect && KillCalledDestructible(target) is { } killed)
+                        {
+                            waitOn?.Add((target, killed.Anchor));
+                            continue;
+                        }
                         // ⚠ Keep the library-root test data-driven, never name-based, and gated on
                         // a death or range-triggered mission call. Other ambient calls keep their
                         // authored positions and must not relocate during bootstrap.
@@ -3494,6 +3502,35 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
     }
 
+    // A CALL_ANIMATION naming a destructible's own death definition is that destructible's kill,
+    // run through its pool on its own anchor: a gasbag burn "destroys" the ring's other cannons this
+    // way, and a plain Start on the CALLER's anchor hid their guns through the symbol table while
+    // their pools stayed healthy and the broadside kept firing from them. Null when the def is no
+    // sole registered pool (a template with several copies stays a plain call); the instance,
+    // untouched, when it is already dead or out of the world.
+    private DestructibleRegistry.Instance? KillCalledDestructible(AnimDefinition target)
+    {
+        DestructibleRegistry.Instance? own = null;
+        foreach (var inst in _destructibles.All)
+        {
+            if (inst.Def != target)
+                continue;
+            if (own != null)
+                return null;
+            own = inst;
+        }
+        if (own == null)
+            return null;
+        if (own.Dormant || own.Status == DestructibleRegistry.State.Destroyed)
+            return own;
+        own.Health = 0f;
+        own.Status = DestructibleRegistry.State.Destroyed;
+        if (HealthyNodeNameOf(own.Def) is { } healthyNode)
+            DestructibleKilled?.Invoke(healthyNode);
+        RunDeathSequence(own);
+        return own;
+    }
+
     // Runs a destructible's death the instant its HP reaches zero.
     // ⚠ Play ALL the def's Initial sequences through Start; never try to pick "the death sequence"
     // out by name. The swap sits in a sequence whose name varies and is only reliably Initial
@@ -3800,12 +3837,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // Every REQUIRED node prerequisite reads the state it asks for. Active is what
     // OBJECT_ACTIVE_STATE writes, the subtree's visibility. A path that resolves to no node
     // passes: the optional entries and MINIMUM_TO_SATISFY are parsed, not enforced.
+    // ⚠ Bind the leaf through its compiled node pointer first, as Targets binds an event's node.
+    // A gasbag finisher starts on the dead CANNON's anchor (its call chain), and the name search
+    // from there met the intact panels of the nine other zeppelins sharing the Dante's node names.
     private bool NodePrerequisitesMet(AnimDefinition def, Node3D? anchor)
     {
         foreach (var prereq in def.PrereqNodes)
         {
             if (!prereq.Required)
                 continue;
+            if (prereq.Ptr is { } ptr && prereq.Path.Count > 0
+                && _resolver.ClaimedNode(ptr, prereq.Path[^1], anchor) is { } own)
+            {
+                if (IsInstanceValid(own) && own.Visible != prereq.Active)
+                    return false;
+                continue;
+            }
             foreach (var node in ResolveScoped(new List<string>(prereq.Path), def, anchor))
                 if (IsInstanceValid(node) && node.Visible != prereq.Active)
                     return false;
