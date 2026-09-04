@@ -196,20 +196,35 @@ engines, turrets and cannons, which are ordinary members of the turret and struc
 `object+0x4` is a live count of how many AI hold that target and the scorer simply excludes its own
 contribution. There is no drop-and-reselect pass.
 
-### What CSVM ports of this (D36)
+### What pursue does with a non-vehicle target
+
+`FUN_0041d9f0` case 0 casts the standing target to `TargetVehicle` once, and the cast decides three
+things. A victim that is a `jet` or `wingman` gets the aspect test against its backward row
+(`+0x18`–`+0x20` of the thing at target vtable `+0xc`), the lead offset along that row when the test
+fails, and the 400 m merge rule. Anything else, a turret or a structure, takes the on-axis arm
+unconditionally: the aim point is the object's own position (target object vtable `+0x0`), the
+gun-lead flag is set, and the desired velocity is the object's velocity virtual (object vtable
+`+0x4`, the same slot the ranking's closing term reads), scaled by 0.9 on the normal arm. So a pilot
+whose sweep picked a gasbag engine flies straight at the engine, and the zeppelin hull under it is
+what the crash-avoidance ray then sees.
+
+### What CSVM ports of this
 
 `FlightController.SelectRankedTarget` sweeps `TargetVehicle`/`TargetTurret`/`TargetStruct` (the
-gun aim assist's own three lists) for one global minimum, and `AiTargetRanking.ObjectiveBiasFor`
-carries the turret's flat `+37.5`. Routed into `AiGunner.GroundTarget` rather than the
-aircraft-only `Target` field, so `AiPilot`'s flight law never chases a turret or structure through
-the sky — it keeps flying its assigned course while the gunner alone aims and fires at it.
+gun aim assist's own three lists) for one global minimum into `AiGunner.Target`, a standing target
+of any class, which `AiPilot` reads through `PursuitQuarry.Of` as its pursuit quarry: the mode
+machine promotes on it, and `FlyPursuit` takes the on-axis arm above for a non-aircraft one and
+never arms the merge rule against it. `AiTargetRanking.Score` is the decoded arithmetic term for
+term: the `wingman` **+0.4** (an aircraft flying `AiPilot.Escort`, which is the netless `mode
+wingman` fork), the half-metre deadband on the raw offset for ahead/behind, the altitude sign, the
+closing term on the candidate's velocity, and the gasbag **−0.5**. The gasbag admission gate is
+`FlightController.HasGasbagOrdnanceReady`, walking the pylons for a `DAMAGES_ZEPPELIN` weapon with
+ammo whose two launch timers have run out, and the gasbag identity reaches `AiRocketeer.Solve`, so
+a torpedo-armed pilot that picked a gasbag launches at it.
 
-Unmodelled, named rather than guessed: the `wingman` **+0.4** de-prioritisation and the zeppelin
-gasbag **−0.5**/ordnance-gated admission (`TargetStruct`'s `+0x65` members) both need a `mode`
-field and a gasbag identity CSVM's session wiring does not carry into `FlightController` yet; the
-ahead/behind deadband, altitude sign and facing ±0.2 terms stay the pre-D36 cone/sign reading
-rather than the decoded half-metre-deadband geometry above; and `TargetProjectile` is not part of
-the acquisition sweep at all.
+Unmodelled, named rather than guessed: the activation volume is scored as a sphere where the engine
+tests a cylinder (`+0x328`, `+0x32c`–`+0x330`); `TargetProjectile` is not part of the acquisition
+sweep at all; and `FUN_00421ad0`'s `1e21` on a candidate object whose `+0x04` reads 3 or more.
 
 ## The chapter's net table, and what "the first net" means
 
@@ -1103,8 +1118,8 @@ remaining five.
 
 Their volumes are `FUN_0045a240`'s ±10000 m, not the net's: the block wins the overwrite (above).
 
-Two consequences follow from the demotion rule above, and both are read off the code path rather
-than observed at the controls of the original:
+Two consequences follow from the demotion rule above, read off the code path and consistent with
+the original at the controls:
 
 - Instant Action **wingmen are demoted from `wingman` to `jet` at spawn** and walk that net like
   everything else. The `w<plane>` defs contribute their pilot and airframe values, not their mode.
@@ -1112,9 +1127,11 @@ than observed at the controls of the original:
   (0/1/3 on the player, 2/4 on 1/3) is therefore **not** flown as a formation in that mode. It
   survives as a target assignment.
 
-The escort law is a campaign behaviour. If a future decode shows Instant Action wingmen holding
-station on the player in the original, the fault is in one of the three facts above and this section
-is where to start.
+What the original's wingmen do instead is the acquisition: on C1's CM02 they enter pursue at the
+start and attack the zeppelin's turrets and engines, which is the sweep picking a `TargetTurret` or
+`TargetStruct` inside the ±10000 m volumes and pursue flying at it ("What pursue does with a
+non-vehicle target" above). The net is only what they fly when the sweep finds nothing. The escort
+law is a campaign behaviour and the wrong fix for a wingman that leaves the fight.
 
 ## Function map
 

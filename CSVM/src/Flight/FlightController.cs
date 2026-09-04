@@ -3157,28 +3157,23 @@ public partial class FlightController : Node3D
     private static string TargetLabel(object? source) =>
         source is FlightController fc ? $"P{fc.PlayerIndex + 1}" : TargetPool.NameOf(source);
 
-    // The gunner's one standing target, whichever of its two fields holds it — AiGunner.Target
-    // (aircraft, AiPilot's own pursuit quarry) or AiGunner.GroundTarget (D36's non-aircraft half).
-    // The two are mutually exclusive by construction (see AssignAcquired below).
-    private static object? StandingTarget(AiGunner gunner) =>
-        (object?)gunner.Target ?? gunner.GroundTarget;
+    // The gunner's one standing target of any class, which AiPilot reads as its pursuit quarry.
+    private static object? StandingTarget(AiGunner gunner) => gunner.Target;
 
-    // Routes one D12/D36 acquisition winner into the field AiPilot's flight law expects: an
-    // aircraft into Target (so it becomes the pursuit quarry), anything else into GroundTarget
-    // (so the flight law sees nothing and keeps flying its assigned course while the gunner alone
-    // aims and fires at it) — the mechanism AiGunner.GroundTarget's own doc names.
-    private static void AssignAcquired(AiGunner gunner, object? acquired)
+    // Whether this pilot may be offered a gasbag at all: the decoded admission gate walks the
+    // weapon list for a DAMAGES_ZEPPELIN slot with ammo whose two launch timers have run out
+    // (FUN_00420070, docs/org/aiPilot.md). A pilot that launches nothing has no such slot.
+    private bool HasGasbagOrdnanceReady()
     {
-        if (acquired is FlightController fc)
+        if (Loadout is not { Hardpoints.Count: > 0 } || Pilot?.Rocketeer is not { } rocketeer)
+            return false;
+        for (int i = 0; i < Loadout.Hardpoints.Count; i++)
         {
-            gunner.Target = fc;
-            gunner.GroundTarget = null;
+            var hp = Loadout.Hardpoints[i];
+            if (hp.Weapon.DamagesZeppelin && hp.Armed(InfiniteAmmo) && rocketeer.SlotReady(i))
+                return true;
         }
-        else
-        {
-            gunner.Target = null;
-            gunner.GroundTarget = acquired;
-        }
+        return false;
     }
 #pragma warning restore SA1204
 
@@ -3197,9 +3192,9 @@ public partial class FlightController : Node3D
         {
             TargetScore score = default;
             string how = "ranked";
-            AssignAcquired(gunner, gunner.AutoTarget
+            gunner.Target = gunner.AutoTarget
                 ? SelectRankedTarget(gunner, out score, out how)
-                : null);
+                : null;
             if (!TryTargetGeometry(StandingTarget(gunner), out targetPos, out targetVel, out targetFwd,
                     out targetLive) || !targetLive)
                 return;
@@ -3276,11 +3271,10 @@ public partial class FlightController : Node3D
                 RefireSeconds = hp.RefireSeconds,
             });
         }
-        // targetIsGasbag stays false: gasbag identity is unreachable from here
-        // (docs/org/aiPilot.md "What CSVM ports of this"), an unmodelled gap rather than a guess.
         rocketeer.Solve(WorldPosition, WorldVelocity, _model.Attitude,
             targetPos, targetVel, targetFwd,
-            targetIsGasbag: false, _pylonViews);
+            targetIsGasbag: gunner.Target is DestructibleRegistry.Instance { Gasbag: true },
+            _pylonViews);
         if (rocketeer.SelectedPylon >= 0)
             _fire.SelectPylon(rocketeer.SelectedPylon);
         if (rocketeer.WantsFire && !_rocketeerLoggedFire)
@@ -3295,9 +3289,9 @@ public partial class FlightController : Node3D
         }
     }
 
-    // The D12/D36 acquisition: the decoded ranking formula over aircraft, turrets and structures
-    // (BL-363's TargetVehicle/TargetTurret/TargetStruct), swept for one global minimum, same roster
-    // and team gate as the aim assist. A live PrimaryTargetName is picked outright; its "player"
+    // The acquisition: the decoded ranking formula over aircraft, turrets and structures
+    // (TargetVehicle/TargetTurret/TargetStruct), swept for one global minimum, same roster and
+    // team gate as the aim assist. A live PrimaryTargetName is picked outright; its "player"
     // token resolves to the nearest human (C22) — both stay aircraft-only. Decode: docs/org/aiPilot.md.
     // ⚠ Deconfliction (AiTargetRanking) stays zero outside a mission.
     private object? SelectRankedTarget(AiGunner gunner, out TargetScore score, out string how)
@@ -3361,11 +3355,14 @@ public partial class FlightController : Node3D
                     attackers++;
             }
 
+            // Wingman mode is the netless escort: a net demotes the mode to jet at spawn, and
+            // CSVM's session build makes the same fork (docs/org/aiPilot.md "Net assignment").
             _rankCandidates.Add(new RankedTargetCandidate
             {
                 Position = c.Position,
-                Forward = fc.NoseDirection,
+                Velocity = c.Velocity,
                 IsPlayer = fc.IsHumanPiloted,
+                IsWingman = fc.Pilot?.Escort != null,
                 ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(
                     fc.IsHumanPiloted ? AiTargetRanking.PlayerRole : fc.Name, gunner.RatingBiases),
                 AlliedAttackers = attackers,
@@ -3373,11 +3370,12 @@ public partial class FlightController : Node3D
             _rankSources.Add(fc);
         }
 
-        // Turrets and structures: BL-363's other two pools, neither with a primary_target/facing
-        // term (docs/org/aiPilot.md). A structure reaches the gate on its pool's authored team, so
-        // an unauthored one is neutral and never ranked at all.
-        AddRankedNonAircraft(_gunnerScan.Turrets, isTurret: true, ownTeam, gunner);
-        AddRankedNonAircraft(_gunnerScan.Structures, isTurret: false, ownTeam, gunner);
+        // Turrets and structures: the other two pools, neither with a primary_target term. A
+        // structure reaches the gate on its pool's authored team, so an unauthored one is neutral
+        // and never ranked; a gasbag reaches it only past the ordnance gate (docs/org/aiPilot.md).
+        bool gasbagsAdmitted = HasGasbagOrdnanceReady();
+        AddRankedNonAircraft(_gunnerScan.Turrets, isTurret: true, ownTeam, gunner, gasbagsAdmitted);
+        AddRankedNonAircraft(_gunnerScan.Structures, isTurret: false, ownTeam, gunner, gasbagsAdmitted);
 
         bool byRole = primary == null && nearestHuman != null;
         primary ??= nearestHuman;
@@ -3396,9 +3394,11 @@ public partial class FlightController : Node3D
     }
 
     // Files one turret or structure candidate into the shared rank pool, mirroring the vehicle
-    // loop's team gate and allied-attacker count above (BL-363's TargetTurret/TargetStruct).
+    // loop's team gate and allied-attacker count above (TargetTurret/TargetStruct). A gasbag is
+    // dropped at admission unless the pilot's gasbag ordnance is live, the original's
+    // FUN_0041f9c0 third argument.
     private void AddRankedNonAircraft(List<AimCandidate> pool, bool isTurret, int ownTeam,
-        AiGunner gunner)
+        AiGunner gunner, bool gasbagsAdmitted)
     {
         foreach (var c in pool)
         {
@@ -3411,21 +3411,25 @@ public partial class FlightController : Node3D
             // here would put two entries on one silhouette. Mirrors TargetPool.Offer's guard.
             if (isTurret && !TargetPool.IsEmplacement(c.Source))
                 continue;
+            bool gasbag = c.Source is DestructibleRegistry.Instance { Gasbag: true };
+            if (gasbag && !gasbagsAdmitted)
+                continue;
 
             int attackers = 0;
             foreach (var a in _gunnerScan.Vehicles)
             {
                 if (a.Team == ownTeam && a.Source is FlightController ally
                     && !ReferenceEquals(ally, this)
-                    && ReferenceEquals(ally.Pilot?.Gunner?.GroundTarget, c.Source))
+                    && ReferenceEquals(ally.Pilot?.Gunner?.Target, c.Source))
                     attackers++;
             }
 
             _rankCandidates.Add(new RankedTargetCandidate
             {
                 Position = c.Position,
-                Forward = Vector3.Zero,
+                Velocity = c.Velocity,
                 IsPlayer = false,
+                IsGasbag = gasbag,
                 ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(
                     TargetPool.NameOf(c.Source), TargetPool.OwnerOf(c.Source),
                     gunner.RatingBiases, isTurret),

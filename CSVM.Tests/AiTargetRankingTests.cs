@@ -10,12 +10,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The target-ranking formula (docs/formats/ai-rosters.md "AI modes, engine-side"):
-/// rank = weight × 1200 + distance + objectiveBias, minimised, player base weight 0.7, ±0.2
-/// bearing/altitude/facing terms, 1e21 beyond the activation radius. The term sign conventions
-/// are still documented assumptions; these tests pin the decoded arithmetic and the assumptions
-/// both, so a re-decode that moves either fails loudly. Plus the roster accessors for slots 6
-/// (primary_target) and 33 (rating_biases), with install-wide goldens.
+/// The target-ranking formula (FUN_00421ad0, docs/org/aiPilot.md "Target acquisition"):
+/// rank = weight × 1200 + distance + objectiveBias, minimised, player base weight 0.7, +0.4 on a
+/// wingman, ±0.2 ahead-behind/altitude/closing terms on the decoded half-metre deadband, −0.5 on
+/// a gasbag, 1e21 beyond the activation radius. Ahead and above are the UNFAVOURABLE arms. Plus
+/// the roster accessors for slots 6 (primary_target) and 33 (rating_biases), with install-wide
+/// goldens.
 /// </summary>
 [Trait("Tier", "Quick")]
 public class AiTargetRankingTests
@@ -36,8 +36,8 @@ public class AiTargetRankingTests
         var ai = Ahead(800f, xOffset: -100f);
         var sPlayer = AiTargetRanking.Score(OwnPos, OwnFwd, Activation, player);
         var sAi = AiTargetRanking.Score(OwnPos, OwnFwd, Activation, ai);
-        Assert.Equal(0.7f - 0.2f + 0.2f - 0.2f, sPlayer.Weight, 3); // front −, above +, away −
-        Assert.Equal(1.0f - 0.2f + 0.2f - 0.2f, sAi.Weight, 3);
+        Assert.Equal(0.7f + 0.2f - 0.2f - 0.2f, sPlayer.Weight, 3); // ahead +, level −, away −
+        Assert.Equal(1.0f + 0.2f - 0.2f - 0.2f, sAi.Weight, 3);
         Assert.Equal(360f, sAi.Rank - sPlayer.Rank, 1);
 
         int pick = AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
@@ -56,14 +56,14 @@ public class AiTargetRankingTests
             new[] { Ahead(400f, xOffset: -100f), player }, out _));
         Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
             new[] { Ahead(600f, xOffset: -100f), player }, out _));
-        // One ±0.2 term flip is 480 rank units: a target astern loses to one 400 m farther
-        // ahead (bearing is the only differing term — the astern nose flips too so facing
-        // stays on the away arm).
-        var behind = Ahead(400f);
-        behind.Position = OwnPos + new Vector3(0f, 0f, 400f);
-        behind.Forward = new Vector3(0f, 0f, 1f);
+        // One ±0.2 term flip is 480 rank units: a target ahead loses to one 400 m farther
+        // astern (ahead/behind is the only differing term; the astern one flies away too, so
+        // closing stays on the away arm). The engine prefers the target on its tail.
+        var behind = Ahead(800f);
+        behind.Position = OwnPos + new Vector3(0f, 0f, 800f);
+        behind.Velocity = new Vector3(0f, 0f, 60f);
         Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
-            new[] { behind, Ahead(800f) }, out _));
+            new[] { Ahead(400f), behind }, out _));
     }
 
     [Fact]
@@ -95,24 +95,58 @@ public class AiTargetRankingTests
         float b = RankOf(baseline);
 
         var behind = baseline;
-        behind.Position = OwnPos + new Vector3(0f, 0f, 500f); // astern: bearing flips…
-        behind.Forward = new Vector3(0f, 0f, 1f);             // …and only bearing
-        Assert.Equal(0.4f * AiTargetRanking.WeightScale, RankOf(behind) - b, 1);
+        behind.Position = OwnPos + new Vector3(0f, 0f, 500f); // astern: ahead/behind flips…
+        behind.Velocity = new Vector3(0f, 0f, 60f);            // …and only that term
+        Assert.Equal(-0.4f * AiTargetRanking.WeightScale, RankOf(behind) - b, 1);
 
-        var below = baseline;
-        below.Position = baseline.Position + Vector3.Down * 100f; // below: altitude flips
-        float distBelow = OwnPos.DistanceTo(below.Position);
-        Assert.Equal(-0.4f * AiTargetRanking.WeightScale + (distBelow - 500f),
-            RankOf(below) - b, 1);
+        var above = baseline;
+        above.Position = baseline.Position + Vector3.Up * 100f; // above: altitude flips
+        float distAbove = OwnPos.DistanceTo(above.Position);
+        Assert.Equal(0.4f * AiTargetRanking.WeightScale + (distAbove - 500f),
+            RankOf(above) - b, 1);
 
         var closing = baseline;
-        closing.Forward = new Vector3(0f, 0f, 1f); // nose at the shooter: facing flips
+        closing.Velocity = new Vector3(0f, 0f, 60f); // flying at the shooter: closing flips
         Assert.Equal(0.4f * AiTargetRanking.WeightScale, RankOf(closing) - b, 1);
 
-        // No facing information reads as the unfavourable (closing) arm.
-        var noFacing = baseline;
-        noFacing.Forward = Vector3.Zero;
-        Assert.Equal(RankOf(closing), RankOf(noFacing), 1);
+        // A stationary candidate (a turret, a parked structure) reads as the favourable arm.
+        var parked = baseline;
+        parked.Velocity = Vector3.Zero;
+        Assert.Equal(b, RankOf(parked), 1);
+    }
+
+    [Fact]
+    public void TheAheadTermHasAHalfMetreDeadbandOnTheRawOffset()
+    {
+        // The dot is taken on the un-normalised offset, so a candidate 0.4 m ahead of the
+        // scorer's plane adds nothing, 0.6 m ahead adds the term, 0.6 m behind subtracts it.
+        var abeam = Ahead(500f);
+        abeam.Position = OwnPos + new Vector3(500f, 0f, -0.4f);
+        abeam.Velocity = new Vector3(60f, 0f, 0f); // flying away abeam, so closing holds still
+        var justAhead = abeam;
+        justAhead.Position = OwnPos + new Vector3(500f, 0f, -0.6f);
+        var justBehind = abeam;
+        justBehind.Position = OwnPos + new Vector3(500f, 0f, 0.6f);
+        float w = AiTargetRanking.Score(OwnPos, OwnFwd, Activation, abeam).Weight;
+        Assert.Equal(w + 0.2f, AiTargetRanking.Score(OwnPos, OwnFwd, Activation, justAhead).Weight, 3);
+        Assert.Equal(w - 0.2f, AiTargetRanking.Score(OwnPos, OwnFwd, Activation, justBehind).Weight, 3);
+    }
+
+    [Fact]
+    public void AWingmanCarriesPointFourAgainstItAndAGasbagPointFiveForIt()
+    {
+        var plain = Ahead(500f);
+        var wingman = plain;
+        wingman.IsWingman = true;
+        Assert.Equal(AiTargetRanking.WingmanWeight * AiTargetRanking.WeightScale,
+            RankOf(wingman) - RankOf(plain), 1);
+        var gasbag = plain;
+        gasbag.IsGasbag = true;
+        Assert.Equal(-AiTargetRanking.GasbagWeight * AiTargetRanking.WeightScale,
+            RankOf(gasbag) - RankOf(plain), 1);
+        // 600 m in the gasbag's favour: it beats an equal aircraft 500 m nearer.
+        Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
+            new[] { Ahead(500f), Ahead(1000f, xOffset: 50f) with { IsGasbag = true } }, out _));
     }
 
     // ---- rating_biases -----------------------------------------------------------------------
@@ -298,12 +332,13 @@ public class AiTargetRankingTests
     }
 
     // A candidate ahead of the shooter with every ±0.2 term on the same arm as its
-    // peers: in the front arc, above the shooter (level counts as above), nose pointing away.
+    // peers: ahead (unfavourable), level with the shooter (level counts as below, favourable),
+    // flying away (favourable).
     private static RankedTargetCandidate Ahead(float distance, bool isPlayer = false,
         float bias = 0f, int attackers = 0, float xOffset = 0f) => new()
         {
             Position = OwnPos + new Vector3(xOffset, 0f, -Mathf.Sqrt(distance * distance - xOffset * xOffset)),
-            Forward = new Vector3(0f, 0f, -1f),
+            Velocity = new Vector3(0f, 0f, -60f),
             IsPlayer = isPlayer,
             ObjectiveBias = bias,
             AlliedAttackers = attackers,

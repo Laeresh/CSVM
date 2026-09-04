@@ -1690,7 +1690,6 @@ public sealed class CampaignDirector
                 if (rig.Pilot?.Gunner is { } gunner)
                 {
                     gunner.Target = null;
-                    gunner.GroundTarget = null;
                 }
                 set++;
             }

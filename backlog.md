@@ -1061,7 +1061,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   cannon already thins the volley (`git log --grep=BL-713`). Killing engines or cannons wakes
   nothing but radio lines. *Playtest after fix:* CM24, fight only the escorts and watch whether
   the Pandora's volleys set the Dante's gasbags burning. *Cross-refs:* `BL-713`'s closing commit.
-- `BL-740` `[Bug]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **An AI aeroplane never flies at
+- `BL-740` `[Bug]` `[Owed-playtest]` `[L]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **An AI aeroplane never flies at
   a turret or a zeppelin part: Instant Action wingmen walk the chapter's first net away from the
   fight, and no Warhawk ever runs a torpedo at the Pandora.** *Evidence:* in the original's CM02
   Instant Action the wingmen enter pursue at the start and attack the zeppelin's turrets and

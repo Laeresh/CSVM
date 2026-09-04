@@ -122,6 +122,12 @@ public sealed class AiRocketeer
     /// <summary>Seconds until ordnance may fire again — the lockout, for tests and breadcrumbs.</summary>
     public float LockoutRemaining => _lockout;
 
+    /// <summary>Whether both timers a launch stamps have run out for this pylon, the vehicle-wide
+    /// lockout and the slot's own: the acquisition's gasbag gate reads it (<c>FUN_00420070</c>),
+    /// since a gasbag is offered only to a pilot whose gasbag ordnance can fire NOW.</summary>
+    public bool SlotReady(int index) =>
+        _lockout <= 0f && (!_slotLockouts.TryGetValue(index, out float slot) || slot <= 0f);
+
     /// <summary>Clears the trigger and ages the lockout. Called every tick, including the ticks
     /// where no fire decision runs at all, so the lockout is a vehicle timer rather than one that
     /// stops whenever the AI loses its target or leaves Pursue.</summary>
