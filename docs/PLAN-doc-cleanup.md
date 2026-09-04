@@ -190,7 +190,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave F: tooling.md and cli.md
 
-51. ☐ F51 `docs/tooling.md`: each script's section cut to what it does, its switches and its outputs
+51. ☑ F51 `docs/tooling.md`: each script's section cut to what it does, its switches and its outputs
 52. ☑ F52 `docs/cli.md` flag bullets, first half of the index groups (modes through debug labs), to the 600-character cap
 53. ☐ F53 `docs/cli.md` flag bullets, second half (dumps through audio), plus the three lab sections and the index prose
 
@@ -728,7 +728,7 @@ ID set in the file; every hit must resolve.
 
 # Wave F: tooling.md and cli.md
 
-## F51 ☐ `docs/tooling.md`: each script's section cut to what it does, its switches and its outputs
+## F51 ☑ `docs/tooling.md`: each script's section cut to what it does, its switches and its outputs
 
 **Goal.** A reader learns from each section what the script or stage does, how it is driven, and
 where its output lands; the measurements that justified a default and the rules verification.md

@@ -1,12 +1,8 @@
 # Tooling — the extraction pipeline, the launch scripts, and the fork
 
-Everything *around* the project rather than in it: how game files become `extracted/`, how the
-game gets launched, and how the mech3ax fork is maintained. None of it changes often, and none of
-it needs to be in context to write engine code — which is why it lives here rather than in
-PROJECT_CONTEXT.md.
-
-For *which* archive types extract and how far each is validated, see
-[formats/extraction.md](formats/extraction.md). For the engine's own CLI flags, see [cli.md](cli.md).
+How game files become `extracted/`, how the game gets launched, and how the mech3ax fork is
+maintained. For *which* archive types extract and how far each is validated, see
+[extraction](formats/extraction.md); for the engine's own flags, [cli.md](cli.md).
 
 ## `extracted/` — the extraction workdir (git-ignored)
 
@@ -16,41 +12,25 @@ Populated by `ExtractAssets.ps1`, mirroring the game's own ZBD folder structure:
 and per-mission `C1/IA1/zrdr.zip`.
 
 The viewer's defaults read `planes.zip`, `C1/gamez.zip`, the chapter's top texture tier (below),
-`zrdr.zip` and
-`soundsh.zip` — but for each default it **prefers the unpacked sibling folder when present** (it
-reads `extracted/C1/rtexture15/` over `C1/rtexture15.zip`). So running `ExtractAssets.ps1 -Unzip`,
-or
-unzipping just the archives you want to grep in the editor, makes the viewer load loose files and
-skip zip decompression. All four loaders (`GameZ`, `TextureArchive`, `Zrdr`, `SoundArchive`) accept
-a zip or a directory; an explicit `--gamez=`/`--textures=`/`--zrdr=`/`--sounds=` is used verbatim.
+`zrdr.zip` and `soundsh.zip`, **preferring the unpacked sibling folder when present**
+(`extracted/C1/rtexture15/` over `C1/rtexture15.zip`). Each loader takes a zip or a directory, and
+an explicit `--gamez=`/`--textures=`/`--zrdr=`/`--sounds=` wins.
 
 **Chapter textures load from the top `rtextureN` tier, falling back to `texture.zip`**
-(`SessionPaths.ChapterTextures`). The `N` in `rtextureN` is a **size budget in MB of
-video-card texture memory** (the file sizes give it away: rtexture2 ≈ 1.95 MB, rtexture4 ≈ 3.85,
-rtexture6 ≈ 5.7, rtexture8 ≈ 7.65 in every chapter); each chapter ships the 2/4/6/8 tiers plus one
-full-quality tier sized to whatever it needs (`rtexture15`/`11`/`10`/`14`/`9`/`12`/`14`/`14` for
-C1…C5). ⚠ **The tiers are not mere downscales of `texture.zbd`, and resolution comparison misses
-that**: the top tier holds the identical 881-file set at identical dimensions (C1, verified
-per-file), but **301 of them differ in pixel content and five in pixel format** — `needle`,
-`smallneedle`, `steps`, `tarmac_lines`, `bal_taillogo` are RGBA there and RGB in `texture.zbd` —
-and the tier copies are richer (more color levels, painted alpha), never worse. The gauge needle's
-tapered-pointer silhouette exists **only** in the tier copies' alpha (see `docs/formats/hud.md`);
-the original engine picks a tier by texture memory and plainly renders the tier art, so
-`texture.zbd` looks like an older build of the set that the shipped game never draws. An earlier
-note here said the rtextures are "not loaded, by design" after measuring C5 *dimensions*
-(`texture` == `rtexture14` max-res, `rtexture2` = ¼, `rtexture4/6/8` = ½) — true of resolution,
-wrong about content. `rimage.zip` is still not loaded: it is the UI/HUD image set (crosshairs,
-buttons, cursor, menu splash, briefing thumbnails), with no world geometry textures.
+(`SessionPaths.ChapterTextures`), where `N` is a **size budget in MB of video-card texture
+memory**. ⚠ **The tiers are not mere downscales of `texture.zbd`, which a resolution comparison
+misses**: the top tier holds the same file set at the same dimensions, but hundreds of those files
+differ in pixel content, and the tier copies are richer, never worse (see
+[formats/hud.md](formats/hud.md) on the gauge needle). `rimage.zip` is not loaded at all.
 
-**`extracted/rof/`** is produced by the separate `ExtractRof.ps1`, not `ExtractAssets.ps1`, and
-holds the unpacked `.rof` UI archives plus `ui_strings.json`. `PatternLibrary` reads the paint
-patterns out of it (`--rof=`, default `extracted/rof`).
+**`extracted/rof/`** is produced by the separate `ExtractRof.ps1` and holds the unpacked `.rof` UI
+archives plus `ui_strings.json`. `PatternLibrary` reads the paint patterns out of it (`--rof=`,
+default `extracted/rof`).
 
 ## `ExtractAssets.ps1` (repo root) — the ZBD bulk extractor
 
 Walks `CrimsonSkiesGame/ZBD` and runs `unzbd cs <mode>` on every ZBD with the right mode for its
-type, writing output to the mirrored relative path under `extracted/` (basename kept, extension →
-`.zip`, or `.json` for interp):
+type, writing to the mirrored relative path under `extracted/`, basename kept:
 
 | Source | Mode | Output |
 |---|---|---|
@@ -61,492 +41,259 @@ type, writing output to the mirrored relative path under `extracted/` (basename 
 | `rimage`, `texture`, `rtexture*` | `textures` | `.zip` |
 | `cam_anim`, `mis_anim` | `anim` | `.zip` |
 
-**Extracts with the fork build** (`tools/mech3ax/target/release/unzbd.exe`).
-`-Unzbd <path>` overrides it — e.g. back to the pinned `tools/mech3ax-v0.6.1-.../unzbd.exe`, which
-needs **no code change**, because the Godot loaders read either extraction shape (see
-`GameZ.cs` in [architecture.md](architecture.md)).
+**Extracts with the fork build** (`tools/mech3ax/target/release/unzbd.exe`); `-Unzbd <path>`
+overrides it, back to the pinned `tools/mech3ax-v0.6.1-.../unzbd.exe` for instance, which needs
+**no code change**, because the loaders read either extraction shape. Idempotent: skips outputs
+newer than their source unless `-Force`. `-Unzip` also expands each `.zip` into a sibling folder,
+which is what makes the viewer read loose files; `-Source`/`-Dest` override the roots.
 
-Idempotent: skips outputs newer than their source unless `-Force`. `-Unzip` also expands each
-`.zip` into a sibling folder; `-Source`/`-Dest` override the roots.
+Every failure-free run stamps `<Dest>/VERSION.json` with the `unzbd --version` line verbatim, the
+exe's SHA-256, the fork HEAD, the date, and a hand-bumped schema integer the engine
+compares at boot (`src/Session/ExtractionStamp.cs` warns, never blocks), bumped by any reader
+change that invalidates old extractions.
 
-Every failure-free run (including an all-up-to-date one) stamps `<Dest>/VERSION.json` with its
-provenance: the `unzbd --version` line verbatim (the fork's version number is frozen — the build
-timestamp is what distinguishes binaries), the exe's SHA-256, the fork checkout's HEAD when the
-exe sits inside one, the date, and a hand-bumped schema integer the engine compares at boot
-(`src/Session/ExtractionStamp.cs` — one warning line on stale/missing/unreadable, never a block).
-The schema bumps in the same commit as any reader change that invalidates old extractions; the
-extraction output itself is never hashed (gigabytes).
-
-Two output-handling details worth knowing before touching the script:
-
-- unzbd's stderr is captured and judged **by exit code**, because PowerShell 5.1 turns a native
-  exe's stderr into terminating errors under `$ErrorActionPreference = "Stop"`.
-- mech3ax's `object3d transform fail` notes — one per node whose euler angles don't recompose to
-  the stored matrix bit-for-bit, informational since the matrix itself is preserved and preferred —
-  are counted and summarised rather than printed (155 on a full run).
-
-**`messages.json`** is produced by a dedicated step after the ZBD walk: `strings.dll` sits at
-the install root (the ZBD tree's parent), so the walk never sees it — the script extracts it
-with `unzbd cs messages` into `<Dest>\messages.json`, skipping with a note when the DLL is
-absent. Without it the engine falls back to raw `MSG_*` keys on the HUD and briefings (how the
-gap was found in the first sandbox clean-machine run).
+**`messages.json`** comes from a step after the walk, since `strings.dll` sits at the install root
+outside it: `unzbd cs messages` into `<Dest>\messages.json`, skipped with a note when the DLL is
+absent, in which case the engine falls back to raw `MSG_*` keys.
 
 ## `ExtractRof.ps1` (repo root) — the non-ZBD half
 
-Covers everything `ExtractAssets.ps1` doesn't: the `.rof` UI resource archives
-(`GOSDATA/ASSETS/crimson.rof` plus the `crimptch.rof` patch overlay) and the
-`langui.dll`/`language.dll` Win32 string tables, all into `extracted/rof/`.
+Covers the `.rof` UI archives (`GOSDATA/ASSETS/crimson.rof` plus the `crimptch.rof` patch overlay)
+and the `langui.dll`/`language.dll` string tables, all into `extracted/rof/`. It writes each member
+at its archive path, decodes each `.BM` texture to `<name>.png` (the greyscale
+shading map) and `<name>_mask.png` (**the paint region masks**, R/G/B = paint slots 1/2/3), and
+emits `ui_strings.json`, every UI string joined to its `RESOURCE.H` symbol.
 
-It writes every archive member at its archive path, decodes each custom `.BM` texture to
-`<name>.png` (the greyscale shading map) and `<name>_mask.png` (**the paint region masks** — R/G/B
-= paint slots 1/2/3), and emits `ui_strings.json`, every UI string joined to its `RESOURCE.H`
-symbol. That last file is where the aircraft names and description text live.
-
-It also emits **`menu_layout.json`**, the decoded menu layout: `LAYOUT.CSV`'s 34 screen sections
-and 636 widget rows with their macros resolved and their `IDS_*` symbols joined to text, the 46
-navigation edges the layout states and no script does, each screen's script-created widget keys,
-the art the scripts name outside the layout, `SCRAPBOOK.CSV`, and the patch overlay's precedence.
-Runtime reads that file rather than the originals. The decoder is **`ExtractRof.MenuLayout.cs`**
-beside the script, `Add-Type`d from disk rather than inlined because `CSVM.Tests` compiles the same
-file and drives it against hand-authored fixtures; keeping one implementation is the point, so the
-file stays inside the C# 5 subset PowerShell 5.1's `Add-Type` accepts. Format:
-[formats/menu-layout.md](formats/menu-layout.md).
+It also emits **`menu_layout.json`**, the decoded `LAYOUT.CSV` screens, widgets, navigation edges,
+script-created widget keys, out-of-layout art, `SCRAPBOOK.CSV` and patch-overlay precedence, which
+runtime reads instead of the originals. Its decoder, **`ExtractRof.MenuLayout.cs`**, is `Add-Type`d
+from disk and compiled by `CSVM.Tests` as well, so it stays inside the C# 5 subset.
 
 `-Raw` skips the decoding, the string table and the menu layout; `-Force` re-runs an up-to-date
-extraction; `-Source`/`-Dest` override the roots. The `.BM` decode is an inline C# type
-(`Add-Type`), so a full run is ~3 s.
-
-Each run also merges its own `rof` field (script, date, `-Raw`) into the shared
-`VERSION.json` one level above `-Dest` — read-merge-write, so `ExtractAssets.ps1`'s fields
-survive — when `-Dest` follows the canonical `…\extracted\rof` layout; any other `-Dest` skips
-the stamp with a note rather than guessing where the shared file lives.
-
-Formats: [formats/rof.md](formats/rof.md), [formats/strings.md](formats/strings.md),
-[formats/menu-layout.md](formats/menu-layout.md).
+extraction; `-Source`/`-Dest` override the roots. Each run merges its own `rof` field into the
+shared `VERSION.json` one level above `-Dest`, and skips that stamp with a note unless `-Dest`
+follows the canonical `…\extracted\rof` layout. Formats: [rof](formats/rof.md),
+[strings](formats/strings.md), [menu layout](formats/menu-layout.md).
 
 ## `packaging/Extract.ps1` — the friend-facing dispatcher
 
-Ships in the release zip (see `packaging/MANIFEST.md`), never used in the dev tree. It takes
-one argument — the recipient's Crimson Skies install root — validates `ZBD` and
-`GOSDATA\ASSETS` exist with a friendly error, and dispatches to the two UNMODIFIED scripts
-above, shipped next to it: `ExtractAssets.ps1 -Source <install>\ZBD -Dest .\extracted
--Unzbd .\tools\unzbd.exe`, then `ExtractRof.ps1 -Source <install>\GOSDATA\ASSETS -Dest
-.\extracted\rof` (all `.\` anchored to `$PSScriptRoot`, so the CWD never matters, and the
-`rof` dest keeps the canonical shape the VERSION.json stamp requires). **Keep all extraction
-logic in the two scripts only** — the dispatcher is path plumbing; a package-only extraction
-variant is the divergence trap the plan forbids. Its one post-step: it unpacks the produced
-`rimage.zip` into `extracted\rimage\` (`Expand-Archive`, idempotent) — the HUD-font and
-gun-reticle loaders read loose PNGs from that folder and have no zip fallback, and the dev
-tree only has it unpacked because of a historical `-Unzip` run.
+Ships in the release zip (`packaging/MANIFEST.md`), never used in the dev tree. It takes the
+recipient's install root, checks `ZBD` and `GOSDATA\ASSETS` exist with a friendly error, and
+dispatches to the two UNMODIFIED scripts above with `.\` paths anchored to `$PSScriptRoot`. **Keep
+all extraction logic in the two scripts only.** Its one post-step unpacks `rimage.zip` into
+`extracted\rimage\`, because the HUD-font and reticle loaders read loose PNGs there.
 
 ## Launch scripts
 
 **`RunGame.ps1` — the play entry point.** `dotnet build`, then Godot with **no user args**, so the
-in-game launchscreen (Mode → Chapter → Plane; `src/UI/LaunchMenu.cs`) shows. Any args you pass are
-forwarded verbatim, so an explicit content arg (`--fly`/`--stunt`/`--plane=`/`--chapter=`/
-`--screenshot=`) bypasses the launchscreen and builds directly. No console prompts.
+launchscreen (`src/UI/LaunchMenu.cs`, Mode → Chapter → Plane) shows. Args are forwarded verbatim,
+so a content arg (`--fly`/`--stunt`/`--plane=`/`--chapter=`/`--screenshot=`) bypasses it.
 
-**`RunDev.ps1` — the dev helper**, same build step but with console prompts. No args = interactive
-console menus (plane roster + chapter), then `--fly`. `--fly` or extra flight flags prompt for
-whatever is missing; bare `--plane=X` / `--chapter[=X]` static views pass through promptless;
-`--damage[=…]` is its own static flow, prompting only for the plane and never adding
-`--fly`/`--chapter` (combined with an explicit one it passes through verbatim and the viewer
-ignores it with a note).
+**`RunDev.ps1` — the dev helper**, same build step but with console prompts: no args gives
+interactive menus (plane roster, chapter) and then `--fly`, flight flags prompt for what is
+missing, and the static views (`--plane=`, `--chapter=`, `--damage=`) pass through promptless
+apart from `--damage=`'s own plane prompt.
 
 **`RunTests.ps1` — the verification entry point.** One command, one summary block, one exit code.
 Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 
-| Stage | What it runs |
+| Stage | Runs / reads its verdict from / fails on |
 |---|---|
-| `build` | `dotnet build CSVM/CSVM.sln`. A failure stops the run — nothing downstream can say anything about a tree that does not compile |
-| `units` | `dotnet test CSVM/CSVM.sln` (the `CSVM.Tests` xUnit project), `--no-build` since the build stage just produced the binaries. Counts are read from a TRX log in `.scratch/testresults/`, never scraped from the localized console summary. A FAILED units stage does not stop the run — only a failed `build` does — so `engine`, `goldens` and `hitch` still launch and are scored from their own reports; the summary row for `units` still reads `FAIL` |
-| `engine` | Godot with `--run-tests` — windowed (never `--headless`: no shaders compile there, so a clean error screen would prove nothing — LOG-8) and with `--log-file`, which is what lets the harness screen native engine `ERROR:` lines. `--run-tests` implies `--det` by itself. The full catalog runs in `-Shards` concurrent processes (below); each launch has its own five-minute watchdog, and a timeout kills that launch, fails the stage with exit 124 and leaves the partial log while the other shards still report. Counts and failing suite names come from the shard reports, each deleted before the run so a dead run cannot be scored from the last one's numbers |
-| `goldens` | The golden-image tripwire: one Godot per shot in `analysis/goldens/manifest.json`, each a pinned `--det` capture with `--screenshot=` and `--log-file=` appended, compared as **md5 of the raw pixel buffer** the engine prints on its `[core] shot pixmd5=… size=… gpu=…` line (never the PNG's encoded bytes — SHOT-6). `-GoldenWorkers <n>` (default 4) launches up to that many shots at once in registry-order batches; each keeps its own process, log, `.out`/`.err` and PNG. ~30 s for 16 shots at the default, ~88 s at `-GoldenWorkers 1` (serial) |
-| `perf` | `-Perf` only: every scenario in `analysis/perf/scenarios.json` under `--det --perf --no-vsync --mute`, medians appended to the git-ignored `perf-history.jsonl`. ~88 s for 5 scenarios. It measures and records; it never judges (below) |
-| `hitch` | `-Hitch` only, and always last: two scripted Godot launches reporting `HitchMonitor`/`HitchSidecar` health — a clean `--frames=180` run should stay silent, and `--hitch-inject=50@300 --frames=310` should trip once on frame 300 with a full 120-entry ring and matching sidecar record. Results are awareness-only and never fail the run; off by default even in a full run, and a run without `-Hitch` names its cadence in `not checked:` |
+| `build` | `dotnet build CSVM/CSVM.sln`; its exit code; a compile error, which also stops the run |
+| `units` | `dotnet test --no-build`; the TRX log in `.scratch/testresults/`, never the console summary; any failed test |
+| `engine` | Godot `--run-tests` in `-Shards` processes, windowed (LOG-8); each shard's JSON report; a failed suite, a missing report, a watchdog timeout (exit 124) |
+| `goldens` | One `--det` Godot per manifest shot; the raw-pixel md5 on its `[core] shot pixmd5=…` line, not the PNG bytes (SHOT-6); a hash, frame or size off the manifest |
+| `perf` | `-Perf` only: `analysis/perf/scenarios.json`; the `[perf]` lines, medianed into `perf-history.jsonl`; nothing, it records only |
+| `hitch` | `-Hitch` only, last: two scripted launches; each launch's `.hitches.jsonl` sidecar; nothing, awareness only |
 
 Switches: **`-Suite <name>[,<name>]`** (exact in-engine suite names), **`-Filter <substring>`**
-(engine suite names only — `-Filter weapons` runs `weapons-defs` + `weapons-fire`),
-**`-UnitFilter <expr>`** (straight into `dotnet test --filter`), **`-Shards <n>`**, **`-Quick`**, **`-SkipUnits`**,
-**`-SkipEngine`**, **`-SkipGoldens`**, **`-RegenGoldens`**, **`-GoldenWorkers <n>`**, **`-Hitch`**,
-**`-SkipHitch`**, **`-Perf`** (+ `-PerfLabel`, `-PerfCompare`, `-PerfFilter`, `-PerfIterations`, `-PerfFrames`),
-**`-Graphics original|enhanced`** (default `original`, appends `--graphics=enhanced` to the perf
-and hitch launches only — goldens and the engine suites stay original-mode by construction, and
-`original` appends nothing, so the default launch argument lists are byte-identical to a run that
-omits the parameter).
+(engine suite names), **`-UnitFilter <expr>`** (into `dotnet test --filter`), **`-Shards <n>`**,
+**`-Quick`**, **`-SkipUnits`**, **`-SkipEngine`**, **`-SkipGoldens`**, **`-RegenGoldens`**,
+**`-GoldenWorkers <n>`**, **`-Hitch`**, **`-SkipHitch`**, **`-Perf`** (+ `-PerfLabel`,
+`-PerfCompare`, `-PerfFilter`, `-PerfIterations`, `-PerfFrames`), and **`-Graphics
+original|enhanced`** (default `original`, which appends nothing; `enhanced` appends
+`--graphics=enhanced` to the perf and hitch launches only).
 
-**Every stage prints its wall time against a budget, and a budget never fails a run.** The numbers
-live in `analysis/verification-budgets.json`, one lane for the complete gate and one for `-Quick`,
-beside the measured distribution they came from; the per-stage figures are not repeated here or in
-the script's help, so they cannot drift out of the file. Each budget is the slowest of three
-back-to-back warm runs plus 50 %, rounded up to the next 5 seconds, with a 10 second floor so a
-sub-second stage is not tripped by ordinary process startup. The full run measured 112.0 / 113.2 /
-119.3 s against a 180 s total, `-Quick` 30.4 / 30.5 / 30.6 s against 50 s. A stage past its budget
-prints `over budget` and is listed under the summary block, and the exit code is untouched: this is
-a workstation, and load the script cannot see must not turn a correct tree red. A skipped stage is
-compared against nothing and the total only when the lane's own stages all ran, so a targeted run
-prints its total without a budget rather than against one describing a different amount of work.
-The perf stage carries no budget on purpose, because it records rather than judges and its verdict
-comes from a paired A/B against a freshly measured same-build band (`docs/verification.md` PERF-18).
-The engine stage's 300 s per-launch watchdog is a different mechanism and not a budget: it kills a
-hung launch and fails the stage, where these numbers only print.
+**Every stage prints its wall time against a budget, and a budget never fails a run** (PERF-18).
+The numbers live in `analysis/verification-budgets.json`, one lane for the complete gate and one
+for `-Quick`, and live nowhere else so they cannot drift; each is the slowest of three
+back-to-back warm runs plus 50 %. A skipped stage is compared against nothing, and the total only
+when its lane's stages all ran.
 
-**Selection is exact or substring, and a miss is a failure.** `-Suite` and `-Filter` compose into
-the harness's own term grammar on `--run-tests=` (`suite:<name>` exact, `tier:<name>` a checked-in
-tier, anything else a substring; terms are comma separated and unioned, and the run keeps registry
-order). A term that selects no suite ends the harness before anything runs and fails the stage,
-naming the term — an empty selection is never an empty pass. `-UnitFilter` holds the same rule from
-the other side: a filter matching zero tests fails the units stage rather than reporting a green
-zero. The targeted loops are `.\RunTests.ps1 -Suite <name> -SkipUnits -SkipGoldens` and
-`.\RunTests.ps1 -UnitFilter "FullyQualifiedName~<test>" -SkipEngine -SkipGoldens`, each about 3 s
-warm end to end. Neither needs `-SkipHitch`: the hitch stage is opt-in, so it is already out.
+**A selection that matches nothing is a failure**: `-Suite`, `-Filter` and `-UnitFilter` each fail
+their stage naming the term, rather than reporting a green zero.
 
 **`-Quick` is the broad partial gate**: build, the quick unit tier (`--filter Tier=Quick`), the
-quick engine tier (`--run-tests=tier:quick`), no goldens and no hitch. Measured 30.4–30.6 s warm on
-the development machine against a ≤60 s milestone target. Membership of both tiers is checked in — the
-`[Trait("Tier", "Quick")]` classes in `CSVM.Tests` and `SuiteCatalog.QuickTier` — and chosen by the
-failure surface each representative can catch, never inferred from a diff or from elapsed time.
-`emitter-lifetime` is outside the engine tier because `puffer-modes` covers the emitter runtime end
-to end for a fraction of its wall time. An explicit `-Suite`/`-Filter` is unioned with the engine tier, so "the quick lane
-plus the suite I am editing" is one command; an explicit `-UnitFilter` replaces the unit tier,
-since the VSTest grammar can express a union itself. Quick prints its declared scope before
-it starts and a `not checked:` line for every omitted surface; it is partial by construction and
-never satisfies the landing rule, which stays the complete run.
+quick engine tier (`--run-tests=tier:quick`), no goldens and no hitch. Membership of both tiers is
+checked in, as the `[Trait("Tier", "Quick")]` classes and `SuiteCatalog.QuickTier`. An explicit
+`-Suite`/`-Filter` unions with the engine tier and a `-UnitFilter` replaces the unit tier. Quick
+prints a `not checked:` line per omitted surface, and never satisfies the landing gate.
 
 **The engine stage runs the full catalog in concurrent Godot processes.** `-Shards <n>` sets how
 many; the default is 4 for a full run and 1 whenever `-Suite`/`-Filter`/`-Quick` names a selection,
-which is faster started once than started N times. `-Shards 1` is the serial reference path and
-stays selectable. Membership comes from the harness's own `shard:<index>/<count>` term over the
-measured per-suite weights checked in at `analysis/engine-suite-weights.json` (longest unit first
-onto the lightest shard, ties broken on registry position), so the same tree divides the same way
-every run and no membership list has to be maintained by hand. The two seven-world censuses are
-pinned into one shard by that file's `groups`, because whichever runs second reads its eight
-chapters out of the process `DecodeCache` instead of decoding them again. A suite the file does not
-name is charged the default weight and printed as a `not checked:` line, so an unmeasured suite
-skews the balance visibly rather than silently. Regenerate the file from a warm `-Shards 1` run's
-`test-report.json`.
+and `-Shards 1` is the serial reference path. Membership comes from the harness's
+`shard:<index>/<count>` term over the per-suite weights at `analysis/engine-suite-weights.json`, so
+the same tree always divides the same way; an unweighted suite is charged the default and printed
+as `not checked:`. Regenerate that file from a warm `-Shards 1` run's report.
 
-Each shard is isolated by construction: its own `--log-file`, its own `.out`/`.err`, and its own
-report and per-suite artifacts in a `shard<i>of<n>` directory beside that log, all under
-`.scratch/engine/owner-<pid>/`. The owner pid in that path is also the stray-Godot rule: a
-`--run-tests` Godot whose owning PowerShell is gone is a leftover and is killed, while one whose
-owner is alive belongs to another run and is reported and left alone (SHELL-2), so a shard can
-never kill a sibling. **The stage's verdict is the merge of every shard's report**, in registry
-order via each suite's own `index`: counts sum, failed names sort back into registry order, the
-error allowlist's caps are re-checked against the SUMMED counts (N processes each under the cap can
-still sum past it), every shard must report the same `CSVM.dll` hash, and the shards' suite counts
-must add up to the selection each of them reports. **A shard exiting 0 with no report FAILS the
-stage** — a process that ran nothing must never read as a green one.
+Each shard gets its own log, streams, report and artifacts under `.scratch/engine/owner-<pid>/`;
+what that does not isolate is a suite whose store sits outside `.scratch/`, so overlapping runs are
+not safe (LOG-13). **The stage's verdict is the merge of every shard's report**, in registry order
+via each suite's `index`: counts sum, the error allowlist's caps are re-checked against the SUMMED
+counts, and **a shard exiting 0 with no report FAILS the stage**.
 
-**Two concurrent `RunTests.ps1` invocations isolate everything except a suite's own `user://`
-store.** Measured with `-SkipUnits -SkipGoldens -SkipHitch`: logs, reports, artifacts and the
-stray-Godot sweep all held, and the second run failed exactly one suite, `campaign-loop`, which
-proves persistence ACROSS processes and therefore keeps its profile under `user://Testing/` where
-`.scratch/` isolation cannot reach it. The goldens, hitch and perf stages still identify their
-strays by output path alone, so they are not concurrency-safe either.
+**`test-report.json`'s schema is versioned** (`"schema"`, bumped when a field changes meaning or
+goes). Besides the per-suite rows and their registry `index`, it holds a `binary` block
+(the loaded `CSVM.dll`'s path and MD5), the run's `selector`, a `shard` block and a `phaseTotals`
+block splitting wall time into world build, disposal and the rest, so a report can be matched to
+its build and the shard merge proved complete. Read the current field list from a report.
 
-**`test-report.json`'s schema is versioned** (`"schema"`, currently 3 — bumped when a field's
-meaning changes or one is removed, the same rule `analysis/goldens/manifest.json`'s own `schema`
-follows). Besides the per-suite PASS/FAIL/SKIP rows, it carries a `binary` block (the loaded
-`CSVM.dll`'s own path and MD5, the same `$PerfDll` identity `RunTests.ps1`'s perf stage records),
-the run's own `selector`, and a `shard` block (this shard's index and count, the whole selection's
-size before the division, and any suite the weights file did not name), so a report can be matched
-to the exact build and suite set that produced it and a merger can prove the shards covered the
-selection exactly once. Each suite row carries its registry `index`, which is what merges the shard
-reports back into registry order. A `phaseTotals` block and a matching set of per-suite fields (`worldsBuilt`, `buildSeconds`,
-`archiveDecodeSeconds`, `soundPrepSeconds`, `runtimeConstructionSeconds`, `otherBuildSeconds`,
-`disposalSeconds`, `restSeconds`, `overrunSeconds`) split every suite's wall time into world-build
-(further split into three phase categories), disposing a
-built world, and what is left over (manual simulation plus assertion work) — `docs/architecture.md`'s
-`src/Testing/TestHarness.cs` entry has the boundary detail. `overrunSeconds` is nonzero only on a
-measurement anomaly (the independent stopwatches summing past the suite's own wall clock); it is
-never a correctness verdict.
+**The golden stage is scripted, not an in-engine suite**, because the `--run-tests` harness runs
+every suite inside one `_Ready` call without yielding a frame, so no suite there can photograph
+anything. A mismatch leaves the actual PNG and that shot's log in
+`.scratch/goldens/<shot>.{png,log}`. **`-RegenGoldens`** re-renders every shot and rewrites
+`manifest.json` in place, byte-identically apart from the hash lines that moved; GOLD-1 says when
+that is the right answer.
 
-**The golden stage is a scripted pass, not an in-engine suite, and that is structural**: the
-`--run-tests` harness runs every suite to completion inside one `_Ready` call and never yields a
-frame, so no suite there can photograph anything. Driving it from the script also makes each shot's
-manifest entry the *literal* command a human re-runs by hand. A mismatch fails the stage naming the
-shot, and leaves the actual PNG plus that shot's own engine log in `.scratch/goldens/<shot>.{png,log}`
-for eyeballing — the shot's frame number and render size are checked separately from its hash, so a
-clock or window-size regression reads as itself rather than as "pixels moved". **`-RegenGoldens`**
-re-renders every shot and rewrites `manifest.json` in place; the emitter round-trips the file
-byte-identically, so the diff is exactly the hash lines that moved. Regeneration is deliberate and
-never automatic — see `docs/verification.md` GOLD-1 for when it is the right answer and when it is
-covering up a defect, and `analysis/goldens/README.md` for the shot set.
+**Golden shots launch concurrently, `-GoldenWorkers` of them at a time (default 4)**, in
+registry-order batches, each with its own watchdog, process, log and PNG. The default is
+the fastest worker count that stayed bit-identical on the one machine measured, and
+**`-GoldenWorkers 1`** is the serial reference path.
 
-**Golden shots launch concurrently, `-GoldenWorkers` of them at a time (default 4).** Shots run in
-registry-order batches: a batch of up to `-GoldenWorkers` shots is started together through the same
-`Start-Godot`/`Wait-Godot` pair the engine stage's shards use, each with its own per-shot watchdog, and
-the whole batch is awaited before the next one starts. Concurrency changes only how many launches are
-in flight; every shot still gets its own process, its own `--log-file`, its own `.out`/`.err`, and its
-own PNG, and the silent-death `--verbose` retry (BL-039) runs afterward, serially, over whichever shots
-died silently in their batch — never inside a batch, so a flaky retry never competes with fresh
-launches for the GPU. An A/B of 1/2/3/4 workers, three repeats each, over the complete
-manifest found every raw-pixel hash, `sim_frame`, size and adapter string bit-identical at every
-count, with the measured wall time falling from ~88 s serial to ~49 s (2), ~41 s (3) and ~29 s (4) —
-4 was chosen as the fastest count that stayed bit-identical on the one machine measured. Pass
-`-GoldenWorkers 1` for the serial reference path; a hash that moves under a higher count on a different
-machine is a disproof of that count there; it does not need to change the default.
-
-**The hitch stage is opt-in (`-Hitch`), not part of the retained landing gate.** The milestone that
-shortened this run names what the full gate retains — build, units, all engine suites, goldens —
-and hitch is not on that list, because it never changes the exit code and its own subject changes
-rarely: `HitchMonitor.cs`/`HitchSidecar.cs` landed once and have taken exactly one substantive
-change since, a queue-size tune found by a controls capture rather than by this stage. Run it
-explicitly with `-Hitch` when landing a change that touches `HitchMonitor.cs`, `HitchSidecar.cs`,
-or the hitch tick in `Launcher.cs`, or periodically otherwise; a run without `-Hitch` skips the
-stage and the summary names that same cadence in its `not checked:` lines. `-Quick` never runs it.
-`-SkipHitch` forces it off even when `-Hitch` is given, for a caller that always passes `-Hitch`
-and needs to suppress it for one run.
-
-It stays a scripted measurement for the same structural reason the golden stage is one:
-`HitchMonitor` only trips on a real rendered frame measured over wall time (ticked from
-`Launcher._Process`), and `--run-tests` runs every suite to completion inside one `_Ready` call
-without ever yielding a frame, which is not a new exception. Each launch's sidecar path is recovered
-from the `"[core] log file=…"` line every session prints once at `Log.Open` (`Log.SinkPath`, the
-PROJECT's own log — a different file from Godot's own `--log-file` this stage also passes), then
-read back as `<that path minus .log>.hitches.jsonl`. It prints detector failures as awareness items
-and never changes the verifier's exit code: workstation contention makes frame-time evidence too
-variable to gate unrelated work. The injected record's C8 attribution is checked as
-an identity — `attributed_ms + unattributed_ms` must close over `frame_ms`, with no scope violations
-— rather than as "no samples": the injected stall is deliberately unscoped, and C9 seeding a
-site that fires during this launch must not turn the check red. It is always the LAST stage in a
-run, after perf, so its wall-time evidence is never taken beside engine, golden, or perf load
-(`docs/verification.md` LOG-13, PERF-12/13/14).
+**The hitch stage is opt-in (`-Hitch`), not part of the landing gate**, because it never changes
+the exit code: run it when landing a change to `HitchMonitor.cs`, `HitchSidecar.cs` or the hitch
+tick in `Launcher.cs`. **`-SkipHitch`** forces it off even when `-Hitch` is given, and `-Quick`
+never runs it. A clean `--frames=180` launch should
+stay silent and `--hitch-inject=50@300 --frames=310` should trip once on frame 300; it runs last so
+its evidence is never taken beside another stage's load (LOG-13, PERF-12/13/14).
 
 ### The perf stage (`-Perf`)
 
 **A duration here is a count of SIM frames, never wall seconds.** Each scenario runs
-`--det --perf --no-vsync --mute` plus `--frames=N --screenshot=`, which is what ends the run at
-exactly N sim frames — the fixed clock advances one sim step per rendered frame, and the saved-shot
-line prints `sim_frame=N` so the count is *proved* rather than assumed. `--perf` reports one
-`[perf] window …` line per 60 rendered frames, and C21's `[perf] startup …` line closes
+`--det --perf --no-vsync --mute` plus `--frames=N --screenshot=`, and the saved-shot line prints
+`sim_frame=N` so the count is proved rather than assumed. `--perf` reports
+a `[perf] window …` line per 60 rendered frames and a `[perf] startup …` line that closes
 arithmetically over the build; the script parses both.
 
-**Scenario set** (`analysis/perf/scenarios.json` — each entry's `args` are the literal command a
-human re-runs): `empty-stage` (no gamez at all — the control: a world, clutter or animation change
-must leave it alone), `c1-flight` (the only moving camera: chase cam, animators, HUD, collision
-raycasts), `c2b-water` (rain over open water, the lightest world), `c4-terrain` (the heaviest
-draw-call pose, ~2180 calls), `c5-city` (the largest clutter build and the `LIGHT_STATE` data
-texture). Defaults: 300 sim frames × 3 launches per scenario.
+**Scenario set** (`analysis/perf/scenarios.json`, whose `args` are the literal command a human
+re-runs): `empty-stage` (no gamez, the control a world or clutter change must leave alone),
+`c1-flight` (the only moving camera), `c2b-water`, `c4-terrain` and `c5-city`. Defaults are 300 sim
+frames × 3 launches, overridden by `-PerfFrames` and `-PerfIterations`; `-PerfFilter` narrows the
+set.
 
-**Protocol.** The first launch of each scenario is discarded — a cold file cache *reshapes* a
-startup profile instead of scaling it (PERF-7) — and each kept launch also drops its first perf
-window, which carries the first draw's shader compilation. The record stores **medians**: over
-every kept window for the frame metrics, over the kept launches for the startup phases, plus commit,
-`--dirty` flag, GPU string and the **md5 of the `CSVM.dll` Godot loaded** (METHOD-6: a dirty tree
-gives A and B the same commit, so the assembly hash is the only proof the new build ran).
+**Protocol and verdict.** The first launch of each scenario is discarded, because a cold file cache
+*reshapes* a startup profile instead of scaling it (PERF-7), and each kept launch drops its first
+window, which carries shader compilation. The record stores medians plus commit, `--dirty` flag,
+GPU string, the launch's `"vsync"` mode and the **md5 of the loaded `CSVM.dll`** (METHOD-6).
+**A paired A/B is the only verdict**: `-PerfLabel base`, flip the one line under test (METHOD-5),
+rebuild, then `-PerfLabel change -PerfCompare base` prints the ratios, calling identical hashes a
+noise floor.
 
-**A/B is the only verdict.** `-PerfLabel base` … flip the one line under test (METHOD-5), rebuild …
-`-PerfLabel change -PerfCompare base` pairs each scenario against the most recent `base` record and
-prints the ratios. Identical dll hashes are called out as "SAME BINARY — a noise floor, not an A/B".
-Nothing in this stage can fail a build, and **a history trend is awareness, not evidence**.
+**What is read and what is refused.** The verdict metrics are `render_cpu_ms`, `gpu_ms`, the counts
+`draws` / `prims` / `nodes` and the startup phases, and a row is marked `*` only when it clears
+**both** a relative band and an absolute floor, each this machine's own noise (PERF-9…PERF-11).
+Every other recorded metric prints as awareness only, each because its own instrument is unfit for
+a ratio (PERF-1, PERF-2, PERF-21), with the reason in the manifest's `notes`.
 
-**What is read and what is refused.** Verdict metrics: `render_cpu_ms`, `gpu_ms` and the counts
-`draws` / `prims` / `nodes`, plus the startup phases. Recorded but printed as *awareness only*, each
-with its reason: `fps` and `frame_ms` (paced — floors, PERF-2), `script_ms` (`TIME_PROCESS`,
-~2.2× real per PERF-1, and it collapses onto the frame cap when the loop is paced), `physics_ms`
-(the worst single physics tick of the last wall second, refreshed about 1 Hz, PERF-21, and empty
-here on top of that, since `--det` makes the clock parent-driven and `_PhysicsProcess` consumers
-no-op), `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz` (the bracketed mean tick, the worst tick, and
-ticks per wall second: the honest form of `physics_ms`, emptied by the same `--det`, so they are
-numbers for a `--no-det` hand-run), `mem_mb` (managed-heap high-water, monotonic inside a run), `max_ms`/`p95_ms` (the worst frame and
-the 95th percentile within each 60-frame window, then MEDIANED across windows — a population too
-small to hold a ratio, and the median actively hides a single bad window: a real 50 ms injected
-stall moved one window's own `max_ms` from 8.33 to 48.96 while the scenario's reported `max_ms`
-stayed 8.33, three clean windows outvoting the hit one), `hitch_count` (below). A row is marked `*`
-only when it clears **both** a relative band and an absolute floor, both measured as this machine's same-build noise — see `docs/verification.md` PERF-9…PERF-11 and the manifest's `notes`.
+**Exit-code contract: 1 if any stage FAILED, 0 otherwise, and a skip is not a failure.** A missing
+dependency and `-SkipUnits`/`-SkipEngine` report `SKIP` at 0 with a `not checked:` line, so "the
+data was not there" never reads as "the check held". `-RegenGoldens` reports `REGEN`, never `PASS`.
 
-**`hitch_count`** is `HitchMonitor`'s own trip count for the launch — the
-`[perf] hitch …` lines B6 writes — median over the same kept-launch population as every other metric
-here, riding inside the record's `metrics` object rather than a section of its own so it flows
-through the existing ratio machinery for free. It is what actually survives a single hitching frame:
-`max_ms`/`p95_ms` above are a median of per-window extremes and a lone spike gets outvoted, but a trip
-either happened or it did not. **Awareness only, never a verdict** — the run-to-run spread of hitch
-count on an unchanged build is not yet measured, and a count this bursty is the last thing that
-should gate anything (`docs/verification.md` PERF-5, METHOD-3). Every record also carries `"vsync"`
-(`"off"`/`"on"`, read back from each launch's own `[perf] vsync …` line): hitch counts, and `max_ms`/
-`p95_ms`, are not comparable across vsync modes, since a padded frame changes what a hitch even means
-(PERF-13). Every scenario here runs `--no-vsync`, so today every record reads `"vsync":"off"`; the
-field is carried (not yet checked — `-PerfCompare` does not refuse a mismatched pair) so a future
-vsync-on scenario at least leaves the mode visible in both records being read side by side.
-
-**Exit-code contract: 1 if any stage FAILED, 0 otherwise — and a skip is not a failure.** No game
-data, no Godot, `-SkipUnits`/`-SkipEngine` all report `SKIP` and keep the run at 0, but every one of
-them prints a `not checked:` line and the summary names what went unmeasured: "the data was not
-there" must never read as "the check held". The `TODO` row does the same for the hitch stage, which
-never resolves to `PASS`/`FAIL` because it is awareness-only, and `-RegenGoldens` reports its stage
-as `REGEN` — never `PASS` — with a `not checked:` line saying the goldens were rewritten rather than
-verified.
-
-**Worktrees.** Extracted data is found through `CSVM_DATA_ROOT` by the engine and the unit tests
-alike, and Godot is resolved this tree first then `CSVM_DATA_ROOT` (as `RunGame.ps1` does), so
-`$env:CSVM_DATA_ROOT = 'Z:\CSVM'; .\RunTests.ps1` from a git worktree behaves identically
-to the primary tree. Without it a worktree still builds and runs the units; the engine stage reports
-`SKIP` with the Godot path it looked at. Note the unit tests fall back to their own checkout when
-`CSVM_DATA_ROOT` names a directory holding no extraction, so pointing it at an empty folder skips
-the engine suites but *not* the data-dependent units — from the primary tree they still find
-`extracted/`.
+**Worktrees.** Extracted data and Godot are both found through `CSVM_DATA_ROOT`, so
+`$env:CSVM_DATA_ROOT = 'Z:\CSVM'; .\RunTests.ps1` from a worktree behaves identically to the
+primary tree; without it the engine stage reports `SKIP` with the path it looked at. The unit tests
+fall back to their own checkout, so a root holding no extraction skips the engine suites but *not*
+the data-dependent units. The other variable a scripted run may want is
+`CSVM_TRACE_SISCRIPT=<node name>`, which makes `ScriptPlayback` log a `sitrace` line in the `anim`
+category with that node's per-step pose, `dt` and step distance every tick.
 
 Stray Godots are killed before the engine, golden, hitch and perf stages, **filtered to this tree's
-project dir AND an argument only that stage's own launches carry** (SHELL-2) — `--run-tests` for the
-engine stage, the `.scratch\goldens\` / `.scratch\hitchcheck\` / `.scratch\perf\` output paths for
-the other three. All always quit by themselves, so one still alive is stuck and ours, while any
-other Godot on this tree — a live playtest, another agent, a hand-run capture to any other path —
-is reported and left alone.
+project dir AND an argument only that stage's own launches carry** (SHELL-2): `--run-tests`, or the
+`.scratch\goldens\` / `.scratch\hitchcheck\` / `.scratch\perf\` output paths. All quit by
+themselves, so one still alive is stuck and ours; any other Godot here is left alone.
 
-**All three scripts set `SDL_JOYSTICK_DIRECTINPUT=0`**, respecting a pre-set value — the
-controller-disconnect freeze workaround. Godot's bundled SDL hangs the main thread
-forever when a >255-button DirectInput device disconnects (the 8BitDo Ultimate 2 dongle is one);
-disabling the dinput backend removes those phantom views, and real pads keep working via
-XInput/HIDAPI. Direct editor or exe launches don't get the workaround. Removal conditions are in
-`backlog.md` under "Drop the `SDL_JOYSTICK_DIRECTINPUT=0` workaround".
+**All three scripts set `SDL_JOYSTICK_DIRECTINPUT=0`**, respecting a pre-set value, as the
+controller-disconnect freeze workaround: Godot's bundled SDL hangs the main thread forever when a
+>255-button DirectInput device disconnects, and disabling that backend removes the phantom views
+while real pads keep working via XInput/HIDAPI. Removal conditions are in `backlog.md` under "Drop
+the `SDL_JOYSTICK_DIRECTINPUT=0` workaround".
 
 ## Exporting a release build
 
-`CSVM/export_presets.cfg` (committed, friends-release B11) holds one preset,
-**"Windows Desktop"**: release export, x86_64, `embed_pck=true` — a single `CSVM.exe` with the
-pck inside, plus the .NET publish output beside it as `data_CSVM_windows_x86_64/`
-(**self-contained**: `coreclr.dll`/`hostfxr.dll` ship in it, so a recipient installs no .NET
-runtime). The exported build resolves every root to the exe's own folder: it reads
-`extracted/` beside the exe and writes its logs to `.scratch/logs/` beside the exe.
+`CSVM/export_presets.cfg` (committed) holds one preset, **"Windows Desktop"**: release export,
+x86_64, `embed_pck=true`, so a single `CSVM.exe` with the pck inside, plus the **self-contained**
+.NET publish output beside it as `data_CSVM_windows_x86_64/`. The exported build reads `extracted/`
+and writes `.scratch/logs/` beside the exe, resolving every root to the exe's own folder.
 
-**One-time template install.** The Godot export templates are user-global, not part of the
-repo's pinned editor: extract the inner `templates/` FILES of
-`tools/godot-4.7-mono-export-templates.tpz` (an ordinary zip) directly into
-`%APPDATA%\Godot\export_templates\4.7.stable.mono\` (create the version dir; do not keep the
-`templates/` folder level).
+**One-time template install.** The Godot export templates are user-global, not part of the repo's
+pinned editor: extract the inner `templates/` FILES of `tools/godot-4.7-mono-export-templates.tpz`
+into `%APPDATA%\Godot\export_templates\4.7.stable.mono\` (create the dir; do not keep the
+`templates/` level).
 
-**`ExportRelease.ps1` (repo root)** does the whole sequence: checks the export templates are
-installed at `%APPDATA%\Godot\export_templates\4.7.stable.mono\` (throwing a named error if not,
-rather than letting the export itself fail partway through), checks the fork-built
-`tools\mech3ax\target\release\unzbd.exe` and the rest of the release payload exist, empties
-`.scratch\export\`, builds, imports headless, exports, copies the payload in beside the export
-output, and zips the folder to `.scratch\CSVM.zip`. The folder is cleared rather than written
-over because all of it is zipped, so a leftover would ship in every later release. It is emptied
-rather than deleted (a shell or a running build sitting in it holds the directory itself open),
-and the clear refuses to run if the folder holds a junction, since PowerShell 5.1's recursive
-delete follows one into its target. The payload is
-`packaging/MANIFEST.md`'s table; copying it from those sources on every export is what makes
-"byte-identical to the repo version" true without a check. Two failures it turns into named
-errors up front rather than a cryptic one late: a still-running exported `CSVM.exe` cannot be
-replaced, and `Compress-Archive` reports success after writing nothing when a single file is
-locked, so the zip is built through `System.IO.Compression` instead. Equivalent by hand (a
-fresh tree needs the build + one import pass first):
+**`ExportRelease.ps1` (repo root)** takes no parameters and runs the whole sequence: it checks the
+export templates, the fork-built `tools\mech3ax\target\release\unzbd.exe` and the rest of the
+payload exist (named errors up front), empties `.scratch\export\`,
+builds, imports headless, exports, copies the payload in beside the output, and zips the folder to
+`.scratch\CSVM.zip`. That folder is cleared because all of it is zipped, and the clear refuses to
+run if it holds a junction, since PowerShell 5.1's recursive delete follows one into its target.
+The zip is built through `System.IO.Compression`, since `Compress-Archive` reports success after
+writing nothing when a single file is locked.
 
-```powershell
-dotnet build CSVM/CSVM.sln
-& tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe `
-    --path CSVM --headless --import
-& tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe `
-    --path CSVM --headless --export-release "Windows Desktop" Z:\CSVM\.scratch\export\CSVM.exe
-```
-
-Output lands at the path given on the command line (the preset's own `export_path` is
-`../.scratch/export/CSVM.exe`, git-ignored, used when exporting from the editor GUI).
-
-Two filters in the preset are required:
-
-- `include_filter="data/*.json"` — `stock_loadouts.json`/`effect_pools.json` are non-imported
-  resources the default export silently drops; without this every plane flies unarmed. Their
-  loaders read `res://data/*.json` through `Godot.FileAccess` (not `GlobalizePath` + System.IO),
-  which is what makes the pck copies reachable in an export — keep it that way.
-- `exclude_filter="config.json"` — ⚠ the dev box keeps a personal tuning override at
-  `CSVM/config.json` (git-ignored). The exclude guarantees it is never baked into a build even
-  when exporting from the main tree; an exported build logs `config absent … using in-code
-  defaults`, which is correct.
-
-Smoke-test an export from a **bare folder** (exe + data dir + `extracted/` beside it) launched
-with a **foreign CWD** and no `CSVM_DATA_ROOT` — the CWD and the env var can both mask a broken
-default root (verification: A1's traps).
+The payload is `packaging/MANIFEST.md`'s table, copied from its repo sources on every export, which
+keeps it byte-identical. Two filters in the preset are required.
+`include_filter="data/*.json"` keeps `stock_loadouts.json`/`effect_pools.json`, non-imported
+resources the default export silently drops, without which every plane flies unarmed; their loaders
+read them through `Godot.FileAccess` rather than `GlobalizePath` plus System.IO, which is what
+makes the pck copies reachable. ⚠ `exclude_filter="config.json"` keeps the dev box's personal
+tuning override out of every build. Smoke-test an export from a **bare folder** with a **foreign
+CWD** and no `CSVM_DATA_ROOT`; either can mask a broken default root.
 
 ## `tools/` (git-ignored)
 
-Downloaded binaries: mech3ax v0.6.1 (the pinned pre-fork extractor, kept for rollback), the
-mech3ax fork checkout (below), and the Godot 4.7 .NET editor at
-`tools/godot/Godot_v4.7-stable_mono_win64/` — use `*_console.exe` for CLI runs.
+Downloaded binaries: mech3ax v0.6.1 (pinned pre-fork extractor, for rollback), the fork checkout
+(below), and the Godot 4.7 .NET editor at `tools/godot/Godot_v4.7-stable_mono_win64/`; use
+`*_console.exe` for CLI runs.
 
 ## The mech3ax fork (`tools/mech3ax/`)
 
-**Crimson Skies support lives in the fork, not upstream.** Upstream removed it
-because they could not maintain it — bandwidth, not architecture — so the fork is its home, and
-upstream commits get merged *into* the fork if they appear.
-
-Upstream is **dormant**: its tip is `cbb838f` (rc3), and `upstream/main` was 0 commits
-ahead of the fork's `main` the last time it was checked. Syncing is a check-occasionally, not a
-routine.
+**Crimson Skies support lives in the fork, not upstream.** Upstream removed it, so the fork is its
+home and upstream commits get merged *into* the fork. Upstream is dormant, so syncing is a
+check-occasionally rather than a routine.
 
 - **Remotes:** `origin` = `git@github.com:Laeresh/mech3ax.git`,
   `upstream` = `https://github.com/TerranMechworks/mech3ax.git`.
-- **Branches, all three pushed to `origin`** — the fork is the authoritative copy, not this
-  workstation: `cs-anim` = integration, and what the release binary is built from;
+- **Branches, all three pushed to `origin`**, since the fork and not this workstation is the
+  authoritative copy: `cs-anim` = integration, and what the release binary is built from;
   `pr-cs-anim` / `pr-cs-gamez` = the same work split by concern; `main` = an upstream mirror.
-- **Sync:** `git fetch upstream && git merge upstream/main` into the fork, then rebuild the release
-  binary `ExtractAssets.ps1` uses (`target/release/unzbd.exe`) and re-extract if anything in the
-  output shape moved.
+- **Sync:** `git fetch upstream && git merge upstream/main` into the fork, then rebuild
+  `target/release/unzbd.exe` and re-extract if the output shape moved.
 
-The shelved upstream-contribution package is archived at [upstream-pr/](upstream-pr/) —
-kept because its PR bodies are the best description of what each branch actually contains.
+The shelved upstream-contribution package is archived at [upstream-pr/](upstream-pr/).
 
 ### Window focus: scripted runs stay out of your way
 
-The game window is **created without focus** (`display/window/size/no_focus` in `project.godot`), so
-a scripted run never takes the desktop from whoever is using the machine — a full `RunTests.ps1`
-launches the engine about twenty times, and before this it grabbed the foreground on most of them.
+The game window is **created without focus** (`display/window/size/no_focus` in `project.godot`),
+and a scripted session also **hides its window** through `ScriptedWindow.Hide` once
+`Launcher._Ready` knows the flags, which leaves rendering untouched where minimizing would stop it
+(SHELL-13, SHOT-16). A hand launch still shows a brief flash, because the window exists before
+`_Ready` can run, so `RunTests.ps1` instead runs **every launch on a separate Windows desktop**
+(`HiddenDesktop.ps1`: `CreateDesktop`, then `CreateProcess` with `STARTUPINFO.lpDesktop`), which a
+window can only join through the process that started it, so placement is decided *before* the
+process runs. The summary line names the desktop used, and a refused desktop continues
+visibly rather than failing; the rejected alternatives are in the retired `analysis/hidden-desktop/`
+(`git show analysis-archive:analysis/hidden-desktop/FINDINGS.md`).
 
-Not taking focus is not the same as staying out of sight: an unfocused window still *opens in front*
-of what you are reading. So a scripted session also **hides its window** —
-`ScriptedWindow.Hide` calls `ShowWindow(SW_HIDE)` once `Launcher._Ready` knows the flags. Rendering
-is unaffected (every golden hash-identical); hiding is deliberately not *minimizing*, which stops
-rendering and blanks the captures (verification SHOT-16).
+`RunGame.ps1` and `RunDev.ps1` hand the foreground to the new window themselves, finding it by pid
+via `EnumWindows` (SHELL-13). Every `RunTests.ps1` stage launches through its private
+`Invoke-Godot` helper, which uses the non-console binary and redirects both streams to
+`<its --log-file>.out` / `.err` (SHELL-10).
 
-That still leaves a **~1 s flash** for anything the engine launches by hand, because the window
-exists from ~180 ms and `_Ready` cannot run before ~1180 ms. So `RunTests.ps1` does not rely on it:
-it runs **every launch on a separate Windows desktop** (`HiddenDesktop.ps1` — `CreateDesktop`, then
-`CreateProcess` with `STARTUPINFO.lpDesktop`). A window belongs to the desktop its process was
-started on and only one desktop is ever displayed, so this is decided *before* the process runs,
-which is the only kind of placement that works (SHELL-13). The summary line says which desktop was
-used, because a silent fallback to the visible one looks exactly like success. If the OS refuses the
-desktop, the run continues visibly rather than failing.
-
-Measured: a full run passed 152 units, 9/9 suites and every golden hash-identical while a probe
-sampling our own desktop every 50 ms saw a Godot window in **0 of 700 samples**, Godot alive in 697
-of them; perf draw counts are identical to a visible run. Evidence and the rejected alternatives:
-the retired `analysis/hidden-desktop/` (`git show analysis-archive:analysis/hidden-desktop/FINDINGS.md`).
-
-`RunGame.ps1` and `RunDev.ps1` hand the foreground to the new window themselves, so playing is
-unchanged. That grab lives in the launcher and not in the engine because Windows' foreground lock
-no-ops `SetForegroundWindow` from a process the user is not interacting with; the console you typed
-into is that process, so it is allowed to give the foreground away (verification SHELL-13).
-The window is found by pid via `EnumWindows`, not `Process.MainWindowHandle` — that property is
-zero for a hidden window, and a launcher whose own window is hidden (an agent shell, a scheduled
-task) passes `SW_HIDE` down via `STARTUPINFO`, which is also why the launch asks for
-`-WindowStyle Normal` explicitly. Godot's stdout/stderr go to `.scratch/logs/game-<stamp>.out`/
-`.err`: with no stdout handle the plain exe attaches the launcher's console and prints its whole
-engine chatter over it (the engine's categorized log lands in `.scratch/logs/` regardless).
-
-`RunTests.ps1` also uses the **non-console** Godot binary, whose console twin opens its own
-`Godot Engine (Console)` window. A GUI-subsystem binary does not block PowerShell and, started
-without std handles, reattaches to the parent console and prints straight onto the terminal the run
-came from (verification SHELL-10) — so every stage launches through the script's `Invoke-Godot`
-helper, which waits for the process and redirects both streams to `<its --log-file>.out` / `.err`.
-Stages still read their results from `--log-file` and the JSON reports rather than from console
-text; the suite table you see live is replayed from the log. `--no-focus` remains as the manual
-lever that marks any ad-hoc run as scripted.
-
-**`RunProbe.ps1` — the same launch for ad-hoc runs.** `Invoke-Godot` is private to `RunTests.ps1`,
-so every hand-launched probe (`--screenshot=`, `--dump-*`, a single `--run-tests=` suite) used to
-inherit both problems: the ~1 s window flash *and* the console scribble — a bare `& $GodotExe …`
-from any shell reattaches to the calling terminal and prints the whole world-build chatter over it
-(SHELL-10), which is exactly what an agent-driven session sprays across the user's screen. So:
-**never invoke the Godot binary directly for a scripted run — go through `.\RunProbe.ps1 <user
-args>`.** It forwards every argument verbatim (no build step — build first), runs on its own hidden
-desktop (`csvm-probe`, falling back to a *visible but still redirected* run if the OS refuses one),
-parks the streams beside the run's `--log-file` when one is passed (else
-`.scratch/logs/probe-<stamp>.out/.err`), prints where they went, and exits with Godot's exit code.
-The wait is bounded: `-TimeoutSec` (default **300**, `0` = wait forever) kills the run when it
-expires and exits **124** (the GNU timeout convention), so a probe that never quits — a flag
-combination with no auto-quit, a stuck boot — cannot hang an agent session; the partial
-`.out`/`.err` streams survive the kill and show where it hung. A deliberately long run
-(`--frames=` beyond ~5 min of sim) needs an explicit larger value. `RunTests.ps1` gives its
-in-engine phase the same five-minute bound; its other scripted stages retain their own policies.
+**`RunProbe.ps1` — the same launch for ad-hoc runs.** A hand-launched probe would otherwise inherit
+both the window flash and the console scribble a bare `& $GodotExe …` sprays over the calling
+terminal (SHELL-10): **never invoke the Godot binary directly for a scripted run, go through
+`.\RunProbe.ps1 <user args>`.** It forwards every argument verbatim (no build step, so build
+first), runs on its own hidden desktop (`csvm-probe`, falling back to a visible but still
+redirected run if the OS refuses one), parks the streams beside the run's `--log-file` or in
+`.scratch/logs/probe-<stamp>.out/.err`, and exits with Godot's code. Its one switch is
+**`-TimeoutSec`** (default **300**, `0` = wait forever), which kills the run and exits **124**, so
+a probe that never quits cannot hang a session.
