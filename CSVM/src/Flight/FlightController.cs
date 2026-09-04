@@ -1310,7 +1310,7 @@ public partial class FlightController : Node3D
         // The selection, not a frame's pose: a held numpad key or a look-behind is not something a
         // hand-back can read, and the pilot's own view is what the episode owes them back.
         Cockpit?.Apply(_cam.ViewMode, _cam.FirstPerson);
-        _panelShown = CockpitVisibility.Rules(_cam.ViewMode, _cam.FirstPerson).Interior;
+        ShowPanel(CockpitVisibility.Rules(_cam.ViewMode, _cam.FirstPerson).Interior);
         CockpitPass?.Sync(_renderPose.Basis, _cam, Shake?.Roll ?? 0f, Projectiles?.ActiveMuzzleLights());
     }
 
@@ -1915,7 +1915,7 @@ public partial class FlightController : Node3D
             // puts the camera outside the aircraft and must bring its body back while held.
             Cockpit?.Apply(_cam.ViewMode, firstPersonPose);
             // Same rule, so the panel is driven exactly on the frames it is on the screen.
-            _panelShown = CockpitVisibility.Rules(_cam.ViewMode, firstPersonPose).Interior;
+            ShowPanel(CockpitVisibility.Rules(_cam.ViewMode, firstPersonPose).Interior);
             // After the hide, so the pass shows exactly the frames the interior itself does.
             CockpitPass?.Sync(_renderPose.Basis, _cam, Shake?.Roll ?? 0f, Projectiles?.ActiveMuzzleLights());
             _cam.LogView(view, _model.Position, _model.Attitude);
@@ -2649,7 +2649,15 @@ public partial class FlightController : Node3D
     {
         Cockpit?.Apply(_cam?.ViewMode ?? PilotViewMode.Chase, firstPerson: false);
         CockpitPass?.Deactivate();
-        _panelShown = false;
+        ShowPanel(false);
+    }
+
+    // The cockpit interior's on-screen frames drive two things together: the authored panel
+    // needles, and the screen-space overlay coming off so the panel is not doubled by it.
+    private void ShowPanel(bool shown)
+    {
+        _panelShown = shown;
+        _pilotHud.SetCockpitView(shown);
     }
 
     // The dead hull flying itself, on the same model it flew alive: the original gates nothing in

@@ -342,12 +342,12 @@ gauges):
 
 `%1` names the **gun group / rocket type** — which is *why* these strings exist: the counters are
 per gun group and per pylon, so the readout has to say *which* one. `%2!d!` is the integer count.
-The remake (`src/Flight/WeaponReadout.cs`) resolves both through `Messages`, fills `%1` with the
-gun group's **mount name** (`Inner Wing Guns`, from `IDS_AIRFRAMEGUNGROUPNAMES`) or the rocket's
-resolved **display name** (`High-explosive rocket`, from its `MSG_WEAP_*` `DESC`), and `%2` with the
-selected group's per-group rounds / the next-to-fire pylon's per-pylon rounds. It draws in the
-`5pointhud` font at the pane's bottom centre. The placeholder grammar (`%N`, a trailing `!spec!`
-consumed, `%%` → literal `%`) is handled by `Messages.Fill`.
+The remake does not draw this text form; the two dial gauges carry the same counts. `%1` would
+take the gun group's **mount name** (`Inner Wing Guns`, from `IDS_AIRFRAMEGUNGROUPNAMES`) or the
+rocket's resolved **display name** (`High-explosive rocket`, from its `MSG_WEAP_*` `DESC`), and
+`%2` the selected group's per-group rounds / the next-to-fire pylon's per-pylon rounds. The
+placeholder grammar (`%N`, a trailing `!spec!` consumed, `%%` → literal `%`) is handled by
+`Messages.Fill`.
 
 ## Bitmap font
 

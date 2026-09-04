@@ -130,7 +130,7 @@ public class FlightHudMappingTests
     // ---- the gun gauge's slot fill ----
 
     [Fact]
-    public void TheSelectedFirableGroupFeedsTheGunGaugeAndTheMountNameFeedsTheReadout()
+    public void TheSelectedFirableGroupFeedsTheGunGauge()
     {
         var slots = new List<float>();
         var guns = new List<GunGroup>
@@ -144,7 +144,6 @@ public class FlightHudMappingTests
         Assert.Equal(1, readout.Selected);
         Assert.Equal(8, readout.Ammo);
         Assert.Equal("50ap", readout.Type);
-        Assert.Equal("Wing Guns", readout.MountName);
         Assert.Equal(new[] { 0.5f, 1f }, slots);
     }
 
@@ -160,7 +159,7 @@ public class FlightHudMappingTests
     }
 
     [Fact]
-    public void NoFirableGunClampsTheSelectionAndHidesTheMountName()
+    public void NoFirableGunClampsTheSelectionAndReadsNothing()
     {
         var slots = new List<float>();
         var readout = FlightHud.ComputeGunGauge(new List<GunGroup>(), gunSel: 3, slots);
@@ -169,7 +168,6 @@ public class FlightHudMappingTests
         Assert.Equal(0, readout.Selected);
         Assert.Equal(0, readout.Ammo);
         Assert.Equal("", readout.Type);
-        Assert.Null(readout.MountName);
         Assert.Empty(slots);
     }
 
@@ -190,7 +188,7 @@ public class FlightHudMappingTests
     // ---- the missile gauge's slot fill ----
 
     [Fact]
-    public void TheSelectedPylonsOwnRoundsFeedTheMissileGaugeAndTheResolvedNameFeedsTheReadout()
+    public void TheSelectedPylonsOwnRoundsFeedTheMissileGauge()
     {
         var slots = new List<float>();
         var hardpoints = new List<Hardpoint>
@@ -204,18 +202,7 @@ public class FlightHudMappingTests
         Assert.True(readout.HasHardpoints);
         Assert.Equal(4, readout.Selected); // pylon 5 -> belt index 4 (0-based)
         Assert.Equal(3, readout.Ammo);
-        Assert.Equal("High-explosive rocket", readout.ReadoutName); // resolved display name, not the handle
-    }
-
-    [Fact]
-    public void AnUnresolvedDisplayNameFallsBackToTheShortHandle()
-    {
-        var slots = new List<float>();
-        var hardpoints = new List<Hardpoint> { Hp(index: 1, ammo: 2, capacity: 4, weaponName: "BOOM", displayName: "MSG_WEAP_BOOM") };
-
-        var readout = FlightHud.ComputeMissileGauge(hardpoints, pylonSelect: 0, slots);
-
-        Assert.Equal("BOOM", readout.ReadoutName); // MSG_-prefixed, unresolved: falls back to the handle
+        Assert.Equal("FLAK", readout.Type); // the dial face's short handle, never the display name
     }
 
     [Fact]

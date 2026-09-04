@@ -161,7 +161,6 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/HudMetrics.cs` — the one rule for HUD sizing: window height / 1440, damped by `sqrt(paneH/windowH)` for splitscreen.
 - `src/Flight/HudFont.cs` — the game's own 5px HUD bitmap font, auto-segmented from `rimage/5pointhud*.png`; `--hud-font-test` proves it.
 - `src/Flight/HudFontTest.cs` — the `--hud-font-test` overlay: a known string in both variants, with a rule marking the width `Measure` reports.
-- `src/Flight/WeaponReadout.cs` — the selected-weapon text readout: gun group + rocket type and live ammo, in the game's own HUD font.
 - `src/Flight/ImpactReticle.cs` — the gun aiming pipper: 0.5 s of the selected group's flight along the nose (the original's own rule), projected each frame.
 - `src/Flight/EdgeMarker.cs` — the off-screen marker's placement rules, engine-free: on-screen test, behind-mirror, edge clamp, and the o'clock bearing.
 - `src/Flight/MarkerDraw.cs` — the world marker's drawing primitives: reticle, edge arrow, centred text block and its clamped variant, marker blue and shadow.

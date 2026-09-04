@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Godot;
 
@@ -98,10 +97,10 @@ public struct FlightHudState
 }
 
 /// <summary>Everything one pane draws for its pilot: the heading tape, the cockpit dials and their
-/// two weapon gauges, the gun pipper, the weapon text readout, the stunt and targeting marker HUDs,
-/// the font-test overlay, and the flight text block. Fed one <see cref="FlightHudState"/> per
-/// rendered frame; nothing outside this class writes any of those readouts. Constraints and the
-/// draw order: this module's entry in docs/architecture.md.</summary>
+/// two weapon gauges, the gun pipper, the stunt and targeting marker HUDs, the font-test overlay,
+/// and the flight text block. Fed one <see cref="FlightHudState"/> per rendered frame; nothing
+/// outside this class writes any of those readouts. Constraints and the draw order: this module's
+/// entry in docs/architecture.md.</summary>
 public sealed class FlightHud
 {
     /// <summary>The original's heading tape at the top of the screen. Null if the chapter's
@@ -115,10 +114,6 @@ public sealed class FlightHud
     /// <summary>The <c>--hud-font-test</c> bitmap-font verification overlay, drawn over everything
     /// so it scales with the pane. Null unless the flag is set.</summary>
     public HudFontTest? FontTest;
-
-    /// <summary>The selected-weapon text readout: gun group + rocket type and their live ammo, in
-    /// the game's HUD font. Null (no font / no loadout) draws nothing.</summary>
-    public WeaponReadout? WeaponReadout;
 
     /// <summary>The gun aiming reticle: the game's pipper at the selected group's ballistic impact
     /// point. Null when the plane carries no firable gun, or the reticle texture was absent.</summary>
@@ -154,6 +149,9 @@ public sealed class FlightHud
     private readonly List<string> _textLines = new(); // reused across frames; ComposeTextLines' return
 
     private Label? _text;                        // the flight text block; never built on an AI rig
+    private bool _shown = true;                  // SetVisible: off in a cutscene and in photo mode
+    private bool _instrumentsShown = true;       // SetInstrumentsVisible: off under --debug-spectate
+    private bool _cockpitView;                   // the cockpit interior is on the screen this frame
     private float _paneFactor = 1f;              // last applied splitscreen shrink (1 = single player)
     private float _damageFlash;                  // s left on the impact line
     private string _damageFlashText = "";
@@ -213,7 +211,7 @@ public sealed class FlightHud
 
     /// <summary>The gun gauge's selected-slot readout: the SELECTED firable group's ammo and short
     /// weapon name and the belt fraction per firable group (<paramref name="slotsOut"/>, cleared
-    /// and refilled — the reused instance list a live gauge pushes each frame). Static and
+    /// and refilled, the reused instance list a live gauge pushes each frame). Static and
     /// Loadout-free so CSVM.Tests (FlightHudMappingTests) can drive it off bare
     /// <see cref="GunGroup"/>s with no bound plane.</summary>
     public static GunGaugeReadout ComputeGunGauge(IEnumerable<GunGroup> firableGuns, int gunSel, List<float> slotsOut)
@@ -231,8 +229,7 @@ public sealed class FlightHud
             firable++;
         }
         int selectedIndex = firable > 0 ? Mathf.Clamp(gunSel, 0, firable - 1) : 0;
-        return new GunGaugeReadout(firable, selectedIndex, selected?.Ammo ?? 0, selected?.Weapon.Name ?? "",
-            firable > 0 ? selected?.Mount : null);
+        return new GunGaugeReadout(firable, selectedIndex, selected?.Ammo ?? 0, selected?.Weapon.Name ?? "");
     }
 
     /// <summary>The missile gauge's selected-slot readout: the SELECTED pylon's rounds are its OWN,
@@ -258,8 +255,7 @@ public sealed class FlightHud
         {
             slotsOut[h.Index - 1] = h.Capacity > 0 ? (float)h.Ammo / h.Capacity : 0f;
         }
-        return new MissileGaugeReadout(true, selectedHp.Index - 1, selectedHp.Ammo, selectedHp.Weapon.Name,
-            RocketReadoutName(selectedHp.Weapon));
+        return new MissileGaugeReadout(true, selectedHp.Index - 1, selectedHp.Ammo, selectedHp.Weapon.Name);
     }
 
     /// <summary>Builds the text block and parents every readout onto <paramref name="canvas"/> in
@@ -281,8 +277,6 @@ public sealed class FlightHud
             canvas.AddChild(Gauges);
         if (Reticle != null)
             canvas.AddChild(Reticle); // gun aiming pipper, over the dials, under the text/marker
-        if (WeaponReadout != null)
-            canvas.AddChild(WeaponReadout); // selected-weapon text readout, over the dials
         if (Marker != null)
             canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
         if (versusHud != null)
@@ -353,35 +347,40 @@ public sealed class FlightHud
     }
 
     /// <summary>Show or hide everything this pane draws for its pilot: the dial cluster, the
-    /// compass tape, the reticle, the weapon readout, the text block and the marker/target HUD.
-    /// A cutscene hides the lot, and so does photo mode, since instruments belonging to an
-    /// aircraft you are looking at from outside are noise in a picture (BL-429).
+    /// compass tape, the reticle, the text block and the marker/target HUD. A cutscene hides the
+    /// lot, and so does photo mode, since instruments belonging to an aircraft you are looking at
+    /// from outside are noise in a picture (BL-429).
     /// ⚠ Not what <c>--debug-spectate</c> wants: that mode keeps the marker HUD
     /// deliberately, so it calls <see cref="SetInstrumentsVisible"/> instead.</summary>
     public void SetVisible(bool visible)
     {
-        SetInstrumentsVisible(visible);
-        if (Compass != null)
-            Compass.Visible = visible;
-        if (_text != null)
-            _text.Visible = visible;
-        if (Marker != null)
-            Marker.Visible = visible;
-        if (TargetHud != null)
-            TargetHud.Visible = visible;
+        _shown = visible;
+        ApplyVisibility();
     }
 
-    /// <summary>Show or hide the three COCKPIT readouts alone, leaving the marker HUDs and the text
+    /// <summary>Show or hide the two COCKPIT readouts alone, leaving the marker HUDs and the text
     /// block where they are. The instruments belong to an aircraft nobody is flying under
     /// <c>--debug-spectate</c>, while the marker HUD is the whole point of that mode.</summary>
     public void SetInstrumentsVisible(bool visible)
     {
-        if (Gauges != null)
-            Gauges.Visible = visible;
-        if (Reticle != null)
-            Reticle.Visible = visible;
-        if (WeaponReadout != null)
-            WeaponReadout.Visible = visible;
+        _instrumentsShown = visible;
+        ApplyVisibility();
+    }
+
+    /// <summary>Whether the cockpit interior is on the screen this frame. Its own panel carries
+    /// the dials, so the screen-space dials, the compass tape and the text block come off while it
+    /// is; the pipper and the marker HUDs stay, since the panel has no counterpart for them. Keyed
+    /// to the frame's pose, the same rule the interior itself follows, so a look-behind or a held
+    /// numpad view brings the overlay back with the outside camera. Independent of the two
+    /// switches above: leaving the cockpit never overrides a cutscene's or photo mode's hide.</summary>
+    public void SetCockpitView(bool cockpitView)
+    {
+        if (_cockpitView == cockpitView)
+        {
+            return;
+        }
+        _cockpitView = cockpitView;
+        ApplyVisibility();
     }
 
     /// <summary>The altimeter's LOW ALT feed: one ray straight down per physics frame, through the
@@ -473,14 +472,6 @@ public sealed class FlightHud
     internal string? DrawnText => _text?.Text;
 #pragma warning restore SA1201, SA1202
 
-    // The rocket name the text readout shows: the resolved `MSG_WEAP_*` display name
-    // (e.g. "High-explosive rocket") when it resolved, else the short internal handle ("BOOM") — a
-    // raw, unresolved `MSG_*` key falls back to the handle rather than being shown verbatim.
-    private static string RocketReadoutName(WeaponDef w) =>
-        !string.IsNullOrEmpty(w.DisplayName) && !w.DisplayName.StartsWith("MSG_", StringComparison.Ordinal)
-            ? w.DisplayName
-            : w.Name;
-
     // Where a round of `weapon` fired from `origin` along `forward` (carrying `inheritVel`, the
     // plane's velocity) sits after travelling `distance` m of path — Ballistics.March, the SAME
     // integration ProjectilePool steps each round with, so the reticle and the rounds agree.
@@ -495,9 +486,27 @@ public sealed class FlightHud
         return Ballistics.March(weapon, origin, forward, inheritVel, distance, dt);
     }
 
-    // Feeds the two cockpit weapon gauges from the same live ammo the firing code draws down, and
-    // the text readout alongside them. With `--infinite-ammo` the counters sit at capacity, so the
-    // gauges read full.
+    // The three switches composed onto each node: the cockpit view takes the overlay off, the
+    // spectate switch the instruments, and the session-level hide everything.
+    private void ApplyVisibility()
+    {
+        bool overlay = _shown && !_cockpitView;
+        if (Gauges != null)
+            Gauges.Visible = overlay && _instrumentsShown;
+        if (Reticle != null)
+            Reticle.Visible = _shown && _instrumentsShown;
+        if (Compass != null)
+            Compass.Visible = overlay;
+        if (_text != null)
+            _text.Visible = overlay;
+        if (Marker != null)
+            Marker.Visible = _shown;
+        if (TargetHud != null)
+            TargetHud.Visible = _shown;
+    }
+
+    // Feeds the two cockpit weapon gauges from the same live ammo the firing code draws down. With
+    // `--infinite-ammo` the counters sit at capacity, so the gauges read full.
     private void UpdateWeaponGauges(in FlightHudState state)
     {
         if (state.Loadout is not { } loadout)
@@ -512,30 +521,13 @@ public sealed class FlightHud
             _gunGauge.Count = gun.Ammo;
             _gunGauge.Type = gun.Type;
         }
-        if (WeaponReadout != null)
-        {
-            WeaponReadout.GunGroupName = gun.MountName;
-            WeaponReadout.GunAmmo = gun.Ammo;
-        }
 
         var missile = ComputeMissileGauge(loadout.Hardpoints, state.PylonSelect, _missileGaugeSlots);
-        if (missile.HasHardpoints)
+        if (missile.HasHardpoints && _missileGauge != null)
         {
-            if (_missileGauge != null)
-            {
-                _missileGauge.Selected = missile.Selected;
-                _missileGauge.Count = missile.Ammo;
-                _missileGauge.Type = missile.Type;
-            }
-            if (WeaponReadout != null)
-            {
-                WeaponReadout.MissileName = missile.ReadoutName;
-                WeaponReadout.MissileAmmo = missile.Ammo;
-            }
-        }
-        else if (WeaponReadout != null)
-        {
-            WeaponReadout.MissileName = null;
+            _missileGauge.Selected = missile.Selected;
+            _missileGauge.Count = missile.Ammo;
+            _missileGauge.Type = missile.Type;
         }
     }
 
@@ -615,17 +607,15 @@ public sealed class FlightHud
     }
 
     /// <summary>One frame's gun-gauge readout: how many firable groups exist, which belt index the
-    /// arrow targets, the selected group's ammo and short weapon name for the dial face, and its
-    /// mount name for the text readout (null with no firable group at all).</summary>
+    /// arrow targets, and the selected group's ammo and short weapon name for the dial face.</summary>
     public readonly struct GunGaugeReadout
     {
-        public GunGaugeReadout(int firableCount, int selected, int ammo, string type, string? mountName)
+        public GunGaugeReadout(int firableCount, int selected, int ammo, string type)
         {
             FirableCount = firableCount;
             Selected = selected;
             Ammo = ammo;
             Type = type;
-            MountName = mountName;
         }
 
         public int FirableCount { get; }
@@ -635,22 +625,19 @@ public sealed class FlightHud
         public int Ammo { get; }
 
         public string Type { get; }
-
-        public string? MountName { get; }
     }
 
     /// <summary>One frame's missile-gauge readout: whether the loadout carries any hardpoint at
-    /// all, the SELECTED pylon's belt index, ammo and readout name (<see cref="RocketReadoutName"/>).
+    /// all, and the SELECTED pylon's belt index, ammo and short weapon name for the dial face.
     /// Default (<c>HasHardpoints</c> false) when the loadout carries none.</summary>
     public readonly struct MissileGaugeReadout
     {
-        public MissileGaugeReadout(bool hasHardpoints, int selected, int ammo, string type, string? readoutName)
+        public MissileGaugeReadout(bool hasHardpoints, int selected, int ammo, string type)
         {
             HasHardpoints = hasHardpoints;
             Selected = selected;
             Ammo = ammo;
             Type = type;
-            ReadoutName = readoutName;
         }
 
         public bool HasHardpoints { get; }
@@ -660,7 +647,5 @@ public sealed class FlightHud
         public int Ammo { get; }
 
         public string Type { get; }
-
-        public string? ReadoutName { get; }
     }
 }

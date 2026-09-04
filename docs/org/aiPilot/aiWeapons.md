@@ -111,7 +111,7 @@ Gates, in the order the function applies them:
      ([`../aiPilot.md`](../aiPilot.md#the-gasbag-gate-is-ordnance-checked-at-admission));
    - **range window**: squared separation inside `[+0x18, +0x1c]`.
 4. A slot that passes becomes the vehicle's **selected weapon** (`FUN_004b20d0` writes `+0x950`,
-   the same field the player's HUD weapon readout reads). Ordnance always takes the selection;
+   the same field the player's HUD weapon gauges read). Ordnance always takes the selection;
    a cannon takes it only if no ordnance has taken it this pass.
 5. If the slot's cooldown has also expired, its trigger byte `+0x2c` is set, and the pilot voice
    line `0x0e` plays when the target is the player (`FUN_004afd00`).

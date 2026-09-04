@@ -524,13 +524,6 @@ view and a splitscreen pane can be screenshot and compared. A thin rule under ea
 `HudFont.Measure`'s reported width, which is what confirms the metric agrees with the glyphs
 actually drawn. Not part of the flight HUD; it is added only when the flag is set.
 
-## src/Flight/WeaponReadout.cs
-The selected-weapon text readout: a bottom-centre two-line `Control` drawing the current gun group
-and rocket type with their live ammo in `HudFont`, from the game's own `MSG_HUD_GUNGAUGE` and
-`MSG_HUD_MISSLES` templates through `Messages.Fill` rather than hardcoded text.
-`FlightController` pushes the state each frame, filling the first slot with the mount or rocket
-display name and the second with the per-group or per-pylon rounds.
-
 ## src/Flight/ImpactReticle.cs
 The gun aiming reticle: a viewport-filling `Control` drawing the game's own `impact_point.png`
 pipper at a world impact point `FlightController` feeds it each frame, projected through
@@ -911,13 +904,13 @@ ground-blow write stay on `FlightController`, which has the live world a source 
 
 ## src/Flight/FlightHud.cs
 Everything one pane draws for its pilot, in one module the flight node holds privately: the heading
-tape, the cockpit dials and their two weapon gauges, the gun pipper, the selected-weapon readout,
-the stunt objective marker, the targeting HUD, the `--hud-font-test` overlay and the flight text
-block. Nothing outside this class writes one of them. The per-frame entry is
-`Draw(in FlightHudState)`, a struct carrying aircraft STATE rather than readout values, so composing
-the text, the dial positions and the gates happens here and the whole mapping is assertable with no
-Godot `Control` in the process; that mapping is decoded into static pieces (`ComputeStallWarning`,
-`MphFromSpeedMps`, `FeetFromWorldY`, `ComputeAgl`, the two gauge readouts, `ComposeTextLines`).
+tape, the cockpit dials and their two weapon gauges, the gun pipper, the stunt objective marker,
+the targeting HUD, the `--hud-font-test` overlay and the flight text block. Nothing outside this
+class writes one of them. With the cockpit interior on screen the dials, tape and text block come
+off (`SetCockpitView`), its panel carrying them; the pipper and marker HUDs stay. The per-frame
+entry is `Draw(in FlightHudState)`, a struct of aircraft STATE rather than readout values, so the
+text, dial positions and gates are composed here and assertable with no Godot `Control`, as statics
+(`ComputeStallWarning`, `MphFromSpeedMps`, `FeetFromWorldY`, `ComputeAgl`, `ComposeTextLines`).
 
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing

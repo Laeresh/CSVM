@@ -356,16 +356,6 @@ internal sealed class HumanFlightAdapter
                 GD.Print($"hud-font-test: '{_policy.HudFontTestText}' via 5pointhud font");
         }
 
-        // The selected-weapon text readout: the gun group + rocket type and their
-        // live ammo, drawn in the game's HUD font from the MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES
-        // templates. Built whenever the font loaded and the plane carries a loadout.
-        if (_aircraft.HudFont != null && controller.Loadout != null)
-        {
-            pilotHud.WeaponReadout = WeaponReadout.Build(_aircraft.HudFont, _aircraft.WeaponMessages);
-            if (verbose)
-                GD.Print("weapon readout: MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES via 5pointhud font");
-        }
-
         // The gun aiming reticle: the ballistic impact point of the selected gun
         // group at the convergence distance, drawn as the game's pipper — visibly
         // trailing the nose in a hard turn, on the rounds in steady flight.
