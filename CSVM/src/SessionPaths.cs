@@ -4,9 +4,8 @@ namespace CSVM;
 
 /// <summary>
 /// Resolves the per-chapter and per-mission extraction paths (gamez / texture / zrdr) under a
-/// data root, preferring an unpacked sibling folder over its <c>.zip</c>. Extracted from
-/// <see cref="CSVM.Session.GameSession"/> so <c>--anim-lab</c> resolves the same paths a normal
-/// session does.
+/// data root, preferring an unpacked sibling folder over its <c>.zip</c>. Static and engine-free
+/// so every entry point, <c>--anim-lab</c> included, resolves the paths a normal session does.
 /// ⚠ The <c>--gamez=</c>/<c>--textures=</c>/<c>--zrdr=</c>/<c>--sounds=</c> overrides are the
 /// caller's policy and stay in <see cref="CSVM.Session.GameSession"/>.
 /// </summary>

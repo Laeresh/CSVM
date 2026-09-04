@@ -178,6 +178,10 @@ one sentence of measured evidence; everything else belongs in the commit that la
 - **GOLD-11** — **Do not move where a `Puffer` is constructed, or construct one on a capture
   path outside its normal init.** Each emitter draws one RNG seed off `Rng.Puffer` at
   construction, so construction order alone re-pins every puffer-bearing golden.
+- **GOLD-12** — **A change to a shader-key generator dumps every reachable key's `Shader.Code`
+  before and after and sweeps every golden; original mode stays byte-identical on both.** The dump
+  catches a text change the goldens' camera poses never frame, and the goldens catch a runtime
+  effect, a light or a tonemap curve, that the shader text cannot show.
 
 ## DET — determinism and randomness
 

@@ -11,7 +11,7 @@ namespace CSVM;
 /// every pad, never trust <c>pads[0]</c>) and <see cref="Disabled"/> (<c>--no-pads</c>).
 /// ⚠ <see cref="Connected"/> (the roster) and <see cref="For"/> (the input gate) answer different
 /// questions and must stay apart. Gating the roster on focus would un-join menu players and
-/// leave a session pad-less after an alt-tab. Detail: this module's docs/architecture.md entry.
+/// leave a session pad-less after an alt-tab.
 /// </summary>
 public static class Pads
 {

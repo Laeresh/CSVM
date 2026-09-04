@@ -84,6 +84,10 @@ previews, debug dumps, golden-test captures, etc. — always write them into
 - **No XML doc on private members**, and no `<para>`, `<b>`, `<i>`, `<list>` or `<item>` anywhere:
   the build generates no documentation file (`.editorconfig` silences SA0001 for that reason), so
   they render for nobody. `<see cref>` and `<c>` stay; the IDE reads them.
+- **Inspection labs are opt-in.** A lab builds no UI and changes no pixel until its key or its
+  `--debug-*` flag is used, so an ordinary run and the pinned golden sweep never see it.
+- **Every formatted number uses `CultureInfo.InvariantCulture`.** A German-locale machine
+  otherwise renders `0,5` and corrupts logs, reports and parsed round-trips.
 
 ## Repo layout
 

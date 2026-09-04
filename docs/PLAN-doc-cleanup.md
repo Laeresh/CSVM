@@ -176,7 +176,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☐ C22 `docs/architecture/Utils.md` (17)
 23. ☐ C23 `docs/architecture/Bindings.md` (17)
 24. ☐ C24 `docs/architecture/Testing.md` (17 plus the `CSVM.Tests/` section)
-25. ☐ C25 `docs/architecture/Root.md` (3 entries plus Cross-module conventions and the enhanced-graphics section)
+25. ☑ C25 `docs/architecture/Root.md` (3 entries plus Cross-module conventions and the enhanced-graphics section)
 26. ☐ C26 `docs/architecture/Session.md` (40)
 27. ☐ C27 `docs/architecture/Mech3.md` (62)
 28. ☐ C28 `docs/architecture/UI.md` (78)
@@ -539,7 +539,7 @@ or test class, under caps) or to `docs/verification.md` where they are measureme
 **⚠ Traps.** `CSVM.Tests/`-only edits do not need the full run; a `CSVM/src/Testing` comment does
 count as `CSVM/`.
 
-## C25 ☐ `docs/architecture/Root.md`
+## C25 ☑ `docs/architecture/Root.md`
 
 **Goal.** Three root entries at cap; "Cross-module conventions" loses its two traps to code
 comments; "Rendering: the enhanced graphics mode" keeps the architecture description and loses its
