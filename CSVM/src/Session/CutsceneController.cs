@@ -870,6 +870,14 @@ public sealed partial class CutsceneController : Node
             pilot.Audio?.SetPaused(on);
         }
 
+        // A pilot the film is posing is no longer where a PLAYER_RANGE poll should read him:
+        // the drop reparents his aeroplane onto the very marker one of the mission's own polls
+        // re-poses, and the two then chase each other (AnimRuntime.RangePositions).
+        if (_runtime != null)
+        {
+            _runtime.PlayerRangeHeld = on;
+        }
+
         // ⚠ In the same instant, not on the next tick: the definition raising this code goes on
         // posing the aircraft in the same dispatch, so the pose it reads must be this one.
         StagePlayerAircraft();

@@ -252,6 +252,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// it for A/B comparison.</summary>
     internal int QualityLod = HighLod;
 
+    /// <summary>Whether a cutscene has the pilots out of flight and is posing their aeroplanes
+    /// itself, in which case a range gate reads the last pose they flew rather than the one the
+    /// film is putting them through. Set by the cutscene host as it takes and returns flight; a
+    /// session with no host leaves it false and reads live, as it always has.</summary>
+    internal bool PlayerRangeHeld;
+
     /// <summary>Where the player is, for a <c>PLAYER_RANGE</c> condition with no
     /// <see cref="PlayerPositions"/> wired (a lab, a unit test). Supplied by the session (the
     /// flown aircraft, or the spectator camera); absent → the viewport camera, and failing
@@ -521,6 +527,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // _missionCallDepth counter below only covers the trigger's own dispatch; a cutscene's later
     // beats run off delayed sequence events outside it and are still that trigger's work.
     private readonly HashSet<string> _missionTriggerDefs = new(StringComparer.OrdinalIgnoreCase);
+
+    // See RangePositions: the last flying pose of each player, which a cutscene hold answers with.
+    private readonly List<Vector3> _rangePositions = new();
 
     private Node3D _root = null!;
 
@@ -1335,6 +1344,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public void Advance(float dt)
     {
         _elapsed += dt;
+        SampleRangePositions();
         // Motions advance ONCE per frame, here — not from the sequence runners, which would
         // apply dt once per running sequence and run the train at 4× speed.
         TickMotions(dt);
@@ -2322,7 +2332,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         if (_rangeDeferred.Count == 0)
             return;
-        var positions = PlayerPositions?.Invoke() ?? new[] { PlayerPos() };
+        var positions = RangePositions();
         // No-op until some player crosses a check cell (the common case, every frame).
         bool moved = positions.Count != _rangeCheckCells.Count;
         for (int i = 0; !moved && i < positions.Count; i++)
@@ -3696,6 +3706,31 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return true;
     }
 
+    /// <summary>Where a range gate reads the players from, which is not where a cutscene's own
+    /// choreography has flown their models to (<see cref="PlayerRangeHeld"/>). Empty until the
+    /// first flying frame, so a film that takes the session during the bootstrap still reads live
+    /// and every mission intro keeps the answer it had.</summary>
+    private IReadOnlyList<Vector3> RangePositions()
+    {
+        if (PlayerRangeHeld && _rangePositions.Count > 0)
+            return _rangePositions;
+        var live = PlayerPositions?.Invoke();
+        return live is { Count: > 0 } ? live : new[] { PlayerPos() };
+    }
+
+    // The last flying pose, refreshed once a frame so a held range gate has one to answer with.
+    private void SampleRangePositions()
+    {
+        if (PlayerRangeHeld)
+            return;
+        _rangePositions.Clear();
+        var live = PlayerPositions?.Invoke();
+        if (live is { Count: > 0 })
+            _rangePositions.AddRange(live);
+        else if (PlayerPosition != null)
+            _rangePositions.Add(PlayerPosition());
+    }
+
     private Vector3 PlayerPos()
     {
         if (PlayerPosition != null)
@@ -3709,14 +3744,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // sits kilometres off. Falls back to PlayerPos when no PlayerPositions seam is wired.
     private float NearestPlayerDistanceSquared(Vector3 point)
     {
-        if (PlayerPositions?.Invoke() is { Count: > 0 } positions)
-        {
-            float d2 = float.MaxValue;
-            foreach (var p in positions)
-                d2 = Mathf.Min(d2, point.DistanceSquaredTo(p));
-            return d2;
-        }
-        return point.DistanceSquaredTo(PlayerPos());
+        float d2 = float.MaxValue;
+        foreach (var p in RangePositions())
+            d2 = Mathf.Min(d2, point.DistanceSquaredTo(p));
+        return d2 == float.MaxValue ? point.DistanceSquaredTo(PlayerPos()) : d2;
     }
 
     private Node3D? ConditionNode(object? reference, AnimDefinition def, Node3D? anchor)
