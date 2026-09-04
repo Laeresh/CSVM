@@ -582,6 +582,10 @@ public sealed partial class ZeppelinRuntime : Node
             zep.GasbagZones[zone.Node] = inst;
             if (inst != null)
             {
+                // The identity the acquisition's ordnance gate, the ranking's -0.5 and the
+                // rocketeer's torpedo match all read; a zone node carries no mission-structure
+                // meta, so the registry cannot stamp it and the record's healthy list is the source.
+                inst.Gasbag = true;
                 zep.GasbagInstances.Add(inst);
             }
             else

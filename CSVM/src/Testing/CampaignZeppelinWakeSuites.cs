@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -158,6 +159,12 @@ internal static class CampaignZeppelinWakeSuites
             report.AppendLine($"dormant: {dormantParts} target part(s), {dormantStructures} structure candidate(s)");
             ctx.Check(dormantParts > 0,
                 $"the live zeppelin still offers its own parts to the target pool ({dormantParts})");
+            // BL-740: the gasbag identity is what the acquisition's ordnance gate and the
+            // rocketeer's torpedo match read, so a zone pooled as a gasbag has to say so.
+            int flaggedGasbags = GasbagParts(runtime);
+            report.AppendLine($"gasbag-flagged parts: {flaggedGasbags}");
+            ctx.Check(flaggedGasbags > 0,
+                $"the live zeppelin's gasbag zones carry the gasbag identity ({flaggedGasbags} flagged of {dormantParts} parts)");
 
             // BL-673: a dormant pool is out of the world for a scripted DamageAt too, not only
             // for the target scan. The read is live, so the same pool must die after the wake.
@@ -228,6 +235,13 @@ internal static class CampaignZeppelinWakeSuites
         var parts = new List<AimCandidate>();
         runtime.CollectTargetParts(parts);
         return parts.Count;
+    }
+
+    private static int GasbagParts(ZeppelinRuntime runtime)
+    {
+        var parts = new List<AimCandidate>();
+        runtime.CollectTargetParts(parts);
+        return parts.Count(p => p.Source is DestructibleRegistry.Instance { Gasbag: true });
     }
 
     private static int Structures(TestWorld world)
