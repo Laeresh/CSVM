@@ -16,7 +16,10 @@ namespace CSVM.Testing;
 /// own roster and objective graph and checks the marker rides the aeroplane's own candidate: no
 /// candidate at all while the block is still asleep, exactly ONE once OBJECTIVE21's
 /// <c>WAKEUP_ENEMIES</c> puts it in the world, named and labelled off its own block, and none
-/// again once it is shot down.</summary>
+/// again once it is shot down. CM21's Cabbie, <c>autogyro_1</c>, is the sibling case this same
+/// drive proves: team 0 (neither side), no category label, and a non-destructive help label
+/// (<c>MSG_OBJ_FOLLOW</c>), so the marker rides Objective-first on the Enemy cycle same as Tex,
+/// but must colour blue rather than red or green (<c>docs/org/targeting.md</c> "Colour").</summary>
 internal static class CampaignRosterObjectiveMarkerSuites
 {
     private const string Chapter = "C2";
@@ -28,6 +31,16 @@ internal static class CampaignRosterObjectiveMarkerSuites
 
     // OBJECTIVE21, the shipped dormant objective whose WAKEUP_ENEMIES names exactly this block.
     private const int WakeObjective = 21;
+
+    private const string CabbieChapter = "C5";
+    private const string CabbieMission = "M01";
+    private const string CabbieBlock = "autogyro_1";
+    private const string CabbieName = "Cabbie";
+    private const string CabbieCategory = "Follow";
+
+    // OBJECTIVE28, the shipped dormant objective whose WAKEUP_ENEMIES names exactly this block
+    // (woken by OBJECTIVE2 completing, the player's approach to dz1).
+    private const int CabbieWakeObjective = 28;
 
     private const string RelabelChapter = "C3";
     private const string RelabelMission = "M05";
@@ -68,7 +81,8 @@ internal static class CampaignRosterObjectiveMarkerSuites
 
         var blocks = AiSkills.LoadRoster(missionZrdr);
         var report = new StringBuilder();
-        CheckAuthored(ctx, blocks, report);
+        CheckAuthored(ctx, blocks, report, Chapter, Mission, Block, "MSG_BOMBER_NAME",
+            "MSG_OBJ_DEFEND", "MSG_TEX_NAME");
 
         var script = ObjectiveScript.Load(missionZrdr);
         var targets = MissionTargets.Load(missionZrdr, chapterZrdr);
@@ -77,11 +91,68 @@ internal static class CampaignRosterObjectiveMarkerSuites
         var director = CampaignDirector.Create(script, mission, profile, null);
         ctx.WithWorld(Chapter, collision: false, Mission, world =>
             Drive(ctx, world, director, blocks, missionZrdr, chapterZrdr, texturesPath, targets,
-                messages, report));
+                messages, report, Block, PilotName, TypeLabel, Category, WakeObjective));
 
         ctx.WriteArtifact($"test-campaign-cm15-roster-objective-marker-{Chapter}-{Mission}.txt",
             report.ToString());
         ctx.Note($"{Chapter}/{Mission}: '{Block}' carries its own marker on its own aircraft, named '{PilotName}'");
+    }
+
+    [Suite("campaign-cm21-cabbie-marker",
+        "CM21's Cabbie over C5/M01's own BUILT roster and graph: autogyro_1 authors team 0 (neither "
+        + "side) and the non-destructive MSG_OBJ_FOLLOW help label with no category label, ships "
+        + "deactivated, and its marker rides the aeroplane's own candidate exactly like Tex's — no "
+        + "candidate before OBJECTIVE28's WAKEUP_ENEMIES, exactly one Objective-ranked target named "
+        + "Cabbie once it wakes, coloured blue rather than red or green, and none after it is shot down")]
+    internal static void CampaignCm21CabbieMarker(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, CabbieChapter, CabbieMission);
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, CabbieChapter);
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, CabbieChapter);
+        ctx.RequireData(missionZrdr, $"{CabbieChapter}/{CabbieMission} zrdr");
+        ctx.RequireData(chapterZrdr, $"{CabbieChapter} zrdr");
+        ctx.RequireData(texturesPath, $"{CabbieChapter} textures");
+
+        CampaignMission? found = null;
+        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        {
+            if (m.ChapterFolder.Equals(CabbieChapter, StringComparison.OrdinalIgnoreCase)
+                && m.MissionFolder.Equals(CabbieMission, StringComparison.OrdinalIgnoreCase))
+            {
+                found = m;
+            }
+        }
+        if (found is not { } mission)
+        {
+            throw new SuiteSkippedException($"{CabbieChapter}/{CabbieMission} is not in cm_sequence");
+        }
+
+        var blocks = AiSkills.LoadRoster(missionZrdr);
+        var report = new StringBuilder();
+        CheckAuthored(ctx, blocks, report, CabbieChapter, CabbieMission, CabbieBlock,
+            categoryLabel: null, helpLabel: "MSG_OBJ_FOLLOW", title: "MSG_CABBIE_NAME");
+        if (Fields(blocks, CabbieBlock) is { } cabbieFields)
+        {
+            ctx.Same(0, AiSkills.RosterTeam(cabbieFields) ?? -1,
+                $"'{CabbieBlock}' authors team 0, neither side (slot 3)");
+        }
+
+        var script = ObjectiveScript.Load(missionZrdr);
+        var targets = MissionTargets.Load(missionZrdr, chapterZrdr);
+        var messages = Messages.Load(ctx.MessagesPath);
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        var director = CampaignDirector.Create(script, mission, profile, null);
+        ctx.WithWorld(CabbieChapter, collision: false, CabbieMission, world =>
+            Drive(ctx, world, director, blocks, missionZrdr, chapterZrdr, texturesPath, targets,
+                messages, report, CabbieBlock, CabbieName, typeLabel: null, category: CabbieCategory,
+                wakeObjective: CabbieWakeObjective));
+
+        ctx.WriteArtifact($"test-campaign-cm21-cabbie-marker-{CabbieChapter}-{CabbieMission}.txt",
+            report.ToString());
+        ctx.Note(
+            $"{CabbieChapter}/{CabbieMission}: '{CabbieBlock}' carries its own marker on its own aircraft, named '{CabbieName}', coloured blue as a non-destructive objective");
     }
 
     [Suite("campaign-cm02-roster-marker-relabel",
@@ -132,34 +203,38 @@ internal static class CampaignRosterObjectiveMarkerSuites
     }
 
     // The shipped block: all four authored slots, read off the real roster rather than assumed.
+    // categoryLabel is null for a block that authors none (empty slot 38), Cabbie's case.
     private static void CheckAuthored(TestContext ctx,
-        IReadOnlyList<(string Name, List<object?> Fields)> blocks, StringBuilder report)
+        IReadOnlyList<(string Name, List<object?> Fields)> blocks, StringBuilder report,
+        string chapter, string mission, string block, string? categoryLabel, string helpLabel,
+        string title)
     {
-        if (Fields(blocks, Block) is not { } fields)
+        if (Fields(blocks, block) is not { } fields)
         {
-            ctx.Check(false, $"{Chapter}/{Mission} authors a '{Block}' roster block");
+            ctx.Check(false, $"{chapter}/{mission} authors a '{block}' roster block");
             return;
         }
 
-        report.AppendLine($"'{Block}': objectiveTarget={AiSkills.RosterObjectiveTarget(fields)} "
+        report.AppendLine($"'{block}': objectiveTarget={AiSkills.RosterObjectiveTarget(fields)} "
             + $"title='{AiSkills.RosterTitle(fields)}' categoryLabel='{AiSkills.RosterCategoryLabel(fields)}' "
             + $"helpLabel='{AiSkills.RosterHelpLabel(fields)}' deactivated={AiSkills.RosterDeactivated(fields)}");
         ctx.Check(AiSkills.RosterObjectiveTarget(fields),
-            $"'{Block}' authors the roster's own objectiveTarget flag (slot 37)");
-        ctx.Check(AiSkills.RosterCategoryLabel(fields) == "MSG_BOMBER_NAME",
-            $"'{Block}' authors the install's one categoryLabel (slot 38)");
-        ctx.Check(AiSkills.RosterHelpLabel(fields) == "MSG_OBJ_DEFEND",
-            $"'{Block}' authors the MSG_OBJ_DEFEND help label (slot 39)");
-        ctx.Check(AiSkills.RosterTitle(fields) == "MSG_TEX_NAME",
-            $"'{Block}' authors the pilot name the marker prints (slot 20)");
+            $"'{block}' authors the roster's own objectiveTarget flag (slot 37)");
+        ctx.Check(AiSkills.RosterCategoryLabel(fields) == categoryLabel,
+            $"'{block}' authors categoryLabel (slot 38) '{categoryLabel}'");
+        ctx.Check(AiSkills.RosterHelpLabel(fields) == helpLabel,
+            $"'{block}' authors the {helpLabel} help label (slot 39)");
+        ctx.Check(AiSkills.RosterTitle(fields) == title,
+            $"'{block}' authors the pilot name the marker prints (slot 20)");
         ctx.Check(AiSkills.RosterDeactivated(fields),
-            $"'{Block}' ships deactivated, so the pre-wake case is the shipped one");
+            $"'{block}' ships deactivated, so the pre-wake case is the shipped one");
     }
 
     private static void Drive(TestContext ctx, TestWorld world, CampaignDirector director,
         IReadOnlyList<(string Name, List<object?> Fields)> blocks,
         string missionZrdr, string chapterZrdr, string texturesPath,
-        MissionTargets targets, Messages messages, StringBuilder report)
+        MissionTargets targets, Messages messages, StringBuilder report,
+        string block, string pilotName, string? typeLabel, string category, int wakeObjective)
     {
         var textures = new TextureArchive(texturesPath);
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
@@ -196,9 +271,9 @@ internal static class CampaignRosterObjectiveMarkerSuites
             });
 
             var rigs = director.Roster;
-            if (!rigs.TryGetValue(Block, out var tex))
+            if (!rigs.TryGetValue(block, out var tex))
             {
-                ctx.Check(false, $"'{Block}' spawns into the roster");
+                ctx.Check(false, $"'{block}' spawns into the roster");
                 return;
             }
 
@@ -217,31 +292,38 @@ internal static class CampaignRosterObjectiveMarkerSuites
             graph.Step(0.1f);
             var sites = new ObjectiveSites(director, messages, targets, world.Runtime);
 
-            ctx.Check(tex.Inert && !tex.InPlay, $"'{Block}' is out of the world before its wake");
-            var asleep = Offered(sites, rigs, report, "asleep");
-            ctx.Same(0, asleep.Count, $"'{Block}' is not selectable at all before it wakes");
+            ctx.Check(tex.Inert && !tex.InPlay, $"'{block}' is out of the world before its wake");
+            var asleep = OfferedFor(sites, rigs, block, report, "asleep");
+            ctx.Same(0, asleep.Count, $"'{block}' is not selectable at all before it wakes");
 
-            graph.Wake(WakeObjective);
-            ctx.Check(tex.InPlay, $"OBJECTIVE{WakeObjective}'s WAKEUP_ENEMIES puts '{Block}' in the world");
+            graph.Wake(wakeObjective);
+            ctx.Check(tex.InPlay, $"OBJECTIVE{wakeObjective}'s WAKEUP_ENEMIES puts '{block}' in the world");
 
-            var awake = Offered(sites, rigs, report, "awake");
-            ctx.Same(1, awake.Count, $"'{Block}' is offered exactly once across all three cycles");
+            var awake = OfferedFor(sites, rigs, block, report, "awake");
+            ctx.Same(1, awake.Count, $"'{block}' is offered exactly once across all three cycles");
             if (awake.Count == 1)
             {
                 var t = awake[0];
                 ctx.Check(t.Objective && t.Class == TargetClass.Enemy && t.SortsFirst,
                     $"…as an Objective on the Enemy cycle, ahead of every Enemy Target: class={t.Class} sortsFirst={t.SortsFirst}");
-                ctx.Check(t.DisplayName == PilotName,
+                ctx.Check(t.DisplayName == pilotName,
                     $"…printing its block's own slot-20 name rather than the airframe's: '{t.DisplayName}'");
-                ctx.Check(t.TypeLabel == TypeLabel && t.Category == Category,
+                ctx.Check(t.TypeLabel == typeLabel && t.Category == category,
                     $"…with both label halves off slots 38 and 39: \"{t.CategoryLine}\"");
                 ctx.Check(ReferenceEquals(t.Source, tex),
                     $"…and the selection is held by the aeroplane itself, not a synthetic site");
+                // Both this file's categories (Tex's "Defend", Cabbie's "Follow") are
+                // non-destructive, so both colour blue regardless of team — the decode's own rule
+                // (docs/org/targeting.md "Colour"), read off the category alone.
+                var color = TargetHud.MarkerColor(t, AimAssist.PlayerTeam);
+                report.AppendLine($"awake: '{block}' marker colour {color} (team={t.Team})");
+                ctx.Check(color == MarkerDraw.HudBlue,
+                    $"…coloured blue off its non-destructive category, never off team {t.Team}: {color}");
             }
 
             tex.DebugForceCrash(human.PlayerIndex);
-            var dead = Offered(sites, rigs, report, "shot down");
-            ctx.Same(0, dead.Count, $"'{Block}' leaves the cycle once it is shot down");
+            var dead = OfferedFor(sites, rigs, block, report, "shot down");
+            ctx.Same(0, dead.Count, $"'{block}' leaves the cycle once it is shot down");
         }
         finally
         {
@@ -372,13 +454,9 @@ internal static class CampaignRosterObjectiveMarkerSuites
         }
     }
 
-    // Every offer of the block, across all three cycles and both sources: the aeroplane's own
-    // vehicle candidate and whatever the site collector still produces. Two entries here would be
-    // the double offer this seam exists to prevent.
-    private static List<TargetRef> Offered(ObjectiveSites sites,
-        IReadOnlyDictionary<string, FlightController> rigs, StringBuilder report, string when) =>
-        OfferedFor(sites, rigs, Block, report, when);
-
+    // Every offer of the named block, across all three cycles and both sources: the aeroplane's
+    // own vehicle candidate and whatever the site collector still produces. Two entries here
+    // would be the double offer this seam exists to prevent.
     private static List<TargetRef> OfferedFor(ObjectiveSites sites,
         IReadOnlyDictionary<string, FlightController> rigs, string block, StringBuilder report,
         string when)
