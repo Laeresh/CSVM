@@ -127,7 +127,8 @@ public sealed partial class ProjectilePool : Node3D
     // The original's splash gather (FUN_004cb420) writes into a 32-entry hit buffer and logs
     // "Database intersections array is full" for every candidate past it, so a burst damages at
     // most 32 objects. Which 32 is grid-walk order there; here it is the nearest 32, so the cap
-    // drops the farthest and weakest hits, and the log line names the burst it bit.
+    // drops the farthest and weakest hits. ⚠ Never discard a capped blast silently: the log line
+    // names the weapon, the burst and how many candidates were dropped.
     private const int MaxBlastTargets = 32;
     // The cover ray starts this far off the struck surface along its normal, so a burst sitting on
     // a wall's face does not read that wall as cover for its own side while a target behind the
@@ -3234,7 +3235,10 @@ public sealed partial class ProjectilePool : Node3D
 
         /// <summary>Spends one hit's pair, armour then health (<c>FUN_005abcf0</c>): each pool is
         /// clamped at zero, and health is only touched once armour is empty — which, with the
-        /// armour pool shipped at 0, is the same call.</summary>
+        /// armour pool shipped at 0, is the same call.
+        /// ⚠ Never merge this with <c>PlaneDamage.Spend</c>. That is <c>FUN_004b7f80</c>, a richer
+        /// routine with an armour-shielded share; the flyout branch is the plain clamp-and-subtract
+        /// pair and the engine keeps the two apart.</summary>
         public void Spend(float armourDamage, float healthDamage)
         {
             if (HealthMax <= 0f)
