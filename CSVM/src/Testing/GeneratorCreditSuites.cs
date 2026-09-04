@@ -29,7 +29,8 @@ internal static class GeneratorCreditSuites
         + "launches nothing through 30 s at altitude on its authored capacity 0, cutscene "
         + "callback 800 raised through the runtime's host chain is answered and credits the "
         + "generator by name with five launches, which then drop through the opened hangar doors "
-        + "one every 4 s (ind 3 + wave 1) and stop at five, while 801 is declined")]
+        + "one every 4 s (ind 3 + wave 1) and stop at five, while 801, the launch hook's own "
+        + "code, is passed down the chain rather than credited")]
     internal static void GeneratorCallbackCredit(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
@@ -106,7 +107,7 @@ internal static class GeneratorCreditSuites
                 ctx.Same(0, doorPlays.Count, $"…and the hangar doors stay shut");
 
                 ctx.Check(!runtime.CallbackHost!(ReactivateCode, BeautyShot, null),
-                    $"callback {ReactivateCode} is not a credit and is declined");
+                    $"callback {ReactivateCode} is not a credit and this host declines it");
                 ctx.Check(runtime.CallbackHost!(CreditCode, BeautyShot, null),
                     $"callback {CreditCode} from '{BeautyShot}' is answered");
                 ctx.Same(0, spawns.Count, $"the credit itself launches nothing until the cycle steps");

@@ -2720,6 +2720,13 @@ public partial class GameSession : Node3D
             Rng = Rng.NewSystemRandom(Rng.Ai),
         });
 
+        // The launch hook's CALLBACK codes, taken after the generator runtime's own bind so the
+        // director sits ahead of it and the rest of the chain still answers everything else.
+        if (state.WorldRuntime is { } callbackRuntime)
+        {
+            _campaign?.BindCallbackHost(callbackRuntime);
+        }
+
         // F15 / --debug-targets: who is aiming at whom. Reads the live gunners through closures
         // rather than a snapshot — waves activate, AI planes spawn and emplacements die long
         // after this line runs. The roster list is reused, not rebuilt per frame.

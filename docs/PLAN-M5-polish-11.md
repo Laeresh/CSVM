@@ -118,7 +118,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Mission flow
 
-31. ☐ `BL-730` CM19's Black Hats launch from their hook
+31. ☑ `BL-730` CM19's Black Hats launch from their hook
 32. ☑ `BL-727` Mission end fades to black over the hold
 33. ☐ Closing sortie: every landed item judged at the controls
 
@@ -453,7 +453,7 @@ means the flicker is a different writer, and the item's title changes with it.
 
 # Wave D — Mission flow
 
-## D31 ☐ `BL-730` CM19's Black Hats launch from their hook
+## D31 ☑ `BL-730` CM19's Black Hats launch from their hook
 
 **Goal.** CM19's `bhatwarhawk_*` and `bhatbrigand_*` roster aircraft appear when their objectives
 wake `launch_warhawk`/`launch_brigand`.
@@ -484,6 +484,28 @@ warning.
 
 **⚠ Traps.** The mission also swaps the player onto the Warhawk (966), so "no enemies" may be
 read after the swap; check the timeline. Do not fall back to spawning the roster enabled.
+
+**Outcome.** A Black Hat now leaves the hook on the launch definition's own `CALLBACK`. The
+hypothesis that the place definition activates the roster rig is DEAD: `ai_warhawk_place` only
+parents the display node `anim2_warhawk` under `bmhookpoint` and translates it, and `launch_warhawk`
+switches that same display node on and off around an SI-script hook run. What ties the definition
+to the roster is the code it raises, 801, which the repo had already decoded
+(`docs/formats/anim-definitions/cutscenes.md`: 801 to 803 reactivate the first still-deactivated
+`bhatwarhawk`/`bhatbrigand`/`bhatgyro`, the primitive `WAKEUP_ENEMIES` uses) and then declined at
+runtime. `CampaignDirector.BindCallbackHost` takes the `CALLBACK` slot ahead of the generator
+runtime's and answers the three codes by activating the lowest-numbered still-deactivated member of
+that family, through the same un-dormanting path `WAKEUP_ENEMIES` uses, so the roster still spawns
+deactivated. A CM19 trace confirmed the front half before the change: `campaign: WAKE_ANIM
+'launch_warhawk' started 1 definition(s)` fired twice inside 60 s of sim with all twenty roster
+aircraft still `DEACTIVATED`; after it the same run logs `campaign: CALLBACK 801 launched
+'bhatwarhawk_1' off the hook`, then `bhatwarhawk_2`, and the second is tracked and engages.
+⚠ The evidence does not settle where a launched Black Hat should APPEAR: the original's 801 case
+reactivates in place and does not re-place, so the rig comes up at its roster spawn, which C4/M04
+authors 37 m below the terrain height there for all fifteen blocks. Both launched aircraft flew out
+on their net without an under-map report, but whether the launch reads right at the controls is a
+judgement for `D33`.
+
+**Verified.** <pending orchestrator run>
 
 ## D32 ☑ `BL-727` Mission end fades to black over the hold
 
