@@ -487,38 +487,27 @@ What a binding is, how one resolves against hardware, and the named actions a po
 for. The registry that turns a device identity into a live pad and the map that holds the actions
 both sit on top of these types.
 
-- `src/Bindings/DeviceId.cs` — which device a binding is on, as a stable value: the one keyboard, or a joypad named by its hardware string rather than by a connection index.
-- `src/Bindings/BindingControl.cs` — the tagged control: a key, a button, one signed half of an axis past a deadzone, or one direction of a hat, built through four validating factories.
+- `src/Bindings/DeviceId.cs` — which device a binding is on, as a value: the one keyboard, the one mouse, or a joypad named by its stable hardware string.
+- `src/Bindings/BindingControl.cs` — the tagged control: a key, a button, a mouse button, one signed half of an axis past a deadzone, or one hat direction.
 - `src/Bindings/Binding.cs` — one control on one named device, plus `ControlValue`, the held/how-far pair every resolution returns.
-- `src/Bindings/IDeviceState.cs` — the tick's raw hardware state addressed by device identity; the seam that keeps resolution engine-free, answering false for an absent device.
-- `src/Bindings/BindingSet.cs` — the bindings one action holds, ORed together the way the original ORs its four slots, with the deepest deflection winning the analogue read.
-- `src/Bindings/DeviceRegistry.cs` — the live joypad index-to-identity table, rebuilt from a
-  connected-pad list on `Refresh` rather than trusting an index to stay put across a replug; pure
-  and engine-free, so the mapping rule is tested without a joypad (`CSVM.Tests/DeviceRegistryTests.cs`).
-  Two connected pads reporting the same GUID (identical hardware sharing one SDL identity) is a real
-  collision: the first one seen claims it and the second stays unresolved rather than the pair
-  silently driving one binding together.
-- `src/Bindings/GodotDeviceState.cs` — the live `IDeviceState` over Godot's `Input` singleton,
-  addressed by identity through a `DeviceRegistry` rather than a raw index; `RefreshDevices()` reads
-  the connected roster and is meant to run once at launch and again on
-  `Input.Singleton.JoyConnectionChanged`, though the call site belongs to whoever builds the per-tick
-  resolver, since this module has no polling loop of its own. Godot exposes a d-pad as four
-  `JoyButton` values rather than a raw hat, so hat index 0 is that d-pad and every other hat index is
-  unbindable.
-- `src/Bindings/SeatDeviceState.cs` — the `IDeviceState` a seat reads: keyboard and mouse straight
-  from the platform, and the seat's whole pad set behind one placeholder identity, gated through
-  `Pads.For` so `--no-pads` and the focus gate still apply.
-- `src/Bindings/InputAction.cs` — the enum of named actions, one member per binding that exists at a polling site, contiguous because the snapshot indexes arrays by it.
-- `src/Bindings/ActionMap.cs` — one player's keymap: which control fires which action, with assignment taking a control off its previous owner and naming the action that lost it.
+- `src/Bindings/IDeviceState.cs` — the tick's raw hardware state addressed by device identity; the seam that keeps resolution engine-free.
+- `src/Bindings/GodotDeviceState.cs` — the live `IDeviceState` over Godot's `Input` singleton, resolving an identity to an index through a `DeviceRegistry`.
+- `src/Bindings/DeviceRegistry.cs` — the joypad index-to-identity table, rebuilt from the connected-pad list rather than trusting an index across a replug.
+- `src/Bindings/SeatDeviceState.cs` — the `IDeviceState` a seat reads: the platform's keyboard and mouse, plus the seat's pad set behind a placeholder.
+- `src/Bindings/BindingSet.cs` — the bindings one action holds, ORed the way the original ORs its four slots, the deepest deflection winning the analogue read.
+- `src/Bindings/InputAction.cs` — the enum of named actions, one per binding a polling site holds, contiguous because the snapshot indexes arrays by it.
+- `src/Bindings/ActionMap.cs` — one player's keymap: which control fires which action, with assignment taking a control off every action that held it.
+- `src/Bindings/ControlCapture.cs` — what a rebinding screen may capture, and the release-first scan that turns a press into a binding on the seat's identity.
+- `src/Bindings/ICaptureDevices.cs` — the hardware a capture reads through: one reader per context, with the pad identity that context's bindings sit on.
+- `src/Bindings/SeatCaptureDevices.cs` — one seat's capture readers, a `SeatDeviceState` per context over one pad list, on that context's placeholder identity.
+- `src/Bindings/BindingLabels.cs` — what a rebinding screen prints: an action's name, a control's keycap name, and a row that counts what it is not showing.
 - `src/Bindings/ActionSnapshot.cs` — the tick's resolved values, so two consumers reading one action in one tick get the same answer. No edges and no history.
-- `src/Bindings/PlayerActions.cs` — the seam a polling site holds: a map, the tick's snapshot, and the pad-only keyboard gate for splitscreen players two to four.
-- `src/Bindings/InputContext.cs` — which set of controls a seat is reading (flight, menu, camera), because one control means different things in different modes and a map holds each control once.
-- `src/Bindings/DefaultBindings.cs` — the shipped keymap as data, one map per context, reproducing `docs/controls.md`; also the placeholder pad identity a default is authored on.
+- `src/Bindings/PlayerActions.cs` — the seam a polling site holds: a map, the tick's snapshot, and the pad-only keyboard gate for splitscreen players.
+- `src/Bindings/InputContext.cs` — which set of controls a seat is reading (flight, menu, camera), because one control means different things per mode.
+- `src/Bindings/DefaultBindings.cs` — the shipped keymap as data, one map per context, reproducing `docs/controls.md`, and the placeholder a pad default uses.
 - `src/Bindings/BindingProfile.cs` — one seat's whole input: a map and a `PlayerActions` per context, plus the keyboard gate that applies to all of them.
-- `src/Bindings/BindingStore.cs` — the versioned, human-readable JSON keymap file, one per player under `user://`, falling back per action to the shipped default for anything it cannot read.
-- `src/Bindings/LaunchBindings.cs` — where a seat's keymap comes from when the seat is built: the player's saved file, or the shipped defaults under the deterministic gate a scripted run needs (DET-8).
-- `src/Bindings/ControlCapture.cs` — what a rebinding screen may capture and the release-first scan that turns a press into a binding on the seat's own device identity; an axis under a rest-then-move rule, and no hat.
-- `src/Bindings/BindingLabels.cs` — what a rebinding screen prints: an action's name, a control's keycap name, and a binding row that counts what it is not showing.
+- `src/Bindings/BindingStore.cs` — the versioned JSON keymap file, one per player under `user://`, falling back per action to the shipped default.
+- `src/Bindings/LaunchBindings.cs` — where a seat's keymap comes from when the seat is built: the player's saved file, or the shipped defaults.
 
 ### Session root and tests
 

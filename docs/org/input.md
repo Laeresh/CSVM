@@ -223,12 +223,12 @@ defaults, load from the registry over the top, then rebuild the reverse arrays.
 
 | | Original | CSVM today |
 |---|---|---|
-| Binding identity | a physical scancode plus three modifier bits, or a bare button index | a Godot key or joypad button constant, hard-polled at the call site |
-| Slots per action | four, fixed by type: keyboard, keyboard, joystick button, mouse button | one, wherever the poll is written |
-| Joystick devices | exactly one, `DAT_0075c1e0`, with no index in the record | per-player routing through `PadDevices`/`UseKeyboard` |
-| Bindable joystick controls | buttons 1-10 only. Axes and hats are read outside the map and cannot be bound | pad buttons and the D-pad, chosen per site |
-| Rebinding | a keybind screen writing into the same word the defaults wrote | none. `docs/controls.md` is the record and the definition at once |
-| Persistence | 2400 raw bytes under `HKEY_CURRENT_USER` | nothing to persist |
+| Binding identity | a physical scancode plus three modifier bits, or a bare button index | a device identity plus a tagged control (`Binding`), resolved through a hardware seam |
+| Slots per action | four, fixed by type: keyboard, keyboard, joystick button, mouse button | a list of any length, ORed together (`BindingSet`) |
+| Joystick devices | exactly one, `DAT_0075c1e0`, with no index in the record | any number, named by stable hardware string and resolved to a live index per tick |
+| Bindable joystick controls | buttons 1-10 only. Axes and hats are read outside the map and cannot be bound | every button the platform reports and either half of any axis; no hat, since a d-pad arrives as buttons |
+| Rebinding | a keybind screen writing into the same word the defaults wrote | a screen editing an `ActionMap`, the steal rule naming every action that loses the control |
+| Persistence | 2400 raw bytes under `HKEY_CURRENT_USER` | versioned JSON per player under `user://`, in the shape below |
 
 Two things are worth taking. The **four-slots-ORed-together** semantics give an action several
 bindings at once without a mode, and the **code-uniqueness rule** (reassigning a control steals it
@@ -236,10 +236,52 @@ from its previous owner rather than double-binding) is the behaviour a rebinding
 
 The encoding is not worth taking. A binding here is a fixed slot of a fixed type on the one device
 the program can see, which is why axes are unbindable and why ten buttons is a hard number rather
-than a configured one. A port that wants more than one pad, an axis driving a digital action, or a
-device that survives a replug has to model a binding as a device identity plus a tagged control
-rather than as a scancode, and to hold those in a list rather than in typed slots. That is a design
-decision for `BL-296` and `BL-398`, not a decode result, and this page does not make it.
+than a configured one. Wanting more than one pad, an axis driving a digital action, or a device that
+survives a replug is what makes a binding a device identity plus a tagged control rather than a
+scancode, held in a list rather than in typed slots.
+
+## The CSVM keymap file
+
+One JSON file per player under `user://`, named `bindings_p<n>.json`, written atomically through a
+sibling temp file and a rename. It is versioned, and the version says how the tokens below are
+encoded rather than which actions exist: an action a file does not name simply stays at its shipped
+default, so adding one needs no bump.
+
+```json
+{
+  "version": 1,
+  "player": 1,
+  "contexts": {
+    "flight": {
+      "FireGuns": ["keyboard/key:Space", "pad:*/button:B"],
+      "PitchUp": ["pad:*/axis:LeftY+@0.25"],
+      "TargetNextAlly": []
+    },
+    "menu": { },
+    "camera": { }
+  }
+}
+```
+
+A binding is one string, `device/control`, in words rather than numbers so a player can correct a
+row by hand.
+
+- The device is `keyboard`, `mouse`, or `pad:<hardware id>`. A shipped pad row is authored on the
+  placeholder id `*`, which the loader replaces with the seat's own pad.
+- The control is `key:<name>`, `button:<name>`, `mouse:<name>`, `axis:<name><sign>@<deadzone>` or
+  `hat:<index>:<direction>`. A name is the engine's own enum name, or `#<number>` for a code the
+  engine does not name; a bare number is accepted on the way back in either way. An axis carries its
+  sign and its deadzone, which is both the noise gate and the digital threshold.
+
+Every action of every context is written, the ones bound to nothing included, so a deliberate unbind
+survives a reload rather than coming back at its default. Whether a seat reads the keyboard is not
+written: a saved file could otherwise hand a pad-only splitscreen seat the keyboard back.
+
+Nothing costs the file. A row the reader cannot read costs that action its saved bindings and
+nothing more, leaving it on the shipped default while the rest of the file loads. That covers an
+unknown context or action name, a token in a shape this build does not know, and a `hat:` row, which
+is deliberately unreadable because Godot reports a d-pad as four buttons and a hat row would be a
+second encoding of a control the defaults already author as a button.
 
 ## Open questions
 

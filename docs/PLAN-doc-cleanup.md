@@ -174,7 +174,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ C21 `docs/architecture/Effects.md` (5 entries; the rehearsal for the brief)
 22. ☐ C22 `docs/architecture/Utils.md` (17)
-23. ☐ C23 `docs/architecture/Bindings.md` (17)
+23. ☑ C23 `docs/architecture/Bindings.md` (17)
 24. ☐ C24 `docs/architecture/Testing.md` (17 plus the `CSVM.Tests/` section)
 25. ☑ C25 `docs/architecture/Root.md` (3 entries plus Cross-module conventions and the enhanced-graphics section)
 26. ☐ C26 `docs/architecture/Session.md` (40)
@@ -506,7 +506,7 @@ remaining pointer naming something the trimmed entry still holds.
 
 **⚠ Traps.** `HitchMonitor`'s TUNE constants are tune, not fact; the `docs/org/` page says so.
 
-## C23 ☐ `docs/architecture/Bindings.md`
+## C23 ☑ `docs/architecture/Bindings.md`
 
 **Goal.** 17 entries at cap plus `ICaptureDevices.cs` and `SeatCaptureDevices.cs`.
 
