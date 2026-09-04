@@ -56,7 +56,7 @@ public sealed class AircraftStage
     /// the hangar floor while the pilot parachutes in (<c>anim_bloodhawk</c>, under <c>world1</c>)
     /// and the undercarriage the flown aeroplane wears on the lift (<c>bloodhawk_gear</c>, under
     /// <c>player</c>). Both ship <c>INACTIVE</c> and parentless, built the way
-    /// <see cref="ChuteNode"/> is; docs/architecture.md has the legs that add and detach them.</summary>
+    /// <see cref="ChuteNode"/> is: the drop's own legs add, activate and detach them.</summary>
     public static readonly string[] PropNodes = { "anim_bloodhawk", "bloodhawk_gear" };
 
     private readonly Dictionary<string, Node3D> _figures =

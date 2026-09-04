@@ -50,6 +50,9 @@ public sealed class SoundArchive : IDisposable
     /// happens at the point of use, not here.</summary>
     public AudioStreamWav? Find(string wavName, bool looped, bool warn = true)
     {
+        // The cache key carries the PLAY SITE's looped flag, not the one sounds.json holds:
+        // FlightAudio forces it true on a firing loop and ProjectilePool false on everything else,
+        // so WorldSounds' prewarm (which reads the definition's flag) cannot cover those reads.
         var key = $"{wavName}|{looped}";
         if (_cache.TryGetValue(key, out var cached))
             return cached;
@@ -99,7 +102,7 @@ public sealed class SoundArchive : IDisposable
     /// life: a later <see cref="Find"/> reopens the file for that one read.
     /// ⚠ Do not restore a one-way close. The build-scoped handle rested on the prewarm being
     /// complete, it is not, and the throw that produced was invisible on an unpacked tree. The
-    /// lifetime rule and how it shipped: this module's entry in docs/architecture.md.</summary>
+    /// lifetime rule: this module's entry in docs/architecture.md.</summary>
     public void Dispose()
     {
         _zip?.Dispose();

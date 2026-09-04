@@ -146,7 +146,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Hands a named effect to the world-effects runtime instead of starting it locally,
     /// passing the call-site world point, the resolved call-site node (the callee's INPUT_NODE) and
     /// whether the effect rides that node (true for every call that resolved a site, so a carried
-    /// site's death effects move with the hull, docs/architecture.md). Returns true when it took the
+    /// site's death effects move with the hull, docs/org/sequences.md). Returns true when it took the
     /// effect, so the local Start is skipped. Set on the WORLD runtime, whose puffer factory is gone
     /// after the build; null everywhere else, where CALL_ANIMATION starts the callee locally.</summary>
     public Func<string, Vector3, Node3D?, bool, bool>? ExternalEffect;
@@ -915,7 +915,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // and a slot written behind it would arrive to an episode already booked to a callee.
         MissionTriggerOwner?.Invoke(animName);
         // ⚠ The depth below covers this dispatch and nothing after it, while a cutscene's later
-        // beats run off delayed events outside it (docs/architecture.md), so the closure is what is
+        // beats run off delayed sequence events seconds outside it, so the closure is what is
         // remembered rather than the call stack.
         foreach (var reached in CallClosureOf(animName))
         {
@@ -2383,7 +2383,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // fresh template copy per CALL_ANIMATION. Without it a copy whose sequences end INACTIVE (the
     // sonic burst's five rings) plays once per slot and is dead from the wrap on. Scoped to the
     // call's own closure, never the whole slot: another effect live on the same slot number must
-    // not be re-posed under its running motions. RESET_TIME -1 does not exempt a def (docs/architecture.md).
+    // not be re-posed under its running motions. RESET_TIME -1 does not exempt a def.
     private void ResetCheckedOutCopies(string animName, IReadOnlyList<Node3D?> roots)
     {
         var slots = new HashSet<int>();
@@ -2790,7 +2790,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             {
                                 // A death's callee rides its call site: a carried ring's debris
                                 // moves with the hull (the pieces integrate in the root's frame,
-                                // docs/architecture.md). Other relocating calls hold their placement.
+                                // docs/org/sequences.md). Other relocating calls hold their placement.
                                 bool rides = _deathCallDepth > 0;
                                 if (ownCopy != null)
                                 {

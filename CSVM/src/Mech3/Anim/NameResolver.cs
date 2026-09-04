@@ -361,7 +361,7 @@ public sealed class NameResolver<TNode>
     /// narrowed to that copy, the private subtree the original hands the definition
     /// (org/sequences.md). A bound node outside the copy yields to the copy's own node of that
     /// name; a name the copy lacks keeps its binding. ⚠ A cross-archive symbol table binds by
-    /// index, so a parked archive figure would otherwise answer for the staged actor (docs/architecture.md).</summary>
+    /// index, so a parked archive figure would otherwise answer for the staged actor.</summary>
     public bool SymbolClaims(AnimDefinition def, string name, TNode? anchor, out TNode? node)
     {
         node = null;
