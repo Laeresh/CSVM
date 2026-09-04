@@ -3,7 +3,7 @@
   "regenerate": "RunTests.ps1 -RegenGoldens",
   "readme": "analysis/goldens/README.md",
   "size": "1280x720",
-  "gpu": "NVIDIA GeForce RTX 5080 / 1.4.341",
+  "gpu": "NVIDIA GeForce RTX 5080 / 1.4.351",
   "notes": [
     "Hashes are md5 over the RAW pixel buffer (Image.GetData()), never over the saved PNG.",
     "A GPU or driver change legitimately moves every hash at once; the gpu field above is what these were captured on. Regenerate after a driver update, and say so in the commit message.",
@@ -15,15 +15,15 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "d4c4d01169e1454ae02014caea935269",
-      "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121.",
+      "hash": "6410c3bdaf263124994aeaf0da892f0d",
+      "exercises": "UV scroll on the falls sheet, the mist puffer, and the alpha-textured spray under the zone's world light; frame-sensitive 1.28 % at 120 vs 121.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
     {
       "name": "c1b-night-sea",
       "frame": 120,
-      "hash": "98985ea1d887d268a420fd957e494b2b",
-      "exercises": "night lighting, skydome, islands, the ambient cloud-puff field; static at 120 vs 121, 0.13 % at 120 vs 360 (puff drift).",
+      "hash": "7d19876678eedebf567c8770359adb4d",
+      "exercises": "night lighting, skydome, islands, coastline sheets dimmed by the 0.426 world light like every lit surface, the ambient cloud-puff field; static at 120 vs 121, 0.13 % at 120 vs 360 (puff drift).",
       "args": ["--freecam", "--chapter=C1B", "--pos=-6748,300,-8885", "--direction=0.242,-0.25,0.970", "--det", "--mute"]
     },
     {
@@ -36,8 +36,8 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "fa50a2720acb8a954377a9acdd087c16",
-      "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog, and the harbour wake spray the boat start anims emit; near-static, 51 px at 120 vs 121.",
+      "hash": "2f871f2548e2ad675165b2ad525e7fba",
+      "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog, and the harbour wake spray the boat start anims emit, alpha sprites lit like the rest; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
     {
@@ -50,8 +50,8 @@
     {
       "name": "c3-island",
       "frame": 120,
-      "hash": "5b9033005214974e70fb6b7d5f87e2b3",
-      "exercises": "coastline, surf edge and open water at close range; static — 9 px at 120 vs 360, so it proves geometry and shading, not the clock.",
+      "hash": "39d12b1d919bb0bbc36d97484a8aeee0",
+      "exercises": "coastline, surf edge and open water at close range, the blended surf sheets taking the world light with the water; static, 9 px at 120 vs 360, so it proves geometry and shading, not the clock.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
     },
     {
@@ -85,57 +85,57 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "3526eb7616a8e89c40c982c8cefc0ade",
-      "exercises": "Held pitch-and-roll flight: quaternion physical rates, chase camera, default livery, prop and surface animators, gauges, compass, weapon readout, pipper, exhaust, SpeedCue, and the plane lit by the zone's authored SUNLIGHT; frame-sensitive.",
+      "hash": "1cdcf34e0e2e297ccdae3edc7008cc40",
+      "exercises": "Held pitch-and-roll flight: quaternion physical rates, chase camera, default livery, prop and surface animators, gauges, compass, weapon readout, pipper, exhaust, SpeedCue, the plane under the zone's SUNLIGHT over a world-lit C1; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "4b325b421a9a213ecc1677fd3b3cc6ed",
-      "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, flight-state-dependent SpeedCue and seeded puffer placement; frame-sensitive.",
+      "hash": "e6b86492c00daba59f5933f086294c03",
+      "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, flight-state-dependent SpeedCue, seeded puffer placement, world-lit alpha scenery; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "1f7229848260f3d641fd2dbaca7af8ad",
-      "exercises": "player_crash_default after five flight steps: corrected pre-crash attitude, crash rig and airframe, moving distance puffers, ranged tumble, vector-form pieces, flydirt delta and pooled repeat calls.",
+      "hash": "c302c724eda84f61df035e634e07e34d",
+      "exercises": "player_crash_default after five flight steps: corrected pre-crash attitude, crash rig and airframe, moving distance puffers, ranged tumble, vector-form pieces, flydirt delta, pooled repeat calls, over world-lit C1 scenery.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-debris-rest",
       "frame": 360,
-      "hash": "b678718aa4ab8e29f142c6c81a92ea6a",
-      "exercises": "the two-ray column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer as the visible signal, so a piece the column misses and lets run shows here.",
+      "hash": "20dd996ad399c4ba1b8f4b6578d8bbcd",
+      "exercises": "the two-ray column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer as the visible signal, over C1 ground and cutouts under one world light.",
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "4466ddf7dddc2dace933313551c49419",
-      "exercises": "Targeting a live AI in flight: its quaternion-driven pose and its crewed rear turret's barrel feed fixed antialiased in-range brackets, the label below the plane and --debug-markers identity/health text; frame-sensitive 48.18 %.",
+      "hash": "036de46b2dbcc4a7681ef978094e2424",
+      "exercises": "Targeting a live AI in flight: its quaternion-driven pose and crewed rear turret feed fixed antialiased in-range brackets, the label below the plane, --debug-markers identity/health text, world-lit C1 beneath; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-ai-wreck",
       "frame": 280,
-      "hash": "ee3fbf31f08c0462ed030687ac3f2ded",
-      "exercises": "A shot-down AI three seconds after the kill: quaternion flight state under frozen commands, the target's antialiased brackets, the handover fireball where randomdestseq inherits the hull's velocity, and the LOW ALT lamp lit inside its 60 m gate.",
+      "hash": "5fa49909a9fe8ecd97427202dbdb17ed",
+      "exercises": "A shot-down AI three seconds after the kill: quaternion flight state under frozen commands, the target's antialiased brackets, the handover fireball inheriting the hull's velocity, the LOW ALT lamp inside its 60 m gate, world-lit C1.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "55c769c2434b024dacbd9220b5f3a1da",
-      "exercises": "Four humans launch a co-op campaign mission abreast on StartGrid: four render targets, HUDs and cockpit gauges, no cutscene collapsing the panes; frame-sensitive 73.79%.",
+      "hash": "7f4544524a3ce9bc08f2746c6b184cf3",
+      "exercises": "Four humans launch a co-op campaign mission abreast on StartGrid: four render targets, HUDs and cockpit gauges, no cutscene collapsing the panes, the C1 world under its light in every pane; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },
     {
       "name": "campaign-intro-fill",
       "frame": 120,
-      "hash": "33d61737b59b994864b8450f9d574915",
-      "exercises": "A campaign mission's intro cutscene fills the whole window at four human players: one pane at the full rect, letterbox bars, the rest hidden with no gutter; frame-sensitive 3.89%.",
+      "hash": "a8ebd3dc189a5aad2677b4c2b1b55b45",
+      "exercises": "A campaign mission's intro cutscene fills the whole window at four human players: one pane at the full rect, letterbox bars, the rest hidden with no gutter, the world-lit C1 scene behind; frame-sensitive 3.89%.",
       "args": ["--campaign=csvm-golden:0", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     }
   ]

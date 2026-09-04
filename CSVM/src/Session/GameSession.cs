@@ -1385,10 +1385,6 @@ public partial class GameSession : Node3D
         // reporting 0 self-lit models means they did not.
         GD.Print($"model flags: {builder.UnlitModelCount} self-lit (lighting: false), "
                  + $"{builder.UnfoggedModelCount} unfogged (fog: false)");
-        // The evidence that the texture's own alpha class reached the materials, which is the
-        // original's second lighting gate. Zero in any chapter means the class is not being read.
-        GD.Print($"alpha exemption: {builder.AlphaExemptMaterialCount} of "
-                 + $"{builder.TexturedMaterialCount} textured material(s) unlit");
         // The per-polygon second material pass. A declined count above zero means a
         // sprite/facade mesh carried one and it was dropped — never observed in this install.
         if (builder.OverlayPassSurfaceCount > 0 || builder.OverlayPassDeclinedCount > 0)

@@ -17,9 +17,10 @@ internal static class WorldAndToolSuites
     private static readonly string[] AlphaClassChapters =
         { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
 
-    // The two halves of docs/org/vertexLighting.md's readable statement of the rule: the flares and
-    // signage overlays carry the bit and draw unlit, the building skins and the water do not.
-    private static readonly (string Name, bool Exempt)[] AlphaClassExpectations =
+    // The two halves of docs/org/vertexLighting.md's census: the flares and signage overlays carry
+    // the alpha bit, the building skins and the water do not. The bit routes and blends; it is not a
+    // lighting exemption on the original's hardware draw.
+    private static readonly (string Name, bool CarriesAlphaBit)[] AlphaClassExpectations =
     {
         ("poleflare", true), ("lightpole", true),
         ("cblock1", false), ("bldg1", false), ("wtr00000", false),
@@ -72,9 +73,9 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // The plumbing behind the original's second lighting gate, which is a reader question and not a
-    // render one: the class comes off the extraction manifest's `alpha` field, and a pixel test
-    // cannot stand in for it. Able to fail: with the manifest read removed, every chapter falls back
+    // The reader behind the texture's own alpha class, which is a reader question and not a render
+    // one: the class comes off the extraction manifest's `alpha` field, and a pixel test cannot
+    // stand in for it. Able to fail: with the manifest read removed, every chapter falls back
     // to the pixels and lightpole (a Simple texture in several chapters) classifies None.
     [Suite("texture-alpha-class",
         "every chapter's texture archive classifies alpha from the extraction manifest rather than "
@@ -95,12 +96,12 @@ internal static class WorldAndToolSuites
         }
 
         using var c5 = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C5"));
-        foreach (var (name, exempt) in AlphaClassExpectations)
+        foreach (var (name, carriesAlphaBit) in AlphaClassExpectations)
         {
             c5.Find(name);
             bool bit = c5.LastAlphaClass != TextureArchive.AlphaClass.None;
-            ctx.Check(bit == exempt,
-                $"C5 texture={name} class={c5.LastAlphaClass} carries the alpha bit={bit} expected={exempt}");
+            ctx.Check(bit == carriesAlphaBit,
+                $"C5 texture={name} class={c5.LastAlphaClass} carries the alpha bit={bit} expected={carriesAlphaBit}");
         }
     }
 

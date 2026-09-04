@@ -1032,11 +1032,7 @@ public sealed class ClutterBuilder
         // SceneBuilder's world surfaces; wrapping bleeds the texture's opposite edge in at the
         // UV border (the hairline-seam / tracer-tail artifact).
         bool clampUv = SceneBuilder.UvsWithinUnitSquare(_gamez.Meshes[kind.MeshIndex].Polygons, pass: 0);
-        // The original's second lighting gate reaches a card as it reaches a world surface: an
-        // alpha-bearing texture takes no sun term whatever the model's flag says
-        // (docs/org/vertexLighting.md). Reads the class the Find above installed.
-        bool lit = kind.Lit && _textures.LastAlphaClass == TextureArchive.AlphaClass.None;
-        var mat = new ShaderMaterial { Shader = SpriteShader(lit, kind.Fogged, clampUv) };
+        var mat = new ShaderMaterial { Shader = SpriteShader(kind.Lit, kind.Fogged, clampUv) };
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
 
