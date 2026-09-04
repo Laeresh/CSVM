@@ -16,18 +16,24 @@ reads two bits of is [`textures.md`](textures.md); the model and material fields
 `SUNLIGHT` is not a separate path. The `sunlight` gamez node is an ordinary Light-class node that
 enters the same 128-slot light array as every `LIGHT_STATE` point light, and its one distinction is
 a **directional** flag that exempts it from the range test. Its contribution is computed **per
-vertex, at draw time, inside the polygon loop** (`FUN_005524d0`, `zrender\zrndr_draw.c`), not baked
-at load. **Two per-surface tests decide whether a given polygon receives it**, and they are checked
-in this order:
+vertex, at draw time, inside the polygon loop**, not baked at load.
 
-1. **Per model** (`FUN_00551d90`): bit 0 of the model record's flag word at `+0x08`, the flag the
-   extractor spells `lighting`. Clear, and no light in the array is even considered for that model.
-2. **Per texture** (`FUN_005524d0`, textured branch): bit `0x02` of the texture object's storage
-   flags byte at `+0x09`, which is set for exactly the textures carrying an alpha channel. Set, and
-   the whole per-vertex lighting evaluation is skipped and the polygon is submitted through the
-   unlit path.
+⚠ **The engine ships two model draws, and only one of them runs on a 3D card.** `FUN_0054dca0`
+tests the hardware flag `DAT_009be708`: clear, it keeps the software draw `FUN_005524d0`
+(`zrender\zrndr_draw.c`, a palette span rasteriser); set, it installs the hardware draw
+`FUN_00554550`, which submits through Direct3D. Every retail capture this project measures against
+is the hardware draw. The two agree on the per-model test and disagree on the per-texture one:
 
-**There is no material-level, `soil`-id-level or node-level test anywhere on this path.** The
+1. **Per model** (`FUN_00551d90` in software, `FUN_00552020` in hardware): bit 0 of the model
+   record's flag word at `+0x08`, the flag the extractor spells `lighting`. Clear, and no light in
+   the array is even considered for that model.
+2. **Per texture, software draw only** (`FUN_005524d0`, textured branch): bit `0x02` of the texture
+   object's storage flags byte at `+0x09`, set for exactly the textures carrying an alpha channel,
+   skips the per-vertex lighting evaluation when palette shading is off. **The hardware draw has no
+   per-texture test.** `FUN_00554550` lights an alpha-textured polygon exactly as it lights an
+   opaque one; the alpha bit there decides sorting and blending and never touches the colour.
+
+**There is no material-level, `soil`-id-level or node-level test anywhere on either path.** The
 material record is read for its texture pointer, its colour and its cycle state and for nothing
 else; `soil` never reaches the lighting code.
 
@@ -35,9 +41,16 @@ else; `soil` never reaches the lighting code.
 
 | Address | Role |
 |---|---|
-| `FUN_00566be0` | `zmodel\gmod_light.c`: gathers the scene's active lights into the 128-slot array, and caches the directional light's colour into the globals the material setup reads |
-| `FUN_00551d90` | The **per-model** decision: builds a bitmask of "is this model lit / fogged / band-fogged" from the model's own flag word |
-| `FUN_005524d0` | `zrender\zrndr_draw.c`: the model draw. Calls `FUN_00551d90` once, then walks the polygons and applies the **per-texture** test inside the textured branch |
+| `FUN_0054dca0` | Render start-up: installs `FUN_00554550` as the model draw when `DAT_009be708` (hardware) is set, else keeps `FUN_005524d0` and arms the palette-shading global `DAT_00a07000` |
+| `FUN_00566be0` | `zmodel\gmod_light.c`: gathers the scene's active lights into the 128-slot array, and caches the directional light's colour into the globals the software material setup reads |
+| `FUN_00551d90` | Software draw, the **per-model** decision: builds a bitmask of "is this model lit / fogged / band-fogged" from the model's own flag word |
+| `FUN_005524d0` | `zrender\zrndr_draw.c`: the **software** model draw. Calls `FUN_00551d90` once, then walks the polygons and applies the **per-texture** test inside the textured branch |
+| `FUN_00554550` | The **hardware** model draw. Calls `FUN_00552020` once, seeds and evaluates the per-vertex light for every polygon the model mask allows, multiplies it onto the authored vertex colours and packs the result into the Direct3D vertex diffuse |
+| `FUN_00552020` | Hardware draw, the per-model decision: the same three flag-word bits, plus `FUN_00567060` asking whether any gathered light reaches the model's bound sphere |
+| `FUN_00568830` | Hardware draw: seeds every vertex's light accumulator to 1.0 before the evaluation |
+| `FUN_005688a0` | Hardware draw: the per-vertex light evaluation. Adds each directional light's `ambient + diffuse × max(N·L, 0)` times its colour, minus one, into the accumulator. Reads positions, normals, the accumulator and the polygon flags; never the texture |
+| `FUN_005a0e00` | Direct3D device set-up: stage 0 colour op MODULATE (texture × diffuse), alpha op SELECTARG1 (texture alpha) |
+| `0x005a6160` | The hardware transparent-queue drain (no function boundary in the database): per polygon sets shade mode, alpha blend, z-write off, the alpha op and the destination blend, then draws with FVF `0x1c4`, which carries diffuse. Never touches the colour op |
 | `FUN_00566e00` | Per model, selects which of the gathered lights reach it and writes each one's scalar intensity into the accumulator |
 | `FUN_00567150` | The per-vertex light evaluation for a **textured** polygon: `N·L` against each selected light's direction, plus its ambient |
 | `FUN_00569a10` | The same for an untextured (`Colored`) polygon |
@@ -101,13 +114,24 @@ included: **3,003 models are `lighting: false`** and 225 are `fog: false`.
 ambient bit from a global that the model flag does not gate, so an unlit model still enters
 `FUN_00567150` when that global is armed. It is 0 by default (`FUN_0054d9c0`) and no shipped data
 arms it, so in practice an unlit model is unlit. In the other direction, a model that passes this
-gate can still be exempted per polygon by gate 2.
+gate can still be exempted per polygon by gate 2 in the software draw, and by nothing in the
+hardware draw.
 
 ⚠ **`GfxFlags_SW` bit 0 is a global kill switch.** `FUN_0054d9c0` resolves `GfxFlags_SW` as a
 GameGen variable and falls back to all-bits-set when it is absent, so lighting is on unless the
 boot data turns it off.
 
-## Gate 2: the texture's alpha bit (`FUN_005524d0`)
+## Gate 2: the texture's alpha bit, software draw only (`FUN_005524d0`)
+
+⚠ **This gate exists in the software draw and nowhere else.** It was decoded first and CSVM
+reproduced it, and the C1B coastline sheets rendering as a hard bright band was the symptom: they
+were the only surfaces skipping the world light, and the original hardware draw skips it for none.
+The hardware rule is in the next section; this one is kept as the record of what the software
+draw does. Even there it is narrower than it looks: the skip applies only while the palette-shading
+global `DAT_00a07000` is 0, and `FUN_0054dca0` sets it to 1 whenever the software draw is chosen
+(`FUN_0054e040`, the `SetPaletteShading` setter, is the only other writer), so an alpha polygon
+goes through the lighting block in software as well, with a flat-shade flag instead of a per-vertex
+one. What the palette shade tables then make of it is not traced.
 
 Inside the polygon walk, a polygon's material is classified by its own bit `0x100`: clear is a
 `Colored` material and set is a `Textured` one. The two branches differ in exactly the way that
@@ -175,31 +199,57 @@ gauges, the cable and scaffold cutouts, and the plane and zeppelin logo decals.
 Not exempted (bit clear, lit): the city block skins `cblock1`–`7`, the building skins `bldg1`–`4`
 and `bldgtrim1`, the water `wtr00000`–`wtr00015`, and the terrain and cliff families.
 
+## The hardware draw: one gate, and the colour it writes (`FUN_00554550`)
+
+`FUN_00554550` calls `FUN_00552020` once per model for the same mask `FUN_00551d90` builds, with
+one addition: the lighting bit also needs `FUN_00567060` to find at least one gathered light
+reaching the model's bound sphere. Then, for every polygon the mask allows:
+
+- `FUN_00568830` seeds each vertex's light accumulator to 1.0.
+- `FUN_005688a0` adds, per directional light, `(ambient + diffuse × max(N·L, 0)) × colour − 1`, so a
+  scene with the sun alone leaves exactly `ambient + diffuse × max(N·L, 0)` times the sun colour.
+  `N` is the vertex normal when the polygon carries them and the face normal otherwise. The
+  function reads positions, normals, the accumulator and the polygon flags; **it never reads the
+  texture**.
+- The draw multiplies the polygon's authored per-vertex colours (the polygon record's colour
+  array, copied to the colour buffer's `+0x14` slot) by the accumulator, clamps to 0..255, and
+  packs the result into the Direct3D vertex diffuse. A polygon no light reached gets the authored
+  colours times 1.0.
+- The device runs stage 0 as MODULATE of texture by diffuse with the alpha taken from the texture
+  (`FUN_005a0e00`), so the diffuse above is what dims the texel. Only `FUN_005a7130`, the
+  multitexture path, ever changes the colour op.
+
+The texture alpha bit (`+0x09 & 0x02`) is tested four times in this draw, and every use is
+routing: it sends the polygon through the sorted transparent queue (`0x005a6160`) with alpha
+blending on and z-write off, and it excludes the polygon from the projected-shadow and lightmap
+passes. The two globals the submit reads beside it, the opacity `DAT_00a06f98` (default 1.0, set by
+`FUN_0054e0e0`) and the overwrite flag `DAT_00a06f94`, are routing too and never a brightness term.
+
 ## Where CSVM stands
 
 The remake renders the world fullbright and dims it by one `csky_world_light` scalar, the
 data-driven collapse of the original's per-vertex `N·L` (see [`weather.md`](weather.md)). Gate 1 is
 reproduced: `SceneBuilder` reads the model's `lighting` flag and builds an unlit shader variant per
-model. Gate 2 is reproduced as the same variant choice, keyed on the texture instead of the model:
-`TextureArchive` reads the extractor's `alpha` field out of the archive's `manifest.json` and
-publishes it as an alpha class, and a textured surface whose class is not `None` is built without
-the `csky_world_light` term whatever its model's flag says. The clutter sprite cards take the same
-rule at their own material, since they carry their own shader rather than the world one.
+model. **Gate 2 must not be reproduced**, since the hardware draw does not have it: a textured world
+surface takes the `csky_world_light` term whatever its texture's alpha class, and so does a clutter
+sprite card. `TextureArchive` still reads the extractor's `alpha` field out of the archive's
+`manifest.json` and publishes it as an alpha class, which is the right reader for anything that
+needs the texture's own bit rather than its pixels.
 
 ⚠ **The PNG alpha channel is not a substitute for the field.** It distinguishes `Full` from `None`
 but loses the one to ten `Simple` textures per chapter, which carry the bit too, so the pixel
-classification `TextureArchive` already had for the blend/scissor choice cannot answer this
+classification `TextureArchive` already had for the blend/scissor choice cannot answer that
 question. The pixel test is the fallback for a deployed tree that ships PNGs with no manifest, and
 it is a degradation rather than an equivalent.
 
-⚠ **The rule is invisible wherever the mission's `WorldLight` is already 1.** C4 and C5 author
-`world_light=1` in every zone, so the exemption cancels a multiply by one there and changes no
-pixel; it is C1 (0.802), C1B (0.426), C1C and C2B (0.784) and C3 (0.99) where it shows. A
-C5 residual is therefore not this rule's to fix.
+⚠ **An exemption would be invisible wherever the mission's `WorldLight` is already 1.** C4 and C5
+author `world_light=1` in every zone, so a multiply by one changes no pixel; it is C1 (0.802), C1B
+(0.426), C1C and C2B (0.784) and C3 (0.99) where a wrongly exempted surface shows, C1B most.
 
-Materials the exemption takes, counted over each chapter's whole gamez material table joined to its
-top-tier `rtextureN` manifest (the archive the engine loads, which classes `needle` and
-`smallneedle` as alpha where the base `texture.zbd` does not):
+Materials the software gate would take, counted over each chapter's whole gamez material table
+joined to its top-tier `rtextureN` manifest (the archive the engine loads, which classes `needle`
+and `smallneedle` as alpha where the base `texture.zbd` does not), kept as the census of the alpha
+class rather than of anything the hardware draw treats differently:
 
 | Chapter | Textured materials | Exempt | Unresolved names |
 |---|---|---|---|

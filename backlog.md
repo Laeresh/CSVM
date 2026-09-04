@@ -1370,29 +1370,35 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   world rotation transfers unchanged. Pre-existing and found while wiring the energy mirror, so it
   is not a regression of that work. *Cross-refs:* `BL-332`'s closing record, `docs/org/weather.md`.
 
-- `BL-701` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **A light-exempt
+- `BL-701` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **A light-exempt
   surface renders at full albedo, which reads far brighter than the original: C1B's coastline
   sheets come out as a hard bright band instead of a soft edge.** *Evidence:* reported at the
   controls in C1B on the build that landed `BL-613`, whose exemption takes 48 of C1B's 147 textured
   materials out of the world light (the per-chapter census logs it per world build). C1B authors
   `world_light=0.426`, so an exempted surface jumps by more than a factor of two, and it is the
-  night chapter where the reading is most visible. The exemption itself is decoded and is not in
-  question: `FUN_005524d0` skips the per-vertex light evaluation on the texture's alpha bit. What
-  is not decoded is what the original's unlit submission path then uses as the vertex term, and
-  "full albedo" is CSVM's assumption rather than a reading. *Fix shape:* decode the unlit branch's
-  own submission and find what it writes where the lit branch writes the evaluated light. If it
-  carries the polygon's authored vertex colours or a fixed base intensity, that is the term CSVM is
-  missing, and the exemption stays as it is with the intensity corrected under it.
-  *⚠ Traps:* the alpha blend is intact and is not the fault. `SceneBuilder` computes blend and
-  scissor from `LastHadAlpha`/`LastAlphaIsSoft` independently of `lit`, which is a separate shader
-  key bit, and the coastline sheets are in `SoftAlphaCoastline` so they blend. A blended soft ramp
-  at full brightness over dark water reads as a hard band, which is why the symptom presents as
-  lost blending; confirm the ramp is still there before changing any blend rule. Reverting `BL-613`
-  is also not the fix: the surfaces were wrong before as well, in the other direction.
-  *Playtest after fix:* C1B flown low along a coastline at night, and the same coast in daylight
-  where `world_light` is near 1 and the exemption cannot show. *Cross-refs:* `BL-613`'s closing
-  commit and `docs/org/vertexLighting.md`, which holds the two-gate decode and the per-chapter
-  census.
+  night chapter where the reading is most visible. *Decoded:* the exemption `BL-613` landed was
+  read off the original's software model draw, `FUN_005524d0`. The hardware model draw
+  `FUN_00554550`, which `FUN_0054dca0` installs whenever a 3D card is present and which every
+  reference capture shows, has no per-texture test: `FUN_005688a0` lights an alpha-textured polygon
+  like any other, the draw multiplies the result onto the authored vertex colours and packs it into
+  the Direct3D vertex diffuse, and the texture's alpha bit only routes the polygon through the
+  sorted transparent queue. There is no unlit branch and no missing term; the bright band is the
+  exemption itself (`docs/org/vertexLighting.md`, "The hardware draw"). *Fix shape:* remove the
+  alpha-class exemption from `SceneBuilder.BuildMaterial` and the clutter sprite material so a
+  textured surface takes `csky_world_light` whatever its texture's alpha class, keep the
+  `LastAlphaClass` reader and its suite, retire the per-chapter exemption census line, and re-pin
+  the goldens B12 moved. *⚠ Traps:* the alpha blend is intact and is not the fault. `SceneBuilder`
+  computes blend and scissor from `LastHadAlpha`/`LastAlphaIsSoft` independently of `lit`, which is
+  a separate shader key bit, and the coastline sheets are in `SoftAlphaCoastline` so they blend. A
+  blended soft ramp at full brightness over dark water reads as a hard band, which is why the
+  symptom presents as lost blending; confirm the ramp is still there before changing any blend rule.
+  `BL-070`'s "exempt from the SUNLIGHT dim" half was struck by B12 on the strength of the software
+  decode, so that strike rests on nothing now; the hardware draw's only exemption is the model's
+  own `lighting` flag, and whether those billboards carry it is a data question, not a texture one.
+  *Playtest after fix:* C1B flown low along a coastline at night, and the
+  same coast in daylight where `world_light` is near 1 and the change cannot show. *Cross-refs:*
+  `BL-613`'s closing commit (`git log --grep=BL-613`) and `docs/org/vertexLighting.md`, which holds
+  the software and hardware decodes and the per-chapter alpha-class census.
 
 ## Effects & animation runtime
 
