@@ -192,7 +192,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 51. ☑ F51 `docs/tooling.md`: each script's section cut to what it does, its switches and its outputs
 52. ☑ F52 `docs/cli.md` flag bullets, first half of the index groups (modes through debug labs), to the 600-character cap
-53. ☐ F53 `docs/cli.md` flag bullets, second half (dumps through audio), plus the three lab sections and the index prose
+53. ☑ F53 `docs/cli.md` flag bullets, second half (dumps through audio), plus the three lab sections and the index prose
 
 ### Wave E: wire the gate and close
 
@@ -808,7 +808,7 @@ the parser's accepted-flag count (`SessionSpec.cs`) and every index token has a 
 names a key binding (`F5`, `L`, `M`, `C`, `X`) is describing `docs/controls.md`'s subject; keep the
 key, drop the description of the panel.
 
-## F53 ☐ `docs/cli.md` flag bullets, dumps through audio, plus the lab sections and the index prose
+## F53 ☑ `docs/cli.md` flag bullets, dumps through audio, plus the lab sections and the index prose
 
 **Goal.** The same cap for the groups "Dumps and the test harness", "Logging and profiling",
 "Rendering probes", "Map-edge continuation", "Scripted input", "Data paths" and "Audio"; the three

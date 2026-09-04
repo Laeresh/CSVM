@@ -529,6 +529,11 @@ one sentence of measured evidence; everything else belongs in the commit that la
   instead, one line per aircraft at build naming what each slot resolved to, then one per cull
   transition and one per damaged-engine swap.** The pair is what separates silent past the cull
   from silent because the definition never resolved.
+- **INSTR-46** — **An unpacked developer tree cannot reproduce a zip-only asset bug: verify a
+  release's asset shape with `--zip-assets`.** A directory-backed `SoundArchive` re-reads a path
+  per lookup and cannot be closed under itself, while a zip-backed one holds a handle that can,
+  which threw `ObjectDisposedException` out of `SessionSimulation.Step` for every sound the
+  prewarm had missed.
 
 ## SRC — sources and documents
 
