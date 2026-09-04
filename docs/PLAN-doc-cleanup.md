@@ -162,7 +162,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ A1 `PROJECT_CONTEXT.md`: counts, size claim, dates, repeated rules, skills section
 2. ☑ A2 `CLAUDE.md`, `AGENTS.md`, `AGENTS.override.md`: pointer paragraphs, phantom skill, size claim
 3. ☑ A3 `docs/tooling.md`: dates, phantom path, golden counts, banned phrase
-4. ☐ A4 Whole-tree check that no entry doc states a date or a banned phrase
+4. ☑ A4 Whole-tree check that no entry doc states a date or a banned phrase
 
 ### Wave B: split architecture.md
 
@@ -304,7 +304,7 @@ docs/tooling.md` returns nothing.
 **⚠ Traps.** Line 403 names a backlog entry by title, not id; that is a pointer, not provenance,
 and stays.
 
-## A4 ☐ Whole-tree check that no entry doc states a date or a banned phrase
+## A4 ☑ Whole-tree check that no entry doc states a date or a banned phrase
 
 **Goal.** One command proves Wave A is complete.
 
@@ -320,6 +320,12 @@ its own.
 **Model recommendation.** medium, low effort.
 
 **Verify.** The two commands above.
+
+**Result.** After A1 to A3 the date sweep returns CLAUDE.md's rule examples, the two
+`docs/verification.md` dates (D32) and ten `docs/architecture.md` entry bodies; the banned-phrase
+sweep returns CLAUDE.md's list and two "load-bearing" in `docs/architecture.md`. Every
+architecture entry is rewritten in Wave C, so those hits are C's by construction and are not fixed
+twice; E41's sweep re-runs both commands and must return only CLAUDE.md.
 
 **⚠ Traps.** None.
 
