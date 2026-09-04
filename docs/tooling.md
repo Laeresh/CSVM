@@ -505,7 +505,7 @@ exists from ~180 ms and `_Ready` cannot run before ~1180 ms. So `RunTests.ps1` d
 it runs **every launch on a separate Windows desktop** (`HiddenDesktop.ps1` — `CreateDesktop`, then
 `CreateProcess` with `STARTUPINFO.lpDesktop`). A window belongs to the desktop its process was
 started on and only one desktop is ever displayed, so this is decided *before* the process runs,
-which is the only kind of placement that works (SHELL-9). The summary line says which desktop was
+which is the only kind of placement that works (SHELL-13). The summary line says which desktop was
 used, because a silent fallback to the visible one looks exactly like success. If the OS refuses the
 desktop, the run continues visibly rather than failing.
 
@@ -517,7 +517,7 @@ the retired `analysis/hidden-desktop/` (`git show analysis-archive:analysis/hidd
 `RunGame.ps1` and `RunDev.ps1` hand the foreground to the new window themselves, so playing is
 unchanged. That grab lives in the launcher and not in the engine because Windows' foreground lock
 no-ops `SetForegroundWindow` from a process the user is not interacting with; the console you typed
-into is that process, so it is allowed to give the foreground away (verification SHELL-5, SHELL-9).
+into is that process, so it is allowed to give the foreground away (verification SHELL-13).
 The window is found by pid via `EnumWindows`, not `Process.MainWindowHandle` — that property is
 zero for a hidden window, and a launcher whose own window is hidden (an agent shell, a scheduled
 task) passes `SW_HIDE` down via `STARTUPINFO`, which is also why the launch asks for

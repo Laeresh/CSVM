@@ -186,7 +186,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ D31 Delete the 46 uncited rules (with the paragraph-rule exception check)
 32. ☑ D32 Cut every remaining paragraph rule to shape; remove merge notes, dates and the stale line ref; restore numeric order
-33. ☐ D33 Fix the six dangling rule references at their source; header states the shape rule
+33. ☑ D33 Fix the six dangling rule references at their source; header states the shape rule
 
 ### Wave F: tooling.md and cli.md
 
@@ -702,7 +702,7 @@ sequence within each section is ascending.
 check must be able to fail" exactly. The file's final three sections (what the project cannot
 verify, non-deterministic surfaces, the standing checklist) are already at shape and stay.
 
-## D33 ☐ Fix the six dangling rule references; header states the shape rule
+## D33 ☑ Fix the six dangling rule references; header states the shape rule
 
 **Goal.** No document cites a verification ID that does not exist.
 

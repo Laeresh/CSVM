@@ -6,7 +6,7 @@
 # test run launches it about twenty times. A window belongs to the desktop its creating process was
 # started on, and only one desktop is ever displayed, so a process started on a desktop nobody
 # switches to cannot flash anything -- the placement is decided before the process runs, which is the
-# only kind of placement that works (SHELL-9).
+# only kind of placement that works (SHELL-13).
 #
 # Rendering is unaffected: a golden shot rendered on the hidden desktop matched its manifest md5
 # exactly (0bb2532d29261339fb11e3eda79403d0, c1-waterfall), and the window was seen on the new

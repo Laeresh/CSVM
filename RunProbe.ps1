@@ -9,7 +9,7 @@
     handles it calls AttachConsole(ATTACH_PARENT_PROCESS) and reopens stdout on CONOUT$,
     so its entire world-build chatter bypasses every pipe and lands on the console screen
     buffer of whatever terminal the run came from (verification SHELL-10). Its window also
-    exists for the ~1 s boot before the engine can hide it (SHELL-9). RunTests.ps1 solves
+    exists for the ~1 s boot before the engine can hide it (SHELL-13). RunTests.ps1 solves
     both internally through its private Invoke-Godot helper; this script is the same launch
     for everything else. Use it for ANY ad-hoc scripted run instead of invoking Godot
     directly.
@@ -72,7 +72,7 @@ $HiddenDesktop = Open-HiddenDesktop -Name "csvm-probe"
 
 $Launch = @("--path", $ProjectDir, "res://scenes/Main.tscn", "--") + @($GodotArgs)
 
-# SHELL-1: the argument string is re-split by the callee, and a path may carry a space, so
+# SHELL-19: the argument string is re-split by the callee, and a path may carry a space, so
 # any argument carrying one is quoted here or Godot receives it split. Same rule as
 # RunTests.ps1's Invoke-Godot: --flag=value keeps the flag outside the quotes.
 $quoted = @()

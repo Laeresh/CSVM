@@ -22,7 +22,7 @@ C4 all carry it, so it was shared geometry rather than one bad map).
 
 **Area-weighted vote with a quorum**: each polygon contributes its triangulated area (strip order
 for tri_strips, a fan otherwise — matching `EmitPolygon`; a strip's raw index list is not an
-outline, WORLD-6) to its texture's class, unclassified polygons abstain but still count toward the
+outline) to its texture's class, unclassified polygons abstain but still count toward the
 whole, and the winning tag must cover **at least half the mesh's total surface area** or the mesh
 stays null/terrain. Area rather than count because area is the static analogue of what
 `--tex-census` measures — which texture actually covers the surface — and because it keeps real

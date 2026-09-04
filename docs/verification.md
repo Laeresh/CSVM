@@ -333,6 +333,10 @@ one sentence of measured evidence; everything else belongs in the commit that la
   DOWNWARD from above instead.** World colliders honour the polygon's own `SHOW_BACKFACE` and 64 %
   of the install's collision faces clear it: across all eight chapters a downward ray answers in
   1,376 of 1,376 partition cells and an upward one in 24 (`world-ground-solid`).
+- **WORLD-34** — **A coplanar base/overlay texture pair can resemble a day/night or LOD variant
+  set; compare UV scale and vertex colour before assuming duality.** C5's flagged `cblock1/2/3`
+  overlay differs from its unflagged `cblock4/5/6` base only in resolution and brightness, sharing
+  an identical 256 m UV scale, y-plane and all-white vertex colours.
 
 ## SHELL — Windows, PowerShell, and processes
 
@@ -364,6 +368,12 @@ one sentence of measured evidence; everything else belongs in the commit that la
   PowerShell variable names are case-insensitive, so `$nodes = @()` under `param([string]$Nodes)`
   writes the empty array into the TYPED parameter and turns every later `+=` into string
   concatenation.** A terrain scan reported "terrain nodes: 1" where the same parse inlined found 231.
+- **SHELL-18** — **Quote a comma-bearing command-line value in PowerShell, or the unquoted comma
+  splits it into an array and the run fails.** `--pos=-6500,300,-1500` and a multi-name
+  `--tex-census=` list both die instantly unless quoted.
+- **SHELL-19** — **Quote a launched argument that carries a space, or the process re-splits it
+  before the callee sees it.** `-ArgumentList` quotes nothing itself, so a data-root or Godot
+  path with a space arrives split unless the launch scripts quote it.
 
 ## INSTR — building instruments
 

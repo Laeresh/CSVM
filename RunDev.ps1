@@ -203,12 +203,12 @@ else {
 }
 
 Write-Host "Launching Godot: $($UserArgs -join ' ')" -ForegroundColor Cyan
-# SHELL-1: -ArgumentList quotes nothing itself and this repo path contains a space.
+# SHELL-19: -ArgumentList quotes nothing itself and this repo path contains a space.
 $LaunchArgs = @("--path", ('"' + $ProjectDir + '"'), "res://scenes/Main.tscn", "--") + $UserArgs
 # The window is created WITHOUT focus (display/window/size/no_focus) so a scripted run never takes
 # the desktop from whoever is using the machine. An interactive launch does want it, and the engine
 # cannot take it for itself: Windows' foreground lock no-ops SetForegroundWindow from a process the
-# user is not interacting with (verification SHELL-5). This console IS that process, so it is
+# user is not interacting with (verification SHELL-13). This console IS that process, so it is
 # allowed to hand the foreground over -- which is why the grab lives here and not in the engine.
 Add-Type -Name FgWin -Namespace CsvmLaunch -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);

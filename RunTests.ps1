@@ -341,7 +341,7 @@ if (-not (Test-Path $ScratchDir)) {
 # std handles built by hand; the ProcessStartInfo path below is the fallback for a session that was
 # refused one, and is what keeps this readable as a plain process launch.
 #
-# SHELL-1: the argument string is re-split by the callee, and this repo's path contains a space, so
+# SHELL-19: the argument string is re-split by the callee, and this repo's path contains a space, so
 # any argument carrying one is quoted here or Godot receives it split.
 function Invoke-Godot {
     param(
