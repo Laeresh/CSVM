@@ -9,328 +9,102 @@ Traps do not live here; the rule is in `docs/architecture.md`.
 ## src/Session/GameSession.cs
 The per-launch orchestrator: `Launcher` constructs it from `(SessionSpec, LauncherContext)` and
 `StartSession` runs ordered build phases over one local `BuildState`. It owns the session clock,
-world root, panes, mode runtimes and resource lifetimes, delegating aircraft assembly and membership
-to `FlightRoster`, world construction to `WorldSession`, and effects staging to `WorldEffectsFactory`.
-After the synchronous build it constructs one `SessionSimulation`. `_PhysicsProcess` requests one
-realtime step; `_Process` requests each parent-driven `GameClock` substep. Debug/CLI forces remain
-outer-frame input injection. The nested runtime adapter maps named phases to concrete owners, which
-do not self-step from Godot callbacks. Its mission-ending admission path holds both simulation and
-authored animation while advancing only the campaign hand-off. All human and dynamic AI aircraft
-enter through `FlightRoster`;
-`AllAircraft` combines its AI view with ordered rig controllers for non-step consumers. Exit frees
-the session subtree atomically and releases only the non-node resources this orchestrator owns.
+world root, panes, mode runtimes and resource lifetimes, delegating aircraft assembly and
+membership to `FlightRoster`, world construction to `WorldSession`, and effects staging to
+`WorldEffectsFactory`. After the synchronous build it constructs one `SessionSimulation`, which
+owns the step order; `_PhysicsProcess` requests one realtime step and `_Process` each
+parent-driven `GameClock` substep. `AllAircraft` combines the roster's AI view with the ordered
+rig controllers, for consumers that read membership without stepping it. Exit frees the session
+subtree atomically and releases only the non-node resources this orchestrator owns. The
+prohibitions that keep those rules true, no `Teardown`, no argument parsing here and no
+re-derived camera set, sit on the members they bind. Read `SessionSimulation.cs` for the step
+order and `Launcher.cs` for what outlives one session.
 
 ## src/Session/SessionSimulation.cs
 The session simulation: one plain-C# module owning hold admission and the exact order of flight,
-combat, mission, radio, effects and match advancement. `Step(dt)` snapshots eligible AI membership
-at entry, then advances incoming fire → projectiles → human aircraft → zeppelins → emplacements →
-generators → surface vehicles → captured AI → landing approaches → Instant Action → campaign →
-radio → smoke → tags →
-AI voice → Versus. A generator-spawned aircraft therefore first flies on the next step, including
-the next fixed-accumulator substep in the same rendered frame. A landing or campaign callback that
-raises `SimHeld` halts the remaining phases immediately. An active ending hold advances only the
-campaign hand-off; one raised by the campaign also rejects every later phase and same-frame substep.
-Exceptions are fail-fast. Authored animation,
-cutscene presentation, weather, lens flare, terrain extension and wall-time watches stay outside.
-`ISessionSimulationRuntime` is the named recording/production seam; it is not a participant registry.
+combat, mission, radio, effects and match advancement. `Step(dt)` snapshots eligible AI
+membership at entry, then advances incoming fire, projectiles, human aircraft, zeppelins,
+emplacements, generators, surface vehicles, captured AI, landing approaches, Instant Action,
+campaign, radio, smoke, tags, AI voice and Versus. Authored animation, cutscene presentation,
+weather, lens flare, terrain extension and wall-time watches stay outside it, with
+`GameSession`. `ISessionSimulationRuntime` is the named recording and production seam rather
+than a participant registry. Read `GameSession.cs` for who owns each phase.
 
 ## src/Session/Launcher.cs
-Main.tscn's root: the once-per-process bootstrap — CLI parse into `_cli`/`_spec`, data-root
-precedence, `Pads.Disabled`/`TextureDropIn`/`Log`/master-seed side effects, the
-`--dump-*`/`--run-tests` early quits, the `--headless`+`--screenshot` rejection (after `Log.Open`,
-so the message actually lands somewhere) — plus everything that persists across in-process relaunches
-(camera, orbit rig, sun, WorldEnvironment, launchscreen, focus mute, the per-frame shader clock /
-`--perf` / capture tick at priority -999). Both audio levers are master-*bus* writes from here,
-because only `FlightAudio` has a gain to scale and `WorldSounds` would sound through any factor
-threaded through the other path: `SetFocusMuted` owns the bus's mute FLAG (alt-tab), while
-`ApplyMasterVolume` writes its VOLUME once per launch from `--volume=`, else the `audio.volume`
-config key. Separate properties, so neither disturbs the other — and unlike `--mute`, a zero volume
-still loads and plays everything, so the sound counters and log lines stay intact.
-`SetupLighting` builds the session's one `DirectionalLight3D` and `WorldEnvironment` at
-`WeatherRig.DefaultEnergies` and a hand-picked bearing, which is what a viewer, a menu or a
-mission with no weather.json flies under. A mission that has weather overwrites both the bearing
-and the energies per zone-apply (`WeatherRig.ApplyZone`), so these are defaults rather than the
-level every flight renders at.
-The default root is export-aware: editor (and editor-run builds) → the repo checkout
-(`res://`'s parent — `GlobalizePath("res://")` maps to disk only there), exported build → the
-exe's own directory; `CSVM_DATA_ROOT`/`--data-root=` override either.
-`LaunchSession()` instantiates a `GameSession` per
-launch; `ReturnToMenu(destination)` `QueueFree`s it and shows the menu again; a menu launch
-derives its spec via `SessionSpec.FromMenu(_cli, …)`, never from the outgoing spec. `ExitSession`
-is the boards' Exit item, handed down through `LauncherContext`: back to the menu at its top level
-when the process launched into it, out of the game otherwise. The routing Esc used to do — Esc now
-opens the pause board instead, so leaving a flight is reachable from a pad, and this one rule lives
-here rather than being restated per board.
-
-The menu is owned as a `MenuHost` (`src/UI/Menu/MenuHost.cs`), built by `BuildMenuHost` on the
-first show and kept for the life of the process: a `PresentationRegistry` with the Built-in
-presentation registered under `PresentationId.BuiltIn` (its factory closes over this node as the
-parent, the data paths, the `--menu=` aid from `_cli` and the first seat's poller) and the Original
-presentation under `PresentationId.Original` (over the layout the availability check loaded and
-the same `--menu=` aid, read as Original's own values), the shared `FreeFlightFeature`, the first
-seat (a `PointerSeat` over a `BuiltInSeat` over a keyboard-plus-unclaimed-pads `MenuInput`, the
-viewport's mouse position and the left button as the pointer), the `MenuAudioService` over the
-process's music channel, sound archive and the rof tree's `ASSETS/SOUNDS`, and `OnMenuExit` as
-the sink. The active presentation is settled once there through `MenuHost.Select`
-(`PresentationResolution.Resolve` with `--force-builtin`, `--presentation=` and the saved
-`OptionsStore` request; availability is registration plus `OriginalAvailable`, which loads the
-decoded layout through `OriginalAvailability`, keeps it for the factory and logs the optional
-absences as their own `ui` line, and is asked again on every switch so a repaired tree is seen)
-and logged as one `ui`
-line with the requested and active ids and the fallback reason; an unknown, blank or unavailable
-request falls back to Built-in rather than crashing, and a fallback never rewrites the saved
-request. An `OptionsApplyExit` is acted on one frame later (`_pendingApply`, the exit
-arrives inside the presentation's own tick): `ApplyOptions` saves both the presentation request and
-the graphics word through `OptionsStore`, calls `Deactivate` (freeing the presentation and
-discarding transient feature state), re-selects with the saved request in place of any
-`--presentation=` override (the force flag still wins) and shows the top level. This is the only
-writer of the options file anywhere in the codebase, which is what keeps a driven Options screen
-in a test or a suite from writing the player's own. Nothing here gates a presentation on anything
-but registration and availability: a saved `original` request selects Original on a cold start with
-no flag, so Original's normal exposure is the two Options choosers' toggle plus `OptionsStore`'s
-accepted token set, and the whole contract a further presentation registers against is
-[`docs/menu-presentations.md`](menu-presentations.md). `ShowMenu(destination)` shows the host at a semantic
-`MenuReturnDestination`, then does what is the owner's: the `loadboard` aids, the menu music cue,
-and the one-shot `--debug-join=`/`--debug-waves=`/`--debug-wingmen=`/`--debug-preset=` aids
-through `BuiltInMenu`, the one door onto the launchscreen (`Active as BuiltInPresentation`, null
-under Original), also used for the failed-build note. The `--menu=` aid is the cold start's alone:
-`BuildMenuHost` parks it in `_menuAid`, both registry factories read it when they run (inside the
-first `Show`, so the first instance gets it and the fresh instance a switch creates gets none), and
-the first `ShowMenu` consumes it, applying the `loadboard` aids once. Every later show, a return
-from flight through `ReturnToMenu` or a debrief through `OpenDebrief`, lands on the destination
-itself in both presentations. A failed build returns to the top level, logs one `ui` line naming
-the active presentation, and shows Built-in's error line where Built-in is active; Original has no
-note and its top level shows bare. Esc ownership and the capture director's menu flag read
-`MenuHost.Shown`, never a node's visibility. `_Process` ticks the host last, after `RunOwedLaunch`,
-which is where the launchscreen's own process callback ran when it ticked itself as a child.
-
-`OnMenuExit` is the one way out of the menu: a `LaunchExit` becomes `StartSessionFromMenu`
-(`FromMenu` over the chapter, the mode, the wizard's def and the seat choices unpacked into the
-four parallel lists the factory takes, a campaign-exported custom plane's stored fit standing in
-where a seat set none), a `CampaignMissionExit` becomes `StartCampaignFromMenu` (`FromCampaign`
-over the profile and story position; it names no chapter and no mission, since
-`CampaignDirector.ResolveSpec` reads those out of `cm_sequence` in the session's constructor, so
-one place resolves a story position whether it came from a cabin or a `--campaign=` command line),
-and a `QuitExit` quits the tree. The host has already hidden the presentation when the sink runs,
-with its screens kept so a failed build can show it again where it stood. The campaign's return
-leg is `CampaignMissionEnded`, handed down through `LauncherContext` and non-null only in a
-menu-driven process: a campaign mission's end, won or lost, queues the profile name alongside its
-`CampaignMissionResult`, and the next `_Process` frees the session and shows the menu at a
-`DebriefReturn(profile, seq)`, which each presentation maps onto its own book with the cabin on its
-far side. Queued rather than acted on directly, because the mission ends inside the session's own
-physics step, which is no place to free it. The boards' Exit is `ExitSession`, a
-`ReturnToMenu(TopLevel)` in a menu-driven process and a quit otherwise; `RestartSession` rebuilds
-without touching the menu. These three, the failed build's return and the two sinks above are every
-way a session hands control back, and each is a destination or a quit, never a screen name.
-The music channel is built here too, once per process and after every early-quit probe, over a
-`SoundArchive` of its own rather than the build-scoped `SessionArchives.Sounds`: one channel has to
-outlive a mission launch, or the cabin track would restart every time the player left a board. It
-is entered on every launchscreen show, stopped in `BeginLaunch` (the one place a session leaves the
-boards), and ticked on wall time from `_Process` so a paused or stepped session cannot stall a fade
-halfway. An install with no readable sound archive or sound definitions leaves it null, which is
-silence rather than a refusal to launch.
-`RestartSession` is its sibling for the boards' Restart on an Instant Action mission: `QueueFree`
-this session, step the sortie seed exactly as flying again from the menu does (so an unpinned
-restart draws a new mission and a pinned one repeats), and build a fresh session from the same
-spec. A mission's opposition lives in the world, so putting it back means rebuilding the world.
-Both interactive paths in — the launchscreen's Fly and that Restart — go through `BeginLaunch`,
-which shows the `LoadBoard` and owes the build to `RunOwedLaunch` at the tail of the NEXT
-`_Process`: a build is one synchronous block, so the load screen cannot be drawn during it, and
-the outgoing session (freed at the end of the requesting frame) is gone before the new one builds,
-which is what stops its exit-tree duties (the published clock, the world lights, the camera
-restore) landing on top of the new session. The load screen is freed in the same tick the build
-returns, before anything renders, so it can never draw over the world's first frame or a
-`--screenshot` capture. ⚠ The CLI launch in `_Ready` deliberately does NOT come through here: it
-stays inline, so no scripted, golden or perf run gains a frame it did not have before.
-`ReportPerf`'s window line carries `max_ms`/`p95_ms` beside its means:
-a preallocated `_perfFrameMs` ring holds each frame's unaveraged wall cost, sorted into scratch
-at window close. No `p99_ms` — at `PerfWindowFrames` = 60 it would equal `max_ms` by construction.
-One `ReadFrameCounters()` per frame samples the eight engine counters once and feeds both
-instruments: `HitchMonitor.Tick` wants them unaveraged, `ReportPerf` sums
-them, and the two `TIME_*` monitors are converted from seconds to ms at that single read. The
-monitor is constructed alongside the other process-scoped services (ahead of every probe's early
-quit and of `--dump-config`, which is what registers its five keys) and `Rearm`ed by
-`LaunchSession`/`ReturnToMenu`, since a build or a teardown legitimately stalls the loop.
-`--hitch-inject=` fires right before the QPC stamp, on the `_Process` call
-where `HitchMonitor.FrameCount + 1` matches the flag's frame — so the injected stall counts as that
-call's own frame cost instead of the next one's.
-`PerfSample.EndFrame()` is called on the same line as that stamp, so a frame's scopes and its
-wall cost cover the same span — the session node processes at priority -1000, one notch ahead of
-this one, so the work it declared is already in — and `PerfSample.Reset()` sits beside every
-`Rearm`, since a build's own loads belong to no frame.
-`_hitchSidecar` is built one step later than the monitor, right after `Log.Open` (its path
-derives from `Log.SinkPath`): a trip queues into it from `_Process`, and `LaunchSession`/
-`ReturnToMenu`/`_ExitTree` all flush it before `HitchMonitor.Rearm` — a build, a teardown and an
-ordinary quit all legitimately stall or end the loop, and none of them should wait out the sidecar's
-own flush interval to write down what it already has queued.
-Measured render time is enabled once in `_Ready` (`ViewportSetMeasureRenderTime`) rather than per
-frame from `ReportPerf`, because the hitch record needs the CPU/GPU split on every run, not only a
-`--perf` one.
-`SetupLighting` keeps `_sun.ShadowEnabled = false` in the faithful path and calls `EnableSunShadows`
-in enhanced graphics mode only: PSSM 4 splits, blended, splits 0.06/0.17/0.42, bias 0.05 and normal
-bias 1.25 (TUNE, the pair judged against acne at C1's 25 degree sun and against peter-panning of the
-biased road decals), `LightAngularDistance` 2.0 degrees so a cast edge on flat water reads as a soft
-penumbra rather than a hard line, and a `DirectionalShadowMaxDistance` that is a FALLBACK: a flown mission
-overwrites it per zone from that zone's pushed-out fog far (`WeatherRig`). The world meshes and the
-aircraft are the only casters; every other population is already `ShadowCastingSetting.Off` or
-declares `shadows_disabled` in its shader. The front-culled world needs no `DoubleSided` casting:
-the source's visible side is Godot's back face, which is the face the sun sees. `EnableWaterReflections`
-is the same mode gate on the Environment's SSR, for the one glossy population `SceneBuilder` builds;
-what it can and cannot reflect is measured in `PLAN-enhanced-graphics` C24.
-`UseMissionSky` is the same mode gate on the Environment's sky: enhanced mode swaps Godot's
-placeholder `ProceduralSkyMaterial` for a flat `PanoramaSkyMaterial` carrying one colour, which
-`WeatherRig` rewrites per zone from that zone's `FOG_COLOR`, and takes the ambient off the sky so
-the authored `SUNLIGHT_AMBIENT` keeps it. The faithful path keeps the procedural sky, which it
-never shows: the dome is gamez geometry drawn over the background.
-`SetupLighting` also sets SSAO on the enhanced `_env` (radius 2.5, intensity 2.0, power 1.5, detail
-0.5, horizon 0.06, sharpness 0.98; all TUNE for this world's street-canyon scale). The faithful path
-never enables it, since SSAO reads ambient light and the unshaded path has none for it to modulate.
-`CockpitOverlay.NewOverlay` duplicates `_env` at build time, so the interior pass inherits the same
-settings automatically.
-`EnableGlowAndTonemap` is the same mode gate for `_env`'s glow and tonemap: `GlowHdrThreshold` 1.0
-with `GlowBloom` 0 so only the glow-arm sprites (`SceneBuilder`'s `col.rgb * 1.5`, the only pixels
-enhanced mode pushes above 1.0) bloom; `TonemapMode` AgX with its own white/contrast pair recovers
-the day chapters' far-ridge washout instead of clipping it (all TUNE, judged against C1/C4/C5
-captures in `PLAN-enhanced-graphics` C22). `CockpitOverlay`'s duplicated `_env` inherits
-this too, so the interior pass tonemaps once, the same as the world pass. See "Rendering: the
-enhanced graphics mode" above for the divergence record as a whole.
-Vsync resolves at the same `_Ready` site as the shader clock / `--perf` tick: `display.vsync`
-config key (default true) or `--no-vsync`, the flag always beating the key.
-The config read is unconditional even when the flag already decided, so the key still registers
-into `--dump-config` on a `--no-vsync` run — the same reason `ApplyMasterVolume` reads
-`audio.volume` unconditionally. The resolved state logs either way (`vsync on` / `vsync off
-source=…`), so a session's log always says which mode it ran in.
+Main.tscn's root and the once-per-process bootstrap: CLI parse into `_cli`/`_spec`, data-root
+precedence, the `--dump-*`/`--run-tests` early quits, and everything that outlives a session
+(camera, orbit rig, sun and `WorldEnvironment`, the master audio bus levers, the music channel,
+the perf and hitch instruments, the enhanced-graphics lighting gates). It owns the menu as one
+`MenuHost` built on the first show, the presentation resolution and the only options write in
+the codebase, and the sink every way out of the menu passes through
+([../menu-presentations.md](../menu-presentations.md)). `LaunchSession`, `ReturnToMenu`,
+`RestartSession` and `BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on.
 
 ## src/Session/LiveryResolver.cs
-Resolves which livery each player flies: the shipped paint catalog (`PaintCatalog`, lazy + cached), the per-pattern
-region-mask library (`Patterns`, lazy + cached), `PatternsForPlane`, and the per-player
-`SchemeFor` pick that reads a `SessionSpec`'s `--paint=`/`--paint-color=`/`--paint-decal=`
-overrides. Constructed once per session build (`_liveryResolver` in `GameSession.StartSession`,
-never across a menu rebuild — a relaunch gets a fresh instance over the fresh `_spec`).
-With no `--paint=`, every aircraft wears `LiveryResolver.DefaultPattern` (`player_fortune`, the
-Fortune Hunters livery the original's stock planes wear, and the only pattern covering all eleven
-airframes): flight rigs, AI spawns and the static `--plane`/`--damage`/`--viewer` views alike. An
-AI spawn wears an explicit scheme first (the Instant Action ace's `ace_*` livery), then its own
-def's `paint_*` scheme (`DefScheme`, via `AiFlightAssembler.MilitiaScheme`), and reaches this
-default only when neither is authored. That default is a straight catalog lookup and consumes no RNG draw, so pinned liveries are unmoved by it;
-`--paint=none` is the only way to the bare shipped skins, and an absent `player_fortune` catalog
-entry (no vehicle.json) falls back to them with a one-line note. The Instant Action enemies are the
-exception (`SchemeFor`'s `useDefaultPattern: false`) — see `InstantActionRuntime.cs`'s entry for why.
+Resolves which livery each player flies: the shipped paint catalog and the per-pattern
+region-mask library (both lazy and cached), `PatternsForPlane`, and the per-player `SchemeFor`
+pick that reads a `SessionSpec`'s `--paint=`/`--paint-color=`/`--paint-decal=` overrides.
+Constructed once per session build, so a relaunch resolves against the fresh spec. With no
+override every aircraft wears `DefaultPattern`, the only pattern covering all eleven airframes;
+an AI spawn prefers an explicit scheme, then its own def's `paint_*`, and reaches that default
+only when neither is authored. Instant Action enemies are the exception, for the reason
+`InstantActionRuntime.cs` gives. Paint decode: [../org/paint.md](../org/paint.md).
 
 ## src/Session/SpawnPicker.cs
-Resolves each player's flight spawn:
-`ChooseSpawnBase` (the shared `--spawn=`-or-random list index), `ChooseSpawn` (a player's
-position/look-at from that list, objectives.json `PLAYER_INIT`, or the `--spawn-at=` debug
-override), and `LogSpawn`. Constructed once per session build (`_spawnPicker`, same lifetime as
-`LiveryResolver`). Also the plain `IFlightStarts`: `ChooseStarts` just loops its own `ChooseSpawn`,
-which is the placement every session flies except a splitscreen race or a co-op campaign mission.
-`StartGrid` delegates to
-`ChooseSpawn` for its anchor, and the weapon lab and freecam spectator call it directly, so this
-type stays the single owner of spawn resolution.
+Resolves each player's flight spawn: `ChooseSpawnBase` (the shared `--spawn=`-or-random list
+index), `ChooseSpawn` (a player's position and look-at from that list, `objectives.json`'s
+`PLAYER_INIT`, or the `--spawn-at=` debug override) and `LogSpawn`. Constructed once per session
+build, the same lifetime as `LiveryResolver`. Also the plain `IFlightStarts`: `ChooseStarts`
+loops its own `ChooseSpawn`, which is the placement every session flies except a splitscreen
+race or a co-op campaign mission. `StartGrid` takes its anchor from here, and the weapon lab and
+the freecam spectator call it directly, so this type stays the single owner of spawn resolution.
+Spawn data: [../formats/spawns.md](../formats/spawns.md).
 
 ## src/Session/IFlightStarts.cs
 Where every pilot in a session starts: `ChooseStarts(spawns, missionZrdrPath, spawnBase,
-playerCount)` returns one `FlightStart` — the same `(pos, lookAt)` pair `FlightController.Setup`
-already took — per player. Two implementations: `SpawnPicker` (the plain per-player walk of the
-mission's spawn list) and `StartGrid`. `HumanFlightAdapter` holds the interface and resolves the
-field lazily on its first `Assemble`, so the resolve still happens where it always did.
+playerCount)` returns one `FlightStart` per player, the same `(pos, lookAt)` pair
+`FlightController.Setup` takes. Two implementations: `SpawnPicker`, the plain per-player walk of
+the mission's spawn list, and `StartGrid`. `HumanFlightAdapter` holds the interface and resolves
+the field lazily on its first `Assemble`. Answering for the whole field at once is the point of
+the seam, and the constraints that keep it so sit on the interface's own members.
 
 ## src/Session/StartGrid.cs
-The abreast starting grid and second `IFlightStarts`: it fans slots symmetrically across one anchor
-heading, then lifts the whole field by its lowest terrain clearance. Anchor selection stays with
-`SpawnPicker`, preserving mission `PLAYER_INIT`, Instant Action lists, fallbacks, and `--pos`.
-Heading comes from the anchor's position-to-look-at pair so `--direction` survives. Terrain is an
-injected `Func<Vector3, float?>`; production uses `GameSession.GroundSampler()`.
-`startGrid.slotSpacing` and `startGrid.groundClearance` are registered TUNE values. `GameSession`
-selects this grid for multiplayer campaign sessions and eligible splitscreen stunt races; solo,
-Dogfight, and deterministic scripted race starts keep their own placement paths. Geometry and
-terrain lifting are pinned by `CSVM.Tests/StartGridTests.cs`.
+The abreast starting grid and second `IFlightStarts`: it fans slots symmetrically across one
+anchor heading, then lifts the whole field by its lowest terrain clearance. Anchor selection
+stays with `SpawnPicker`, preserving mission `PLAYER_INIT`, Instant Action lists, fallbacks and
+`--pos`; the heading comes from the anchor's position-to-look-at pair, so `--direction` survives.
+Terrain is an injected `Func<Vector3, float?>`, production using `GameSession.GroundSampler()`,
+and `startGrid.slotSpacing`/`startGrid.groundClearance` are registered TUNE values.
+`GameSession` selects this grid for multiplayer campaign sessions and eligible splitscreen stunt
+races; solo, Dogfight and deterministic scripted race starts keep their own placement paths.
 
 ## src/Session/PlaneRoster.cs
 Static, spec-free lookups over a `SessionSpec`'s plane roster: `PlaneFor(spec, index)`,
 `PlaneDisplayName(stats)`, `Humanize(s)`. A plane's display name is the def's AUTHORED `title`
 (`PlaneStats.AiTitle`, "Medusa Kestrel") where something has resolved it through the string table,
 and the def-name derivation ("Bloodhawk") otherwise, which is what a player load and a bare rig get.
-No session state — every call takes the `SessionSpec` explicitly rather than caching one, since
+No session state: every call takes the `SessionSpec` explicitly rather than caching one, since
 these are pure over their arguments.
 
 ## src/Session/SurfaceDefTable.cs
-One of the original's per-surface anim-def vectors — `"player_crash_" + name`, `"ai_crash_" +
-name` or `"touchdown_" + name` over every `SurfaceRegistry` slot — plus the cascade that
-indexes it with a struck material's numeric surface id (`SceneBuilder.SurfaceIdMeta`). Faithful to
-`FUN_0048b920`
-`0x0048bac5`–`0x0048bb00`: a null struck material, a negative id, an id at/beyond the vector length,
-or a slot naming a def the program does not define all resolve **slot 0**; an empty vector or an
-empty slot 0 resolves the bare last-resort anim name; anything else is `vector[id]`. Built once per
-bind from a caller-supplied "does this def exist" test, so `PlayableDefs` is what a runtime must
-bind and `DefForSurfaceId` is what an impact asks. Engine-free and pure. The AI family is the same
-cascade over the same fields (`FUN_00475820` copies its params-built vector onto the vehicle,
-`FUN_00476250` swaps in the player vector only on the vehicle named `player`); its last resort is
-the vehicle's own name (`FUN_00479240` at `0x0047b11b`), so `AiCrashDefTable` passes the plane name.
-Full decode, including the touchdown family's one difference (its empty last-resort arm plays
-nothing) and the weapon `IMPACT` table's own, non-sharing fallback over the same registry id space:
-`analysis/surface-classification/FINDINGS.md`.
+One of the original's per-surface anim-def vectors (`"player_crash_" + name`, `"ai_crash_" +
+name` or `"touchdown_" + name` over every `SurfaceRegistry` slot) plus the cascade that indexes
+it with a struck material's numeric surface id (`SceneBuilder.SurfaceIdMeta`). Built once per
+bind from a caller-supplied "does this def exist" test, so `PlayableDefs` is what a runtime binds
+and `DefForSurfaceId` is what an impact asks. Engine-free and pure; the fallback cascade and its
+empty-slot arm carry their prohibition at the type itself. The AI family runs the same cascade
+over the same fields with the vehicle's own name as its last resort. Full decode, including the
+touchdown family and the weapon `IMPACT` table: `analysis/surface-classification/FINDINGS.md`.
 
 ## src/Session/InstantActionDirector.cs
-The engine-side sequencing of one Instant Action mission, behind `GameSession`'s one nullable
-`_iaDirector` field. A plain sealed class, not a Node: `GameSession` owns the tick order and calls
-the phases at its pinned points (its entry has the order), and every node built on the mission's
-behalf parents under the handed `_worldRoot`, so the session's no-Teardown rule holds unchanged.
-The decoded rules stay engine-free in `InstantActionRuntime` and `InstantActionWaves`; this class
-is where they meet the engine, and it owns every "ia:" log line.
-`TryCreate(spec)` is construction: `SessionSpec.IaDef` (the wizard's already-built def, H16)
-first, else `--ia=<path>` through `InstantAction.LoadFromJson`; both producers converge on the one
-`new InstantActionRuntime(def)` call (⚠ in the code — two similar calls is the failure it avoids),
-and a load failure warns and returns null rather than aborting the launch.
-`BuildActors(ActorBuildInputs)` is the contiguous actor phase: stable mission references plus the
-two delegates `GameSession` keeps private behaviour behind, the roster-spawn lambda and
-`RegisterAiVoice`: the
-chapter's FIRST patrol net armed on every actor, the `dogfight_ace` ace (spawn draw
-`ChooseAceSpawn`, authored livery/team/rating), D9's wingmen (`FlownWingmen` clamp,
-`WingmanSlotFor` fan off P1's pose, `player_fortune` livery, explicit `attackRating: 5`, the
-escort chain set AFTER spawn so wingmen 2/4 target the already-spawned 1/3), and E11's waves —
-EVERY configured wave built inert at the world origin on all four modes (Decision 6: build inert,
-then teleport-and-activate, folding "wave 1 spawns live" into the path every later wave takes),
-each member's rating and accent drawn from `Rng.Stream(Rng.Ai)`, its livery the militia pattern or
-its own shipped skins, never the Fortune Hunters default. Wave 1 starts here on every mode but
-`zeppelin_run`.
-F12's zeppelin run rewires three points without a second code path: `SwitchZeppelins` writes every
-distinct authored zeppelin node `Visible = objective` (the decoded `gwNodeSetActive`, colliders
-derive from it) with `ZeppelinRuntime.Hold` on the ones switched off, returning the switched nodes
-for `GameSession`'s turret arm; `ArmZeppelinRun` hands the private `ReleaseWaveMember` launch hook
-to the objective's generator (`UseInstantActionLaunches`) and only then starts wave 1, since
-activating it means crediting a generator that did not exist at `BuildActors` time; `ActivateWave`
-branches at the top, stamping the launch-wave group (the generator's decoded `+0x64`) and calling
-`GrantWaveCapacity` instead of drawing a spawn point.
-`Step(dt)` (⚠ called from BOTH drive paths) advances the mission clock, ticks
-`InstantActionWaves.Step` with the current wave's alive count (a member still parked in the
-zeppelin's bay COUNTS as present, as the decoded walk counts a still-deactivated enemy), activates
-whatever wave it returns, and reports `WavesCleared` when the sequencer finishes.
-`WireEndConditions(EndConditionInputs)` is G13+G14: each mode's own signal routed into the runtime
-(the ace's `Downed`; `StuntMission.RunCompleted` into the zone-set check, re-checked when a pilot
-goes out, never polled; both zeppelin signals filtered to the OBJECTIVE node, engines first; the
-sequencer's exhausted counter from `Step`), a mission whose win signal cannot arrive disabled with
-a WARN at build; every human seat on the lives ledger with the 3 s respawn delay and a `Downed`
-handler that logs the lives left or hands the pane over through `Session/SpectateHandoff.cs`, which
-the campaign's own loss rule shares; and the whole-window wrap-up board,
-its counters summed across every seat (`enemiesShotDown` filtered on `killer != null` — a bare
-terrain crash never reaches the take-hit body the original counts in — Shot % through
-`ProjectilePool.ScoredShooters`, zones read live at `MissionEnded` time, P1's stunt best recorded
-under the mission's own score key). `BuildStuntSummary` (`BL-426`) is the record's own gate: it
-gets THIS run's own `AllComplete`, never the mission's win/loss flag, since a splitscreen mission
-ends once every pilot is done OR spent, so P1's own zone set can still be short when the mission
-itself ends on the other pilot going out of lives — each pilot's summary reads that pilot's own
-`StuntMission`, so the gate is per-pilot by construction. The stored `prevBest` is read before the
-gated record either way, so a run that does not qualify still shows the true stored best instead of
-nothing; reading it after the record would show a completing new-best run its own just-written time
-as "previous". A failed run's working default, pending the author's own judgement, is to show its
-elapsed total with no NEW BEST flag — the original's own behaviour here is not decoded, and whether
-an already-poisoned `user://stunt_scores.json` needs invalidating is a separate open question this
-item does not settle.
-`ForceDebugScoreboard()` is `--debug-scoreboard`'s single-fire force, attributed to P1:
-`dogfight_ace`/`dogfight_squadron` through `DebugForceCrash`; `stunt_flying` needs nothing,
-already forced by `HumanFlightAdapter`'s own `DebugCompleteStunt` wiring; `zeppelin_run` has no
-force, its verification drove the mode through real damage.
+The engine side of one Instant Action mission, behind `GameSession`'s one nullable `_iaDirector`
+field: a plain sealed class that builds no node of its own, so every actor it makes parents under
+the handed world root. `TryCreate` takes the wizard's def or `--ia=<path>`; `BuildActors` is the
+contiguous actor phase (the chapter's first patrol net, the ace, the wingman fan and its escort
+chain, every configured wave built inert at the world origin); `Step` ticks the sequencer and
+activates what it returns; `WireEndConditions` routes each mode's own win signal, the lives
+ledger and the whole-window wrap-up board. The decoded rules stay engine-free in
+`InstantActionRuntime.cs` and `InstantActionWaves.cs`; this class owns every `ia:` log line.
 
 ## src/Session/SpectateHandoff.cs
 The shared pane handoff for an Instant Action pilot out of lives or a campaign human whose aircraft
@@ -343,85 +117,41 @@ Candidate and tracking lists are optional for callers without a roster or rerun 
 ## src/Session/InstantActionRuntime.cs
 Owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's spawn draw
 and rating, the wingmen's fan placement, each wave's per-member draws, the objective-zeppelin
-selection, and the mission's end. Static, engine-free helpers `InstantActionDirector` calls:
-`ChooseAceSpawn`, `RepresentativeRating`, `WingmanSlotFor`/`FlownWingmen`,
-`RandomPilotStats`/`ResolveWaveAccentId`, `ZeppelinNodes`/`SelectedZeppelinNode`/`ZeppelinTypeIndex`,
-`FormatElapsed`/`ShotPercent`. The end half (`Objective`, `ReportObjective`, `DisableObjective`,
-`ZoneSetsFlown`, the lives ledger, `Outcome`/`MissionEnded`, `Elapsed`) holds no engine type and
-calls no `GD.*`, the same construction rule `VersusMatch` follows —
-`CSVM.Tests/InstantActionEndTests.cs` pins it off-engine, and `InstantActionDirector` owns every
-log line about it. Format and decode: docs/formats/instant-action.md.
+selection, and the mission's end. The static, engine-free helpers `InstantActionDirector` calls
+are here (`ChooseAceSpawn`, `RepresentativeRating`, `WingmanSlotFor`/`FlownWingmen`,
+`RandomPilotStats`/`ResolveWaveAccentId`, the zeppelin lookups, `FormatElapsed`/`ShotPercent`).
+The end half holds no engine type and calls no `GD.*`, the same construction rule `VersusMatch`
+follows, and the director owns every log line about it. Format and decode:
+[../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/Session/InstantActionWaves.cs
-The decoded wave sequencer's own selection, trigger and geometry logic (`FUN_0045b9d0`): pure state
-over `Start`/`Step` calls, in the shape of `GeneratorCycle` —
-`CSVM.Tests\InstantActionWavesTests.cs` pins it off-engine. `InstantActionDirector.BuildActors`
-builds every configured wave's members INERT at the world origin, tracked in the director's own
-per-wave rosters, then calls `Start()` and activates whatever it returns; the director's `Step`
-ticks `InstantActionWaves.Step` once per sim step, and its `ActivateWave` resolves the spawn draw
-against every live human's CURRENT position before calling `FlightController.Activate` on each
-member. Format and decode: docs/formats/instant-action.md.
+The decoded wave sequencer's own selection, trigger and geometry logic (`FUN_0045b9d0`): pure
+state over `Start`/`Step` calls, in the shape of `GeneratorCycle`, pinned off-engine by
+`CSVM.Tests/InstantActionWavesTests.cs`. `InstantActionDirector.BuildActors` builds every
+configured wave's members inert at the world origin, then calls `Start()` and activates whatever
+it returns; the director's `Step` ticks this once per sim step, and its `ActivateWave` resolves
+the spawn draw against every live human's current position before activating each member. Format
+and decode: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/Session/ObjectiveScript.cs
 One mission's `objectives.zrd`, parsed into the typed shape `ObjectiveGraph` runs. `Load` takes a
 mission zrdr scope and yields an empty script for a mission with no file, which is what every
 Instant Action and multiplayer stub amounts to. Two parser rules are the original's and are what
-keep the shipped data honest: blocks are read `OBJECTIVE1`, `OBJECTIVE2`, … and **stop at the first
-missing number**, and every directive is found by EXACT name over the block's flat alternating list,
-so `WAKEUP_OBJECTIVE_WHEN_I_COMPLETE` and the truncated `SET_AI_` land in no field and stay dead
-without anything special-casing them. The lookup stays at the top level rather than recursing into
-nested lists as the original does: no shipped file exercises the recursion, so the answer is the
-same on all 53 files and no data string can false-match a keyword. A `null` block parses to a
-directive-free objective, which starts awake and completes as a no-op. The four target directives
-and `SET_HELP_LABEL` read `ObjectiveTarget`s, not names: a string is a bare name and a nested list is
-ONE `[parent, child, ...]` path, keyed as `parent/child` (`ObjectiveTarget.Key`) everywhere a
-target is stored or compared. ⚠ Flattening the nesting into names is how C1/M04's
-`[[piratezep, rock_zeppelin]]` lit the hull root and a ground `rock_zeppelin` as two markers.
-`SoundGroupNames()` (D33) collects every sound-group name the script's directives can hand to
-`PlaySoundGroup`, a vocabulary the mission's anim program never sees, so nothing else prewarms it;
-a session hands this to `WorldSession.Options.ExtraPrewarmNames`.
-Format and decode: docs/formats/objectives.md.
+keep the shipped data honest: blocks are read `OBJECTIVE1`, `OBJECTIVE2` and stop at the first
+missing number, and every directive is found by exact name over the block's flat alternating
+list, so a truncated or misspelled key lands in no field and stays dead. The four target
+directives and `SET_HELP_LABEL` read `ObjectiveTarget`s, where a nested list is ONE path keyed
+`parent/child`. Format and decode: [../formats/objectives.md](../formats/objectives.md).
 
 ## src/Session/ObjectiveSites.cs
 The flown campaign mission's objective sites, offered to each player's `TargetPool` as
-objective-flagged candidates: the original carries an objective as a companion flag on the Enemy
-cycle, so one site is drawn at a time and d-pad up steps between them. The set is `targets.zrd`'s
-own `objective` entries plus every roster block that authors the flag on itself
-(`CampaignDirector.RosterObjectiveMarkers`, aiv slot 37 — CM11's `secfury_5`/`secfury_6`, the
-shipped case), minus whichever of those a completed objective's `REMOVE_OBJECTIVE_TARGET` names,
-plus whatever `ADD_OBJECTIVE_TARGET` has added: `ObjectiveGraph.ObjectiveTargets` alone starts
-empty and a mission that only ever REMOVES its sites would offer nothing, CM11's own OBJECTIVE1
-included, which removes both stunt planes without ever adding them. One `ObjectiveSite` instance
-lives as long as the mission flags it, since the selection is held by source identity; its position
-and labels are re-read every frame, which is what tracks a site under a moving node. `PointFor`
-prefers the bare `TRAVELERS` point of the objective that edits a target over the world node of the
-same name, because C3/M01's village node stands at the world origin. Next, a roster marker reads
-its own spawned `FlightController`'s live `WorldPosition` (`RosterAircraftPosition`): a roster
-aircraft with no chapter-gamez library root under its own block name is never indexed on
-`AnimRuntime` (`RosterMarkers.Attach` only indexes one when that root exists), so `Resolve`/
-`SiteAnchor` below can never find it. Otherwise a site on a world node is marked at `SiteAnchor`,
-the centre of the world bounding box of everything that node draws, which is what the
-original publishes for a mission structure (`docs/org/targeting.md`); its own position is only the
-fallback for a node that draws nothing. C1/M05's balloon groups stand on the water with the balloon
-16 m above them and C2's `sghangar` stands at the world origin, so the node's position is not the
-site. A site carries the team of the node it stands on where that node is a mission structure, and
-neutral otherwise, which is the original's own split: a record naming a flagged node keeps that
-object's team, and a record that has to build its own builds it neutral. Almost every site is the
-second case, since a group is flagged on a child (a roster-aircraft site is always this case, since
-`RosterAircraftPosition` resolves no `DestructibleRegistry` instance). A site is keyed by
-`ObjectiveTarget.Key`, and `ResolveTarget` walks a path one name at a time with `FindNodes` scoped
-to the node before, so `piratezep/rock_zeppelin` is the hull's own child and a bare name is the
-first global match; `targets.zrd` is looked up by the whole key first (a path-authored entry
-keys `parent/child` there too) and by the path's last node as the fallback. The help label reads
-the graph's own `SET_HELP_LABEL` first, then the roster block's own slot 39, then `targets.zrd`'s.
-The marker's verb, proper name and colour all come off that table through `Messages`
-(`Zeppelin [Disable] -` over `Worker's Voyage` in red, `[Dock] -` over `Worker's Voyage Docking
-Hook` in blue), and a site whose key finds no entry falls back to its node name, which is what a
-table loaded from the wrong scope looks like. `GameSession` binds it through
-`FlightRoster.SetTargetObjectives`. Pinned by `campaign-objective-markers`,
-`campaign-objective-target-path`, `campaign-objective-labels`, `campaign-race-chain` (the
-hangar anchor, and C2/M03's race chain of per-zone objectives with a racer-death DEDG each) and
-`campaign-cm11-stunt-marker` (the roster-marker source, over CM11's own built roster and graph).
+objective-flagged candidates, which is what tells the player where to go. The set is
+`targets.zrd`'s own `objective` entries plus every roster block that authors the flag on itself,
+minus whichever of those a completed objective's `REMOVE_OBJECTIVE_TARGET` names, plus whatever
+`ADD_OBJECTIVE_TARGET` has added. A site is keyed by `ObjectiveTarget.Key` and re-read every
+frame, so it tracks a moving node; `PointFor` and `SiteAnchor` decide where its marker stands,
+and `Messages` gives the marker its verb, proper name and colour. `GameSession` binds the set
+through `FlightRoster.SetTargetObjectives`. Marker decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Session/CampaignHumanField.cs
 Engine-free objective rules over every joined human, represented by `HumanState` position, captured
@@ -432,234 +162,95 @@ captured group and ignores temporary cutscene inertia. The scripted player remai
 identity for authored `player` tokens, roster leaders, and anchored net trailers. Rules are pinned by
 `CSVM.Tests/CampaignHumanFieldTests.cs`.
 
+## src/Session/CampaignDangerZones.cs
+A campaign mission's own danger zones: the `dzpathN` names its `objectives.zrd` authors inside
+`DANGER_ZONES_COMPLETED`, narrowed by the mission's `dzones.zrd` `disable` list and resolved
+against the world's gate geometry, with `Load` answering null when a mission arms none. A zone is
+a route ribbon plus a material-matched pair of gate polygons, crossed by a segment passing inside
+each in either order, which is the rule `Flight/StuntMission.cs` reads off `ia.json`'s zone list;
+the two differ by authoring surface, not by mechanism. Crossings are tracked per human, each with
+its own previous position. `CampaignDirector` counts what the graph's condition asks about. Gate
+decode: [../formats/missions.md](../formats/missions.md).
+
 ## src/Session/ObjectiveGraph.cs
 The objectives runtime over a parsed script, pure state over `Step` calls in the shape of
-`InstantActionWaves` — no Godot type, no logging, `CSVM.Tests/ObjectiveGraphTests.cs` pins it
-off-engine and `CampaignDirector` owns every log line about it. Implemented as decoded, shipped
-quirks included: the four states (dormant/awake/napping/retired); at most ONE completion per tick
-from a scan index that advances every tick, completion or not; `TICK_DEPENDS_ON_OBJ` gating the
-whole objective on its dependency being AWAKE, not merely alive; the wake executor's early return on
-an already-awake target, which TRUNCATES the rest of the caller's wake list;
-`NAP_OBJECTIVE_WHEN_I_COMPLETE` clearing the target's completed flag as the only re-run path;
-condition families OR-ing together with a conditionless objective completing on its first eligible
-tick; and `DANGER_ZONES_COMPLETED` counting only zones flagged while the objective was awake.
-`NotifyDockingComplete` is the one ending that comes from outside the script: callback 13, raised by
-the docking animation itself, which the original answers with the call its objectives runtime makes
-when a primary completes and then the mission-end path, in the same breath and with NO wrap-up, so
-the debrief opens on the frame the film raises the code. Where a mission also authors an
-`ANIM_STATE ... EXECUTED` objective over the same definition (C3/M05's `OBJECTIVE19`), the code
-always gets there first: it is raised by that definition's last sequence, so the definition is
-still `RUNNING` when it lands and the objective's `INSTANTWIN` arrives to an ended mission and does
-nothing. `Session/CutsceneController.cs` raises it.
-The world seam is `IObjectiveWorld`: a method returning `null` means "this engine cannot answer",
-which makes the family report FALSE and bumps `UnresolvedConditions` rather than guess — ⚠ reading
-an empty world as "the group is wiped out" would win missions on the first tick. Every condition on
-that interface reads the whole human field rather than one aeroplane
-(`Session/CampaignHumanField.cs`), which is why the interface doc carries the scripted-player split
-too: an implementer that answers `TravelersMet` off P1 alone leaves a co-op mission unwinnable by
-anybody else.
-The read model D33 consumes is `Rows` (one row per unique `IDENTITY` priority, ascending, the
-priority the row key and the sort key), `ObjectiveTargets`/`OtherTargets`/`HelpLabels`, and the
-`Woke`/`Completed`/`TargetsChanged`/`MissionEnded` events; wake and complete events carry the
-`WAKEUP_SOUND_GROUP` / `COMPLETED_SOUND_GROUP` names, which is also how D37 sees the music groups.
-`Transitioned` fires on every state change (woke, napped, completed, killed, slept, expired) with
-the objective whose completion caused it, the mission time, the nap length, and whether the
-objective is held by a `TICK_DEPENDS_ON_OBJ` dependency that is not awake; `CampaignDirector`
-turns it into the sortie log's `objective N ...` lines. A held nap does not count down: that is the
-decoded gate, not a defect, and `CSVM.Tests/ObjectiveGraphTests.cs` drives the shipped C1/M04 chain
-(tower down inside the distress window, through the held nap to the squad wake and the docking)
-to pin it.
-`CompletedMask` is bit-per-row, so bit 0 is the lowest priority and therefore the primary objective
-the profile's merge gates on (docs/formats/saved-games.md).
-The fourth ending, the player's own death, is `NotifyPlayerLost` then `EndAfterPlayerLost`: the
-first stops `Step` entirely, countdown and pending wrap-up included, and the second delivers the
-outcome. ⚠ That outcome is the won flag alone, so a mission won before the death is still won, and
-neither call plays a sound.
+`InstantActionWaves`: no Godot type, no logging, pinned off-engine by
+`CSVM.Tests/ObjectiveGraphTests.cs`, with `CampaignDirector` owning every log line about it.
+Implemented as decoded, shipped quirks included: the four states per objective, at most one
+completion per tick from a rotating scan, dependency gating on an AWAKE target, the wake
+executor's truncating early return, the nap that clears a completed flag, and the condition
+families' OR. Four endings reach it, three from the script and `NotifyDockingComplete` from the
+animation. World seam: `IObjectiveWorld`. Decode: [../formats/objectives.md](../formats/objectives.md).
 
 ## src/Session/CampaignDirector.cs
-The engine side of one campaign mission, behind `GameSession`'s one nullable `_campaign` field and
-the sibling of `InstantActionDirector`: a plain sealed class that builds no node of its own.
-`ResolveSpec` runs in `GameSession`'s CONSTRUCTOR, before any chapter-dependent path is derived: a
-`--campaign=<profile>:<seq>` launch names a story position, so the sequence is read and
-`SessionSpec.WithCampaignMission` points the rest of the build at an ordinary chapter/mission.
-`ResolveSeatedPlane` runs in the same constructor chain, last, and is the command line's
-counterpart to the cabin's seat: a `--campaign=` launch passed no launchscreen and so names
-nobody's aeroplane, so the profile's `SelectedPlane` is read here (with its `CustomPlaneStore`
-build, or its award template where a granted aircraft has no file) and installed through
-`SessionSpec.WithSeatedAircraft`. `--plane=` entry 0 beats it and warns naming what it overrode,
-which is what lets a golden pin a co-op campaign shot with no hand-authored profile on disk;
-entries 1 and up name guests and are left alone. The warning fires on the NODE differing, not on
-where the name came from, so a cabin launch (whose entry 0 is already that node) stays silent
-without this needing to know which factory built the spec.
-The world adapter answers TWO questions that both used to be spelled "the player", and keeping them
-apart is what makes a co-op mission playable: `Player()` is the scripted player, `WorldInputs.PlayerAircraft`'s
-one aeroplane, always P1's, and it is what the lost ending, the music damage ping and the escort
-leader read. `SnapshotHumans()` is the human field, `WorldInputs.Humans` (`GameSession.HumanAircraft`,
-the rigs' controllers and no AI) refilled into one reused buffer and handed to
-`Session/CampaignHumanField.cs`. Three reads moved onto the field: the `TRAVELERS` condition whose
-subject is the authored `player`, the `DEDG` walk's human arm, and the danger-zone update, which is
-now driven per human so a gate pair may be split between two of them. A session that names no field
-is one where the scripted player IS the field, which is every solo sortie and every suite that
-builds one rig, so the co-op read and the solo read stay on one code path and a 1P mission answers
-byte-identically. `HumanRigs()` is that same field held as the aeroplanes themselves, for the two
-seams that need one rather than a reading of one: the per-seat death wiring and the wreck wait.
-⚠ A `TRAVELERS` with an empty field still falls back to
-`WorldInputs.ListenerPosition`, because a suite that builds no rig at all resolves its conditions
-that way and always has.
-`TryCreate` loads the profile and the script on the same "a failure warns and flies without a
-mission" contract `InstantActionDirector.TryCreate` has. `Attach(WorldInputs)` arms the graph once
-every runtime a directive can touch is up, applies the chapter's persist log and hands the world's
-`DangerZoneRibbons` to every roster pilot; `Step(dt)` is
-called from BOTH of `GameSession`'s drive paths. Each step also walks the roster for a wingman
-whose escort leader has left play and seats it on that leader's own patrol net
-(`TakeLostLeadersNets` through `SeatOnNet`, the body `SET_AI_NET` shares), since a netless escort
-holds the orders its last pursuit wrote once its leader is gone; a leader flying no net, which is
-every player-led escort, leaves its wingman untouched and is reported once. Every graph transition is one
-`[campaign] objective N woke|napped|completed|killed|slept|expired [by M] [for Ns] at Ts` line
-through `Log.Info`, so the file sink carries the chain a sortie report is about. `WireScoredShooter`
-registers the scripted player's aircraft into `ProjectilePool.ScoredShooters`, deferred into `Step`
-like the damage ping because that aircraft is built after `Attach` runs, so the recorded attempt's
-`Shots`/`Hits` read the seated pilot alone and a guest's cannon fire is never counted (decision 13).
-Mission end records the attempt through
-`CampaignProgression`, merges `CampaignPersistLog.Capture` into the profile, saves it, writes any
-aircraft award's build into `CustomPlaneStore` (`SaveAwardedBuilds`, which is where the cabin's
-launch looks a plane's fit up by name), and starts the LEAVING HOLD; `ReturnToCabin` and
-`MissionEnded` come at the far end of it, `LeavingHoldS` (2 s) later, and the cabin screen itself
-is C22's. The hold is the original's `FUN_00443090`, which records the result and then pushes its
-"Fade State" over a copy of the frame the ending landed on for that fade's default 2 s before the
-next screen takes the state machine: the world is not advanced and the stick is not read while it
-runs, so the last flown frame is the frame the ending landed on. `Leaving` says the hold is
-running; `GameSession` reads it in BOTH drive paths ahead of everything else, holds `GameClock`'s
-sim on the realtime one, and steps nothing but the director until it expires.
-Which directives reach the engine today: `INACTIVEn` (node visibility, the decoded active bit),
-`ANIM_STATE` (`AnimRuntime.AnimStateOf`), both forms of `TRAVELERS` (the node form against
-`ListenerPosition`/a named node; the group form tallying the spawned roster's live, non-inert
-members of the named group inside or outside the radius against `spec.Count`, the decoded
-`FUN_00465b40` shape `docs/formats/objectives.md` already carried), `WAKEUP_TURRETS` /
-`WAKEUP_ZEP_TURRETS` (`TurretEmplacementRuntime.SetActivatedUnder`), `WAKEUP_GENERATOR`
-(`AiGeneratorRuntime.GrantWaveCapacity`), `DEDG` over the spawned roster, every generator launch
-booked into it under its launch name (`RegisterGeneratorLaunch`, carrying the template's group, so
-C5/M04's `DEDG [5, 0]` counts Miles from the moment the Dante drops him), plus the human rig when
-its `FlightController.Group` is the counted group (a 967 capture swap stamps it; a crashed rig
-drops out, an inert one does not, since a human rig is inert under a cutscene; a roster rig counts
-unless `FlightController.Deactivated`, which is inert with no cutscene park behind it, so the
-wing walk's 913 park keeps the captured bomber counted until 967 hides it), `WAKE_ANIM` (`AnimRuntime.PlayMissionTrigger`, so the
-woken definition may stage library roots), both sound-group directives through
-`MissionRadio`, falling through to `WorldSounds.PlayOneShot` for a cue the radio does not own,
-`STOP_QUEUED_SOUNDS` through `MissionRadio.Cancel`, `START_TAXI` through the director's own
-`ScriptedPathVehicles` registry (`Paths`), which it also steps beside the graph,
-`COMPLETED_STOPPOINT` through `ZeppelinRuntime.SetStopPoint` (it arms or releases one stop point of
-a named net, and the airship holds or leaves), and, over the spawned roster, `DEDG`
-(`GroupLiveCount`: not-crashed members of the block group, a parked one counting as alive) and
-`WAKEUP_ENEMIES`, one directive over two deactivated flags: an inert named aircraft re-activated at
-its PLACED pose (a world node of the block's name where one exists, its authored spawn otherwise,
-never a stale copy of the plan), or a dormant `ZeppelinRuntime` record put into the world.
-`SET_AI_NET` / `SET_AI_TEAM` / `SET_AI_ATTACK_RADIUS` share one lookup by roster block name
-(`Commanded`) and write the follower, the team and the attack range over the spawned roster; their
-zeppelin arm has no seam here, so an unmatched name is always reported.
-`COMPLETED_ZEPCANNONS` writes each named zeppelin's broadside engage flag
-(`ZeppelinRuntime.SetCannonsEngaged`), the one thing that lets a hatch open and a volley leave.
-The rest (`WARP_VEHICLE`) is a NAMED no-op, logged once per kind. ⚠ Never turn one of those into an invented
-behaviour: the missing consumer is the finding.
-`BuildRoster(RosterInputs)` is the roster phase, called by `GameSession` right after
-`InstantActionDirector.BuildActors` at the point where the human rigs exist: it plans the mission's
-`aiv` blocks through `Session/CampaignRoster.cs`, spawns each through the handed delegate (an
-authored `netids` becomes `AiPilot.Patrol` on the chapter's net with its trailer; a netless
-`mode wingman` block gets `AiPilot.Escort` in a SECOND pass once every rig exists, its
-`primary_target` resolving to the player rig or a block by name; never both), applies the merged
-volumes and the `min_ai_active_dist` floor, the signature maneuvers, the rating biases and the
-accent, builds a `deactivated` block inert, places a `taxiPath` block held on its path
-(`PlaceOnPath`: re-pinned through `FlightController.PlaceHeld` each tick, `Activate`d at the
-handoff speed), books a block's own objective-target flag and label into `RosterObjectiveMarkers`
-(`RegisterObjectiveMarker`, aiv slots 37/39, also called from the generator-launch and surface
-paths), and logs one `campaign: roster '<name>'` line per block. A block whose
-`primary_target` is not spawned holds its course; a leader that dies later is `AiPilot`'s own
-fallback. `Roster` is the spawned map by block name; the player's block is skipped. A surface
-vehicle (`mode ship`) plans as a hull and goes to `RosterInputs.SpawnSurface` instead of the
-aircraft spawner (`PlaceSurface`): built by `Session/SurfaceVehicleRuntime.cs` at the block's spot,
-put on its authored net, kept in `Vessels` by block name (never in `Roster`), and reported when
-the stage has no such runtime. The hulls take the same directives as the aircraft where they
-apply: `WAKEUP_ENEMIES` wakes one, `SET_AI_NET` and `SET_AI_TEAM` reach a roster hull or a
-generator's launch (`CommandedVessel`, through the runtime), and `DEDG` and the group form of
-`TRAVELERS` count a woken, undestroyed hull as a live member of its group.
-`HoldForCutscene(bool)` is callback 20's objectives half: a held director advances no dormancy
-timer or reminder fuse while a cutscene owns the session (`Session/CutsceneController.cs`).
-`DamageApplied` (the music ping) is subscribed on the aircraft `WorldInputs.PlayerAircraft` answers
-and re-subscribed whenever it answers a different one; `Downed` (the lost ending) is subscribed the
-same way but per SEAT of `World.HumanRigs()`, the human field held as the aeroplanes themselves
-rather than as a reading of them. Both re-subscribe by identity, because an airframe swap rebuilds
-a rig and a death in the new aeroplane has to count too. `BuildRoster` also stamps each spawned
-rig's `FlightController.Group` from its plan.
-Losing the aircraft is the graph's fourth ending, in the original's two stages, with a human field
-widening each: the LAST seat's `Downed` report closes the graph's gate, and the mission ends once
-no human's wreck is still falling. An earlier seat's death only takes that human out of the flight
-(decision 9 rejects respawning): the seat latches down, and `WorldInputs.BeginSpectate` hands that
-pane over through `Session/SpectateHandoff.cs`. ⚠ The director decides WHEN and builds no camera
-itself, which is the same "this class adds no node" rule the rest of it keeps. The last seat is not
-handed a camera, because the mission ends with it and there is nothing left to watch, which is also
-what keeps a 1P death answering exactly as it did before there was a field.
-`EndsOnPlayerDeath` (false under `--no-crash-loss`) is the only switch; `GameSession` is its writer.
-⚠ It gates the whole rule, the spectate hand-off included: a debugging session flying on past a
-crash needs its wreck unpinned so `R` still flies it again, and a pane already given away would
-leave that pilot blind.
-A lost attempt is recorded like any other and commits nothing to the persist log, so a retry starts
-from the chapter state the profile already held (`CampaignPersistLog.CommitsOn`). It does count
-against the mission's own failed-attempt counter, and the fourth failure of a mission never yet
-completed raises the skip offer (BL-622/B14, `docs/org/debrief.md#the-four-attempt-skip-offer`):
-`OnMissionEnded` then captures the lost world's destruction state into `CampaignMissionResult`
-alongside the chapter, because the offer's Yes is a synthetic win whose save gate writes exactly
-that state and the capture cannot be taken once the world is down. The offer is carried, never
-asked here: the screen that shows the result is what asks it (`CampaignProgression.AcceptSkip`).
-`BuildRoster` also wires each spawned aircraft's `Downed` report to `CreditKill` (BL-622/B13): the
-player did it (`killer == WorldInputs.PlayerAircraft().PlayerIndex`), the victim's roster-authored
-`Team` is hostile to `AimAssist.PlayerTeam`, and `UI.PlanePickerRoster.AirframeOf` resolves the
-victim's `PlaneNode` back to one of the eleven stock airframes; the roster plan's own `Ace` flag
-(slot 67) then picks which of `_kills`/`_aceKills` the mission-end attempt reads
-(`docs/org/debrief.md#what-the-tallies-count`). A generator-launched aircraft's kill is not yet
-credited: `AiGeneratorRuntime`'s launches never enter `_roster`, so this is a known gap rather than
-an invented behaviour.
+The engine side of one campaign mission and the sibling of `InstantActionDirector`: a plain sealed
+class that builds no node of its own. `ResolveSpec` runs in `GameSession`'s constructor and turns
+a `--campaign=<profile>:<seq>` story position into an ordinary chapter and mission; `Attach` arms
+the graph once every runtime a directive can touch is up; `Step` runs the graph, the roster's
+escort repair and the mission's two music duties; `BuildRoster` plans and spawns the `aiv` blocks
+through `CampaignRoster.cs`. The nested `World` is the `IObjectiveWorld` implementation, where a
+directive with no seam in this session is a named no-op. Mission end records the attempt, folds
+the persist log into the profile and holds before the cabin. Debrief: [../org/debrief.md](../org/debrief.md).
+
+## src/Session/CampaignProgression.cs
+The campaign's progression rules over a profile: recording one mission attempt with the original's
+best-of merge, raising the position, and granting the aircraft awards. The position is a single
+monotonic integer that only a completed primary objective raises, because `cm_sequence.zrd` is a
+flat list with no predicate and no alternates. `Record` also works out what a mission pays, since
+the reward table is gated on what the profile has already banked, and reports it back through
+`MissionRecorded`. The four-attempt skip offer is raised here and answered by `AcceptSkip` on the
+screen that shows the result. `AirframeCount` fixes the kill tallies' width. Reward table:
+[../org/hangar.md](../org/hangar.md).
+
+## src/Session/CampaignProfileStore.cs
+JSON persistence for one named campaign profile under `user://Profiles/<name>/profile.json`,
+following `ScoreStore` and `CustomPlaneStore`'s precedent: funds, owned planes with their per-gun
+ammunition and per-pylon ordnance picks, each mission's record in the original's two halves
+(latest attempt and best-of merge) with its failed-attempt counter, the completed-mission count,
+the granted aircraft awards and the cross-mission destruction log. An owned plane names a build
+in the global `user://Planes/` store rather than copying it, so deleting a profile orphans
+nothing. A file saved before a field existed reads it at rest rather than failing to load. Save
+format: [../formats/saved-games.md](../formats/saved-games.md).
+
+## src/Session/CampaignPersistLog.cs
+The cross-mission state log: what a campaign mission left destroyed, carried into later missions
+of the SAME chapter, keyed by chapter, by the capturing mission's story position and by gamez node
+index. `Capture` reads the live world through the pool the hit path damages; `Through`/`ApplyTo`
+take the position of the most recent earlier mission of the chapter and carry only what positions
+at or before it captured; `AnimRuntime.CarryState` re-applies the states silently, so a later hit
+on a carried kill is a no-op. Only `PERSIST_LOG` defs are carried, read off the reader def rather
+than the compiled twin. The prohibitions on the cut and on the replay path sit on the members they
+bind. Decode: [../formats/saved-games.md](../formats/saved-games.md).
+
+## src/Session/CampaignLoadout.cs
+The bridge between a campaign profile's stored picks and a flying aircraft's fit: one
+`OwnedPlane`'s ammunition and ordnance arrays as the `LoadoutChoice` a launch hands the session,
+which `Loadout.Bind` then lays over the aircraft's base fit. Engine-free, and both encodings are
+the campaign screens' own rather than the original's undecoded per-pylon ordnance id, so an unset
+pylon is left to the base rather than written back. `PylonRow` is the one decoder of the stored
+one-based ordnance value, and every screen reading the field goes through it. The same reading
+serves an exported `CustomPlaneDef`'s own picks, which is how a campaign plane flown from the
+Instant Action picker carries its fit. Screens: [../formats/campaign-screens.md](../formats/campaign-screens.md).
+
+## src/Session/AirframeSwap.cs
+The three `CALLBACK` codes that hand the player a different airframe in mid mission, and what each
+names: the vehicle def the stats and the stock fit come from, the planes.zbd node the model is
+built from, an optional special-plane award template, and whether the rebuild draws the airframe's
+shipped skins instead of the pilot's paint. `AirframeSwapOrder` is one raised swap (the airframe,
+the raising definition's root, and the episode owner whose rig it lands on) and
+`AirframeSwapResult` reports whether an aircraft was replaced and which one left the world. A swap
+is always to the player's OWN rig, and what it deliberately does not rebuild is stated at the
+request record. Callback table: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 
 ## src/Session/CampaignRoster.cs
 The engine-free half of the campaign roster spawner: `CampaignRosterPlan.Build` turns
-`AiSkills.LoadRoster`'s blocks into one `RosterSpawnPlan` each, using `Mech3/VehicleDefs.cs` for
-the def behind the block name, its `mode` and its player airframe, and the chapter's `AiNet`s for
-the authored `netids` (a multi-entry list takes the handed `rand() % count` draw). The decoded fork
-is here and nowhere else: `Escorts` is `mode wingman` AND no authored net, `Net` is any authored
-net that the chapter carries, and a plan never has both (docs/org/aiPilot.md "A net demotes a
-wingman"). `Volumes` is the net's set overlaid by the block's own; `ApplyVolumes` writes the radii
-onto an `AiModeMachine` and floors activation at `min_ai_active_dist`. The profile's wingman
-airframe replaces the block's own for the named block (`wingman_1`), taking the `w<plane>` def for
-its stats; a def that is no `kind_of` variant of its airframe flies the plain base def, with the
-block's own def still deciding the mode. A def with no airframe whose mode is `ship` plans as a
-`Surface` hull (`PlaneNode` is then the def, the chapter's library-root model; no `AiDef`), and
-`SpawnFor` refuses such a plan; any other airframe-less def is `Skipped`. `ResolveLeader` is the second-pass lookup (`player` = the
-SCRIPTED PLAYER, P1's rig). ⚠ Not the human field, and one of the two reads deliberately left off
-it: an escorting block follows one aeroplane, and a leader chosen from whichever human is handiest
-would hand the wing a different lead every mission (`Session/CampaignHumanField.cs`). The `handover` argument is the airframe-swap counterpart of the wingman override:
-in the two missions that resolve `wingman_4`, that block flies the PLAYER's airframe and paint from
-mission start, because the swap is about to hand it that aeroplane. An `enabled 0` block is
-excluded from the initial roster and
-`BuildGeneratorTemplate` resolves it separately when an enemy generator's `vehicle.params` names
-its positional header label; `GeneratorTemplates` is the whole mission's map of those, keyed by
-that label, and `GameSession` builds it on any run with the generators on rather than only a
-campaign one, since the parameter blocks are mission data. `ResolveGeneratorLaunch` is the
-four-way read of that map for one launch: the block the label names (`Template`), the same block
-when it is a hull (`Surface`, C2/M01's `Eshipg31_params` naming `patrolboat_eg0`), the CLI
-airframe when no label is authored, or `GeneratorLaunch.Empty` when the label names no block. Empty is the decoded
-shape, not a gap: `FUN_00451bf0` then spawns the generator's `vehicle.type` (unauthored in every
-shipped file), finds no def for the empty name and still reports a launch, so nothing is built and
-the launch is counted. C1/M04's `eairg32` (`Eairg32_params` against a label table spelling
-`Earig32_params`) is the shipped case; the data stays as shipped. `ApplyPlan` is the after-the-spawn half of a
-plan (volumes under the floor, signature maneuvers, the gunner's rating biases and its assignment),
-shared by the campaign placement and the generator launch so the two cannot drift; ⚠ it leaves an
-escorting block's `primary_target` alone, because there it names a leader and not a target. A
-plan's `InitHealth`/`Armor` (`AiSkills.RosterInitHealth`/`RosterArmor`, aiv slots 7/66) travel
-through `SpawnFor` onto the `AiSpawn` record; `AiFlightAssembler.Assemble` is what applies them. A
-plan's `ObjectiveTarget`/`HelpLabel` (slots 37/39) are not applied here at all: `CampaignDirector`
-reads them straight off the plan at spawn to book its own `RosterObjectiveMarkers`.
-Pinned in `CSVM.Tests/CampaignRosterPlanTests.cs`, `RosterDurabilityOverrideTests.cs` and
-`RosterObjectiveMarkerTests.cs`; the placement half is the `campaign-roster` suite, the generator
-half the `generator-roster-params` suite.
+`AiSkills.LoadRoster`'s blocks into one `RosterSpawnPlan` each, resolving the def behind a block
+name, its `mode`, its player airframe and the chapter's `AiNet` for an authored `netids`. The
+decoded fork lives here and nowhere else: `Escorts` is `mode wingman` with no authored net, `Net`
+is any authored net the chapter carries, and a plan never has both. `ApplyPlan` is the
+after-the-spawn half (volumes, maneuvers, gunner ratings), shared by the campaign placement and
+the generator launch so the two cannot drift; `BuildGeneratorTemplate`/`ResolveGeneratorLaunch`
+serve the enemy generators. Nets and modes: [../org/aiPilot.md](../org/aiPilot.md).
 
 ## src/Session/ScriptedPathVehicles.cs
 One campaign mission's scripted-path vehicles: `Place` binds a spawned body to its authored
