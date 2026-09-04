@@ -12,8 +12,8 @@ namespace CSVM.Utils;
 /// The project's diagnostic log: one call shape, a fixed category vocabulary, four levels, and
 /// two sinks with different jobs. Console is the human's view and stays quiet by default; the
 /// file sink is the machine's view and always takes everything, at every level, in every
-/// category, line-flushed so a crash still leaves what was written. Grammar and the category
-/// list: this module's entry in docs/architecture.md.
+/// category, line-flushed so a crash still leaves what was written. Grammar, the category list
+/// and the --log= filter: docs/org/logging.md.
 /// ⚠ Messages are interpolated strings rendered with <see cref="CultureInfo.InvariantCulture"/>,
 /// so a float reads <c>16.667</c> on every machine, never the current-culture form.
 /// ⚠ Migration off the remaining <c>GD.Print</c> call sites is incremental by decision — a

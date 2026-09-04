@@ -9,7 +9,7 @@ namespace CSVM.Utils;
 /// from it via <c>splitmix64(master ^ fnv1a(name))</c> — independent across subsystems, so a draw
 /// added to one cannot shift another's. Pinned for a deterministic run, time-seeded otherwise, and
 /// advanced per flight (<see cref="SortieSeed"/>) so flying again is a new mission; the resolved
-/// value logs for replay via <c>--seed=</c>. Full list: docs/architecture.md.
+/// value logs for replay via <c>--seed=</c>. The streams are the constants below.
 /// ⚠ Never derive a subsystem seed via <see cref="string.GetHashCode"/>. .NET randomizes it per
 /// process, so the stream would differ every launch and silently break <c>--det</c>.
 /// ⚠ Only the DRAW ORDER within one subsystem's own stream is significant; that order is

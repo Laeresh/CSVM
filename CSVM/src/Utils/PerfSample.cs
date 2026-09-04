@@ -60,7 +60,7 @@ public readonly ref struct PerfScope
 /// knowing about the hitch monitor, the readout, or whether anything is listening. Totals
 /// accumulate per site into a preallocated array, freeze once per frame in <see cref="EndFrame"/>,
 /// and copy into a <see cref="HitchRecord"/> when one fires. Decode and the seeded call sites:
-/// this module's entry in docs/architecture.md. Instrument cost: docs/verification.md PERF-15.
+/// docs/org/hitch.md. Instrument cost: docs/verification.md PERF-15.
 /// ⚠ Flat leaves only. A scope opened inside another is suppressed and counted as a violation, so
 /// <c>Σ(sites) + unattributed = frame_ms</c> holds on every frame; see <see cref="Scope"/>.
 /// ⚠ Ambient statics are main-thread only. There is one set of counters for the process, and a

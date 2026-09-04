@@ -30,7 +30,7 @@ public readonly record struct FrameSample(
 /// recent neighbours, and a frame that costs far more than they did has a record assembled for it
 /// describing what the frame was doing. Nothing is logged from here; the record is held for
 /// whoever asks (the sidecar writer, the on-screen readout), so a clean run is silent. Trigger
-/// formula and TUNE constants: docs/architecture.md; vsync interaction: docs/verification.md
+/// formula and TUNE constants: docs/org/hitch.md; vsync interaction: docs/verification.md
 /// PERF-12/PERF-13.
 /// ⚠ Feed this a raw wall-clock timestamp, never Godot's <c>delta</c>, which is post-processed
 /// and does not describe the same frame as the counters read here.

@@ -13,7 +13,7 @@ namespace CSVM.Utils;
 /// inline on the hitching frame, since a string interpolation and a file write are avoidable
 /// allocation-heavy work at the worst possible moment. A record is copied (no allocation; every
 /// queue slot is preallocated at construction) into a small ring, drained a few seconds later.
-/// Line grammar and the JSON shape: this module's entry in docs/architecture.md.
+/// Line grammar and the JSON shape: docs/org/hitch.md.
 /// ⚠ Crash durability is bounded by the flush interval, not by the trip. A record survives a
 /// crash only once flushed; <c>Launcher</c> flushes before every <see cref="HitchMonitor.Rearm"/>
 /// so an ordinary relaunch never waits out the interval.

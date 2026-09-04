@@ -173,7 +173,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C: trim every entry and index bullet to the cap
 
 21. ☑ C21 `docs/architecture/Effects.md` (5 entries; the rehearsal for the brief)
-22. ☐ C22 `docs/architecture/Utils.md` (17)
+22. ☑ C22 `docs/architecture/Utils.md` (17)
 23. ☑ C23 `docs/architecture/Bindings.md` (17)
 24. ☐ C24 `docs/architecture/Testing.md` (17 plus the `CSVM.Tests/` section)
 25. ☑ C25 `docs/architecture/Root.md` (3 entries plus Cross-module conventions and the enhanced-graphics section)
@@ -486,7 +486,7 @@ C22 onward and amends the brief text in this plan if a step was ambiguous.
 **⚠ Traps.** `Puffer` construction order re-pins every puffer-bearing golden (GOLD-11); a comment
 relocated onto the constructor must say so.
 
-## C22 ☐ `docs/architecture/Utils.md`
+## C22 ☑ `docs/architecture/Utils.md`
 
 **Goal.** 17 entries at cap plus entries for `HoldToRepeat.cs` and `PhysicsTickCost.cs`.
 

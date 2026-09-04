@@ -11,7 +11,7 @@ namespace CSVM.Utils;
 /// split into the phases the build spends its time in. It only reports — no thresholds, no
 /// verdicts, no comparisons; a comparison needs a warm-up protocol this class deliberately does
 /// not own. Line grammar, the phase vocabulary and <c>boot</c>/<c>rest</c>/<c>first_frame</c>'s
-/// meaning: this module's entry in docs/architecture.md.
+/// meaning: docs/org/startup-profile.md.
 /// ⚠ The line asserts <c>total = boot + Σ(phases) + rest + first_frame</c>. Keep every phase a
 /// leaf, never nested inside another, or the sum silently double-counts.
 /// </summary>

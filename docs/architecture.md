@@ -399,19 +399,27 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 ### `src/Utils/` — session-wide services
 
 The things every subsystem depends on: the clock, the log, the seed. Changing one of these changes
-determinism repo-wide — read `docs/verification.md` first.
+determinism repo-wide; read `docs/verification.md` first.
 
-- `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the in-code `const`.
-- `src/Utils/EffectsLevel.cs`: the original's graphics EffectsLevel option (`graphics.effectsLevel`, default `high`) and the one global it drives, the clutter fade's squared distance scale; `graphics.clutterFarFade` (default `true`) switches the authored fade off entirely.
-- `src/Utils/GameClock.cs` — the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt + single-step, time scale.
-- `src/Utils/Log.cs` — the diagnostic log: 9 categories × 4 levels, `--log=` console filter, always-on full-detail `.scratch/logs/` file sink.
-- `src/Utils/ShaderTime.cs` — the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
-- `src/Utils/StartupProfile.cs` — the always-on `[perf] startup …` line: every session build split by phase, `total = boot + Σphases + rest + first_frame`.
-- `src/Utils/HitchMonitor.cs` — the always-on frame-hitch detector: `frame_ms > max(medianMultiple × rolling_median, floorMs)`, a `HitchRecord` per trip.
-- `src/Utils/HitchSidecar.cs` — the hitch detector's write path: queues a tripped record and drains it a few seconds later to one `[perf] hitch …` line plus one JSON line in `.scratch/logs/<mode>-<stamp>.hitches.jsonl`.
-- `src/Utils/PerfSample.cs` — ambient timed leaf scopes: `using (PerfSample.Scope(PerfSite.X))` accumulates per site per frame, and every hitch record carries the sites plus the remainder no site claimed.
-- `src/Utils/Rng.cs` — the session's one master seed and the ten named subsystem generators every random draw derives from.
+- `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the caller's in-code `const`.
+- `src/Utils/EffectPools.cs` — the `effect_pools.json` reader: how many copies of each effect-template root the world and crash stages build, scaled by player count.
+- `src/Utils/EffectsLevel.cs` — the original's EffectsLevel option and the clutter fade's squared distance scale it drives, plus the remake's far-fade switch.
+- `src/Utils/GameClock.cs` — the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt and single-step, time scale, the holds.
+- `src/Utils/GraphicsMode.cs` — the opt-in enhanced-lighting setting, resolved once at launch into the one boolean every scene builder reads.
+- `src/Utils/HitchMonitor.cs` — the always-on frame-hitch detector: a frame far costlier than its recent neighbours gets a record describing it; it logs nothing.
+- `src/Utils/HitchSidecar.cs` — the hitch detector's write path: queues a tripped record and drains it later to one `[perf] hitch` line plus one JSON sidecar line.
+- `src/Utils/HoldToRepeat.cs` — tap-versus-hold timing for one button: an initial delay, then a repeat every interval until release.
+- `src/Utils/Log.cs` — the diagnostic log: a fixed category vocabulary over four levels, a quiet filtered console and an always-complete `.scratch/logs/` file sink.
+- `src/Utils/OptionsStore.cs` — version-tolerant JSON persistence of the process-wide options in `user://options.json`, written atomically.
+- `src/Utils/PerfSample.cs` — ambient timed leaf scopes: `using (PerfSample.Scope(site))` accumulates per site per frame, and a hitch record carries the frame's named work.
+- `src/Utils/PhysicsTickCost.cs` — the wall cost of one whole physics tick and the tick count a wall second got, measured by a bracket pair spanning the tick.
+- `src/Utils/PresentationResolution.cs` — the requested-versus-active menu presentation resolver, availability checked separately from the saved request.
+- `src/Utils/RenderPoses.cs` — the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.
+- `src/Utils/Rng.cs` — the session's one master seed and the named subsystem generators every random draw derives from.
 - `src/Utils/ScriptedWindow.cs` — Win32-only window hiding for scripted runs; `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)` on the native window.
+- `src/Utils/ShaderTime.cs` — the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
+- `src/Utils/StartupProfile.cs` — the always-on `[perf] startup …` line: every session build split into the phases it spends its time in.
+- `src/Utils/TapHoldButton.cs` — one button carrying two actions split by how long it is held; the caller feeds it the button level and switches on the answer.
 
 ### `src/Testing/` — the in-engine assertion harness
 
