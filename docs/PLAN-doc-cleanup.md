@@ -184,7 +184,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D: verification.md
 
-31. ☐ D31 Delete the 46 uncited rules (with the paragraph-rule exception check)
+31. ☑ D31 Delete the 46 uncited rules (with the paragraph-rule exception check)
 32. ☐ D32 Cut every remaining paragraph rule to shape; remove merge notes, dates and the stale line ref; restore numeric order
 33. ☐ D33 Fix the six dangling rule references at their source; header states the shape rule
 
@@ -636,7 +636,7 @@ verification instruments; their traps belong in `docs/verification.md`, not here
 
 # Wave D: verification.md
 
-## D31 ☐ Delete the 46 uncited rules
+## D31 ☑ Delete the 46 uncited rules
 
 **Goal.** The 46 rules listed under "What the data actually ships" are gone; their IDs are gaps.
 

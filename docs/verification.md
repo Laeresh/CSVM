@@ -20,12 +20,10 @@ and leave gaps when retiring old ones.
 - **METHOD-10** — **A check that passes a no-op does not verify the change.**
 - **METHOD-11** — **Sweep representative poses, times, or inputs.**
 - **METHOD-12** — **State which measurements should change and which should remain invariant.**
-- **METHOD-13** — **Place the subject explicitly with `--pos`, `--direction`, or `--lookat`.**
 - **METHOD-14** — **Test reconciliation metrics for degeneracy.**
 - **METHOD-15** — **Confirm the intervention took effect before crediting it.**
 - **METHOD-16** — **After restoring inputs, force or verify the rebuild.**
 - **METHOD-17** — **Use `git diff` to prove temporary edits are restored.**
-- **METHOD-19** — **Disable later mechanisms that would repair a deliberately restored fault.**
 - **METHOD-20** — **Reproduce a published measurement's pose *and* its statistic, not just its subject.** A number is only comparable under the conditions it was taken in: `CAP-13`'s ring brightnesses were read off frames that already carried the sun wash, which composites toward white and scales every difference by (1−α), and its script reports the *brightest pixel* in a window where a median around the annulus reads systematically lower. Matching the subject but not the pose or the estimator produces a confident calibration that is wrong in a direction nothing reveals (BL-165, the retired `analysis/bl-165-lens-flare/`, `git show analysis-archive:analysis/bl-165-lens-flare/FINDINGS.md`).
 - **METHOD-21** — **A scenario entered at a speed it cannot hold is not a measurement at that speed.** The original's 143 mph knife-edge take, replayed at full throttle, accelerates past 290 mph inside three seconds and reports the 300 mph take's numbers under the 143 mph label — the instrument manufactures its own operating point. `Probes.KnifeEdge` bisects a level-flight trim throttle for the entry speed instead; hold the *condition* the capture was flown in, not just its initial value.
 - **METHOD-22** — **Re-measure a fitted constant ALONE once the mechanisms it was fitted on top of have been replaced — it may now push the wrong way.** `ClimbGravityScale = 0.6` was fitted to make a climb hold speed, on drag and thrust shapes that `B12`/`B13` later replaced. Removing it *by itself*, with nothing else changed, moved the sustained climb from 276.7 to 257.7 mph **toward** the original's 163.1: by then it was making the manoeuvre it existed for worse. A constant that survives a rewrite because it was never re-tested is indistinguishable from one that is still doing its job, and only its own single-variable ablation separates them.
@@ -44,10 +42,6 @@ loss. What the engine renders was decodable from the authored constants + oscill
 (~0.20 px/frame) with no clip; the clip only settles the later fidelity target. A fitted constant
   is only interpretable if it names the quantity it multiplies at the right point in the chain
   (`BL-266(a)`; `analysis/gun-wobble-shake/`).
-- **METHOD-26** — **Carry a decoded representation through its consumer before naming its physical
-  quantity.** `obj+0x16c` looked like angular velocity, but `FUN_0053fbf0` consumes it as a
-  quaternion half-angle: the matrix turns by twice the stored vector. Comparing the accumulator
-  alone left pitch, yaw and roll exactly half-strength while every local value appeared correct.
 - **METHOD-27** — **A count over CSVM's own scene structure is not a count over the original's;
   name the parent before reading the number as a count of objects.** One flak over a C1 aagun dealt
   four splash shares of distinct magnitude, which reads as four objects hit, and the destructible
@@ -60,19 +54,12 @@ loss. What the engine renders was decodable from the authored constants + oscill
 ## DIAG — chasing a symptom
 
 - **DIAG-1** — **Check the premise against data before writing code.**
-- **DIAG-4** — **Confirm fidelity defects against the original.**
-- **DIAG-5** — **When a metric worsens, inspect the artifact and new states.**
 - **DIAG-6** — **Correlation is not a mechanism.**
-- **DIAG-7** — **Isolate the smallest subject and vary only the suspected mechanism.**
 - **DIAG-8** — **Audit inherited claims back to their inputs and method.**
-- **DIAG-9** — **Do not call a residual a floor until controls cannot reduce it.**
 - **DIAG-10** — **Explain cases where the change is inert by construction.**
 - **DIAG-11** — **Identify what moved before calling a deviation a regression.**
-- **DIAG-12** — **Instrument the boundary between externally identical failures.**
 - **DIAG-13** — **Visible activity proves execution, not correctness.**
-- **DIAG-14** — **Read probe failures before modifying the probe.**
 - **DIAG-15** — **Never silently skip unsupported or failed cases.**
-- **DIAG-16** — **Prevent unrelated lifecycle events from clearing the effect.**
 - **DIAG-17** — **Distinguish “never reached” from “reached but invisible.”**
 - **DIAG-18** — **Test code-derived explanations at runtime.**
 - **DIAG-19** — **Scripted repros inherit identity defaults (-Z heading, near-origin spawn); a
@@ -113,14 +100,10 @@ loss. What the engine renders was decodable from the authored constants + oscill
 
 - **SHOT-1** — **Respect capture quantisation; tiny effects need another metric.**
 - **SHOT-3** — **Use state logs when pixels cannot resolve an effect.**
-- **SHOT-4** — **Remove occlusion, fog, lighting, and competing effects.**
-- **SHOT-5** — **Compare pixel values, not enlarged impressions.**
 - **SHOT-6** — **Compare decoded pixels, not encoded image bytes.**
-- **SHOT-7** — **Tree visibility is not proof that pixels rendered.**
 - **SHOT-9** — **Do not combine screenshots with `--headless`.**
 - **SHOT-10** — **Create the output directory, use an absolute path, and verify the screenshot exists.**
 - **SHOT-12** — **Frame the time-driven surface, then perturb time.**
-- **SHOT-13** — **Use `--tex-override` for one texture and `--tex-census` to locate candidates.**
 - **SHOT-14** — **Treat census counts as lower bounds; disable fog and reject tiny counts.**
 - **SHOT-16** — **Hide capture windows; never minimize them.**
 - **SHOT-17** — **Sample transitions mid-ramp.**
@@ -147,18 +130,6 @@ loss. What the engine renders was decodable from the authored constants + oscill
   out to be capture noise at sd 0.91–2.58 (METHOD-14). *(Minted as
   SHOT-20 on the plan's branch; renumbered at the 2026-08-09 merge — BL-165's session minted
   SHOT-20/21/22 first.)*
-- **SHOT-25** — **`--tex-override` cannot separate the `fvol` cloud-sprite field from
-  `cloudparent` clusters — they share their textures.** All 626 of C1's `cloudparent` facades are
-  skinned `cloud1.tif`/`cloud2.tif`, the same two textures the `cloudsprite1`/`cloudsprite2`
-  templates use, so a green override paints both populations at once; separate them by altitude
-  or cluster position instead. *(Branch-minted as SHOT-21; renumbered
-  at the merge.)*
-- **SHOT-26** — **A horizon-band artifact is a full-width, DEAD-FLAT run of rows (per-row sd ≈ 0)
-  bounded by a hard jump — measure it as the largest jump whose rows are BOTH flat, never as the
-  largest jump.** Unrestricted, terrain silhouettes and cloud edges dominate the statistic and a
-  55-luminance flat-band edge reads as ordinary scene contrast.
-  *(Branch-minted as SHOT-22; renumbered at the merge.)*
-
 - **SHOT-27** — **The true horizon is a CALIBRATED row, not the sky/terrain boundary — shoot the
   same position LEVEL and check the shift is `f·tan(pitch)`.** `SHOT-23`(b) says to convert a row
   into an elevation above the true horizon; this is how that row is obtained without guessing.
@@ -284,10 +255,7 @@ loss. What the engine renders was decodable from the authored constants + oscill
 
 ## DET — determinism and randomness
 
-- **DET-1** — **Do not pace a sampler with the clock being tested.**
 - **DET-2** — **Disable live input during scripted runs.**
-- **DET-4** — **Vary render cadence when testing clock independence.**
-- **DET-5** — **Audit mutable state outside seeded generators.**
 - **DET-6** — **Scripted probes imply `--det`; use `--no-det` for realtime behaviour.**
 - **DET-7** — **Deterministic results must depend only on committed inputs.**
 - **DET-8** — **`--det` ignores `config.json`; use committed or CLI inputs.**
@@ -318,13 +286,10 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **PERF-1** — **Do not interpret `script_ms` as literal frame cost.**
 - **PERF-2** — **Capped metrics are floors, not costs.**
 - **PERF-3** — **Split broad timers before choosing what to optimize.**
-- **PERF-4** — **Attribute cost with CPU/GPU evidence.**
 - **PERF-5** — **Ignore differences below measured noise and an absolute floor.**
-- **PERF-6** — **Discard warm-up effects and record cache state.**
 - **PERF-7** — **Compare startup timings under identical cache conditions.**
 - **PERF-8** — **Use the engine startup report, not whole-process time.**
 - **PERF-9** — **Use two unchanged pairs for noise, then measure A/B back to back.**
-- **PERF-10** — **Check exact workload counts before noisy timings.**
 - **PERF-11** — **Use `--no-vsync` and metrics valid for the clock mode.**
 - **PERF-12** — **A frame ordinal does not convert to wall time at an assumed refresh rate.**
   `HitchMonitor`'s grace window is milliseconds; a `--hitch-inject=` frame chosen assuming a 60 Hz
@@ -442,14 +407,8 @@ loss. What the engine renders was decodable from the authored constants + oscill
 
 - **LOG-1** — **An empty report may mean the mode did not build the feature.**
 - **LOG-2** — **State the time, count, and lifecycle window before concluding from absence.**
-- **LOG-3** — **Report unsupported data as an instrument limitation.**
-- **LOG-4** — **Check that the log can express the state sought.**
 - **LOG-5** — **Report caps and truncation; never infer absence from a shortened list.**
-- **LOG-6** — **Inspect complete stdout, stderr, and engine logs.**
 - **LOG-8** — **Run shader checks windowed; `--headless` skips the render path.**
-- **LOG-9** — **Use ordering and lifecycle position before attributing an error.**
-- **LOG-10** — **Error allowlists need narrow patterns, caps, and actual counts.**
-- **LOG-11** — **Capture native engine errors outside C#.**
 - **LOG-12** — **Automated instruments must return their verdict in the exit code.**
 - **LOG-13** — **Do not overlap engine probes.** The one exception is `RunTests.ps1`'s own engine
   shards, which overlap by design: each carries its own `--log-file`, report, scratch directory and
@@ -464,8 +423,6 @@ loss. What the engine renders was decodable from the authored constants + oscill
   LAST stage in a run, launched only after every engine, golden and perf Godot process in that
   invocation has already exited, so the frame-time evidence `HitchMonitor`/`HitchSidecar` report
   is never taken beside contaminating load (PERF-12/13/14).
-- **LOG-14** — **Read every field in a multi-metric row.**
-- **LOG-15** — **When an error lacks identity, log candidate state at the failure boundary.**
 - **LOG-16** — **A census printed at the end of setup cannot report a runtime miss** 
 - **LOG-17** — **In a worktree, `RunTests.ps1` exits 0 having run only the units.** A worktree has
   no `tools/godot` and no `extracted/` — both git-ignored — so the in-engine suites and the golden
@@ -496,9 +453,7 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **WORLD-10** — **Report opposing transitions separately; a net can hide both.**
 - **WORLD-11** — **Match sampling time to lifecycle.**
 - **WORLD-12** — **A started definition is not proof of output; verify its runtime product.**
-- **WORLD-14** — **Measure bounds before unrelated runtime children expand them.**
 - **WORLD-15** — **Establish each subtree’s coordinate frame before applying transforms.**
-- **WORLD-19** — **Verify every output channel of a compound effect.**
 - **WORLD-20** — **For rare classes, census first and aim at named geometry.**
 - **WORLD-21** — **Route equivalent lookups through one resolver.**
 - **WORLD-22** — **Use explicit subsystem state when hosts are hidden by design.**
@@ -510,7 +465,6 @@ loss. What the engine renders was decodable from the authored constants + oscill
 - **WORLD-28** — **A suite world with no `ContactMask` wired silently poses every untimed `OBJECT_MOTION` at rest, so half a death can be invisible to it.** A launch with no `RUN_TIME` ends only at a contact tier, and no mask means no tier, so `HandleMotion` seeks it to t=0 instead of adding it. CM10's lifeboat drop reads 0.0 m fallen that way and 6.2 m with `collision: true` plus `runtime.ContactMask = CollisionLayers.World`; a real session wires the mask and the harness does not, so a suite that must see such a launch wires it itself.
 - **WORLD-29** — **A term you meant to redirect can leave instead, and the frame looks like a win either way: prove the new source arrives with a control colour.** Setting the Environment's background to a colour and its reflected light source to that background gives Godot no radiance map at all, so the water's specular vanished; the day sea darkened toward the original and read as a success. A pure-red sky rendered byte-identically to the fog-grey one, which is what caught it. The reflection needs a `Sky` resource (a flat `PanoramaSkyMaterial` is enough), and under one the red control tints the water red.
 - **WORLD-30** — **`Wake(n)` fires only that objective's wake verbs synchronously; `ADD_OBJECTIVE_TARGET` applies through its own completion, one `Step()` later when nothing else gates it.** CM10's OBJECTIVE10 gates on nothing once awake, so `Wake(10)` alone leaves its site unoffered until the next `Step()` completes it and applies the target. The gap is real in isolation but invisible in play, since both happen inside one Step call at normal frame rates.
-- **WORLD-31** — **A sibling object is a control only once you have censused every authored path that can reach it.** Six of CM09's twelve zeppelin engines are destroyed by `killpzep`, so the other six looked like the control that would prove the breakup did the work; all twelve went dark, because each burning gasbag's own death definition destroys the two engines beside it. Grep the whole mission's definitions for the target's name before calling anything untouched.
 - **WORLD-32** — **A Godot property that accepts a write is not a property the renderer reads: prove a lighting knob is live by driving it to an extreme and watching the goldens move.** `Environment.AmbientLightEnergy` is inert in the faithful path. With `AmbientLightSource.Sky` and the default full `AmbientLightSkyContribution`, the ambient term is the sky cubemap scaled by the *background* energy multiplier, so the ambient energy never enters the shader. Measured: taking the launcher's 0.9 to 0.0 left all 18 goldens byte-identical, while the same experiment on `DirectionalLight3D.LightEnergy` (1.6 → 0.5) moved 7. Run that pair of experiments before attributing any part of an aircraft's brightness to the ambient, and before spending a calibration on a number nothing reads.
 
 - **WORLD-33** — **An upward ray reports open air under a one-sided collider, so it cannot tell
@@ -526,11 +480,8 @@ loss. What the engine renders was decodable from the authored constants + oscill
 
 - **SHELL-2** — **Identify stray Godot processes by worktree and probe flag.**
 - **SHELL-3** — **After bulk rewrites, run Godot as well as the compiler.**
-- **SHELL-4** — **Detect and preserve BOM and encoding explicitly.**
-- **SHELL-6** — **Judge piped native processes by exit code.**
 - **SHELL-7** — **On PowerShell 5.1, read BOM-less UTF-8 through an explicit UTF-8 API.**
 - **SHELL-10** — **Launch scripted Godot probes through `RunProbe.ps1`.**
-- **SHELL-11** — **Assert exit codes, counts, and hashes are non-empty.**
 - **SHELL-12** — **Give every scripted probe an exit condition, and check the flag you chose actually is one.** `--frames=N` is `ScreenshotFrames` (`SessionSpec.cs:586`) — a warm-up counter that terminates the run only alongside `--screenshot`. Passed on its own it reads as valid, changes nothing, and the probe runs until killed: one `--debug-anim` run left this way spent six hours writing a 45 MB log.
 - **SHELL-13** — **A scripted run must not steal desktop focus.** The window is created with
   `no_focus` in project.godot; setting `WindowSetFlag` at runtime after the fact does not hand
@@ -569,10 +520,7 @@ loss. What the engine renders was decodable from the authored constants + oscill
 
 ## INSTR — building instruments
 
-- **INSTR-1** — **Assume diagnostics perturb their subject.**
-- **INSTR-2** — **Give overlays an able-to-fail control and a shipped-render-equivalent mode.**
 - **INSTR-3** — **Share derived predicates with production code.**
-- **INSTR-4** — **An observer must not change the state it reports.**
 - **INSTR-5** — **Log resolved outputs as well as lookup inputs.**
 - **INSTR-6** — **An able-to-fail control over randomised state must sweep seeds, not pin one.** A pinned seed makes one draw, and a bug that fires on some draws is invisible on the rest. Measured: with the BL-240 retirement hold removed, the recorded `--destroy=m_build` probe reports 0 misses at seed 1 but 2/1/1/1 at seeds 4/7/9/10 — the control that a single run was recorded as passing.
 - **INSTR-8** — **Z-fighting is instability, not appearance: measure it as pixels that SWAP WINNER
@@ -678,15 +626,6 @@ loss. What the engine renders was decodable from the authored constants + oscill
   120 s run and reappeared at its 1200 m spawn, and those two jumps are the whole of a reported
   3797 m worst separation and most of a 415 m mean, on a leg that plateaued at 254 m and never read
   above 470 m while both aircraft were flying. INSTR-18 is the same failure at the altitude cap.
-- **INSTR-23** — **A scripted stick authored in deflection-seconds measures the plant, not the pilot:
-  when a plant's rate changes, the same script flies a different aeroplane.** Author such a profile
-  by the attitude each segment is meant to reach and re-derive the hold from the plant's own rate,
-  and say in the constant that this is what it is. Measured on `wingman-station`'s flown leader:
-  after the quaternion half-angle integration doubled every angular rate, its 1.5 s of 0.6 roll
-  reached 95° of bank rather than about 47°, so the 8 s pull that followed dug a knife-edge descent
-  instead of a climbing turn and put the leader into the ground. Nothing in the AI under test had
-  moved. The companion trap is the reverse read: a suite that goes red across a plant change is a
-  claim about the instrument until the instrument has been shown to still fly what it names.
 - **INSTR-24** — **A raycast taken in the same call that moved a static body reads the collider at
   its OLD pose, and reports empty space as "nothing there".** A `StaticBody3D`'s transform reaches
   the physics server on the next frame, which never arrives inside a suite; call
@@ -729,15 +668,6 @@ loss. What the engine renders was decodable from the authored constants + oscill
   log line (`GD.Print`) over a pixel for a realtime transient, or drive the state through a suite's
   own `_Process` loop (INSTR-26) where the frame IS the unit.
 
-- **INSTR-29** — **A perturbation meant for a definition's own pose events has to be in place
-  BEFORE the call that starts it, and be re-applied every step against whatever else drives the
-  subject.** A definition poses inside its start dispatch, so a state first written on the first
-  advance is a frame late and the event under test never sees it; and a stand-in that flies itself
-  rewrites its own transform each tick, so a one-shot write is gone by the next event and a read
-  taken after that tick reports the flight model rather than the pose's host. Measured on CM02's
-  capture: rolling the captured aeroplane 90° at the top of the play loop left the wing-walk frame
-  reading 0° roll under BOTH the old and the new rule, which reads as "the fix is unnecessary";
-  banking before `PlayMissionTrigger` and holding the bank each step separated them at 90° versus 0°.
 - **INSTR-30** — **A world-coordinate precision effect cannot be measured at heading 0, nor with a
   luminance centroid.** An axis-aligned basis multiplies by exact 0s and 1s, so float32 rounding of
   a large world transform is zero there at any distance, and a `--weapon-lab` hold pins the aircraft
@@ -778,19 +708,6 @@ loss. What the engine renders was decodable from the authored constants + oscill
   `CSVM_TRACE_SISCRIPT`, which logs `sitrace` lines from `ScriptPlayback`. The same property is
   what makes the fix safe to land: `RenderPoses` is inert on any clock but the realtime one, so all
   18 goldens are hash-identical with it and without it.
-- **INSTR-34** — **Identify what is in original footage from the pixels alone. A remake log, a
-  livery name or a definition name is the remake's answer, not the film's, and using one to label
-  the film is circular.** A frame-by-frame comparison identified the aircraft docking in
-  `CM04.mkv` as a Devastator, citing `[paint] player_pfighter (dev): player_fortune` from **its own
-  CSVM probe log** plus a "central bubble canopy" silhouette call. The film shows twin wing-mounted
-  engines and a framed greenhouse canopy; the remake's Devastator has a single nose radial and a
-  bubble canopy, and its own montage put the two side by side. The misidentification then closed
-  the only available A/B as impossible ("no Balmoral docking is on film") and cleared the item's
-  stated defect on a comparison of two authored definitions of one family through one runtime,
-  which INSTR-31 already rules out as a correctness test. When an airframe, a livery or a mission
-  must be named from footage, name it from geometry that the remake cannot have supplied, and when
-  unsure put the frame in front of the author rather than resolving it from the repo.
-
 - **INSTR-35** — **A player-piloted rig cannot stand in for an AI aircraft, because the plant is
   selected on range to the nearest human and a human rig is near-field by construction.**
   `FlightModel.FarFieldPlant` is `UsesAiForcePath && NearestHumanDistSqM > FarFieldRangeM²`, and
@@ -858,9 +775,7 @@ loss. What the engine renders was decodable from the authored constants + oscill
 
 ## SRC — sources and documents
 
-- **SRC-1** — **Validate whether bytes are meaningful before numeric sanity checks.**
 - **SRC-3** — **Use design documents for intent; retail evidence decides shipped details.**
-- **SRC-4** — **When a fact is duplicated, name one description of record.**
 - **SRC-5** — **A field you don't read may be REDUNDANT, not dropped — try to derive it from the
   fields you already read before deciding what it means.** A field with a shape your parser
   silently rejects looks identical to a missing feature, and the invented reading then doubles
