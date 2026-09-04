@@ -191,7 +191,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave F: tooling.md and cli.md
 
 51. ☐ F51 `docs/tooling.md`: each script's section cut to what it does, its switches and its outputs
-52. ☐ F52 `docs/cli.md` flag bullets, first half of the index groups (modes through debug labs), to the 600-character cap
+52. ☑ F52 `docs/cli.md` flag bullets, first half of the index groups (modes through debug labs), to the 600-character cap
 53. ☐ F53 `docs/cli.md` flag bullets, second half (dumps through audio), plus the three lab sections and the index prose
 
 ### Wave E: wire the gate and close
@@ -767,7 +767,7 @@ nothing; `.\CheckEncoding.ps1` clean.
 in `backlog.md`; keep the pointer. `packaging/Extract.ps1`'s "keep all extraction logic in the two
 scripts" rule is binding and stays as one sentence.
 
-## F52 ☐ `docs/cli.md` flag bullets, modes through debug labs, to the 600-character cap
+## F52 ☑ `docs/cli.md` flag bullets, modes through debug labs, to the 600-character cap
 
 **Goal.** Every bullet for a flag in the index groups "Modes and content", "Placement",
 "Capture", "Determinism", "Livery and paint", "Weapons, ordnance and damage" and "Debug labs" says
