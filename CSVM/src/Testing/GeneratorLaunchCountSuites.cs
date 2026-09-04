@@ -17,7 +17,9 @@ namespace CSVM.Testing;
 /// hold reads that group as wiped out the moment he leaves the ship, and the mission is lost
 /// 15 s later with Miles alive in the player's brackets. The launch itself must survive the
 /// Dante's kill: a torpedo salvo kills the fourth gasbag inside OBJECTIVE10's 0.5 s nap, before
-/// OBJECTIVE11 credits the bay, and a bay disabled on the kill tick never launches him.</summary>
+/// OBJECTIVE11 credits the bay, and a bay disabled on the kill tick never launches him. A second
+/// suite covers the opposite shape, C3/M03's <c>barracuda</c> submarine, whose own bay must
+/// disable rather than launch forever once its healthy node dies.</summary>
 internal static class GeneratorLaunchCountSuites
 {
     private const string Chapter = "C5";
@@ -26,6 +28,10 @@ internal static class GeneratorLaunchCountSuites
     private const string Template = "stihellhound_5_7";
     private const string Launch = "stihellhound_5_eg0";
     private const int MilesGroup = 5;
+
+    private const string SubChapter = "C3";
+    private const string SubMission = "M03";
+    private const string SubGenerator = "barracuda";
 
     // The loss fuse as the mission authors it: 38 completes on group 5 at zero and naps 39, the
     // instant loss, awake 15 s later.
@@ -95,6 +101,43 @@ internal static class GeneratorLaunchCountSuites
 
         ctx.WriteArtifact($"test-generator-launch-dedg-{Chapter}-{Mission}.txt", report.ToString());
         ctx.Note($"{Chapter}/{Mission}: the Dante's launch counts for DEDG over group {MilesGroup}");
+    }
+
+    [Suite("generator-sub-kill-disables-bay",
+        "C3/M03's barracuda submarine over the mission's own BUILT world: DamageAt on its own "
+        + "destructible pool fires AnimRuntime.DestructibleKilled with its authored 'subhealthy' "
+        + "node, which GameSession's wiring feeds into NotifyHostDied; the bay, credited and "
+        + "launching beforehand, disables permanently once GeneratorCycle.HostDeathGraceSeconds "
+        + "elapses, however much further credit follows")]
+    internal static void GeneratorSubKillDisablesBay(TestContext ctx)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, SubChapter, SubMission);
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, SubChapter);
+        ctx.RequireData(missionZrdr, $"{SubChapter}/{SubMission} zrdr");
+        ctx.RequireData(chapterZrdr, $"{SubChapter} zrdr");
+
+        EnemyGeneratorDef? def = null;
+        foreach (var d in EnemyGenerators.Load(missionZrdr))
+        {
+            if (d.Node.Equals(SubGenerator, StringComparison.OrdinalIgnoreCase))
+            {
+                def = d;
+            }
+        }
+        ctx.Check(def != null, $"{SubChapter}/{SubMission} authors the generator '{SubGenerator}'");
+        ctx.Check(def?.HealthyNode?.Equals("subhealthy", StringComparison.OrdinalIgnoreCase) ?? false,
+            $"'{SubGenerator}' authors its own healthy node ('{def?.HealthyNode}')");
+        if (def == null)
+        {
+            return;
+        }
+
+        var nets = AiNets.Load(chapterZrdr);
+        var report = new StringBuilder();
+        ctx.WithWorld(SubChapter, collision: false, SubMission,
+            world => DriveSubKill(ctx, world, def, nets, report));
+        ctx.WriteArtifact($"test-generator-sub-kill-{SubChapter}-{SubMission}.txt", report.ToString());
+        ctx.Note($"{SubChapter}/{SubMission}: sinking '{SubGenerator}' disables its own bay after the grace");
     }
 
     // The authored shape, read off the shipped files: the generator's label resolves the disabled
@@ -392,5 +435,67 @@ internal static class GeneratorLaunchCountSuites
             null!, ctx.Host, resources,
             new FlightWorldBindings { Projectiles = live, Gamez = planesGamez },
             new HumanRosterBindings());
+    }
+
+    private static void DriveSubKill(TestContext ctx, TestWorld world, EnemyGeneratorDef def,
+        IReadOnlyList<AiNet> nets, StringBuilder report)
+    {
+        AiGeneratorRuntime? runtime = null;
+        try
+        {
+            runtime = new AiGeneratorRuntime(new[] { def },
+                (name, scope) => world.Runtime.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
+                nets, ctx.PlaneName, (d, pos, look, pilot) => default);
+            ctx.Check(runtime.LiveCount == 1, $"'{def.Node}' is live over the built world");
+            world.Runtime.DestructibleKilled += name => runtime.NotifyHostDied(name);
+
+            // Standing credit, well ahead of the def's own wave_period+ind_period gap, so the bay
+            // is caught mid-cycle rather than at its very first due point.
+            runtime.GrantWaveCapacity(def.Node, 999);
+            for (int i = 0; i < (int)(22f / StepDt); i++)
+            {
+                runtime.SimStep(StepDt);
+            }
+            int beforeKill = runtime.LaunchOrdinal;
+            report.AppendLine($"launches before the kill: {beforeKill}");
+            ctx.Check(beforeKill > 0, $"'{def.Node}' launches under standing credit before the kill");
+
+            // The struck node a real weapon hit would resolve: the host node itself, then Resolve
+            // picks the one pool a hit there actually reaches (docs/formats/destructibles.md).
+            var host = world.Runtime.FindNodes(def.Node) is { Count: > 0 } hosts ? hosts[0] : null;
+            ctx.Check(host != null, $"'{def.Node}' is a world node");
+            var inst = host != null ? world.Runtime.Destructibles.Resolve(host) : null;
+            ctx.Check(inst != null, $"'{def.Node}' has its own destructible pool");
+            if (host == null || inst == null)
+            {
+                return;
+            }
+            bool landed = world.Runtime.DamageAt(host, inst.MaxHealth + 1f);
+            report.AppendLine($"DamageAt landed={landed}");
+            ctx.Check(landed, $"the kill lands on '{def.Node}''s own destructible pool");
+
+            // Just past the grace: whatever launched inside it has landed.
+            for (int i = 0; i < (int)((GeneratorCycle.HostDeathGraceSeconds + 1f) / StepDt); i++)
+            {
+                runtime.GrantWaveCapacity(def.Node, 999);
+                runtime.SimStep(StepDt);
+            }
+            int justPastGrace = runtime.LaunchOrdinal;
+
+            // Long past the grace, crediting continuously: the disable is permanent, not a lull.
+            for (int i = 0; i < (int)(20f / StepDt); i++)
+            {
+                runtime.GrantWaveCapacity(def.Node, 999);
+                runtime.SimStep(StepDt);
+            }
+            int longAfter = runtime.LaunchOrdinal;
+            report.AppendLine($"launches just past the grace: {justPastGrace}, 20 s later under continued credit: {longAfter}");
+            ctx.Same(justPastGrace, longAfter,
+                $"no further launches once the grace has elapsed, however much credit follows");
+        }
+        finally
+        {
+            runtime?.Free();
+        }
     }
 }
