@@ -755,12 +755,16 @@ internal static class ZeppelinSuites
         "the far side stays stowed, out-of-arc holds fire and retracts after the invented " +
         "idle window, an F18-destroyed cannon thins the next volley to 5, a " +
         "cannon_inaccuracy clone shows real scatter, and the zeppelin-vs-zeppelin arm " +
-        "rand()-picks only the target's IN-ARC gasbags on constructed geometry")]
+        "rand()-picks only the target's IN-ARC gasbags on constructed geometry; then C5/M04's " +
+        "Dante, sharing its twelve cannon node names with two other zeppelins on the same " +
+        "mission, wires its own F18 pool per cannon, volleys a held target zeppelin's gasbags, " +
+        "and thins the same way once one cannon is destroyed")]
     internal static void ZeppelinBroadsideSuite(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
         ctx.RequireData(missionZrdr, $"C1/M04 zrdr");
         ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, "C3", "M03"), $"C3/M03 zrdr");
+        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, "C5", "M04"), $"C5/M04 zrdr");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var wep28 = weapons.Get(ZeppelinRuntime.BroadsideWeaponId);
@@ -989,6 +993,135 @@ internal static class ZeppelinSuites
                 textures?.Dispose();
             }
         });
+
+        // CM24 (C5/M04)'s Dante: three zeppelins share the twelve `lbroadNN`/`rbroadNN` node
+        // names on one mission, unlike C1/M04's lone piratezep above; proves its own record
+        // still wires an F18 pool per cannon and thins the volley the same way.
+        ctx.WithWorld("C5", collision: true, mission: "M04", world =>
+            DestroyedDanteCannon(ctx, world, weapons));
+    }
+
+    // CM24 (C5/M04)'s Dante broadside: real record data for both the shooter and its
+    // zeppelin-vs-zeppelin target (piratezep, held static so its own net motion never fights the
+    // test's placement), engaged and volleyed at short range, then one port cannon destroyed
+    // through its own F18 pool to prove the thinning F19 promises.
+    internal static void DestroyedDanteCannon(TestContext ctx, TestWorld world, WeaponDefs weapons)
+    {
+        var runtime = world.Session.Runtime;
+        var defs = Zeppelins.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C5", "M04"));
+        var dante = defs.FirstOrDefault(d => d.Node.Equals("dantezep", System.StringComparison.OrdinalIgnoreCase));
+        var pirate = defs.FirstOrDefault(d => d.Node.Equals("piratezep", System.StringComparison.OrdinalIgnoreCase));
+        var danteHost = runtime.FindNodes("dantezep").FirstOrDefault();
+        var pirateHost = runtime.FindNodes("piratezep").FirstOrDefault();
+        ctx.Check(dante is { LeftCannons.Count: 6, RightCannons.Count: 6 } && pirate != null
+                  && danteHost != null && pirateHost != null,
+            $"C5/M04 authors dantezep with 6+6 broadside cannons targeting [{string.Join(",", dante?.Targets ?? new List<string>())}], and both hulls resolve");
+        if (dante == null || pirate == null || danteHost == null || pirateHost == null)
+            return;
+
+        var nets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C5"));
+        TextureArchive? textures = null;
+        ProjectilePool? pool = null;
+        ZeppelinRuntime? zeps = null;
+        try
+        {
+            textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C5"));
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            var started = new List<string>();
+            runtime.OnInstanceStarted = (d, _) => { if (d.AnimName != null) started.Add(d.AnimName); };
+
+            var resolvedDante = danteHost;
+            var resolvedPirate = pirateHost;
+            zeps = new ZeppelinRuntime(new[] { dante, pirate },
+                name => name.Equals("dantezep", System.StringComparison.OrdinalIgnoreCase) ? resolvedDante
+                    : name.Equals("piratezep", System.StringComparison.OrdinalIgnoreCase) ? resolvedPirate
+                    : null,
+                nets);
+            ctx.Host.AddChild(zeps);
+            zeps.WireDamage(runtime);
+            zeps.WireCannons(live, weapons);
+            // Held static the instant it is wired (Speed is still 0 from construction): the
+            // zeppelin-vs-zeppelin target must sit still for the test's own placement, never fly
+            // its own net or carry a phantom velocity into the lead solve.
+            zeps.Hold("piratezep");
+            var bs = zeps.BroadsideOf("dantezep");
+            ctx.Check(bs != null && bs.Cannons.Count == 12,
+                $"the Dante wires 6+6 cannons count={bs?.Cannons.Count ?? 0}");
+            if (bs == null)
+                return;
+
+            // The fire gate this item's evidence questioned: every one of the twelve authored
+            // cannon nodes carries its own F18 destructible pool, despite three zeppelins sharing
+            // the same twelve node names on this one mission.
+            int pooled = 0;
+            foreach (var cannon in dante.LeftCannons.Concat(dante.RightCannons))
+            {
+                var node = runtime.FindNodes(cannon.Node, danteHost).FirstOrDefault();
+                if (node != null && runtime.Destructibles.PoolsOn(node).Count > 0)
+                {
+                    pooled++;
+                }
+            }
+            ctx.Same(12, pooled, $"all twelve Dante cannon nodes carry an F18 destructible pool");
+
+            ctx.Check(!bs.CannonsEngaged && zeps.SetCannonsEngaged("dantezep", true),
+                $"the broadside wires disengaged and the script's flag engages it");
+
+            var motion = zeps.MotionFor("dantezep")!;
+            const float dt = 1f / 60f;
+            Vector3 PortAbeam() => danteHost.GlobalPosition + ZeppelinBroadside.SideNormal(
+                motion.YawRad, motion.PitchRad, BroadsideSide.Left, bs.RightSign) * 300f;
+            void Step(int steps)
+            {
+                for (int i = 0; i < steps; i++)
+                {
+                    pirateHost.GlobalPosition = PortAbeam();
+                    zeps.SimStep(dt);
+                    live.SimStep(dt);
+                    runtime.Advance(dt);
+                }
+            }
+
+            Step((int)(4.5f / dt));
+            ctx.Same(6, zeps.BroadsideShotsOf("dantezep"),
+                $"the port six volley wep_28 at the target zeppelin's in-arc gasbags shots={zeps.BroadsideShotsOf("dantezep")}");
+
+            var lbroadNode = runtime.FindNodes(dante.LeftCannons[0].Node, danteHost).FirstOrDefault();
+            var lbroadPool = lbroadNode == null ? null : runtime.Destructibles.PoolsOn(lbroadNode).FirstOrDefault();
+            ctx.Check(lbroadPool != null,
+                $"'{dante.LeftCannons[0].Node}' carries its own compiled def pool hp={lbroadPool?.MaxHealth ?? 0f:0}");
+            if (lbroadPool == null)
+                return;
+            started.Clear();
+            runtime.DamageAt(lbroadNode, lbroadPool.MaxHealth + 1f);
+            // The destroy def's own death sequence calls its paired panel's burn anim
+            // (dtzepleft_gasbag1 at +1 s, dtzepright_gasbag1 at +8 s), an authored link from a
+            // cannon's death to a gasbag skin fire; the +8 s delay needs real sim time to fire.
+            Step((int)(8.5f / dt));
+            // The gasbag half: already reachable through ordinary CallAnimation dispatch, with
+            // no bespoke code, once the sequence has had time to run.
+            ctx.Check(started.Any(a => a.StartsWith("dtzepleft_gasbag") || a.StartsWith("dtzepright_gasbag")),
+                $"the destroyed cannon's own death sequence calls its paired gasbag panel's burn anim started=[{string.Join(",", started)}]");
+            int shotsBefore = zeps.BroadsideShotsOf("dantezep");
+            int guard = 0;
+            while (zeps.BroadsideShotsOf("dantezep") == shotsBefore && guard++ < (int)(30f / dt))
+            {
+                pirateHost.GlobalPosition = PortAbeam();
+                zeps.SimStep(dt);
+                live.SimStep(dt);
+            }
+            ctx.Same(5, zeps.BroadsideShotsOf("dantezep") - shotsBefore,
+                $"the destroyed Dante cannon drops out — the volley thins to 5 after {guard * dt:0.#} s");
+        }
+        finally
+        {
+            runtime.OnInstanceStarted = null;
+            pool?.Free();
+            zeps?.Free();
+            textures?.Dispose();
+        }
     }
 
     // CM04 (C3/M03) as shipped: the Pandora authors targets [player] and 500 m of range, and its
