@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Cutscene hand-backs
 
 21. ☐ `BL-719` CM14's aircraft no longer hang in the sky during a cutscene
-22. ☐ `BL-721` CM17 hands the player back onto a pose the terrain allows
+22. ☑ `BL-721` CM17 hands the player back onto a pose the terrain allows
 23. ☐ `BL-722` CM18's Blacke drop runs one camera and hands back clear of the ground
 
 ### Wave D — Mission flow
@@ -365,7 +365,7 @@ alive, dock, watch the sky during the film.
 
 **⚠ Traps.** Check both cutscenes. Do not hide aircraft by team or by distance.
 
-## C22 ☐ `BL-721` CM17 hands the player back onto a pose the terrain allows
+## C22 ☑ `BL-721` CM17 hands the player back onto a pose the terrain allows
 
 **Goal.** After CM17's intro the player is in flight at the authored spawn, not against the
 terrain, and no jump or hitch follows.
@@ -394,6 +394,31 @@ briefing, watch the first second after the intro.
 
 **⚠ Traps.** CM17's Blacke search warps the player (`git log --grep=CM17`); confirm the crash is
 at the intro, not after that warp. The respawn jumping is read, not fixed, until the pose is.
+
+**Outcome.** The restored pose itself was never wrong: a headless run over CM17's own BUILT world
+(collision up) shows `StagePlayerAircraft`'s hand-back landing exactly on the aiv.zrd `player`
+block's authored spawn, both by position and by a direct print of `_stagedFrom`, with 78 m of
+clearance under it. What the same run shows going wrong is the flight model's speed and throttle:
+`Held` pins both at zero for every step it holds (its own weapon-lab contract, reused for the
+cutscene), and the no-951 hand-back never re-seeded them, so the aeroplane resumed on a dead
+engine at zero airspeed instead of on the speed and power it actually carried into the hold.
+`FlightController.StageAt` now captures the model's speed and throttle alongside `_stagedFrom` the
+instant staging begins, and restores them on a hand-back that names no re-placement, the same way
+the 951 branch already restores a resume speed. A new engine-free suite, `cutscene-handoff-speed`,
+isolates the mechanism with a bare rig and a bare marker (no mission data needed) and is red before
+this change, green after. A second suite, `blacke-intro-handoff`, drives CM17's real `generic_intro`
+over its own built world and pins the hand-back within 5 m of the authored spawn and 10 m clear of
+the terrain under it; it was already green before this change; and confirms the crash is at the
+intro's own hand-back, never reaching the mission's later `WARP_VEHICLE` (`campaign-blacke-search`
+covers that separately and is unchanged). The hand-back speed is the authored one: `PLAYER_INIT`'s
+180 decodes to 18 m/s through the original's 0.1 scale (`SpawnPoints.SpeedScale`), so the aeroplane
+resumes at the speed the mission authors, not under-powered. No story intro raises a 951, so the
+same zero-speed hand-back sat under all fourteen missions that open on a cutscene (the twelve on
+`generic_intro`, C1/M04's bespoke intro and C3/M03's `cgzep_camera`), and every one of them changes
+with this. The headless run still grazes a rise about 725 m from spawn a few seconds after control
+returns, which is the flown path at 18 m/s and a judgement for `D33`.
+
+**Verified.** <pending orchestrator run>
 
 ## C23 ☐ `BL-722` CM18's Blacke drop runs one camera and hands back clear of the ground
 

@@ -558,6 +558,11 @@ public partial class FlightController : Node3D
     // at, and raises the flag below so the hand-back moves the flight model too.
     private Transform3D? _stagedFrom;
     private bool _resumePlaced;
+    // The model's own speed and throttle the instant staging began, captured alongside
+    // _stagedFrom: Held pins both at zero for every step it holds (its own contract, shared with
+    // the weapon lab), so a hand-back naming no re-placement has nothing else to resume them from.
+    private float? _stagedSpeed;
+    private float? _stagedThrottle;
 
     public FlightController()
     {
@@ -1231,6 +1236,15 @@ public partial class FlightController : Node3D
     {
         if (pose is { } staged)
         {
+            // The model itself, before the first held step pins it at zero: captured once, the
+            // same way _stagedFrom is, so a hand-back naming no re-placement still resumes on the
+            // airspeed and power the aircraft actually held rather than on stall.
+            if (_stagedFrom == null)
+            {
+                _stagedSpeed = _model.Speed;
+                _stagedThrottle = _model.Throttle;
+            }
+
             _stagedFrom ??= GlobalTransform;
             GlobalTransform = staged;
             if (ShakePivot != null)
@@ -1263,6 +1277,17 @@ public partial class FlightController : Node3D
             _heldAttitude = home.Basis;
             _heldPinned = true;
             _model.Reset(_heldPos, _heldAttitude, ReplacedSpeed, _model.Throttle);
+        }
+        else if (_stagedSpeed is { } speed)
+        {
+            // No definition named a re-placement, so the model resumes on the airspeed and power
+            // it held before staging began rather than on the zero Held pinned it at.
+            _heldPos = home.Origin;
+            _heldAttitude = home.Basis;
+            _heldPinned = true;
+            _model.Reset(_heldPos, _heldAttitude, speed, _stagedThrottle ?? 0f);
+            _stagedSpeed = null;
+            _stagedThrottle = null;
         }
 
         ApplyPresence();
