@@ -112,7 +112,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Cutscene hand-backs
 
-21. ☐ `BL-719` CM14's aircraft no longer hang in the sky during a cutscene
+21. ☑ `BL-719` CM14's aircraft no longer hang in the sky during a cutscene
 22. ☐ `BL-721` CM17 hands the player back onto a pose the terrain allows
 23. ☐ `BL-722` CM18's Blacke drop runs one camera and hands back clear of the ground
 
@@ -335,7 +335,7 @@ same marker path; read it before re-chasing the stamp.
 
 # Wave C — Cutscene hand-backs
 
-## C21 ☐ `BL-719` CM14's aircraft no longer hang in the sky during a cutscene
+## C21 ☑ `BL-719` CM14's aircraft no longer hang in the sky during a cutscene
 
 **Goal.** While CM14's intro or docking cutscene plays, no AI aircraft is drawn motionless in the
 sky.
@@ -364,6 +364,29 @@ unchanged; full `.\RunTests.ps1`. At the controls (`D33`): CM14, fly to the Pand
 alive, dock, watch the sky during the film.
 
 **⚠ Traps.** Check both cutscenes. Do not hide aircraft by team or by distance.
+
+**Outcome.** Fixed for the intro; the docking cutscene reads clean. A headless trace over CM14
+(C2B/M04) killed all three named candidates as the direct cause: `SessionSimulation` returns
+before the generator phase whenever the world is held, so a wave cannot spawn mid-hold at all;
+`ParkAi`'s own `!ai.Inert` gate correctly leaves a genuinely dormant roster aircraft alone; and
+`ApplyPresence`'s pivot hide already works, proven separately by the passing wing-walk park in
+`CaptureGroupSuites`. The real cause sat upstream of all three: CM14's own intro definition
+(`generic_intro`, shared by twelve of the thirteen story missions) authors no `CALLBACK` 913 at
+all, only the bespoke C1/M04 intro does, yet the decode says the original parks every AI vehicle
+imperatively at every new-mission start regardless of what codes that mission's own intro data
+authors. `CutsceneController` only parked on a literal 913 dispatch, so an aircraft already flying
+when a non-C1/M04 intro opened (a Gemini fighter the mission's own generator had launched, over
+CM14) stayed drawn and motionless for the whole intro. `CutsceneController.Act`'s `CodeHoldsWorld`
+case now forces the park the instant an intro takes the session, whether or not 913 is later also
+authored. The docking cutscene (`hooked_to_klondike`) is untouched: it authors no 913 in the
+original either, and its background AI is meant to keep flying through a hookup or a drop. The new
+`cutscene-ai-park-intro` suite proves the fix over CM14's own generator and roster data, red before
+the change (the park assertion failed) and green after; it also proves the generator stays silent
+through the hold and resumes once the intro hands off. This does not settle whether the same
+imperative gap affects `player_setup`'s Instant Action bootstrap, which authors the same nine codes
+outside a story mission and is out of this item's scope.
+
+**Verified.** <pending orchestrator run>
 
 ## C22 ☐ `BL-721` CM17 hands the player back onto a pose the terrain allows
 

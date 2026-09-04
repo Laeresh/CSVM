@@ -711,6 +711,15 @@ public sealed partial class CutsceneController : Node
                 // skip is what the player is then offered.
                 Skippable = true;
                 WorldHeld?.Invoke(true);
+                // The original parks the AI before every mission's intro regardless of what codes
+                // that intro's own data authors; the shared generic_intro never raises 913, and
+                // the bespoke intros that do (C1/M04, C3/M03) restate a state already entered.
+                if (IsIntro(Anim) && !AiParked)
+                {
+                    AiParked = true;
+                    ParkAi();
+                }
+
                 break;
             case CodePresentation:
                 Presenting = true;
