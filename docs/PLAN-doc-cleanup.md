@@ -167,7 +167,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B: split architecture.md
 
 11. ☑ B11 Mechanical split into `docs/architecture/<Namespace>.md`, index file keeps the header and bullets
-12. ☐ B12 `CheckDocEntries.ps1` (caps, existence, coverage; `-Summary`), not yet gated
+12. ☑ B12 `CheckDocEntries.ps1` (caps, existence, coverage; `-Summary`), not yet gated
 13. ☑ B13 Pointer sweep of the grep instructions in skills, agent docs and `AGENTS.override.md`
 
 ### Wave C: trim every entry and index bullet to the cap
@@ -366,7 +366,7 @@ HEAD:docs/architecture.md` with the headers stripped); `.\CheckEncoding.ps1` cle
 every arrow and warning sign in 780 KB is mojibaked and the encoding check is the only backstop.
 `Mech3/Anim/` and `UI/Menu/**` are subfolders of their namespace, not namespaces of their own.
 
-## B12 ☐ `CheckDocEntries.ps1`, not yet gated
+## B12 ☑ `CheckDocEntries.ps1`, not yet gated
 
 **Goal.** A repo-root script that reports every entry over cap, every index bullet over one line,
 every heading naming a missing file, and every source file with neither heading nor bullet;
