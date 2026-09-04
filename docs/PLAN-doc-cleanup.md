@@ -180,7 +180,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 26. ☑ C26 `docs/architecture/Session.md` (40)
 27. ☑ C27 `docs/architecture/Mech3.md` (62)
 28. ☑ C28 `docs/architecture/UI.md` (78)
-29. ◐ C29 `docs/architecture/Flight.md` (108), then the complete `.\RunTests.ps1`
+29. ☑ C29 `docs/architecture/Flight.md` (108), then the complete `.\RunTests.ps1`
 
 ### Wave D: verification.md
 
@@ -617,7 +617,7 @@ and says the per-module detail is in architecture; `docs/formats/instant-action.
 **⚠ Traps.** The menu contract page is the place for cross-module menu rules; do not move a
 menu-wide rule into one module's entry.
 
-## C29 ☐ `docs/architecture/Flight.md`, then the complete `.\RunTests.ps1`
+## C29 ☑ `docs/architecture/Flight.md`, then the complete `.\RunTests.ps1`
 
 **Goal.** 108 entries at cap, including `Projectile.cs` (415), `FlightController.cs` (282),
 `AimAssist.cs` (68), `CameraController.cs` (61); plus `CockpitGauges.cs`, `CollisionDamage.cs`,
@@ -642,6 +642,13 @@ exits 0 with every golden identical and `git diff -- analysis/goldens/manifest.j
 several "an earlier reading here" corrections; the rule stays as one line in the entry or on the
 member, the corrections go to the commit message. `--tex-override` and the flight-model probes are
 verification instruments; their traps belong in `docs/verification.md`, not here.
+
+**Verified.** The complete `.\RunTests.ps1` on the merged plan tree after the last C merge: build
+PASS, 3373 units passed, 237 engine suites passed with engine errors clean, 18 goldens
+hash-identical on 4 workers, hitch opt-in skipped, exit 0; `git diff -- analysis/goldens/manifest.json`
+empty. The trail-hold trap above was wrong: the old entry recorded the hold as the refuted half of
+the 300 m reading, so the live remake-only rules kept are the decay's ungated target and the tracer
+pixel floor.
 
 # Wave D: verification.md
 
