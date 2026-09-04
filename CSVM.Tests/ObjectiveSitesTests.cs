@@ -7,95 +7,76 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="ObjectiveSites.CollectTargets"/>'s roster-marker source (BL-635,
-/// docs/formats/ai-rosters.md aiv slot 37/39): a block that authors its own objective-target flag
-/// is offered exactly the way a <c>targets.zrd</c>-flagged entry is, including being dropped once
-/// a completed objective's own <c>REMOVE_OBJECTIVE_TARGET</c> names its key — CM11's OBJECTIVE1
-/// does this for <c>secfury_5</c>/<c>secfury_6</c> without ever adding them, since their starting
-/// flag is the roster's, not the script's, which is what <see cref="ObjectiveGraph.ObjectiveTargets"/>
-/// alone would miss. Pinned off-engine: none of the three types here touch Godot.
+/// <see cref="ObjectiveSites.CollectTargets"/>'s two site sources: <c>targets.zrd</c>'s own
+/// <c>objective</c> entries and the graph's <c>ADD_OBJECTIVE_TARGET</c> edits, each dropped again
+/// once a completed objective's own <c>REMOVE_OBJECTIVE_TARGET</c> names its key. A site is
+/// offered from mission start with the graph's own store still empty, which is what reading
+/// <see cref="ObjectiveGraph.ObjectiveTargets"/> alone would miss. A roster block's own flag is
+/// NOT collected here at all: it rides the block's aircraft
+/// (<see cref="CSVM.Flight.FlightController.ObjectiveTarget"/>). Pinned off-engine: none of the
+/// three types here touch Godot.
 /// </summary>
 public class ObjectiveSitesTests
 {
     [Fact]
-    public void ARosterMarkerIsOfferedAlongsideTargetsZrdAndGraphAdds()
+    public void ATargetsZrdFlaggedEntryIsOfferedFromMissionStart()
     {
-        var script = Script("\"OBJECTIVE1\",null");
+        var script = Script("\"OBJECTIVE1\",[\"BEGIN_DORMANT\",[-1.0],\"INACTIVE1\",[\"never\"]]");
         var graph = new ObjectiveGraph(script, new FakeWorld());
-        var targets = new MissionTargets();
-        var roster = new Dictionary<string, string> { ["secfury_5"] = "MSG_OBJ_FOLLOW" };
         var into = new List<string>();
 
-        ObjectiveSites.CollectTargets(script, graph, targets, into, roster);
+        Assert.Empty(graph.ObjectiveTargets);
+        ObjectiveSites.CollectTargets(script, graph, TargetsWithObjectiveFlag("rfspt1"), into);
 
-        Assert.Contains("secfury_5", into);
+        Assert.Contains("rfspt1", into);
     }
 
     [Fact]
-    public void ARosterMarkerIsDroppedOnceItsOwnKeyIsRemovedByACompletedObjective()
+    public void AFlaggedSiteIsDroppedOnceItsOwnKeyIsRemovedByACompletedObjective()
     {
-        var script = Script(
-            "\"OBJECTIVE1\",[\"REMOVE_OBJECTIVE_TARGET\",[\"secfury_5\",\"secfury_6\"]]");
+        var script = Script("\"OBJECTIVE1\",[\"REMOVE_OBJECTIVE_TARGET\",[\"rfspt1\"]]");
         var graph = new ObjectiveGraph(script, new FakeWorld());
-        var roster = new Dictionary<string, string>
-        {
-            ["secfury_5"] = "MSG_OBJ_FOLLOW",
-            ["secfury_6"] = "MSG_OBJ_FOLLOW",
-        };
+        var targets = TargetsWithObjectiveFlag("rfspt1");
 
-        // Before OBJECTIVE1 completes: both offered.
         var before = new List<string>();
-        ObjectiveSites.CollectTargets(script, graph, new MissionTargets(), before, roster);
-        Assert.Contains("secfury_5", before);
-        Assert.Contains("secfury_6", before);
+        ObjectiveSites.CollectTargets(script, graph, targets, before);
+        Assert.Contains("rfspt1", before);
 
-        // OBJECTIVE1 is conditionless, so it completes on the first tick, exactly like CM11's own
-        // primary once its gate reads true.
+        // OBJECTIVE1 is conditionless, so it completes on the first tick, the way a shipped
+        // primary does once its gate reads true.
         graph.Step(0.1f);
         Assert.True(graph.CompletedOf(1));
 
         var after = new List<string>();
-        ObjectiveSites.CollectTargets(script, graph, new MissionTargets(), after, roster);
-        Assert.DoesNotContain("secfury_5", after);
-        Assert.DoesNotContain("secfury_6", after);
+        ObjectiveSites.CollectTargets(script, graph, targets, after);
+        Assert.DoesNotContain("rfspt1", after);
     }
 
     [Fact]
-    public void ARosterMarkerNeverAddedByTheGraphIsStillOfferedAndStillRemovable()
+    public void ASiteTheGraphAddsIsOfferedAndStillRemovable()
     {
-        // The shipped shape exactly: OBJECTIVE1 REMOVEs secfury_5/6 without any objective ever
-        // ADD_OBJECTIVE_TARGETing them, so ObjectiveGraph.ObjectiveTargets stays empty throughout
-        // and the roster source is the only reason either key is ever offered at all.
         var script = Script(
-            "\"OBJECTIVE1\",[\"BEGIN_DORMANT\",[-1.0],\"INACTIVE1\",[\"never\"]],"
-            + "\"OBJECTIVE2\",[\"REMOVE_OBJECTIVE_TARGET\",[\"secfury_5\"]]");
+            "\"OBJECTIVE1\",[\"ADD_OBJECTIVE_TARGET\",[\"caboose_polys\"]],"
+            + "\"OBJECTIVE2\",[\"BEGIN_DORMANT\",[-1.0],\"INACTIVE1\",[\"never\"]]");
         var graph = new ObjectiveGraph(script, new FakeWorld());
-        var roster = new Dictionary<string, string> { ["secfury_5"] = "MSG_OBJ_FOLLOW" };
-
-        Assert.Empty(graph.ObjectiveTargets);
-        var into = new List<string>();
-        ObjectiveSites.CollectTargets(script, graph, new MissionTargets(), into, roster);
-        Assert.Contains("secfury_5", into);
 
         graph.Step(0.1f);
-        Assert.True(graph.CompletedOf(2));
-        var after = new List<string>();
-        ObjectiveSites.CollectTargets(script, graph, new MissionTargets(), after, roster);
-        Assert.DoesNotContain("secfury_5", after);
+        var into = new List<string>();
+        ObjectiveSites.CollectTargets(script, graph, new MissionTargets(), into);
+        Assert.Contains("caboose_polys", into);
     }
 
     [Fact]
-    public void ARosterMarkerDoesNotDuplicateATargetsZrdEntryOfTheSameKey()
+    public void AGraphAddDoesNotDuplicateATargetsZrdEntryOfTheSameKey()
     {
-        var script = Script("\"OBJECTIVE1\",null");
+        var script = Script("\"OBJECTIVE1\",[\"ADD_OBJECTIVE_TARGET\",[\"rfspt1\"]]");
         var graph = new ObjectiveGraph(script, new FakeWorld());
-        var targets = TargetsWithObjectiveFlag("secfury_5");
-        var roster = new Dictionary<string, string> { ["secfury_5"] = "MSG_OBJ_FOLLOW" };
+        graph.Step(0.1f);
 
         var into = new List<string>();
-        ObjectiveSites.CollectTargets(script, graph, targets, into, roster);
+        ObjectiveSites.CollectTargets(script, graph, TargetsWithObjectiveFlag("rfspt1"), into);
 
-        Assert.Single(into, key => key == "secfury_5");
+        Assert.Single(into, key => key == "rfspt1");
     }
 
     private static MissionTargets TargetsWithObjectiveFlag(string node)

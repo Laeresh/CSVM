@@ -130,6 +130,15 @@ internal sealed class AiFlightAssembler
             });
             // The roster block's nitro slot installs the injector used by an AI's nitro evade.
             controller.Nitro.Installed = spawn.Nitro;
+            // The block's objective marker rides the aeroplane itself, so it wakes, moves and dies
+            // with it. Resolved here for the same reason the name above is: the string table and
+            // the block meet at the spawn, and the targeting path holds no table.
+            controller.ObjectiveTarget = spawn.ObjectiveMarker;
+            if (spawn.ObjectiveMarker)
+            {
+                controller.ObjectiveTypeLabel = MarkerLabel(spawn.ObjectiveTypeLabel);
+                controller.ObjectiveCategory = MarkerLabel(spawn.ObjectiveCategory);
+            }
             onCreated(controller);
 
             // The AI def's own fit when it authors one, the player stock table otherwise. Both
@@ -324,6 +333,16 @@ internal sealed class AiFlightAssembler
         if (spawn.ShippedSkins || _liveries.PaintRequested || stats.AiDefName is not { } def)
             return null;
         return _liveries.DefScheme(_aircraft.ZrdrPath, def);
+    }
+
+    // A marker label as the readout prints it. An unresolved key would be printed verbatim by a
+    // readout and is wrong on a marker, so it reads as no label at all; so does a table-less rig.
+    private string? MarkerLabel(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key) || _aircraft.WeaponMessages is not { } messages)
+            return null;
+        string text = messages.Get(key).Trim();
+        return text.Length == 0 || text.StartsWith("MSG_", StringComparison.Ordinal) ? null : text;
     }
 
     public readonly record struct AssemblyState(AiGunner? Gunner, AiRocketeer? Rocketeer,

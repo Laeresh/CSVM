@@ -996,11 +996,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   not the turrets'. *Fix shape:* decode whether the original's turret acquisition skips an
   objective-flagged aircraft, a capture subject, or an aircraft the script has marked for pickup,
   or whether the Pandora fires at Balmorals in the original too and the report is a preference.
-  Read the turret target scan the ring uses before adding a rule. *⚠ Traps:* the double Enemy
-  Target/Objective candidate on the same Balmoral is `BL-688` and a HUD matter; this entry is
-  about rounds leaving the Pandora. Do not fix it by making the Balmorals friendly, since the
-  player has to shoot them to the capture threshold. *Playtest after fix:* CM02, let the third
-  Balmoral reach the Pandora and watch the rings. *Cross-refs:* `BL-688`, `BL-714` (the same rings,
+  Read the turret target scan the ring uses before adding a rule. *⚠ Traps:* a Balmoral carrying
+  the objective flag is one candidate on the Enemy cycle, not two, and that is a HUD matter; this
+  entry is about rounds leaving the Pandora. Do not fix it by making the Balmorals friendly, since
+  the player has to shoot them to the capture threshold. *Playtest after fix:* CM02, let the third
+  Balmoral reach the Pandora and watch the rings. *Cross-refs:* `BL-714` (the same rings,
   the hull question), `docs/formats/anim-definitions/cutscenes.md` ("The airframe swap codes",
   967).
 
@@ -2379,8 +2379,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   same message key themselves, which is a legitimate use of the per-block field and not a licence to
   read the def. So do not "fall back to the class". The same page warns a fourth author is unfound
   rather than ruled out.
-  *Cross-refs:* `BL-687` (the same boats, their guns), `BL-688` (the marker path's own name
-  fallback, a different producer feeding the same renderer), `BL-626`.
+  *Cross-refs:* `BL-687` (the same boats, their guns), `BL-626`.
 
 - `BL-654` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The menus take no mouse input at all, where the original is mouse-first.**
   *Evidence:* every `Control` the launchscreen builds is `MouseFilterEnum.Ignore`
@@ -3153,8 +3152,9 @@ usual.
   CM13's racers and CM21's Cabbie also use; Miles launches from the Dante's bay as the
   `stihellhound_5_eg0` template. *What to settle:* whether the original consumes a tagged danger
   zone on a generator-launched aircraft's net (the racers and the Cabbie are roster aircraft), and
-  the direction the net is walked from the launch node. *Cross-refs:* `BL-688` (his marker),
-  `docs/formats/mission-entities/enemy-generators.md`.
+  the direction the net is walked from the launch node. His objective marker is not part of this:
+  the bay launch stamps it onto the aircraft like any roster spawn.
+  *Cross-refs:* `docs/formats/mission-entities/enemy-generators.md`.
 
 ## Tooling, platform & docs
 
