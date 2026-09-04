@@ -525,6 +525,10 @@ one sentence of measured evidence; everything else belongs in the commit that la
   and `--direction` on any run a later run is compared against.** The spectator camera takes the
   same spawn the mission places the player at, so two otherwise identical captures frame different
   scenery.
+- **INSTR-45** — **A screenshot proves nothing about audio: read the `sound` log's pairing
+  instead, one line per aircraft at build naming what each slot resolved to, then one per cull
+  transition and one per damaged-engine swap.** The pair is what separates silent past the cull
+  from silent because the definition never resolved.
 
 ## SRC — sources and documents
 

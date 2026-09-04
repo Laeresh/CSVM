@@ -117,7 +117,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/TargetPool.cs` — the player's classed candidate pool: the three cycles (Enemy/Objective, Ally, Non-Aircraft) of `TargetRef`, rebuilt from scratch off the aim assist's `Vehicles`/`Turrets` lists plus an explicit sub-part list; the one place a concrete source type is read.
 - `src/Utils/TapHoldButton.cs` — one button carrying two actions, split by hold duration: edge-detects a level read, times it over `HoldToRepeat`, and answers tap / hold / nothing. The tap resolves on RELEASE; a press whose hold fired is spent. Pure, so the decoding unit-tests even though a gamepad does not.
 - `src/Flight/TargetSelection.cs` — the sticky player selection: owns a `TargetPool`, sorts it into the decoded cycle order, re-finds the selection by entity each frame, and carries every action (next/previous/nearest per class, nearest-crosshairs, target-nothing) plus the attacker queue and the lifecycle. `ApplyInitial` is `--target=`'s seam.
-- `src/Flight/TargetHud.cs` — the per-pane targeting HUD, built in every flight session: the selected-target bracket marker and label, the nearest-AI-hostile fallback, and `--debug-markers`' every-aircraft overlay.
+- `src/Flight/TargetHud.cs` — the per-pane targeting HUD: the selected target's bracket and label, the nearest-hostile fallback, and `--debug-markers`' overlay.
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner: acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
 - `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver: mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional formation escort, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
@@ -154,25 +154,28 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WarningShotCue.cs` — the shipped near-miss accumulator (player.json `warning_shot_*`) and the swept-segment/point distance; unit-testable alone.
 - `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig — a phantom shooter on each player's six, so the cue is reachable deterministically without an AI gunner.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
-- `src/Flight/MissionTargets.cs` — mission `targets.json` loader: world-node name → objective display keys and the `objective`/`other_target` marker flags a mission starts with, resolved through `Messages`.
+- `src/Flight/MissionTargets.cs` — mission `targets.json`: target key to its objective display keys, plus the marker flags a mission starts with.
 - `src/Flight/StuntMission.cs` — Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
 - `src/Flight/HudMetrics.cs` — the one rule for HUD sizing: window height / 1440, damped by `sqrt(paneH/windowH)` for splitscreen.
 - `src/Flight/HudFont.cs` — the game's own 5px HUD bitmap font, auto-segmented from `rimage/5pointhud*.png`; `--hud-font-test` proves it.
+- `src/Flight/HudFontTest.cs` — the `--hud-font-test` overlay: a known string in both variants, with a rule marking the width `Measure` reports.
 - `src/Flight/WeaponReadout.cs` — the selected-weapon text readout: gun group + rocket type and live ammo, in the game's own HUD font.
 - `src/Flight/ImpactReticle.cs` — the gun aiming pipper: 0.5 s of the selected group's flight along the nose (the original's own rule), projected each frame.
-- `src/Flight/EdgeMarker.cs` — the off-screen edge marker's placement rules, engine-free: on-screen test, behind-mirror, edge clamp (`Resolve`) and the clock-hour bearing (`ClockHour`); MarkerHud, VersusHud and TargetHud all place through it.
-- `src/Flight/MarkerDraw.cs` — the world marker's drawing primitives, engine-side but camera-free: reticle, edge arrow, centred text block and its clamped variant, plus the marker blue and the drop shadow. `EdgeMarker` places a marker; this draws it.
+- `src/Flight/EdgeMarker.cs` — the off-screen marker's placement rules, engine-free: on-screen test, behind-mirror, edge clamp, and the o'clock bearing.
+- `src/Flight/MarkerDraw.cs` — the world marker's drawing primitives: reticle, edge arrow, centred text block and its clamped variant, marker blue and shadow.
 - `src/Flight/MarkerHud.cs` — the stunt objective marker HUD: reticle, screen-edge arrow + o'clock bearing, run status, banners; one per player.
-- `src/Flight/StuntScoreboard.cs` — end-of-run results overlay: a Godot-UI panel of per-zone splits, total, and the persisted best time.
+- `src/Flight/ResultsBoard.cs` — the shared shell every results board is built on: backdrop and panel, the palette, the halt contract, and the standard menu.
+- `src/Flight/StuntScoreboard.cs` — end-of-run results overlay: a per-pane panel of per-zone splits, total, and the persisted best time.
+- `src/Flight/StuntSplits.cs` — the stunt run's split table, shared by the scoreboard and the wrap-up board: per-zone rows, the total, and the best comparison.
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
 - `src/Flight/StuntRaceBoard.cs` — the race's shared ranked results overlay, on its own full-window CanvasLayer above the splitscreen panes.
 - `src/Flight/ScoreStore.cs` — stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only.
-- `src/Flight/CustomPlaneDef.cs` — a custom-built plane as a pure model: the decoded 204-byte record's chosen fields (airframe, engine, armour x4, guns x4 with twin bits, hardpoint counts x2, paint pattern/picks/colours, name), none of its derived fields; engine-free. `Ammo`/`Ordnance` carry the campaign loadout EXPORT writes, in `OwnedPlane`'s own encoding with `NoAmmoPick`/`NoOrdnancePick` for a slot nobody fitted, and `HasLoadout` says whether any of it was; `SetLoadout` is the only writer and touches nothing else, since export must not rewrite the build. `Clamp` leaves those two alone: their vocabulary is `CampaignLoadout`'s, which is the one decoder of both.
-- `src/Flight/CustomPlaneStore.cs` — one JSON file per custom plane under `user://Planes/` (versioned schema, name = identity, same name overwrites); list/load/save/delete over a plain absolute directory so it unit-tests, `UserPlanes()` resolves the `user://` scheme. `Delete(name)` sanitises the name exactly as `Save` does and treats a missing file as a no-op. Version 2 stores paint as the original's index pairs plus three decals; a version-1 file still loads, its "picks" read as the decals they were and each RGB triple mapped to the nearest authored swatch, and upgrades on its next save. The `loadout` block (the exported ammunition and ordnance) is optional and written only for a plane that carries one, so a hangar-built plane's file is the one earlier builds wrote; ⚠ it deliberately did not raise the version, because a reader without it skips an unknown property and a reader with it defaults the fields, and a bump would only have made older builds refuse a plane they can read.
-- `src/Flight/CustomPlaneRecord.cs` — import-only reader for the original's 204-byte saved-plane files (`docs/formats/paint.md` "Saved custom planes"): one record or a whole install `Planes\` directory to `CustomPlaneDef`s; every paint field read as the indices it is (colour, shade, decal), the +0x68 RGBA left out as the engine's own cache and exposed by `StoredColour` for the cross-check, derived fields ignored, an unreadable file reads as null.
-- `src/Flight/CustomPlaneBuild.cs` — the join from a saved `CustomPlaneDef` to what a spawn consumes: a `LoadoutDef` over the airframe's stock fit (calibre + twin onto slot markers, hardpoint counts onto the two wings' pylons), a `PaintScheme` from the record's pattern and colours, and a `PlaneDamage` ledger with the bought armour on the four zones; engine and weight deliberately reach nothing.
-- `src/Flight/HangarEconomy.cs` — the hangar's decoded economy over a `CustomPlaneDef`: the airframe/gun/engine tables as data, per-line costs and weights, the two totals, the capacity/engine purchase verdict, and the display-only star ratings; pure, provenance in `docs/org/hangar.md`.
-- `src/Flight/VersusMatch.cs` — Dogfight deathmatch bookkeeping: per-player kills/deaths, the host-fed match clock, threshold/time-out completion, ranked standings.
+- `src/Flight/CustomPlaneDef.cs` — a custom-built plane as a pure model: the saved record's chosen fields only, with the campaign loadout export alongside.
+- `src/Flight/CustomPlaneStore.cs` — JSON persistence for a built plane, one file per name under `user://Planes/`, over a plain directory so it unit-tests.
+- `src/Flight/CustomPlaneRecord.cs` — import-only reader for the original's 204-byte saved-plane files, one record or a whole install directory to defs.
+- `src/Flight/CustomPlaneBuild.cs` — the join from a saved plane onto what a spawn consumes: the loadout over the stock fit, the paint, the armoured zones.
+- `src/Flight/HangarEconomy.cs` — the hangar's decoded economy over a built plane: the component tables, per-line costs and weights, the totals and the verdict.
+- `src/Flight/VersusMatch.cs` — Dogfight deathmatch bookkeeping: kills and deaths per player, the host-fed clock, threshold and time-out completion, standings.
 - `src/Flight/VersusHud.cs` — per-pane Dogfight status line: remaining time, this player's kills, the leader, and the hostile marker.
 - `src/Flight/VersusBoard.cs` — the Dogfight results overlay, one whole-window CanvasLayer above the splitscreen panes.
 - `src/Flight/IaWrapupBoard.cs` — Instant Action's wrap-up board: outcome headline and the per-counter score rows, summed across every seat.
@@ -203,17 +206,18 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ConvexHull.cs` — an engine-free convex hull over a point cloud: vertices, faces, thickness padding and the point-distance query.
 - `src/Flight/ScreenSize.cs` — screen-space sizing for world sprites: the pixel-floor inversion, and the nearest-viewer floor one shared mesh takes.
 - `src/Flight/CollisionLayers.cs` — the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.
+- `src/Flight/CollisionDamage.cs` — the original's collision arithmetic: the severity cosine, the damage pair's terms, the camera kick, and the grace windows.
 - `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` hulls on the aircraft layer; struck shape → part name.
 - `src/Flight/IWorldQuery.cs` — the one seam onto the live physics world: a shape swept along a motion, a ray, and a standing overlap test.
 - `src/Flight/GodotWorldQuery.cs` — the only adapter over `DirectSpaceState`; implements `IWorldQuery`.
-- `src/Flight/ContactReport.cs` — one detected contact as a value: impact, normal, struck part, collider name, stop fraction, and whether an aeroplane was struck.
-- `src/Flight/ContactOutcome.cs` — what a contact costs the striker: fate, the decoded damage pair, doom, the charged zone, the HUD flash, the push-out, and the struck-aircraft instruction.
-- `src/Flight/AircraftContactResolver.cs` — the decoded contact rules for one aircraft: the damage pair, the fate, and the un-embed loop, with no `Node` in sight.
+- `src/Flight/ContactReport.cs` — one detected contact as a value: impact, normal, struck part, collider name, stop fraction, and whether it was an aeroplane.
+- `src/Flight/ContactOutcome.cs` — what a contact costs the striker: fate, the damage pair, the charged zone, the push-out, and the struck-aircraft instruction.
+- `src/Flight/AircraftContactResolver.cs` — the decoded contact rules for one aircraft: the damage pair, the fate and the un-embed loop, holding no node.
 - `src/Flight/SweepCadence.cs` — the original's alternate-step collision sweep: which sim steps sweep, and the skipped step's motion carried into the next one.
-- `src/Flight/AircraftLifecycle.cs` — the states one aircraft moves between (in play, crashed, destroyed, inert) with the spawn timers, holding a `SurfaceDefTable` for the crash-def selection; every transition returns what the node must perform.
-- `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part; owns the whole-vehicle kill rule (`IsDestroyed`).
+- `src/Flight/AircraftLifecycle.cs` — the states one aircraft moves between and the spawn timers; every transition reports what the node must then perform.
+- `src/Flight/PlaneDamage.cs` — the decoded damage ledger: per-part pools plus the whole-vehicle pair, the armour-first take-hit flow, and the kill rule.
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
-- `src/Flight/DamageLab.cs` — the `--damage`/F5 slider UI: one HP slider per part, driving the parked plane's DamageVisuals or the flown plane's real PlaneDamage.
+- `src/Flight/DamageLab.cs` — the `--damage` and F5 slider panel: one slider per part, driving a parked plane's visuals or the flown plane's real ledger.
 - `src/Flight/CompassTape.cs` — the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
 - `src/Flight/GaugeCluster.cs` — the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
 - `src/Flight/FlightController.cs` — the flying-aircraft node: input → FlightModel → transform, weapons, collision, crash and respawn.
@@ -221,7 +225,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/FlightControllerBuild.cs` — FlightRoster's internal, write-once construction handoff for a controller before tree attachment.
 - `src/Flight/IFlightInputSource.cs` — the seam a sim step reads this frame's pilot intent through; `Bind` resolves one of its three adapters once per aircraft.
 - `src/Flight/PlayerRig.cs` — one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
-- `src/Flight/ViewerSet.cs` — session-owned "every pane's camera" registry: `GameSession` binds it once after the rigs are built; `ProjectilePool.Viewers` is its first consumer.
+- `src/Flight/ViewerSet.cs` — the session-owned "every pane's camera" registry, bound once after the rigs are built; the tracer floor is its first consumer.
 
 ### `src/Effects/` — particle systems
 
@@ -298,7 +302,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/HangarGunsPage.cs` — the GUNS screen: four slots stepping the eleven-entry calibre cycle, priced per mount.
 - `src/UI/HangarHardpointsPage.cs` — the HARDPOINTS screen: a 0-to-4 count per wing, priced per hardpoint.
 - `src/UI/HangarPaintPage.cs` — the PAINT screen: a pattern, three colour and shade pairs and three decals over a preview from the original's own masks.
-- `src/Flight/HangarPaintTables.cs` — the paint screen's decoded tables as CSVM data: the swatch table (`data/hangar_swatches.json`, 27 rows of base colour, default variant and shade ramp) and the pattern table plus the 50 decal names (`data/hangar_patterns.json`). `Resolve(colour, shade)` is the original's own resolver; `Available(pattern, airframe)` is the availability mask; `Nearest(rgb)` maps a version-1 store file's free triple onto an authored swatch. Engine-free and pure, so the whole colour model resolves without a session.
+- `src/Flight/HangarPaintTables.cs` — the paint screen's decoded swatch and pattern tables plus the decal names, as CSVM data; the colour resolver is pure.
 - `src/UI/HangarNamePage.cs` — the PLANENAME screen: two word steppers, a roll across both, and a typed name over the result.
 - `src/UI/HangarPurchasePage.cs` — the PURCHASE screen: the itemised bill, the totals row, and the purchase gate in the original's own words.
 - `src/UI/CampaignFlow.cs` — the campaign's out-of-mission flow, engine-free: a stack of screens over one profile, the `ICampaignPage` mount point.

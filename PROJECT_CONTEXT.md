@@ -88,6 +88,8 @@ previews, debug dumps, golden-test captures, etc. — always write them into
   `--debug-*` flag is used, so an ordinary run and the pinned golden sweep never see it.
 - **Every formatted number uses `CultureInfo.InvariantCulture`.** A German-locale machine
   otherwise renders `0,5` and corrupts logs, reports and parsed round-trips.
+- **Log through `Log`, never `GD.Print`.** Only `Log` reaches the file sink and the `--log=` filter,
+  so a `GD.Print` line is invisible to every scripted run and suite.
 
 ## Repo layout
 

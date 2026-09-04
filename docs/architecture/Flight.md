@@ -830,333 +830,235 @@ only IA1 folders have one, the original picks one at random per launch) and `Loa
 (story objectives.json `PLAYER_INIT`, position + yaw). Schema: docs/formats/spawns.md.
 
 ## src/Flight/MissionTargets.cs
-Loads a mission's targets.json: target KEY → objective display keys
-(`description`/`category_label`/`help_label`), resolved through `Messages`, plus the valueless
-`objective`/`other_target` marker flags a mission starts with. A bare node name keys itself and a
-nested `[parent, child]` entry keys `parent/child`, the same key `ObjectiveTarget` gives the
-script's target directives, so the two tables meet on one string. `Load(mission, chapter)` is the
-original's reader search path (`init.gw`'s `RdrAddPath` chain): the mission's own file, else the
-chapter's, one file whole and never a merge. ⚠ Read both scopes for a campaign mission: C1C/M01
-ships no targets.zrd and every one of its objective labels sits in `C1C/zrdr/targets.zrd`.
-Generic across mission types; no file in either scope yields an empty set. `ByNode` exposes the
-whole table for a consumer that needs the starting flags rather than one key's labels. Schema:
-docs/formats/missions.md.
+A mission's `targets.json` as one table: target key to its objective display keys
+(`description`, `category_label`, `help_label`, resolved through `Messages`) plus the valueless
+`objective`/`other_target` marker flags the mission starts with. A bare node name keys itself and
+a nested `[parent, child]` entry keys `parent/child`, the same spelling `ObjectiveTarget` gives
+the script's directives, so the two tables meet on one string. `Load(mission, chapter)` walks the
+original's reader search path, and `ByNode` exposes the whole table for a consumer that wants the
+starting flags rather than one key's labels. Schema: [../formats/missions.md](../formats/missions.md).
 
 ## src/Flight/MarkerDraw.cs
-The world marker's drawing primitives, shared by `MarkerHud` and `TargetHud`: the
-shadowed reticle, the edge arrow with its tail stroke, and the centred text block (`Lines`) with
-the pane-clamped variant (`LinesClamped`) an off-screen marker needs. Owns the marker blue and
-the drop shadow; colour and scaled sizes stay with the caller, since each HUD scales through its
-own `HudMetrics.Scale`. Where a marker GOES is `EdgeMarker`'s; this is only what it looks like.
+The world marker's drawing primitives, shared by `MarkerHud` and `TargetHud`: the shadowed
+reticle, the edge arrow with its tail stroke, and the centred text block with the pane-clamped
+variant an off-screen marker needs. Owns the marker blue and the drop shadow, while colour and
+scaled sizes stay with the caller, since each HUD scales through its own `HudMetrics.Scale`.
+Where a marker goes is `EdgeMarker`'s, which is the module to read next; this is only what it
+looks like.
 
 ## src/Flight/StuntMission.cs
-Stunt Flying state: `Load` builds the ordered zone list from ia.json `dzones` (HUD positions via
-`GameZ.WorldTransformOf`, gate polygons from `dzpathN`; strings via MissionTargets + Messages; null
-when a mission has none → free flight); `Update` requires both polygon-plane crossings in either
-order, fires events, advances the target; clock/scoring via
-`Elapsed`/`CompletedAt`/`CompletionOrder`/`InCompletionOrder`; `ForAnotherPlayer()` clones an
-independent run so the archives parse once per session. Logs through `Log` (`Utils`), not
-`GD.Print`/`GD.PushWarning` (`engine-free-suites` A2) — the class itself has no other engine
-dependency, which is what lets `stunt-gates` move off-engine in A4.
+Stunt Flying's per-pilot run state: `Load` builds the ordered danger-zone list from a mission's
+ia.json `dzones` (HUD positions, gate polygons, strings through `MissionTargets` and `Messages`,
+null where a mission authors none), `Update` requires both polygon-plane crossings in either order
+and advances the target, and `Elapsed`, `CompletedAt`, `CompletionOrder` and `InCompletionOrder`
+carry the clock and the splits. `ForAnotherPlayer()` clones an independent run so the archives
+parse once per session. Engine-free apart from its logging, which is what lets its coverage run
+off the engine. Read `MarkerHud` for what a run draws and `StuntScoreboard` for what it scores.
 
 ## src/Flight/HudMetrics.cs
-The one place the flight HUD decides how big it draws: `Scale(control, reference = 1440)` =
-window height / reference, damped by `PaneFactor` = sqrt(paneH/windowH) inside a splitscreen
-pane (2P ≈ 71 %, 4P 50 %; the damping exponent is TUNE). CompassTape, GaugeCluster, MarkerHud,
-StuntScoreboard and FlightController's text block all route through it.
-`hud.statusTextScale` and `hud.markerTextScale` multiply only their matching flight-HUD text,
-clamped from 0.5 to 2.0; arrows and layout remain at the base scale.
+The one place the flight HUD decides how big it draws: `Scale(control, reference = 1440)` is
+window height over the reference, damped by `PaneFactor`, the square root of pane height over
+window height, inside a splitscreen pane. `hud.statusTextScale` and `hud.markerTextScale` multiply
+only their matching flight-HUD text within a clamp, leaving arrows and layout at the base scale.
+Every flight-HUD control routes through it, so a sizing change lands in one place.
 
 ## src/Flight/HudFont.cs
-The game's own HUD bitmap font, rebuilt from `extracted/rimage/5pointhud.png` (+ the brighter
-`5pointhudbrite.png` highlight variant): a proportional 5-px font covering printable ASCII
-`0x20`–`0x7e` (layout/colours: docs/formats/hud.md). `Load` returns null (one log line) if the
-atlas is absent; `Draw(CanvasItem,…)`/`Measure` render onto any caller's canvas, sized via
-`HudMetrics`. The E34 foundation E35/E36 draw with.
+The game's own HUD bitmap font, rebuilt from `extracted/rimage/5pointhud.png` and the brighter
+`5pointhudbrite.png` highlight variant: a proportional five-pixel font covering printable ASCII.
+`Load` returns null with one log line where the atlas is absent, and `Draw`/`Measure` render onto
+any caller's canvas at a scale `HudMetrics` supplies. Layout and colours:
+[../formats/hud.md](../formats/hud.md); `HudFontTest` is the overlay that proves the renderer.
+
+## src/Flight/HudFontTest.cs
+The `--hud-font-test` verification overlay for `HudFont`: a known string drawn in the normal and
+highlight variants near the top left of each player's pane, sized through `HudMetrics` so a single
+view and a splitscreen pane can be screenshot and compared. A thin rule under each line marks
+`HudFont.Measure`'s reported width, which is what confirms the metric agrees with the glyphs
+actually drawn. Not part of the flight HUD; it is added only when the flag is set.
 
 ## src/Flight/WeaponReadout.cs
-The selected-weapon text readout: a bottom-centre two-line `Control` drawing the current gun
-group + rocket type and their live ammo in `HudFont`, from the game's own `MSG_HUD_GUNGAUGE` /
-`MSG_HUD_MISSLES` templates (`Messages.Fill`, never hardcoded). FlightController pushes the state
-each frame (`%1` = gun mount name / rocket display name, `%2` = per-group / per-pylon rounds).
+The selected-weapon text readout: a bottom-centre two-line `Control` drawing the current gun group
+and rocket type with their live ammo in `HudFont`, from the game's own `MSG_HUD_GUNGAUGE` and
+`MSG_HUD_MISSLES` templates through `Messages.Fill` rather than hardcoded text.
+`FlightController` pushes the state each frame, filling the first slot with the mount or rocket
+display name and the second with the per-group or per-pylon rounds.
 
 ## src/Flight/ImpactReticle.cs
-The gun aiming reticle: a viewport-filling `Control` drawing `impact_point.png` (the game's
-pipper, from `extracted/rimage/`) at a world impact point fed each frame by FlightController,
-projected via `Camera3D.UnprojectPosition` at `_Draw` time (mirrors MarkerHud, never cached).
-Fixed screen size scaled by `HudMetrics`; one per player pane. What the pipper follows — the nose
-axis at 0.5 s of flight, range-smoothed, deliberately never the assist's line — is decoded in
-docs/org/aim-assist.md "What the gun pipper follows".
+The gun aiming reticle: a viewport-filling `Control` drawing the game's own `impact_point.png`
+pipper at a world impact point `FlightController` feeds it each frame, projected through
+`Camera3D.UnprojectPosition` at draw time rather than cached. Fixed screen size scaled by
+`HudMetrics`, one per player pane. What the pipper follows, and why it is deliberately not the
+aim assist's line, is decoded in [../org/aim-assist.md](../org/aim-assist.md).
 
 ## src/Flight/EdgeMarker.cs
 The off-screen edge marker's placement rules, engine-free and pure: `Resolve(projected, behind,
-paneSize, margin)` answers on-screen vs edge-clamped (the margin-inset rect test, the
-behind-the-camera mirror, the degenerate-direction fallback, the clamp along the direction to the
-inset boundary) as a `Placement`, and `ClockHour(ownPos, headingDeg, targetPos)` is the "N o'clock"
-bearing. Owns `RefEdgeMargin`. The camera stays with the callers — `MarkerHud`, `VersusHud` and
-`TargetHud` project through their own pane's camera and keep their own arrow/tag/label styling.
-Off-engine coverage: `CSVM.Tests/EdgeMarkerTests.cs`.
+paneSize, margin)` answers on-screen against edge-clamped as a `Placement` (the margin-inset rect
+test, the behind-the-camera mirror, the degenerate-direction fallback and the clamp to the inset
+boundary), and `ClockHour` is the bearing in hours. Owns `RefEdgeMargin`. The camera stays with
+the callers: `MarkerHud`, `VersusHud` and `TargetHud` project through their own pane and keep
+their own arrow, tag and label styling. `MarkerDraw` draws what this places; off-engine coverage
+is `CSVM.Tests/EdgeMarkerTests.cs`.
 
 ## src/Flight/MarkerHud.cs
-The stunt objective marker HUD: a viewport-filling `Control` drawing the on-screen reticle/text
-block, the off-screen edge arrow (`EdgeMarker.Resolve` + clock-hour bearing), run status and banners
-(`CompleteBanner` branches solo vs race); one per player, sized via `HudMetrics.Scale(this)`.
+The stunt objective marker HUD: a viewport-filling `Control` drawing the on-screen reticle and
+text block, the off-screen edge arrow with its bearing, the run status line and the completion
+banners, one per player and sized through `HudMetrics.Scale`. Placement is `EdgeMarker`'s and the
+primitives are `MarkerDraw`'s; what it reports is `StuntMission`'s.
+
+## src/Flight/ResultsBoard.cs
+The shared shell every results board is built on (`StuntScoreboard`, `StuntRaceBoard`,
+`VersusBoard`, `IaWrapupBoard`): the dimmed backdrop and centred panel, the board palette and
+label factories, the halt-and-retire contract on the sim clock, and the standard Photo Mode,
+Restart and Exit menu. A subclass keeps only its build signature, its completion event, its
+populate content and its still-ended test. `PauseBoard` shares the chrome statics but not the
+shell, since a held clock is not an ended run.
 
 ## src/Flight/StuntScoreboard.cs
-End-of-run results overlay: plain Godot UI (dimming backdrop → CenterContainer →
-PanelContainer → VBox + 3-column split grid) filled from `StuntMission.InCompletionOrder()`;
-wakes on `RunCompleted` (records via `ScoreStore.RecordIfBest`, logs the split table to stdout
-for headless review), branching NEW BEST vs BEST on the stored record. Raises `HaltReason.Ended`
-and carries a Restart · Exit `BoardMenu`; `_Process` releases both once `AllComplete` clears, so
-R and pad Y reach the rerun without going through the menu. Not built while Instant Action is
-active — `IaWrapupBoard` carries the splits there instead (`BL-358`).
+Stunt Flying's end-of-run results overlay on `ResultsBoard`'s shell: the plane and chapter heading
+over a `StuntSplits` section of per-zone splits, total and best-time comparison. Wakes on
+`StuntMission.RunCompleted`, records through `ScoreStore.RecordIfBest` and logs the split table so
+a headless run is reviewable. The one per-pane board among the results boards, which is why it
+overrides the shell's whole-window placement. Read `ResultsBoard` for the shared shell and its
+halt contract, and `IaWrapupBoard` for the board Instant Action carries the splits on instead.
+
+## src/Flight/StuntSplits.cs
+The stunt run's split section, shared by `StuntScoreboard` and `IaWrapupBoard`: the per-zone rows
+in the order flown with split and cumulative times, placeholder rows for zones never reached, the
+total, and the new-best or stored-best comparison line. `StuntSummary` is the value a board hands
+it, one run with its total and the stored best. A single flag keeps the two boards' shipped
+layouts apart, since the scoreboard rules off its total and the wrap-up board runs the table
+straight into it.
 
 ## src/Flight/ScoreStore.cs
 Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
-`chapter/mission/plane` → `{best, date}`; `GetBest` / `RecordIfBest` (returns whether it was a
-new best — never worsens a record). The public `Load()` always opens the player's own file; an
-internal `Load(storePath)` overload exists only so a suite can point at a throwaway path instead
-(`instant-action-stunt-summary`) — never the player's own store.
+`chapter/mission/plane`, with `GetBest` and `RecordIfBest`, which never worsens a record and
+answers whether the run was a new best. The public `Load()` always opens the player's own file;
+the internal path overload exists only so a suite can point at a throwaway directory instead.
+`CustomPlaneStore` is the same file-backed shape for a heavier record.
 
 ## src/Flight/StuntRace.cs
-The internal `Remove` operation is compensation for an uncommitted roster build, including removal
-of that racer's completion subscription; normal race membership remains append-only.
-
-Splitscreen race bookkeeping: one `Racer` per player (own `StuntMission`, `Rank`, `FinishTime`);
-finishing stamps the next placing, `RaceCompleted` fires when the last pilot is in; `Standings()`
-orders finishers by placing then in-flight players by progress; `Restart()` (rematch) resets
-every mission and clears placings — the planes are respawned by GameSession, which owns them.
-Its console lines, and `StuntScoreboard`/`StuntRaceBoard`'s, route through `Log.Info("flight", …)`
-instead of a bare `GD.Print`. Off-engine coverage:
-`CSVM.Tests/StuntRaceTests.cs` (finish ordering, rematch reset, standings ties).
+Splitscreen stunt-race bookkeeping: one `Racer` per player over their own `StuntMission`, with
+finishing stamping the next placing, `RaceCompleted` firing once the last pilot is in, and
+`Standings()` ordering finishers by placing then in-flight players by progress. `Restart()` resets
+every mission and clears the placings, leaving the respawn to `GameSession`, which owns the
+planes. Membership is append-only apart from the internal `Remove`, which compensates an
+uncommitted roster build. Off-engine coverage: `CSVM.Tests/StuntRaceTests.cs`. Read
+`StuntRaceBoard` for what a finished race draws.
 
 ## src/Flight/StuntRaceBoard.cs
-The race's shared ranked results overlay: same clean-Godot-UI construction as StuntScoreboard,
-but covering the WHOLE window — on its own CanvasLayer (Layer 10, above SplitScreen's 0) under
-the session root, one row per player from `StuntRace.Standings()` (placing, tag, plane, zones,
-total + gap to the winner; DNF when unfinished). Wakes on `RaceCompleted` and raises
-`HaltReason.Ended`; `_Process` hides it and releases the clock once `AllFinished` clears, so R and
-pad Y reach the rematch without going through the menu. Carries a Restart · Exit `BoardMenu`
-driven by player 1, Exit's label following how the session was launched.
+The race's shared ranked results overlay on `ResultsBoard`'s shell: one row per player from
+`StuntRace.Standings()` with placing, tag, plane, zones, total and gap to the winner, and a DNF
+row for an unfinished run. Whole-window rather than per-pane, since a race ends for everybody at
+once. Wakes on `RaceCompleted` and retires once `AllFinished` clears, so the rematch is reachable
+without going through the menu. `StuntScoreboard` is the single-pilot form of the same table.
 
 ## src/Flight/VersusMatch.cs
-Dogfight deathmatch bookkeeping: `RegisterKill(shooter,
-victim)` scores the shooter and tallies the victim's death, `RegisterDeath(victim)` tallies a death
-alone (terrain/mid-air — no killer, no score change); `Advance(dt)` is the host-fed match clock;
-`MatchCompleted` fires once on kill threshold or time-out (leader wins, equal top kills draw);
-`Standings()` ranks by kills descending with ties sharing a rank; `Restart()` (rematch) zeroes every
-score and re-arms completion. Off-engine coverage: `CSVM.Tests/VersusMatchTests.cs` (threshold win,
-time-out win, draw, post-completion no-op, rematch re-arm, each limit disabled on its own).
+Dogfight deathmatch bookkeeping, engine-free: `RegisterKill` scores the shooter and tallies the
+victim's death, `RegisterDeath` tallies a death with no killer and no score change, `Advance(dt)`
+is the host-fed match clock, `MatchCompleted` fires once on the kill threshold or the time-out
+(leader wins, equal top kills draw), `Standings()` ranks by kills with ties sharing a rank, and
+`Restart()` zeroes every score and re-arms completion. Off-engine coverage:
+`CSVM.Tests/VersusMatchTests.cs`. Read `VersusHud` and `VersusBoard` for what it feeds.
 
 ## src/Flight/VersusHud.cs
-Per-pane Dogfight HUD, `--vs` only: a compact status line — remaining
-time (omitted once `VersusMatch.TimeLimit` is disabled), this pane's own K/D, and the current
-leader's tag — drawn in MarkerHud's run-status slot (`RefStatusY` — Stunt and Versus are mutually
-exclusive, so the two never compete for it); a transient "P2 DOWNED P3" kill banner ("P3 DOWN"
-with no killer); and one opponent marker per living rig (`Rigs`, excluding `PlayerIndex` and any
-`Controller.Crashed` seat) — an on-screen tag at the projected point, or the edge-arrow +
-clock-hour bearing (`EdgeMarker`'s placement) when off screen/behind, in that
-opponent's own `SplitScreen.PlayerColor`. `Build(match, playerIndex, camera)` binds the match +
-this pane's own camera (opponent markers project through it, exactly like MarkerHud's zone);
-`Rigs` is attached once by `HumanFlightAdapter` (the SAME live list `GameSession` keeps, not a
-snapshot — every seat exists before this pane assembles, only `.Controller` fills in as siblings
-do); `PlanePos`/`HeadingDeg` are fed every frame by `FlightController`, same site as `Marker`'s.
-The status line pulls the match live every `_Draw` (no pose to project for it) and `OnKill` is
-pushed once per `Downed` report by GameSession's own broadcast — a second subscription, never
-piggybacked on the scoring one, so every pane hears every kill/death, not just the two it
-happened to.
-The single-target marker whose shape this reuses is `TargetHud`'s; the original has no per-opponent
-marker at all, so drawing one per human opponent is CSVM's own splitscreen answer to its radar.
-The shape's provenance is decoded in [`org/targeting.md`](org/targeting.md).
+The per-pane Dogfight HUD: a compact status line (remaining time, this pane's kills and deaths,
+the leader's tag) in `MarkerHud`'s run-status slot, a transient kill banner, and one marker per
+living opponent rig, either an on-screen tag or `EdgeMarker`'s arrow and bearing in that
+opponent's own `SplitScreen.PlayerColor`. `Build` binds the match and this pane's own camera;
+`HumanFlightAdapter` attaches the live rig list and `FlightController` feeds the pose each frame.
+Kills arrive on a subscription of their own to the session's broadcast, so every pane hears every
+one. The per-opponent marker is CSVM's splitscreen answer to the original's radar; the shape's
+provenance is in [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/TargetHud.cs
-The per-pane targeting HUD, built on EVERY human pane in every flight session (`--vs` panes get one
-alongside `VersusHud`): the pilot's own selected target from `TargetSelection` (a campaign
-mission's objective sites included, since they ride that same selection), a nearest-AI-hostile
-fallback where no selection exists, and `--debug-markers`' every-live-aircraft overlay. Draws the
-original's bracket box, label block and off-screen edge arrow + clock bearing, and owns the colour
-table (`MarkerColor`), the label layout (`LabelLines`), the selected gun's reach gate (`GunReaches`,
-fed by `FlightController.GunReachesTarget`) and the debug identity string (`DebugTag`). The marker's
-decode is [`org/targeting.md`](org/targeting.md); the edge placement and clock bearing are
-`EdgeMarker`'s, only the styling is this HUD's own. Pinned by the `hostile-marker-hud` suite,
-`HostileTagTests` and the `c1-targeting-hud` golden.
-
+The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
+selection from `TargetSelection` (a campaign mission's objective sites included, since they ride
+that same selection), a nearest AI-hostile fallback where no selection exists, and
+`--debug-markers`' every-aircraft overlay. Draws the original's bracket box and label block and
+owns the colour table, the label layout, the selected gun's reach gate and the debug identity
+string. Placement and the bearing are `EdgeMarker`'s and the primitives `MarkerDraw`'s; only the
+styling is this HUD's own. The marker's decode is [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/VersusBoard.cs
-The dogfight's shared results overlay — `StuntRaceBoard`'s construction
-almost verbatim: winner (their own `SplitScreen.PlayerColor`, or "DRAW" on a tie) on top, then one
-ranked row per player (tag, kills, deaths) from `VersusMatch.Standings()`, covering the WHOLE
-window on its own CanvasLayer (Layer 10, above SplitScreen's 0) — the match ends for everybody at
-once, unlike a per-pane HUD element. Wakes on `MatchCompleted`, hides in `_Process` once
-`Completed` clears (a rematch); `Populate` runs ONLY from `OnMatchCompleted`, so the drawn rows
-stay the ones the match actually ended with even after `Restart()` zeroes the live state —
-`StuntRaceBoard`'s `FinishTime`-snapshot discipline, achieved here for free since `VersusStanding`
-is a value-type snapshot already. Raises `HaltReason.Ended`, so the world stops rather than leaving
-the losers to fly under a board that has already counted them. Carries a Restart · Exit
-`BoardMenu` driven by player 1; Restart routes through `GameSession.RestartMatch` (mirrors
-`RestartRace`: `VersusMatch.Restart()` then every rig respawns), which clears `Completed` and lets
-`_Process` do the hide and the clock release. R and pad Y reach the same call directly, owned only
-while the board is up via `FlightController.Match is { Completed: true }` — polled in
-`PollResultsShortcuts` off the rendered frame, since the halt means no sim step runs to read it.
+The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
+`SplitScreen.PlayerColor`, or a draw on a tie, over one ranked row per player with tag, kills and
+deaths from `VersusMatch.Standings()`. Whole-window, because the match ends for everybody at once.
+Wakes on `MatchCompleted` and retires on the rematch; the rows are populated only from that
+completion, so they stay the ones the match ended with even after `Restart()` zeroes the live
+state. Restart routes through `GameSession.RestartMatch`, which the keyboard and pad shortcuts
+reach directly while the board is up. `StuntRaceBoard` is the same construction over a race.
 
 ## src/Flight/HaltReason.cs
-Why the sim clock is stopped, as a flags set: `Paused` (a player asked, and carries an owner) and
-`Ended` (a results board is up). The clock advances only when the set is empty, which is what lets
-two systems halt it at once without either resuming it out from under the other. `PauseState`
-arbitrates; nothing else writes a reason.
+Why the sim clock is stopped, as a flags set: `Paused`, which a player asked for and which carries
+an owner, and `Ended`, which a results board raises. The clock advances only when the set is empty,
+which is what lets two systems halt it at once without either resuming it out from under the
+other. `PauseState` arbitrates and nothing else writes a reason.
 
 ## src/Flight/PauseState.cs
-Who is holding the sim clock and why (`BL-373`) — `VersusMatch`'s engine-free shape: no `GD.*`, no
-`Godot.` type, no `Node`. One instance per session, built by `GameSession.BuildFlightRigs` ahead of
-the rig loop (the assembler hands it to the per-pane stunt board) and assigned to every rig's
-`FlightController.PauseState`. `TryToggle(playerIndex)` owns the pause half: not paused → pauses
-and claims `OwnerPlayerIndex`; paused → resumes only if `playerIndex` matches the owner, otherwise
-a silent no-op (`Changed` does not fire on a rejected attempt, so `PauseBoard` never flickers on
-another player's futile press). Refused outright while `Ended` is set — the results board's own
-menu already offers the only two things left to do, so a pause menu would stack on nothing.
-`Raise`/`Clear` own the results-board half and REJECT `Paused`, which carries ownership and must
-go through `TryToggle`; `ForceResume` drops a pause whoever owns it, for a rerun or an exit chosen
-from the menu. Off-engine coverage: `CSVM.Tests/PauseStateTests.cs`.
+Who is holding the sim clock and why, engine-free in `VersusMatch`'s shape: one instance per
+session, built by `GameSession` ahead of the rig loop and assigned to every rig's
+`FlightController`. `TryToggle(playerIndex)` owns the pause half, claiming ownership on the way in
+and resuming only for the owner, and it is refused outright while `Ended` is set. `Raise` and
+`Clear` own the results-board half and reject `Paused`, which carries ownership and must go
+through `TryToggle`; `ForceResume` drops a pause whoever owns it, for a rerun or an exit chosen
+from a menu. Off-engine coverage: `CSVM.Tests/PauseStateTests.cs`. Read `PauseBoard` next.
 
 ## src/Flight/PauseBoard.cs
-The shared pause overlay (`BL-373`) — `VersusBoard`'s WHOLE-window construction (pausing
-stops the game for everybody at once, not one pane), built once by `GameSession` on its own
-CanvasLayer (`UI.HudLayers.Board`, same layer the race/dogfight/wrap-up boards share) and wired to
-`PauseState.Changed` instead of a match/race completion event. Shows "PAUSED", the pausing
-player's tag in their own `SplitScreen.PlayerColor`, and a `BoardMenu` of Resume · Restart · Exit
-driven by that same player alone — `PauseState` lets only the owner resume, so binding the cursor
-to the owner keeps one rule rather than two, and stops a second pad steering a menu whose Restart
-and Exit decide the whole session. Exit's label follows how the session was launched. A fresh menu
-each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run.
-`Populate()` runs only on a fresh pause (mirrors `VersusBoard`'s snapshot discipline); `Visible`
-tracks `PauseState.Paused` on every `Changed` event, and `_Process` polls the host only to move
-the cursor. A campaign session's objectives readout (`UI/ObjectivesHud`) rides the same pause on a
-layer of its own rather than inside this board, since it belongs to the flown mission and this
-board is shared by every mode.
+The shared pause overlay, whole-window because pausing stops the game for everybody at once. Built
+once by `GameSession` on the shared board layer and wired to `PauseState.Changed` rather than a
+completion event, it shows the pausing player's tag in their own colour and a Resume, Restart and
+Exit menu driven by that player alone, since `PauseState` lets only the owner resume. A fresh menu
+each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run. It shares
+`ResultsBoard`'s chrome but not its shell. A campaign session's objectives readout rides the same
+pause on a layer of its own, since it belongs to the flown mission rather than to every mode.
 
 ## src/Flight/IaWrapupBoard.cs
-Instant Action's wrap-up board — `VersusBoard`'s WHOLE-window
-construction, since the mission ends for every human at once (decisions 10/14), not
-`StuntScoreboard`'s per-pane shape. Four label/value rows (Time to Complete Mission, Enemies Shot
-Down, Danger Zones Completed, Shot %) — the langui titles at ids 1134-1137, kept as literal
-strings rather than read off `ui_strings.json` at runtime, since that table is a build-time
-extraction artifact of the `.rof` archive and not one of the five archives `SessionArchives.OpenFor`
-loads. Unlike `VersusBoard`/`StuntRaceBoard` it takes no live match object at all: `Present`'s
-arguments are the caller's own snapshot, handed in once from `InstantActionRuntime.MissionEnded` —
-`InstantActionDirector` owns every source (the mission clock, the kill tally, `ProjectilePool`'s
-shot counters, the summed `StuntMission.CompletedCount`) and this class only draws what it is given.
-On a `stunt_flying` mission `Present` also takes a `StuntSummary`, and the board grows the run's
-zone splits, total and best-time row in `StuntScoreboard`'s layout; the scoreboard is then not
-built at all, which is how `BL-358`'s two stacked boards became one. Safe because the scoreboard
-only ever existed single-pane: several pilots take the race branch, which builds none.
-Raises `HaltReason.Ended` on `Present` and carries a Restart · Exit `BoardMenu` driven by player 1.
-Nothing else retires this board — a mission that has ended stays ended — so unlike the race and
-dogfight boards the hide and the clock release happen on the menu's own Restart. That Restart is a
-restart and not a rerun: it reaches the Launcher's `RestartSession`, which rebuilds the world,
-because the mission's waves, ace and zeppelin cannot be put back in place.
+Instant Action's wrap-up board on `ResultsBoard`'s shell, whole-window since the mission ends for
+every human at once: four label and value rows for time to complete, enemies shot down, danger
+zones completed and shot percentage. It takes no live match object at all, only the caller's own
+snapshot handed in once by `InstantActionRuntime`, so `InstantActionDirector` owns every source
+and this class draws what it is given. On a stunt mission it also grows a `StuntSplits` section,
+and the per-pane scoreboard is then not built. Its Restart reaches the Launcher's session restart
+and rebuilds the world, because a mission's waves, ace and zeppelin cannot be put back in place.
 
 ## src/Flight/Weather.cs
-`WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone
-`ZoneWeather` records holding fog (`FOG_COLOR`/`FOG_RANGES`/`FOG_ALTITUDE`), `SUNLIGHT_*` →
-`WorldLight` (`SunIncidence` 0.46 / `MinWorldLight` 0.15, TUNE) and `SUNLIGHT_ORIENTATION` →
-`SunOrientation`, the same block's uncollapsed `SunDiffuse`/`SunAmbient` and their two colours
-(what both lighting arms drive the aircraft light from), plus the `CLOUD_COVER` whiteout band (`WhiteoutAmount` trapezoid), `WIND`, and
-precipitation → `PrecipData`. Schema + colours + zone names: weather.md.
-`DefaultDiffuse`/`DefaultAmbient` (1.5 / 0.5) are the install's modal day pair, public because both
-lighting mappings anchor a zone against them and the `NoFog` zone a weather-less mission gets is
-authored from them. They are deliberately not `WorldLightFactor`'s own 1/0 fallbacks, which belong
-to the faithful collapse and must not move; every shipped weather.json authors both keys, so
-neither fallback fires.
-**The original's weather/sky/fog/light runtime is written up in [org/weather.md](org/weather.md)** —
-the camera weather state machine, the `zone_id` visibility gate, the zone apply's edge trigger, the
-band flicker's two curves, and the sun/dome/deck rules. Read it before changing a weather mechanism.
-
-`PreferPopulatedHorizonZone` is the second, geometry-driven correction (`BL-277`): a request whose
-`horizon/zone*` subtree carries NO meshes yields to the one zone that does, which is what makes
-C1B/C2/C3 render a sky at all. The `ResolveZone(requested, horizonZones)` overload runs both in
-order and takes the geometry pick ONLY if this mission's weather.json also defines fog for it, so
-sky and fog are always the same zone. Census + per-chapter table: weather.md; the census itself is
-`WorldBuilder.HorizonZonesOf`; coverage `CSVM.Tests/SkyZoneTests.cs`.
-
-`CameraWeatherState(cameraPosition, fogZoneArmed, volumes)` (`FUN_0042ee40`) is the binary's
-per-frame camera zone 1/2/3, published by `WeatherRig.Tick` onto each
-`PlayerRig.CameraWeatherState`: 1 default; 2 when `HasCloudBand` and the camera's altitude is
-at/above `CloudCoreBottom` — a THIRD spelling alongside `CloudBandCentre` (the deck-regime flip) and
-`CloudBottom` (the visual floor), all within ~80 m of each other in C1 but never unified (Decision
-1); 3 when `fogZoneArmed` (`FogVolumeSpec.FogZoneArmed`) and the camera is inside any `FogVolumeBox`
-— the exact half-space `Contains` test, not the AABB — and state 3 wins over state 2 on overlap
-(never actually exercised in shipped data: only C5 arms `fogZoneArmed`, and its band sits far above
-every C5 volume).
-`ZoneForState(state)` is B11's consumer-side half: state *n* asks for `zone<n>` and goes through
-`ResolveZone`'s file fallback, so a mission with no `ZONE<n>` keeps its first zone rather than
-falling to `NoFog` (no fog, fullbright). Deliberately NOT routed through the horizon-aware
-`ResolveZone` overload — that one owns the DOME's single per-flight zone; the fog zone changes
-underneath it every time the camera crosses the cloud core.
+`WeatherState`, the flown mission's own weather.json as per-zone `ZoneWeather` records: fog colour,
+ranges and altitude, the sunlight block resolved into a world light, a sun orientation and its two
+uncollapsed colours, the cloud-cover whiteout band, wind, and precipitation. `DefaultDiffuse` and
+`DefaultAmbient` are the install's modal day pair, public because both lighting mappings anchor a
+zone against them. `ResolveZone` picks the flown zone by name, falling back to the one zone whose
+horizon subtree carries meshes where the requested one is empty and this mission also fogs it;
+`CameraWeatherState` and `ZoneForState` are the per-frame camera zone `WeatherRig.Tick` publishes.
+Schema: [../formats/weather.md](../formats/weather.md); runtime: [../org/weather.md](../org/weather.md).
 
 ## src/Flight/FlightAudio.cs
-Own-plane non-positional loops (engine, overspeed whine, rattle) + one-shots: `StartEngine`/`EngineStartRamp` prop-start fade (re-fired via the loop-restart hook
-in `Update`; `EngineStartRamp` 2.0 s is sourced from startprops' authored prop cross-fade duration,
-not a bare literal), `OnCrash` → `snd_exp_plane1..4` (the `plane_destroy_sg` group every crash def
-that names it wants), `OnGroundExplosion`/`OnWaterExplosion` layering the boom the *chosen crash
-def* authors (`snd_exp_ground_a` off `player_crash_dirt` itself, `snd_exp_water_a` from the
-`plane_big_splash` inside the sea dive — the crash runtime renders effects, never sound; the
-fallback `player_crash_default` Sounds only `plane_destroy_sg`, so it layers neither),
-`OnEngineStop` → `snd_propstop`, called right after the explosion one-shots on every crash/destruction
-(`FlightController.Crash`) so the loops end on the authored wind-down cue instead of a cut,
-`OnGraze(water)` → the survivable scrape's authored `snd_exp_water_b`/`snd_exp_ground_b`
-(touchdown.zrd; rate-limited by `FlightController`, not here, and its argument now comes from the
-CHOSEN `touchdown_*` def, since the sound is authored inside that def). `OnWarningShot` draws one
-`bullet_warning_sg` variant per near miss (player.json `warning_shot_sound` is a SOUND_GROUPS name, so
-`Setup` takes the group table too; rate-limited by `FlightController`'s `WarningShotCue`, same split).
-The engine is ONE voice on one slot; its pitch, gain and definition all come from
-`EngineAudioCurves`, shared with `AiEngineAudio` (see that entry). `UpdateEngineSlot` swaps the
-slot's stream for `damaged_engine_sound` while `EngineAudioCurves.EngineDamaged` holds (worst zone
-below a quarter health, or the engine choked) and for `cockpit_engine_sound`
-while the pilot's selected first-person view (`FlightController.FirstPersonView`) is
-Cockpit or Nose, both resolved at `Setup`; damaged takes precedence when both apply
-(`EngineAudioCurves.EngineDefFor` carries the rule — no def authors a damaged cockpit variant, and
-the plan's evidence does not decode which of the two wins, so damage feedback keeps priority as a
-port decision). The view swap keys to the SELECTED mode, not the per-frame camera pose, so a held
-numpad key or look-behind does not retrigger it (D31, closes `BL-161`). `MixGain` is the only
-own-ship scale left and stays here — splitscreen, not a fidelity knob.
+The own plane's non-positional audio: the engine, overspeed whine and rattle loops, plus the
+one-shots a crash, a ground or water explosion, a survivable graze and an engine stop fire, each
+drawing the sound the chosen crash or touchdown definition itself authors rather than a fixed
+name. `OnWarningShot` draws a near-miss variant from the group player.json names; the rate limits
+live on `FlightController`, not here. The engine is one voice on one slot whose pitch, gain and
+definition all come from `EngineAudioCurves`, and `MixGain` is the only own-ship scale left, for
+splitscreen. `AiEngineAudio` is the positional twin an AI aircraft carries instead of this.
 
 ## src/Flight/EngineAudioCurves.cs
-The engine-audio slot maths both audio paths read: `EngineDamaged`, `EngineDefFor` and
-`DamagedPitchMul` (whether the airframe counts as damaged, which definition the slot then holds, and
-the swap's one-off pitch draw), `Engine` and `Whine` (each slot's pitch and gain off the
-`PlaneStats` curves), `DriveFrom`, and `CullDistanceSq`. It exists because the original runs one
-per-frame routine for the player and every AI vehicle; the decode is in
-[formats/vehicle.md](formats/vehicle.md), "The engine audio's slots" and "What makes an airframe
-damaged". The damaged swap is a health-fraction gate, not a took-a-hit one.
-`AdvanceDamagedRearm` is C22's re-arm timer, pure and testable off a `DamagedEngineTimer` and a
-caller-drawn `u` rather than a live RNG (`DamagedPitchMul`'s own reason): only `AiEngineAudio`
-reaches it today, since the own-ship path is never culled and so never silences a playing loop.
-The engine slot's parameter is **not the throttle lever alone**: `DriveFrom` reads a turn rate off
-the two body axes perpendicular to the nose and a climb attitude off the orientation, and `Engine`
-adds them to each curve's NORMALISED parameter under a [0, 1.5] clamp before the curve maps it out.
-That ordering is why `SoundCurve` exposes `Frac`/`Remap` separately from `Eval`, and the headroom
-above 1.0 is what lets a hard pull overshoot the curve's own top. The turn-rate-into-volume term is
-inert against the shipped flat volume curve and is kept because the data, not the mechanism, is what
-makes it so. `BL-109`'s `CAP-10` measurements are the acceptance test, pinned by `engine-note`.
+The engine-audio slot maths both audio paths read: whether an airframe counts as damaged, which
+definition the slot then holds and the swap's one-off pitch draw, each slot's pitch and gain off
+the `PlaneStats` curves, the drive parameter and the cull distance. It exists because the original
+runs one per-frame routine for the player and every AI vehicle. The slot's parameter is not the
+throttle lever alone: the drive adds a turn rate and a climb attitude to each curve's normalised
+parameter under a clamp with headroom above 1, which is why `SoundCurve` exposes its steps
+separately from a plain evaluation. `AdvanceDamagedRearm` is the pure re-arm timer only
+`AiEngineAudio` reaches. Decode: [../formats/vehicle.md](../formats/vehicle.md).
 
 ## src/Flight/AiEngineAudio.cs
 The positional twin of `FlightAudio` that an AI-flown aircraft carries instead of it: the same two
-engine slots on `AudioStreamPlayer3D`s, plus the cull that stops them past `CullDistanceSq` from
-the nearest listener and starts them again inside it. `Attach` is the whole spawner-side surface.
-Deliberately carries no own-ship concept — no `MixGain`, no start ramp, no prop-start cue, no crash
-one-shots: an AI kill is audible from its crash animation's own authored `Sound` events. Audio
-cannot be screenshot-verified, so the `sound` log carries the whole observable: one line per
-aircraft at build naming what each slot resolved to (or that there was no archive at all), then one
-per cull transition and one per damaged-engine swap. The pair is what separates "silent past the
-cull" from "silent because the definition never resolved".
-On the healthy->damaged edge, `SetEngineDamaged` stops the slot-0 handle but does not swap it;
-`Update`'s `ArmDamagedLoop` is what waits out the shared re-arm timer
-(`PlaneStats.DamagedTimer`, `EngineAudioCurves.AdvanceDamagedRearm`) and performs the swap once it
-fires (docs/formats/vehicle.md, "What makes an airframe damaged"). ⚠ The timer sits on the
-airframe DEFINITION: `PlaneStats`'s per-spawn `With*` clones carry the SAME `DamagedTimer`
-reference forward from the cached def, so every aircraft flying one airframe shares one counter
-and one draw, and a damaged loop that is still playing never re-enters it. The damaged->healthy
-direction stays immediate. Proven by `ai-engine-rearm` and `EngineAudioModelTests`.
+engine slots on `AudioStreamPlayer3D`s, plus the cull that stops them past `EngineAudioCurves`'
+cull distance and starts them again inside it. `Attach` is the whole spawner-side surface. It
+deliberately carries no own-ship concept, since an AI kill is audible from its crash animation's
+own authored sound events. The `sound` log carries the whole observable: what each slot resolved
+to at build, then one line per cull transition and one per damaged-engine swap. The healthy to
+damaged edge waits out the shared re-arm timer on `PlaneStats.DamagedTimer`; the other direction
+is immediate.
 
 ## src/Flight/SpectatorCamera.cs
 The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look, wheel speed and
@@ -1384,303 +1286,199 @@ damage are the player's path exactly. `Held`, `Inert`, `Spectating` and `CameraO
 a lab, a cutscene or a session pins it with. Read `FlightHud.cs` and `AircraftLifecycle.cs` next.
 
 ## src/Flight/PlaneDamage.cs
-The decoded vehicle damage ledger (org/vehicleDamage.md, corrected 2026-08-14): per-part pools
-from destroyable_parts PLUS a real whole-vehicle (armor, health) pair — authored where the def
-chain carries one (AI defs), else the sum over parts (player defs; player_bhawk 80/80, Fury
-90/90). Apply is the decoded take-hit flow ported instruction-for-instruction: the named zone
-spends armor-first (a dead/unknown zone REDIRECTS to a random surviving zone — the resolver
-rule), the whole pair recomputes as parts' fraction × whole maxima after every part spend, then
-the unabsorbed leftover re-enters zone-less and drains the whole pair directly. IsDestroyed =
-whole health ≤ 0 (reachable with zones still healthy — the overflow kill). Summary leads with
-the hull pair for the HUD DMG line; SummaryHealthFraction reads the whole pool (DI voice);
-WorstFraction stays the worst PART on the combined pool (the injure_anims scale);
-WorstHealthFraction is the decoded damage-state reading (worst zone on health alone, the hull
-pair where an airframe resolves no zones) and is what the engine-audio swap gates on. `ScalePools`
-and `SetWholePools` are the airframe swap's two writers, the only ones outside the take-hit flow:
-one scales every zone by a fraction and recomputes the whole pair, the other writes that pair
-directly. The stock
-armor/HP doubling and the kill rule are decoded in
-docs/org/vehicleDamage.md and docs/formats/vehicle.md.
+The decoded vehicle damage ledger: per-part pools from `destroyable_parts` plus a whole-vehicle
+armour and health pair, authored where the def chain carries one and summed over the parts where
+it does not. `Apply` is the decoded take-hit flow, spending armour first on the named zone,
+redirecting a dead or unknown zone to a random survivor, recomputing the whole pair after every
+part spend and draining it directly with whatever is left over, so a kill stays reachable with
+every zone still healthy. The four fraction readings differ on purpose, each saying at its own
+member which scale it is on. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
 
 ## src/Flight/DamageVisuals.cs
-Visible damage driven purely by data thresholds: as a part's HEALTH-ONLY fraction (armour is in
-neither pool — docs/org/vehicleDamage.md "Damage staging") crosses an
-injure_anims entry it shows the torn pdpN panel, hides the healthy skin, and plays the entry's
-AUTHORED anim through `DamageEffectSink` — the player's own rig runtime (`BL-259`): `pdpanelN`
-(gimmeflakes debris + the staged short_firetrail/loop_short_firetrail burn-down at the panel),
-`player_fuelleak` (0.85 — gunhit flash + fuel vapor at a random pdp1–3, its stream authored-gated
-on that panel being ACTIVE, so it renders only once torn), the `<part>_damage_effects` spark shims
-(0.99, `player_pfighter` data alone — B4; their general home is the weapons.json `player` IMPACT
-surface, live since M4 A2+D14 fielded AI shooters), and, for the data's 0.10 `player_smoketrail`, `player_damage_trail`
-(short_firetrail at prop1 + the fire_lt light) — `RigAnimFor` owns that one mapping.
-`DamageEffectStop` (Reset, first) stops the whole stage CLOSURE, derived from the program — a
-stopped pdpanelN cannot reach the trail it CALLed, and prop1's trail has no authored exit;
-`DamageEffectStopOne` is the single-stage form a retraction uses. Its lines route through `Log`
-(`flight` for the panel and smoke-trail state, `anim` for the stage routing), not a bare `GD.Print`,
-so a play session's own file sink records which stages fired. Staging is keyed per LADDER
-ENTRY and cleared on the upward crossing alone, so a repair un-stages and the entry can fire again
-(`StagedEntryCount`). Panel pairing (def-derived candidate sets, positional assignment, the three
-crossed-naming outliers) is decoded on `PairHealthySkins` and runs only for an airframe whose own
-data names a `pdpanel*` stage (`PairsPanels`); the null-sink stand-in fallback is on
-`UpdateStatic`/`PlayStage`. An AI ladder's own two anims (`pfsmoketrail`,
-`random_remote_damage`) play through the same sink: `RigAnimFor` is a membership test over
-`EffectCatalogue.DamageStageAnims` + `PlaneDamageEffectAnims`, curated rather than
-program-existence, so the cockpit gauge defs (`*_damage_green/yellow/red`, `*_got_hit`) can never
-play on an airframe.
-
-**The cockpit-interior twins pcdp4/pcdp6.** `PlaneBuilder.CockpitDamagePanels`
-joins `DamagePanels` in the same `_panels` table (an optional constructor param, empty outside a
-cockpit-interior build), so `ApplyPartStage`/`Retract` flip `pcdp4`/`pcdp6` alongside `pdp4`/`pdp6`
-off the identical `pdpanel4`/`pdpanel6` entries — no separate cockpit rule, and `Reset()` clears
-both together for free (neither carries the `_h` suffix that keeps a healthy skin visible). The
-pair has no healthy twin of its own to pair (no `pcdp4_h`/`pcdp6_h` ships anywhere in `planes.zbd`),
-so the crossed-numbering trap that pairs `pdpN`↔`pdpN_h` by mesh position does not extend to them —
-there is nothing to pair. `CockpitVisibility.Apply` (B11) only ever toggles the four top-level
-groups it binds, never a panel's own `Visible`, so a torn cockpit panel stays torn across a
-Cockpit↔Nose↔external switch with no extra code.
+Visible damage driven purely by data thresholds: as a part's health-only fraction crosses an
+`injure_anims` entry it shows the torn `pdpN` panel, hides the healthy skin and plays that entry's
+authored anim through `DamageEffectSink`, the player rig's own runtime. Staging is keyed per
+ladder entry and cleared on the upward crossing, so a repair un-stages and the entry can fire
+again. `RigAnimFor` is a curated membership test over the effect catalogue, which is what keeps a
+cockpit gauge def from ever playing on an airframe, and the panel-pairing traps sit on
+`PairHealthySkins`. The cockpit-interior twins ride the same panel table as their exterior
+partners, so no separate cockpit rule exists. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
 
 ## src/Flight/DamageLab.cs
-The damage lab (F5 toggles): one armor slider (parts the data gives an armor pool) plus one health
-slider per destroyable part — `PartFrac` (Health, Armor, Combined) is what an `IDamageLabTarget`
-reads/writes. `DamageVisuals` itself is driven off the HEALTH fraction alone; `Combined` is
-`DamageLab`'s own derived one-number reading, the scale the mirrored GaugeCluster damage dial is
-on (see the class's own doc for both). `ReadSliders` floors a part's armor at 0 whenever its
-health reads below 1, mirroring `PlaneDamage.Apply`'s armor-first real path (armor absorbs a round
-in full before any of it reaches health, so no reachable state has health short of max with armor
-still standing) — armor alone can still be driven to 0 with health untouched, just not the
-reverse. Presets (--damage=part:frac) set both sliders to the same raw fraction through the same
-ValueChanged path as a hand drag, so a fraction below 1 floors armor there too. One panel, two
-hosts, chosen by the injected IDamageLabTarget (same file): ViewerDamageTarget drives
-DamageVisuals on a parked plane (it holds no model), FlightDamageTarget writes P1's real
-PlaneDamage — each pool through its own single-pool `PlaneDamage.Apply(part, healthDamage,
-armorDamage)` call after `Reset`, using the fractions `ReadSliders` already floored. Neither
-target reimplements visuals, only decides when to rebuild them. The `--damage=` flag's own
-open-at-launch and splitscreen (F51, `BL-376`, P1-only) behaviour is the description of record in
-[`cli.md`](cli.md).
+The damage lab that F5 toggles: one armour slider for the parts the data gives an armour pool, one
+health slider per destroyable part, and a `PartFrac` reading of health, armour or the combined
+scale the mirrored gauge dial is on. `ReadSliders` floors a part's armour once its health reads
+short of full, mirroring the real armour-first path, and a `--damage=` preset takes the same route.
+One panel with two hosts chosen by the injected `IDamageLabTarget`: one drives `DamageVisuals` on
+a parked plane, the other writes the flown plane's real `PlaneDamage` through single-pool `Apply`
+calls. Neither host reimplements the visuals. The flag's own behaviour is in [../cli.md](../cli.md).
 
 ## src/Flight/CompassTape.cs
-The original's top-centre heading tape rebuilt from the game's own compassticks2/compasstxt
-textures: a cylindrical drum seen edge-on — DrumX = center − R·sin(Δ), headings increase LEFT,
-cos(Δ) fade (rendering model: docs/formats/hud.md). Metrics are probe-fitted Ref* constants ×
-HudMetrics.Scale; Build returns null if a texture is missing; _Process re-anchors on resize.
+The original's top-centre heading tape, rebuilt from the game's own compass tick and text textures
+as a cylindrical drum seen edge-on, headings increasing to the left under a cosine fade toward the
+rim. Metrics are probe-fitted reference constants times `HudMetrics.Scale`, `Build` returns null
+where a texture is missing, and the control re-anchors on resize. The heading itself comes from
+`GaugeCluster`. Rendering model: [../formats/hud.md](../formats/hud.md).
 
 ## src/Flight/GaugeCluster.cs
-The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, plus
-the gun + missile weapon gauges and the nitro dial (`nitrogauge`, drawn only with the injector
-installed; its two needles chase the decoded targets through `NitroNeedle`'s exponential at 3/s
-and 1.5/s over a 216° sweep, negated at the draw site because the decoded angles are
-counter-clockwise-positive; it sits at the bottom of the right column, below the speedometer, and
-is the one dial whose bezel centre and radius are read from the tree rather than assumed), all
-geometry extracted from the plane's own gauges subtree
-(structure/scales/quirks: docs/formats/hud.md); polys draw by data priority, rest rotations
-ignored; PartFraction binds flight or the lab; dial centres are bottom-anchored (FromBottom) so
-panes keep them on screen. `HeadingDeg` carries the nose heading `CompassTape` also reads (`BL-663`);
-the cluster draws no screen-space compass itself, but `CockpitGauges` reads the same field to turn
-the authored 3D panel's compass drum, so the tape and the drum never compute the heading twice. `DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (`BL-085`/`BL-173`) is
-the damage-dial band function — `frac` is `PartFraction`'s COMBINED armor+health value (both bound
-sources, flight and the lab, feed that scale; nothing here computes it),
-`yellowAt`/`orangeAt`/`redAt` are mined per-part from the data's own `*_damage_green/yellow/red`
-injure_anims. Both `Border` and `Fill` always take the same colour index — `BL-173`'s refuted fix
-shape was a synthetic per-pool ring split; there is only ever one colour per zone.
-`GunIndicatorColor`/`HardpointIndicatorColor`/`SlotIndicatorColor`/
-`DamageZoneColor`/`TargetArrowAngle`/`TweenArrow`/`IndicatorLowFrac`/`ArrowSweepDegPerSimS`/
-`StallBlinkHalfPeriodS` are `public` (not `internal`) so `CSVM.Tests` (`GaugeColoursTests`,
-`GaugeArrowTweenTests`, `StallWarningTests`) can call them from outside the assembly — moved from
-the in-engine `gauge-colours`/`gauge-arrow-tween`/`stall-warning` suites. The two animated
-cues are plain nested structs, `GaugeCluster.ArrowSweep` (`Angle`/`Advance`/`Reset`) and
-`GaugeCluster.StallLamp` (`Lit`/`Advance`/`Set`) — B11 retired the `internal` testability-escape
-hatches (`StallLampLit`, `AdvanceStallLamp`, the private
-`_gunArrowAngle`/`_missileArrowAngle`/`_stallBlinkPhase`/`_stallDwellS`/`_stallLampOn`/
-`_stallWarnPrev` fields) that existed only so the in-engine suite could reach a live `GaugeCluster`;
-the structs need no `Control` to construct, so `CSVM.Tests` drives them directly. Scoped to
-`GaugeCluster` only (Decision 5) — `FlightController`'s stall/arrow feed predicates are untouched.
+The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, the
+gun and missile weapon gauges and the nitro dial, all geometry extracted from the plane's own
+`gauges` subtree, drawn by data priority and bottom-anchored so splitscreen panes keep them on
+screen. `HeadingDeg` carries the nose heading `CompassTape` and `CockpitGauges` both read, so the
+heading is computed once. `DamageZoneColor` bands the damage dial off the combined armour and
+health fraction against thresholds mined from the data's own green, yellow and red `injure_anims`.
+The animated arrow sweep and stall lamp are plain nested structs needing no `Control`, so
+`CSVM.Tests` drives them directly. Structure and scales: [../formats/hud.md](../formats/hud.md).
+
+## src/Flight/CustomPlaneDef.cs
+A custom-built plane as a pure model: exactly the decoded 204-byte record's chosen fields
+(airframe, engine, per-zone armour units, four gun slots with their twin bits, per-wing hardpoint
+counts, the paint pattern with its colour, shade and decal indices, and the name), and none of the
+fields the original derives at commit, which are recomputed rather than stored. Engine-free, so
+screens edit it, `HangarEconomy` prices it and `CustomPlaneStore` persists it without a session.
+`Ammo` and `Ordnance` carry the campaign loadout export in `OwnedPlane`'s own encoding, written
+only by `SetLoadout` and left alone by `Clamp`, since their vocabulary belongs to
+`CampaignLoadout`. Record layout: [../formats/paint.md](../formats/paint.md).
+
+## src/Flight/CustomPlaneRecord.cs
+Import-only reader for the original's 204-byte saved-plane files: one record, or a whole install's
+`Planes` directory, into `CustomPlaneDef`s. Every paint field is read as the index it is, the
+cached RGBA the engine writes alongside is left out and exposed only for a cross-check, and the
+derived fields are ignored. A file it cannot make sense of reads as null rather than throwing, so
+an import never breaks on one corrupt save. The read is one way: CSVM's own planes persist through
+`CustomPlaneStore` and never in this format. Format: [../formats/paint.md](../formats/paint.md).
+
+## src/Flight/CustomPlaneStore.cs
+JSON persistence for `CustomPlaneDef`, one file per plane under `user://Planes/`. The store works
+over a plain absolute directory through `System.IO` so it unit-tests without an engine, and
+`UserPlanes()` is the single Godot touch resolving the scheme. The name is the identity, as in the
+original, so saving over an existing name replaces its file. A missing or malformed file reads as
+nothing rather than throwing, since a corrupt save must never break a plane picker. The current
+schema stores paint as the original's index pairs, the first schema still loads and upgrades on
+its next save, and the optional exported-loadout block deliberately did not raise the version.
 
 ## src/Flight/CustomPlaneBuild.cs
-The fidelity-bearing join: a saved `CustomPlaneDef` onto the three things a spawn consumes. Pure
-and engine-free — every input is handed in, so nothing here looks up an airframe, a store or a
-session.
+The join from a saved `CustomPlaneDef` onto the three things a spawn consumes, pure and
+engine-free because every input is handed in. `LoadoutFor` builds over the airframe's unmutated
+stock fit, turning a calibre row into a weapon the loadout bind resolves and a twin pick into one
+gun over a marker pair, and filling each wing's pylons in the shared fill order, capped at the
+pylons the stock fit authors. `PaintFor` resolves the record's three colours and three decals
+under a caller-named pattern. `ArmouredParts` and `DamageFor` put the bought armour on the damage
+zones by copy, leaving structure and every unnamed zone alone. What the build reaches at the
+aircraft is on the class; the decode is [../org/hangar.md](../org/hangar.md), "Into the mission".
 
-`LoadoutFor(def, stockBase)` builds over the airframe's stock fit, which stays unmutated.
-**Guns**: slot n's calibre row c becomes `Caliber = 30 + 10c` with `WeaponId` left null, so
-`Loadout.Bind` resolves `wep_{caliber + ammoIndex}` and the Ammo Selection layer still composes on
-top (`LoadoutChoice.ApplyTo` over the result). A twin mount is ONE gun over `firepoint(9-2n)` and
-`firepoint(10-2n)`, a single takes the low one; the stock slot's own marker list narrows that pair
-when the rig is short of it, which is what keeps a twin pick on the Kestrel's slot 1 off the
-`firepoint8` it does not have (binding an absent marker is a loud throw). `Turret` and `Mount` come
-from the stock slot; an empty pick (the dropdown's id 5) omits the slot entirely rather than
-building it with no rounds. **Hardpoints**: the record counts pylons per wing and the stock fit says
-what hangs on each. `Loadout.PylonFillOrder` alternates the wings entry by entry, so its two
-interleaved halves are the wings (1-4 and 5-8; which is physically left is undecoded, `markers.md`
-omits the pylon positions). A wing's count takes that wing's fill-order entries in order and **caps
-at the pylons the stock fit authors** — the record names no ordnance of its own, so a fourth pylon
-on a Bloodhawk wing has nothing to hang. Unchosen entries keep their place as
-`LoadoutChoice.None`, since dropping one would slide every later pylon onto the other wing.
+## src/Flight/HangarEconomy.cs
+The hangar's decoded economy over a `CustomPlaneDef`: the airframe, gun and engine tables as data,
+the per-line cost and weight of everything a build carries, the two totals, the purchase verdict
+and the display-only star ratings. Pure, so a build's whole price resolves without a session. The
+verdict covers capacity and engine presence only, because pricing a build never checks funds.
+Provenance: [../org/hangar.md](../org/hangar.md), "The economy".
 
-`PaintFor(def, patternName)` is the record's three resolved colours and its three decals under a
-pattern name the caller resolves from the 0-13 index (`HangarPaintPage.PatternName`). The decals
-are the same 0-49 index space `vehicle.json`'s `paint_decalN` uses, so they carry straight over; a
-slot the build never chose keeps the `-1` "leave the shipped placeholder" sentinel, which a fresh
-plane has on all three (the pattern defaults carry no decals).
-
-`ArmouredParts` / `DamageFor` put the bought armour on the damage zones. Armour units reach the
-pool at `ArmourUnitScale` = 5, the record's own premultiply, and **no other rescaling**: CSVM's
-`destroyable_parts` armour pools are the shipped stock allocations (15/20/25/30/35/40,
-`docs/formats/vehicle.md`), the same scale the original's hangar writes its raw x5 floats onto. Only
-the ARMOUR pool is set; structure (`MaxHp`) stays the def's, exactly as the original leaves the
-mission file's structure alone. Parts are **copied**, never overwritten: a `PlaneStats` is cached
-and shared by every plane of that airframe. A zone the record does not name is carried across
-untouched. The vehicle totals stay derived — no player def authors an `armor`/`health` pair, so
-`PlaneDamage` sums the rebuilt zones, which is the original's own recompute-on-every-zone-write.
-
-⚠ **Engine and weight reach nothing.** The engine pick decomposes into a power tier and a nitrous
-flag; the tier indexes the same shipped `engines.json` table `PlaneStats.EnginePower` already reads
-an airframe's stock row from, so wiring it means moving `FlightModel`'s thrust term rather than
-adding anything here, and it is deliberately not part of this join. Total weight and the stat-table
-power rating are hangar-only in the original and must never gain a flight dependency
-(`docs/org/hangar.md`, "Into the mission").
+## src/Flight/HangarPaintTables.cs
+The paint screen's two decoded tables and its decal names, carried as CSVM's own JSON data: the
+swatch table of base colours with their shade ramps and reset variants, and the pattern table of
+airframe availability masks with the colour and shade defaults a pattern selection copies over.
+`Resolve` is the original's own colour resolver, `Available` the availability mask, and `Nearest`
+maps a first-schema store file's free triple onto an authored swatch. Engine-free and pure, so a
+paint pick stays an index pair rather than free RGB. Decode:
+[../formats/paint.md](../formats/paint.md), "The swatch table and the pattern defaults".
 
 ## src/Flight/PlayerRig.cs
-One rendered view's state bag: index, camera, optional `SubViewport`, `HudParent`, `VisualLayer`,
-the player's FlightController, and private camera-anchored copies (`Horizon`/`Deck`/`Whiteout`) —
-those re-anchor to the view's camera every frame, so N players need N of each. The ambient cloud
-field is deliberately not one of them: the authored fogvol clutter is world-anchored static
-geometry every pane shares, gated per-view through `Camera.CullMask` instead of a duplicated
-subtree.
-`CameraWeatherState` (1/2/3) is the same shape as the deck
-regime: a per-rig field, not shared, because splitscreen panes can sit in different states at the
-same instant. Written each frame by `Session/WeatherRig.Tick`; rig 0's value drives the per-state
-fog switch there — the fog globals are session-wide, so only rig 0's is read for them.
+One rendered view's state bag: the player index, the camera and its optional `SubViewport`, the
+HUD parent, the visual layer, that player's `FlightController`, and the camera-anchored horizon,
+deck and whiteout copies, which re-anchor every frame and so need one set per pane. The ambient
+cloud field is deliberately not one of them, being world-anchored geometry every pane shares
+behind a cull mask. `CameraWeatherState` is a per-rig field rather than a shared one, since
+splitscreen panes can sit in different states at the same instant; `Session/WeatherRig.Tick`
+writes it each frame.
 
 ## src/Flight/ViewerSet.cs
-`ViewerSet` — the "what do the cameras see" seam promoted out of
-`ProjectilePool.Viewers`/`ScreenSize.NearestFloor`, the pattern the tracer floor proved 2026-08-10
-([`org/tracers.md`](org/tracers.md)). `GameSession` owns one instance (`_viewers`) and `Bind`s it
-once, right after `BuildRigs` returns (`StartSession`) — the same rig-camera list every rig loop
-reads, single player included (one entry wrapping the main camera). `Cameras` hands back the raw
-bound list unfiltered, for a consumer (`ProjectilePool.TracerFloor`) that needs each viewer's own
-FOV and pane height alongside its position and already skips a freed instance itself; `Positions`/
-`Poses` are the two derived shapes B13 and B11 consume, respectively — position only, or position
-plus forward for a view-space depth comparison. `Poses(into)` fills a caller-owned buffer for B11's
-consumer, `EffectAmbience`, which republishes the set every frame and would otherwise allocate a
-list per frame. `ScreenSize`'s arithmetic did not move: this class carries cameras, not the
-screen-size/view-depth math itself.
-Consumers today: `ProjectilePool.Viewers` (tracer floor), `WeatherRig.Tick` → `EffectAmbience`
-(the puffer distance fade), both handed the session's one instance at construction, and
-`UI.ScreenFlash` (B12's wash routing), handed it at `Build`. That last one reads `Cameras` rather
-than `Positions` because it needs the index to stay aligned with its own per-pane rects, and
-`Positions` skips a freed camera. `Positions()` also feeds `AnimRuntime.LightViewerPositions` (B13's world-light budget,
-`WorldLights.Commit`) via `GameSession`'s `() => _viewers.Positions()` closure — the same
-resolved-per-call shape `PlayerPosition`/`PlayerPositions`/`ListenerPositions` already use, since a
-pane's own camera moves every frame and the runtime is built before any rig's transform is final.
+The "what do the cameras see" registry, session-owned and bound once after the rigs are built, so
+every draw rule needing it shares one registration, single player included. `Cameras` hands back
+the raw bound list for a consumer that needs each viewer's own field of view and pane height and
+already skips a freed instance; `Positions` and `Poses` are the two derived shapes, the latter
+filling a caller-owned buffer for a consumer that republishes the set every frame. It carries
+cameras, not the screen-size or view-depth arithmetic, which stays in `ScreenSize`. Its consumers
+are the tracer floor, the puffer distance fade, the screen wash and the world-light budget.
 
 ## src/Flight/CollisionLayers.cs
-The named physics collision layers — world (layer 1, the engine default every pre-existing
-collider sits on implicitly) and aircraft (layer 2, `AircraftBody`) — plus the combined mask.
-The first and only place a layer bit is assigned a meaning; new layers go here, never inline.
+The named physics collision layers, world and aircraft, plus the combined mask. The first and only
+place a layer bit is given a meaning; a new layer goes here rather than inline at a collider.
+
+## src/Flight/CollisionDamage.cs
+The original's collision damage arithmetic as pure statics: the impact severity cosine, the two
+terms of the damage pair a contact costs, the camera kick, the entity-versus-entity cut, and the
+grace and spawn windows. Being pure, the suites pin the whole table without a world. The severity
+carries no airspeed term and the camera kick does; the two laws sit in the same original function
+and the prohibition against merging them is on the members. `AircraftContactResolver` is the
+caller that turns these numbers into one contact's outcome. Decode:
+[../org/flightModel.md](../org/flightModel.md), "Collision damage".
 
 ## src/Flight/AircraftBody.cs
-The flying aircraft's physics body: one `AnimatableBody3D` child of `FlightController`, one
-`CollisionShape3D` per `PlaneCollider.Part` reusing the SAME `ConvexPolygonShape3D` + local
-transform the terrain sweep casts, on the aircraft layer. Rides the controller's transform;
-`PartName(shapeIdx)` maps a query's struck shape back to the part (shapes added in `Parts` order);
-`ExcludeSelf` is the cached one-entry RID list the owner's own queries pass; `SetHittable` drops it
-to layer 0 while the plane is out of play — crashed, or INERT — and back when it is in play again,
-both driven from `FlightController.ApplyPresence`. Also the fuse/blast geometry oracle, answering
-from the same `ConvexHull` set without a physics query: `NearestShape(point)` (nearest hull, its
-skin distance + surface point — blast falloff), `SegmentDistance(from,to)` (closest approach of a
-swept round, ternary search per hull — distance to a convex set is convex along the segment),
-`BoundRadius` for the cheap per-step reject, and `TakeProjectileHit(..., damageScale)` scaling
-both damage magnitudes by the blast falloff share (1 = direct round).
+The flying aircraft's physics body: one `AnimatableBody3D` under `FlightController` carrying one
+collision shape per `PlaneCollider` part, reusing the same convex hulls and local transforms the
+terrain sweep casts. It rides the controller's transform, maps a query's struck shape back to a
+part name, caches the one-entry exclusion list the owner's own queries pass, and drops to no layer
+while the plane is out of play. It is also the fuse and blast geometry oracle, answering nearest
+hull, a swept segment's closest approach and a bound radius from the same hull set with no physics
+query, and scaling a projectile hit's damage by the blast falloff share.
 
 ## src/Flight/IWorldQuery.cs
-The one seam onto the live physics world: `Sweep` (a shape moved along a motion, earliest stop
-across a named part list), `Ray` (one ray), and `Overlaps` (does any named part touch anything at
-a standing pose, which is what the un-embed loop asks). `FlightController` reads the world only
-through this; nothing else may reach `DirectSpaceState`. `SweepReport`/`RayReport` carry the answer,
-including the struck collider as a plain `Node?` so a caller builds its own name. A carried
-`TurretController` reads the same seam for its line-of-sight check
-(`TurretController.WorldBlocksLine`), built with the `GodotWorldQuery` its `BuildCarried` makes
-from the host it is riding; a synthetic `IWorldQuery` proves the mask and the blocked/clear cases
-off-engine (`TurretLineOfSightTests`), with no live node in the process.
+The one seam onto the live physics world: a shape swept along a motion for the earliest stop
+across a named part list, a single ray, and the standing overlap test the un-embed loop asks.
+`FlightController` reads the world only through this and nothing else may reach
+`DirectSpaceState`. The reports carry the struck collider as a plain node so a caller builds its
+own name. A carried turret reads the same seam for its line of sight, and a synthetic
+implementation proves the mask and the blocked and clear cases off-engine with no live node.
+`GodotWorldQuery` is the only real adapter.
 
 ## src/Flight/ContactReport.cs
-One detected contact, as the value both halves of detection fill: the impact, the struck surface's
-normal, which airframe box reached it first, the collider's name, how far along the frame's motion
-the airframe stopped, and `StruckIsAircraft`. `FlightController.SweepAirframe` fills it from the
-`IWorldQuery` sweep; `CenterRayContact` fills the same shape from the anti-tunnelling centre ray,
-where there is no struck box and no surface normal, so the part reads `center`, the normal is the
-reversed motion (making the contact head-on) and the stop fraction stays 1. The report holds no
-`Node` on purpose: the only question the decision side asks about the struck object is whether it
-is an aeroplane, and the caller keeps the collider for the applying (the struck rig's damage, the
-crash def's surface id, the graze reaction). The grace window is a precondition of detection rather
-than a filter on a report: while `_collisionGrace` is live no sweep runs at all.
+One detected contact as the value both halves of detection fill: the impact point, the struck
+surface normal, which airframe box reached it first, the collider's name, how far along the
+frame's motion the airframe stopped, and whether an aeroplane was struck. The airframe sweep fills
+it from the world query, and the anti-tunnelling centre ray fills the same shape where there is no
+struck box and no surface normal. It holds no node on purpose: the only question the decision side
+asks about the struck object is whether it is an aeroplane. Read `ContactOutcome` next.
 
 ## src/Flight/ContactOutcome.cs
-What one contact costs the striking aircraft, as a value with no `Node` and no physics space behind
-it: the fate (`ContactFate.Graze` survivable, `Crash` fatal), the decoded damage pair both parties
-spend, the doom rule's answer, the zone the ledger charged (`Apply`'s answer, not the geometric
-guess), the pilot HUD's flash line, `PushOut` (how far along the normal the caller must move the
-striker to un-embed it, applied on a crash too), `ShakeMagnitude` (the block-5 camera kick, zero on
-an AI), and `DamageStruckAircraft`, the instruction a
-caller owes because only it holds the struck rig: hand that aeroplane the pair and arm the
-collision grace on both parties. One value with no optional parts, so forgetting to perform it is
-forgetting one statement rather than four. `AircraftContactResolver` fills it.
+What one contact costs the striking aircraft, as a value with no node and no physics space behind
+it: the fate, the decoded damage pair both parties spend, the doom rule's answer, the zone the
+ledger actually charged, the pilot HUD's flash line, how far along the normal the caller must move
+the striker to un-embed it, the camera kick, and the instruction to damage the struck aircraft
+that only the caller can perform because only it holds that rig. One value with no optional parts,
+so forgetting half a contact is forgetting one statement. `AircraftContactResolver` fills it.
 
 ## src/Flight/AircraftContactResolver.cs
-The decoded contact rules for one aircraft, holding an `IWorldQuery` and no `Node`: the damage pair
-both parties spend (`FUN_0048d2c0`), the fate (the doom rule, no damage data, health
-exhausted, an airframe that cannot un-embed), and the un-embed loop over the
-seam's `Overlaps`. One call answers one contact with one `ContactOutcome` the caller performs.
-The engine effects it interleaves with, because each one's result is the next rule's premise, go
-through `IContactEffects`: the fly-through offer, the graze reaction, the ledger spend and its
-readouts, and the contact response. `FlightController` implements that as a per-contact
-`ContactEffects`, keeping the struck `Node`, the sweep cadence and the flight model on the node.
-`ContactConditions` is the striker's state per call, `IsHumanPiloted` included. Every contact the
-resolver is handed spends the pair; the original's every-other-frame cadence is the sweep's
-(`SweepCadence`), never a gate on the spend.
-`AircraftContactResolverTests` pins the rule table off-engine against a synthetic `IWorldQuery` and
-a scriptable `IContactEffects`: the doom rule for an AI ramming a non-aeroplane, the entity cut for
-AI into AI, the player's exemption from both (asserted on the damage magnitude, not just
-`DamageStruckAircraft`, since the entity cut applies only on the non-player branch and only against
-another aeroplane), a sustained slide exhausting its ledger against a control that spends nothing,
-the camera kick every human-piloted contact spends and an AI's spends none, and the un-embed loop's
-three-try give-up.
+The decoded contact rules for one aircraft, holding a world query and no node: the damage pair
+both parties spend, the fate (the doom rule, no damage data, health exhausted, an airframe that
+cannot un-embed), and the un-embed loop over the seam's overlap test. One call answers one contact
+with one `ContactOutcome` the caller performs. The engine effects it interleaves with, because
+each result is the next rule's premise, go through `IContactEffects`, which `FlightController`
+implements per contact. Every contact it is handed spends the pair; the alternate-step cadence is
+the sweep's, never a gate on the spend. `AircraftContactResolverTests` pins the rule table
+off-engine against a synthetic world query and a scriptable effects sink.
 
 ## src/Flight/SweepCadence.cs
-The original's alternate-step collision sweep (`FUN_0048d7f0`'s parity gate and the `obj+0x6B0`
-accumulator, docs/org/flightModel.md "Collision response") as a pure value with no `Node`:
-`Advance` answers whether this sim step sweeps and, after a skipped step, the origin the sweep runs
-from, so the carried motion is swept whole; `Respawn` resets the phase. The parity gates the SWEEP,
-never the spend: a contact the sweep resolves always spends the pair. `SweepCadenceTests` drives it
-with the real resolver and ledger against a kinematic wall, pinning the shallow-then-steeper sequence
-from the controls, a sustained scrape dying in three 50-floor spends, and the spend-gated control
-that locks onto the free steps and never spends.
+The original's alternate-step collision sweep as a pure value with no node: `Advance` answers
+whether this sim step sweeps and, after a skipped step, the origin the sweep runs from, so the
+carried motion is swept whole; `Respawn` resets the phase. The parity gates the sweep, never the
+spend, so a contact the sweep resolves always spends the damage pair. `SweepCadenceTests` drives
+it with the real resolver and ledger against a kinematic wall. Decode:
+[../org/flightModel.md](../org/flightModel.md), "Collision response".
 
 ## src/Flight/AircraftLifecycle.cs
 The states one aircraft moves between and the rules that move it: in play, crashed, destroyed with
-its wreck still flying, inert, and back to spawned. It owns those flags plus the collision-grace,
-carrier-drop ground-blow and auto-respawn timers, holds the crash-def table and the selection off it
-(`LastCrashDef`), and holds no `Node`, so the whole table runs in a unit test. Every transition
-REPORTS what happened instead of performing it: `Crash(surfaceId, killer)` answers one `CrashOutcome`
-(did it happen, was it the wreck landing, which crash def, whether the shutdown, the camera cut and
-the `Downed` report are owed, and the killer to name) and `Destroy(destroyDef, killer)` one
-`DestroyOutcome` on the same terms, with `WreckFalling` deciding whether the hull flies itself down.
-Each is one value with no optional parts, so a caller that forgets half a crash is forgetting one
-statement rather than four. `FlightController` keeps `Crashed`, `Destroyed`, `WreckFalling`, `Inert`
-and `InPlay` as forwards onto it, so its fifteen internal readers and every session-side consumer
-read the same spellings they always did, and it keeps the `Downed`/`InertChanged`/`DamageApplied`
-events, which the session subscribes to. The guard that a crashed aircraft cannot crash again is a
-transition rule here: `Crash` refuses while `Crashed`, and the single exception is the falling
-wreck's own landing, which reports `WreckLanding` and owes neither the cut nor the report because
-the death was reported at the kill. `ArmSpawnTimers(carrierDrop)` opens the spawn's collision-free
-window (`CollisionDamage.SpawnGrace`), and the carrier-drop arm adds
-`CarrierDropGroundBlow` seconds of the 0.15 ground-blow multiplier on top; `ArmCollisionGrace` is
-the shorter window a resolved ram writes to both parties. `SetInert` answers whether the flag moved,
-which is what makes the node's presence write and its `InertChanged` raise conditional.
+its wreck still flying, inert, and back to spawned. It owns those flags, the collision-grace,
+carrier-drop and auto-respawn timers, and the crash-def table with the selection off it, and holds
+no node, so the whole table runs in a unit test. Every transition reports what happened instead of
+performing it, answering one outcome value carrying everything the caller owes.
+`FlightController` forwards the flags and keeps the events the session subscribes to. That a
+crashed aircraft cannot crash again is a transition rule here, with the falling wreck's own
+landing as the single exception.
 
 ## src/Flight/GodotWorldQuery.cs
-The only adapter over Godot's `DirectSpaceState`, implementing `IWorldQuery`. Resolves the wrapped
-node's `World3D` at each call rather than caching it, since the node may be bound before it joins
-the tree. `Sweep` holds the airframe's whole per-part cast/rest-info dance, including the 0.05 m
-nudge past the first overlap (`GetRestInfo` can come back empty exactly at the unsafe fraction).
-
+The only adapter over Godot's `DirectSpaceState`, implementing `IWorldQuery`. It resolves the
+wrapped node's world at each call rather than caching it, since the node may be bound before it
+joins the tree, and `Sweep` holds the airframe's whole per-part cast and rest-info dance,
+including the small nudge past the first overlap that a rest query coming back empty exactly at
+the unsafe fraction requires.
