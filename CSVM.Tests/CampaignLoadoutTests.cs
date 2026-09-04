@@ -40,17 +40,20 @@ public class CampaignLoadoutTests
     [Fact]
     public void AnOrdnanceCellBindsItsTableRowsWeaponOnItsOwnWingsPylon()
     {
-        // Cell 0 is the left wing's first pylon and cell 4 the right wing's first; the stored
-        // value is the table index plus one, so 3 is the table's row 2 and 11 its row 10.
+        // Cell 0 is the left wing's first pylon and cell 4 the right wing's first, and the wings
+        // interleave across the centreline: those are pylons 1 and 2, and the left wing's second
+        // cell is pylon 3. The stored value is the table index plus one.
         var ordnance = new int[8];
         ordnance[0] = 3;
+        ordnance[1] = 2;
         ordnance[4] = 11;
         var plane = new OwnedPlane { Name = "Gypsy Magic", Ordnance = ordnance };
 
         var fit = CampaignLoadout.For(plane, Stock);
 
         Assert.Equal(Stock.Options.PylonOrdnance[2].Id, fit.PylonFor(1));
-        Assert.Equal(Stock.Options.PylonOrdnance[10].Id, fit.PylonFor(5));
+        Assert.Equal(Stock.Options.PylonOrdnance[1].Id, fit.PylonFor(3));
+        Assert.Equal(Stock.Options.PylonOrdnance[10].Id, fit.PylonFor(2));
     }
 
     [Fact]
@@ -106,7 +109,7 @@ public class CampaignLoadoutTests
         Assert.Equal("ap", fit.GunAmmoFor(1));
         Assert.Equal(LoadoutChoice.None, fit.GunAmmoFor(2));
         Assert.Equal(Stock.Options.PylonOrdnance[2].Id, fit.PylonFor(1));
-        Assert.Equal(Stock.Options.PylonOrdnance[10].Id, fit.PylonFor(5));
+        Assert.Equal(Stock.Options.PylonOrdnance[10].Id, fit.PylonFor(2));
     }
 
     /// <summary>A plane the campaign never exported picks nothing at all, so laying its fit over an

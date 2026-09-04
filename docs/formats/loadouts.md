@@ -64,7 +64,9 @@ centreline mount with no fp8.
 **`hardpoints.count` → pylon numbers.** `Loadout.Bind` does **not** resolve `pylon1`…`pylonN`
 sequentially — it takes the first `count` entries of `Loadout.PylonFillOrder = {1,5,2,6,3,7,4,8}`
 (`BL-294`/`PT-31`, user-observed at the controls against the original's weapon-gauge belt lights:
-a partial stock fit lands on both wings alternately, not piled onto pylon1's side). `Hardpoint.Index`
+a partial stock fit leaves gaps rather than filling `pylon1`'s side contiguously). Read that
+sequence as gauge positions and nothing more: its two interleaved halves are **not** the wings,
+which are the odd and even numbers ([markers.md](markers.md)). `Hardpoint.Index`
 carries the resolved pylon NUMBER, not the loop position, and the weapon gauge's belt lights and
 arrow-target math (`GaugeCluster`/`FlightController.UpdateWeaponGauges`) key off that number against
 the dial's fixed 8-position ring — an unfitted physical position reads red, the gap the fill order

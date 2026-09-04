@@ -222,11 +222,25 @@ public sealed class HardpointSpec
 /// </summary>
 public sealed class Loadout
 {
-    /// <summary>The original's hardpoint fill order — alternating wings, not sequential
-    /// (user-observed at the controls against the weapon gauge's belt lights):
-    /// a stock fit with fewer than 8 pylons leaves physical gaps rather than filling pylon1..N
-    /// contiguously. <c>hp.Count</c> takes a PREFIX of this sequence.</summary>
+    /// <summary>What a pylon carries when nothing else names its ordnance: high explosive, the
+    /// row the hangar's own commit writes into every cell inside a wing's hardpoint count
+    /// (docs/formats/saved-games.md, "Where the ammunition and ordnance picks live").</summary>
+    public const string StockOrdnance = "wep_06";
+
+    /// <summary>The original's hardpoint fill order (user-observed at the controls against the
+    /// weapon gauge's belt lights): a stock fit with fewer than 8 pylons leaves physical gaps
+    /// rather than filling pylon1..N contiguously. <c>hp.Count</c> takes a PREFIX of this
+    /// sequence. ⚠ Do not read the two interleaved halves as the wings; the model puts odd
+    /// pylons to port and even to starboard (docs/formats/markers.md).</summary>
     public static readonly int[] PylonFillOrder = { 1, 5, 2, 6, 3, 7, 4, 8 };
+
+    /// <summary>Each wing's physical pylon numbers, outboard to inboard: every player model pairs
+    /// its pylons across the centreline, odd to port and even to starboard, with |x| falling as
+    /// the number rises (docs/formats/markers.md).</summary>
+    public static readonly int[] LeftWingPylons = { 1, 3, 5, 7 };
+
+    /// <summary>The starboard half of <see cref="LeftWingPylons"/>'s split.</summary>
+    public static readonly int[] RightWingPylons = { 2, 4, 6, 8 };
 
     private Loadout(LoadoutDef def, List<GunGroup> guns, List<Hardpoint> hardpoints)
     {
@@ -261,6 +275,15 @@ public sealed class Loadout
             }
         }
     }
+
+    /// <summary>The physical pylon a saved record's ordnance cell names: cells 0-3 are the left
+    /// wing and 4-7 the right, each half bounded by that wing's hardpoint count
+    /// (docs/formats/saved-games.md). Out of range answers 0, which no pylon carries.</summary>
+    public static int PylonForCell(int cell) =>
+        cell >= 0 && cell < LeftWingPylons.Length ? LeftWingPylons[cell]
+        : cell >= LeftWingPylons.Length && cell < LeftWingPylons.Length + RightWingPylons.Length
+            ? RightWingPylons[cell - LeftWingPylons.Length]
+            : 0;
 
     /// <summary>Binds an authored loadout to a built plane and the weapon catalogue. Throws if a
     /// named marker is absent on the model or a resolved <c>wep_*</c> id is missing.</summary>
@@ -499,7 +522,7 @@ public sealed class Loadout
 
         if (pylons.Count > 0)
         {
-            string stockId = stock?.Hardpoints?.Stock is { Length: > 0 } s ? s[0] : "wep_06";
+            string stockId = stock?.Hardpoints?.Stock is { Length: > 0 } s ? s[0] : StockOrdnance;
             var hardpointStock = new string[pylons.Count];
             for (int i = 0; i < hardpointStock.Length; i++)
             {
