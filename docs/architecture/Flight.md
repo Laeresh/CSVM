@@ -999,14 +999,14 @@ schema stores paint as the original's index pairs, the first schema still loads 
 its next save, and the optional exported-loadout block deliberately did not raise the version.
 
 ## src/Flight/CustomPlaneBuild.cs
-The join from a saved `CustomPlaneDef` onto the three things a spawn consumes, pure and
-engine-free because every input is handed in. `LoadoutFor` builds over the airframe's unmutated
-stock fit, turning a calibre row into a weapon the loadout bind resolves and a twin pick into one
-gun over a marker pair, and filling each wing's pylons in the shared fill order, capped at the
-pylons the stock fit authors. `PaintFor` resolves the record's three colours and three decals
-under a caller-named pattern. `ArmouredParts` and `DamageFor` put the bought armour on the damage
-zones by copy, leaving structure and every unnamed zone alone. What the build reaches at the
-aircraft is on the class; the decode is [../org/hangar.md](../org/hangar.md), "Into the mission".
+The join from a saved `CustomPlaneDef` onto the three things a spawn consumes, pure and engine-free
+because every input is handed in. `LoadoutFor` builds over the airframe's unmutated stock fit,
+turning a calibre row into a weapon the loadout bind resolves and a twin pick into one gun over a
+marker pair, and hanging each wing's own pylons outboard-first from that wing's bought count alone,
+every one carrying high explosive for the Ammo Selection layer to overwrite. `PaintFor` resolves the
+record's three colours and decals under a caller-named pattern; `ArmouredParts` and `DamageFor` put
+the bought armour on the damage zones by copy, leaving structure and unnamed zones alone. The decode
+is [../org/hangar.md](../org/hangar.md), "Into the mission".
 
 ## src/Flight/HangarEconomy.cs
 The hangar's decoded economy over a `CustomPlaneDef`: the airframe, gun and engine tables as data,

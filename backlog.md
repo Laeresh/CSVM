@@ -946,27 +946,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-523` (the AI mode machine, which this is not), `BL-626`, `BL-664`, `BL-598`,
   `BL-637`, `PT-87`, `PT-100`, `PT-101`.
 
-- `BL-715` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **A custom Devastator built with
-  six hardpoints flies with four: the mission rig caps a wing's count at what the stock fit
-  authors.** *Evidence:* reported at the controls: "Custom Devastator with 6 hardpoints that I can
-  configure in ammo screen has only 4 hardpoints in mission". `CSVM/data/stock_loadouts.json` gives
-  `pdevastator` a four-pylon stock fit, and `CustomPlaneBuild.HardpointsFor`
-  (`CSVM/src/Flight/CustomPlaneBuild.cs:238-289`) takes a wing's pylons only where the stock fit
-  hangs something, so a count above the stock fit's caps silently. The hangar offers up to four per
-  wing on every airframe (`docs/org/hangar.md`, "There is no per-airframe slot count") and
-  `pylon1`..`pylon8` exist on every player model (`docs/formats/markers.md`). *Fix shape:* decode
-  what the original hangs on a pylon the stock fit does not author: the ammunition table's eight
-  hardpoint counts and the per-airframe default ordnance (the 965 swap writes "two hardpoints of
-  six" for the Bloodhawk, so the count per slot is a table,
-  `docs/formats/anim-definitions/cutscenes.md` "The airframe swap codes"). Then either fill the
-  extra pylons from that default or cap the hangar's selector to the airframe. *⚠ Traps:* do not
-  fix it by extending every stock fit to eight `wep_06` entries; the stock fit is also the AI's and
-  the Instant Action default. The ammo screen shows six because it reads the build, not the rig; a
-  fix that hides the two pylons there instead is a different behaviour from the original and needs
-  the same decode first. *Playtest after fix:* a bought Devastator with 3/3, launch any mission,
-  count pylons in the external view and rockets in the readout. *Cross-refs:*
-  `docs/formats/loadouts.md`, `BL-357` (the selector's direction).
-
 - `BL-716` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **A flak round that hits a plane
   plays no hit effect, and flak's damage, targeting, arming and burst radius are unverified at the
   controls.** *Evidence:* reported at the controls: "FLAK has no animation on plane hit. Recheck
@@ -1018,8 +997,30 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   sortie's choice for a swap that carries a build, and pin it in `AirframeSwapSuites`. *⚠ Traps:*
   `BL-394` is the AI fit and is not this; the Balmoral (967) and Warhawk (966) swaps go through the
   same code and should be asserted too. *Playtest after fix:* CM07 with flak rockets bought, take
-  the Bloodhawk, read the hardpoint readout. *Cross-refs:* `BL-394`, `BL-715` (the pylon cap on the
-  same join), `docs/org/hangar.md` ("special-plane template").
+  the Bloodhawk, read the hardpoint readout. *Cross-refs:* `BL-394`,
+  `docs/org/hangar.md` ("special-plane template").
+
+- `BL-732` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` **`Loadout.PylonFillOrder` may hang a partial stock fit
+  lopsidedly: read as physical pylons it puts both of the Hoplite's two rockets on the port
+  wing.** *Evidence:* `--dump-markers` over all eleven player airframes: every model pairs its
+  pylons across the centreline, odd to port and even to starboard, with `|x|` falling as the
+  number rises (`docs/formats/markers.md`). Against that geometry the sequence
+  `{1,5,2,6,3,7,4,8}` reads port, port, starboard, starboard, port, port, starboard, starboard,
+  so a stock fit's prefix is unbalanced at every odd count and at 2: the Hoplite (count 2) hangs
+  1 and 5, both port; the Hellhound, Bloodhawk, Fury and Peacemaker (3) hang two port and one
+  starboard. The sequence was introduced as "the original's alternating-per-wing fill"
+  (`git show 8faa6b1d`), whose confirming evidence was the rockets dial cropped out of CSVM's own
+  golden render showing belt-light gaps rather than a contiguous run. That confirms the gauge
+  draws what the code intends, not that the intent matches the original. *Fix shape:* decode
+  which pylon nodes the original hangs a partial fit on, then either correct the sequence or
+  separate the two orders the code currently conflates: the gauge belt's position order and the
+  physical pylon assignment. *⚠ Traps:* the belt-light observation behind the current value is
+  real and must survive any change, so do not replace the sequence with `1..N` on geometry alone.
+  A full eight-pylon fit (Balmoral, Warhawk) is unaffected either way, since the sequence is a
+  permutation. Custom planes do not go through it: their pylons come from the record's two wing
+  counts. *Playtest after fix:* Instant Action in a Hoplite, external view, count rockets a side.
+  *Cross-refs:* `BL-294` (which introduced the sequence), `docs/formats/markers.md`,
+  `docs/formats/loadouts.md`, `docs/formats/hud.md` (the belt-light rule).
 
 ## Flight model & collision physics
 

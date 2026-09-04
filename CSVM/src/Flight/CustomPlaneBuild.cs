@@ -33,16 +33,10 @@ public static class CustomPlaneBuild
     /// spell them.</summary>
     private static readonly string[] ArmourZones = { "nose", "tail", "leftwing", "rightwing" };
 
-    // Physical pylon numbers per wing. PylonFillOrder alternates the two wings entry by entry
-    // (1,5,2,6,3,7,4,8), so its two interleaved halves ARE the wings: 1-4 one side, 5-8 the
-    // other. ⚠ Which half is physically left is not decoded — markers.md omits the pylon
-    // positions — so a swap here would be invisible except at the controls.
-    private static readonly int[] LeftWingPylons = { 1, 2, 3, 4 };
-    private static readonly int[] RightWingPylons = { 5, 6, 7, 8 };
-
     /// <summary>The loadout a custom plane flies: <paramref name="stockBase"/> (its airframe's
-    /// stock fit, which names the model, the mounts and the pylon ordnance) with the record's own
-    /// gun picks and hardpoint counts written over it. The base is never mutated.</summary>
+    /// stock fit, which names the model and the mounts) with the record's own gun picks written
+    /// over it and its own pylons hung from the two hardpoint counts. The base is never
+    /// mutated.</summary>
     public static LoadoutDef LoadoutFor(CustomPlaneDef def, LoadoutDef stockBase)
     {
         ArgumentNullException.ThrowIfNull(def);
@@ -63,7 +57,7 @@ public static class CustomPlaneBuild
             }
         }
 
-        built.Hardpoints = HardpointsFor(def, stockBase);
+        built.Hardpoints = HardpointsFor(def);
         return built;
     }
 
@@ -235,34 +229,28 @@ public static class CustomPlaneBuild
         return kept.Count > 0 ? kept : wanted;
     }
 
-    // The hardpoint join: the record counts how many pylons hang per wing, the stock fit says
-    // what hangs on each. A wing's pylons are taken in PylonFillOrder's order, so a count of 2
-    // lands on that wing's first two fill-order entries rather than on its two lowest numbers;
-    // a count above what the stock fit authors for that wing caps at what exists, because the
-    // record names no weapon of its own to hang on the extra pylon.
-    private static HardpointSpec? HardpointsFor(CustomPlaneDef def, LoadoutDef stockBase)
+    // The hardpoint join: a wing's own count opens that many of its pylons, outboard first, and
+    // each carries the high explosive the hangar's commit writes into every cell inside the
+    // count. The airframe's stock fit bounds nothing here — it is the AI's and Instant Action's
+    // fit, while the original reads the record's two counts alone.
+    private static HardpointSpec? HardpointsFor(CustomPlaneDef def)
     {
-        if (stockBase.Hardpoints is not { } stock)
-        {
-            return null;
-        }
-
         var chosen = new HashSet<int>();
-        Take(LeftWingPylons, def.LeftHardpoints);
-        Take(RightWingPylons, def.RightHardpoints);
+        Take(Loadout.LeftWingPylons, def.LeftHardpoints);
+        Take(Loadout.RightWingPylons, def.RightHardpoints);
         if (chosen.Count == 0)
         {
             return null;
         }
 
         // An entry sits on PylonFillOrder[i] physically, so an unchosen pylon keeps its slot as
-        // the empty sentinel: dropping it would slide every later pylon onto another wing.
+        // the empty sentinel: dropping it would slide every later entry onto another pylon.
         int last = -1;
         var built = new string[Loadout.PylonFillOrder.Length];
         for (int i = 0; i < built.Length; i++)
         {
             bool take = chosen.Contains(Loadout.PylonFillOrder[i]);
-            built[i] = take ? StockAt(stock, i) : LoadoutChoice.None;
+            built[i] = take ? Loadout.StockOrdnance : LoadoutChoice.None;
             if (take)
             {
                 last = i;
@@ -274,24 +262,12 @@ public static class CustomPlaneBuild
 
         void Take(int[] wing, int count)
         {
-            int taken = 0;
-            for (int i = 0; i < Loadout.PylonFillOrder.Length && taken < count; i++)
+            for (int i = 0; i < wing.Length && i < count; i++)
             {
-                int pylon = Loadout.PylonFillOrder[i];
-                if (Array.IndexOf(wing, pylon) >= 0
-                    && !string.Equals(StockAt(stock, i), LoadoutChoice.None, StringComparison.OrdinalIgnoreCase))
-                {
-                    chosen.Add(pylon);
-                    taken++;
-                }
+                chosen.Add(wing[i]);
             }
         }
     }
-
-    // The ordnance the stock fit hangs at fill-order index i, or the empty sentinel where it
-    // authors no pylon there at all — which is the cap a wing count runs into.
-    private static string StockAt(HardpointSpec stock, int index) =>
-        index < stock.Count && index < stock.Stock.Length ? stock.Stock[index] : LoadoutChoice.None;
 
     private static GunSpec? StockSlot(LoadoutDef stockBase, int slot)
     {

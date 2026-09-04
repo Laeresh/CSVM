@@ -8,8 +8,9 @@ namespace CSVM.Session;
 /// <see cref="OwnedPlane"/>'s <see cref="OwnedPlane.Ammo"/> and <see cref="OwnedPlane.Ordnance"/>
 /// arrays as the <see cref="LoadoutChoice"/> the launch hands the session, which
 /// <see cref="Loadout.Bind"/> then lays over the aircraft's own base fit. Engine-free, so the two
-/// encodings test off engine; both are the plan's C25 section, not the save format's (the
-/// original's per-pylon ordnance id is undecoded).
+/// encodings test off engine. Both are CSVM's own, one-based with 0 for "never picked", where the
+/// original's record holds a plain rocket-table index with 11 for none
+/// (<c>docs/formats/saved-games.md</c>, "Where the ammunition and ordnance picks live").
 /// </summary>
 public static class CampaignLoadout
 {
@@ -73,14 +74,14 @@ public static class CampaignLoadout
             return fit;
         }
 
-        // Cells 0-3 are the left wing and 4-7 the right, which is physical pylon cell+1: pylons
-        // 1-4 left, 5-8 right, the split Loadout.PylonFillOrder itself carries.
+        // A cell names its wing's pylon, not pylon cell+1: the two halves interleave across the
+        // centreline, so cell 1 is the left wing's second pylon and that is pylon 3.
         for (int cell = 0; cell < LoadoutChoice.MaxPylon && cell < ordnancePicks.Count; cell++)
         {
             int row = ordnancePicks[cell] - 1;
             if (row >= 0 && row < table.Count)
             {
-                fit.SetPylon(cell + 1, table[row].Id);
+                fit.SetPylon(Loadout.PylonForCell(cell), table[row].Id);
             }
         }
 

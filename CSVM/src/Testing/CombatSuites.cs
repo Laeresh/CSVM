@@ -77,11 +77,43 @@ internal static class CombatSuites
                 }
             }
 
+            CustomBuildBind(ctx, planesGamez, textures, weapons, stock);
             AiLoadoutBind(ctx, planesGamez, textures, weapons);
         }
         finally
         {
             textures.Dispose();
+        }
+    }
+
+    // A custom build's own half of the bind, against real geometry: a wing's hardpoint count must
+    // hang that wing's pylons and no others. Only a bound model can show it — a pylon NUMBER
+    // proves nothing, since the wings interleave across the centreline (nose -Z, right +X).
+    internal static void CustomBuildBind(TestContext ctx, GameZ planesGamez, TextureArchive textures,
+        WeaponDefs weapons, StockLoadouts stock)
+    {
+        var def = new CustomPlaneDef { Name = "Pylon Census", LeftHardpoints = 3, RightHardpoints = 1 };
+        var built = CustomPlaneBuild.LoadoutFor(def, stock.For("pdevastator")!);
+        Node3D? plane = null;
+        try
+        {
+            plane = new PlaneBuilder(planesGamez, textures).Build(built.Model);
+            var bound = Loadout.Bind(built, plane, weapons);
+            var sides = bound.Hardpoints
+                .Select(h => (h.Index, X: h.Pylon.Position.X))
+                .OrderBy(p => p.Index)
+                .ToList();
+            int port = sides.Count(p => p.X < 0f), starboard = sides.Count(p => p.X > 0f);
+            string census = string.Join(" ", sides.Select(p => $"pylon{p.Index}@{p.X:+0.00;-0.00}"));
+            ctx.Note($"3/1 custom Devastator binds {census}");
+            ctx.Check(port == 3 && starboard == 1,
+                $"a 3/1 Devastator hangs three to port and one to starboard, got {port}/{starboard} — {census}");
+            ctx.Check(sides.All(p => (p.Index % 2 == 1) == (p.X < 0f)),
+                $"odd pylons sit to port and even to starboard — {census}");
+        }
+        finally
+        {
+            plane?.Free();
         }
     }
 

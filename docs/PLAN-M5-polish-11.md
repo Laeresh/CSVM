@@ -30,9 +30,9 @@ the item (`C21`), and three entries gained or lost a fact: `A2`'s named `pzep_br
 not exist in the extraction, `C23`'s premise that the runtime ignores the camera gate is
 contradicted by `AnimRuntime.Start`, and `B13`'s roster block is already flagged as an objective
 carrier on team 0. The scheduled entries were moved out of `backlog.md` into this plan in the same
-change that created it. Remaining alternates if an item dies early, in order: `BL-715` (the custom
-Devastator's pylon cap), `BL-717` (the Pandora's turrets on the Balmoral), `BL-716` (flak's hit
-effect), `BL-698` and `BL-700` (the two wreck-rest residues).
+change that created it. Remaining alternates if an item dies early, in order: `BL-717` (the
+Pandora's turrets on the Balmoral), `BL-716` (flak's hit effect), `BL-698` and `BL-700` (the two
+wreck-rest residues).
 
 ## Milestone goal
 

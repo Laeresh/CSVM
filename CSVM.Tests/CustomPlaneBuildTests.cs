@@ -96,20 +96,21 @@ public class CustomPlaneBuildTests
         Assert.Equal("Rear Turret", built.Guns.Single(g => g.Slot == 4).Mount);
     }
 
-    /// <summary>Each wing's count fills that wing's pylons in the fill order, so a fit lands
-    /// alternately rather than piling onto one side's lowest numbers. Two per wing on the
-    /// eight-pylon Balmoral is pylons 1 and 2 left, 5 and 6 right.</summary>
+    /// <summary>A wing's count hangs that wing's own pylons, outermost first. The halves
+    /// interleave across the centreline, so two per wing is 1 and 3 to port with 2 and 4 to
+    /// starboard, listed here in the array's fill order.</summary>
     [Fact]
-    public void EachWingsCountFillsThatWingsPylonsInTheFillOrder()
+    public void EachWingsCountHangsThatWingsOutermostPylons()
     {
         var def = Def();
         def.LeftHardpoints = 2;
         def.RightHardpoints = 2;
 
-        Assert.Equal(new[] { 1, 5, 2, 6 }, PylonsOf(def, "pbalmoral"));
+        Assert.Equal(new[] { 1, 2, 3, 4 }, PylonsOf(def, "pbalmoral"));
     }
 
-    /// <summary>An asymmetric build hangs what each wing asks for and nothing on the other.</summary>
+    /// <summary>An asymmetric build hangs what each wing asks for and nothing on the other: three
+    /// to port is 1, 3 and 5, all of them odd, with no starboard pylon at all.</summary>
     [Fact]
     public void TheTwoWingCountsAreIndependent()
     {
@@ -117,21 +118,32 @@ public class CustomPlaneBuildTests
         def.LeftHardpoints = 3;
         def.RightHardpoints = 0;
 
-        Assert.Equal(new[] { 1, 2, 3 }, PylonsOf(def, "pbalmoral"));
+        Assert.Equal(new[] { 1, 5, 3 }, PylonsOf(def, "pbalmoral"));
     }
 
-    /// <summary>The count says how many hang, the stock fit says what: a count above the pylons
-    /// that fit authors for that wing caps at what exists, because the record names no ordnance
-    /// of its own. The Bloodhawk's three-pylon fit authors two on one wing and one on the
-    /// other.</summary>
+    /// <summary>The record's counts alone open the pylons. The airframe's stock fit is the AI's
+    /// and Instant Action's, and bounds nothing here: the Bloodhawk's three-pylon fit does not
+    /// stop a 4/4 build flying eight.</summary>
     [Fact]
-    public void ACountAboveTheStockFitCapsAtWhatItAuthors()
+    public void ACountAboveTheStockFitStillHangsWhatWasBought()
     {
         var def = Def();
         def.LeftHardpoints = CustomPlaneDef.MaxHardpointsPerWing;
         def.RightHardpoints = CustomPlaneDef.MaxHardpointsPerWing;
 
-        Assert.Equal(new[] { 1, 5, 2 }, PylonsOf(def, "pbloodhawk"));
+        Assert.Equal(new[] { 1, 5, 2, 6, 3, 7, 4, 8 }, PylonsOf(def, "pbloodhawk"));
+    }
+
+    /// <summary>The reported case: a Devastator bought with three hardpoints a side flies six,
+    /// not the four its stock fit authors.</summary>
+    [Fact]
+    public void ThreeAWingOnTheDevastatorHangsSix()
+    {
+        var def = Def();
+        def.LeftHardpoints = 3;
+        def.RightHardpoints = 3;
+
+        Assert.Equal(new[] { 1, 5, 2, 6, 3, 4 }, PylonsOf(def, "pdevastator"));
     }
 
     /// <summary>No hardpoints bought is no hardpoint block at all, not eight empty ones.</summary>
@@ -141,10 +153,11 @@ public class CustomPlaneBuildTests
         Assert.Null(Build(Def(), "pbalmoral").Hardpoints);
     }
 
-    /// <summary>The ordnance on a hung pylon is the stock fit's own, at that pylon's place in the
-    /// fill order.</summary>
+    /// <summary>Every hung pylon carries high explosive, what the hangar's commit writes inside a
+    /// wing's count. One a side is pylons 1 and 2, which sit at fill-order indices 0 and 2, so the
+    /// unchosen index between them keeps the sentinel rather than sliding pylon 2 down.</summary>
     [Fact]
-    public void APylonCarriesTheStockFitsOrdnance()
+    public void EveryHungPylonCarriesHighExplosive()
     {
         var def = Def();
         def.LeftHardpoints = 1;
@@ -152,8 +165,8 @@ public class CustomPlaneBuildTests
 
         var hp = Build(def, "pwarhawk").Hardpoints!;
 
-        Assert.Equal(new[] { "wep_06", "wep_06" }, hp.Stock);
-        Assert.Equal(2, hp.Count);
+        Assert.Equal(new[] { "wep_06", LoadoutChoice.None, "wep_06" }, hp.Stock);
+        Assert.Equal(3, hp.Count);
     }
 
     /// <summary>The Ammo Selection layer composes over the built def unchanged: the picks are
@@ -169,7 +182,7 @@ public class CustomPlaneBuildTests
         var choice = new LoadoutChoice();
         choice.SetGunAmmo(1, "ap");
         choice.SetGunAmmo(2, LoadoutChoice.None);
-        choice.SetPylon(5, "wep_14");
+        choice.SetPylon(2, "wep_14");
 
         var applied = choice.ApplyTo(Build(def, "pdevastator"));
 
@@ -177,7 +190,25 @@ public class CustomPlaneBuildTests
         Assert.Equal(1, gun.Slot);
         Assert.Equal(70, gun.Caliber);
         Assert.Equal("wep_72", StockLoadouts.GunWeaponId(gun.Caliber, gun.Ammo));
-        Assert.Equal(new[] { "wep_06", "wep_14" }, applied.Hardpoints!.Stock);
+        Assert.Equal(new[] { "wep_06", LoadoutChoice.None, "wep_14" }, applied.Hardpoints!.Stock);
+    }
+
+    /// <summary>The join the report is about: a pick for a pylon the airframe's stock fit never
+    /// authors reaches it, because the rig the picks compose over is now as wide as the record's
+    /// counts. The Devastator's stock fit stops at four; this lands a torpedo on the sixth.</summary>
+    [Fact]
+    public void APickReachesAPylonAboveTheStockFit()
+    {
+        var def = Def();
+        def.LeftHardpoints = 3;
+        def.RightHardpoints = 3;
+        var choice = new LoadoutChoice();
+        choice.SetPylon(6, "wep_14");
+
+        var applied = choice.ApplyTo(Build(def, "pdevastator"));
+
+        Assert.Equal("wep_14", applied.Hardpoints!.Stock[3]);
+        Assert.Equal(6, Loadout.PylonFillOrder[3]);
     }
 
     /// <summary>The plane keeps its airframe's def and model (it flies that aircraft) and takes
