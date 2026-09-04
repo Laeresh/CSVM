@@ -185,7 +185,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D: verification.md
 
 31. ☑ D31 Delete the 46 uncited rules (with the paragraph-rule exception check)
-32. ☐ D32 Cut every remaining paragraph rule to shape; remove merge notes, dates and the stale line ref; restore numeric order
+32. ☑ D32 Cut every remaining paragraph rule to shape; remove merge notes, dates and the stale line ref; restore numeric order
 33. ☐ D33 Fix the six dangling rule references at their source; header states the shape rule
 
 ### Wave F: tooling.md and cli.md
@@ -669,7 +669,7 @@ unchanged (none of the 46 is cited, by construction); `.\CheckEncoding.ps1` clea
 
 **⚠ Traps.** Never renumber to close a gap; the header says IDs are permanent.
 
-## D32 ☐ Cut every remaining paragraph rule to shape; merge notes, dates, stale ref; numeric order
+## D32 ☑ Cut every remaining paragraph rule to shape; merge notes, dates, stale ref; numeric order
 
 **Goal.** Every rule is a bold one- or two-line imperative plus at most one sentence of measured
 evidence; no "renumbered at the merge" notes; no dates; SHELL-12 cites the property name, not a
