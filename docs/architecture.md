@@ -232,7 +232,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab has a scripted
 `--debug-*` twin so a finding can be reproduced headlessly — see `docs/cli.md`.
 
-- `src/UI/MenuInput.cs` — one player's menu input source: keyboard flag + a `Pads` binding, edge/auto-repeat `Poll(dt)`, plus the typed characters and pad-only cursor axes a text field needs.
+- `src/UI/MenuInput.cs` — one player's menu input source: keyboard flag, a `Pads` binding, edge and auto-repeat polling, and the typed characters a field needs.
 - `src/UI/Menu/PresentationId.cs` — the identity a presentation registers under and Options persist; `built-in` and `original` ship.
 - `src/UI/Menu/IMenuPresentation.cs` — one presentation's lifecycle: activate at a mapped destination, tick over the host's seats, deactivate.
 - `src/UI/Menu/PresentationRegistry.cs` — presentation registration: one factory per id, a fresh instance per activation, an unknown id refused.
@@ -243,7 +243,6 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/IMenuFeature.cs` — the shared-feature contract: typed state and semantic operations; `Discard()` drops transient setup.
 - `src/UI/Menu/MenuFeatureSet.cs` — the host-owned feature registry, fetched by concrete type; `DiscardTransient()` is what a switch drops.
 - `src/UI/Menu/MenuCommands.cs` — one seat's semantic commands plus `IMenuInputSource`, the device-neutral seam every device sits behind.
-- `src/UI/Menu/MenuIdleSource.cs` — a seat's input source with no device behind it, idle every frame; the screenshot aid's extra players.
 - `src/UI/Menu/IMenuAudio.cs` — the shared menu audio contract: presentations ask for cues and narration, the service owns everything else.
 - `src/UI/Menu/MenuExit.cs` — the one typed menu exit `Launcher` consumes: launch, campaign mission, quit, options-apply. No presentation builds a session.
 - `src/UI/Menu/MenuReturnDestination.cs` — semantic return destinations (top level, cabin, debrief) each presentation maps into its own graph.
@@ -251,14 +250,15 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/MenuLayout.cs` — the runtime reader of `extracted/rof/menu_layout.json`: screens, widgets with typed fields, navigation edges.
 - `src/UI/Menu/ControlsFeature.cs` — the shared rebinding screen: one seat's keymaps, the cursors, the capture, and the steal it names first.
 - `src/UI/Menu/PlayerSetupFeature.cs` — the shared player setup: seats claimed by source identity, the roster, the two-stage pick, the gate.
-- `src/UI/MenuSeatDevices.cs` — the pad side of the shared player setup: seat 0's claimed pad, the join gesture, hotplug, the flight binding.
-- `src/UI/Menu/FreeFlightFeature.cs` — Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
-- `src/UI/Menu/InstantActionFeature.cs` — Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
 - `src/UI/Menu/HangarFeature.cs` — the shared hangar: one scratch build over a plane store and an optional wallet, and the purchase gate.
 - `src/UI/Menu/CampaignFeature.cs` — the campaign as a shared feature: the profile roster, the seated player, the mission, and every write.
 - `src/UI/Menu/CampaignBriefing.cs` — one mission's briefing as the feature holds it: the state, the narration, the note, the reveal's progress.
 - `src/UI/Menu/CampaignWallet.cs` — the seated profile as the hangar's wallet: funds, affordability, availability, the builds, purchase and sale.
 - `src/UI/Menu/CampaignAidProfiles.cs` — the scratch profile store the campaign screenshot aids seat a player over, unable to reach the real one.
+- `src/UI/Menu/MenuIdleSource.cs` — a seat's input source with no device behind it, idle every frame; the screenshot aid's extra players.
+- `src/UI/MenuSeatDevices.cs` — the pad side of the shared player setup: seat 0's claimed pad, the join gesture, hotplug, the flight binding.
+- `src/UI/Menu/FreeFlightFeature.cs` — Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
+- `src/UI/Menu/InstantActionFeature.cs` — Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
 - `src/UI/Menu/Original/OriginalShell.cs` — the Original presentation's screen graph over the decoded layout, and its four partials below.
 - `src/UI/Menu/Original/OriginalGameOptions.cs` — the shell's Game Options page (a `partial`): the shared options as a table of authored rows.
 - `src/UI/Menu/Original/OriginalSeats.cs` — the shell's two sortie screens (a `partial`): the chapters, the windowed aircraft column, FLY.
@@ -273,140 +273,78 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/Original/PointerSeat.cs` — seat 0 with the mouse as its `MenuPointer`, the click a press edge; device reads injected.
 - `src/Session/MenuCueTable.cs` — the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
 - `src/UI/BoardMenu.cs` — a board's cursor and item list, engine-free, so the selection rules test off engine.
-- `src/UI/BoardMenuItem.cs` — the rows a board menu can offer: Resume, Restart, Exit.
+- `src/UI/BoardMenuItem.cs` — the rows a board menu can offer: Resume, Photo, Restart, Exit.
 - `src/UI/BoardMenuView.cs` — draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
-- `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
-- `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, the seats, joins and picks offered over `src/UI/Menu/PlayerSetupFeature.cs`, then the typed launch exit (Free Flight through `src/UI/Menu/FreeFlightFeature.cs`, the first shared feature); also the hangar's two doors, the campaign's one (`OpenCampaignCabin`) and its mission-end debrief (`OpenCampaignScrapbook`, both re-reading the profile from the store), the Options door (the menu presentation chooser) and the renderer both flows draw through.
-- `src/UI/MenuZones.cs` — how the launchscreen divides a window: a fixed header band, a fixed footer band, the selection list in what is left, and the one scale all three share. Engine-free.
-- `src/UI/InstantActionPresets.cs` — the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
-- `src/UI/PlanePickerRoster.cs` — the one roster every human plane picker draws: 11 stock airframes then the store's saved customs, each custom carrying its store name and its airframe's stock node (D32's launch seam); engine-free build/lookup rules.
-- `src/UI/PlaneDiagrams.cs` — the two plane-diagram sheets the original draws beside a fitted aircraft, framed per airframe: `OL_PLANEDIAGRAMSTOP.PNG` (204x1870) and `OL_PLANEDIAGRAMSFRONT.PNG` (245x1100), each eleven equal frames stacked top to bottom in airframe-id order. Shared by ammo selection, the campaign's flight check and the hangar's airframe list; the decode is cached for the process, misses included, and a sheet whose height is not a whole multiple of the airframe count draws nothing rather than a mis-sliced picture.
-- `src/UI/HangarFlow.cs` — the Build Custom Plane flow, Built-in's walk of the shared `HangarFeature`, engine-free: the original's nine screens in order over the feature's scratch plane, back/next navigation, the `IHangarPage` mount point the pages fill (rows, detail, stepper, optional page `HangarArt` and a per-row one), the plane-selection screen's two-stage delete, and the commit and every rule delegated to the feature.
-- `src/UI/HangarAirframePage.cs` — the AIRFRAME screen: all 11 airframes as rows, focus previewing one and confirm picking it (raising the string-206 defaults ask as an inline two-row confirm), the stat table's figures and the economy's star ratings per row, the focused airframe's blueprint TGA as page art with its `PlaneDiagrams` plan view under it as row art; nothing is ticked until a pick is made and the ←→ stepper is inert.
-- `src/UI/HangarEnginePage.cs` — the ENGINE screen: the airframe's six engines (langui 3100+af*6+id) plus the None row (1165, the decoded dropdown's own last row; 1171 stays the purchase wording), the pick ticked and opened on, confirm writing the scratch engine and the stepper inert, each row's decoded cost and weight via `HangarEconomy.EngineLine`.
-- `src/UI/HangarArmourPage.cs` — the ARMOR screen: the four zones through their own langui formats (1191-1194) on the record's own units x5 display scale (0 to 60 in fives, the original's 13-row dropdown), the detail naming the pick as that dropdown does (1165 "None" on zero, else 1170 of units x5) beside the x4 priced cost and weight.
-- `src/UI/HangarGunsPage.cs` — the GUNS screen: always four slots titled from the stat table's slot-title strings, each stepping the original's 11-entry dropdown (five calibres single, five twinned via format 506, No Gun 3315), the detail pricing the slot's wing or turret column (doubled for twin) with the calibre's magazine rounds.
-- `src/UI/HangarHardpointsPage.cs` — the HARDPOINTS screen: the two per-wing counts through langui 1176/1177, the stepper walking 0-4, the detail speaking the dropdown's 1165/1168/1169 vocabulary with the decoded $410 / 480 lb per hardpoint and the wing's line total.
-- `src/UI/HangarPaintPage.cs` — the PAINT screen on the original's own model: the pattern row stepping only the patterns this airframe's availability mask allows (labels langui 3425+index) and loading that entry's six colour/shade defaults, a colour row and a shade row per slot over the 27-row swatch table and its ramps, three decal rows each showing the chosen decal's own tile out of the shipped `PX_P_DECALS.TGA` sheet, and a live preview composed from the pair's own paint-screen artwork (`PaintIcons`, `PX_ICON_<airframe>_<pattern>_0..3.TGA`: the detail plate plus three region masks in their alphas, alpha-over in slot order then the plate on top). That is a different mask set from the `.BM` skins `PlanePainter` paints the flying aircraft with, and a different formula: no shading multiply and no weight normalisation, so a fully-masked texel IS its resolved colour.
+- `src/UI/CursorRow.cs` — one centred list row and its cursor marker, shared by the launchscreen's lists and every board menu.
+- `src/UI/HudLayers.cs` — the canvas-layer order for everything drawn over the 3D view: whiteout, HUD, sun wash, debug overlays, labs, boards.
+- `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2-4), a shared `World3D`, every pane a 3D audio listener.
+- `src/UI/LaunchMenu.cs` — the Built-in presentation's launchscreen: the screen graph, the Godot controls, per-seat polling, and the hangar and campaign doors.
+- `src/UI/MenuZones.cs` — how the launchscreen divides a window: a fixed header and footer, the list in what is left, one shared scale. Engine-free.
+- `src/UI/Menu/InstantActionPresets.cs` — the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
+- `src/UI/PlanePickerRoster.cs` — the roster every human plane picker draws: the stock airframes then the store's saved customs. Engine-free.
+- `src/UI/PlaneDiagrams.cs` — the original's plan and head-on diagram sheets sliced per airframe, shared by ammo selection, the flight check and the hangar.
+- `src/UI/PlaneNameTables.cs` — the two authored word lists the PLANENAME screen rolls a plane name from.
+- `src/UI/PlaneFit.cs` — what one campaign aircraft carries, resolved from its hangar build or its airframe's stock fit; engine-free.
+- `src/UI/PlaneRatings.cs` — the four Poor-to-Excellent ratings the plane selection screen prints beside an aircraft; only agility is decoded.
+- `src/UI/HangarFlow.cs` — the Build Custom Plane flow, Built-in's walk of the shared hangar feature: the screen order, the cursor and the page mount point.
+- `src/UI/HangarAirframePage.cs` — the AIRFRAME screen: the eleven airframes, the blueprint preview, and the defaults ask a pick raises.
+- `src/UI/HangarEnginePage.cs` — the ENGINE screen: the airframe's six engines plus the explicit None row, each with its decoded cost and weight.
+- `src/UI/HangarArmourPage.cs` — the ARMOR screen: the four zones stepped on the dropdown's own units-times-five scale.
+- `src/UI/HangarGunsPage.cs` — the GUNS screen: four slots stepping the eleven-entry calibre cycle, priced per mount.
+- `src/UI/HangarHardpointsPage.cs` — the HARDPOINTS screen: a 0-to-4 count per wing, priced per hardpoint.
+- `src/UI/HangarPaintPage.cs` — the PAINT screen: a pattern, three colour and shade pairs and three decals over a preview from the original's own masks.
 - `src/Flight/HangarPaintTables.cs` — the paint screen's decoded tables as CSVM data: the swatch table (`data/hangar_swatches.json`, 27 rows of base colour, default variant and shade ramp) and the pattern table plus the 50 decal names (`data/hangar_patterns.json`). `Resolve(colour, shade)` is the original's own resolver; `Available(pattern, airframe)` is the availability mask; `Nearest(rgb)` maps a version-1 store file's free triple onto an authored swatch. Engine-free and pure, so the whole colour model resolves without a session.
-- `src/UI/HangarNamePage.cs` — the PLANENAME screen: one row per character stepped through a filename-safe alphabet plus a length row that adds and removes them, capped at the original's 32-character name, with the detail line assembling the name and marking the focused character.
-- `src/UI/HangarPurchasePage.cs` — the PURCHASE screen: the itemised review, one row per priced thing the scratch plane carries (airframe always, engine when chosen, armed gun slots, armoured zones via 1191-1194, wings with hardpoints via 1176/1177) with its decoded cost and weight, a totals row, and the Purchase Now row that commits, flagged with the problems text (1182 + 1227 / 1171) whenever the verdict is not Ok.
-- `src/UI/CampaignFlow.cs` — the campaign's out-of-mission flow, engine-free: a stack of screens over one selected `CampaignProfileDef`, the `ICampaignPage` mount point the later screens fill (rows, detail, footer, optional `HangarArt`, optional text field), a registry keyed by `CampaignScreen` (`Roster`, `Cabin`, `PreviousMissions`, `Briefing`, `FlightCheck`, `Ammo`, `PlaneSelection`, `Scrapbook`, `ScrapbookZoom`), and the navigation API (`GoTo`, `Back`, `SelectProfile`, `Cancel`) those pages steer with. `RaiseModal`/`Modal` is the dialog facility every screen shares, and it takes every press until it is answered. `ZoomTarget` names the mission/spread/item a `ScrapbookZoom` screen opens on, set by `SetScrapbookZoom` and re-read fresh rather than cached.
-- `src/UI/CampaignRosterPage.cs` — the player-profile screen: the name field over the roster, CONTINUE creating or continuing a player and opening the cabin, a roster row selecting then continuing, DELETE PLAYER as a confirmed second stage, CANCEL back to the launchscreen, and the original's own name refusals (langui 200/202/212/707).
-- `src/UI/CampaignTextEntry.cs` — a campaign screen's one-line text field: the original's alphanumeric-and-space rule and 32-character cap, typed from the keyboard and stepped from the pad through one alphabet, so the field needs no keyboard and produces nothing the profile store would have to sanitise.
-- `src/UI/CampaignCabinPage.cs` — the cabin hub: NEXT MISSION (opens the briefing for the profile's next mission, or refuses in the campaign's own words once all 24 are complete), PREVIOUS MISSIONS, PLANE CONSTRUCTION (a `CampaignExit.OpenHangar` request the shell fulfils), and RETURN TO MAIN MENU; `Pictures` layers the pilot's own aircraft photo (`PC_P_HANGAR<airframe>.JPG`) under the painted cabin, whose colour-keyed hole is the window, and the board draws it, the three panes at `[@PassengerCabin@]`'s `PC_PLANE`, `PC_BACKGROUND` and `PC_FRAME` rows through `CampaignLayout` and the memento window chosen rather than read; `Art` is the flat cabin scene alone, for a caller that wants pixels. `MapPinCount` is a pure, tested stand-in for pins nothing places yet.
-- `src/UI/CampaignPreviousMissionsPage.cs` — the scrapbook's table of contents, one 80-pixel row per completed mission in `seq` order at `SBTOC_L_TOCList`'s own geometry (its box, row height, window and three scroll bitmaps read once through `CampaignLayout` when the page is built, the shipped values as the fallback; the two headers at `SBTOC_T_CHARACTER`/`SBTOC_T_MISSIONS` with their own justification): an `FC_PlaneIcons.png` silhouette beside the mission's short name, its area and the plane flown, all three off the best-of record. Past the listbox's four visible rows the window scrolls to keep the cursor's row on screen and the layout's own scrollbar draws beside it. The picked row washes and outlines in the list sub-script's own colours, the focused row in a fainter pair, both as `Fills`. A confirm on a row picks it and a second confirm on the picked row is REPLAY MISSION's own press, the original's double-click folded onto one pad button. Then VIEW SELECTED (`uiData` 2405 mode 1: opens the book at the picked mission's first spread), REPLAY MISSION (`SetMission` + `GoTo(Briefing)`, no advance, offered only where `uiData` 2411 offers it), the CURRENT MISSION bookmark (the book at the campaign's own next mission) and RETURN TO CABIN. The same file carries `CampaignScrapbookResults` (static): the book's results page (spread 1) computed from one `MissionResult` — the outcome line, the four drawn rows (Run Time, Gun Hit Ratio, Cash Earned, Overall Planes Downed; Rockets Expended is authored and never drawn) and the two tab titles, each at its own `SB_T_*` row through the `CampaignLayout` a caller hands in. Row labels are literal strings, `IaWrapupBoard`'s own precedent. Reproduces the original's Best to Date bug: `0x0040a7e6` reads a never-written offset for that tab instead of the merged mask, so it always renders Mission Failed. `Stamps`/`StampPictures`/`StampLabels` fill the eleven `SB_KILL`/`SB_KILLTEXT` slots densely from the plain kill tally then the ace tally, skipping zeros, at the `SB_killMARKERcombined.png` strip frame each names (0-10 plain, 11-21 starred), each slot at its `SB_KILL<n>`/`SB_KILLTEXT<n>` row; the eleven slot positions are not in reading order. `NotYetFlown` is the results card's own placeholder (langui 1219) for a mission with no recorded attempt, at the outcome line's own position. Wired into `CampaignFlow` as `CampaignScreen.Scrapbook` by `CampaignScrapbookPage.cs`.
-- `src/UI/CampaignScrapbookPage.cs` — the scrapbook itself, opened on a browsed
-  `(mission, spread)` position that defaults to `CampaignFlow.MissionSeq`'s own spread 1 and resets
-  there whenever `MissionSeq` or `CampaignFlow.ScrapbookEntry` changes underneath a reused page
-  instance, so reopening the book on the mission it is already browsing still lands on spread 1.
-  Every spread carries `SB_T_NAMEANDAREA`, langui 1215 over the player's name and the mission's
-  short name, at that row's position through `Flow.Layout`. Spread 1 adds the `SB_STATCARD` chrome
-  (its row's position and art), the Best to Date / Most Recent tabs and
-  `CampaignScrapbookResults`' rows and kill stamps off whichever half the tabs select, reset to
-  Most Recent on every entry; a spread-1 view of a mission with no recorded attempt shows
-  `CampaignScrapbookResults.NotYetFlown` (langui 1219) instead of a block. ⚠ The two tabs are a z
-  sandwich around the card, which is the whole of the selection cue, so only the selected one is a
-  plaque: the other is drawn as a picture under the card with its own label line over it
-  (`CampaignBoards.SlotOf`). Every spread draws its own shipped scraps under that
-  (`ScrapbookComposition.Pictures`: "the results page is a story page with the card laid over its
-  right half"), gated on the mission's merged best-to-date mask (0 for an unattempted one). The
-  page/mission arrows (`sb_b_prev`/`sb_b_next`) step by probing `SCRAPBOOK.CSV` for the neighbouring
-  spread's item 1, exactly as `FUN_00406170` does, rather than storing a page count. The forward
-  arrow appears only where there is a spread to turn to; the back arrow is always offered and, at
-  the front of the book, opens the mission overview instead, which is where the original's own
-  `sb_b_prev` falls. VIEW ALL MISSIONS (`SB_B_TOC`) goes there directly. The Current Mission
-  bookmark (`sb_b_current`, langui 1200) appears only while the browsed mission differs from
-  `MissionSeq` and jumps back to its spread 1. REPLAY MISSION and RETURN TO CABIN act on whichever
-  mission is browsed (`uiData` 2405's own "the mission the open page shows" read), not necessarily
-  `MissionSeq`: REPLAY MISSION calls `SetMission` on the browsed mission before opening the
-  briefing, and is offered only where `uiData` 2411 offers it, on a results page whose mission's
-  record holds a time in either half (a lost attempt counts, a completion bit is not the gate).
-  Every scrap that opens (`ScrapbookComposition.Openable`) gets its own row after the
-  fixed rows, drawing no `RowText` of its own (its picture already stands at its authored position)
-  but naming itself on the hint line (title, else caption, else body, else the image name);
-  confirming one opens `CampaignScreen.ScrapbookZoom` via `CampaignFlow.SetScrapbookZoom`.
-  `CampaignFlow.CapturePath` (D21, the danger-zone scrap slot) resolves a `Snap_`-prefixed row's
-  file against `CampaignFlow.Store.DirFor(profile.Name)`, the profile directory `BL-256`'s
-  still-unbuilt capture writer would save into; `ScrapbookComposition.Pictures`/`Openable` skip the
-  row when it is absent and draw it from that path, nudged and grimed, the moment a file exists.
-  `ScrapOf(row)` hands a pointer-driven presentation the scrap a row stands for, whose
-  `ScrapbookScrap.Region` (the CSV's quoted `Left,Top,Right,Bottom` column) is the rectangle it
-  hit-tests.
-  The mount's own `Objective` gate is authored
-  independently of its paired capture's (`SCRAPBOOK.CSV` rows `1_2_4`/`1_2_6`: mount objective 1,
-  capture objective 18), so the two can show and hide on different mission progress, which this
-  page reproduces by treating every row's gate as its own rather than inferring a pairing.
-- `src/UI/CampaignScrapbookZoomPage.cs` — one scrap's detail view, opened on
-  `CampaignFlow.ZoomTarget` and closing back to `Scrapbook` (CLOSE, or the default `Back()`): the
-  zoom family's background (`SB_BG_<letter>.jpg`), the scrap's inset image at its own
-  `ZoomX`/`ZoomY`, and up to three text lines at the family's own boxes
-  (`CampaignLayout.ZoomFamily` off the decoded `SBZ_T_*` rows, else
-  `ScrapbookComposition.ZoomFamily`'s own read of `LAYOUT.CSV`); the grime frame is `SBZ_GRIME`'s
-  row and the capture sits inset from it. The title/caption/body are the shipped row's own langui
-  *symbols* (`IDS_SB_...`): `RESRC1.H` assigns them numeric ids under `ScrapBook.Rc`, a resource
-  script never extracted, so nothing resolves them to real text. Shown as the raw symbol, the same
-  degrade `CampaignBriefingPage`/`BriefingObjectives` use for an unresolved key, rather than
-  invented English. A target with no such item draws nothing rather than throwing. A capture takes
-  the `SBZ_GRIME` torn frame instead of its own `ZoomX`/`ZoomY`, sitting at that frame's position
-  plus ten and eight the way the script places it. EXPORT TO DESKTOP (`SBZ_B_EXPORT`) is offered
-  only where a source file resolves, which is the original deactivating it for a zoom with no inset
-  image; it copies through `ScrapbookExport` and reports langui 705 or 706 on the flow's message
-  line, where the original opened a message box.
-- `src/UI/ScrapbookExport.cs` — EXPORT TO DESKTOP's copy (`uiData` 2412, `FUN_00406870`): the
-  scrap's own file to the desktop under its own base name, overwriting, returning whether it landed
-  and either the name or the OS reason, which are langui 705's and 706's own arguments. Engine-free,
-  and the folder is a parameter so a test writes somewhere other than a real desktop.
-- `src/UI/ScrapbookComposition.cs` — the scrapbook's per-spread scrap layout, read from
-  `extracted\rof\ASSETS\SCRAPBOOK.CSV` rather than invented: `Items` enumerates a mission slot's
-  spread from item 1 upward and stops at the first missing key, the way the original's own reader
-  does; `Pictures` gates each row's `Objective` against the mission's merged best-to-date mask
-  (bit 0 "ever won", a positive value its own bit set, a negative value its own bit clear), skips a
-  `Snap_`-prefixed capture when the caller-supplied resolver returns no path for it (`BL-256`, the
-  capture writer, does not exist yet, so no such file exists on a real profile), and stacks the
-  survivors by ascending `DrawOrder`. A capture draws from the resolver's own path rather than the
-  asset library, offset the three and four pixels the original moves it, with a `SB_P_Grime` frame
-  over it from `ScrapbookGrime` (`uiData` 2413: seeded `(mission << 8) | spread`, each of the ten
-  frames handed out once before repeating, so a page's smudges are stable and its neighbours' differ). `Openable` narrows the same gate to
-  `ScrapbookScrap.Opens`, the `Zoom` column alone (`!= '0'`) rather than `ImageType`'s second
-  letter (`docs/formats/campaign-screens.md`, "Resolving a row to a file"). `ZoomFamily` reads
-  `LAYOUT.CSV`'s `SBZ_T_TITLE`/`CAPTION`/`TEXT<letter>` rows for a family's three text boxes (X, Y,
-  wrap width only; colour is unreadable by a `BoardLine` regardless, and two families' colour
-  fields are typo'd). Parsed rows are cached per file path, misses included, `PlaneDiagrams`' own
-  precedent. CSVM carries no unlock-flag analogue, so unlike the original the objective gate cannot
-  be bypassed.
-- `src/UI/CampaignBriefingPage.cs` — the mission briefing: everything resolved from `CampaignFlow.MissionSeq` alone, through `cm_sequence` to the storage address, `brief_c%d%d` to the dialog state, the state to its map bitmap and narration name, `sounds.zrd`'s `SETS` to the wav file, and the mission's own `objectives.zrd` to the note, so nothing is computed from the story position. REPLAY BRIEFING / RETURN TO CABIN / GO TO FLIGHT CHECK are the screen's only rows: an uncovered objective is written on the parchment through `Notes`, the `BoardNote` carrying the dialog's own `LIST` widget, so the mission's text is read and never a cursor stop (`BL-487`). The map is the page's `HangarArt`. Labels are `messages.json`'s own `MSG_BTN_*` and an unresolved objective key shows as the raw key, so a missing extraction degrades to the three buttons rather than throwing. It plays nothing: `NarrationWav` and `NarrationStarts` name what a shell must play, and `Advance(seconds)` is the clock a shell drives.
-- `src/UI/CampaignCombo.cs` — a campaign screen's drop-down (`PS_D_PILOTPLANE`, `OL_D_AMMO0`): the authored rectangle, the row height and row count the list opens at, the window that scrolls when the cursor leaves it, and a closed field's horizontal step. ⚠ It never moves its own pick: `Confirm` and `Next` return a candidate and `Select` is the only mutation, because the screens that own one refuse some picks.
-- `src/UI/CampaignModal.cs` — the dialog a screen raises over the composed board, the original's `messagebox.script`: a message, one button and the callback its answer runs. Held by `CampaignFlow`, not by a page, since two screens reach the same box. ⚠ It is not `CampaignFlow.Message`, the one-line refusal band a navigation clears; answering a refusal in both would say it twice.
-- `src/UI/CampaignFlightCheckPage.cs` — the FLIGHT CHECK screen (`FLIGHTCHECK.SCRIPT`): the mission title, a PILOT block and, where `cm_sequence` sets the wingman flag, a WINGMAN block, each with its silhouette, its GUNS and ROCKETS tables and its CHANGE AMMO and CHANGE PLANE rows, then RETURN TO BRIEFING and FLY MISSION. The objectives note is a caption at `FC_T_OBJECTIVES`' own row, read once per mission rather than once per repaint; every fixed element on the screen (title, mission line, headings, tables, silhouettes) is its `FC_*` row through `CampaignLayout`, with the title's x, the paper plaques' y and the wingman tables' 17-pixel drop pinned to their measurements (`docs/org/campaign-board.md`). CHANGE AMMO names the slot and opens `CampaignScreen.Ammo`; CHANGE PLANE names the slot and opens `CampaignScreen.PlaneSelection`, the picker being the one place a plane changes and therefore the one place the duplicate rule is enforced. Its two gates are the script's own: barred on mission ordinals 13 and 17, and while the profile owns fewer than three planes; a guest's row is offered unconditionally, both gates being rules about the seated profile's own aircraft. The screen has no horizontal stepper at all: a guest's CHANGE PLANE takes the same door the seated player's does, so the duplicate rule is enforced in one place. Weapons resolve build-or-stock through `CampaignFlightField.IsStock`, never by looking a stock record up in `CustomPlaneStore` by name.
-- `src/UI/CampaignAmmoPage.cs` — the AMMO SELECTION screen (`ORDINANCELAYOUT.SCRIPT`): four gun-group drop-downs (`OL_D_AMMO0..3`) and eight pylon drop-downs (`OL_D_ROCKETS0..7`) as `CampaignCombo` fields at their rows' boxes, item heights and windows, the calibre captions at `OL_T_GunName0..3`, the title and the two panel headings with their notes at their `OL_T_*` rows, the two aircraft diagrams at `OL_P_PLANETOPICON`/`OL_P_PLANEFRTICON`, all through `CampaignLayout` with the shipped values as fallback; the title's x is pinned at the measured 138 where the row says 132 centred, and the description column (`CampaignBoards.DetailSlot`) keeps its measured y 92 where `OL_S_AMMODESC` says 96. ACCEPT LOADOUT writes the picks through `CampaignFeature.CommitLoadout`; CANCEL writes nothing.
-- `src/UI/CampaignPlaneSelectionPage.cs` — the PLANE SELECTION screen (`PLANESELECTION.SCRIPT`): a combo, a silhouette, four ratings and a gun and hardpoint list per active crew slot, EXPORT per slot, ACCEPT writing both picks and CANCEL restoring the pair the screen opened with. A pick the other active crew slot already flies is refused with langui 710 and the field left where it was, which is message 10015's own arm plus its `sender.QG` revert; the comparison is by plane name, `CampaignFlightField.KeyOf`'s rule for a profile aircraft, since two of them may share an airframe legally. The refusal answers a commit, a picked list row or a closed field's step, never movement inside an open list. EXPORT writes the slot's plane into `CustomPlaneStore` under its own name with the ammunition and ordnance the campaign fitted, and answers with langui 702 through `UiStrings.Format`; a record already on file keeps its paint, armour and engine, and a starter or granted aircraft with none gets one built from its award template or its airframe's stock weapons (`HangarFlow.LoadStockWeapons`), since a record with no guns would export an aircraft that flies unarmed. ⚠ A stock record is refused outright (`CampaignFlightField.IsStock`): it is named for its airframe, so the write would land on any hangar plane sharing that name. TOP SPEED and OFFENSE have no decoded formula and draw a stand-in (`BL-653`). A guest's check (`CampaignFlow.Field.Current` above zero) opens the same page over that guest's own `Choices` instead: one PILOT slot whatever the mission flies, no EXPORT row at all (a guest's record carries the owner's plane name, so the write would rewrite the owner's build), a refusal reading "Each player must fly a different plane." because langui 710 names a Pilot and a Wingman a guest's check has no concept of, and an ACCEPT that moves the guest's own pick through `CampaignFlightField.Choose` and writes nothing. ⚠ The guest refusal asks `CampaignFlightField.Taken` rather than carrying a second copy of the rule: only the field knows what the other humans took, and it is what compares a stock entry by airframe and a profile copy by name. Every fixed element (combos, silhouettes, title, mission line, headings, plane lines, ratings, weapon lists) is its `PS_*` row through `CampaignLayout`; the wingman's plane line keeps the pilot's row dropped by 218 where `PS_T_WINGPLANE` says 323, and the title stays left-justified where its row says centred.
-- `src/UI/Menu/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader and the interpreter that runs a state's beat sheet against a caller's clock.
-- `src/UI/Menu/BriefingObjectives.cs` — the briefing's parchment note from a mission's `objectives.zrd`, ordered by priority, which is what a reveal opcode indexes.
-- `src/UI/ObjectivesHud.cs` — the campaign mission's objectives readout, drawn on the **pause screen** and nowhere else (`BL-466`): the original keeps its objectives on the pause screen's parchment and leaves the flight HUD to the gauges, so the whole layer is hidden until `PauseState.Paused`. Reads `CampaignDirector`'s `ObjectiveGraph.Rows` directly (not a re-parse), text through `Messages`, and shows every row rather than gating on the row's own `Awake` flag (an objective authored with no `BEGIN_DORMANT` starts awake without ever running a wake action, so its row's `Awake` flag never turns on even though it is live from the mission's first tick, C1/M02's own primary OBJECTIVE3, and filtering on it would hide exactly the objective a player needs to see first). This also matches the original's own decoded display mechanism (`docs/formats/objectives.md`, `FUN_004acc20`/`FUN_004ad240`): every `IDENTITY` row is built once and shown unconditionally, only the completion mark toggles. A row the mission gives **no message key** resolves to no text and is dropped from the drawing (`DrawnLines`), since drawn it would be a mark against blank space, and `BuildLines` still carries one line per graph row so a suite counts against the graph. The mark takes a column of its own, so a completed line's text starts where every other line's does. Self-mounting (its own `CanvasLayer`, on `HudLayers.Board` with the pause board and after it in tree order), so `GameSession` only hands each built instance the shared `CampaignDirector`, `Messages` and `PauseState` and adds it — unlike `PerfHud`'s one-for-the-window instance, a splitscreen campaign session builds ONE INSTANCE PER RIG (B15), each under that rig's own `HudParent`, so every pane draws and polls the shared `ObjectiveGraph` on its own. The reference frame (`Complete Mission M02.mkv` at t=12 s) fixes the top-right corner and nothing else, so the glyphs and metrics are TUNE.
-- `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
-- `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
-- `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
-- `src/UI/MeshLab.cs` — the geometry/shading lab (M): normal lines, smoothing seams, cull/normal overrides; on the parked plane, or on the selection.
-- `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by the surface id it resolves to; needs `--collision` outside flight.
-- `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
-- `src/UI/AiNetsOverlay.cs` — the AI patrol-net overlay (F13, `--debug-ainets`): the chapter's nets as coloured graphs with labels + census log.
-- `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay (`--debug-tilegrid`): every ground tile tinted by repetition band, so one colour band is one block.
-- `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface. Fires nothing itself.
-- `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
-- `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (F16): Off/Meshes/All, anchored on mesh centres, de-cluttered.
-- `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
-- `src/UI/PhotoModeHud.cs` — photo mode's fading hint line and its Escape/pad-B way out; raises an event, decides nothing.
-- `src/UI/PerfHud.cs` — the frame-cost readout (F14, `--debug-fps=`): fps/current-frame-cost/worst-recent-frame, once for the window, drawn above the launchscreen too.
-- `src/UI/TargetingOverlay.cs` — the targeting overlay (F15, `--debug-targets`): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
-- `src/UI/DebugKillTarget.cs` — the debug kill key (F17): kills P1's `TargetSelection.Current` through its own death path (`DebugForceCrash` for an aircraft, `AnimRuntime.DamageAt` for a zeppelin sub-part); inert on a turret, which has no `HEALTH` key at all.
-- `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
-- `src/UI/NodeLab.cs` — the `--freecam`/`--anim-lab` node lab (N, `--debug-nodelab`): lazy `cs_name` tree, search, frame/hide, dependencies, destructibles.
-- `src/UI/WorldDamageLab.cs` — the `--freecam`/`--anim-lab` world damage lab (F5, `--debug-damage`): HP slider + kill/reset on the selection's destructible pool.
-- `src/UI/OrbitCamera.cs` — the `--viewer` orbit camera (orbit/zoom/framing), extracted from `GameSession` for `--anim-lab`.
-- `src/UI/AnimLab.cs` — the `--anim-lab` debugger: quiet stage, fixed-dt clock, transport panel, def picker, timeline, freecam, follows the selection.
-- `src/UI/AnimTimeline.cs` — the anim lab's per-sequence timeline: authored event blocks vs runtime-fired ticks (the scheduler-divergence instrument).
+- `src/UI/HangarNamePage.cs` — the PLANENAME screen: two word steppers, a roll across both, and a typed name over the result.
+- `src/UI/HangarPurchasePage.cs` — the PURCHASE screen: the itemised bill, the totals row, and the purchase gate in the original's own words.
+- `src/UI/CampaignFlow.cs` — the campaign's out-of-mission flow, engine-free: a stack of screens over one profile, the `ICampaignPage` mount point.
+- `src/UI/Menu/CampaignFlightField.cs` — a campaign sortie's humans: joined count, the check showing, each guest's pick, and the no-duplicate rule.
+- `src/UI/CampaignRosterPage.cs` — the player profile screen: the name field over the roster, continue, a confirmed delete, and the name refusals.
+- `src/UI/CampaignCabinPage.cs` — the cabin hub: next mission, previous missions, plane construction and the way back to the main menu, over the cabin art.
+- `src/UI/CampaignBriefingPage.cs` — the mission briefing: the revealed map, the parchment objectives note, the narration a shell plays, and the three buttons.
+- `src/UI/CampaignFlightCheckPage.cs` — the FLIGHT CHECK screen: each crew slot's plane, guns and rockets, the ammo and plane doors, and FLY MISSION.
+- `src/UI/CampaignAmmoPage.cs` — the AMMO SELECTION screen: four gun-group and eight pylon drop-downs over a working copy, written only by ACCEPT LOADOUT.
+- `src/UI/CampaignPlaneSelectionPage.cs` — the PLANE SELECTION screen: a drop-down, silhouette, ratings and weapon lists per slot, EXPORT, and its refusal.
+- `src/UI/Menu/BriefingScript.cs` — the reveal script, engine-free: the `Briefing.zrd` reader and the interpreter running a state's beat sheet on a caller's clock.
+- `src/UI/Menu/BriefingObjectives.cs` — the briefing's parchment note from a mission's `objectives.zrd`, ordered by priority, which a reveal opcode indexes.
+- `src/UI/CampaignPreviousMissionsPage.cs` — the scrapbook's contents list, one row per completed mission, plus the results page a mission's records compute.
+- `src/UI/CampaignScrapbookPage.cs` — the scrapbook itself: the browsed spread's scraps, the results card with its tabs and stamps, and the page arrows.
+- `src/UI/CampaignScrapbookZoomPage.cs` — one scrap's detail view: the zoom family's background, the inset image, its three text lines, and EXPORT TO DESKTOP.
+- `src/UI/ScrapbookComposition.cs` — the scrapbook's per-spread scrap layout read from the shipped CSV, gated on the mission's own progress mask.
+- `src/UI/ScrapbookExport.cs` — EXPORT TO DESKTOP's copy: the scrap's file to the desktop, answering with the name or the OS reason. Engine-free.
+- `src/UI/CampaignCombo.cs` — a campaign screen's drop-down field: its authored box, its scrolling window, and a candidate it never commits itself.
+- `src/UI/CampaignModal.cs` — the one-button dialog a campaign screen raises over the board, held by the flow because two screens reach the same box.
+- `src/UI/CampaignTextEntry.cs` — a campaign screen's one-line text field, typed from a keyboard or stepped from a pad through one alphabet.
+- `src/UI/BoardFit.cs` — how the original's fixed 800x600 dialog space lands on any window: one uniform scale, the board centred, the rest letterboxed.
+- `src/UI/ComposedBoard.cs` — what a composed campaign screen is made of: backdrop, fills, pictures, strokes, lines, plaques and flowed lists in draw order.
+- `src/UI/CampaignBoards.cs` — the fixed chrome of the eight campaign screens, and the composer that turns a page and a cursor into one board.
+- `src/UI/CampaignLayout.cs` — the decoded menu layout as the boards read it: geometry and art by section and key, every read carrying its own fallback.
+- `src/UI/ComposedBoardView.cs` — the Godot half of the boards: a composed board drawn through `BoardFit` at nearest filtering, the art cache, the hint band.
+- `src/UI/BoardPalette.cs` — the ink a campaign board writes in, one palette per background family.
+- `src/UI/LoadBoard.cs` — the load screen a session builds behind: the original's chart sheet for a campaign launch, its blackboard for everything else.
+- `src/UI/ObjectivesHud.cs` — the campaign mission's objectives readout, drawn on the pause screen alone, one instance per rig.
+- `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.
+- `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
+- `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron, colour and decal steppers, a live repaint and copy-CLI-args.
+- `src/UI/MeshLab.cs` — the geometry and shading lab (M): normal lines, smoothing seams, cull and normal overrides, on the parked plane or on the selection.
+- `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by the surface id it resolves to.
+- `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible, facade, clutter or scenery, a findable-targets view.
+- `src/UI/AiNetsOverlay.cs` — the AI patrol-net overlay (F13): the chapter's nets as coloured graphs with labels, plus a live leash per AI aircraft.
+- `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay (`--debug-tilegrid`): every ground tile tinted by repetition band, so one band is one block.
+- `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, and click-to-place on a world surface. Fires nothing.
+- `src/UI/PanelFocus.cs` — the one rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
+- `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (F16): off, meshes or all, anchored on mesh centres and de-cluttered.
+- `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint, pylon and target overlay (K): coloured gizmos with de-cluttered labels.
+- `src/UI/PhotoModeHud.cs` — photo mode's fading hint line and its Escape or pad-B way out; it raises an event and decides nothing.
+- `src/UI/PerfHud.cs` — the frame-cost readout (F14): fps, current frame cost and worst recent frame, once for the window, drawn above the launchscreen too.
+- `src/UI/TargetingOverlay.cs` — the targeting overlay (F15): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
+- `src/UI/DebugKillTarget.cs` — the kill key (F17): kills player 1's selected target through its own death path; inert on a turret, which has no health key.
+- `src/UI/SelectionService.cs` — the shared `--freecam` and `--anim-lab` selection: click-pick, the `cs_name` ancestor ladder, a breadcrumb and a highlight box.
+- `src/UI/NodeLab.cs` — the node lab (N): a lazy `cs_name` tree, search, frame and hide, a dependency readout and a destructibles view.
+- `src/UI/WorldDamageLab.cs` — the world damage lab (F5): an HP slider with kill and reset on the selection's own destructible pool.
+- `src/UI/OrbitCamera.cs` — the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
+- `src/UI/AnimLab.cs` — the `--anim-lab` debugger: a quiet stage, a fixed-dt clock, a transport panel, a def picker, the timeline and a freecam.
+- `src/UI/AnimTimeline.cs` — the anim lab's per-sequence timeline: authored event blocks against runtime-fired ticks, the scheduler-divergence instrument.
 
 ### `src/Utils/` — session-wide services
 
@@ -545,4 +483,3 @@ both sit on top of these types.
 - `src/SessionSpec.cs` — the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
 
 - `CSVM.Tests/` — the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent; plus eight former in-engine suites moved here as `Probes.*`/plain-static/`StuntMission`/`GaugeCluster` facts.
-

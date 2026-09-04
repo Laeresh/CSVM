@@ -179,7 +179,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 25. ☑ C25 `docs/architecture/Root.md` (3 entries plus Cross-module conventions and the enhanced-graphics section)
 26. ☑ C26 `docs/architecture/Session.md` (40)
 27. ☐ C27 `docs/architecture/Mech3.md` (62)
-28. ☐ C28 `docs/architecture/UI.md` (78)
+28. ☑ C28 `docs/architecture/UI.md` (78)
 29. ☐ C29 `docs/architecture/Flight.md` (108), then the complete `.\RunTests.ps1`
 
 ### Wave D: verification.md
@@ -597,7 +597,7 @@ pointer to content the trimmed entry no longer holds.
 rule) are cited by `analysis/` findings and `docs/formats/gotchas.md`; keep each as one clause in
 the entry or move it to the format page and leave the analysis citation to find it there.
 
-## C28 ☐ `docs/architecture/UI.md`
+## C28 ☑ `docs/architecture/UI.md`
 
 **Goal.** 78 entries at cap, including `LaunchMenu.cs` (165), `InstantActionPresets.cs` (121),
 `HangarFlow.cs` (87), `OriginalShell.cs` (77), `OriginalCampaign.cs` (58); plus `HudLayers.cs`,

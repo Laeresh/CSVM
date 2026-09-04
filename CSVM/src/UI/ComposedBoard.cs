@@ -298,7 +298,9 @@ public sealed class ComposedBoard
     /// <summary>Text over the pictures, in draw order.</summary>
     public IReadOnlyList<BoardLine> Lines { get; }
 
-    /// <summary>Button plaques, drawn over everything.</summary>
+    /// <summary>Button plaques, one layer over every picture. ⚠ A screen whose authored z
+    /// interleaves the two has to draw the under-side plaque as a picture instead, since this
+    /// layer cannot go below one: the results card between its own two tabs is the case.</summary>
     public IReadOnlyList<BoardPlaque> Plaques { get; }
 
     /// <summary>List widgets whose entries flow, drawn with the text.</summary>

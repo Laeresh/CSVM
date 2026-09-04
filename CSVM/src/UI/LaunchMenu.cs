@@ -391,13 +391,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     // 0 wingmen, matching the decoded setup screen's own behaviour.
     private int WingmenRowCount => _ia.NumWingmen > 0 ? 2 : 1;
 
-    // Whether the plane pick offers the hangar DOOR row. Decision 6 puts the Build entry on the
-    // Instant Action pick alone; a splitscreen pane never draws it, so no pane's PlaneIndex can
+    // Whether the plane pick offers the hangar DOOR row. The Build entry sits on the Instant
+    // Action pick alone; a splitscreen pane never draws it, so no pane's PlaneIndex can
     // point past the roster; the roster itself (stock + customs) is every seat's alike.
     private bool HangarRowOnPlaneScreen => _mode == MenuMode.Stunt && _slots.Count == 1;
 
     // The plane pick's row count: the roster (stock + customs) plus the hangar door where it is
-    // offered. The door sits AFTER the customs, so the C21 clamp reasoning holds with the roster
+    // offered. The door sits AFTER the customs, so the clamp reasoning holds with the roster
     // grown: it is always the single trailing row, never locked, never launched.
     private int PlaneRowCount => _roster.Count + (HangarRowOnPlaneScreen ? 1 : 0);
 

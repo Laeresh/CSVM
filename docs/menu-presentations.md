@@ -2,9 +2,9 @@
 
 How the in-game menu is split between shared features and interchangeable presentations, what a
 new presentation (a Modern one, say) plugs into, and what it must not assume it inherits from the
-two that ship. The per-module detail is in the module index [`architecture.md`](architecture.md), which routes
-to one `##` entry per file named below under `docs/architecture/`; this page is the seam read as a
-whole. The screen census and the evidence behind
+two that ship. The per-module detail is routed from [`architecture.md`](architecture.md) into
+[`architecture/UI.md`](architecture/UI.md), one `##` entry per file named below; this page is the
+seam read as a whole. The screen census and the evidence behind
 the Original presentation are [`org/menu-inventory.md`](org/menu-inventory.md); the decoded layout
 format is [`formats/menu-layout.md`](formats/menu-layout.md).
 
@@ -400,8 +400,9 @@ In order. Each step names the file it touches and the test that proves it.
     destination at the host's sink. Register each suite in `SuiteCatalog`.
 11. **Prove Built-in unchanged.** Shoot Built-in's aids before and after and compare decoded pixels;
     the only Built-in change a new presentation may make is to the Options chooser.
-12. **Document it.** Its `##` entries in `architecture.md` with their index lines, its remake-only
-    readings where they belong, `cli.md`'s aids, and this page's registration paragraph.
+12. **Document it.** Its `##` entries in `architecture/UI.md` with their index lines in
+    `architecture.md`, its remake-only readings where they belong, `cli.md`'s aids, and this
+    page's registration paragraph.
 13. **Run the landing gate.** The complete `.\RunTests.ps1`, then the at-the-controls pass: each
     mode to FLY and back through the pause board's Exit, a campaign mission to its end and back to
     the scrapbook, a real pad's join and walk, the sounds, the pointer, a cold start on an aid, a
