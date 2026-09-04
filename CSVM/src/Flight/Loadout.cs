@@ -227,11 +227,11 @@ public sealed class Loadout
     /// (docs/formats/saved-games.md, "Where the ammunition and ordnance picks live").</summary>
     public const string StockOrdnance = "wep_06";
 
-    /// <summary>The original's hardpoint fill order (user-observed at the controls against the
-    /// weapon gauge's belt lights): a stock fit with fewer than 8 pylons leaves physical gaps
-    /// rather than filling pylon1..N contiguously. <c>hp.Count</c> takes a PREFIX of this
-    /// sequence. ⚠ Do not read the two interleaved halves as the wings; the model puts odd
-    /// pylons to port and even to starboard (docs/formats/markers.md).</summary>
+    /// <summary>The original's hardpoint fill order, decoded from its stock loadout table: a fit
+    /// of fewer than 8 pylons leaves physical gaps rather than filling pylon1..N contiguously.
+    /// <c>hp.Count</c> takes a PREFIX of this sequence. ⚠ Do not read the two interleaved halves
+    /// as the wings; the model puts odd pylons to port and even to starboard, so the original
+    /// itself hangs a 2-pylon fit port-heavy (docs/formats/loadouts.md).</summary>
     public static readonly int[] PylonFillOrder = { 1, 5, 2, 6, 3, 7, 4, 8 };
 
     /// <summary>Each wing's physical pylon numbers, outboard to inboard: every player model pairs
