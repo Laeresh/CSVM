@@ -222,10 +222,10 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 ### `src/Effects/` — particle systems
 
 - `src/Effects/Puffer.cs` — data-driven `PUFFER_STATE` billboard-particle emitter: burst, distance-trail, or sustained at-node modes.
-- `src/Effects/EmitterRenderer.cs` — the `IEmitterRenderer` seam under `Puffer` (particles → GPU) and the real `MultiMesh` + billboard-shader renderer behind it.
-- `src/Effects/FogVolumeClutter.cs` — the authored ambient cloud field: `fogvol.zrd`'s clutter scattered through the gamez `fvol*` boxes, one static MultiMesh per sprite kind.
+- `src/Effects/EmitterRenderer.cs` — the `IEmitterRenderer` seam under `Puffer` and the `MultiMesh` billboard-shader renderer behind it.
+- `src/Effects/FogVolumeClutter.cs` — the authored ambient cloud field: `fogvol.zrd` clutter scattered through its `fvol*` volumes, one MultiMesh per kind.
 - `src/Effects/Precipitation.cs` — weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.
-- `src/Effects/WorldWind.cs` — the mission's global wind (weather.json's `WIND` block: static vector + horizontal random-walk gust) and `EffectAmbience`, the per-session seam a `Puffer` reads it through.
+- `src/Effects/WorldWind.cs` — the mission's global wind (static vector plus random-walk gust) and `EffectAmbience`, the seam a `Puffer` reads it through.
 
 ### `src/UI/` — screens, overlays and the inspection labs
 

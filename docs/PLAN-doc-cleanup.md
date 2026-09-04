@@ -172,7 +172,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C: trim every entry and index bullet to the cap
 
-21. ☐ C21 `docs/architecture/Effects.md` (5 entries; the rehearsal for the brief)
+21. ☑ C21 `docs/architecture/Effects.md` (5 entries; the rehearsal for the brief)
 22. ☐ C22 `docs/architecture/Utils.md` (17)
 23. ☐ C23 `docs/architecture/Bindings.md` (17)
 24. ☐ C24 `docs/architecture/Testing.md` (17 plus the `CSVM.Tests/` section)
@@ -458,10 +458,19 @@ merges one at a time. **The brief, given verbatim to each agent:**
 7. Report: the relocation list, every deletion you were unsure about, and every `docs/org/` page
    you created or extended.
 
+Amendments from the C21 rehearsal: a body is the non-blank physical lines between the heading and
+the next heading, and a namespace holding none of the 12-line files is capped at 8 throughout;
+the split moved the files a directory down, so every relative link becomes `../formats/` or
+`../org/` and each target is checked; a member comment already at `CheckCommentCaps.ps1`'s cap
+that states the prohibition counts as the destination, and is not trimmed to make room; the
+relocation record is `claim -> destination (file:line)` in three groups (relocated, already at
+the destination with the proving line, deleted with the reason); the index bullets keep the
+file's ` — ` separator between path and prose.
+
 Model recommendation for every C item: **high**. Deciding what is still binding is the whole job;
 a low tier will delete a constraint or keep a narrative.
 
-## C21 ☐ `docs/architecture/Effects.md`
+## C21 ☑ `docs/architecture/Effects.md`
 
 **Goal.** Five entries at cap; the brief proven on the smallest file before the fan-out.
 
