@@ -79,8 +79,14 @@ below).
 `pylon1`…`pylon8` markers exist on every player plane. `Loadout.ForRig` (the full-rig lab loadout)
 binds all of them present on the model; the **stock** loadout (`loadouts.md`) does not bind them
 sequentially — a fit with fewer than 8 pylons takes `Loadout.PylonFillOrder`'s prefix
-(`{1,5,2,6,3,7,4,8}`, `BL-294`), alternating wings rather than piling onto `pylon1`'s side. These
-are the ordnance hardpoints (rockets, bombs, mines); their positions are omitted here. (Every AI
+(`{1,5,2,6,3,7,4,8}`, `BL-294`), leaving gaps rather than piling onto `pylon1`'s side. These
+are the ordnance hardpoints (rockets, bombs, mines).
+
+**The numbering pairs across the centreline: odd pylons are port and even are starboard**, so the
+two wings are `{1,3,5,7}` and `{2,4,6,8}`, not the low and high halves. Within a wing `|x|` falls
+as the number rises, so the numbering runs outboard to inboard. This holds on all eleven player
+airframes; the per-plane coordinates are omitted here because `--dump-markers` regenerates them.
+(Every AI
 airframe that fires ordnance, namely `bloodhawk`, `fury`, `warhawk`, `autogyro`, `avenger`,
 `balmoral`, `brigand`, `firebrand`, `kestrel` and `peacemaker`, shares this exact `pylon1`…`pylon8`
 rig with the player planes; [aiWeapons.md](../org/aiPilot/aiWeapons.md) has the per-airframe
