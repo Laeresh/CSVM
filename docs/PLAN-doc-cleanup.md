@@ -14,18 +14,22 @@ shape, and the index files (`PROJECT_CONTEXT.md`, `CLAUDE.md`, `AGENTS.md`, `AGE
 the plan rests on are in "What the data actually ships" below; the executing session does not
 re-measure them.
 
-Out of scope: the verbosity of `docs/tooling.md` and `docs/cli.md` beyond the stale facts named
-here (they are not entry docs), `docs/org/` and `docs/formats/` content beyond what a relocated
-constraint adds, and any change to code semantics. Comment relocations into `CSVM/src` are the
-only code edits, and they change no behaviour.
+`docs/tooling.md` and `docs/cli.md` are in scope too (Wave F): both are pointed at from the
+entry docs as the description of record for the scripts and the flags, and both have grown the
+same measurement narrative the entry docs have. Out of scope: `docs/org/` and `docs/formats/`
+content beyond what a relocated constraint adds, and any change to code semantics. Comment
+relocations into `CSVM/src` are the only code edits, and they change no behaviour.
 
 ## Milestone goal
 
 - `docs/architecture.md` is a routing index of one line per module; the entries live in
   `docs/architecture/<Namespace>.md`, every entry within its cap, no `⚠` trap, no item id or date
   as provenance, and every `.cs` under `CSVM/src` has an index line and an entry.
-- A repo check, `CheckArchitectureEntries.ps1`, enforces the caps and the coverage and runs in the
-  commit content gate.
+- A repo check, `CheckDocEntries.ps1`, enforces the architecture caps and coverage and the
+  `docs/cli.md` bullet cap, and runs in the commit content gate.
+- `docs/cli.md`'s flag bullets say what a flag does, its argument shape and the modes it applies
+  to, within a cap; `docs/tooling.md` says what each script does, its switches and where its output
+  lands, with the measurements that justified a default gone to the commit record.
 - `docs/verification.md` holds only rules something cites, each in the shape "bold imperative plus
   at most one evidence sentence", with no dangling rule reference anywhere in the repo.
 - The index files state no wrong count, no date, no phantom path, and each shared rule once.
@@ -42,6 +46,7 @@ claims the target page already carries.
 | 1 | Split scheme for architecture.md | **Per namespace under `docs/architecture/`**, index stays at `docs/architecture.md`. Code comments that say "this module's entry in docs/architecture.md" stay valid through the index and are not rewritten. |
 | 2 | How far to trim | **Every entry to the cap**, not only the giants. Highest-traffic modules may use 12 lines, the rest 8. |
 | 3 | Uncited verification rules | **Deleted**; IDs stay retired gaps. Cited one-liners stay; paragraph rules are cut to shape. |
+| 4 | `docs/tooling.md` and `docs/cli.md` | **Included** (Wave F): a 600-character cap per flag bullet, 12 lines for the three lab sections, and tooling.md cut to what each script does and how it is driven. |
 
 ## ⚠ Read this before implementing anything
 
@@ -103,6 +108,21 @@ INSTR-7 after INSTR-11, INSTR-15 before INSTR-14, SHELL-15 before SHELL-14. SHOT
 "renumbered at the merge" notes. SHELL-12 cites `SessionSpec.cs:586`; the property is at 507 and
 the parse at 1151. Every other identifier the rules cite resolves.
 
+`docs/cli.md` (186 KB, 550 lines): the `## Flags` section is 167 KB. 152 flag bullets, median 891
+characters; 102 over 600, 36 over 1500, 7 over 3000. Largest: `--menu` 6854, `--run-tests` 5185,
+`--view` 4533, `--ai` 3288, `--anim-lab` 3279, `--weapon-lab` 3143, `--pos` 3142, `--tex-census`
+2985, `--destroy` 2696, `--perf` 2436. Three lab sections (world damage lab 4.2 KB, node lab
+3.8 KB, shared selection 3.0 KB). The bullets carry measured startup costs, "verified by md5"
+notes, the crash history of a lab, and rejected designs beside the flag's behaviour.
+
+`docs/tooling.md` (44 KB, 78 paragraphs): twelve paragraphs over 1000 characters, all measurement
+narrative: the `RunTests.ps1` stage table (2.6 KB), the rtexture tier investigation (1.6 KB), the
+perf stage's metric-by-metric refusal list (1.5 KB), the `test-report.json` schema (1.5 KB), the
+budget derivation with its three timings (1.5 KB), the golden-worker A/B (1.3 KB), the hidden
+desktop's 700-sample probe (in the window-focus section), and the hitch stage's rationale (1.3 KB).
+The budget rule, the shard-isolation rule and the vsync rule are already verification rules
+(PERF-18, LOG-13, PERF-13) and are restated here in full.
+
 Repeated rules across the index files: the "over budget is awareness only" rule is stated in
 `CLAUDE.md`, `AGENTS.md`, twice in `PROJECT_CONTEXT.md` and twice in `docs/tooling.md`; the
 skills junction in `CLAUDE.md`, `AGENTS.md` and `PROJECT_CONTEXT.md`; the verification-loop
@@ -147,7 +167,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B: split architecture.md
 
 11. ☐ B11 Mechanical split into `docs/architecture/<Namespace>.md`, index file keeps the header and bullets
-12. ☐ B12 `CheckArchitectureEntries.ps1` (caps, existence, coverage; `-Summary`), not yet gated
+12. ☐ B12 `CheckDocEntries.ps1` (caps, existence, coverage; `-Summary`), not yet gated
 13. ☐ B13 Pointer sweep of the grep instructions in skills, agent docs and `AGENTS.override.md`
 
 ### Wave C: trim every entry and index bullet to the cap
@@ -168,9 +188,15 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 32. ☐ D32 Cut every remaining paragraph rule to shape; remove merge notes, dates and the stale line ref; restore numeric order
 33. ☐ D33 Fix the six dangling rule references at their source; header states the shape rule
 
+### Wave F: tooling.md and cli.md
+
+51. ☐ F51 `docs/tooling.md`: each script's section cut to what it does, its switches and its outputs
+52. ☐ F52 `docs/cli.md` flag bullets, first half of the index groups (modes through debug labs), to the 600-character cap
+53. ☐ F53 `docs/cli.md` flag bullets, second half (dumps through audio), plus the three lab sections and the index prose
+
 ### Wave E: wire the gate and close
 
-41. ☐ E41 `CheckArchitectureEntries.ps1` into `CheckCommitContent.ps1` and its `-SelfTest`; CLAUDE.md hook clause
+41. ☐ E41 `CheckDocEntries.ps1` into `CheckCommitContent.ps1` and its `-SelfTest`; CLAUDE.md hook clause
 42. ☐ E42 `PROJECT_CONTEXT.md` names the layout and the check; closing commit deletes this plan
 
 ## Dependency and parallelism notes
@@ -180,11 +206,14 @@ and E; B12 and B13 follow B11 and are independent of each other. C items each ow
 file and the `docs/architecture.md` bullets of that namespace only; they run in parallel
 worktrees with that file-ownership boundary, except that two C items relocating a trap into the
 same `docs/org/` page or the same `.cs` file contend, so the orchestrator merges C items one at a
-time and re-runs `CheckArchitectureEntries.ps1` after each merge. C21 runs first, alone, to prove
+time and re-runs `CheckDocEntries.ps1` after each merge. C21 runs first, alone, to prove
 the brief on the smallest file before the rest fan out. C29 ends with the complete
 `.\RunTests.ps1` because the wave's comment relocations touch `CSVM/src`. D31 to D33 are a chain
 in one file and are independent of B and C, so Wave D may run beside Wave C in its own worktree;
-D33 edits `docs/tooling.md` and `docs/cli.md`, which no C item touches. E41 needs every C item
+D33 edits `docs/tooling.md` and `docs/cli.md`, which no C item touches. Wave F follows D33
+(same two files) and is independent of Wave C; F51 owns `docs/tooling.md`, F52 and F53 split
+`docs/cli.md` by index group and must not run in parallel with each other (one file, and the
+index-versus-bullet reconciliation in the file header is shared). E41 needs every C and F item
 merged (the gate must pass on the tree it guards); E42 is last.
 
 ---
@@ -331,7 +360,7 @@ HEAD:docs/architecture.md` with the headers stripped); `.\CheckEncoding.ps1` cle
 every arrow and warning sign in 780 KB is mojibaked and the encoding check is the only backstop.
 `Mech3/Anim/` and `UI/Menu/**` are subfolders of their namespace, not namespaces of their own.
 
-## B12 ☐ `CheckArchitectureEntries.ps1`, not yet gated
+## B12 ☐ `CheckDocEntries.ps1`, not yet gated
 
 **Goal.** A repo-root script that reports every entry over cap, every index bullet over one line,
 every heading naming a missing file, and every source file with neither heading nor bullet;
@@ -348,8 +377,12 @@ the next `## ` heading, trimmed of blank lines; cap 8, or 12 for a heading in a 
 under a `### src/` heading must be one physical line. Every `## src/<path>` must exist under
 `CSVM/src` (a `*` wildcard heading matches by glob). Every `.cs` under `CSVM/src` except
 `Testing/*Suites.cs` and `Mech3/Anim/*.cs` must appear as a heading in `docs/architecture/*.md`
-and as a bullet in the index. `-Summary` and path arguments as in `CheckCommentCaps.ps1`. Do not
-wire it into the gate yet; until Wave E it is the progress meter and would block every commit.
+and as a bullet in the index. For `docs/cli.md`: every `- \`--flag\`` bullet under `## Flags`,
+measured from the bullet's first character to the line before the next bullet or heading, is at
+most 600 characters, and the three lab sections are at most 12 lines each; the index-token count
+must equal the count of flags with a bullet (the header's own reconciliation). `-Summary` and
+path arguments as in `CheckCommentCaps.ps1`. Do not wire it into the gate yet; until Wave E it is
+the progress meter and would block every commit.
 
 **Model recommendation.** medium.
 
@@ -413,7 +446,7 @@ merges one at a time. **The brief, given verbatim to each agent:**
    characters, purpose only.
 5. Add an index bullet and an entry for each of your namespace's uncovered files (the list in
    "What the data actually ships"). Read the file to write it; never guess.
-6. Finish with `.\CheckArchitectureEntries.ps1 docs/architecture/<Namespace>.md` clean,
+6. Finish with `.\CheckDocEntries.ps1 docs/architecture/<Namespace>.md` clean,
    `.\CheckCommentCaps.ps1 -Summary` clean for every `.cs` you touched, `.\CheckEncoding.ps1`
    clean, and `dotnet build CSVM/CSVM.sln` green if you touched a `///` comment.
 7. Report: the relocation list, every deletion you were unsure about, and every `docs/org/` page
@@ -586,7 +619,7 @@ FlightModel and camera; the rest). After the merge of the last C item, run the c
 `.\RunTests.ps1` once from the main tree (the wave's comment relocations are changes under
 `CSVM/`); every golden must be hash-identical since no semantics changed.
 
-**Verify.** Step 6; `.\CheckArchitectureEntries.ps1` clean over the whole tree; `.\RunTests.ps1`
+**Verify.** Step 6; `.\CheckDocEntries.ps1` clean over the whole tree; `.\RunTests.ps1`
 exits 0 with every golden identical and `git diff -- analysis/goldens/manifest.json` empty
 (GOLD-9).
 
@@ -678,12 +711,117 @@ ID set in the file; every hit must resolve.
 
 **⚠ Traps.** `docs/cli.md` is 186 KB; grep to the line, never read it whole.
 
+# Wave F: tooling.md and cli.md
+
+## F51 ☐ `docs/tooling.md`: each script's section cut to what it does, its switches and its outputs
+
+**Goal.** A reader learns from each section what the script or stage does, how it is driven, and
+where its output lands; the measurements that justified a default and the rules verification.md
+already holds are gone from here. Target under 20 KB.
+
+**Evidence (confidence: traced).** The twelve paragraphs over 1000 characters listed under "What
+the data actually ships". The budget rule (PERF-18), shard isolation (LOG-13) and the vsync rule
+(PERF-13) are restated in full. The rtexture tier paragraph is format knowledge that belongs on
+`docs/formats/textures.md` or `docs/org/textures.md` if not already there. The window-focus
+section narrates the 700-sample probe and the rejected alternatives, which the retired
+`analysis/hidden-desktop` findings held.
+
+**Approach.** Section by section, keeping the file's structure (extraction workdir, the two
+extractors, the dispatcher, the launch scripts, the stages, the perf stage, exporting, `tools/`,
+the fork, window focus, `RunProbe.ps1`). Each `RunTests.ps1` stage row: what it runs, what it
+reads its verdict from, what fails it, one line. The budget paragraph: the rule and the file
+that holds the numbers; the derivation ("slowest of three warm runs plus 50 %") stays as one
+clause since it is how a number is re-set, the three timings go. The perf stage: the protocol
+and the A/B verdict rule in one paragraph; the metric-by-metric refusal list becomes one
+sentence pointing at PERF-1, PERF-2, PERF-21 and the manifest's `notes`. `test-report.json`:
+the schema is versioned and what the blocks are for, one paragraph; the field list is read from
+a report. Golden workers: the default and the serial reference path; the timing table goes.
+Hidden desktop and window focus: what is done and why it must be decided before the process
+starts, four sentences; the measurements go. Anything that is a rule about how an instrument
+misleads becomes a pointer to its verification rule, minting one only if none covers it. The
+removed measurements go to the commit message body.
+
+**Model recommendation.** high. Every paragraph is a judgement about what a script's user needs.
+
+**Verify.** `(Get-Item docs/tooling.md).Length` under 20 KB; every switch in `RunTests.ps1`'s
+`param()` block, `RunProbe.ps1`'s and `ExportRelease.ps1`'s is still named; no paragraph over
+1000 characters; `Select-String '\d+\.\d+ s|\d+ of \d+ samples' docs/tooling.md` returns
+nothing; `.\CheckEncoding.ps1` clean.
+
+**⚠ Traps.** The `SDL_JOYSTICK_DIRECTINPUT=0` paragraph is a workaround with a removal condition
+in `backlog.md`; keep the pointer. `packaging/Extract.ps1`'s "keep all extraction logic in the two
+scripts" rule is binding and stays as one sentence.
+
+## F52 ☐ `docs/cli.md` flag bullets, modes through debug labs, to the 600-character cap
+
+**Goal.** Every bullet for a flag in the index groups "Modes and content", "Placement",
+"Capture", "Determinism", "Livery and paint", "Weapons, ordnance and damage" and "Debug labs" says
+what the flag does, its argument shape, the modes it applies to and the flag it pairs with or
+conflicts with, in at most 600 characters. One flag, one bullet, still the description of record.
+
+**Evidence (confidence: traced).** The size table above; `--menu`, `--view`, `--ai`, `--anim-lab`,
+`--weapon-lab`, `--pos`, `--destroy`, `--ai-attack`, `--det`, `--zeppelins`, `--debug-clutterflag`
+and `--debug-markers` are all in this half. Bullets carry measured startup costs (`--collision`:
+"C2 freecam measured 2,462 to 3,106 ms"), verification claims ("byte-identical by md5"), a lab's
+crash history (`--debug-mesh`), and rejected designs.
+
+**Approach.** Bullet by bullet. Keep: behaviour, argument grammar, defaults, the mode set, the
+pairing or precedence rule, and a `WARN`/error behaviour the user will see. Move: a way the flag's
+output misleads to `docs/verification.md` (most are already rules: SHOT-13/14 for the census
+flags, WORLD-9 for `--collision`); decode knowledge to the format or `docs/org/` page; measured
+costs and history to the commit message. `--det`'s second "in detail" bullet folds into the first
+within the cap. The two shared bullets (`--direction` with `--pos`, `--spawn-dir` with
+`--spawn-at`) may stay shared if each stays under cap, else split; then the header's reconciliation
+paragraph is rewritten to the new counts, in one sentence. Run `.\CheckDocEntries.ps1
+docs/cli.md` for the running tally; the remaining groups are F53's and will still report.
+
+**Model recommendation.** high. A bullet is the description of record; cutting the wrong clause
+changes what the flag is documented to do.
+
+**Verify.** Every bullet in the named groups under 600 characters; the index-token count equals
+the parser's accepted-flag count (`SessionSpec.cs`) and every index token has a bullet;
+`.\CheckEncoding.ps1` clean.
+
+**⚠ Traps.** `docs/cli.md` is 186 KB; grep to a bullet, never read the file whole. A bullet that
+names a key binding (`F5`, `L`, `M`, `C`, `X`) is describing `docs/controls.md`'s subject; keep the
+key, drop the description of the panel.
+
+## F53 ☐ `docs/cli.md` flag bullets, dumps through audio, plus the lab sections and the index prose
+
+**Goal.** The same cap for the groups "Dumps and the test harness", "Logging and profiling",
+"Rendering probes", "Map-edge continuation", "Scripted input", "Data paths" and "Audio"; the three
+lab sections (shared selection, node lab, world damage lab) at most 12 lines each; the file's
+opening prose and the reconciliation paragraph at most one screen.
+
+**Evidence (confidence: traced).** `--run-tests` (5185 characters), `--tex-census`, `--perf`,
+`--debug-anim`, `--hitch-inject`, the `--dump-*` family and `--debug-damage`'s section are in this
+half. The header's "Written exceptions to one flag, one bullet" paragraph (lines 82 to 93)
+narrates a count reconciliation with history.
+
+**Approach.** As F52 for the bullets. `--run-tests` keeps the selector grammar and the exit-code
+contract and drops the stage narrative (that is `docs/tooling.md`'s). The lab sections keep the
+key map and the flag's token grammar; the design rationale and the "able-to-fail control"
+arguments are verification rules or go. The header keeps: flight is the default, the index is
+the lookup, one flag one bullet with the named exceptions, and the counts as a single sentence
+the check script verifies. After the last bullet, `.\CheckDocEntries.ps1 docs/cli.md` must be
+clean.
+
+**Model recommendation.** high.
+
+**Verify.** `.\CheckDocEntries.ps1 docs/cli.md` clean; `(Get-Item docs/cli.md).Length` under
+100 KB; PROJECT_CONTEXT's day-to-day table still glosses only flags that exist;
+`.\CheckEncoding.ps1` clean.
+
+**⚠ Traps.** `--det`'s constituents list is the behaviour, not narrative; it stays. A flag the
+parser accepts but the index lacks is a defect this item must not paper over: add its bullet.
+
 # Wave E: wire the gate and close
 
-## E41 ☐ `CheckArchitectureEntries.ps1` into the content gate
+## E41 ☐ `CheckDocEntries.ps1` into the content gate
 
-**Goal.** A commit that pushes an entry over cap, an index bullet past one line, or a new `.cs`
-without an entry is refused with a message naming the file and the rule.
+**Goal.** A commit that pushes an architecture entry over cap, an index bullet past one line, a
+new `.cs` without an entry, or a `docs/cli.md` bullet past 600 characters is refused with a
+message naming the file and the rule.
 
 **Evidence (confidence: traced).** `CheckCommitContent.ps1` runs four scripts with worktree
 resolution and a `-SelfTest`; `CLAUDE.md` documents them in the hooks paragraph. `.codex/` and
@@ -697,7 +835,7 @@ merged first; run the script over the tree before wiring it.
 **Model recommendation.** medium.
 
 **Verify.** `.\CheckCommitContent.ps1 -SelfTest` passes; a deliberate 13-line entry in a scratch
-worktree is refused at commit; `.\CheckArchitectureEntries.ps1` over the main tree is clean.
+worktree is refused at commit; `.\CheckDocEntries.ps1` over the main tree is clean.
 
 **⚠ Traps.** The gate checks every worktree; a stale plan worktree left over from Wave C with an
 untrimmed file blocks main's commits. `CleanScratch.ps1` sweeps finished worktrees.
