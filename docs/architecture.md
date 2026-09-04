@@ -458,7 +458,6 @@ clusters they delegate to.
 - `src/Session/PlaneRoster.cs` — pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
 - `src/Session/EffectCatalogue.cs` — the record of which authored anims are playable effects, and what their defs need staged: the effect/crash/damage-shim name tables, the two surface-indexed def vectors (`CrashDefTable`/`TouchdownDefTable`), and the anchor-root derivation both binds stage from.
 - `src/Session/SurfaceDefTable.cs` — one of the original's per-surface anim-def vectors and the cascade that indexes it with a struck material's surface id.
-- `src/Utils/EffectPools.cs` — the `data/effect_pools.json` reader: how many copies of each effect template the stage builds, per ROOT, scaled by player count.
 - `src/Session/WeatherRig.cs` — loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
 - `src/Session/WorldEffectsFactory.cs` — builds the impact/destruction effect stages and the per-plane crash runtime.
 - `src/Session/LensFlareRig.cs` — the sun's lens flare: screen-space sprites along the sun→centre line, occlusion-tested.
