@@ -204,7 +204,12 @@ public sealed class FlightRoster
                 controller.TargetObjectives = source;
     }
 
-    /// <summary>Introduces one fully configured AI aircraft into the running session.</summary>
+    /// <summary>Introduces one fully configured AI aircraft into the running session. It can
+    /// return before the aeroplane's crash rig exists, since the roster may queue that build
+    /// (<see cref="CrashRigQueue"/>). ⚠ A caller writing rig-owned state on the returned
+    /// controller (<c>DestroyDef</c> is the one that bites) must force the build first with
+    /// <see cref="FlightController.EnsureCrashRig"/>, or the deferred build overwrites it.
+    /// </summary>
     public FlightController SpawnAi(AiSpawn spawn)
     {
         int index = _spawned;

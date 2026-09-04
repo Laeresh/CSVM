@@ -518,6 +518,9 @@ one sentence of measured evidence; everything else belongs in the commit that la
   `broken` as a tooling fault and `moved` as a content change, and open the preserved log first.**
   Two shots hit the 300 s ceiling logging `Cannot instantiate C# script … Launcher.cs` because the
   assembly was rebuilt under the running battery; `.scratch/goldens-failures/<stamp>/` holds the log.
+- **INSTR-43** — **Read the staged `player` marker's pose from the last playing frame of a cutscene,
+  not from the frame after the handoff.** The restore parks the marker back at the world origin, so
+  a suite comparing the handed-back aeroplane against it one frame late measures against the origin.
 
 ## SRC — sources and documents
 

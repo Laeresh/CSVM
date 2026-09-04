@@ -179,6 +179,9 @@ public sealed class SurfaceVehicle
 
     // The follower steers the hull in the horizontal plane; its height is the water's, whatever
     // the net's nodes author, since a net is a route and not a waterline.
+    // ⚠ The hull ROOT is the only node this class poses. The death sequence's ObjectMotions own
+    // every child transform through MotionSet's channel rule (docs/org/objectMotion.md), so a
+    // write here on a child would fight the sinking, the debris and the slick.
     private void WritePose(Vector3 position)
     {
         Body.GlobalPosition = new Vector3(position.X, _waterY, position.Z);

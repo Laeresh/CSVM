@@ -177,7 +177,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☑ C23 `docs/architecture/Bindings.md` (17)
 24. ☑ C24 `docs/architecture/Testing.md` (17 plus the `CSVM.Tests/` section)
 25. ☑ C25 `docs/architecture/Root.md` (3 entries plus Cross-module conventions and the enhanced-graphics section)
-26. ☐ C26 `docs/architecture/Session.md` (40)
+26. ☑ C26 `docs/architecture/Session.md` (40)
 27. ☐ C27 `docs/architecture/Mech3.md` (62)
 28. ☐ C28 `docs/architecture/UI.md` (78)
 29. ☐ C29 `docs/architecture/Flight.md` (108), then the complete `.\RunTests.ps1`
@@ -559,7 +559,7 @@ message. The open judgements list is not live prose; drop the pointer.
 **⚠ Traps.** `Pads.cs` reads its entry for the seat-assignment rule; keep that rule in the entry
 (it is orientation) or move it beside the code.
 
-## C26 ☐ `docs/architecture/Session.md`
+## C26 ☑ `docs/architecture/Session.md`
 
 **Goal.** 40 entries at cap, including `Launcher.cs` (168 lines), `CampaignDirector.cs` (144),
 `CutsceneController.cs` (140), `WorldEffectsFactory.cs` (114), `ZeppelinRuntime.cs` (79); plus
