@@ -25,10 +25,10 @@ public static class ScreenSize
     }
 
     /// <summary>The floor to apply to ONE shared world-space mesh seen by several viewers: the
-    /// SMALLEST size that meets <paramref name="pixels"/> for any of them. Minimum, not maximum, is
-    /// load-bearing — sizing for the farthest viewer inflates every nearer pane, the splitscreen bug
-    /// docs/org/tracers.md describes. Degenerate viewers are skipped; a wholly degenerate set means no
-    /// floor.</summary>
+    /// SMALLEST size that meets <paramref name="pixels"/> for any of them. It must be the minimum
+    /// and never the maximum: sizing for the farthest viewer inflates every nearer pane, the
+    /// splitscreen defect docs/org/tracers.md describes. Degenerate viewers are skipped; a wholly
+    /// degenerate set means no floor.</summary>
     public static float NearestFloor(float pixels, IReadOnlyList<ViewerSample> viewers)
     {
         float best = 0f;

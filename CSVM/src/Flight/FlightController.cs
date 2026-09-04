@@ -1061,6 +1061,8 @@ public partial class FlightController : Node3D
         // The original tops the tank up where it places the aircraft, from the def-derived capacity.
         Fuel.Capacity = Stats?.FuelCapacity ?? 0f;
         Fuel.Fill();
+        // ⚠ The backing field here, never CrashRuntime: a still-armed rig has played nothing, so
+        // there is nothing to replay, and asking would build the whole rig on the placement frame.
         // First setup precedes adapter construction, so the adapter replays startprops after attachment.
         _crashRuntime?.Play("startprops", PlaneModel, applyReset: false);
         // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → the spawn
@@ -1845,8 +1847,9 @@ public partial class FlightController : Node3D
         }
         else if (halted)
         {
-            // A board is up. Nothing is written, so the camera holds the pose it had when the
-            // board appeared and the menu sits over a still frame (BL-429).
+            // ⚠ Never write the camera on a halted frame: a board's menu cursor reads the same
+            // WASD/arrows/left stick OrbitInput does, so choosing a menu row would swing the view.
+            // Writing nothing leaves the menu over the still frame the board appeared on.
         }
         else if (Crashed)
         {

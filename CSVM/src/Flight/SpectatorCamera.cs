@@ -9,7 +9,10 @@ namespace CSVM.Flight;
 /// camera directly with no aircraft in the world: WASD/arrows move, Q/E (or Z/U) down/up, RMB-held
 /// mouse look, wheel sets speed; gamepad mirrors it. Deliberately has NO collision, and pitch is
 /// clamped short of vertical with roll never applied, so the view cannot tumble into an
-/// unrecoverable attitude.</summary>
+/// unrecoverable attitude.
+/// ⚠ Never bind a movement key another action already uses (C toggles the collider overlay, Space
+/// fires the guns): this camera polls raw key state, so a shared key moves the camera as a side
+/// effect of the other action, which is why the vertical pair is Q/E with Z/U beside it.</summary>
 public sealed partial class SpectatorCamera : Node
 {
     /// <summary>Base movement speed in m/s, before the boost/slow modifiers. TUNE.</summary>

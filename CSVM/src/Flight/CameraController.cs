@@ -523,11 +523,11 @@ public sealed class CameraController
         _orbitPitch = _orbitDist > 1e-3f ? Mathf.Asin(Mathf.Clamp(v.Y / _orbitDist, -1f, 1f)) : 0f;
     }
 
-    /// <summary>Free orbit camera used only while paused: the host mixes WASD/arrows (or the
-    /// gamepad left stick) into <paramref name="yawIn"/>/<paramref name="pitchIn"/> and numpad
-    /// +/- (or the triggers) into <paramref name="zoomIn"/>, all in [−1, 1]. The plane stays put,
-    /// so every angle frames the same pose for side-by-side screenshots. Takes WALL dt — the
-    /// point of the freeze is to fly the camera around a stopped world.</summary>
+    /// <summary>Free orbit camera, run only while the weapon lab holds this airframe: the host
+    /// mixes WASD/arrows (or the gamepad left stick) into <paramref name="yawIn"/>/<paramref
+    /// name="pitchIn"/> and numpad +/- (or the triggers) into <paramref name="zoomIn"/>, all in
+    /// [−1, 1]. The plane stays put, so every angle frames the same pose for side-by-side
+    /// screenshots. Takes WALL dt: the subject is standing still while the world runs on.</summary>
     public void Orbit(float dt, Vector3 focus, float yawIn, float pitchIn, float zoomIn)
     {
         float rate = Mathf.DegToRad(OrbitRateDeg);

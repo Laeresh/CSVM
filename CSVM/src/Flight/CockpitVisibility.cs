@@ -51,7 +51,10 @@ public sealed class CockpitVisibility
     }
 
     /// <summary>Write this frame's rule onto the four nodes. Called every frame the rig owns its
-    /// camera, so nothing else has to remember to undo a hide.</summary>
+    /// camera, so nothing else has to remember to undo a hide.
+    /// ⚠ Splitscreen shares one scene tree: visibility is a property of the node, not of a
+    /// viewport, so a pilot in the cockpit hides that plane's body in EVERY pane. Each rig owns its
+    /// own plane model, which makes the rule per-pilot; a per-pane rule needs render layers.</summary>
     public void Apply(PilotViewMode mode, bool firstPerson)
     {
         var shown = Rules(mode, firstPerson);

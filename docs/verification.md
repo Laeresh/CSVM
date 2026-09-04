@@ -521,6 +521,10 @@ one sentence of measured evidence; everything else belongs in the commit that la
 - **INSTR-43** — **Read the staged `player` marker's pose from the last playing frame of a cutscene,
   not from the frame after the handoff.** The restore parks the marker back at the world origin, so
   a suite comparing the handed-back aeroplane against it one frame late measures against the origin.
+- **INSTR-44** — **`--freecam` starts at the mission spawn, which is RANDOM per launch: pin `--pos`
+  and `--direction` on any run a later run is compared against.** The spectator camera takes the
+  same spawn the mission places the player at, so two otherwise identical captures frame different
+  scenery.
 
 ## SRC — sources and documents
 
