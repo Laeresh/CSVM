@@ -159,8 +159,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A: stale facts in the index files
 
-1. ☐ A1 `PROJECT_CONTEXT.md`: counts, size claim, dates, repeated rules, skills section
-2. ☐ A2 `CLAUDE.md`, `AGENTS.md`, `AGENTS.override.md`: pointer paragraphs, phantom skill, size claim
+1. ☑ A1 `PROJECT_CONTEXT.md`: counts, size claim, dates, repeated rules, skills section
+2. ☑ A2 `CLAUDE.md`, `AGENTS.md`, `AGENTS.override.md`: pointer paragraphs, phantom skill, size claim
 3. ☐ A3 `docs/tooling.md`: dates, phantom path, golden counts, banned phrase
 4. ☐ A4 Whole-tree check that no entry doc states a date or a banned phrase
 
@@ -220,7 +220,7 @@ merged (the gate must pass on the tree it guards); E42 is last.
 
 # Wave A: stale facts in the index files
 
-## A1 ☐ `PROJECT_CONTEXT.md`: counts, size claim, dates, repeated rules, skills section
+## A1 ☑ `PROJECT_CONTEXT.md`: counts, size claim, dates, repeated rules, skills section
 
 **Goal.** The file states no count the repo contradicts, no date, and each shared rule once; it
 describes the split layout of Wave B so a reader arriving between waves is not misdirected.
@@ -253,7 +253,7 @@ history. Do not touch "Current status" beyond what E42 prescribes.
 **⚠ Traps.** The day-to-day flag table (lines 182 to 213) is glosses by design; A1 edits only the
 one dated cell in it. The `--volume` row's "default 0" stays, its date goes.
 
-## A2 ☐ `CLAUDE.md`, `AGENTS.md`, `AGENTS.override.md`: pointer paragraphs, phantom skill, size claim
+## A2 ☑ `CLAUDE.md`, `AGENTS.md`, `AGENTS.override.md`: pointer paragraphs, phantom skill, size claim
 
 **Goal.** The three tool-specific files point at PROJECT_CONTEXT's verification loop instead of
 restating it, name no phantom skill, and give the split-layout grep instruction.

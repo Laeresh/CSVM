@@ -9,14 +9,12 @@ file first — `CLAUDE.md` and `AGENTS.md` are thin, tool-specific pointers into
 `docs/`.** Update documentation in the same turn as the change it describes:
 
 - Module purpose → the module's `## src/...` entry in `docs/architecture.md`. **That file orients a reader: what each module is for, what it owns, and which other module to look at next. Nothing else.** Body ≤ ~8 lines, ~12 for the heaviest. **`⚠` traps do not belong there.** A trap that constrains a future edit goes in the code, at the member it binds, under the comment caps below; a trap that is really format or decode knowledge goes in `docs/formats/` or `docs/org/`; a way a measurement misleads goes in `docs/verification.md`. **Read a module's entry there before modifying that module**, then read the code. Diagnosis narratives go in the landing commit's message body.
-- A new, renamed or deleted module → **`docs/architecture.md` only**, updating its index line and its `##` entry in the same edit. This file carries the namespace map, never a per-module list; keeping both was 13 KB of duplication and had already drifted.
+- A new, renamed or deleted module → **`docs/architecture.md` only**, updating its index line and its `##` entry in the same edit. This file carries the namespace map, never a per-module list.
 - Format / reverse-engineering knowledge → `docs/formats/`.
 - The extraction pipeline, the launch scripts, or the mech3ax fork → `docs/tooling.md`.
 - A way a MEASUREMENT can mislead (non-determinism, an instrument that manufactures its own answer, a masked effect) → `docs/verification.md`, as a transferable rule. A commit message alone buries it — nobody reads the log before starting work. Shape: a bold 1–2-line imperative + at most one sentence of measured evidence — no narrative.
 - Landed work → the commit message body — what landed, how verified, outcome — plus tick the active plan's checklist and **swap** the "Current status" next-step pointer. The status section must be no longer after the landing edit than before it; the description of what landed lives in the commit and the plan, never here.
 - Pure refactors with no external effect → usually no update needed. When in doubt, update.
-
-- If a task is delegated to a subagent use cheaper models when appropriate. For example a cheaper/faster model tier for exploration.
 
 **Budget and shape — this file is an index, not a narrative.** `CLAUDE.md` once grew to 162 KB because every session appended while nobody owned the total; three rules keep that from happening again:
 
@@ -24,7 +22,7 @@ file first — `CLAUDE.md` and `AGENTS.md` are thin, tool-specific pointers into
 - **Shape: never restate a list another file already indexes — point at that file.** If a section here starts growing one line per *thing*, that list belongs in `docs/` with a pointer in its place.
 - **"Current status" holds pointers and item IDs — never a description of landed work, in any tense.** The tripwire is size — over ~15 lines / ~2 KB means history crept in.
 
-**Standing rule — AI-assistance disclosure (decided 2026-07-21).** Every outward-facing communication about this work discloses that it was done with the help of an AI coding agent: PR bodies, issues, discussion posts, comments, and any community writeup — not only an initial submission. Commits carry a `Co-Authored-By:` trailer naming the acting agent and model (e.g. `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`) — whichever agent actually did the work, not a fixed name. The user owns all upstream/community communication, so this is a constraint on what gets *drafted* for them, not an instruction to post anything.
+**Standing rule — AI-assistance disclosure.** Every outward-facing communication about this work discloses that it was done with the help of an AI coding agent: PR bodies, issues, discussion posts, comments, and any community writeup — not only an initial submission. Commits carry a `Co-Authored-By:` trailer naming the acting agent and model (e.g. `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`) — whichever agent actually did the work, not a fixed name. The user owns all upstream/community communication, so this is a constraint on what gets *drafted* for them, not an instruction to post anything.
 
 ## Project Description
 
@@ -36,7 +34,7 @@ An XWVM-style remake of **Crimson Skies** (2000, Zipper Interactive, Microsoft):
 
 Public open-source project under the **XWVM legal model**: the repo ships **code and format documentation only**. Game files, extracted assets, ZBD contents, screenshots of hexdumps containing bulk asset data — none of it gets committed or published. The importer reads the player's own install at runtime. `.gitignore` enforces this for `CrimsonSkiesGame/`, `extracted/`, and `tools/`; keep it that way when adding directories.
 
-**Licensing (decided 2026-07-22).** Code is **GPL-3.0-or-later** (root `LICENSE`); `docs/formats/` is **CC BY 4.0** (`docs/formats/LICENSE`) so the format knowledge is reusable by permissively-licensed projects. New code files need no per-file header — the root `LICENSE` plus the `README.md` notice covers the repo. The mech3ax fork is **EUPL-1.2** (upstream's license, not a choice) and is a separate tool, not linked into the engine; GPL-3.0 was chosen partly because the EUPL Appendix lists it as compatible, so fork code *could* later be vendored in. Do not relicense any part permissively without checking that chain. `README.md` also carries the not-affiliated-with-Microsoft disclaimer and the AI-assistance disclosure.
+**Licensing.** Code is **GPL-3.0-or-later** (root `LICENSE`); `docs/formats/` is **CC BY 4.0** (`docs/formats/LICENSE`) so the format knowledge is reusable by permissively-licensed projects. New code files need no per-file header — the root `LICENSE` plus the `README.md` notice covers the repo. The mech3ax fork is **EUPL-1.2** (upstream's license, not a choice) and is a separate tool, not linked into the engine; GPL-3.0 was chosen partly because the EUPL Appendix lists it as compatible, so fork code *could* later be vendored in. Do not relicense any part permissively without checking that chain. `README.md` also carries the not-affiliated-with-Microsoft disclaimer and the AI-assistance disclosure.
 
 ## Scratch / probe output
 
@@ -110,8 +108,8 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `New-ItemId.ps1` — mints the next `BL-`/`CAP-`/`PT-` item ID (`-Kind BL`, optional `-Count n` to reserve a block). The counter sits in `.git/item-id-counters.json` — shared by all worktrees, incremented under an exclusive lock — so concurrent sessions can't mint the same number. **Never assign an item ID any other way, and run it for EVERY id rather than once per session** — deriving the next id by adding 1 (or reusing one it handed you earlier) leaves the counter behind the file, so the invented number is handed out again on the next call. Use `-Count n` when you need several at once. A pre-commit hook fails the commit if `backlog.md`/`playtest.md` define an ID twice.
 - `tools/` — downloaded binaries (git-ignored): pinned mech3ax v0.6.1, the mech3ax fork, the Godot 4.7 .NET editor.
 - `analysis/` — **committed** read-only analysis scripts + their `FINDINGS.md`, one dir per question. For instruments whose result `docs/` cites, because `.scratch/` is swept. No game data in them, ever. A directory no live file cites is deleted; the tag `analysis-archive` marks the tree before the bulk retirement, so `git show analysis-archive:analysis/<dir>/FINDINGS.md` recovers a retired one.
-- `analysis/goldens/manifest.json` — the golden-image tripwire: 16 pinned `--det` shots as command line + raw-pixel md5. Hashes only, never pixels.
-- `analysis/verification-budgets.json` — `RunTests.ps1`'s per-stage and total wall-time budgets, the measured distribution behind them, and the rule that set them. Awareness thresholds; they never change the exit code.
+- `analysis/goldens/manifest.json` — the golden-image tripwire: the pinned `--det` shots as command line + raw-pixel md5. Hashes only, never pixels.
+- `analysis/verification-budgets.json` — `RunTests.ps1`'s per-stage and total wall-time budgets ("Development verification loop" below has the awareness-only rule that reads them).
 - `analysis/engine-suite-weights.json` — the measured per-suite engine weights the shard planner divides the catalog by, so one tree shards the same way every run.
 - `docs/tooling.md` — the extraction pipeline, the launch scripts, and the fork's remotes/branches/sync procedure.
 - `docs/architecture.md` — per-module purpose + still-binding constraints for `CSVM/src`, one `##` entry each. **Read a module's entry before changing it.**
@@ -156,17 +154,17 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 
 (First time only: run with `--headless --import` once before running scenes.)
 
-**Module map — the per-module index lives in [`docs/architecture.md`](docs/architecture.md), which now opens with it.** Find the module in that index, then read only its `##` entry: `Grep "## src/Flight/FlightModel.cs" -A 12` returns the whole entry. **Never read architecture.md whole** — it is ~110 KB. Read a module's entry before changing it.
+**Module map — the index at [`docs/architecture.md`](docs/architecture.md) routes to the per-namespace file `docs/architecture/<Namespace>.md`.** Find the module in that index, then read only its `##` entry: `Grep "## src/Flight/FlightModel.cs" -A 12 docs/architecture/` returns the whole entry. Read a module's entry before changing it.
 
-- `src/Mech3/` (40) — extraction readers, the GameZ→Godot builders, and the animation runtime: install → live world.
-- `src/Flight/` (34) — the aircraft as a flying, shooting, damageable thing, plus its HUD and stunt mode.
-- `src/Effects/` (4) — particle systems: puffers, the ambient cloud field, precipitation, the world wind.
-- `src/UI/` (16) — launchscreen, splitscreen rig, and the inspection labs (each with a scripted `--debug-*` twin).
-- `src/Utils/` (9) — session-wide services: clock, log, seed, shader time, config, startup profile, options, graphics mode. Determinism lives here.
-- `src/Testing/` (6) — the in-engine assertion harness behind `--run-tests` and the `--dump-*` probes.
-- `src/Bindings/` (16) — the input binding model and the named-action seam: device identity, the tagged control, the binding list an action resolves through, the registry that resolves a device identity to a live pad, the seat device state a polling site reads its pad set through, a player's action map resolved once per tick, and the shipped default keymap with its versioned per-player file.
-- `src/Session/` (11) — `Launcher.cs` (Main.tscn root: bootstrap, launchscreen, persistent camera/lighting) and `GameSession.cs` (the per-launch session node it instantiates), plus livery/spawn/plane-roster resolution, the roster aggregate with grouped inputs and its two internal assemblers, the effect/crash stage factory, and the weather rig.
-- `src/` root (3) — `SessionSpec.cs`, `SessionPaths.cs`, `Pads.cs`.
+- `src/Mech3/` — extraction readers, the GameZ→Godot builders, and the animation runtime: install → live world.
+- `src/Flight/` — the aircraft as a flying, shooting, damageable thing, plus its HUD and stunt mode.
+- `src/Effects/` — particle systems: puffers, the ambient cloud field, precipitation, the world wind.
+- `src/UI/` — launchscreen, splitscreen rig, and the inspection labs (each with a scripted `--debug-*` twin).
+- `src/Utils/` — session-wide services: clock, log, seed, shader time, config, startup profile, options, graphics mode. Determinism lives here.
+- `src/Testing/` — the in-engine assertion harness behind `--run-tests` and the `--dump-*` probes.
+- `src/Bindings/` — the input binding model and the named-action seam: device identity, the tagged control, the binding list an action resolves through, the registry that resolves a device identity to a live pad, the seat device state a polling site reads its pad set through, a player's action map resolved once per tick, and the shipped default keymap with its versioned per-player file.
+- `src/Session/` — `Launcher.cs` (Main.tscn root: bootstrap, launchscreen, persistent camera/lighting) and `GameSession.cs` (the per-launch session node it instantiates), plus livery/spawn/plane-roster resolution, the roster aggregate with grouped inputs and its two internal assemblers, the effect/crash stage factory, and the weather rig.
+- `src/` root — `SessionSpec.cs`, `SessionPaths.cs`, `Pads.cs`.
 - `CSVM.Tests/` — the xUnit project: engine-free reader units. Anything reaching `GD.*` or a live `Node` belongs in `src/Testing/` instead.
 
 Highest-traffic modules, so the common cases skip the index: `GameSession.cs` (session build), `FlightController.cs` (the flying node), `FlightModel.cs` (physics), `SceneBuilder.cs` (every mesh), `WorldBuilder.cs` (chapter worlds), `AnimRuntime.cs` (world animation), `Projectile.cs` (weapon fire), `Suites.cs` (golden counts).
@@ -175,7 +173,7 @@ Highest-traffic modules, so the common cases skip the index: `GameSession.cs` (s
 
 **Flight is the default.** Any content arg builds a *flight* unless `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4. `--viewer` gives the static inspection view, where the livery / mesh labs live. The damage lab now lives in both — F5 in `--viewer` drives a parked plane's visuals, F5 in `--fly` drives the flown plane's real HP — so `--fly` is redundant except with `--damage=`, which picks the parked viewer unless flight was asked for by name. A bare launch (no content arg) shows the launchscreen.
 
-The day-to-day 30 of 151 — 151 is both the parser's accepted-flag count and `docs/cli.md`'s flag-index count, kept equal on purpose. **[`docs/cli.md`](docs/cli.md) opens with an index of all of them, grouped**, and each flag's bullet there is the **description of record** — the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, the data-path overrides, and the deprecated `--campos`/`--spawn-at`/`--spawn-dir` spellings of the placement pair.
+The day-to-day subset; `docs/cli.md` is the description of record. **[`docs/cli.md`](docs/cli.md) opens with an index of every flag, grouped**, covering the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, the data-path overrides, and the deprecated `--campos`/`--spawn-at`/`--spawn-dir` spellings of the placement pair.
 
 ⚠ **These rows are glosses, not the spec: a behaviour change edits the `cli.md` bullet, and a row here only when the gloss went wrong.**  Adding a row is rarely right — the index is one file away.
 
@@ -210,7 +208,7 @@ The day-to-day 30 of 151 — 151 is both the parser's accepted-flag count and `d
 | `--collision[=show]` | build the world's colliders in a mode that builds none (freecam/anim-lab/viewer); `=show` opens the **C** wireframe overlay — but only in freecam/anim-lab, since C in `--viewer` is the mesh lab's cull cycler |
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
 | `--mute` | skip flight audio — a **load-time** switch, so nothing plays *and nothing is counted or logged*; a muted baseline is blind to sound errors |
-| `--volume=N` | master gain 0–1 (default 0 since 2026-08-05 — `RunGame.ps1`/`RunDev.ps1` pass `--volume=1.0` so interactive play sounds). `--volume=0` is silent but **not** blind: audio still loads, plays, counts and logs, so a run is testable from `.scratch/logs/`. Also the `audio.volume` config key, which the flag beats |
+| `--volume=N` | master gain 0–1 (default 0 — `RunGame.ps1`/`RunDev.ps1` pass `--volume=1.0` so interactive play sounds). `--volume=0` is silent but **not** blind: audio still loads, plays, counts and logs, so a run is testable from `.scratch/logs/`. Also the `audio.volume` config key, which the flag beats |
 
 the player controls during development are in `docs/controls.md`. **change them if the player input changes**
 
@@ -224,19 +222,9 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 ## Agent skills
 
-Config the installed engineering skills read. Written by `/setup-matt-pocock-skills`; edit the files directly. The skills live at `.claude/skills/`, mirrored at `.agents/skills/` (a local junction — see `AGENTS.md`) so agents that follow the `.agents/` convention find the same set.
-
-### Issue tracker
-
-This repo's own markdown — `backlog.md`, a live `docs/PLAN-*.md`, `playtest.md`. No GitHub Issues yet. See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
-
-### Triage labels
-
-The five canonical roles, unrenamed. See [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
-
-### Domain docs
-
-Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT.md`/`docs/adr/`. See [`docs/agents/domain.md`](docs/agents/domain.md).
+- Issue tracker: this repo's own markdown — `backlog.md`, a live `docs/PLAN-*.md`, `playtest.md`. No GitHub Issues yet. See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
+- Triage labels: the five canonical roles, unrenamed. See [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
+- Domain docs: single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT.md`/`docs/adr/`. See [`docs/agents/domain.md`](docs/agents/domain.md).
 
 ## Current status / next step
 
