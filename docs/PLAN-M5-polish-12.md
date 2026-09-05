@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Seats and joining
 
 11. ☑ `BL-703` Original never says who has joined, and its Instant Action lets nobody join
-12. ☐ `BL-704` Original's sortie screen walks every seat down one shared aircraft list
+12. ☑ `BL-704` Original's sortie screen walks every seat down one shared aircraft list
 
 ### Wave C — The campaign boards and Game Options
 
@@ -416,7 +416,7 @@ seat whose check shows draws focused. Shots: `.scratch/bl703_strip.png`,
 still builds its exit for seat 0 alone (`OriginalInstantAction.cs`, the `FlyMissionKey` case), so a
 seat joined on that screen is seated and kept but not flown; `MinimumSeats` is untouched.
 
-## B12 ☐ `BL-704` Original's sortie screen walks every seat down one shared aircraft list
+## B12 ☑ `BL-704` Original's sortie screen walks every seat down one shared aircraft list
 
 **Goal.** On Free Flight and Dogfight under Original, seat 0 picks on the sortie screen and each
 joined seat then picks on a screen of its own in the campaign plane-selection screen's shape, in
@@ -447,6 +447,35 @@ as part of `E41`.
 **⚠ Traps.** Do not assume a pad per seat. Whatever replaces the shared list is also the route a
 seat reaches Confirmed by, so keep the two-press walk. Nothing here is decoded; do not go looking
 for an original layout to copy.
+
+**Verified.** <pending orchestrator run>
+
+**Outcome.** The shared aircraft column is gone from the sortie screens along with the per-seat
+tags it carried: seat 0 alone picks there, and `OriginalScreen.SeatPlane` is a new screen each
+joined seat gets in player order once seat 0's pick stands. `OriginalSeatPlane.cs` holds it as a
+shell partial whose `SeatPlanePage` is an `ICampaignPage`, so `CampaignBoards.For` draws it in the
+campaign plane-selection board's shape with no new list widget: the same `CampaignCombo`, the same
+silhouette, ratings and weapon column, ACCEPT and CANCEL SELECTIONS. `BuildCampaignRows` was split
+so `BuildPageRows` serves any board page, which is what makes the shared row and pointer machinery
+(and so `D31`'s wheel) reach the new screen for free. `StepSeat` no longer walks a cursor of its
+own: it routes the picking seat's frame into `Step` under `_steppingSeat`, so one code path applies
+Accept and Back whoever pressed them, and seat 0's own controller can walk the screen. Back means
+what it did: browsing it unjoins, selected it undoes the selection, and from seat 0 it cancels the
+walk and keeps every seat. `Step` re-reads the walk every frame, so a seat joining after seat 0's
+pick is walked too, and a seat that vanishes mid-screen advances it. FLY reads the gate it always
+did. Joining stays closed on the new screen (`JoiningOpen`).
+
+Both gaps B11 left are closed. FLY MISSION on Instant Action now walks a joined seat first
+(`BeginInstantActionSeatWalk`, the `FlyMissionKey` case, the only exit edit): seat 0's pick becomes
+the Pilot Plane row, the setup's roster becomes `PilotRoster` so every seat's cursor indexes the
+same rows, and the launch after the last confirm carries every seat. The Instant Action screen also
+draws `CampaignSeatPanel()` in the same desk-margin band, which clears the book (the page's own
+words start at `IA_T_TABLETITLE`, 155,94); its palette is one dark paper ink, so that strip takes a
+light ground instead of the campaign boards' black scrim (`onPaper`). The board's second crew block
+would otherwise sit empty on a one-pilot screen, so the wingman heading's slot carries the other
+seats' standing instead. Shots: `.scratch/bl704_seat2.png` (the per-seat screen on Free Flight
+under `--menu=free-flight:seat-plane --debug-join=1`, a new aid that poses seat 0's pick) and
+`.scratch/bl704_ia_strip.png`.
 
 ---
 

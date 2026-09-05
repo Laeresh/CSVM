@@ -19,6 +19,10 @@ public enum OriginalScreen
     /// <summary>The remake-only Dogfight screen: the Free Flight screen's shape over the Dogfight gate.</summary>
     Dogfight,
 
+    /// <summary>The remake-only per-seat aircraft screen: the campaign plane-selection board's
+    /// shape over the sortie roster, one joined seat picking at a time.</summary>
+    SeatPlane,
+
     /// <summary>The Options screen: the decoded <c>[@Preferences@]</c> page, its GAME OPTIONS
     /// door live and its three other doors drawn disabled.</summary>
     Options,
@@ -352,12 +356,19 @@ public sealed partial class OriginalShell
         Open(OriginalScreen.TopLevel);
     }
 
-    /// <summary>Opens a screen directly, the screenshot aids' door.</summary>
+    /// <summary>Opens a screen directly, the screenshot aids' door. Any screen but the per-seat
+    /// one ends a seat walk in progress.</summary>
     public void Open(OriginalScreen screen)
     {
         _screen = screen;
         _hover = -1;
         _pressed = -1;
+        if (screen != OriginalScreen.SeatPlane)
+        {
+            _pickingSeat = null;
+            _seatPage = null;
+        }
+
         if (screen == OriginalScreen.GameOptions)
         {
             ReadSavedOptions();
@@ -373,6 +384,13 @@ public sealed partial class OriginalShell
         MenuExit? exit = null;
         SyncCampaignField();
         bool changed = TypeName(commands, cues);
+        if (_screen == OriginalScreen.SeatPlane && _pickingSeat is not { Joined: true })
+        {
+            // The seat this screen was picking for has gone: the walk moves on or ends.
+            exit = AdvanceSeatWalk();
+            changed = true;
+        }
+
         var rows = Rows;
         int focus = EnsureFocus(rows);
 
@@ -487,6 +505,12 @@ public sealed partial class OriginalShell
             changed = true;
         }
 
+        // With seat 0's aircraft picked, a joined seat still to confirm gets its own screen.
+        if (exit == null && IsSortie && BeginSeatWalkIfDue())
+        {
+            changed = true;
+        }
+
         return new OriginalStep(cues, exit, changed);
     }
 
@@ -510,7 +534,7 @@ public sealed partial class OriginalShell
         var overlays = new List<BoardPanel>();
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
         bool ownPage = _screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionLoadout
-            or OriginalScreen.Options or OriginalScreen.GameOptions
+            or OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.SeatPlane
             || IsHangarScreen || IsCampaignScreen;
         if (!ownPage && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
         {
@@ -533,12 +557,15 @@ public sealed partial class OriginalShell
             case var _ when IsCampaignScreen:
                 ComposeCampaign(rows, focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
                 break;
+            case OriginalScreen.SeatPlane:
+                ComposeSeatPlane(focus, backdrop, pictures, fills, lines, plaques, overlays);
+                break;
             case var _ when IsHangarScreen:
                 ComposeHangar(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
                 break;
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:
-                ComposeSortie(rows, lines);
+                ComposeSortie(lines);
                 break;
             case OriginalScreen.Options:
                 ComposeOptions(pictures, lines);
@@ -857,6 +884,8 @@ public sealed partial class OriginalShell
                 return ActivateInstantAction(row);
             case OriginalScreen.InstantActionLoadout:
                 return ActivateLoadout(row);
+            case OriginalScreen.SeatPlane:
+                return ActivateSeatPlane(row);
             case var _ when IsCampaignScreen:
                 return ActivateCampaign(row);
             case var _ when IsHangarScreen:
@@ -882,11 +911,11 @@ public sealed partial class OriginalShell
     }
 
     // Back with a dialog standing takes its declining answer, the messagebox script's own Escape.
-    // On a sortie screen it first undoes seat 0's own pick, a stage at a time; browsing, it leaves
-    // the screen. On the Instant Action screen, its loadout and the Game Options page the first
-    // Back closes an open list and the next one leaves, the loadout's leaving being CANCEL LOADOUT
-    // and the page's CANCEL CHANGES. The campaign and the hangar walk their own graphs back. The
-    // top level quits outright, as MAINMENU.SCRIPT's Quit terminates with no confirm.
+    // On a sortie screen it undoes seat 0's pick a stage at a time, then leaves; the per-seat
+    // screen has its own, whose meaning depends on who pressed it. On Instant Action, its loadout
+    // and Game Options the first Back closes an open list and the next leaves (CANCEL LOADOUT,
+    // CANCEL CHANGES). The campaign and the hangar walk their own graphs back. The top level
+    // quits outright, as MAINMENU.SCRIPT's Quit terminates with no confirm.
     private MenuExit? Back()
     {
         if (_dialog is { } dialog)
@@ -898,6 +927,11 @@ public sealed partial class OriginalShell
         if (_screen == OriginalScreen.TopLevel)
         {
             return new QuitExit();
+        }
+
+        if (_screen == OriginalScreen.SeatPlane)
+        {
+            return BackSeatPlane();
         }
 
         if (IsSortie && Seat0 is { } seat && _setup.Back(seat) != SeatBack.Browsing)
@@ -962,6 +996,13 @@ public sealed partial class OriginalShell
                 break;
             case OriginalScreen.InstantActionLoadout:
                 BuildLoadoutRows(rows);
+                break;
+            case OriginalScreen.SeatPlane:
+                if (_seatPage is { } seatPage)
+                {
+                    BuildPageRows(seatPage, rows);
+                }
+
                 break;
             case var _ when IsCampaignScreen:
                 BuildCampaignRows(rows);

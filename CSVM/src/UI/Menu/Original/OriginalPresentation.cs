@@ -28,6 +28,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the Dogfight screen.</summary>
     public const string DogfightAid = "dogfight";
 
+    /// <summary>The Free Flight aid's argument that picks the first chapter and aircraft for
+    /// seat 0, so with <c>--debug-join</c> the per-seat aircraft screen shows.</summary>
+    public const string SeatPlaneAid = "seat-plane";
+
     /// <summary>The aid value that opens the Options screen.</summary>
     public const string OptionsAid = "options";
 
@@ -254,6 +258,8 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         _shell.ReturnToTopLevel();
         StopNarration();
+        // Seated before the aid opens its screen, so a pose that walks the seats finds them.
+        DebugJoin(setup);
         string aid = _aid;
         _aid = string.Empty;
         if (destination is CabinReturn cabin)
@@ -288,6 +294,10 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case FreeFlightAid:
                     _shell.Open(OriginalScreen.FreeFlight);
+                    break;
+                case FreeFlightAid + ":" + SeatPlaneAid:
+                    _shell.Open(OriginalScreen.FreeFlight);
+                    _shell.PoseSortiePick();
                     break;
                 case DogfightAid:
                     _shell.Open(OriginalScreen.Dogfight);
@@ -339,7 +349,6 @@ public sealed class OriginalPresentation : IMenuPresentation
             }
         }
 
-        DebugJoin(setup);
         foreach (var seat in host.Seats)
         {
             seat.Prime();

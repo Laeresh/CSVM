@@ -80,7 +80,9 @@ internal static class MenuInstantActionSuites
         + "list with its file (the wingman list stays stock), Weapon Loadout with the radio on "
         + "Wingman opens the decoded ammo chrome over the wingmen's shared fit whose CANCEL restores "
         + "and ACCEPT keeps a stepped pick, and Build Custom Plane opens the wallet-free hangar whose "
-        + "Back and Purchase Now both return to the screen, the purchase's plane in the Pilot Plane list")]
+        + "Back and Purchase Now both return to the screen, the purchase's plane in the Pilot Plane list, "
+        + "and a second pilot joined on the screen is named by the seat strip and walked through its own "
+        + "aircraft screen by Fly Mission before the launch carries both seats")]
     internal static void MenuOriginalInstantAction(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -126,6 +128,7 @@ internal static class MenuInstantActionSuites
             OriginalCustomPilot(ctx, host, seat, shell, fit, ia, exits, store, scratch);
             OriginalLoadout(ctx, host, seat, shell, fit, ia);
             OriginalBuild(ctx, host, seat, shell, fit, host.Features.Get<HangarFeature>(), store, built);
+            OriginalTwoSeats(ctx, host, seat, shell, fit, host.Features.Get<PlayerSetupFeature>(), exits);
         }
         finally
         {
@@ -930,6 +933,66 @@ internal static class MenuInstantActionSuites
         var exit = Row(shell, OriginalShell.ExitKey)!;
         Press(host, seat, Pointer(fit, exit.X + 5f, exit.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.TopLevel, $"Exit returns to the top level ({shell.Screen})");
+    }
+
+    // A second pilot joined on the Instant Action screen: the strip names it, FLY MISSION opens
+    // its per-seat aircraft screen instead of launching, and the launch that follows carries both.
+    private static void OriginalTwoSeats(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit,
+        PlayerSetupFeature setup, List<MenuExit> exits)
+    {
+        if (!EnterInstantAction(ctx, host, seat, shell, fit))
+        {
+            return;
+        }
+
+        ctx.Check(StripLines(shell) == 0, $"one seat draws no seat strip over the screen ({StripLines(shell)})");
+        var guest = new ScriptedSeat();
+        ctx.Check(setup.Join(guest) != null && host.Seats.Count == 2, $"a second pilot joins on the screen ({host.Seats.Count})");
+        ctx.Check(StripLines(shell) == 2, $"and the strip names both seats ({StripLines(shell)})");
+
+        var fly = Row(shell, OriginalShell.FlyMissionKey);
+        ctx.Check(fly != null, $"Fly Mission is on screen");
+        if (fly == null)
+        {
+            return;
+        }
+
+        int before = exits.Count;
+        Press(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(exits.Count == before && shell.Screen == OriginalScreen.SeatPlane && shell.PickingSeat == 1,
+            $"Fly Mission opens the guest's own aircraft screen instead of launching ({shell.Screen}, picking {shell.PickingSeat})");
+        ctx.Check(shell.SeatReturn == OriginalScreen.InstantAction && ReferenceEquals(setup.Roster, shell.PilotRoster),
+            $"over the Pilot Plane roster, the walk returning to Instant Action ({shell.SeatReturn})");
+        Press(host, guest, Down);
+        Press(host, guest, Accept);
+        Press(host, guest, Accept);
+        ctx.Check(exits.Count == before + 1 && exits[^1] is LaunchExit { Seats.Count: 2 },
+            $"the guest's second Accept ends the walk as one LaunchExit for both seats ({exits.Count - before})");
+        if (exits[^1] is LaunchExit both && both.Seats.Count == 2 && shell.PilotRoster.Count > 1)
+        {
+            ctx.Check(both.Seats[1].PlaneNode == shell.PilotRoster[1].Node && both.InstantAction != null,
+                $"the guest flying the row it picked, the def still the screen's ({both.Seats[1].PlaneNode})");
+        }
+    }
+
+    // How many seat-strip lines the composed screen carries, the strip being the overlay whose
+    // lines are named for their player.
+    private static int StripLines(OriginalShell shell)
+    {
+        int lines = 0;
+        foreach (var overlay in shell.Compose().Overlays)
+        {
+            foreach (var line in overlay.Lines)
+            {
+                if (line.Text.StartsWith("P1  ", StringComparison.Ordinal) || line.Text.StartsWith("P2  ", StringComparison.Ordinal))
+                {
+                    lines++;
+                }
+            }
+        }
+
+        return lines;
     }
 
     private static bool EnterInstantAction(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)

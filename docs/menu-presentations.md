@@ -141,16 +141,25 @@ open), and `FlightPads`, the binding a launch carries per seat. Both presentatio
 `OriginalShell.JoiningOpen` is false), so the pad seat 0 steers with is seat 0's for good and can
 never join as a further seat. Original opens joining on the four screens that launch a flight
 (Free Flight, Dogfight, Instant Action and the campaign flight check) and, once a second seat has
-joined, draws the sortie screens' seat strip over every campaign board as an overlay in the desk
-margin above the clipboard; a solo campaign shows the authored board alone. A presentation with a
-pointer maps the window-pixel pointer into its own space; Original does it through the same
-`BoardFit` its board view draws with. Built-in reads no `MenuPointer` at all: its rows are Godot
+joined, draws the sortie screens' seat strip over every campaign board and over the Instant Action
+screen as an overlay in the desk margin; a solo campaign shows the authored board alone. A
+presentation with a pointer maps the window-pixel pointer into its own space; Original does it
+through the same `BoardFit` its board view draws with. Built-in reads no `MenuPointer` at all: its rows are Godot
 `Control`s, so player 1's rows take Godot's own hit test through `gui_input` (`LaunchMenu.Pointable`)
 and fold the mouse into the next frame's commands (a hover is the cursor step onto that row, a
 press and release on one row is that step plus Accept in one frame, a wheel notch is a step; the
 frame's own step outranks a hover, so a pad and the mouse cannot each own a row). The centred
 layout's lists, the hangar pages and player 1's pane on a split aircraft screen are pointable;
 the campaign boards under Built-in are one composed surface and stay on the keys and pads.
+
+Under Original a seat picks its aircraft on a screen of its own, not down a list every seat shares.
+Seat 0 picks on the sortie screen or in the Instant Action Pilot Plane row; then each joined seat in
+player order gets the per-seat aircraft screen (`OriginalSeatPlane.cs`), the campaign plane-selection
+board's shape over the sortie roster, where Accept selects, a second Accept confirms and Back undoes
+the selection or unjoins. Joining stays closed on that screen. The walk ends on the sortie screen
+with FLY live, or as the Instant Action launch, and FLY goes live only when every joined seat is
+Confirmed. Seat 0's own controller drives the screen too, so one pad at the desk can walk it, and
+seat 0's Back there cancels the walk with every seat kept. Nothing on that screen is decoded.
 
 ## Options, selection and availability
 

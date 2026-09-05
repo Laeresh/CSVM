@@ -1,0 +1,561 @@
+using System;
+using System.Collections.Generic;
+using CSVM.Flight;
+using CSVM.Mech3;
+
+namespace CSVM.UI.Menu.Original;
+
+/// <summary>
+/// The remake-only per-seat aircraft screen: once seat 0 has picked on a sortie screen, or has
+/// pressed FLY MISSION on Instant Action with a second pilot joined, each joined seat in player
+/// order picks its own aircraft here, on the campaign plane-selection board's shape (its list
+/// field, silhouette, ratings and weapon column, ACCEPT and CANCEL SELECTIONS) over the sortie
+/// roster. The list stands open while the seat browses; Accept selects and closes it, Accept
+/// again confirms and hands the screen to the next unconfirmed seat; Back undoes a selection
+/// or, while browsing, unjoins, as CANCEL SELECTIONS does. Seat 0's controller drives the screen
+/// as well, so one pad at the desk can walk it, and seat 0's own Back undoes its pick and returns
+/// to the screen it came from with every seat kept. The walk ends back on the sortie screen with
+/// FLY live, or on Instant Action as the launch itself. Nothing here is decoded.
+/// </summary>
+public sealed partial class OriginalShell
+{
+    /// <summary>The per-seat screen's list field, the one field row of its page.</summary>
+    public const string SeatPlaneFieldKey = "FIELD:0";
+
+    private SeatPlanePage? _seatPage;
+    private PlayerSeat? _pickingSeat;
+    private OriginalScreen _seatReturn = OriginalScreen.FreeFlight;
+
+    // Which seat's frame Step is applying: 0 unless StepSeat is routing a later seat's frame
+    // through it, which is how Back tells seat 0's press from the picking seat's.
+    private int _steppingSeat;
+
+    /// <summary>The seat picking on the per-seat screen, as its index, or -1 off that screen.</summary>
+    public int PickingSeat => _screen == OriginalScreen.SeatPlane && _pickingSeat is { } seat ? SeatIndex(seat) : -1;
+
+    /// <summary>The screen the per-seat walk returns to, meaningful while <see cref="PickingSeat"/> is not -1.</summary>
+    public OriginalScreen SeatReturn => _seatReturn;
+
+    /// <summary>Picks the first chapter and the first aircraft for seat 0 on the sortie screen
+    /// showing, the screenshot aid's pose; with a joined seat still to confirm, the per-seat
+    /// screen opens at once. Nothing happens off the sortie screens.</summary>
+    public void PoseSortiePick()
+    {
+        if (!IsSortie || Seat0 is not { } seat)
+        {
+            return;
+        }
+
+        PickedChapterIndex = 0;
+        if (_screen == OriginalScreen.FreeFlight)
+        {
+            _free.SelectChapter(_chapters[0].Code);
+        }
+
+        if (!seat.Locked)
+        {
+            _setup.Browse(seat, 0);
+            _setup.Select(seat);
+        }
+
+        BeginSeatWalkIfDue();
+    }
+
+    private int SeatIndex(PlayerSeat seat)
+    {
+        var seats = _setup.Seats;
+        for (int i = 0; i < seats.Count; i++)
+        {
+            if (ReferenceEquals(seats[i], seat))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    // The first joined seat after seat 0 that has not confirmed, or null: the order the walk takes.
+    private PlayerSeat? NextUnconfirmed()
+    {
+        var seats = _setup.Seats;
+        for (int i = 1; i < seats.Count; i++)
+        {
+            if (!seats[i].Confirmed)
+            {
+                return seats[i];
+            }
+        }
+
+        return null;
+    }
+
+    // On a sortie screen, once seat 0 has picked, a joined seat still to confirm gets the per-seat
+    // screen. Read every frame, so a seat joining after seat 0's pick is walked too.
+    private bool BeginSeatWalkIfDue()
+    {
+        if (!IsSortie || Seat0 is not { Locked: true } || NextUnconfirmed() is not { } next)
+        {
+            return false;
+        }
+
+        EnterSeatPlane(next, _screen);
+        return true;
+    }
+
+    // FLY MISSION with a second pilot joined: seat 0's pick is the Pilot Plane row, the setup's
+    // roster becomes the Pilot Plane list so every seat's cursor indexes the same rows, and the
+    // walk starts; with nobody left to pick it is the launch itself.
+    private MenuExit? BeginInstantActionSeatWalk()
+    {
+        if (Seat0 is not { } seat)
+        {
+            return null;
+        }
+
+        _setup.SetRoster(_iaPilotRoster);
+        int last = Math.Max(0, _iaPilotRoster.Count - 1);
+        foreach (var joined in _setup.Seats)
+        {
+            joined.Cursor = Math.Clamp(joined.Cursor, 0, last);
+        }
+
+        while (_setup.Back(seat) != SeatBack.Browsing)
+        {
+        }
+
+        _setup.Browse(seat, Math.Clamp(PilotRow, 0, last));
+        _setup.Select(seat);
+        _seatReturn = OriginalScreen.InstantAction;
+        return AdvanceSeatWalk();
+    }
+
+    private void EnterSeatPlane(PlayerSeat seat, OriginalScreen returnTo)
+    {
+        _pickingSeat = seat;
+        _seatReturn = returnTo;
+        _seatPage = new SeatPlanePage(this, seat);
+        Open(OriginalScreen.SeatPlane);
+        _focus[(int)OriginalScreen.SeatPlane] = 0;
+    }
+
+    // After a confirm or an unjoin: the next seat still to pick, else the end of the walk.
+    private MenuExit? AdvanceSeatWalk()
+    {
+        if (NextUnconfirmed() is { } next)
+        {
+            EnterSeatPlane(next, _seatReturn);
+            return null;
+        }
+
+        return FinishSeatWalk();
+    }
+
+    // Every seat confirmed: back to the sortie screen, where FLY now stands, or the Instant Action
+    // launch with every seat's choice, seat 0's confirmation being FLY MISSION's own press.
+    private MenuExit? FinishSeatWalk()
+    {
+        var back = _seatReturn;
+        Open(back);
+        if (back != OriginalScreen.InstantAction || Seat0 is not { } seat)
+        {
+            return null;
+        }
+
+        _setup.Confirm(seat);
+        return _instantAction.BuildExit(_setup.Choices(_flightDevices));
+    }
+
+    // Seat 0's Back: its own pick is undone and the screen it came from returns, the seats kept,
+    // so a pick made again walks them again.
+    private void CancelSeatWalk()
+    {
+        if (Seat0 is { } seat)
+        {
+            _setup.Back(seat);
+        }
+
+        Open(_seatReturn);
+    }
+
+    private MenuExit? ActivateSeatPlane(OriginalRow row)
+    {
+        if (_seatPage is not { } page || _pickingSeat is not { } seat)
+        {
+            return null;
+        }
+
+        if (Entry(row.Key) is { } entry)
+        {
+            page.List.Move(entry - page.List.Highlight);
+            TakeSeatPick(page, seat);
+            return null;
+        }
+
+        switch (row.Key)
+        {
+            case SeatPlaneFieldKey:
+                if (seat.Locked)
+                {
+                    return ConfirmSeatPick(seat);
+                }
+
+                if (page.List.Open)
+                {
+                    TakeSeatPick(page, seat);
+                }
+                else
+                {
+                    page.List.Expand();
+                }
+
+                return null;
+            case nameof(BoardButton.AcceptSelections):
+                if (seat.Locked)
+                {
+                    return ConfirmSeatPick(seat);
+                }
+
+                TakeSeatPick(page, seat);
+                return null;
+            case nameof(BoardButton.CancelSelections):
+                _setup.Unjoin(seat);
+                return AdvanceSeatWalk();
+            default:
+                return null;
+        }
+    }
+
+    // The first Accept: the highlighted row becomes the seat's cursor and its selection, and the
+    // list closes over it, the silhouette and ratings now standing for the pick.
+    private void TakeSeatPick(SeatPlanePage page, PlayerSeat seat)
+    {
+        int pick = page.List.Confirm() ?? page.List.Highlight;
+        page.List.Select(pick);
+        _setup.Browse(seat, pick);
+        _setup.Select(seat);
+        _focus[(int)OriginalScreen.SeatPlane] = 0;
+    }
+
+    private MenuExit? ConfirmSeatPick(PlayerSeat seat)
+    {
+        _setup.Confirm(seat);
+        return AdvanceSeatWalk();
+    }
+
+    // Back on the per-seat screen: seat 0's undoes its own pick and leaves the walk; the picking
+    // seat's undoes its selection (the list reopening) or, browsing, unjoins it.
+    private MenuExit? BackSeatPlane()
+    {
+        if (_seatPage is not { } page || _pickingSeat is not { } seat)
+        {
+            return AdvanceSeatWalk();
+        }
+
+        if (_steppingSeat == 0)
+        {
+            CancelSeatWalk();
+            return null;
+        }
+
+        if (seat.Locked)
+        {
+            _setup.Back(seat);
+            page.List.Expand();
+            _focus[(int)OriginalScreen.SeatPlane] = 0;
+            return null;
+        }
+
+        _setup.Unjoin(seat);
+        return AdvanceSeatWalk();
+    }
+
+    // The screen as the shared board component composes it over the seat's page, with the seat
+    // strip naming who is picking.
+    private void ComposeSeatPlane(
+        int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures, List<BoardFill> fills,
+        List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPanel> overlays)
+    {
+        if (_seatPage is not { } page)
+        {
+            return;
+        }
+
+        bool pressed = _pressed >= 0 && _pressed == focus;
+        var board = CampaignBoards.For(page, focus, pressed, string.Empty, null, _campaignLayout);
+        backdrop.AddRange(board.Backdrop);
+        fills.AddRange(board.Fills);
+        pictures.AddRange(board.Pictures);
+        lines.AddRange(board.Lines);
+        plaques.AddRange(board.Plaques);
+        overlays.AddRange(board.Overlays);
+        if (CampaignSeatPanel() is { } strip)
+        {
+            overlays.Add(strip);
+        }
+    }
+
+    /// <summary>
+    /// One seat's picker as a campaign page, so <c>CampaignBoards.For</c> draws it in the
+    /// plane-selection board's shape: the list field over the sortie roster, the silhouette of
+    /// the row under the cursor, its ratings and weapon column, ACCEPT and CANCEL SELECTIONS. The
+    /// page composes only; the shell applies every press itself, since the picks are the shared
+    /// setup's stages and not a profile's slots.
+    /// </summary>
+    private sealed class SeatPlanePage : ICampaignPage
+    {
+        // The pilot block's authored geometry, the fallback under each row read.
+        private const string Section = CampaignLayout.PlaneSelectionSection;
+        private const float ComboX = 138f;
+        private const float ComboY = 132f;
+        private const float ComboWidth = 271f;
+        private const int ItemHeight = 15;
+        private const int ItemsDisplayed = 13;
+        private const float HeadingY = 102f;
+
+        // The board's second crew block, which one seat's picker leaves empty: the campaign page's
+        // own drop onto the wingman heading, where the other seats' standing goes instead.
+        private const float SlotDrop = 218f;
+        private const float PlaneNameX = 236f;
+        private const float PlaneNameY = 106f;
+        private const float SilhouetteX = 444f;
+        private const float SilhouetteY = 138f;
+        private const float RatingX = 430f;
+        private const float RatingY = 228f;
+        private const float RatingPitch = 17f;
+        private const float RatingWidth = 140f;
+        private const float WeaponsX = 578f;
+        private const float WeaponsWidth = 160f;
+        private const float TitleX = 132f;
+        private const float TitleY = 36f;
+        private const float TitleWidth = 190f;
+        private const float LineX = 136f;
+        private const float LineY = 70f;
+        private const float LineWidth = 500f;
+        private const float TitleFont = 20f;
+        private const float BodyFont = 12f;
+        private const int SilhouetteFrames = 12;
+
+        private static readonly string[] RatingLabels = { "TOP SPEED:", "ARMOR:", "AGILITY:", "OFFENSE:" };
+        private static readonly string[] RatingKeys = { "PS_T_TOPSPEEDP", "PS_T_ARMORP", "PS_T_AGILITYP", "PS_T_OFFENSEP" };
+        private static readonly string[] RatingWords = { "Poor", "Fair", "Average", "Good", "Excellent" };
+        private static readonly int[] Calibres = { 70, 60, 50, 40, 30 };
+
+        private readonly OriginalShell _shell;
+        private readonly PlayerSeat _seat;
+
+        public SeatPlanePage(OriginalShell shell, PlayerSeat seat)
+        {
+            _shell = shell;
+            _seat = seat;
+            var layout = shell._campaignLayout;
+            var (x, y, width) = layout.Box(Section, "PS_D_PILOTPLANE", ComboX, ComboY, ComboWidth);
+            List = new CampaignCombo(x, y, width,
+                layout.Int(Section, "PS_D_PILOTPLANE", "ItemHeight", ItemHeight),
+                layout.Int(Section, "PS_D_PILOTPLANE", "TotalDisplayed", ItemsDisplayed));
+            var roster = shell._setup.Roster;
+            var entries = new List<string>(roster.Count);
+            foreach (var row in roster)
+            {
+                entries.Add(row.Name);
+            }
+
+            List.Load(entries, seat.Cursor);
+            if (!seat.Locked)
+            {
+                List.Expand();
+            }
+        }
+
+        /// <summary>The list field: open while the seat browses, closed over its selection.</summary>
+        public CampaignCombo List { get; }
+
+        public CampaignScreen Screen => CampaignScreen.PlaneSelection;
+
+        public string Title => "PLANE SELECTION";
+
+        public int RowCount => 3;
+
+        public int OpeningRow => 0;
+
+        public string Footer => List.Open
+            ? "↑↓  Choose       Enter / A  Select       Esc / B  Leave"
+            : "Enter / A  Confirm       Esc / B  Change";
+
+        public HangarArt? Art => null;
+
+        public CampaignTextEntry? TextEntry => null;
+
+        public IReadOnlyList<BoardStroke> Strokes => Array.Empty<BoardStroke>();
+
+        public IReadOnlyList<BoardFill> Fills => Array.Empty<BoardFill>();
+
+        public IReadOnlyList<BoardNote> Notes => Array.Empty<BoardNote>();
+
+        /// <summary>The silhouette of the aircraft under the cursor, the airframe's frame of the
+        /// icon sheet at <c>PS_P_PILOTPLANE</c>.</summary>
+        public IReadOnlyList<BoardPicture> Pictures
+        {
+            get
+            {
+                if (Current is not { } row || PlanePickerRoster.AirframeOf(row.Node) is not { } airframe)
+                {
+                    return Array.Empty<BoardPicture>();
+                }
+
+                var layout = _shell._campaignLayout;
+                var fallback = new BoardArt(BoardArtLibrary.Ui, "FC_PlaneIcons.Png", SilhouetteFrames);
+                var (x, y) = layout.At(Section, "PS_P_PILOTPLANE", SilhouetteX, SilhouetteY);
+                return new[] { new BoardPicture(layout.Art(Section, "PS_P_PILOTPLANE", fallback), x, y, airframe) };
+            }
+        }
+
+        /// <summary>The title, the line naming whose pick this is and what the screen waits for,
+        /// the seat's tag in the pilot heading's slot, the aircraft under the cursor and its
+        /// ratings and weapons.</summary>
+        public IReadOnlyList<BoardLine> Captions
+        {
+            get
+            {
+                var layout = _shell._campaignLayout;
+                int player = _shell.SeatIndex(_seat) + 1;
+                var (titleX, titleY, titleWidth) = layout.Box(Section, "PS_T_TITLE", TitleX, TitleY, TitleWidth);
+                var (lineX, lineY, lineWidth) = layout.Box(Section, "PS_T_MISSIONINFO", LineX, LineY, LineWidth);
+                var (headX, headY, headWidth) = layout.Box(Section, "PS_T_PILOT", ComboX, HeadingY, 94f);
+                var (otherX, otherY, otherWidth) = layout.Box(Section, "PS_T_WINGMAN", ComboX, HeadingY + SlotDrop, 94f);
+                var lines = new List<BoardLine>
+                {
+                    new(Title, titleX, titleY, titleWidth, TitleFont, BoardInk.Heading),
+                    new(Status(player), lineX, lineY, lineWidth, 15, BoardInk.Detail, Italic: true),
+                    new($"P{player}", headX, headY, headWidth, 15, BoardInk.Heading),
+                    new(Others(), otherX, otherY, TitleWidth * 3f, 15, BoardInk.Detail),
+                };
+                if (Current is not { } row)
+                {
+                    return lines;
+                }
+
+                var (nameX, nameY, nameWidth) = layout.Box(Section, "PS_T_PILOTPLANE", PlaneNameX, PlaneNameY, 400f);
+                lines.Add(new BoardLine(row.Name, nameX, nameY, nameWidth, BodyFont, BoardInk.Row));
+                if (PlanePickerRoster.AirframeOf(row.Node) is not { } airframe)
+                {
+                    return lines;
+                }
+
+                var fit = PlaneFit.For(row.Custom, _shell._stock?.Invoke()?.ForModel(row.Node));
+                var ratings = PlaneRatings.For(airframe, fit);
+                for (int i = 0; i < RatingLabels.Length; i++)
+                {
+                    var (x, y, width) = layout.Box(Section, RatingKeys[i], RatingX, RatingY + (i * RatingPitch), RatingWidth);
+                    lines.Add(new BoardLine($"{RatingLabels[i]}   {RatingWord(ratings[i])}", x, y, width, BodyFont, BoardInk.Row));
+                }
+
+                var (weaponsX, weaponsY, weaponsWidth) = layout.Box(Section, "PS_A_PLANEWEAPONSP", WeaponsX, RatingY, WeaponsWidth);
+                lines.Add(new BoardLine(WeaponList(fit), weaponsX, weaponsY, weaponsWidth, BodyFont, BoardInk.Row));
+                return lines;
+            }
+        }
+
+        private UiStrings Strings => _shell._campaign?.Strings ?? _shell._hangar?.Strings ?? UiStrings.Empty;
+
+        // The roster row the screen stands for: the highlighted one while the list is open, the
+        // selected one once it is closed.
+        private MenuAircraft? Current
+        {
+            get
+            {
+                var roster = _shell._setup.Roster;
+                int at = List.Open ? List.Highlight : List.Selected;
+                return at >= 0 && at < roster.Count ? roster[at] : null;
+            }
+        }
+
+        public BoardButtonRef Button(int row) => row switch
+        {
+            1 => new BoardButtonRef(BoardButton.AcceptSelections),
+            2 => new BoardButtonRef(BoardButton.CancelSelections),
+            _ => BoardButtonRef.None,
+        };
+
+        public CampaignCombo? Combo(int row) => row == 0 ? List : null;
+
+        public HangarArt? RowArt(int row) => null;
+
+        public bool Focusable(int row) => true;
+
+        public string RowText(int row) => row switch
+        {
+            0 => List.Text,
+            1 => "ACCEPT SELECTIONS",
+            _ => "CANCEL SELECTIONS",
+        };
+
+        public string Detail(int row) => string.Empty;
+
+        public bool Step(int row, int dir) => false;
+
+        public bool Accept(int row) => false;
+
+        public bool Secondary(int row) => false;
+
+        public bool Back() => false;
+
+        private string Status(int player)
+        {
+            string device = _seat.Source.DeviceLabel;
+            return _seat.Locked
+                ? $"P{player}  {device}   A again to confirm, B to change"
+                : $"P{player}  {device}   choose your aircraft";
+        }
+
+        // Every seat but the one picking, with what it stands at: the aircraft it has taken, READY
+        // once confirmed, waiting until its own turn comes. The walk's order, on the screen.
+        private string Others()
+        {
+            var seats = _shell._setup.Seats;
+            var roster = _shell._setup.Roster;
+            var parts = new List<string>();
+            for (int i = 0; i < seats.Count; i++)
+            {
+                if (ReferenceEquals(seats[i], _seat))
+                {
+                    continue;
+                }
+
+                string name = seats[i].Cursor < roster.Count ? roster[seats[i].Cursor].Name : string.Empty;
+                string standing = seats[i].Confirmed ? $"{name}  READY" : seats[i].Locked ? name : "waiting";
+                parts.Add($"P{i + 1}  {standing}");
+            }
+
+            return string.Join("     ", parts);
+        }
+
+        private string RatingWord(int stars)
+        {
+            int at = Math.Clamp(stars, 0, RatingWords.Length - 1);
+            return Strings.Text(501 + at, RatingWords[at]);
+        }
+
+        // The gun and hardpoint column in the plane-selection screen's own form, "(2) .50-cal."
+        // rows then the hardpoint count.
+        private string WeaponList(PlaneFit fit)
+        {
+            var lines = new List<string>();
+            foreach (int calibre in Calibres)
+            {
+                if (fit.Barrels.TryGetValue(calibre, out int barrels))
+                {
+                    int idx = Math.Clamp((calibre - 30) / 10, 0, 4);
+                    lines.Add($"({barrels}) {Strings.Text(3320 + idx, $" .{30 + (idx * 10)}-cal.").Trim()}");
+                }
+            }
+
+            if (fit.Hardpoints > 0)
+            {
+                lines.Add($"({fit.Hardpoints}) {Strings.Text(1008, "Hardpoints")}");
+            }
+
+            return string.Join("\n", lines);
+        }
+    }
+}

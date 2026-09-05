@@ -35,6 +35,7 @@ public class OriginalCoverageTests : IDisposable
     private const string TypeStep = "*type:";
     private const string EraseStep = "*erase";
     private const string ScrapStep = "*scrap";
+    private const string JoinStep = "*join";
 
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
@@ -60,6 +61,8 @@ public class OriginalCoverageTests : IDisposable
     {
         new("free-flight", OriginalScreen.FreeFlight, new[] { OriginalShell.FreeFlightKey }, new[] { OriginalShell.BackKey }),
         new("dogfight", OriginalScreen.Dogfight, new[] { OriginalShell.DogfightKey }, new[] { OriginalShell.BackKey }),
+        new("seat-plane", OriginalScreen.SeatPlane, new[] { OriginalShell.FreeFlightKey, JoinStep, "C1", OriginalShell.AirframeKey(0) },
+            new[] { OriginalShell.SeatPlaneFieldKey, "CancelSelections", OriginalShell.BackKey }),
         new("options", OriginalScreen.Options, new[] { "MM_B_PREFERENCES" }, new[] { OriginalShell.OptionsBackKey }),
         new("game-options", OriginalScreen.GameOptions, new[] { "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey },
             new[] { OriginalShell.GameOptionsCancelKey, OriginalShell.OptionsBackKey }),
@@ -161,6 +164,9 @@ public class OriginalCoverageTests : IDisposable
     private readonly string _dir;
     private readonly HashSet<string> _drawn = new(StringComparer.OrdinalIgnoreCase);
     private int _runs;
+
+    // The setup of the shell a journey is walking, for the join directive.
+    private PlayerSetupFeature? _setup;
 
     public OriginalCoverageTests(ITestOutputHelper output)
     {
@@ -409,6 +415,10 @@ public class OriginalCoverageTests : IDisposable
             else if (step == ScrapStep)
             {
                 exit = PressAScrap(shell, family);
+            }
+            else if (step == JoinStep)
+            {
+                _setup!.Join(new ScriptedMenuSeat());
             }
             else
             {
@@ -684,6 +694,7 @@ public class OriginalCoverageTests : IDisposable
         var setup = new PlayerSetupFeature();
         setup.SetRoster(OriginalPresentation.Roster(planes.List()));
         setup.Join(new ScriptedMenuSeat());
+        _setup = setup;
         hangar = new HangarFeature(strings, PlanePickerRoster.AirframeNode);
         campaign = new CampaignFeature(strings, PlanePickerRoster.AirframeNode);
         var store = profiles;

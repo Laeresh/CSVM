@@ -20,7 +20,8 @@ public sealed record OriginalInstantActionInks(
 /// the clouds. The Pilot Plane list is the sortie screens' roster, rows named <c>Stock Fury</c> and
 /// <c>&lt;build name&gt; Fury</c>; the wingman list stays stock. Build opens the hangar wallet-free
 /// and returns here with the list re-read; Weapon Loadout opens the loadout screen for the seat
-/// the radio names. Remake-only readings: docs/org/menu-inventory.md.
+/// the radio names; with a second seat joined the strip names it and FLY MISSION walks each seat
+/// through its own aircraft screen. Remake-only readings: docs/org/menu-inventory.md.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -710,6 +711,13 @@ public sealed partial class OriginalShell
                 OpenLoadout();
                 return null;
             case FlyMissionKey:
+                if (_setup.Seats.Count > 1)
+                {
+                    // A second pilot joined here picks on the per-seat screen first; the launch
+                    // then carries every seat.
+                    return BeginInstantActionSeatWalk();
+                }
+
                 // A build flies its airframe's stock node with the def riding along; the def's
                 // own player plane stays the airframe's stock name. An edited fit rides the seat.
                 var pilot = PilotPick();
@@ -811,6 +819,13 @@ public sealed partial class OriginalShell
         if (_iaOpen != null)
         {
             ComposeOpenDropdown(rows, focus, overlays, ItemFont);
+        }
+
+        // The seat strip in the same desk-margin band as the campaign boards': the page's own
+        // words start at IA_T_TABLETITLE (155, 94), so the top-left corner is clear.
+        if (CampaignSeatPanel(onPaper: true) is { } strip)
+        {
+            overlays.Add(strip);
         }
     }
 

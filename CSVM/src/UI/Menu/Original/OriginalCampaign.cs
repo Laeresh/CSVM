@@ -88,9 +88,12 @@ public sealed partial class OriginalShell
     /// <summary>The campaign page composing the screen showing, or null off the campaign.</summary>
     public ICampaignPage? CampaignContent => IsCampaignScreen ? _flow?.Page : null;
 
-    /// <summary>Which campaign screen the one showing is, or null off the campaign; what the
-    /// presentation picks the board's palette by.</summary>
-    public CampaignScreen? CampaignPage => IsCampaignScreen ? CampaignScreenOf(_screen) : null;
+    /// <summary>Which campaign board the screen showing wears, or null when it wears none; what
+    /// the presentation picks the board's palette by. The per-seat aircraft screen wears the
+    /// plane-selection board off the campaign.</summary>
+    public CampaignScreen? CampaignPage => IsCampaignScreen ? CampaignScreenOf(_screen)
+        : _screen == OriginalScreen.SeatPlane ? CampaignScreen.PlaneSelection
+        : null;
 
     /// <summary>The dialog standing over the screen, or null.</summary>
     public OriginalDialog? Dialog => _dialog;
@@ -126,8 +129,22 @@ public sealed partial class OriginalShell
         }
     }
 
-    private CampaignCombo? OpenCombo =>
-        _flow != null && _dialog == null && PageFocus >= 0 && _flow.Page.Combo(PageFocus) is { Open: true } combo ? combo : null;
+    // The open drop-down list, on a campaign screen or the per-seat aircraft screen, or null.
+    private CampaignCombo? OpenCombo
+    {
+        get
+        {
+            if (_screen == OriginalScreen.SeatPlane)
+            {
+                return _seatPage?.List is { Open: true } list ? list : null;
+            }
+
+            return _flow != null && _dialog == null && PageFocus >= 0 && _flow.Page.Combo(PageFocus) is { Open: true } combo ? combo : null;
+        }
+    }
+
+    // The screens whose fields are board combos, so a list of theirs can stand open.
+    private bool IsComboScreen => IsCampaignScreen || _screen == OriginalScreen.SeatPlane;
 
     /// <summary>The Campaign row's door: opens the campaign over the user's profile store and lands
     /// on the profile screen. Nothing happens when the shell has no feature or no store.</summary>
@@ -449,6 +466,18 @@ public sealed partial class OriginalShell
         }
     }
 
+    // The seat picking on the per-seat screen as its index, else the seat whose flight check
+    // shows, else none: the strip's focused line.
+    private int StripFocus()
+    {
+        if (_screen == OriginalScreen.SeatPlane)
+        {
+            return PickingSeat;
+        }
+
+        return _screen == OriginalScreen.CampaignFlightCheck && _campaign != null ? _campaign.Field.Current : -1;
+    }
+
     // Typed characters and Backspace into the roster's name box, the campaign's own character set
     // and cap, each character cueing the box's keystroke or reject sound.
     private bool TypeRosterName(MenuCommands commands, List<string> cues)
@@ -510,18 +539,20 @@ public sealed partial class OriginalShell
         }
     }
 
-    // The rows of a campaign screen: one row per page row at the rectangle the shared board
-    // component draws it at (a button's slot and strip, a field's box, a list row's slot), a row
-    // with no rectangle keeping its index unseen and unhit and a row the page refuses focus on
-    // disabled, then the open list's entries where a field is open.
     private void BuildCampaignRows(List<OriginalRow> rows)
     {
-        if (_flow == null)
+        if (_flow != null)
         {
-            return;
+            BuildPageRows(_flow.Page, rows);
         }
+    }
 
-        var page = _flow.Page;
+    // The rows of a screen drawn by the shared board component: one row per page row at the
+    // rectangle the component draws it at (a button's slot and strip, a field's box, a list row's
+    // slot), a row with no rectangle keeping its index unseen and unhit and a row the page refuses
+    // focus on disabled, then the open list's entries where a field is open.
+    private void BuildPageRows(ICampaignPage page, List<OriginalRow> rows)
+    {
         var screen = page.Screen;
         int listIndex = 0;
         for (int row = 0; row < page.RowCount; row++)
@@ -656,10 +687,10 @@ public sealed partial class OriginalShell
         }
     }
 
-    private bool CloseCampaignCombo() => IsCampaignScreen && OpenCombo is { } combo && combo.Collapse();
+    private bool CloseCampaignCombo() => IsComboScreen && OpenCombo is { } combo && combo.Collapse();
 
     private bool MoveCampaignCombo(IReadOnlyList<OriginalRow> rows, int focus, int direction) =>
-        IsCampaignScreen && OpenCombo is { } combo && combo.Move(direction);
+        IsComboScreen && OpenCombo is { } combo && combo.Move(direction);
 
     // A sideways step on a closed field picks its next entry, the page's own stepper, which the
     // plane selection may refuse with its dialog.

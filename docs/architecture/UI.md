@@ -656,12 +656,22 @@ writes the store. The remake rows' words and control kinds are recorded in [../o
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the
 seat rules every screen shares. Rows: the chapter column and BACK, then the aircraft column over
-the setup's roster (an eleven-row window that slides to keep the focused row inside it) and FLY.
-Seat 0 picks a chapter and an aircraft; a later seat walks its own cursor, selects, confirms, and
-on Back undoes a stage or unjoins. FLY is enabled once the mode's gate is met and leaves as the
-mode's own typed exit. `JoiningOpen` is the per-screen joining rule the presentation reads, and
-the campaign boards take the same seat strip as an overlay once a second seat has joined.
-Remake-only by design, the original shipping no join gesture: [../org/menu-inventory.md](../org/menu-inventory.md).
+the setup's roster (an eleven-row sliding window) and FLY. Seat 0 alone drives these screens; each
+joined seat then picks on its own screen (`OriginalSeatPlane.cs`). FLY is enabled once the mode's
+gate is met and leaves as the mode's own typed exit. `JoiningOpen` is the per-screen joining rule
+the presentation reads, and `CampaignSeatPanel` the seat strip the campaign boards and the Instant
+Action screen take as an overlay once a second seat has joined. Remake-only by design, the original
+shipping no join gesture: [../org/menu-inventory.md](../org/menu-inventory.md).
+
+## src/UI/Menu/Original/OriginalSeatPlane.cs
+The remake-only per-seat aircraft screen, a shell partial: once seat 0 has picked on a sortie
+screen, or pressed FLY MISSION on Instant Action with a second pilot joined, each joined seat in
+player order picks here before the walk ends. `SeatPlanePage` is an `ICampaignPage` over the sortie
+roster, so `CampaignBoards.For` draws it in the campaign plane-selection board's shape: the list
+field, the silhouette, the ratings and weapon column, ACCEPT and CANCEL SELECTIONS, with the seat
+strip over it. Accept selects and a second Accept confirms; Back undoes a selection, unjoins while
+browsing, or, from seat 0's own controller, cancels the walk. The walk ends on the sortie screen
+with FLY live, or as the Instant Action launch. Nothing here is decoded: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/Original/OriginalInstantAction.cs
 The Original Instant Action screen, the shell's partial over the decoded `[@InstantAction@]`
