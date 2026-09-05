@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using CSVM.Flight;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -12,12 +13,13 @@ public sealed record OriginalInstantActionInks(
 /// <summary>
 /// The Original Instant Action screen, composed from the decoded <c>[@InstantAction@]</c> rows over
 /// the shared <see cref="InstantActionFeature"/>: the Table of Contents window with its scroll
-/// arrows, the dropdowns at their authored lines, the enemy rows paged by the up and down buttons
-/// (the first wave beside the pilot fields, waves two to four on the second page), the radio pair
-/// and the five buttons. Decoded rules bound here: a contents row applies its preset, View Story
-/// writes the preset's name as the story title, the ace duel hides every enemy control, the
-/// wingman plane hides at zero wingmen, a changed militia resets its aircraft, stunt flying bars
-/// the clouds. Remake-only until the screen is filmed: the open list drawn under its box, a
+/// arrows, the dropdowns at their authored lines, the enemy rows paged by the up and down buttons,
+/// the radio pair and the five buttons. Decoded rules bound here: a contents row applies its
+/// preset, View Story writes the preset's name as the story title, the ace duel hides every enemy
+/// control, the wingman plane hides at zero wingmen, a changed militia resets its aircraft, stunt
+/// flying bars the clouds. The Pilot Plane list is the sortie screens' roster (stock, then the
+/// saved builds) with rows named <c>Stock Fury</c> and <c>&lt;build name&gt; Fury</c>; the wingman
+/// list stays stock. Remake-only until the screen is filmed: the open list drawn under its box, a
 /// sideways step changing a value, both halves shown together, Build and Weapon Loadout disabled.
 /// </summary>
 public sealed partial class OriginalShell
@@ -92,6 +94,8 @@ public sealed partial class OriginalShell
     private static readonly string[] WaveKeyPrefixes = { "IA_D_NENEMY", "IA_D_EGROUP", "IA_D_DIFFICULTY", "IA_D_PLANEE" };
 
     private readonly InstantActionFeature _instantAction;
+    private IReadOnlyList<MenuAircraft> _iaPilotRoster = OriginalRosters.Roster(Array.Empty<CustomPlaneDef>());
+    private string? _iaPilotBuild;
     private int _iaPage;
     private string? _iaOpen;
     private int _iaContentsTop;
@@ -103,6 +107,41 @@ public sealed partial class OriginalShell
 
     /// <summary>The open dropdown's key, or null when none is open.</summary>
     public string? OpenDropdown => _iaOpen;
+
+    /// <summary>The Pilot Plane list: the roster the sortie screens read, the eleven stock
+    /// airframes and then the saved builds, as of the last <see cref="RefreshInstantActionRoster"/>.</summary>
+    public IReadOnlyList<MenuAircraft> PilotRoster => _iaPilotRoster;
+
+    /// <summary>The picked Pilot Plane row's index into <see cref="PilotRoster"/>: the picked
+    /// build's row while it still flies the feature's airframe, else that airframe's stock row.</summary>
+    public int PilotRow
+    {
+        get
+        {
+            string node = _instantAction.PlayerPlane.Node;
+            int stock = -1;
+            for (int i = 0; i < _iaPilotRoster.Count; i++)
+            {
+                var row = _iaPilotRoster[i];
+                if (row.Node != node)
+                {
+                    continue;
+                }
+
+                if (row.IsCustom && row.Name == _iaPilotBuild)
+                {
+                    return i;
+                }
+
+                if (!row.IsCustom && stock < 0)
+                {
+                    stock = i;
+                }
+            }
+
+            return stock;
+        }
+    }
 
     /// <summary>Which enemy page shows: 0 the pilot fields with the first wave, 1 waves two to four.</summary>
     public int EnemyPage => _iaPage;
@@ -126,8 +165,31 @@ public sealed partial class OriginalShell
             _iaPage = 0;
         }
 
+        RefreshInstantActionRoster();
         _iaOpen = null;
         Open(OriginalScreen.InstantAction);
+    }
+
+    /// <summary>Re-reads the saved builds into the Pilot Plane list through the sortie screens'
+    /// roster rule. Every entry to the screen calls it; a return from the hangar calls it too, so
+    /// a build saved there is offered without leaving the screen.</summary>
+    public void RefreshInstantActionRoster()
+    {
+        _iaPilotRoster = OriginalRosters.Roster(_planes?.List() ?? Array.Empty<CustomPlaneDef>());
+    }
+
+    /// <summary>Opens one of the screen's dropdowns as a press on it would, for a scripted pose;
+    /// false when the screen is not showing or the key names no dropdown.</summary>
+    public bool OpenInstantActionDropdown(string key)
+    {
+        if (_screen != OriginalScreen.InstantAction || DropdownFor(key) is not { } list)
+        {
+            return false;
+        }
+
+        _iaOpen = key;
+        _focus[(int)_screen] = Math.Max(0, list.Current);
+        return true;
     }
 
     private static OriginalInstantActionInks ReadInstantActionInks(MenuLayout layout)
@@ -196,6 +258,27 @@ public sealed partial class OriginalShell
         }
 
         return int.TryParse(key[(ContentsKey.Length + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out int i) ? i : -1;
+    }
+
+    // The stock airframe a roster row flies as, matched on the node rather than the row's name:
+    // a build's row is named for the build, and a name-keyed lookup would land on the wrong def.
+    private static InstantActionAirframe? AirframeOf(MenuAircraft row)
+    {
+        foreach (var airframe in InstantActionFeature.Airframes)
+        {
+            if (airframe.Node == row.Node)
+            {
+                return airframe;
+            }
+        }
+
+        return null;
+    }
+
+    private static string PilotRowText(MenuAircraft row)
+    {
+        string airframe = AirframeOf(row)?.Name ?? row.Name;
+        return row.IsCustom ? row.Name + " " + airframe : "Stock " + airframe;
     }
 
     // The rows: an open list's items alone while one is open, else the screen's widgets.
@@ -347,17 +430,61 @@ public sealed partial class OriginalShell
         return _iaContentsTop;
     }
 
+    // The pilot's list over the roster; the wingman's stays the stock table (the original offers
+    // the wingmen no builds), so the two dropdowns are built apart on purpose.
+    private DropdownList PilotDropdown() =>
+        new(Names(_iaPilotRoster, PilotRowText), PilotRow, _ => true, SelectPilotRow);
+
+    private DropdownList WingmanPlaneDropdown() =>
+        new(Names(InstantActionFeature.Airframes, a => a.Name), _instantAction.WingmanPlaneIndex, _ => true, _instantAction.SelectWingmanPlane);
+
+    // A pick moves the feature onto the row's stock airframe either way, so the presets, the def's
+    // nominal name and the wingman screens keep the stock vocabulary; the build rides as the overlay.
+    private void SelectPilotRow(int row)
+    {
+        if (row < 0 || row >= _iaPilotRoster.Count)
+        {
+            return;
+        }
+
+        var pick = _iaPilotRoster[row];
+        var airframes = InstantActionFeature.Airframes;
+        for (int i = 0; i < airframes.Count; i++)
+        {
+            if (airframes[i].Node == pick.Node)
+            {
+                _instantAction.SelectPlayerPlane(i);
+                break;
+            }
+        }
+
+        _iaPilotBuild = pick.IsCustom ? pick.Name : null;
+    }
+
+    // The picked pilot row, or the feature's stock airframe when the roster has lost it.
+    private MenuAircraft PilotPick()
+    {
+        int row = PilotRow;
+        if (row >= 0)
+        {
+            return _iaPilotRoster[row];
+        }
+
+        var stock = _instantAction.PlayerPlane;
+        return new MenuAircraft(stock.Name, stock.Node);
+    }
+
     private DropdownList? DropdownFor(string key)
     {
         var ia = _instantAction;
         switch (key)
         {
             case PlayerPlaneKey:
-                return new DropdownList(Names(InstantActionFeature.Airframes, a => a.Name), ia.PlayerPlaneIndex, _ => true, ia.SelectPlayerPlane);
+                return PilotDropdown();
             case WingmenKey:
                 return new DropdownList(Counts(InstantActionFeature.MaxWingmen), ia.NumWingmen, _ => true, ia.SetWingmen);
             case WingmanPlaneKey:
-                return new DropdownList(Names(InstantActionFeature.Airframes, a => a.Name), ia.WingmanPlaneIndex, _ => true, ia.SelectWingmanPlane);
+                return WingmanPlaneDropdown();
             case MissionKey:
                 return new DropdownList(Names(ia.MissionTypes, m => m.Label), ia.MissionTypeIndex, _ => true, i =>
                 {
@@ -501,6 +628,7 @@ public sealed partial class OriginalShell
                         // launch's base def follows the preset's chapter.
                         _instantAction.ApplyPreset(int.Parse(suffix, CultureInfo.InvariantCulture));
                         _instantAction.ConfirmEnvironment();
+                        _iaPilotBuild = null;
                         _iaPage = 0;
                         break;
                 }
@@ -545,9 +673,12 @@ public sealed partial class OriginalShell
                 _iaRadio = 1;
                 return null;
             case FlyMissionKey:
+                // A build flies its airframe's stock node with the def riding along; the def's
+                // own player plane stays the airframe's stock name.
+                var pilot = PilotPick();
                 return _instantAction.BuildExit(new[]
                 {
-                    new MenuSeatChoice(_instantAction.PlayerPlane.Node, Array.Empty<int>()),
+                    new MenuSeatChoice(pilot.Node, Array.Empty<int>(), Custom: pilot.Custom),
                 });
             case ExitKey:
                 Open(OriginalScreen.TopLevel);

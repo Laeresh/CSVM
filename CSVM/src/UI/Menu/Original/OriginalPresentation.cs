@@ -42,6 +42,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the Instant Action screen.</summary>
     public const string InstantActionAid = "instant-action";
 
+    /// <summary>The Instant Action aid's argument that leaves its Pilot Plane list standing open.</summary>
+    public const string InstantActionPilotPlaneAid = "pilot-plane";
+
     /// <summary>The aid value that opens the hangar's name screen on a fresh build.</summary>
     public const string PlaneNameAid = "plane-name";
 
@@ -278,6 +281,10 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case InstantActionAid:
                     _shell.OpenInstantAction();
+                    break;
+                case InstantActionAid + ":" + InstantActionPilotPlaneAid:
+                    _shell.OpenInstantAction();
+                    _shell.OpenInstantActionDropdown(OriginalShell.PlayerPlaneKey);
                     break;
                 case PlaneNameAid:
                     _shell.OpenHangar();

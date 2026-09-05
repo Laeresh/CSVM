@@ -302,8 +302,9 @@ scan automatically; anything it adds to the shared namespace falls under the fir
 `--menu=<value>` opens the cold start on one screen for a `--screenshot`, and its values belong to
 the active presentation: every value in [`cli.md`](cli.md)'s bullet is Built-in's unless
 `--presentation=original` is set, in which case the same flag carries Original's own values
-(`free-flight`, `dogfight`, `instant-action`, `options`, the `plane-*` hangar poses, `campaign` and
-the shared scratch-store campaign poses, `campaign-delete`), and any other value opens that
+(`free-flight`, `dogfight`, `instant-action` and `instant-action:pilot-plane` with its Pilot Plane
+list open, `options`, the `plane-*` hangar poses, `campaign` and the shared scratch-store campaign
+poses, `campaign-delete`), and any other value opens that
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.
 
 A new presentation's aids follow the same rules: they select a screen of its own graph, they never

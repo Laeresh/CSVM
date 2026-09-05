@@ -665,12 +665,12 @@ splitscreen Dogfight and no join gesture: [../org/menu-inventory.md](../org/menu
 ## src/UI/Menu/Original/OriginalInstantAction.cs
 The Original Instant Action screen, the shell's partial over the decoded `[@InstantAction@]`
 section and the shared `InstantActionFeature`. Its rows are the section's own widgets keyed by
-their layout keys: the Table of Contents list in its authored window with its arrows and thumb,
-the dropdowns at their authored boxes, the enemy rows on two pages, the loadout-target radio pair
-and the screen's buttons. A contents row applies its preset on select, the ace duel hides every
-enemy control, and `InstantActionInks` is the colour reading the presentation turns into this
-screen's own palette. Option sets: [../formats/instant-action.md](../formats/instant-action.md);
-the screen and what its capture must confirm: [../org/menu-inventory.md](../org/menu-inventory.md).
+their layout keys: the contents list in its authored window with its arrows and thumb, the
+dropdowns at their authored boxes, the enemy rows on two pages, the radio pair and the buttons.
+The Pilot Plane list is `OriginalRosters.Roster` (stock, then the saved builds, rows named
+`Stock <airframe>` and `<build name> <airframe>`), re-read by `RefreshInstantActionRoster` on
+every entry; a picked build flies its airframe's stock node with its def on the seat, and the
+wingman list stays stock. Option sets: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/UI/Menu/Original/OriginalHangar.cs
 The Original hangar, the shell's partial over the shared `HangarFeature` and the decoded hangar
@@ -726,8 +726,8 @@ The two rosters the Original sortie screens list. `Chapters` is the shared `Menu
 with a short label per code; `Airframes` is the eleven stock names in the string table's own
 order, resolved to their `planes.zbd` nodes through the Instant Action decode, so the
 name-to-node map has one home. `Roster(customs)` appends the saved custom planes through the
-shared player setup's roster rule, which is what both presentations pick from. Read
-`src/UI/Menu/PlayerSetupFeature.cs` next.
+shared player setup's roster rule, which is what both presentations pick from and what the
+Instant Action Pilot Plane list offers. Read `src/UI/Menu/PlayerSetupFeature.cs` next.
 
 ## src/UI/Menu/Original/OriginalCues.cs
 The four cue names the Original presentation asks the shared audio service for: a button rollover,

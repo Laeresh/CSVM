@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.UI;
 using CSVM.UI.Menu;
@@ -69,10 +70,13 @@ internal static class MenuInstantActionSuites
         "Original Instant Action through the presentation boundary over the install's decoded "
         + "layout: the top level's Instant Action row is live and a click opens the decoded screen "
         + "with the environment's def loaded, its rows are the layout's contents window, dropdowns "
-        + "and buttons, keyboard frames cross to a dropdown and step and pick its value, and four "
+        + "and buttons, keyboard frames cross to a dropdown and step and pick its value, four "
         + "representative presets (an ace duel, a squadron, a stunt run and a zeppelin run) each "
         + "leave through Fly Mission as one LaunchExit whose def derives the matching session spec, "
-        + "the setup surviving each return to the top level")]
+        + "the setup surviving each return to the top level, and a build saved to the user's store "
+        + "is offered in the Pilot Plane list after the stock rows under its own name, flies its "
+        + "airframe's stock node with the def riding the seat, survives a return, and leaves the "
+        + "list with its file; the wingman list stays stock")]
     internal static void MenuOriginalInstantAction(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -94,6 +98,9 @@ internal static class MenuInstantActionSuites
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
         MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
         host.AddSeat(seat);
+        var store = CustomPlaneStore.UserPlanes();
+        string scratch = ScratchName();
+        ctx.Check(store.Load(scratch) == null, $"the scratch name {scratch} is free in the user's store before the run");
         try
         {
             host.Select(forceBuiltIn: false, cliOverride: "original", savedRequest: null);
@@ -111,13 +118,20 @@ internal static class MenuInstantActionSuites
             OriginalScreenOpens(ctx, host, seat, shell, fit, ia);
             OriginalKeyboard(ctx, host, seat, shell, ia);
             OriginalLaunches(ctx, host, seat, shell, fit, ia, exits);
+            OriginalCustomPilot(ctx, host, seat, shell, fit, ia, exits, store, scratch);
         }
         finally
         {
+            store.Delete(scratch);
             host.Deactivate();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
         }
+
+        ctx.Check(store.Load(scratch) == null, $"the scratch plane is gone from the user's store after the run");
     }
+
+    // A name no player would type, distinct per run, inside the name screen's own character set.
+    private static string ScratchName() => "Scratch " + Guid.NewGuid().ToString("N")[..8];
 
     private static void EnvironmentScreen(TestContext ctx, LaunchMenu menu)
     {
@@ -520,8 +534,8 @@ internal static class MenuInstantActionSuites
         }
 
         ctx.Check(contents == 14, $"the contents window shows the layout's fourteen rows ({contents})");
-        ctx.Check(Row(shell, OriginalShell.PlayerPlaneKey) is { Label: "Autogyro", X: 511f, Y: 210f, Width: 224f, Height: 18f },
-            $"the player plane dropdown stands at its authored line with the first airframe ({Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
+        ctx.Check(Row(shell, OriginalShell.PlayerPlaneKey) is { Label: "Stock Autogyro", X: 511f, Y: 210f, Width: 224f, Height: 18f },
+            $"the player plane dropdown stands at its authored line with the first airframe as its stock row ({Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
         ctx.Check(Row(shell, OriginalShell.MissionKey)?.Label == "Dogfighting an Ace" && Row(shell, "IA_D_NENEMY0") == null,
             $"the ace duel opens with no enemy row ({Row(shell, OriginalShell.MissionKey)?.Label})");
         ctx.Check(Row(shell, OriginalShell.ExitKey) is { Enabled: true, Width: 200f, Height: 32f },
@@ -541,12 +555,16 @@ internal static class MenuInstantActionSuites
         Press(host, seat, Right);
         ctx.Check(ia.PlayerPlane.Name == "Hellhound", $"Right on a dropdown steps its value ({ia.PlayerPlane.Name})");
         Press(host, seat, Accept);
-        ctx.Check(shell.OpenDropdown == OriginalShell.PlayerPlaneKey && shell.Rows.Count == 11,
-            $"Accept opens its eleven-row list ({shell.OpenDropdown}, {shell.Rows.Count})");
+        // The list is the eleven stock rows and then whatever the user's store holds, so the
+        // count is a floor and the stock prefix is what the first rows are checked for.
+        ctx.Check(shell.OpenDropdown == OriginalShell.PlayerPlaneKey && shell.Rows.Count >= 11 && StockRows(shell) == 11,
+            $"Accept opens its list with the eleven stock rows first ({shell.OpenDropdown}, {shell.Rows.Count}, {StockRows(shell)} stock)");
+        ctx.Check(shell.Rows[0].Label == "Stock Autogyro" && shell.Rows[1].Label == "Stock Hellhound" && shell.FocusedKey == OriginalShell.PlayerPlaneKey + ":1",
+            $"named Stock <airframe> with the focus on the current row ({shell.Rows[0].Label}, {shell.Rows[1].Label}, {shell.FocusedKey})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.OpenDropdown == null && ia.PlayerPlane.Name == "Balmoral",
-            $"Down and Accept pick the next row and close the list ({ia.PlayerPlane.Name})");
+        ctx.Check(shell.OpenDropdown == null && ia.PlayerPlane.Name == "Balmoral" && Row(shell, OriginalShell.PlayerPlaneKey)?.Label == "Stock Balmoral",
+            $"Down and Accept pick the next row and close the list ({ia.PlayerPlane.Name}, {Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
         Press(host, seat, Down);
         ctx.Check(shell.FocusedKey == OriginalShell.WingmenKey, $"Down walks the right page ({shell.FocusedKey})");
         Press(host, seat, Right);
@@ -625,6 +643,179 @@ internal static class MenuInstantActionSuites
             ctx.Check(shell.Screen == OriginalScreen.TopLevel && ia.PresetIndex == c.Preset,
                 $"the return re-enters the top level with the setup kept ({shell.Screen}, preset {ia.PresetIndex})");
         }
+    }
+
+    // A build saved to the user's store, entered from the top level: the Pilot Plane list offers
+    // it after the stock rows under "<build name> <airframe>", a click on it flies the airframe's
+    // stock node with the def on the seat, the pick survives a return, the wingman list never
+    // lists it, the roster re-read offers a build saved while the screen shows, and deleting the
+    // file drops the row and the pick back onto the airframe's stock row.
+    private static void OriginalCustomPilot(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia, List<MenuExit> exits, CustomPlaneStore store, string scratch)
+    {
+        const int Fury = 7;
+        string rowText = scratch + " Fury";
+        store.Save(new CustomPlaneDef { Name = scratch, Airframe = Fury, Engine = 1 });
+        if (!EnterInstantAction(ctx, host, seat, shell, fit))
+        {
+            return;
+        }
+
+        int row = PilotRowOf(shell, scratch);
+        ctx.Check(row >= 11 && shell.PilotRoster[row].Node == "player_fury",
+            $"entering the screen reads the store: the build sits after the eleven stock rows flying the Fury's node (row {row})");
+
+        // The wingman list, opened beside it, is the stock table alone.
+        if (ia.NumWingmen == 0)
+        {
+            ia.SetWingmen(1);
+        }
+
+        var wingmanDrop = Row(shell, OriginalShell.WingmanPlaneKey);
+        ctx.Check(wingmanDrop != null, $"the Wingman Plane dropdown shows with a wingman ({ia.NumWingmen})");
+        if (wingmanDrop != null)
+        {
+            Press(host, seat, Pointer(fit, wingmanDrop.X + 5f, wingmanDrop.Y + 5f, pressed: true, clicked: true));
+            ctx.Check(shell.OpenDropdown == OriginalShell.WingmanPlaneKey && shell.Rows.Count == 11 && LabelRow(shell, rowText) < 0 && shell.Rows[7].Label == "Fury",
+                $"the wingman list is the eleven stock names alone ({shell.Rows.Count}, {shell.Rows[7].Label})");
+            Press(host, seat, Accept);
+            ctx.Check(shell.OpenDropdown == null, $"Accept on its current row closes it");
+        }
+
+        var drop = Row(shell, OriginalShell.PlayerPlaneKey);
+        ctx.Check(drop != null, $"the Pilot Plane dropdown is on screen");
+        if (drop == null || row < 0)
+        {
+            return;
+        }
+
+        Press(host, seat, Pointer(fit, drop.X + 5f, drop.Y + 5f, pressed: true, clicked: true));
+        var item = Row(shell, $"{OriginalShell.PlayerPlaneKey}:{row}");
+        ctx.Check(shell.OpenDropdown == OriginalShell.PlayerPlaneKey && item != null && item.Label == rowText && StockRows(shell) == 11,
+            $"a click opens the list with the build's row named for it after the stock rows ({item?.Label})");
+        if (item == null)
+        {
+            return;
+        }
+
+        Press(host, seat, Pointer(fit, item.X + 5f, item.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.OpenDropdown == null && shell.PilotRow == row && Row(shell, OriginalShell.PlayerPlaneKey)?.Label == rowText,
+            $"a click on it picks the build and closes the list ({shell.PilotRow}, {Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
+        ctx.Check(ia.PlayerPlane.Name == "Fury", $"the feature's own pick moves onto the build's airframe ({ia.PlayerPlane.Name})");
+
+        var fly = Row(shell, OriginalShell.FlyMissionKey)!;
+        int before = exits.Count;
+        Press(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(exits.Count == before + 1 && exits[^1] is LaunchExit, $"Fly Mission leaves as one LaunchExit ({exits.Count - before})");
+        if (exits[^1] is not LaunchExit launch)
+        {
+            return;
+        }
+
+        var choice = launch.Seats[0];
+        ctx.Check(launch.Seats.Count == 1 && choice.PlaneNode == "player_fury" && choice.Custom?.Name == scratch,
+            $"seat 0 flies the airframe's stock node with the build's def on the seat ({choice.PlaneNode}, {choice.Custom?.Name ?? "no def"})");
+        ctx.Check(launch.InstantAction?.PlayerPlane == "Fury", $"the def's player plane is the airframe's stock name ({launch.InstantAction?.PlayerPlane})");
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()), launch.Chapter, new[] { choice.PlaneNode },
+            launch.Mode, launch.InstantAction, customPlanes: new[] { choice.Custom });
+        ctx.Check(spec.PlaneNames.Count == 1 && spec.PlaneNames[0] == "player_fury" && spec.MenuCustomPlanes.Count == 1 && spec.MenuCustomPlanes[0]?.Name == scratch,
+            $"and the session spec resolves to the stock node with the build's name riding it ({spec.PlaneNames[0]}, {spec.MenuCustomPlanes[0]?.Name ?? "no def"})");
+
+        host.Show(MenuReturnDestination.TopLevel);
+        if (!EnterInstantAction(ctx, host, seat, shell, fit))
+        {
+            return;
+        }
+
+        ctx.Check(shell.PilotRow == PilotRowOf(shell, scratch) && Row(shell, OriginalShell.PlayerPlaneKey)?.Label == rowText,
+            $"the pick survives the return ({Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
+
+        // The re-read the hangar's return calls: a build saved while the screen shows is offered
+        // without leaving it, and a deleted file drops both its row and the pick.
+        string second = ScratchName();
+        store.Save(new CustomPlaneDef { Name = second, Airframe = 3, Engine = 1 });
+        try
+        {
+            ctx.Check(PilotRowOf(shell, second) < 0, $"a build saved while the screen shows is not offered until the roster is re-read");
+            shell.RefreshInstantActionRoster();
+            int secondRow = PilotRowOf(shell, second);
+            ctx.Check(secondRow >= 11 && shell.PilotRoster[secondRow].Node == "player_bhawk",
+                $"RefreshInstantActionRoster offers it on the Bloodhawk's node (row {secondRow})");
+            ctx.Check(Row(shell, OriginalShell.PlayerPlaneKey)?.Label == rowText, $"and the standing pick is kept ({Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
+        }
+        finally
+        {
+            store.Delete(second);
+        }
+
+        store.Delete(scratch);
+        shell.RefreshInstantActionRoster();
+        ctx.Check(PilotRowOf(shell, scratch) < 0 && PilotRowOf(shell, second) < 0 && shell.PilotRoster.Count >= 11,
+            $"deleting the files drops their rows ({shell.PilotRoster.Count} rows)");
+        ctx.Check(Row(shell, OriginalShell.PlayerPlaneKey)?.Label == "Stock Fury" && ia.PlayerPlane.Name == "Fury",
+            $"and the pick falls back onto the airframe's stock row ({Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
+        var exit = Row(shell, OriginalShell.ExitKey)!;
+        Press(host, seat, Pointer(fit, exit.X + 5f, exit.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel, $"Exit returns to the top level ({shell.Screen})");
+    }
+
+    private static bool EnterInstantAction(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
+    {
+        var door = Row(shell, "MM_B_INSTANTACTION");
+        ctx.Check(door != null && shell.Screen == OriginalScreen.TopLevel, $"the top level's Instant Action row is on screen ({shell.Screen})");
+        if (door == null)
+        {
+            return false;
+        }
+
+        Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
+        return shell.Screen == OriginalScreen.InstantAction;
+    }
+
+    // The index of the open list's row carrying a label, or -1.
+    private static int LabelRow(OriginalShell shell, string label)
+    {
+        var rows = shell.Rows;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (rows[i].Label == label)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    // The row a build sits at in the pilot list, or -1: found by its own name among the custom
+    // rows, never by the airframe it flies.
+    private static int PilotRowOf(OriginalShell shell, string build)
+    {
+        for (int i = 0; i < shell.PilotRoster.Count; i++)
+        {
+            if (shell.PilotRoster[i].IsCustom && shell.PilotRoster[i].Name == build)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    // How many rows from the top of an open list carry the stock prefix before the first that does not.
+    private static int StockRows(OriginalShell shell)
+    {
+        int n = 0;
+        foreach (var row in shell.Rows)
+        {
+            if (!row.Label.StartsWith("Stock ", StringComparison.Ordinal))
+            {
+                break;
+            }
+
+            n++;
+        }
+
+        return n;
     }
 
     private static OriginalRow? Row(OriginalShell shell, string key)

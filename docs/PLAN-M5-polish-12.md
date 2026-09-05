@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — The Instant Action screen and the export crossing
 
 1. ☑ `BL-691` The export message box draws its OK button in ink the plaque hides
-2. ☐ `BL-709` Instant Action's Pilot Plane list offers the stock airframes only
+2. ☑ `BL-709` Instant Action's Pilot Plane list offers the stock airframes only
 3. ☐ `BL-708` Original's Instant Action screen draws Weapon Loadout and Build Custom Plane disabled
 4. ☐ `BL-651` Instant Action's build list shows every campaign plane, with no working Export gate
 
@@ -194,7 +194,7 @@ which every scratch-store campaign aid now opens over, so no aid can write `user
 scratch write. Left as found: the box's icon draws the `?` frame where the original's export
 notice shows `!`, not part of this item.
 
-## A2 ☐ `BL-709` Instant Action's Pilot Plane list offers the stock airframes only
+## A2 ☑ `BL-709` Instant Action's Pilot Plane list offers the stock airframes only
 
 **Goal.** Original's Instant Action Pilot Plane dropdown offers the saved custom builds after the
 eleven stock airframes, each row named `Stock <airframe>` or `<build name> <airframe>`, and a
@@ -225,6 +225,22 @@ name. Screenshot with `--presentation=original --menu=instant-action:<steps>` fo
 **⚠ Traps.** A custom flies its airframe's stock node, so a name-keyed lookup lands on the wrong
 def. The `Stock <airframe>` prefix is a text of this dropdown only; the sortie screens and Built-in
 keep their names, or every menu suite asserting row text moves.
+
+**Verified.** <pending orchestrator run>
+
+**Outcome.** Landed as designed. `OriginalShell` holds a `PilotRoster` read through
+`OriginalRosters.Roster(_planes.List())` by `RefreshInstantActionRoster()`, which
+`OpenInstantAction()` calls on every entry and which `A3` calls when Build returns to the screen;
+the wingman dropdown is built by its own `WingmanPlaneDropdown()` over the stock table. The row
+text is applied in `PilotRowText` alone, the airframe found by node (`AirframeOf`), and a pick moves
+the feature onto the airframe's stock row with the build kept as an overlay (`_iaPilotBuild`), so
+the def's `PlayerPlane` stays the stock name `GameSession` resolves by and the seat carries the
+build's def (`MenuSeatChoice.Custom`) on the airframe's stock node. `--menu=instant-action:pilot-plane`
+opens the list for a shot. `menu-original-instant-action` gained the walk; a perturbation dropping
+the airframe suffix failed its four row-text checks. Finding for the sortie, not fixed here: with
+the author's eight builds the open list is nineteen rows and runs past the page's foot over the
+button row, since the remake's open list has no window although the layout's dropdown authors
+`TotalDisplayed 20`.
 
 ## A3 ☐ `BL-708` Original's Instant Action screen draws Weapon Loadout and Build Custom Plane disabled
 
