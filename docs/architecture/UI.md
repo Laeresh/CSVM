@@ -41,14 +41,14 @@ inverse, and `IndexOf` is the after-build auto-select's case-blind lookup. Delib
 the menu-side list, that one the session-side read. Tests: `CSVM.Tests/PlanePickerRosterTests.cs`.
 
 ## src/UI/HangarFlow.cs
-The Build Custom Plane flow, Built-in's walk of the shared `HangarFeature`
-(`Menu/HangarFeature.cs`), engine-free the way `BoardMenu` is: the launchscreen owns the Godot
-controls, the feature owns the scratch plane, the rules and the store operations, and this file
-owns the screen order, the cursor and the pages. `Order` is the original's nine screens and
-`PageFor` maps each to its `IHangarPage`, the mount point handing the shell rows, a detail line, a
-stepper, the totals line's subject and optional art. Nothing is written until `Commit()`, so
-cancelling from any screen is residue-free by construction. The screens, the economy and the
-campaign wallet's inventory reading: [../org/hangar.md](../org/hangar.md).
+The Build Custom Plane flow, Built-in's walk of the shared `HangarFeature` (`Menu/HangarFeature.cs`),
+engine-free the way `BoardMenu` is: the launchscreen owns the Godot controls, the feature owns the
+scratch plane, the rules and the store operations, and this file owns the screen order, the cursor
+and the pages. `Order` is the original's nine screens and `PageFor` maps each to its `IHangarPage`,
+the mount point handing the shell rows, a detail line, a stepper, the totals line's subject, each
+row's would-be cost and optional art; over a campaign the flow adds the wallet line beside the
+totals and the mark on a row the funds cannot cover. Nothing is written until `Commit()`, so
+cancelling is residue-free. Screens, economy and the cash note: [../org/hangar.md](../org/hangar.md).
 
 ## src/UI/Hangar*Page.cs
 The eight hangar screens the flow walks, one file each, every one a `HangarPage` editing
@@ -573,9 +573,9 @@ operations both presentations walk, one build at a time. `Open` takes a `CustomP
 optional `IHangarWallet` (what `CampaignWallet` implements: funds, affordability, airframe
 availability, the owned builds, purchase and sale); the three starts pick how the scratch plane
 begins, the per-tab operations clamp and report change, and `Refusal`, `CanCommit`, `Bill` and
-`Commit` are the purchase gate and the write. It also owns every label the screens write, the
-name rules, and `Discard`, which drops the build and touches nothing saved. The economy, the
-strings and the decoded tables: [../org/hangar.md](../org/hangar.md). Read `HangarFlow.cs` next.
+`Commit` are the purchase gate and the write. It also owns every label the screens write, the wallet
+line, the would-be cost behind the mark on an over-priced row, the name rules, and `Discard`, which
+drops the build and touches nothing saved. Economy and strings: [../org/hangar.md](../org/hangar.md).
 
 ## src/UI/Menu/CampaignFeature.cs
 The campaign as a shared engine-free feature in the host's feature set: the state and the
@@ -677,10 +677,10 @@ The Original hangar, the shell's partial over the shared `HangarFeature` and the
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
 right page, the totals page and the INVENTORY, each composed from its own layout section. It owns
 the plane picture over the four blueprint panes (the airframe's blueprint, else the picked
-pattern's region masks tinted under its plate), the running total, the tab bar read off the
-layout's own edges, every dropdown's list under its box, and the airframe-switch ask as a dialog
-over the page; every pick binds straight to the feature. The economy and the paint tables:
-[../org/hangar.md](../org/hangar.md); the screens: [../org/menu-inventory.md](../org/menu-inventory.md).
+pattern's region masks tinted under its plate), the running total, the cash note over a wallet with
+the mark on a dropdown row the funds cannot cover, the tab bar read off the layout's own edges, every
+dropdown's list under its box, and the airframe-switch ask as a dialog over the page; every pick
+binds straight to the feature. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCampaign.cs
 The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,

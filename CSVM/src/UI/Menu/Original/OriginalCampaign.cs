@@ -105,6 +105,10 @@ public sealed partial class OriginalShell
     /// <summary>The briefing's narration wav, or "" when there is none or the briefing is not showing.</summary>
     public string NarrationWav => _screen == OriginalScreen.CampaignBriefing ? _campaign?.Briefing?.NarrationWav ?? string.Empty : string.Empty;
 
+    /// <summary>The seated profile as the hangar's wallet, or null with nobody seated: what the
+    /// cabin's PLANE CONSTRUCTION opens the hangar over, and what the campaign-hangar aid takes.</summary>
+    public IHangarWallet? CampaignWallet => _campaign?.Wallet();
+
     private CampaignTextEntry? RosterEntry => _flow?.Page is CampaignRosterPage roster ? roster.TextEntry : null;
 
     // The focused row as a page row, for the pages that read the flow's cursor.

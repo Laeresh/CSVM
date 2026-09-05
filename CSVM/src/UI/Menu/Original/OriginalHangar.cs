@@ -205,15 +205,16 @@ public sealed partial class OriginalShell
 
     /// <summary>Opens a hangar tab directly on a default-configuration build named
     /// <paramref name="name"/>, the screenshot aids' door: the name screen's OK with the box
-    /// checked, then the tab. Nothing happens without a feature or a store.</summary>
-    public void OpenHangarTab(OriginalScreen tab, string name)
+    /// checked, then the tab, over <paramref name="wallet"/> when the shot wants the campaign's
+    /// cash note. Nothing happens without a feature or a store.</summary>
+    public void OpenHangarTab(OriginalScreen tab, string name, IHangarWallet? wallet = null)
     {
         if (_hangar == null || _planes == null)
         {
             return;
         }
 
-        OpenHangar();
+        OpenHangar(wallet);
         _hangarName = name;
         AcceptName();
         if (tab != OriginalScreen.HangarAirframe)
@@ -329,6 +330,24 @@ public sealed partial class OriginalShell
     // The paper buttons whose authored label colours are the page's black, not the tabs' white.
     private static bool IsPaperButton(string key) =>
         key is PurchaseNowKey or InventorySellKey or InventoryExportKey or AskOkKey or AskCancelKey;
+
+    // The wallet mark on every priced row the funds could not cover after that pick, baked into
+    // the item texts so the closed box, the open list and the focus read the same row.
+    private static void MarkUnaffordable(HangarFeature hangar, string[] items, Func<int, int> costWith)
+    {
+        if (hangar.Wallet == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < items.Length; i++)
+        {
+            if (hangar.Unaffordable(costWith(i)))
+            {
+                items[i] = HangarFeature.UnaffordableMark + items[i];
+            }
+        }
+    }
 
     // A rating's bar: the five authored segment panes, the first n drawn for n stars.
     private static void ComposeBar(MenuLayoutScreen hub, List<BoardPicture> pictures, string prefix, int filled)
@@ -870,6 +889,7 @@ public sealed partial class OriginalShell
                     names[i] = hangar.AirframeName(i);
                 }
 
+                MarkUnaffordable(hangar, names, hangar.CostWithAirframe);
                 return new HangarList(names, hangar.AirframeChosen ? scratch.Airframe : -1, i => hangar.PickAirframe(i));
             case EngineDropKey:
                 var engines = new string[CustomPlaneDef.EngineNone + 1];
@@ -878,6 +898,7 @@ public sealed partial class OriginalShell
                     engines[i] = i == CustomPlaneDef.EngineNone ? hangar.Strings.Text(1165, "None") : hangar.EngineName(scratch.Airframe, i);
                 }
 
+                MarkUnaffordable(hangar, engines, hangar.CostWithEngine);
                 return new HangarList(engines, scratch.Engine, i => hangar.SetEngine(i));
             case PatternDropKey:
                 var patterns = hangar.WearablePatterns();
@@ -907,6 +928,7 @@ public sealed partial class OriginalShell
                 units[i] = hangar.ArmourLabel(i);
             }
 
+            MarkUnaffordable(hangar, units, i => hangar.CostWithArmour(zone, i));
             return new HangarList(units, hangar.ArmourUnits(zone), i => hangar.SetArmour(zone, i));
         }
 
@@ -918,6 +940,7 @@ public sealed partial class OriginalShell
                 guns[i] = hangar.GunCycleName(i);
             }
 
+            MarkUnaffordable(hangar, guns, i => hangar.CostWithGun(slot, i));
             return new HangarList(guns, HangarFeature.GunCycleIndex(scratch.Guns[slot]), i => hangar.SetGun(slot, i));
         }
 
@@ -929,6 +952,7 @@ public sealed partial class OriginalShell
                 counts[i] = hangar.HardpointsLabel(i);
             }
 
+            MarkUnaffordable(hangar, counts, i => hangar.CostWithHardpoints(wing, i));
             return new HangarList(counts, wing == 0 ? scratch.LeftHardpoints : scratch.RightHardpoints, i => hangar.SetHardpoints(wing, i));
         }
 
@@ -1214,11 +1238,13 @@ public sealed partial class OriginalShell
 
         if (hangar.Wallet is { } wallet)
         {
+            // The cash note's two authored rows, on every tab and the totals page alike; the figure
+            // takes the problems ink once the build outruns it, the mark's own colour.
             AddHangarText(hub, lines, "PX_T_CASHTITLE", HubTextFont, BoardInk.Row);
             if (hub.Widget("PX_T_CASH") is { } cash)
             {
                 lines.Add(new BoardLine("$" + wallet.Funds.ToString(CultureInfo.InvariantCulture), cash.Int("X"), cash.Int("Y"),
-                    cash.Int("Width"), HubLabelFont, BoardInk.Row, -1, false, Justify(cash)));
+                    cash.Int("Width"), HubLabelFont, hangar.TotalUnaffordable() ? BoardInk.Heading : BoardInk.Row, -1, false, Justify(cash)));
             }
         }
 

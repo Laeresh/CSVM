@@ -80,6 +80,11 @@ public sealed class HangarAirframePage : HangarPage
                $"Agility {Stars(bill.AgilityStars)}   Armor {Stars(bill.ArmourStars)}";
     }
 
+    /// <summary>What the build would cost on that airframe with every other pick kept; the ask's two
+    /// answer rows price nothing.</summary>
+    public override int? CostWith(int row) =>
+        Flow.DefaultsAsk is null ? Flow.Feature.CostWithAirframe(row) : null;
+
     /// <inheritdoc/>
     public override bool Accept(int row)
     {

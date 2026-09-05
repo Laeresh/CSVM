@@ -2267,12 +2267,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         column.AddChild(Spacer((int)(ZonePad * s)));
         column.AddChild(Label(Heading(), (int)(HeadingFont * s), HeadingColor, HorizontalAlignment.Center));
 
-        // The persistent price/weight line comes from HangarFlow.TotalsLine, error-coloured when
-        // over and empty where the focused row has no plane to price. Its slot is reserved on every
-        // screen, so gaining or losing a total never moves the rows under it.
+        // The hangar's totals with the campaign's money on hand beside them, error-coloured when
+        // over either. The slot is reserved on every screen, so gaining or losing a line never
+        // moves the rows under it.
         var totals = _screen == Screen.Hangar ? _hangar : null;
-        column.AddChild(Reserved(totals?.TotalsLine ?? "", (int)(DetailFont * s),
-            totals is { TotalsOverweight: true } ? ErrorColor : DetailColor));
+        column.AddChild(Reserved(TotalsAndWallet(totals), (int)(DetailFont * s),
+            totals is { TotalsOverweight: true } or { WalletShort: true } ? ErrorColor : DetailColor));
 
         // The rows in a column of their own so the hangar's art can stand beside them.
         var content = new VBoxContainer();
@@ -2952,6 +2952,20 @@ public sealed partial class LaunchMenu : CanvasLayer
         return label;
     }
 
+    // The one reserved line over a hangar screen: the totals, then the wallet where a campaign funds
+    // the build, either alone when the other is empty.
+    private string TotalsAndWallet(HangarFlow? flow)
+    {
+        if (flow == null || _screen != Screen.Hangar)
+        {
+            return "";
+        }
+
+        string totals = flow.TotalsLine;
+        string wallet = flow.WalletLine;
+        return totals.Length > 0 && wallet.Length > 0 ? totals + "      " + wallet : totals + wallet;
+    }
+
     // The stock fit behind a roster row, or null when the table has no def flying that model.
     // A custom row resolves through its airframe's stock node, so its Ammo Selection list is the
     // airframe's until custom loadouts are supported. Wingman indices land here too: wingmen
@@ -3125,7 +3139,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Mode => index < Modes.Length ? Modes[index].Label
                 : index == Modes.Length ? CampaignRow
                 : index == Modes.Length + 1 ? HangarRow : OptionsRow,
-            Screen.Hangar => _hangar?.Page.RowText(index) ?? "",
+            Screen.Hangar => _hangar?.RowText(index) ?? "",
             Screen.Campaign => _campaign?.Page.RowText(index) ?? "",
             Screen.Options => index switch
             {

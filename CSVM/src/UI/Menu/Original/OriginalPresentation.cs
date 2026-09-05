@@ -68,12 +68,13 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The campaign aid values Original shares with Built-in, each over the scratch
     /// profile store: the empty profile screen, the two-player one, the cabin, the table of
     /// contents, the book on the last mission flown, the briefing (with its seconds argument),
-    /// the flight check, ammo selection and plane selection; plus Original's own
-    /// <see cref="CampaignDeleteAid"/>.</summary>
+    /// the flight check, ammo selection, plane selection and the hangar over the profile's wallet
+    /// (with a tab argument); plus Original's own <see cref="CampaignDeleteAid"/>.</summary>
     public static readonly IReadOnlyList<string> CampaignAids = new[]
     {
         "campaign-empty", "campaign-roster", "campaign-cabin", "campaign-previous", "campaign-scrapbook",
-        "campaign-briefing", "campaign-flightcheck", "campaign-ammo", "campaign-planeselection", CampaignDeleteAid,
+        "campaign-briefing", "campaign-flightcheck", "campaign-ammo", "campaign-planeselection", "campaign-hangar",
+        CampaignDeleteAid,
     };
 
     // The aids' scratch build carries this name, so the shots read the same on every machine; it
@@ -83,6 +84,19 @@ public sealed class OriginalPresentation : IMenuPresentation
     // The briefing aid's reveal is advanced in frame-sized slices, since the script blocks on
     // authored waits and cue points and one large step would stand at the first of them.
     private const double AidSlice = 1.0 / 60.0;
+
+    // The campaign-hangar aid's tab argument, each the hub screen it opens on over the wallet.
+    private static readonly IReadOnlyDictionary<string, OriginalScreen> CampaignHangarTabs =
+        new Dictionary<string, OriginalScreen>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["airframe"] = OriginalScreen.HangarAirframe,
+            ["engine"] = OriginalScreen.HangarEngine,
+            ["armor"] = OriginalScreen.HangarArmor,
+            ["guns"] = OriginalScreen.HangarGuns,
+            ["hardpoints"] = OriginalScreen.HangarHardpoints,
+            ["paint"] = OriginalScreen.HangarPaint,
+            ["purchase"] = OriginalScreen.HangarPurchase,
+        };
 
     private readonly Node _parent;
     private readonly string _dataRoot;
@@ -563,6 +577,20 @@ public sealed class OriginalPresentation : IMenuPresentation
                 if (argument == CampaignAidProfiles.ExportArgument)
                 {
                     _shell.PressExport();
+                }
+
+                break;
+            case "campaign-hangar":
+                // The cabin's own PLANE CONSTRUCTION press, so the shot carries the cash note: the
+                // name screen bare, or the named tab on the aid's build.
+                _shell.ShowCabin(CampaignAidProfiles.Pilot);
+                if (colon >= 0 && CampaignHangarTabs.TryGetValue(aid[(colon + 1)..], out var tab))
+                {
+                    _shell.OpenHangarTab(tab, AidPlaneName, _shell.CampaignWallet);
+                }
+                else
+                {
+                    _shell.OpenHangar(_shell.CampaignWallet);
                 }
 
                 break;

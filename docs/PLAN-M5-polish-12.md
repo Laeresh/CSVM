@@ -112,7 +112,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — The campaign boards and Game Options
 
 21. ☑ `BL-712` A briefing re-entered from the cabin resumes its reveal mid-way
-22. ☐ `BL-655` The campaign hangar never shows the wallet while a plane is being built
+22. ☑ `BL-655` The campaign hangar never shows the wallet while a plane is being built
 23. ☑ `BL-570` The difficulty setting has no menu row
 
 ### Wave D — The pointer
@@ -429,7 +429,7 @@ revealed objective and a narration count of three, where the unchanged build rea
 two. The Original suite's earlier assertion that the re-entry "reopens the briefing where REPLAY
 left it" was the defect pinned as expected behaviour and is replaced.
 
-## C22 ☐ `BL-655` The campaign hangar never shows the wallet while a plane is being built
+## C22 ☑ `BL-655` The campaign hangar never shows the wallet while a plane is being built
 
 **Goal.** Every Plane Construction screen after the buy row (airframe, engine, hardpoints, armour,
 guns) shows the money on hand beside the running total, and marks a row the remaining funds cannot
@@ -446,8 +446,12 @@ the totals row draws.
 beside the totals on each hangar page over a `CampaignWallet` (`HangarFlow.Campaign`, null on the
 wallet-free doors, where nothing is drawn), and a mark on any row whose price exceeds the funds
 left, in both presentations (`OriginalHangar.cs`'s composers and Built-in's hangar pages).
-`<TODO: the original's own layout for the money line on the part screens, from the langui strings
-and any capture; none is cited yet.>`
+The original's own layout, from the data: `PLANECONSTRUCTION.SCRIPT` puts `px_t_cashtitle`
+(langui 1149) and `px_t_cash` on the hub chrome at 615,0 and 615,25, over the sticky-note art in
+`PX_BackGround.jpg`, so the note stands on every tab and the totals page beside `PLANE COST:
+$%1!d!` (1036) in the header; `OriginalScreenshots\Campaign CAP-40 Plane Construction 1.png` and
+`2.png` show it on the Engine and Armor tabs (`$$$ on Hand` / `$21840`). No dropdown row is marked
+in the original (`docs/org/hangar.md`, "The cash note").
 
 **Model recommendation.** medium.
 
@@ -459,6 +463,22 @@ the mark while remaining selectable. Screenshot each page under
 **⚠ Traps.** Do not block an unaffordable selection outright: the decoded flow refuses at the
 purchase, not at the part, and a screen that hides parts you cannot yet afford also hides what you
 are saving toward.
+
+**Verified.** <pending orchestrator run>
+
+**Outcome.** Original already composed the two cash rows over a wallet (`OriginalHangar.cs`,
+`ComposeHubChrome`), but no `--menu=` aid could reach the hub over one and nothing marked a row;
+Built-in drew the wallet on the buy row alone. Now `HangarFlow.WalletLine` puts langui 1149 with
+the funds beside the totals on every page after the buy row (empty over the wallet-free doors and
+on the inventory, whose buy row keeps it), `IHangarPage.CostWith` gives each row the total its
+pick would leave and `HangarFlow.RowUnaffordable` / `RowText` prefix `HangarFeature.UnaffordableMark`
+(`✕ `) where the funds fall short, with the line error-coloured; Original bakes the same mark
+into its priced dropdown lists (airframe, engine, armour, guns, hardpoints) and draws the cash
+figure in the problems ink once the build outruns it. Paint, name and the inventory rows take no
+mark, Purchase Now keeps its own flag, and no pick is refused. Original gained the shared
+`campaign-hangar` aid with a `:tab` argument (`docs/cli.md`), which is what the eight
+`.scratch/bl655_*.png` shots and `bl655_montage.png` were taken with; the suites read the aid
+profile's $900 against a $9610 Devastator. The decode: `docs/org/hangar.md`, "The cash note".
 
 ## C23 ☑ `BL-570` The difficulty setting has no menu row
 
