@@ -1061,42 +1061,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   cannon already thins the volley (`git log --grep=BL-713`). Killing engines or cannons wakes
   nothing but radio lines. *Playtest after fix:* CM24, fight only the escorts and watch whether
   the Pandora's volleys set the Dante's gasbags burning. *Cross-refs:* `BL-713`'s closing commit.
-- `BL-740` `[Bug]` `[Owed-playtest]` `[L]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **An AI aeroplane never flies at
-  a turret or a zeppelin part: Instant Action wingmen walk the chapter's first net away from the
-  fight, and no Warhawk ever runs a torpedo at the Pandora.** *Evidence:* in the original's CM02
-  Instant Action the wingmen enter pursue at the start and attack the zeppelin's turrets and
-  engines; ours patrol net 10 (`M4ReinfAce`), which is anchored to something other than the
-  player, and leave. The net is the original's standing order too (`docs/org/aiPilot.md` "Instant
-  Action gives every actor a net"); what pulls a pilot off it is the acquisition sweep picking a
-  turret or structure and pursue flying at it, since pursue reads its victim through the `Target`
-  vtable whatever the class and only the 400 m merge rule gates on a jet or wingman. CSVM's D36
-  routes every non-aircraft winner into `AiGunner.GroundTarget` so that "the flight law sees
-  nothing and keeps flying its assigned course" (`CSVM/src/Flight/FlightController.cs`,
-  `AssignAcquired`), a scope containment from the D36 commit and not a decode. The same split
-  hard-codes `targetIsGasbag: false` into the rocketeer solve, so the torpedo gate
-  `AiRocketeer.Solve` already carries never opens, and the campaign's Black Hat Warhawks, whose
-  radio lines announce torpedo runs on the Pandora, cannot fire one. *Fix shape:* one standing
-  target of any class, read by the pursue arm, the mode machine's promotion and the lay-off test
-  through a quarry snapshot (position, velocity, forward axis, is-human, mode) built from a
-  `FlightController`, a `TurretController` or a `DestructibleRegistry.Instance`; decode what a
-  `TargetStruct`'s forward axis is, since the pursue aim point offsets along it. Port the three
-  acquisition gaps D36 named: the gasbag admission gate (a gasbag is offered only to a pilot with
-  a loaded `DAMAGES_ZEPPELIN` weapon whose cooldowns are clear, and then carries the −0.5 weight),
-  the +0.4 weight against a candidate in `wingman` mode, and the ahead/behind, above/below and
-  facing ±0.2 terms on the decoded half-metre deadband. Hand the gasbag identity
-  (`DestructibleRegistry.Instance.Gasbag`, already read by `TurretController`) to the rocketeer.
-  Correct the "unreachable" claims in `docs/org/aiPilot.md` "What CSVM ports of this" and the
-  rocketeer call. *⚠ Traps:* the escort law is the wrong fix; the original's Instant Action
-  wingmen are demoted to `jet` at spawn and fly no formation, and arming `AiEscort` would glue them
-  to the player without attacking anything. Pursuing a hull part will trip the crash-avoidance
-  ray on the zeppelin, which the original's does too. Enemy waves and campaign hostiles gain the
-  same behaviour, so missions with a friendly zeppelin get harder, which is the original's
-  difficulty. *How you'd know it worked:* units on the quarry snapshot per class, the gasbag gate
-  with and without loaded gasbag ordnance, and the three ranking terms; a headless suite with a
-  netted AI and a zeppelin in range asserting it leaves patrol, closes on a part and fires, and a
-  torpedo-armed pilot picking the gasbag; then the user's own flight of CM02 Instant Action seeing
-  the wingmen attack the zeppelin, and of a Warhawk mission seeing torpedoes at the Pandora.
-  *Cross-refs:* `BL-363`'s closing commit (D36), `BL-717`, `BL-714`.
 - `BL-741` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **A roster
   `rating_biases` exclusion naming a mission structure never reaches the structure's parts, so
   C4/M03's Black Swan wingman attacks the cargo zeppelin its own block excludes instead of the
@@ -1123,8 +1087,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scorer's `+0x344`, −200 on the `w*` wingman defs and 0 elsewhere) are separate terms, not this
   bug. *How you'd know it worked:* a unit on the bias match for a structure part, and the
   `campaign-roster` shape on C4/M03: `bswingman_1` ranks no cargozep pool at all while the
-  Brigands still rank. *Cross-refs:* `BL-740`, `BL-400`, `BL-476`'s closing commit (the
-  zeppelin owner identity).
+  Brigands still rank. *Cross-refs:* `BL-400`, `BL-476`'s closing commit (the zeppelin owner
+  identity), and `git log --grep=BL-740` for the acquisition sweep this rides on: it is what put
+  turrets and structures in front of the flight law, and its `ZeppelinRuntime.WireZones` fan is
+  the pattern a docked structure lacks.
 
 ## Flight model & collision physics
 
@@ -3410,9 +3376,10 @@ usual.
   PERF-21.
 - `BL-742` `[Testing]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The empty stage
   cannot host a zeppelin, and `--ai=` cannot put its planes on a side, so an AI-versus-zeppelin
-  question takes a full campaign flight per iteration.** *Evidence:* BL-740's torpedo hunt took four
-  user flights of C4/M03 and three log reads to find that the Pandora's gasbag pools reached the AI
-  as nobody's, and the rocketeer's own gates were still unread after the last one. `--stage=empty`
+  question takes a full campaign flight per iteration.** *Evidence:* the AI-attacks-zeppelin-parts
+  work (`git log --grep=BL-740`) took four user flights of C4/M03 and three log reads to find that
+  the Pandora's gasbag pools reached the AI as nobody's, and the rocketeer's own gates were still
+  unread after the last one. `--stage=empty`
   builds no chapter gamez, and a zeppelin is a chapter world node (`rock_zeppelin` under the
   mission's gamez) that `ZeppelinRuntime` resolves by name, so no hull exists to wire. `AiSpawn`
   already carries a `Team` (`CSVM/src/Session/FlightRoster.cs:25`), but the `--ai=` parser
@@ -3427,13 +3394,15 @@ usual.
   fork of `AiPilot` are testable there too; then one in-engine suite that spawns a torpedo-armed
   Warhawk against a hostile zeppelin on the stage and asserts an acquisition and a launch. *⚠
   Traps:* a record's team fans onto every zone, so the override must go through
-  `AuthoredTeam`'s path rather than a stamp on the pools, or the state-child rule BL-740 added is
-  bypassed; the stage has no `AnimProgram`, so the gasbag destroy anims resolve to nothing and the
+  `AuthoredTeam`'s path rather than a stamp on the pools, or the rule that gives a zone the team
+  its flagged `panels` child carries is bypassed; the stage has no `AnimProgram`, so the gasbag
+  destroy anims resolve to nothing and the
   pools register without choreography, which is fine for a targeting probe and wrong for a damage
   one. *Playtest after fix:*
   `.\RunGame.ps1 --stage=empty --zep=C4/M03:piratezep:team=1 --ai=player_warhawk:ring:def=bhatwarhawk:team=2 --ai-attack --frames=3600 --det`
-  and read the `ai gunner`/`ai rocketeer` lines; without `:ring` the same planes fly netless. *Cross-refs:* BL-740 (the hunt this shortens),
-  BL-741 (the cargozep case wants the same rig with a mission structure instead of a record).
+  and read the `ai gunner`/`ai rocketeer` lines; without `:ring` the same planes fly netless.
+  *Cross-refs:* `BL-741` (the cargozep case wants the same rig with a mission structure instead of
+  a record); the `warhawk-torpedo-run` suite is the held-world version of what this makes flyable.
 
 ## Misc
 

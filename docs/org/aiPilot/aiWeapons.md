@@ -260,13 +260,13 @@ the same two routines:
 
 `AiGunner.Solve` holds the gun path in this order: the quick-draw cosine, the squared engagement
 window against the separation itself, then the traverse clamp and the residual it leaves against
-`0.9848`. `MinRangeM`/`MaxRangeM` carry the shipped 1 to 900 m until the vehicle def's `weapons`
-tuple is parsed per vehicle (`BL-394`), and the clamp runs through `TurretController.LocalDir`, the
-same clamp-then-cone the turret gunners use.
+`0.9848`. `MinRangeM`/`MaxRangeM` carry the shipped 1 to 900 m for a slot whose fit authored no
+window of its own, and the def's own `weapons` tuple supplies one where it does; the clamp runs
+through `TurretController.LocalDir`, the same clamp-then-cone the turret gunners use.
 
 Three things here have no counterpart on our side yet. The quick draw's aircraft-against-aircraft
-condition is satisfied by our target type rather than tested, and needs a real test once a gasbag or
-a ground target can be aimed at. Of the aim gate's two skips, the player's holds by construction
+condition reads the target's facing axis, which a turret and a structure report as zero, so for
+those two classes it passes rather than being tested. Of the aim gate's two skips, the player's holds by construction
 (neither `AiGunner` nor `AiRocketeer` runs for a human pilot, and a human's rocket leaves through
 `FireControl` with no aim gate at all), while the `+0xf8` vehicle byte is not modelled. The `REAR`
 handling belongs to the smoke screen and is a separate item.
@@ -281,12 +281,15 @@ staying fixed to the pylon while the round leaves along the clamped aim is not a
 (above, "Census: no shipped airframe carries that node"): the original's own mount is the fixed
 case for every shipped ordnance pylon, so it does not move either.
 
-⚠ The match's zeppelin side is written but unexercised in play, for two reasons that are both
-elsewhere. The AI acquisition admits aircraft alone (`BL-363`), so the gasbag argument is always
-false at the call site, and no stock loadout carries `wep_14` because the vehicle def's `weapons`
-tuple is unparsed (`BL-394`), so no AI in a session flies the Warhawk's eight torpedoes. Until both
-land, the two-way match and the Warhawk's authored fit are held by `AiRocketeerTests` against the
-install's own data rather than by anything at the controls.
+The match's zeppelin side is flown. The acquisition offers a gasbag to a pilot whose
+`DAMAGES_ZEPPELIN` ordnance can launch now and hands the identity to `Solve`, and an AI aeroplane
+flies its def's own fit, so the Black Hat Warhawk's eight `wep_14` torpedoes reach a pylon walk
+against the Pandora's gasbags. The `warhawk-torpedo-run` suite flies the whole run.
+
+⚠ **A pass affords about one roll.** The torpedo's authored band is 350 to 800 m and an attacking
+Warhawk crosses it at roughly 95 m/s, so the 5 s refire allows a single `quick_draw_chance` draw
+per approach, 0.31 at rating 6. A mission flight showing no torpedo from a flight of Warhawks is
+the expected tail of that, not a closed gate.
 
 ## What the shipped data amounts to
 

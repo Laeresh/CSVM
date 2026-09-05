@@ -424,12 +424,12 @@ turn, so the employable cone is the traverse limit plus that gate. Engine-free; 
 ## src/Flight/AiRocketeer.cs
 The AI's ordnance employment, the gun path's twin: per sim tick the host `FlightController` ages the
 vehicle-wide lockout and hands over the fire geometry (`Solve`), which answers with the trigger, the
-hardpoint it chose and the direction the round leaves along, which is the clamped mount aim rather
-than the raw lead. Gates in the engine's order: the quick-draw cone aborting the whole pass, then per
-pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the squared engagement band and the
-traverse clamp's residual against an aim-quality cosine deliberately tighter than the gun's. The lead
-is solved per pylon in the frame that round flies in. Engine-free. Decode:
-[../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md).
+hardpoint it chose and the direction the round leaves along, the clamped mount aim rather than the
+raw lead. Gates in the engine's order: the quick-draw cone aborting the whole pass, then per pylon
+the armed check, the two-way `DAMAGES_ZEPPELIN` match, the squared engagement band and the traverse
+clamp's residual against an aim-quality cosine tighter than the gun's. The lead is solved per pylon
+in the frame that round flies in, and each unlocked pass leaves a verdict behind, keyed without its
+numbers so a host logs a gate change. Engine-free. Decode: [aiWeapons.md](../org/aiPilot/aiWeapons.md).
 
 ## src/Flight/AiVoiceDispatcher.cs
 The combat-voice trigger dispatch, engine-free
