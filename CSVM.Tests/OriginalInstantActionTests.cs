@@ -72,7 +72,7 @@ public class OriginalInstantActionTests
         var plane = Row(shell, OriginalShell.PlayerPlaneKey);
         Assert.Equal(OriginalRowKind.Dropdown, plane.Kind);
         Assert.Equal((510f, 200f, 220f, 20f), Rect(plane));
-        Assert.Equal("Autogyro", plane.Label);
+        Assert.Equal("Stock Autogyro", plane.Label);
         Assert.Equal("0", Row(shell, OriginalShell.WingmenKey).Label);
         Assert.Equal("Dogfighting an Ace", Row(shell, OriginalShell.MissionKey).Label);
         Assert.Equal("an airfield", Row(shell, OriginalShell.EnvironmentKey).Label);
