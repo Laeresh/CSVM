@@ -147,7 +147,7 @@ async function runContentGate(cwd: string, event: any): Promise<HookResult> {
   const command = event.input.command;
   if (!command || !command.match(/git\s+commit/)) return NOT_BLOCKED;
 
-  // Only to LOCATE the gate; the gate works out which trees to check for itself.
+  // Only to LOCATE the gate; the gate works out which tree to check for itself.
   const here = await getGitRoot(cwd);
   if (!here) return NOT_BLOCKED;
   const gate = `${here}/CheckCommitContent.ps1`;
