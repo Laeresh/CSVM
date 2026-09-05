@@ -313,7 +313,8 @@ in `--viewer` C stays the mesh lab's cull cycler. Scripted twin: `--debug-mesh=<
 **N toggles a panel down the left edge** holding the world's node tree by `cs_name`, a search box and a
 dependency readout for the shared selection. It is two-way: clicking an object scrolls the tree to it,
 clicking a row selects it, double-clicking frames the camera. Buttons: **Frame**, **Hide/Show** (flip the
-subtree's `Visible`, reversible), **Deps** and **Destructibles**.
+subtree's `Visible`, reversible), **Export glTF** (write the selected subtree as a timestamped `.glb`
+under git-ignored `Exports/`), **Deps** and **Destructibles**.
 
 The tree fills one branch at a time on expand and stops at 500 rows per branch. The dependency readout
 lists the anim definitions anchored on or naming the node, its destructible pools with live HP, its mesh

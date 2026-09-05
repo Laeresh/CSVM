@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using CSVM.Utils;
@@ -5,14 +6,12 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>Exports the viewer plane's <c>Node3D</c> subtree to a glTF file — mesh + the currently
-/// painted livery texture, with the current damage state baked in. Static geometry only: no
-/// animation, and the live particle emitters (smoke/fire/trails) are not part of the tree it reads.
+/// <summary>Exports a <c>Node3D</c> subtree to a glTF file. Static geometry only: no animation,
+/// and live particle emitters (smoke/fire/trails) are not part of the tree it reads.
 ///
-/// <para>Two triggers share <see cref="Export"/>: the <c>--export-gltf=</c> CLI one-shot, driven by
-/// the frame-stepped <see cref="Tick"/> state machine (waits for the plane to build, writes, quits),
-/// and the interactive F10 key. The work happens on a throwaway <c>Duplicate()</c> so the live scene
-/// is never mutated — the golden screenshots must be identical after an export.</para></summary>
+/// The viewer plane goes through the <c>--export-gltf=</c> CLI one-shot and F10; NodeLab can
+/// export its current selection. The work happens on a throwaway <c>Duplicate()</c>, so the live
+/// scene is never mutated.</summary>
 public sealed class GltfExporter
 {
     // The export still owed from the launch spec, cleared once written; null when no --export-gltf=.
@@ -31,7 +30,7 @@ public sealed class GltfExporter
     {
         if (plane == null || string.IsNullOrEmpty(path))
         {
-            GD.PrintErr("gltf export failed: no plane or no path");
+            GD.PrintErr("gltf export failed: no node or no path");
             return Error.InvalidParameter;
         }
         // Duplicate so material overrides and node pruning below never touch the live tree. The
@@ -56,6 +55,23 @@ public sealed class GltfExporter
             GD.PrintErr($"gltf export failed ({err}): {path}");
         }
         return err;
+    }
+
+    /// <summary>Exports <paramref name="node"/> to a timestamped GLB in the git-ignored
+    /// <c>Exports/</c> directory beside the Godot project. <paramref name="nodeName"/> becomes a
+    /// filesystem-safe portion of the filename.</summary>
+    public static Error ExportToExports(Node3D? node, string nodeName)
+    {
+        if (node == null)
+        {
+            return Export(null, "");
+        }
+        string projectDir = ProjectSettings.GlobalizePath("res://");
+        string directory = Path.GetFullPath(Path.Combine(projectDir, "..", "Exports"));
+        Directory.CreateDirectory(directory);
+        string path = Path.Combine(directory,
+            $"crimsonskies_{SafeFileName(nodeName)}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.glb");
+        return Export(node, path);
     }
 
     /// <summary>The CLI one-shot, ticked from the tail of <c>_Process</c>: wait for the session to
@@ -160,5 +176,19 @@ public sealed class GltfExporter
             return path;
         }
         return Path.GetFullPath(path);
+    }
+
+    private static string SafeFileName(string nodeName)
+    {
+        if (string.IsNullOrWhiteSpace(nodeName))
+        {
+            return "node";
+        }
+        var safe = new System.Text.StringBuilder(nodeName.Length);
+        foreach (char character in nodeName)
+        {
+            safe.Append(Array.IndexOf(Path.GetInvalidFileNameChars(), character) >= 0 ? '_' : character);
+        }
+        return safe.Length == 0 ? "node" : safe.ToString();
     }
 }
