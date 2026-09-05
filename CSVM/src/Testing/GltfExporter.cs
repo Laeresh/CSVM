@@ -91,7 +91,7 @@ public sealed class GltfExporter
     // Bake the current damage/flare state and drop non-geometry: free every hidden
     // `Node3D` (torn/healthy panel twins and off wing-flares are toggled purely by
     // `Visible`) and every point-sprite `"lights"` instance, then convert each surviving
-    // mesh's shader skins to a `StandardMaterial3D` glTF can serialize.
+    // mesh's shader skins to a double-sided `StandardMaterial3D` glTF can serialize.
     private static void BakeAndConvert(Node copy)
     {
         var toFree = new List<Node>();
@@ -126,31 +126,37 @@ public sealed class GltfExporter
         }
     }
 
-    // Replace each surface's custom `ShaderMaterial` skin with a
-    // `StandardMaterial3D` that glTF understands: the painted `albedo_tex` as the albedo
-    // map, the shader's `albedo_color` tint when present, and vertex color as albedo so the
-    // baked per-vertex shading survives into glTF's `COLOR_0`. `StandardMaterial3D`
-    // skins (flares, magenta-missing fallbacks) already serialize and pass through untouched.
+    // Replace each surface's custom `ShaderMaterial` skin with a double-sided
+    // `StandardMaterial3D` glTF understands. Duplicate an existing base material before changing
+    // its culling, because resources are shared with the live tree.
     private static void ConvertMaterials(MeshInstance3D mesh)
     {
         int surfaces = mesh.GetSurfaceOverrideMaterialCount();
         for (int i = 0; i < surfaces; i++)
         {
-            if (mesh.GetActiveMaterial(i) is not ShaderMaterial shader)
+            if (mesh.GetActiveMaterial(i) is ShaderMaterial shader)
+            {
+                var std = new StandardMaterial3D
+                {
+                    AlbedoTexture = shader.GetShaderParameter("albedo_tex").As<Texture2D>(),
+                    VertexColorUseAsAlbedo = true,
+                    CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+                };
+                var tint = shader.GetShaderParameter("albedo_color");
+                if (tint.VariantType == Variant.Type.Color)
+                {
+                    std.AlbedoColor = tint.As<Color>();
+                }
+                mesh.SetSurfaceOverrideMaterial(i, std);
+                continue;
+            }
+            if (mesh.GetActiveMaterial(i) is not BaseMaterial3D source)
             {
                 continue;
             }
-            var std = new StandardMaterial3D
-            {
-                AlbedoTexture = shader.GetShaderParameter("albedo_tex").As<Texture2D>(),
-                VertexColorUseAsAlbedo = true,
-            };
-            var tint = shader.GetShaderParameter("albedo_color");
-            if (tint.VariantType == Variant.Type.Color)
-            {
-                std.AlbedoColor = tint.As<Color>();
-            }
-            mesh.SetSurfaceOverrideMaterial(i, std);
+            var copy = (BaseMaterial3D)source.Duplicate();
+            copy.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
+            mesh.SetSurfaceOverrideMaterial(i, copy);
         }
     }
 
