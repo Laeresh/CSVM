@@ -207,10 +207,10 @@ public sealed partial class TargetingOverlay : Node
             {
                 Turret(t);
             }
-            // The AI gunner's own standing target (Target or D36's GroundTarget): its line starts
-            // at the airframe, not at a muzzle, because the D14 gunner aims the whole aeroplane.
+            // The AI gunner's own standing target, of any class: its line starts at the airframe,
+            // not at a muzzle, because the D14 gunner aims the whole aeroplane.
             if (rig.Pilot?.Gunner is { } gunner
-                && FlightController.TryTargetGeometry((object?)gunner.Target ?? gunner.GroundTarget,
+                && FlightController.TryTargetGeometry(gunner.Target,
                     out var preyPos, out _, out _, out bool preyLive)
                 && preyLive)
             {

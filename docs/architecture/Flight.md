@@ -424,12 +424,12 @@ turn, so the employable cone is the traverse limit plus that gate. Engine-free; 
 ## src/Flight/AiRocketeer.cs
 The AI's ordnance employment, the gun path's twin: per sim tick the host `FlightController` ages the
 vehicle-wide lockout and hands over the fire geometry (`Solve`), which answers with the trigger, the
-hardpoint it chose and the direction the round leaves along, which is the clamped mount aim rather
-than the raw lead. Gates in the engine's order: the quick-draw cone aborting the whole pass, then per
-pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the squared engagement band and the
-traverse clamp's residual against an aim-quality cosine deliberately tighter than the gun's. The lead
-is solved per pylon in the frame that round flies in. Engine-free. Decode:
-[../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md).
+hardpoint it chose and the direction the round leaves along, the clamped mount aim rather than the
+raw lead. Gates in the engine's order: the quick-draw cone aborting the whole pass, then per pylon
+the armed check, the two-way `DAMAGES_ZEPPELIN` match, the squared engagement band and the traverse
+clamp's residual against an aim-quality cosine tighter than the gun's. The lead is solved per pylon
+in the frame that round flies in, and each unlocked pass leaves a verdict behind, keyed without its
+numbers so a host logs a gate change. Engine-free. Decode: [aiWeapons.md](../org/aiPilot/aiWeapons.md).
 
 ## src/Flight/AiVoiceDispatcher.cs
 The combat-voice trigger dispatch, engine-free
@@ -440,13 +440,22 @@ the death cries with force, and the computed bearing trigger id. Availability co
 resolver rather than from def presence. Pinned by `AiVoiceDispatcherTests` and the `ai-voice` suite.
 
 ## src/Flight/AiTargetRanking.cs
-The decoded target-ranking formula ([../formats/ai-rosters.md](../formats/ai-rosters.md) "AI modes,
-engine-side"): a rank built from a weight, the distance and an objective bias, and MINIMISED, with
-the player carrying a lower base weight than everyone else, small terms for bearing, altitude sign
-and target facing, and an effectively infinite rank beyond the activation radius. Snapshots in, index
-and score out, engine-free. `SelectBest` prefers the best candidate no ally already holds and falls
-back to the overall best when the pool is exhausted, and `ObjectiveBiasFor` matches `rating_biases`
-patterns, first match wins, saturating at always-target and at exclusion.
+The decoded target-ranking formula ([../org/aiPilot.md](../org/aiPilot.md) "Target acquisition"): a
+rank built from a weight, the distance and an objective bias, and MINIMISED, with the player carrying
+a lower base weight than everyone else, a wingman a higher one, a gasbag a lower one, ±0.2 terms for
+ahead/behind on a half-metre deadband, altitude sign and closing, and an effectively infinite rank
+beyond the activation radius. Snapshots in, index and score out, engine-free. `SelectBest` prefers
+the best candidate no ally already holds and falls back to the overall best when the pool is
+exhausted, and `ObjectiveBiasFor` matches `rating_biases` patterns, first match wins, saturating at
+always-target and at exclusion.
+
+## src/Flight/PursuitQuarry.cs
+The flight law's snapshot of `AiGunner.Target` for one step, whatever its class: position, velocity,
+the nose axis of an aircraft or zero for a turret or structure, and the aircraft-only facts the merge
+rule, the lay-off assist and the sixth-sense trigger read. `Of` is the one place a standing target
+becomes this shape, so a pilot pursues a zeppelin engine through the same arm it pursues a fighter,
+which is the original's `Target` vtable read ([../org/aiPilot.md](../org/aiPilot.md) "What pursue
+does with a non-vehicle target").
 
 ## src/Flight/IncomingFire.cs
 `--incoming[=metres[,wep_id]]`, the near-miss test rig: a phantom shooter on each player's six,

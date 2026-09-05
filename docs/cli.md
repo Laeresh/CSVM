@@ -287,7 +287,7 @@ lines**.
 - `--look=x,y` (**hold a right-stick look deflection for the whole run**, the scripted twin of pushing the look stick and the only way a headless run aims it. Both components are clamped to `[−1, 1]`, `+x` right and `+y` up; a malformed pair warns and leaves the stick centred. It drives **both** halves of the look-around from one value: outside first person it swings the camera around the plane, and in `--view=cockpit`/`=nose` it aims the head, over one shared envelope (±150° round, ±60° up and down, see [`controls.md`](controls.md)). A live stick beats it while deflected)
 - `--campos=x,y,z` (**deprecated** — the pre-A5 camera-only spelling of `--pos`; logs `WARN [core] deprecated flag=--campos use=--pos` once per run, then behaves identically. It never placed the plane and still does not, so it is not simply a rename of `--pos` in `--fly`. Where both reach the same camera (`--freecam`, `--anim-lab`), `--pos` wins)
 - `--screenshot=<path>` (render a few frames, save a PNG, quit. Implies `--no-focus` and `--det`, so a bare `--screenshot` is reproducible with no other flags; `--no-det` opts out. The hidden window still renders, a minimized one does not (SHOT-16). Every capture prints `[core] shot pixmd5=<md5> size=<WxH> gpu=<adapter / api>`, the md5 of the raw pixel buffer rather than of the PNG (SHOT-6), which is what the golden tripwire compares; copying it into `analysis/goldens/manifest.json` turns the shot into a golden, see `analysis/goldens/README.md`)
-- `--export-gltf=<path>` (export the viewer plane's mesh to glTF, then quit: the parked model in its selected livery with its damage state baked in (hidden panel twins, off wing-flares and point sprites pruned). Skins convert to double-sided `StandardMaterial3D` so the baked shading survives and external viewers do not cull the exterior; live emitters are not part of the model. The extension picks the format, `.glb` self-contained, `.gltf` JSON plus external buffer and PNGs, anything else `.glb`. Reads a throwaway `Duplicate()`, so the live plane is untouched; implies `--det`; works under `--headless`. Interactive twin **F10**, into `Exports/`)
+- `--export-gltf=<path>` (export the viewer plane's mesh to glTF, then quit: the parked model in its livery with its damage baked in (hidden panel twins, off flares and point sprites pruned). Skins convert to double-sided `StandardMaterial3D`, so the baked shading survives and nothing culls the exterior; live emitters are not part of the model. The extension picks the format: `.glb` self-contained, `.gltf` JSON plus buffer and PNGs, else `.glb`. Reads a throwaway `Duplicate()`, so the live plane is untouched; implies `--det`; works headless. Interactive twin **F10**, into `Exports/`)
 - `--frames=N` (warm-up frames rendered before the shot, default 15. **Under `--det`, which `--screenshot` implies, this is exactly sim frame N**: the fixed clock advances one 1/60 s step per rendered frame, so the capture lands on the same simulated moment and N is a sim coordinate, not a wall-clock delay. The saved-shot log line carries it, `sim_frame=120 sim_time=2` under `--det` against `sim_frame=15 sim_time=0.435` for `--frames=15` under `--no-det`. Two runs at the same N are md5-identical and different Ns genuinely differ, so a shot's frame number is part of what it shows)
 - `--shots=N` (after the `--frames` warm-up, capture N **consecutive** frames — one per `_Process` — then quit; default 1 = the single-shot behavior at the verbatim path; N>1 writes zero-padded indexed files `foo.png`→`foo_00.png`/`foo_01.png`/… via `IndexedShotPath`, for **z-fighting debugging** since the flicker is only visible across frames)
 - `--jitter=<deg>` (per-frame camera dither during a `--shots` burst — micro-orbits the eye around the framed point (`_orbit.OrbitCenter`) so a dead-still camera doesn't render bit-identical frames; default 0.15° when `--shots>1` else 0, **and 0 under `--det`** whatever `--shots` is, since the dither exists to break the bit-identity `--det` wants; `0` disables; static mode only — in `--fly` the FlightController owns the camera and the plane's motion already surfaces the fight; file `_00` is the un-jittered baseline)
@@ -311,15 +311,14 @@ in `--viewer` C stays the mesh lab's cull cycler. Scripted twin: `--debug-mesh=<
 ## The node lab — `N` (`--freecam` / `--anim-lab`)
 
 **N toggles a panel down the left edge** holding the world's node tree by `cs_name`, a search box and a
-dependency readout for the shared selection. It is two-way: clicking an object scrolls the tree to it,
-clicking a row selects it, double-clicking frames the camera. Buttons: **Frame**, **Hide/Show** (flip the
-subtree's `Visible`, reversible), **Export glTF** (write the selected subtree as a timestamped `.glb`
-under git-ignored `Exports/`), **Deps** and **Destructibles**.
+dependency readout for the shared selection. It is two-way: clicking an object scrolls the tree to it, a
+row selects it, a double-click frames the camera. Buttons: **Frame**, **Hide/Show** (flip the subtree's
+`Visible`, reversible), **Export glTF** (that subtree to git-ignored `Exports/`), **Deps**, **Destructibles**.
 
 The tree fills one branch at a time on expand and stops at 500 rows per branch. The dependency readout
 lists the anim definitions anchored on or naming the node, its destructible pools with live HP, its mesh
-and material counts, and its colliders; where a source is not built in this mode it says so rather than
-showing an empty list (LOG-1, WORLD-9).
+and material counts, and its colliders; a source not built in this mode says so rather than reading
+empty (LOG-1, WORLD-9).
 
 - `--debug-nodelab[=spec]` (`--freecam`/`--anim-lab` only, the scripted twin: open the panel at launch
   and dump its readouts to the `ui` log category on the second frame. Tokens: `deps`, `dest` (destructibles

@@ -128,6 +128,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AiRocketeer.cs` — the AI's ordnance employment: the per-pylon gates, an aim cosine tighter than the gun's, the lockout, the per-pylon lead solve.
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch: the talker roll, the bearing halving, the broadcast election, the damage tiers.
 - `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula, minimised over weight, distance and objective bias, plus the deconfliction pick.
+- `src/Flight/PursuitQuarry.cs` — the flight law's one-step snapshot of the standing target of any class: an aircraft, a turret or a zeppelin part.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints, nose-picked edges and along-leg arrival; shared by `AiPilot` and `ZeppelinMotion`.
 - `src/Flight/DangerZoneRibbon.cs` — one `dzpathN` route as a metre-parameterised spline with lanes, a pilot's cursor on it, and the rail integrator.
 - `src/Flight/DangerZoneRibbons.cs` — a mission's ribbon set off the chapter gamez with its inactive list; one per session, lanes being occupancy-counted.

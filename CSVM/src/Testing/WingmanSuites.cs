@@ -339,7 +339,7 @@ internal static class WingmanSuites
                 everCrashed |= wing.Crashed || leader.Crashed;
                 if (i % 600 == 0)
                 {
-                    ctx.Note($"[engage] t={i * StepDt:0}s escort={escort.State} target={(pilot.Gunner.Target == null ? "-" : pilot.Gunner.Target.Name.ToString())} bandit={wing.WorldPosition.DistanceTo(bandit.WorldPosition):0} m leader={wing.WorldPosition.DistanceTo(leader.WorldPosition):0} m rounds={ammoAtStart - gun.Ammo}");
+                    ctx.Note($"[engage] t={i * StepDt:0}s escort={escort.State} target={(pilot.Gunner.AircraftTarget is { } held ? held.Name.ToString() : "-")} bandit={wing.WorldPosition.DistanceTo(bandit.WorldPosition):0} m leader={wing.WorldPosition.DistanceTo(leader.WorldPosition):0} m rounds={ammoAtStart - gun.Ammo}");
                 }
             }
 
