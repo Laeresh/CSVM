@@ -160,6 +160,9 @@ public sealed partial class OriginalShell
     /// <summary>The Free Flight screen's launch button.</summary>
     public const string FlyKey = "FLY";
 
+    /// <summary>The Game Options page's difficulty dropdown, the page's first row.</summary>
+    public const string DifficultyKey = "DIFFICULTY";
+
     /// <summary>The Game Options page's menu-presentation dropdown.</summary>
     public const string PresentationKey = "PRESENTATION";
 
@@ -233,6 +236,7 @@ public sealed partial class OriginalShell
     private int _pickedChapter = -1;
     private string _choice = PresentationId.Original.Value;
     private string _graphics = CSVM.Utils.GraphicsMode.Default;
+    private int _difficulty = CSVM.Flight.Difficulty.Normal;
 
     /// <summary>A shell over <paramref name="layout"/> and the shared features. <paramref name="measure"/>
     /// answers an art name with its strip's pixel size (null when the file is not there),
@@ -325,6 +329,10 @@ public sealed partial class OriginalShell
 
     /// <summary>The graphics mode word the Game Options page would apply.</summary>
     public string GraphicsChoice => _graphics;
+
+    /// <summary>The difficulty tier (<see cref="CSVM.Flight.Difficulty"/>) the Game Options page
+    /// would apply.</summary>
+    public int DifficultyChoice => _difficulty;
 
     /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
     public (float X, float Y)? Pointer => _pointer;

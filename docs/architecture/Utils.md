@@ -155,7 +155,7 @@ block, where the same predicate drives both window hiding and the interactive ru
 
 ## src/Utils/OptionsStore.cs
 Process-wide, version-tolerant JSON persistence for `OptionsDef`, today the requested menu
-presentation and the requested graphics mode: one file, `user://options.json`, independent of
+presentation, the requested graphics mode and the difficulty word: one file, `user://options.json`, independent of
 `Session/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version
 invalidates it, an unknown value drops only that field, and a field the file does not carry reads
 as never set, which is why adding a field does not bump `Version`. `Save` writes a sibling temp

@@ -604,7 +604,7 @@ public class OriginalCoverageTests : IDisposable
         return 1;
     }
 
-    // The page's four rows share one plate, so no two of them may overlap, and no control may sit
+    // The page's five rows share one plate, so no two of them may overlap, and no control may sit
     // over a title or a description: a control that covered the words beside it is what sent the
     // options off the Preferences page in the first place. The authored space scales uniformly, so
     // disjoint here is disjoint at every window size.
@@ -616,12 +616,12 @@ public class OriginalCoverageTests : IDisposable
         Assert.Equal(
             new[]
             {
-                OriginalShell.PresentationKey, OriginalShell.GraphicsKey,
+                OriginalShell.DifficultyKey, OriginalShell.PresentationKey, OriginalShell.GraphicsKey,
                 OriginalShell.GameOptionsAcceptKey, OriginalShell.GameOptionsCancelKey,
             },
             rows.Select(r => r.Key));
         var words = shell.Compose().Lines.Where(l => l.Row < 0 && l.Text != "GAME OPTIONS").ToArray();
-        Assert.Equal(4, words.Length);
+        Assert.Equal(6, words.Length);
         foreach (var row in rows)
         {
             foreach (var line in words)

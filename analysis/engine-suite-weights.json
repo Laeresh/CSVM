@@ -236,6 +236,7 @@
     "menu-original-hangar": 0.2,
     "menu-original-campaign": 0.6,
     "menu-launch-return": 0.6,
+    "options-difficulty-launch": 0.1,
     "menu-campaign-journey": 1.0,
     "campaign-layout-parity": 0.28,
     "perf-hud-layout": 0.009,

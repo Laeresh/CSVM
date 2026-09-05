@@ -32,12 +32,12 @@ public abstract record MenuExit
 public sealed record QuitExit : MenuExit;
 
 /// <summary>The player applied an Options screen: the consumer persists every choice it carries,
-/// then ends the active presentation, re-selects on <paramref name="Presentation"/>, and shows the
-/// selected presentation at its top level. <paramref name="Graphics"/> is a
-/// <see cref="Utils.GraphicsMode"/> word, saved and no more; the mode resolves once at launch.
-/// ⚠ Both ride the exit rather than being saved by the screen that took them, so the options file
-/// keeps exactly one writer and no driven screen can write the player's own.</summary>
-public sealed record OptionsApplyExit(PresentationId Presentation, string Graphics) : MenuExit;
+/// then ends the active presentation, re-selects on <paramref name="Presentation"/>, and shows it
+/// at its top level. <paramref name="Graphics"/> is a <see cref="Utils.GraphicsMode"/> word, saved
+/// and no more (the mode resolves once at launch); <paramref name="Difficulty"/> is a
+/// <see cref="Flight.Difficulty.Word"/> the next launch reads. ⚠ All three ride the exit rather than
+/// being saved by the screen, so the options file keeps one writer and no driven screen can write it.</summary>
+public sealed record OptionsApplyExit(PresentationId Presentation, string Graphics, string Difficulty) : MenuExit;
 
 /// <summary>A non-campaign launch: the chapter, one <see cref="MenuSeatChoice"/> per joined seat
 /// in seat order, the picked <see cref="MenuMode"/>, and, for Instant Action only, the wizard's

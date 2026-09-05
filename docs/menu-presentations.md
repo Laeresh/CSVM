@@ -146,8 +146,8 @@ view draws with.
 `user://options.json`, independent of any profile: version-tolerant (an unknown version invalidates
 the file, an unknown value drops only that field, a field the file does not carry reads as never
 set), read as empty when missing or malformed, written atomically. Its fields are
-`menuPresentation` (`built-in`, `original`) and `graphicsMode` (`original`, `enhanced`); a value
-outside a field's set reads as never set.
+`menuPresentation` (`built-in`, `original`), `graphicsMode` (`original`, `enhanced`) and
+`difficulty` (`normal`, `hard`, `hardest`); a value outside a field's set reads as never set.
 
 **An option is a store field plus a row in each presentation's Options screen.** Adding one means
 a nullable field on `OptionsDef` with its accepted-value set, the two writes in `Serialize` and
@@ -159,7 +159,10 @@ written before the field existed loads with everything it does have, and the ver
 reserved for a field whose meaning or shape changed. Whichever module consumes the option decides
 what "never set" falls back to and where the saved value sits among its other sources; for the
 graphics mode that is `GraphicsMode.Resolve`, where the `--graphics=` flag beats the saved option,
-which beats the `graphics.mode` config key (`docs/cli.md`).
+which beats the `graphics.mode` config key (`docs/cli.md`); for the difficulty it is
+`SessionSpec.WithSavedDifficulty`, applied by `Launcher.LaunchSession` at every launch, where a
+parsed `--difficulty=` flag beats the saved word, a `--det` run reads no saved option, and the
+default is `normal`.
 
 A screen never writes the store. Both values ride the exit and `Launcher.ApplyOptions` is the only
 writer, so the options file has exactly one, and no test or suite that drives an Options screen

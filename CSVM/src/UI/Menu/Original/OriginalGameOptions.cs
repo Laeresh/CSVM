@@ -9,9 +9,9 @@ namespace CSVM.UI.Menu.Original;
 /// background and title, the shared options in the section's own row shape (a title in the title
 /// column, a control in the control column, a description in the description column, at the
 /// authored row pitch) and ACCEPT CHANGES and CANCEL CHANGES under them. The options are a table,
-/// so a further one is an entry plus the store field it reads. Remake-only: the two rows' words and
-/// which control each takes, and the third authored row left empty. The decode and the readings are
-/// in <c>docs/org/menu-inventory.md</c>.
+/// so a further one is an entry plus the store field it reads. The first row is the original's own
+/// Difficulty dropdown at its authored place; remake-only are the two rows under it, their words and
+/// which control each takes. The decode and the readings are in <c>docs/org/menu-inventory.md</c>.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -50,15 +50,29 @@ public sealed partial class OriginalShell
     private const float GameOptionDescFont = 12f;
     private const float FallbackCheckSize = 24f;
 
-    // The two shipped presentation tokens as the dropdown's items, and the checkbox's two states.
+    // The three IDS_DIFFICULTY rows as the campaign selector labels them, the two shipped
+    // presentation tokens as the dropdown's items, and the checkbox's two states.
+    private static readonly string[] DifficultyWords =
+    {
+        CSVM.Flight.Difficulty.Label(CSVM.Flight.Difficulty.Normal),
+        CSVM.Flight.Difficulty.Label(CSVM.Flight.Difficulty.Hard),
+        CSVM.Flight.Difficulty.Label(CSVM.Flight.Difficulty.Hardest),
+    };
+
     private static readonly string[] PresentationWords = { "ORIGINAL", "BUILT-IN" };
     private static readonly string[] GraphicsWords = { "FAITHFUL", "ENHANCED" };
 
     // The page's options in their authored row order, each a title, a control, a description and
     // the words of the store field it reads and writes. A screen never saves: the apply exit
-    // carries both choices and Launcher.ApplyOptions is the options file's one writer.
+    // carries every choice and Launcher.ApplyOptions is the options file's one writer. The
+    // difficulty row's title and description are IDS_GO_DIFFICULTY_TITLE and _DESC as authored;
+    // the setting scales enemy armour and health at spawn and nothing about how the enemy flies.
     private static readonly GameOption[] GameOptions =
     {
+        new(DifficultyKey, "Difficulty", _ => "Select the difficulty level for a solo campaign.",
+            OriginalRowKind.Dropdown, DifficultyWords,
+            s => CSVM.Flight.Difficulty.Clamp(s._difficulty),
+            (s, i) => s._difficulty = CSVM.Flight.Difficulty.Clamp(i)),
         new(PresentationKey, "Menu", _ => "Select the menu presentation.", OriginalRowKind.Dropdown, PresentationWords,
             s => s._choice == PresentationId.BuiltIn.Value ? 1 : 0,
             (s, i) => s._choice = i == 1 ? PresentationId.BuiltIn.Value : PresentationId.Original.Value),
@@ -106,9 +120,10 @@ public sealed partial class OriginalShell
         var saved = _options?.Invoke();
         _choice = saved?.MenuPresentation ?? PresentationId.Original.Value;
         _graphics = saved?.GraphicsMode ?? CSVM.Utils.GraphicsMode.Default;
+        _difficulty = CSVM.Flight.Difficulty.Parse(saved?.Difficulty) ?? CSVM.Flight.Difficulty.Normal;
     }
 
-    // The rows: an open list's items alone while one is open, else the two option controls at
+    // The rows: an open list's items alone while one is open, else the three option controls at
     // their authored rows and the two plaques under them, all one column. Without the section the
     // controls stand as text buttons so the page is still walkable.
     private void BuildGameOptionsRows(List<OriginalRow> rows)
@@ -233,7 +248,7 @@ public sealed partial class OriginalShell
         switch (row.Key)
         {
             case GameOptionsAcceptKey:
-                return new OptionsApplyExit(new PresentationId(_choice), _graphics);
+                return new OptionsApplyExit(new PresentationId(_choice), _graphics, CSVM.Flight.Difficulty.Word(_difficulty));
             case GameOptionsCancelKey:
                 BackToPreferences();
                 return null;

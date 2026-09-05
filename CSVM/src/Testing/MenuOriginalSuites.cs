@@ -33,11 +33,11 @@ internal static class MenuOriginalSuites
         + "Free Flight door focused, a pointer frame over Quit takes focus and cues the rollover, a "
         + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
         + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
-        + "GAME OPTIONS door open the decoded page whose dropdown and checkbox take both choices "
-        + "and whose CANCEL CHANGES drops them, a switch to Built-in "
+        + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
+        + "three rows take every choice and whose CANCEL CHANGES drops them, a switch to Built-in "
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
-        + "Original fresh, Built-in's Options route steps both choices, opens and leaves the "
-        + "rebinding screen behind its Controls door and emits the apply exit "
+        + "Original fresh, Built-in's Options route steps the difficulty and both other choices, "
+        + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
         + "carrying them, the force flag recovers "
         + "and a missing layout falls back with the request kept")]
     internal static void MenuOriginalTracer(TestContext ctx)
@@ -233,9 +233,10 @@ internal static class MenuOriginalSuites
         ctx.Check(menu?.ShownRowCount == 6, $"whose sixth row is the Options door ({menu?.ShownRowCount})");
     }
 
-    // Built-in's Options route: the last Mode row opens Options, Right steps the presentation to
-    // Original, Right on the row under it steps the graphics mode, and the apply row's Accept
-    // leaves as the one exit the launcher persists both choices from.
+    // Built-in's Options route: the last Mode row opens Options, Right steps the difficulty to
+    // Hard, Right on the row under it steps the presentation to Original, Right on the next steps
+    // the graphics mode, and the apply row's Accept leaves as the one exit the launcher persists
+    // every choice from.
     private static void BuiltInOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, List<MenuExit> exits)
     {
         var menu = (host.Active as BuiltInPresentation)?.Menu;
@@ -247,8 +248,11 @@ internal static class MenuOriginalSuites
         Press(host, seat, Up);
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow, $"Up from Free Flight wraps onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 4,
-            $"Accept opens the Options screen with its four rows ({menu.ShownScreen}, {menu.ShownRowCount})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 5 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its five rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        Press(host, seat, Right);
+        ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
+        Press(host, seat, Down);
         string before = menu.ShownRowText;
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText != before && menu.ShownRowText.StartsWith("Menu presentation: ", System.StringComparison.Ordinal),
@@ -261,7 +265,7 @@ internal static class MenuOriginalSuites
             $"Right steps the graphics row under it ({beforeGraphics} -> {menu.ShownRowText})");
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the third row is the Controls door ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the fourth row is the Controls door ({menu.ShownRowText})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -274,15 +278,15 @@ internal static class MenuOriginalSuites
             $"Apply leaves through the host as an OptionsApplyExit ({exits.Count}, {exits[^1].GetType().Name})");
         if (exits.Count == 2 && exits[1] is OptionsApplyExit applied)
         {
-            ctx.Check(applied.Presentation.Value == chosen && applied.Graphics == graphics,
-                $"carrying both stepped choices ({applied.Presentation}, {applied.Graphics})");
+            ctx.Check(applied.Presentation.Value == chosen && applied.Graphics == graphics && applied.Difficulty == "hard",
+                $"carrying every stepped choice ({applied.Presentation}, {applied.Graphics}, {applied.Difficulty})");
         }
 
         ctx.Check(!host.Shown, $"and the presentation is hidden for the launcher to act (shown={host.Shown})");
     }
 
     // Original's own Options route over the install's decoded sections: PREFERENCES opens the
-    // Preferences page, its GAME OPTIONS door the decoded page, whose two rows take both choices
+    // Preferences page, its GAME OPTIONS door the decoded page, whose three rows take every choice
     // and whose CANCEL CHANGES drops them; the walk leaves the top level as it found it.
     private static void OriginalOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits)
     {
@@ -291,16 +295,16 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.FocusedKey == OriginalShell.GameOptionsDoorKey,
             $"PREFERENCES opens the Preferences page with its GAME OPTIONS door focused ({shell.Screen}, {shell.FocusedKey})");
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.GameOptions && shell.FocusedKey == OriginalShell.PresentationKey,
-            $"GAME OPTIONS opens the decoded page on its Menu dropdown ({shell.Screen}, {shell.FocusedKey})");
+        ctx.Check(shell.Screen == OriginalScreen.GameOptions && shell.FocusedKey == OriginalShell.DifficultyKey,
+            $"GAME OPTIONS opens the decoded page on its Difficulty dropdown, the first row ({shell.Screen}, {shell.FocusedKey})");
         var board = shell.Compose();
         int titles = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "GAME OPTIONS" or "Menu" or "Enhanced Graphics" ? 1 : 0;
+            titles += line.Text is "GAME OPTIONS" or "Difficulty" or "Menu" or "Enhanced Graphics" ? 1 : 0;
         }
 
-        ctx.Check(titles == 3, $"drawing the section's own tab title over our two row titles ({titles} of 3)");
+        ctx.Check(titles == 4, $"drawing the section's own tab title over the three row titles ({titles} of 4)");
         bool box = false;
         foreach (var plaque in board.Plaques)
         {
@@ -309,8 +313,16 @@ internal static class MenuOriginalSuites
 
         ctx.Check(box, $"with the checkbox drawn from its eight-state strip ({board.Plaques.Count} plaques)");
         Press(host, seat, Accept);
+        ctx.Check(shell.OpenGameOption == OriginalShell.DifficultyKey && shell.Rows.Count == 3,
+            $"Accept opens the dropdown over the three campaign tiers ({shell.OpenGameOption}, {shell.Rows.Count})");
+        Press(host, seat, Down);
+        Press(host, seat, Accept);
+        ctx.Check(shell.DifficultyChoice == CSVM.Flight.Difficulty.Hard && shell.FocusedKey == OriginalShell.DifficultyKey,
+            $"and picking the second closes it on Hard ({shell.DifficultyChoice}, {shell.FocusedKey})");
+        Press(host, seat, Down);
+        Press(host, seat, Accept);
         ctx.Check(shell.OpenGameOption == OriginalShell.PresentationKey && shell.Rows.Count == 2,
-            $"Accept opens the dropdown over the two shipped presentations ({shell.OpenGameOption}, {shell.Rows.Count})");
+            $"Accept on the Menu row under it opens the dropdown over the two shipped presentations ({shell.OpenGameOption}, {shell.Rows.Count})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
         ctx.Check(shell.PresentationChoice == PresentationId.BuiltIn.Value,
@@ -322,8 +334,8 @@ internal static class MenuOriginalSuites
         WalkTo(host, seat, shell, OriginalShell.GameOptionsCancelKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.PresentationChoice == PresentationId.Original.Value
-            && shell.GraphicsChoice == GraphicsMode.Default,
-            $"CANCEL CHANGES lands back on Preferences with both edits dropped ({shell.Screen}, {shell.PresentationChoice}, {shell.GraphicsChoice})");
+            && shell.GraphicsChoice == GraphicsMode.Default && shell.DifficultyChoice == CSVM.Flight.Difficulty.Normal,
+            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.PresentationChoice}, {shell.GraphicsChoice}, {shell.DifficultyChoice})");
         WalkTo(host, seat, shell, OriginalShell.OptionsBackKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && exits.Count == 1,

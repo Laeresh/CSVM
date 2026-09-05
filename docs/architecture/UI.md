@@ -551,7 +551,7 @@ handoff into a launching session. The host implementation is `MenuAudioService`
 The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
 `LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
-`OptionsApplyExit` (the `PresentationId` and the graphics-mode word an Options screen applied).
+`OptionsApplyExit` (the `PresentationId`, the graphics-mode word and the difficulty word an Options screen applied).
 An applied choice rides the exit rather than being saved by the screen that took it, so the
 options file keeps one writer; a custom plane rides it as a resolved `CustomPlaneDef`, never a
 store name. Presentations never construct sessions. The return side is `MenuReturnDestination`;
@@ -645,12 +645,12 @@ as a `ComposedBoard`. Screen by screen: [../org/menu-inventory.md](../org/menu-i
 ## src/UI/Menu/Original/OriginalGameOptions.cs
 The Game Options page, the shell's partial over the decoded `[@GameOptions@]` section. Its content
 is a table: per option a key, a title, a description, the control kind and how the store field is
-read and written, so a further option is one entry plus its field. The two shipped rows are the
-presentation as a dropdown over the registered tokens and the graphics mode as a checkbox off the
-section's own strip. The row shape is read off the section's own widgets, so a layout that moves a
-row moves ours. ACCEPT CHANGES leaves as the `OptionsApplyExit`; a screen never writes the store,
-`Launcher.ApplyOptions` does. The words and control kinds are remake-only readings, recorded in
-[../org/menu-inventory.md](../org/menu-inventory.md).
+read and written, so a further option is one entry plus its field. Row one is the original's own
+Difficulty dropdown at its authored box over the three campaign tiers; under it the two remake-only
+rows, the presentation as a dropdown over the registered tokens and the graphics mode as a checkbox
+off the section's own strip. The row shape is read off the section's widgets, so a layout that moves
+a row moves ours. ACCEPT CHANGES leaves as the `OptionsApplyExit`; only `Launcher.ApplyOptions`
+writes the store. The remake rows' words and control kinds are recorded in [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, the other

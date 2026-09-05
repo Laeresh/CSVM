@@ -36,13 +36,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     public const string CampaignRow = "Campaign";
 
     /// <summary>The row that opens the Options screen, the last on the Mode screen. Options hold
-    /// the one process-wide choice so far, the menu presentation, and every presentation exposes
-    /// them so a player can always get back to Built-in.</summary>
+    /// the process-wide choices (the difficulty, the menu presentation, the graphics mode), and
+    /// every presentation exposes them so a player can always get back to Built-in.</summary>
     public const string OptionsRow = "Options";
 
     /// <summary>The row that opens the rebinding screen, inside Options. It is not beside the
-    /// presentation and graphics steppers as a third choice: those two are process-wide and leave
-    /// through <c>OptionsApplyExit</c>, while a keymap is per player and saves itself.</summary>
+    /// three steppers as a further choice: those are process-wide and leave through
+    /// <c>OptionsApplyExit</c>, while a keymap is per player and saves itself.</summary>
     public const string ControlsRow = "Controls...";
 
     // Base metrics at 720p, scaled up on taller viewports (like StuntScoreboard). All TUNE.
@@ -172,11 +172,12 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string _dataRoot = "";
     private Screen _screen = Screen.Mode;
     private int _modeIndex, _chapterIndex;
-    // The Options screen's cursor and the two choices its stepper rows would apply, seeded from
+    // The Options screen's cursor and the three choices its stepper rows would apply, seeded from
     // the saved options when the screen opens so it shows back what was asked for, not what is
     // active: availability can make Built-in active, and the graphics mode a running process
     // resolved is the one the process started under.
     private int _optionsIndex;
+    private int _difficultyChoice = Difficulty.Normal;
     private string _presentationChoice = PresentationId.BuiltIn.Value;
     private string _graphicsChoice = GraphicsMode.Default;
     // The Table of Contents' list cursor and the first visible row of its 14-row window; the
@@ -1350,20 +1351,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // Both choice rows are two-way steppers; the apply row has nothing to step.
-                if (_optionsIndex == 0)
+                // The three choice rows are steppers; the doors under them have nothing to step.
+                switch (_optionsIndex)
                 {
-                    TogglePresentationChoice();
-                    return true;
+                    case 0: StepDifficultyChoice(dir); return true;
+                    case 1: TogglePresentationChoice(); return true;
+                    case 2: ToggleGraphicsChoice(); return true;
+                    default: return false;
                 }
-
-                if (_optionsIndex == 1)
-                {
-                    ToggleGraphicsChoice();
-                    return true;
-                }
-
-                return false;
             case Screen.MissionType:
                 // The lives stepper rides the same screen as the mission choice (decision 18),
                 // so it never competes with the vertical list cursor above.
@@ -1427,22 +1422,27 @@ public sealed partial class LaunchMenu : CanvasLayer
             case Screen.Options:
                 if (_optionsIndex == 0)
                 {
-                    TogglePresentationChoice();
+                    StepDifficultyChoice(1);
                 }
                 else if (_optionsIndex == 1)
                 {
-                    ToggleGraphicsChoice();
+                    TogglePresentationChoice();
                 }
                 else if (_optionsIndex == 2)
+                {
+                    ToggleGraphicsChoice();
+                }
+                else if (_optionsIndex == 3)
                 {
                     _screen = Screen.Controls;
                     OpenControls();
                 }
                 else
                 {
-                    // The launcher persists both choices and restarts the menu; the screen stays
+                    // The launcher persists every choice and restarts the menu; the screen stays
                     // standing for the host to hide.
-                    _host.Exit(new OptionsApplyExit(new PresentationId(_presentationChoice), _graphicsChoice));
+                    _host.Exit(new OptionsApplyExit(new PresentationId(_presentationChoice), _graphicsChoice,
+                        Difficulty.Word(_difficultyChoice)));
                 }
 
                 break;
@@ -2339,6 +2339,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         _optionsIndex = 0;
         var saved = OptionsStore.UserOptions().Load();
+        _difficultyChoice = Difficulty.Parse(saved.Difficulty) ?? Difficulty.Normal;
         _presentationChoice = saved.MenuPresentation ?? PresentationId.BuiltIn.Value;
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
     }
@@ -2653,6 +2654,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         return "↑↓  Choose       ←→  Which control       Enter / A  Rebind"
             + "       L / Y  Unbind       P / X  Defaults       Esc / B  Back without saving";
     }
+
+    // A three-way stepper with wrap, Normal / Hard / Hardest in the campaign selector's order.
+    private void StepDifficultyChoice(int dir) =>
+        _difficultyChoice = ((Difficulty.Clamp(_difficultyChoice) + dir) % 3 + 3) % 3;
 
     private void TogglePresentationChoice() =>
         _presentationChoice = _presentationChoice == PresentationId.Original.Value
@@ -3066,7 +3071,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Mode => Modes.Length + 3, // + the trailing campaign, hangar and options rows
         Screen.Hangar => _hangar?.Page.RowCount ?? 1,
         Screen.Campaign => _campaign?.Page.RowCount ?? 1,
-        Screen.Options => 4, // the two steppers, the controls door, then the apply row
+        Screen.Options => 5, // the three steppers, the controls door, then the apply row
         Screen.Controls => ControlsHeaderRows + _controls.Actions.Count + ControlsFooterRows,
         Screen.Chapter => CurrentChapters.Length,
         Screen.Presets => InstantActionPresets.All.Count,
@@ -3124,9 +3129,10 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Campaign => _campaign?.Page.RowText(index) ?? "",
             Screen.Options => index switch
             {
-                0 => $"Menu presentation: {PresentationChoiceLabel()}",
-                1 => $"Graphics: {GraphicsChoiceLabel()}",
-                2 => ControlsRow,
+                0 => $"Difficulty: {Difficulty.Label(_difficultyChoice)}",
+                1 => $"Menu presentation: {PresentationChoiceLabel()}",
+                2 => $"Graphics: {GraphicsChoiceLabel()}",
+                3 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -3421,15 +3427,16 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Mode => focus < Modes.Length ? Modes[focus].Detail
             : focus == Modes.Length ? "Fly the story: pick a player, then the cabin."
             : focus == Modes.Length + 1 ? "Build a plane in the hangar and fly it."
-            : "Choose which presentation draws the menus, and the graphics mode.",
+            : "Choose the difficulty, which presentation draws the menus, and the graphics mode.",
         Screen.Hangar => _hangar?.Page.Detail(focus) ?? "",
         Screen.Campaign => _campaign?.Page.Detail(focus) ?? "",
         Screen.Options => focus switch
         {
-            0 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
-            1 => GraphicsDetail(),
-            2 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
-            _ => "Saves both choices and restarts the menu at its top level; unfinished setup is discarded.",
+            0 => "Select the difficulty level for a solo campaign. Enemy armour and health scale with it at spawn.",
+            1 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
+            2 => GraphicsDetail(),
+            3 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),
         Screen.Presets => PresetDetail(focus),

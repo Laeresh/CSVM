@@ -50,6 +50,42 @@ public class OptionsStoreTests
     }
 
     [Fact]
+    public void RoundTrip_PreservesTheDifficultyWord()
+    {
+        var store = new OptionsStore(TestData.TempDir());
+        store.Save(new OptionsDef { Difficulty = "hard" });
+        var def = store.Load();
+
+        Assert.Equal("hard", def.Difficulty);
+        Assert.Null(def.MenuPresentation);
+        Assert.Null(def.GraphicsMode);
+
+        store.Save(new OptionsDef { Difficulty = "hardest", MenuPresentation = "original" });
+        def = store.Load();
+        Assert.Equal("hardest", def.Difficulty);
+        Assert.Equal("original", def.MenuPresentation);
+    }
+
+    /// <summary>The file carries the three campaign words alone: Instant Action's names and the
+    /// bare digits the flag also takes are a command line's convenience, and a word outside the set
+    /// is dropped like a missing one rather than invalidating the file.</summary>
+    [Fact]
+    public void Load_UnknownDifficultyWord_DropsOnlyThatField()
+    {
+        var dir = TestData.TempDir();
+        foreach (string word in new[] { "brutal", "veteran", "1", "Hard" })
+        {
+            File.WriteAllText(Path.Combine(dir, "options.json"),
+                $"{{\"version\": 1, \"menuPresentation\": \"original\", \"difficulty\": \"{word}\"}}",
+                new UTF8Encoding(false));
+            var def = new OptionsStore(dir).Load();
+
+            Assert.Equal("original", def.MenuPresentation);
+            Assert.Null(def.Difficulty);
+        }
+    }
+
+    [Fact]
     public void Load_UnknownGraphicsValue_DropsOnlyThatField()
     {
         var dir = TestData.TempDir();
@@ -75,6 +111,7 @@ public class OptionsStoreTests
 
         Assert.Equal("original", def.MenuPresentation);
         Assert.Null(def.GraphicsMode);
+        Assert.Null(def.Difficulty);
     }
 
     [Fact]

@@ -6,14 +6,18 @@ using System.Text.Json;
 
 namespace CSVM.Utils;
 
-/// <summary>The process-wide options: the requested menu presentation and the requested graphics
-/// mode. A missing field means "never set"; the caller, not this def, decides what that falls back
-/// to.</summary>
+/// <summary>The process-wide options: the requested menu presentation, the requested graphics
+/// mode and the difficulty setting. A missing field means "never set"; the caller, not this def,
+/// decides what that falls back to.</summary>
 public sealed class OptionsDef
 {
     public string? MenuPresentation { get; set; }
 
     public string? GraphicsMode { get; set; }
+
+    /// <summary>The difficulty word (<see cref="Flight.Difficulty.Word"/>): the campaign
+    /// selector's tier the launch reads when no flag names one.</summary>
+    public string? Difficulty { get; set; }
 }
 
 /// <summary>
@@ -54,6 +58,16 @@ public sealed class OptionsStore
         GraphicsMode.EnhancedWord,
     };
 
+    // The three campaign words alone, spelt as Flight.Difficulty.Word spells them. Parse's wider
+    // vocabulary (Instant Action's names, bare digits) is a command line's convenience, not a
+    // value this file should ever carry: a file reads back only what the options screens write.
+    private static readonly HashSet<string> ValidDifficulties = new(StringComparer.Ordinal)
+    {
+        Flight.Difficulty.Word(Flight.Difficulty.Normal),
+        Flight.Difficulty.Word(Flight.Difficulty.Hard),
+        Flight.Difficulty.Word(Flight.Difficulty.Hardest),
+    };
+
     private static readonly JsonWriterOptions WriterOptions = new() { Indented = true };
 
     private readonly string _dir;
@@ -91,6 +105,7 @@ public sealed class OptionsStore
             w.WriteNumber("version", Version);
             Write(w, "menuPresentation", def.MenuPresentation);
             Write(w, "graphicsMode", def.GraphicsMode);
+            Write(w, "difficulty", def.Difficulty);
             w.WriteEndObject();
         }
 
@@ -122,6 +137,7 @@ public sealed class OptionsStore
             {
                 MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
                 GraphicsMode = Read(root, "graphicsMode", ValidGraphicsModes),
+                Difficulty = Read(root, "difficulty", ValidDifficulties),
             };
         }
         catch (JsonException)

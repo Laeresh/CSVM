@@ -33,7 +33,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the Game Options page behind it.</summary>
     public const string GameOptionsAid = "game-options";
 
-    /// <summary>The Game Options aid's argument that leaves its Menu dropdown standing open.</summary>
+    /// <summary>The Game Options aid's argument that leaves its Difficulty dropdown standing open.</summary>
     public const string GameOptionsOpenAid = "open";
 
     /// <summary>The Game Options aid's argument that leaves its checkbox checked.</summary>
@@ -437,8 +437,9 @@ public sealed class OriginalPresentation : IMenuPresentation
     private static Color ToColor(MenuLayoutColor c) => new(c.R / 255f, c.G / 255f, c.B / 255f, 1f);
 
     // The Game Options aid's two posed states, each the keyboard walk that reaches it rather than a
-    // state the page can only be put in from outside: Accept on the opening focus stands the Menu
-    // dropdown's list open, and a step down then Accept checks the box.
+    // state the page can only be put in from outside: Accept on the opening focus stands the
+    // Difficulty dropdown's list open, and two steps down (past the Menu dropdown) then Accept
+    // checks the box.
     private void OpenGameOptionsAid(string aid)
     {
         _shell!.OpenGameOptions();
@@ -446,6 +447,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         string pose = colon >= 0 ? aid[(colon + 1)..] : string.Empty;
         if (pose == GameOptionsCheckedAid)
         {
+            _shell.Step(new MenuCommands { MoveY = 1 });
             _shell.Step(new MenuCommands { MoveY = 1 });
         }
 

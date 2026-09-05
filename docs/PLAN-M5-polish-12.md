@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ `BL-712` A briefing re-entered from the cabin resumes its reveal mid-way
 22. ☐ `BL-655` The campaign hangar never shows the wallet while a plane is being built
-23. ☐ `BL-570` The difficulty setting has no menu row
+23. ☑ `BL-570` The difficulty setting has no menu row
 
 ### Wave D — The pointer
 
@@ -460,7 +460,7 @@ the mark while remaining selectable. Screenshot each page under
 purchase, not at the part, and a screen that hides parts you cannot yet afford also hides what you
 are saving toward.
 
-## C23 ☐ `BL-570` The difficulty setting has no menu row
+## C23 ☑ `BL-570` The difficulty setting has no menu row
 
 **Goal.** Difficulty (Normal / Hard / Hardest) is the first row of Original's Game Options page
 and a stepper on Built-in's Options screen, persisted in the options file, read by a normal launch,
@@ -495,6 +495,23 @@ skill stands in for that spawn (`InstantActionDirector.cs:196`). Do not wire the
 path or a wave flies at two difficulties. It selects a hit-point tier only; the description must not
 say it changes how well the enemy flies or shoots. The Game Options screenshot aid's row index
 moves by one.
+
+**Verified.** <pending orchestrator run>
+
+**Outcome.** `OptionsDef.Difficulty` carries one of the three campaign words (`Flight.Difficulty.Word`),
+validated on read against that set alone, no version bump. Original's Game Options table opens with
+the Difficulty dropdown at the authored `GO_D_DIFFICULTY` box over Normal / Hard / Hardest, with
+Menu and Enhanced Graphics one row down each (the checkbox now sits on the head-turn row its offset
+was read from); Built-in's Options screen is five rows with a wrapping Difficulty stepper first.
+`OptionsApplyExit` carries the word and `Launcher.ApplyOptions` saves it. `Launcher.LaunchSession`
+folds the saved word into the spec through `SessionSpec.WithSavedDifficulty` at every launch: a
+parsed `--difficulty=` flag (`DifficultyExplicit`) wins, a `--det` run reads no saved option, and a
+missing or refused word changes nothing, so the tier reaches `FlightRosterPolicy.Difficulty` on a
+plain launch and an Options apply reaches the next flight without a restart. Instant Action is
+untouched; a wave's own skill still outranks the session's per spawn. The `game-options:checked`
+aid steps down twice now. New suite `options-difficulty-launch`; `OptionsStoreTests`,
+`OriginalShellTests`, `OriginalCoverageTests`, `menu-original-tracer` and `menu-launch-return`
+updated for the new first row.
 
 ---
 

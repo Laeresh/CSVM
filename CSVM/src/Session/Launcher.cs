@@ -1008,6 +1008,9 @@ public partial class Launcher : Node3D
     // CLI launch leaves the log to tell the story, exactly as the single-root class did).
     private bool LaunchSession()
     {
+        // The saved difficulty, read at every launch so an Options apply reaches the next flight
+        // in the same process. The flag and --det rules are the spec's (WithSavedDifficulty).
+        _spec = _spec.WithSavedDifficulty(OptionsStore.UserOptions().Load().Difficulty);
         _session = new GameSession(_spec, new LauncherContext
         {
             RepoRoot = _repoRoot,
@@ -1294,8 +1297,9 @@ public partial class Launcher : Node3D
         var options = store.Load();
         options.MenuPresentation = requested.Value;
         options.GraphicsMode = applied.Graphics;
+        options.Difficulty = applied.Difficulty;
         store.Save(options);
-        Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics}");
+        Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
         _menuHost.Deactivate();
         string? reason = _menuHost.Select(_spec.ForceBuiltInPresentation, null, requested.Value);
         string why = reason == null ? "" : $" reason={reason}";
