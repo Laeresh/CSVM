@@ -528,7 +528,7 @@ public partial class FlightController : Node3D
     private bool _gunnerLoggedTarget;            // verification breadcrumb: the AI gunner's first acquisition
     private bool _gunnerLoggedFire;              // verification breadcrumb: the AI gunner's first open fire
     private bool _rocketeerLoggedFire;           // verification breadcrumb: the AI's first ordnance launch
-    private string _rocketeerLastVerdict = "";   // the last rocketeer verdict logged, so a repeat is silent
+    private string _rocketeerLastVerdict = "";   // the last rocketeer verdict KEY logged, so a repeat is silent
     private int _rocketeerVerdictsLogged;        // capped per shooter: a flight of twelve must not flood the log
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
     private bool _aiNitroArmed;                  // the current AI nitro maneuver already engaged
@@ -3294,10 +3294,10 @@ public partial class FlightController : Node3D
             _fire.SelectPylon(rocketeer.SelectedPylon);
         // Each CHANGE of verdict, a few per shooter: the user's C4/M03 flights had the Warhawks on
         // a gasbag with the gate open and nothing launched, and the log could not say which gate.
-        if (_rocketeerVerdictsLogged < 8 && rocketeer.LastVerdict.Length > 0
-            && rocketeer.LastVerdict != _rocketeerLastVerdict)
+        if (_rocketeerVerdictsLogged < 12 && rocketeer.LastVerdictKey.Length > 0
+            && rocketeer.LastVerdictKey != _rocketeerLastVerdict)
         {
-            _rocketeerLastVerdict = rocketeer.LastVerdict;
+            _rocketeerLastVerdict = rocketeer.LastVerdictKey;
             _rocketeerVerdictsLogged++;
             Log.Info("flight",
                 $"ai rocketeer: shooter {PlayerIndex} on {TargetLabel(StandingTarget(gunner))} at {WorldPosition.DistanceTo(targetPos):0} m: {rocketeer.LastVerdict}");
