@@ -2494,6 +2494,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   not the model. A saved profile with unequal wings must still load. *Cross-refs:* `BL-723`,
   `docs/org/hangar.md`.
 
+- `BL-743` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Original's Instant Action
+  Pilot Plane list has no window, so with saved builds it runs past the page's foot.** *Evidence:*
+  the `--menu=instant-action:pilot-plane` aid over a store of eight builds draws nineteen rows from
+  the dropdown's line down over the BUILD CUSTOM PLANE and EXIT buttons. The layout authors the
+  dropdown `TotalDisplayed 20`, and the remake's open list
+  (`CSVM/src/UI/Menu/Original/OriginalInstantAction.cs`, "the open list drawn under its box",
+  remake-only until the screen is filmed) draws every row with no window or scroll. *Fix shape:* a
+  windowed open list of at most the authored count with the contents window's arrow pair, the
+  window following the focused row. *⚠ Traps:* the open list is the route a scripted pose and
+  every `MenuInstantActionSuites` walk pick a row by, so the window must keep the picked row
+  reachable by index. *Cross-refs:* `BL-707` (the wheel over the same list).
+
+- `BL-744` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: trace]` **The export notice
+  draws the message box's `?` icon where the original draws `!`.** *Evidence:*
+  `OriginalScreenshots/Campaign Flight Check Change Plane Export dialog.png` shows the `!` frame of
+  `MB_B_Icon.Png`; the remake's one-button message box over the plane-selection screen
+  (`CSVM/src/UI/CampaignBoards.cs`, `Dialog(modal.Message, ...)`, and Original's `ComposeDialog` in
+  `CSVM/src/UI/Menu/Original/OriginalCampaign.cs`) always draws the `?` frame. *Fix shape:* decode
+  which icon frame each message-box call site selects (the delete confirm keeps `?`, the export
+  notice takes `!`) and carry the frame on the modal. *⚠ Traps:* do not key the icon on the button
+  count; the original's two-button confirms and one-button notices may each use either frame.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
