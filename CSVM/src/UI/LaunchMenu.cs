@@ -2068,6 +2068,10 @@ public sealed partial class LaunchMenu : CanvasLayer
                 _campaign = null;
                 _campaignFeature.Discard();
                 _error = "";
+
+                // An EXPORT in the campaign that was just left added a plane to the pickers, and the
+                // sortie screens are reached from here without another Show to re-read on.
+                RefreshRoster();
                 return true;
         }
     }

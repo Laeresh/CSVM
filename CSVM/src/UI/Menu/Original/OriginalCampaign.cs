@@ -255,13 +255,22 @@ public sealed partial class OriginalShell
         return !briefing.Complete;
     }
 
-    /// <summary>Drops the open campaign, if any: the feature's transient state and the pages. Every
-    /// door out of the campaign and every return to the top level comes through here.</summary>
+    /// <summary>Drops the open campaign, if any: the feature's transient state and the pages, and
+    /// re-reads the build store into the sortie roster, since an EXPORT inside may have crossed a
+    /// plane into it. Every door out of the campaign and every return to the top level comes
+    /// through here.</summary>
     public void CloseCampaign()
     {
         _campaign?.Discard();
         _flow = null;
         _dialog = null;
+
+        // An EXPORT inside the campaign just crossed a plane into the sortie lists, and those are
+        // reached from the top level without another Activate to re-read the store on.
+        if (_planes != null)
+        {
+            _setup.SetRoster(OriginalRosters.Roster(_planes.List()));
+        }
     }
 
     private static bool IsCampaign(OriginalScreen screen) =>

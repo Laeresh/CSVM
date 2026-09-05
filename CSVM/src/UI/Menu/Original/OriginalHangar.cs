@@ -188,7 +188,9 @@ public sealed partial class OriginalShell
             return;
         }
 
-        _hangar.Open(_planes, wallet);
+        // Over a wallet the build store is the campaign's own, so ownership and the file it names
+        // cannot end up in two different directories when a suite or an aid seats a scratch store.
+        _hangar.Open(wallet != null ? _campaign?.Planes ?? _planes : _planes, wallet);
         _hangarReturn = IsHangarScreen ? OriginalScreen.TopLevel : _screen;
         _hangarName = string.Empty;
         _hangarDefaults = true;

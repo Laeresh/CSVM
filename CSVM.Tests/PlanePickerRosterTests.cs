@@ -64,6 +64,23 @@ public class PlanePickerRosterTests
         Assert.Equal("My Warhawk", row.CustomName);
     }
 
+    /// <summary>The export gate: a campaign aeroplane nobody has pressed EXPORT on is not offered,
+    /// and clearing the marker is what lists it. Every plane without the marker is offered, which is
+    /// what keeps a build written before the marker existed in the list.</summary>
+    [Fact]
+    public void ACampaignPlaneAwaitingExportIsNotOffered()
+    {
+        var def = new CustomPlaneDef { Name = "The Knave", Airframe = 5, Engine = 1, AwaitingExport = true };
+        var hidden = PlanePickerRoster.Build(Stock, new[] { def });
+        Assert.Equal(Stock.Length, hidden.Count);
+        Assert.Equal(-1, PlanePickerRoster.IndexOf(hidden, "The Knave"));
+
+        def.AwaitingExport = false;
+        var listed = PlanePickerRoster.Build(Stock, new[] { def });
+        Assert.Equal(Stock.Length + 1, listed.Count);
+        Assert.Equal(Stock.Length, PlanePickerRoster.IndexOf(listed, "The Knave"));
+    }
+
     /// <summary>Airframe ids 0-10 in the stat table's order (docs/org/hangar.md), the Hoplite
     /// being player_autogyro (the shipped data's two-names aircraft).</summary>
     [Theory]

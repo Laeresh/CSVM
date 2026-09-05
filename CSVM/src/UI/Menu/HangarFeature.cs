@@ -593,6 +593,11 @@ public sealed class HangarFeature : IMenuFeature
         }
 
         int cost = Bill.Total.Cost;
+
+        // The door decides the crossing: a build funded by a campaign wallet waits for that
+        // campaign's EXPORT before any picker lists it, a build from a wallet-free door is already
+        // an Instant Action aeroplane and carries no marker at all.
+        Scratch.AwaitingExport = Wallet != null;
         store.Save(Scratch);
         BuiltPlaneName = Scratch.Name;
         Message = string.Empty;

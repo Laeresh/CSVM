@@ -121,7 +121,9 @@ public sealed class PlayerSetupFeature : IMenuFeature
 
     /// <summary>The roster rule both presentations share: the stock rows in their given order,
     /// then one row per saved custom plane in the store's own order, each custom flying its
-    /// airframe's stock node (<paramref name="nodeOfAirframe"/>, the picker roster's table).</summary>
+    /// airframe's stock node (<paramref name="nodeOfAirframe"/>, the picker roster's table). A
+    /// campaign aeroplane nobody has exported yet is not offered
+    /// (<see cref="CustomPlaneDef.AwaitingExport"/>).</summary>
     public static IReadOnlyList<MenuAircraft> BuildRoster(
         IReadOnlyList<(string Name, string Node)> stock,
         IReadOnlyList<CustomPlaneDef> customs,
@@ -138,7 +140,10 @@ public sealed class PlayerSetupFeature : IMenuFeature
 
         foreach (var def in customs)
         {
-            rows.Add(new MenuAircraft(def.Name, nodeOfAirframe(def.Airframe), def));
+            if (!def.AwaitingExport)
+            {
+                rows.Add(new MenuAircraft(def.Name, nodeOfAirframe(def.Airframe), def));
+            }
         }
 
         return rows;

@@ -35,10 +35,11 @@ offsets, the sentinel substitution for an unused wave slot and each preset's con
 The picker roster rule behind every human plane pick, engine-free so it tests without a menu
 instance: `Build(stock, customs)` lists the stock rows in their given order, then one row per saved
 `CustomPlaneDef` in the store's name-sorted order, each carrying its store name and its airframe's
-stock node. `AirframeNode` and `AirframeOf` are the airframe-id to `player_*` node table and its
-inverse, and `IndexOf` is the after-build auto-select's case-blind lookup. Deliberately not
-`Session.PlaneRoster`, which answers "which plane does player N fly" off a `SessionSpec`: this is
-the menu-side list, that one the session-side read. Tests: `CSVM.Tests/PlanePickerRosterTests.cs`.
+stock node, skipping a campaign plane nobody has exported. `AirframeNode` and `AirframeOf` are the
+airframe-id to `player_*` node table and its inverse, `IndexOf` the after-build auto-select's
+case-blind lookup. Deliberately not `Session.PlaneRoster`, which answers "which plane does player N
+fly" off a `SessionSpec`: this is the menu-side list, that one the session-side read. Tests:
+`CSVM.Tests/PlanePickerRosterTests.cs`.
 
 ## src/UI/HangarFlow.cs
 The Build Custom Plane flow, Built-in's walk of the shared `HangarFeature` (`Menu/HangarFeature.cs`),
@@ -798,11 +799,11 @@ other's bindings. The binding model itself: [../org/input.md](../org/input.md).
 Player setup as a shared `IMenuFeature`, device-neutral and engine-free. `Seats` are `PlayerSeat`s
 in join order, each bound to the `IMenuInputSource` that claimed it: a claim is one source and one
 seat, settled in arrival order, and seat 0 never leaves. `Roster` is the `MenuAircraft` list every
-seat picks from, set by the presentation and built by the shared rule (the stock rows in their
-given order, then one row per saved custom flying its airframe's stock node). Per seat it owns the
-cursor, the two stages of the pick, the loadout door and the backing-out ladder; the gate is the
-mode's minimum of seats and every seat confirmed. `Choices` and `BuildExit` are the typed result.
-Nothing here reads a pad: that is `src/UI/MenuSeatDevices.cs`, below.
+seat picks from, set by the presentation and built by the shared rule (the stock rows in their given
+order, then one row per saved custom flying its airframe's stock node, a campaign plane nobody has
+exported left out). Per seat it owns the cursor, the two stages of the pick, the loadout door and
+the backing-out ladder; the gate is the mode's minimum of seats and every seat confirmed. `Choices`
+and `BuildExit` are the typed result. Nothing here reads a pad: `src/UI/MenuSeatDevices.cs`, below.
 
 ## src/UI/MenuSeatDevices.cs
 The pad side of the shared player setup, for any presentation, over seat 0's `MenuInput` and the

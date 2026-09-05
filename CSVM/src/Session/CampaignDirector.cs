@@ -1097,6 +1097,8 @@ public sealed class CampaignDirector
         var planes = CustomPlaneStore.UserPlanes();
         foreach (var build in recorded.AwardedBuilds)
         {
+            // A granted aircraft is the campaign's, so it waits for EXPORT like a campaign-built one.
+            build.AwaitingExport = true;
             GD.Print($"campaign: award '{build.Name}' saved to {planes.Save(build)}");
         }
     }

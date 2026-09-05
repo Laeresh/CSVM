@@ -228,6 +228,21 @@ one, so a plane built in the hangar persists exactly the file earlier builds wro
 reader with it defaults the fields when it is absent, so raising the schema version would only have
 made older builds refuse a plane they read perfectly well.
 
+The same file carries a second optional field, the export gate the original states in langui 1139,
+702 and 1256:
+
+```json
+"awaitingExport": true
+```
+
+The original keeps the campaign's aircraft out of Instant Action and multiplayer until the player
+presses EXPORT on one, and this is how CSVM says which side of that crossing a stored plane is on.
+It is written only while the plane is still waiting: a build funded by the campaign wallet and a
+mission-awarded aircraft are saved with it, EXPORT clears it, and a build from either wallet-free
+door never carries it. **The absence of the field means exported**, which is what keeps every plane
+written before the field existed in the pickers. It is a **version 2** file for the same reason the
+`loadout` block is.
+
 ### The paint screen's preview art
 
 The paint screen's aircraft preview is not the flying model's `.BM` composition. Each

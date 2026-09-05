@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using CSVM.Flight;
 using CSVM.Session;
 using CSVM.UI;
 using CSVM.UI.Menu;
@@ -43,7 +44,8 @@ internal static class MenuOriginalCampaignSuites
         + "return lands on the book with RETURN TO CABIN focused and starts no narration, the cabin "
         + "return lands on the cabin, ammo selection and plane selection write their picks through "
         + "the feature, PLANE CONSTRUCTION opens the hangar over the wallet and Back resumes the "
-        + "cabin, and Deactivate leaves no open campaign")]
+        + "cabin, a plane built over the campaign's wallet is absent from the sortie roster until one "
+        + "EXPORT press crosses it, and Deactivate leaves no open campaign")]
     internal static void MenuOriginalCampaign(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -96,6 +98,7 @@ internal static class MenuOriginalCampaignSuites
             Returns(ctx, host, shell, campaign, store, audio);
             AmmoAndPlanes(ctx, host, seat, shell, fit, campaign, store);
             HangarRoundTrip(ctx, host, seat, shell, fit);
+            ExportGate(ctx, host, seat, shell, fit, campaign, root);
         }
         finally
         {
@@ -415,6 +418,69 @@ internal static class MenuOriginalCampaignSuites
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && !hangar.IsOpen && shell.FocusedKey == "PlaneConstruction",
             $"Back cancels the build and resumes the cabin on the row that opened it ({shell.Screen}, {shell.FocusedKey})");
+    }
+
+    // The export crossing over a scratch profile store and a scratch build store of its own: a plane
+    // built with the campaign's wallet is not in the sortie roster, one EXPORT press puts it there.
+    private static void ExportGate(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit,
+        CampaignFeature campaign, string root)
+    {
+        const string Built = "Export Bird";
+        var profiles = new CampaignProfileStore(Path.Combine(root, "GateProfiles"));
+        var planes = new CustomPlaneStore(Path.Combine(root, "GatePlanes"));
+        shell.OpenCampaignOver(profiles, planes);
+        Press(host, seat, new MenuCommands { Typed = Pilot });
+        Press(host, seat, Accept);
+        var door = Row(shell, "PlaneConstruction");
+        if (campaign.Profile is not { } seated || shell.CampaignWallet is not { } seatedWallet || door == null)
+        {
+            ctx.Check(false, $"the gate walk seats a player over its own stores ({campaign.Profile?.Name})");
+            return;
+        }
+
+        ctx.Check(seated.Planes.Count == 2 && seatedWallet.OwnedBuilds().Count == 2,
+            $"the two profile-seeded starters resolve with nothing in the build store ({seated.Planes.Count}, {seatedWallet.OwnedBuilds().Count})");
+        seated.Funds = 500_000;
+        profiles.Save(seated);
+
+        var hangar = host.Features.Get<HangarFeature>();
+        Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(ReferenceEquals(hangar.Store, planes) && hangar.Wallet != null,
+            $"PLANE CONSTRUCTION builds into the campaign's own store, never a second one (wallet {hangar.Wallet != null})");
+        Press(host, seat, Back);
+
+        // Back through the cabin re-reads the profile, so the wallet the build is funded by has to
+        // be taken after it or the purchase would land on an object nothing else is looking at.
+        if (campaign.Profile is not { } profile || shell.CampaignWallet is not { } wallet)
+        {
+            ctx.Check(false, $"the cabin resumes with the profile seated");
+            return;
+        }
+
+        hangar.Open(planes, wallet);
+        hangar.StartDefaultPlane();
+        hangar.Scratch.Name = Built;
+        bool committed = hangar.Commit();
+        hangar.Discard();
+        ctx.Check(committed && planes.Load(Built) is { AwaitingExport: true },
+            $"a build funded by the wallet is saved waiting for EXPORT ({committed}, {hangar.Message})");
+        int stock = OriginalRosters.Airframes.Count;
+        ctx.Check(OriginalRosters.Roster(planes.List()).Count == stock,
+            $"and the sortie roster still offers the stock airframes alone ({OriginalRosters.Roster(planes.List()).Count} of {stock})");
+
+        profile.SelectedPlane = profile.Planes.Count - 1;
+        profiles.Save(profile);
+        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+        ctx.Check(shell.Screen == OriginalScreen.CampaignPlaneSelection && shell.Rows[0].Label.Contains(Built, StringComparison.Ordinal),
+            $"plane selection puts the pilot's combo on the built aeroplane ({shell.Screen}, {shell.Rows[0].Label})");
+        shell.PressExport();
+        ctx.Check(planes.Load(Built) is { AwaitingExport: false },
+            $"the FIRST EXPORT press clears the marker in the stored record ({planes.Load(Built)?.AwaitingExport})");
+        var roster = OriginalRosters.Roster(planes.List());
+        ctx.Check(roster.Count == stock + 1 && roster[stock].Name == Built,
+            $"which is what puts it in the sortie roster after the stock rows ({roster.Count}, {(roster.Count > stock ? roster[stock].Name : "-")})");
+        ctx.Check(wallet.OwnedBuilds().Count == 3 && profile.Planes.Count == 3,
+            $"and the campaign still owns all three, the two starters included ({wallet.OwnedBuilds().Count})");
     }
 
     private static bool HasLine(ComposedBoard board, string text)

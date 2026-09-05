@@ -102,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ `BL-691` The export message box draws its OK button in ink the plaque hides
 2. ☑ `BL-709` Instant Action's Pilot Plane list offers the stock airframes only
 3. ☑ `BL-708` Original's Instant Action screen draws Weapon Loadout and Build Custom Plane disabled
-4. ☐ `BL-651` Instant Action's build list shows every campaign plane, with no working Export gate
+4. ☑ `BL-651` Instant Action's build list shows every campaign plane, with no working Export gate
 
 ### Wave B — Seats and joining
 
@@ -297,7 +297,7 @@ screen by every input family and reaches the top level through Exit. Fixed on th
 filmed: which sound plays and how the original's own loadout screen behaves under Instant Action
 stay `CAP-50`'s.
 
-## A4 ☐ `BL-651` Instant Action's build list shows every campaign plane, with no working Export gate
+## A4 ☑ `BL-651` Instant Action's build list shows every campaign plane, with no working Export gate
 
 **Goal.** A campaign aircraft appears in the Instant Action and Free Flight pickers only once the
 player has pressed Export on it, and the first press takes.
@@ -331,6 +331,29 @@ it once, and sees it present. Check that the two profile-seeded starters still r
 never hangar-built and have no entry there, which is why the campaign roster resolves them from
 the ownership record; a per-mode store would strand them. A file written before the marker existed
 must read as exported, or every existing player's builds vanish from Instant Action on update.
+
+**Verified.** <pending orchestrator run>
+
+**Outcome.** The "2 exports" half is closed, and not by `A1` alone. `CampaignFeature.ExportPlane`
+always wrote the store's record on the first press, so the store was never the second press's
+doing; the suite walk asserts it by re-reading the file straight after one `PressExport`. What was
+actually stale is the picker: both presentations read the build store on entry (Original at
+`Activate`, Built-in at `Show`) and nothing re-read it on the way out of the campaign, so a plane
+exported mid-visit was missing from the sortie lists that visit. `OriginalShell.CloseCampaign` and
+`LaunchMenu`'s campaign exit now re-read it, which is the one door every way out of the campaign
+passes through. `A1`'s invisible OK is why the press read as having done nothing at the controls.
+
+The marker is `CustomPlaneDef.AwaitingExport`, written as `"awaitingExport": true` and **written
+only when true**, so the absence of the field means exported and every file already on disk stays
+in the pickers. `HangarFeature.Commit` sets it from the door (`Wallet != null`), so a campaign
+build waits and a build from either wallet-free door never carries it; `CampaignDirector`'s awarded
+aircraft are saved with it; `ExportPlane` clears it. `PlayerSetupFeature.BuildRoster` and
+`PlanePickerRoster.Build` skip a def that carries it, which covers every human picker in both
+presentations from two places. The two profile-seeded starters are untouched: they have no file in
+the build store at all, and the campaign roster still resolves them from the ownership record.
+Fixed on the way: Original's cabin opened PLANE CONSTRUCTION over the shell's own store while the
+campaign feature held another, so ownership and the file it names could land in two directories
+under a scratch store; the door now takes the campaign's store, as Built-in's already did.
 
 ---
 

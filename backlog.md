@@ -2361,8 +2361,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   RECORDS, not on the build directory, which the two modes share; counting files would let an
   Instant Action build refuse a campaign purchase. Read what the reserved six are for before
   choosing the number, since a cap of 25 and a cap of 19 are different readings of the same decode.
-  *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) (the slot rules), `BL-651` (the other
-  half of the two modes over one store).
+  *Cross-refs:* [`docs/org/hangar.md`](docs/org/hangar.md) (the slot rules). The other half of the
+  two modes over one store is the export gate, `CustomPlaneDef.AwaitingExport`.
 
 - `BL-637` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **A targeted patrol boat shows no name line. The answer is per roster
   block, not per hull: the original names CM08's boats and leaves CM12's blank.** *Evidence

@@ -425,6 +425,10 @@ public sealed class CampaignFeature : IMenuFeature
 
         var def = store.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane) ?? StockBuild(plane);
         def.SetLoadout(plane.Ammo, plane.Ordnance);
+
+        // The crossing itself: clearing the marker is what puts the aeroplane in the Instant Action
+        // and Free Flight lists, and one press is all it takes.
+        def.AwaitingExport = false;
         store.Save(def);
         return true;
     }

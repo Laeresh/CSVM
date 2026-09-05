@@ -54,7 +54,8 @@ public static class PlanePickerRoster
     }
 
     /// <summary>Builds the picker roster: every stock row in its given order, then one row per
-    /// saved custom in the store's own (name-sorted) order.</summary>
+    /// saved custom in the store's own (name-sorted) order. A campaign aeroplane nobody has
+    /// exported yet is not offered (<see cref="CustomPlaneDef.AwaitingExport"/>).</summary>
     public static IReadOnlyList<PickerPlane> Build(
         IReadOnlyList<(string Name, string Node)> stock, IReadOnlyList<CustomPlaneDef> customs)
     {
@@ -66,7 +67,10 @@ public static class PlanePickerRoster
 
         foreach (var def in customs)
         {
-            rows.Add(new PickerPlane(def.Name, AirframeNode(def.Airframe), def.Name));
+            if (!def.AwaitingExport)
+            {
+                rows.Add(new PickerPlane(def.Name, AirframeNode(def.Airframe), def.Name));
+            }
         }
 
         return rows;
