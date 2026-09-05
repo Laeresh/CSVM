@@ -3408,6 +3408,28 @@ usual.
   older records hold. *Cross-refs:* `BL-562`'s closing commit (the same misreading, found there),
   `CSVM/src/Utils/PhysicsTickCost.cs` (the pattern to copy), `docs/verification.md` PERF-1 and
   PERF-21.
+- `BL-742` `[Testing]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The empty stage
+  cannot host a zeppelin, and `--ai=` cannot put its planes on a side, so an AI-versus-zeppelin
+  question takes a full campaign flight per iteration.** *Evidence:* BL-740's torpedo hunt took four
+  user flights of C4/M03 and three log reads to find that the Pandora's gasbag pools reached the AI
+  as nobody's, and the rocketeer's own gates were still unread after the last one. `--stage=empty`
+  builds no chapter gamez, and a zeppelin is a chapter world node (`rock_zeppelin` under the
+  mission's gamez) that `ZeppelinRuntime` resolves by name, so no hull exists to wire. `AiSpawn`
+  already carries a `Team` (`CSVM/src/Session/FlightRoster.cs:25`), but the `--ai=` parser
+  (`SessionSpec.cs`, `GameSession.cs:2391-2449`) offers no token for it, so every CLI plane lands
+  on one side. *Fix shape:* a `team=<id>` token on `--ai=` entries; a `--zep=<chapter>/<mission>:<record>[:team=<id>][:pos=x,y,z]` flag for the empty stage that slices the record's hull subtree
+  out of that chapter's gamez the way the `--node=` inspection stage slices one, registers its
+  destructibles, and hands the borrowed record with the team override to `ZeppelinRuntime`, so
+  gasbags, engines and cannons wire as in a mission; then one in-engine suite that spawns a
+  torpedo-armed Warhawk against a hostile zeppelin on the stage and asserts an acquisition and a
+  launch. *⚠ Traps:* a record's team fans onto every zone, so the override must go through
+  `AuthoredTeam`'s path rather than a stamp on the pools, or the state-child rule BL-740 added is
+  bypassed; the stage has no `AnimProgram`, so the gasbag destroy anims resolve to nothing and the
+  pools register without choreography, which is fine for a targeting probe and wrong for a damage
+  one. *Playtest after fix:*
+  `.\RunGame.ps1 --stage=empty --zep=C4/M03:piratezep:team=1 --ai=player_warhawk:def=bhatwarhawk:team=2 --ai-attack --frames=3600 --det`
+  and read the `ai gunner`/`ai rocketeer` lines. *Cross-refs:* BL-740 (the hunt this shortens),
+  BL-741 (the cargozep case wants the same rig with a mission structure instead of a record).
 
 ## Misc
 
