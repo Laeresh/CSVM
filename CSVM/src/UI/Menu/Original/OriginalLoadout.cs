@@ -331,7 +331,7 @@ public sealed partial class OriginalShell
 
         if (_iaOpen != null)
         {
-            ComposeOpenDropdown(rows, focus, overlays, LoadoutItemFont);
+            ComposeOpenList(screen, rows, focus, overlays, LoadoutItemFont);
         }
     }
 

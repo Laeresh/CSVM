@@ -437,6 +437,26 @@ public static class CampaignBoards
         return (x, 92f, width);
     }
 
+    /// <summary>An open drop-down's list as a pointer sees it: the window under the field, the
+    /// thumb on its track in the scrollbar column; null while the list is closed or fits its
+    /// window.</summary>
+    public static ListWindow? ComboWindow(CampaignCombo combo)
+    {
+        ArgumentNullException.ThrowIfNull(combo);
+        if (!combo.Open || !combo.Scrolls)
+        {
+            return null;
+        }
+
+        float top = combo.Y + ComboFieldHeight;
+        float height = combo.Visible * combo.RowHeight;
+        return new ListWindow(
+            combo.X, top, combo.Width, height,
+            combo.X + combo.Width - ComboArrowWidth, ThumbY(combo, top, height), ComboArrowWidth, ScrollThumbHeight,
+            top + ScrollArrowHeight, height - (ScrollArrowHeight * 2f),
+            combo.Entries.Count, combo.RowsDisplayed, combo.First);
+    }
+
     /// <summary>Where the <paramref name="index"/>-th list row of a screen sits, as x, y and wrap
     /// width in authored pixels. Each screen's own text widgets, walked in their authored order;
     /// a screen with more rows than widgets keeps stepping by the last one's line height.</summary>
@@ -538,12 +558,10 @@ public static class CampaignBoards
 
     // Where the thumb sits in the track between the two arrows: the window's own position in the
     // list, so a full list's thumb is at the bottom and an unscrolled one's is at the top.
-    private static float ThumbY(CampaignCombo combo, float top, float height)
-    {
-        float track = height - (ScrollArrowHeight * 2f) - ScrollThumbHeight;
-        int span = Math.Max(1, combo.Entries.Count - combo.RowsDisplayed);
-        return top + ScrollArrowHeight + (Math.Max(0f, track) * combo.First / span);
-    }
+    private static float ThumbY(CampaignCombo combo, float top, float height) =>
+        ListWindow.ThumbYFor(
+            top + ScrollArrowHeight, height - (ScrollArrowHeight * 2f), ScrollThumbHeight,
+            combo.First, combo.Entries.Count - combo.RowsDisplayed);
 
     // A field's words, inset from its left edge and sat on the row's own baseline the way the
     // reference draws them: the text is vertically centred in a 16-pixel field at an 11-pixel face.

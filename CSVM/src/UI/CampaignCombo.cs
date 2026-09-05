@@ -147,6 +147,22 @@ public sealed class CampaignCombo
         return true;
     }
 
+    /// <summary>Moves the open list's window so <paramref name="first"/> heads it, clamped, and
+    /// pulls the highlight inside it: the pointer's wheel and thumb move the window rather than
+    /// the cursor. Nothing happens on a closed list or one that fits its window.</summary>
+    public bool ScrollTo(int first)
+    {
+        if (!Open || !Scrolls)
+        {
+            return false;
+        }
+
+        int was = First;
+        First = Math.Clamp(first, 0, _entries.Count - RowsDisplayed);
+        Highlight = Math.Clamp(Highlight, First, First + RowsDisplayed - 1);
+        return First != was;
+    }
+
     /// <summary>The entry a closed step in <paramref name="dir"/> would land on, wrapping. A
     /// candidate, not a move: the caller decides whether that pick is allowed.</summary>
     public int Next(int dir)

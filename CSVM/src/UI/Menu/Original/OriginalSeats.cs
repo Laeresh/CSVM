@@ -39,6 +39,13 @@ public sealed partial class OriginalShell
     private const float HintY = 546f;
     private const float MarkSize = 12f;
 
+    // The aircraft column's scrollbar, remake chrome on a remake screen: a thin track down the
+    // window's right edge with a thumb no shorter than a row, drawn only once the roster outruns
+    // the window.
+    private const string AirframeListKey = "AIRFRAMES";
+    private const float AirframeBarWidth = 6f;
+    private const float AirframeThumbMin = 20f;
+
     // The campaign boards' seat strip, in the desk margin above every board's clipboard. The top
     // left is the one band no campaign screen puts a plaque in: the book's tab sits at x 558 and
     // the briefing's buttons and every ACCEPT/FLY row sit at the bottom. Built-in's hint band
@@ -219,6 +226,48 @@ public sealed partial class OriginalShell
         rows.Add(TextButton(FlyKey, "FLY", RightColumnX + ListWidth - flySize.Width, PlaqueY, FlyEnabled(), 1));
     }
 
+    // The aircraft column as the pointer's one list on a sortie screen.
+    private void SortieLists(List<OriginalList> lists)
+    {
+        if (AirframeWindowFor(_setup.Roster.Count) is { } window)
+        {
+            lists.Add(new OriginalList(AirframeListKey, window, ScrollAirframes));
+        }
+    }
+
+    // The column's window, thumb and track; null while the roster fits the window.
+    private ListWindow? AirframeWindowFor(int count)
+    {
+        if (count <= AirframeWindow)
+        {
+            return null;
+        }
+
+        int lastTop = count - AirframeWindow;
+        int top = Math.Clamp(_airframeTop, 0, lastTop);
+        float height = AirframeWindow * RowPitch;
+        float thumbHeight = Math.Max(AirframeThumbMin, height * AirframeWindow / count);
+        float thumbY = ListWindow.ThumbYFor(ListTop, height, thumbHeight, top, lastTop);
+        return new ListWindow(
+            RightColumnX, ListTop, ListWidth, height,
+            RightColumnX + ListWidth - AirframeBarWidth, thumbY, AirframeBarWidth, thumbHeight,
+            ListTop, height, count, AirframeWindow, top);
+    }
+
+    // Puts the window's first row at top; a focus standing on an aircraft row the move would hide
+    // is pulled to the window's nearer edge, since the window otherwise slides back to it.
+    private void ScrollAirframes(int top)
+    {
+        int count = _setup.Roster.Count;
+        _airframeTop = Math.Clamp(top, 0, Math.Max(0, count - AirframeWindow));
+        int offset = _chapters.Count + 1;
+        int focused = _focus[(int)_screen] - offset;
+        if (focused >= 0 && focused < count)
+        {
+            _focus[(int)_screen] = offset + Math.Clamp(focused, _airframeTop, _airframeTop + AirframeWindow - 1);
+        }
+    }
+
     private bool FlyEnabled()
     {
         if (PickedChapterIndex < 0 || Seat0 is not { Locked: true })
@@ -355,9 +404,22 @@ public sealed partial class OriginalShell
     }
 
     // The sortie screen's own words: the heading, the column labels, the seat strip, the scroll
-    // marks, the hint and the controls line. The rows themselves are drawn by Compose's row loop.
-    private void ComposeSortie(List<BoardLine> lines)
+    // marks, the hint and the controls line, plus the aircraft column's scrollbar as an overlay.
+    // The rows themselves are drawn by Compose's row loop.
+    private void ComposeSortie(IReadOnlyList<OriginalRow> rows, List<BoardLine> lines, List<BoardPanel> overlays)
     {
+        if (AirframeWindowFor(_setup.Roster.Count) is { } window)
+        {
+            overlays.Add(new BoardPanel(
+                new[]
+                {
+                    new BoardFill(window.ThumbX, window.TrackTop, window.ThumbWidth, window.TrackHeight, 0x40, 0x40, 0x40, 0.5f),
+                    new BoardFill(window.ThumbX, window.ThumbY, window.ThumbWidth, window.ThumbHeight, 0xC0, 0xC0, 0xC0, 0.9f),
+                },
+                Array.Empty<BoardPicture>(),
+                Array.Empty<BoardLine>()));
+        }
+
         lines.Add(new BoardLine(_screen == OriginalScreen.Dogfight ? "DOGFIGHT" : "FREE FLIGHT",
             LeftColumnX, ListTop - 44f, 0f, HeadingFont, BoardInk.Heading));
         lines.Add(new BoardLine("MAP", LeftColumnX, ListTop - 20f, 0f, RowFont, BoardInk.Detail));

@@ -872,6 +872,68 @@ public sealed partial class OriginalShell
         return true;
     }
 
+    // The hangar's lists for the pointer: an open dropdown's list alone while one stands.
+    private void HangarLists(List<OriginalList> lists)
+    {
+        if (_hangarOpen != null && OpenHangarListWindow() is { } window)
+        {
+            lists.Add(new OriginalList(_hangarOpen, window, ScrollHangarList));
+        }
+    }
+
+    // The open list's window under its box, the thumb between its two arrows on the right edge;
+    // null while the items fit the authored window.
+    private ListWindow? OpenHangarListWindow()
+    {
+        if (_hangarOpen == null)
+        {
+            return null;
+        }
+
+        string section = _screen == OriginalScreen.HangarInventory ? InventorySection : SectionOf(_screen);
+        if (_layout.Screen(section)?.Widget(_hangarOpen) is not { } widget || HangarListFor(_hangarOpen) is not { } list)
+        {
+            return null;
+        }
+
+        var box = HubBox(widget);
+        int count = list.Items.Count;
+        int window = Math.Clamp(widget.Int("TotalDisplayed", count), 1, Math.Max(1, count));
+        if (count <= window)
+        {
+            return null;
+        }
+
+        var upSize = StripSize(StripArt(widget.Art, 3), FallbackArrowWidth, FallbackArrowHeight);
+        var downSize = StripSize(StripArt(widget.Art, 4), FallbackArrowWidth, FallbackArrowHeight);
+        var thumb = StripSize(StripArt(widget.Art, 0, 1), upSize.Width, 11f);
+        float top = box.Y + box.Height;
+        float height = window * box.Height;
+        float trackHeight = height - upSize.Height - downSize.Height;
+        int first = Math.Clamp(_hangarListTop, 0, count - window);
+        return new ListWindow(
+            box.X, top, box.Width + upSize.Width, height,
+            box.X + box.Width, ListWindow.ThumbYFor(top + upSize.Height, trackHeight, thumb.Height, first, count - window), thumb.Width, thumb.Height,
+            top + upSize.Height, trackHeight, count, window, first);
+    }
+
+    // Puts the open list's window at top; a focused item the move would hide is pulled to the
+    // window's nearer edge, since the window otherwise follows the focus back.
+    private void ScrollHangarList(int top)
+    {
+        if (_hangarOpen == null || HangarListFor(_hangarOpen) is not { } list || OpenHangarListWindow() is not { } window)
+        {
+            return;
+        }
+
+        _hangarListTop = Math.Clamp(top, 0, window.LastTop);
+        int focused = _focus[(int)_screen];
+        if (focused >= 0 && focused < list.Items.Count)
+        {
+            _focus[(int)_screen] = Math.Clamp(focused, _hangarListTop, _hangarListTop + window.Rows - 1);
+        }
+    }
+
     // One dropdown's list over the feature: its items, the standing pick, what a pick does, and
     // for the paint colours and decals the swatch or tile a row draws instead of words.
     private HangarList? HangarListFor(string key)
@@ -1727,6 +1789,13 @@ public sealed partial class OriginalShell
 
             panelLines.Add(new BoardLine(item.Label, item.X + 4f, item.Y + 1f, item.Width - 8f, HubItemFont,
                 i == focus ? BoardInk.RowFocused : BoardInk.Row, i));
+        }
+
+        string section = _screen == OriginalScreen.HangarInventory ? InventorySection : SectionOf(_screen);
+        if (OpenHangarListWindow() is { } window && _layout.Screen(section)?.Widget(_hangarOpen) is { } widget
+            && StripArt(widget.Art, 0, 1) is { } thumb)
+        {
+            panelPictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY));
         }
 
         overlays.Add(new BoardPanel(panelFills, panelPictures, panelLines));

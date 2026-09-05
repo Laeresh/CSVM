@@ -148,6 +148,14 @@ EXPORT TO DESKTOP's copy: the open scrap's own file to the desktop under its own
 overwriting, answering whether it landed and either the name or the OS reason, which are langui
 705's and 706's arguments. Engine-free, and the folder is a parameter so a test writes elsewhere.
 
+## src/UI/ListWindow.cs
+A scrolled list as a pointer sees it, in the board's authored pixels: the window's box, the thumb's
+box on its track, and where the list stands inside it. `TopAfterWheel` steps the window by rows and
+`TopAfterDrag` maps the thumb's free run down the track onto the rows the window can move, both
+clamped; `ThumbYFor` places a thumb for a given window, and is the one rule every list draws its
+thumb by. Each list widget builds one from its own geometry and the presentation that owns the
+pointer decides what a new top writes back, so the arrows and the keyboard keep their own rules.
+
 ## src/UI/BoardFit.cs
 How the original's fixed 800x600 campaign dialog space lands on an arbitrary window: one uniform
 scale on both axes, the board centred, the remainder letterboxed. A `record struct`, so every
@@ -758,13 +766,13 @@ the presentation names no file. The contract is `IMenuAudio.cs` and the table is
 
 ## src/UI/Menu/Original/PointerSeat.cs
 Seat 0 with a pointer: wraps the seat that polls the keyboard and the unclaimed pads and adds the
-mouse as the frame's `MenuPointer` in window pixels, `Pressed` while the left button is down and
-`Clicked` on the press edge; `Prime` reads the button so a click held through a screen change is
-not a fresh click. The two device reads are injected delegates, so the seat is engine-free and
-`Launcher` supplies the viewport's mouse position and `Input.IsMouseButtonPressed`. Built-in
-reads no `MenuPointer` (its row controls take the mouse through their own `gui_input`); Original
-maps it into its authored space. Later seats are pads and carry no pointer; a source that wants
-one wraps itself the same way.
+mouse as the frame's `MenuPointer` in window pixels, `Pressed` while the left button is down,
+`Clicked` on the press edge and `Wheel` as the steps turned since the last poll. `Prime` reads the
+button and drains the wheel, which also drains every frame whether or not a pointer is on screen, so
+input from before the menu showed never arrives as one jump. The three device reads are injected
+delegates, so the seat is engine-free and `Launcher` supplies the mouse position,
+`Input.IsMouseButtonPressed` and the wheel it counts in `_Input`, an event rather than a held state.
+Built-in ignores the pointer; Original maps it into its authored space; a later pad seat has none.
 
 ## src/UI/Menu/MenuReturnDestination.cs
 Where the menu stands when it comes back, said semantically: `TopLevel`, `CabinReturn(profile)`

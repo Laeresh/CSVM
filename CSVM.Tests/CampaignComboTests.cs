@@ -138,6 +138,43 @@ public class CampaignComboTests
         Assert.Equal(7, combo.First);
     }
 
+    /// <summary>The pointer's wheel and thumb move the window rather than the cursor, and drag the
+    /// highlight along only where it would otherwise leave the window.</summary>
+    [Fact]
+    public void ScrollingMovesTheWindowAndPullsTheHighlightInsideIt()
+    {
+        var combo = Loaded(10, selected: 0, rowsDisplayed: 3);
+        combo.Expand();
+
+        Assert.True(combo.ScrollTo(1));
+        Assert.Equal(1, combo.First);
+        Assert.Equal(1, combo.Highlight); // row 0 left the window, so the highlight came with it
+
+        Assert.True(combo.ScrollTo(2));
+        Assert.Equal(2, combo.First);
+        Assert.Equal(2, combo.Highlight);
+
+        Assert.True(combo.ScrollTo(500)); // clamped to the last window
+        Assert.Equal(7, combo.First);
+        Assert.Equal(7, combo.Highlight);
+
+        Assert.False(combo.ScrollTo(7)); // already there
+        Assert.Equal(0, combo.Selected); // and none of it moved the pick
+    }
+
+    [Fact]
+    public void AClosedListAndOneThatFitsItsWindowIgnoreTheWheel()
+    {
+        var closed = Loaded(10, selected: 0, rowsDisplayed: 3);
+        Assert.False(closed.ScrollTo(2));
+        Assert.Equal(0, closed.First);
+
+        var shortList = Loaded(3, selected: 0, rowsDisplayed: 5);
+        shortList.Expand();
+        Assert.False(shortList.ScrollTo(1));
+        Assert.Equal(0, shortList.First);
+    }
+
     [Fact]
     public void LoadingFreshEntriesClosesTheListAndClampsThePick()
     {

@@ -687,6 +687,50 @@ public sealed partial class OriginalShell
         }
     }
 
+    // The campaign's lists for the pointer: an open drop-down's list first, since it hangs over
+    // the screen (the per-seat screen's too, which has no flow), then the contents' mission list.
+    private void CampaignLists(List<OriginalList> lists)
+    {
+        if (OpenCombo is { } combo && CampaignBoards.ComboWindow(combo) is { } open)
+        {
+            lists.Add(new OriginalList(EntryKeyPrefix + "LIST", open, top => combo.ScrollTo(top)));
+        }
+
+        if (_flow == null)
+        {
+            return;
+        }
+
+        // The contents page pulls its window over the flow's cursor, which mirrors this graph's
+        // focus only on a compose, so the mirror is brought up to date first.
+        if (PageFocus >= 0)
+        {
+            _flow.FocusRow(PageFocus);
+        }
+
+        if (_flow.Page is CampaignPreviousMissionsPage contents && contents.PointerWindow is { } window)
+        {
+            lists.Add(new OriginalList("CONTENTS", window, top => ScrollContents(contents, top)));
+        }
+    }
+
+    // The contents list's window moved to top: the page pulls its own cursor inside, and this
+    // graph's focus takes the cursor back, so the window is not pulled home on the next compose.
+    private void ScrollContents(CampaignPreviousMissionsPage contents, int top)
+    {
+        int focus = PageFocus;
+        if (focus >= 0)
+        {
+            _flow!.FocusRow(focus);
+        }
+
+        contents.ScrollTo(top);
+        if (focus >= 0)
+        {
+            _focus[(int)_screen] = _flow!.Row;
+        }
+    }
+
     private bool CloseCampaignCombo() => IsComboScreen && OpenCombo is { } combo && combo.Collapse();
 
     private bool MoveCampaignCombo(IReadOnlyList<OriginalRow> rows, int focus, int direction) =>

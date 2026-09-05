@@ -2424,7 +2424,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is already known to the page, which centres the unselected tab's label in `TabWidth`
   (`CampaignScrapbookPage.cs:34`). *⚠ Traps:* the same switch is what leaves every other non-scrap
   row on that page unreachable, so fix the class of row rather than special-casing the two tabs.
-  *Cross-refs:* `BL-707`, the same page's scrolling.
+  *Cross-refs:* the pointer's wheel and thumb reach the campaign lists through `OriginalShell.Lists`,
+  which is a window rather than a row box and so does not answer for these tabs.
 
 - `BL-706` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The PLANE NAME dialog
   sits off-centre.** *Evidence:* reported at the controls over E44's pointer sweep, "Plane
@@ -2493,18 +2494,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   record keeps two dwords either way, so mission-side damage still reads per wing; couple the UI,
   not the model. A saved profile with unequal wings must still load. *Cross-refs:* `BL-723`,
   `docs/org/hangar.md`.
-
-- `BL-743` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Original's Instant Action
-  Pilot Plane list has no window, so with saved builds it runs past the page's foot.** *Evidence:*
-  the `--menu=instant-action:pilot-plane` aid over a store of eight builds draws nineteen rows from
-  the dropdown's line down over the BUILD CUSTOM PLANE and EXIT buttons. The layout authors the
-  dropdown `TotalDisplayed 20`, and the remake's open list
-  (`CSVM/src/UI/Menu/Original/OriginalInstantAction.cs`, "the open list drawn under its box",
-  remake-only until the screen is filmed) draws every row with no window or scroll. *Fix shape:* a
-  windowed open list of at most the authored count with the contents window's arrow pair, the
-  window following the focused row. *⚠ Traps:* the open list is the route a scripted pose and
-  every `MenuInstantActionSuites` walk pick a row by, so the window must keep the picked row
-  reachable by index. *Cross-refs:* `BL-707` (the wheel over the same list).
 
 - `BL-744` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: trace]` **The export notice
   draws the message box's `?` icon where the original draws `!`.** *Evidence:*

@@ -100,6 +100,7 @@ public sealed partial class OriginalShell
     private LoadoutChoice? _iaSpareFit;
     private int _iaPage;
     private string? _iaOpen;
+    private int _iaListTop;
     private int _iaContentsTop;
     private int _iaRadio;
     private string _iaStoryTitle = string.Empty;
@@ -196,6 +197,7 @@ public sealed partial class OriginalShell
         }
 
         _iaOpen = key;
+        _iaListTop = 0;
         _focus[(int)_screen] = Math.Max(0, list.Current);
         return true;
     }
@@ -230,6 +232,11 @@ public sealed partial class OriginalShell
     // A dropdown's box: its authored corner and width, one item high.
     private static (float X, float Y, float Width, float Height) DropBox(MenuLayoutWidget widget) =>
         (widget.Int("X"), widget.Int("Y"), widget.Int("Width", (int)FallbackDropWidth), widget.Int("ItemHeight", (int)FallbackItemHeight));
+
+    // How many rows a dropdown's open list shows at once: its authored TotalDisplayed, never more
+    // than it has items and never none.
+    private static int OpenListRows(MenuLayoutWidget widget, int count) =>
+        Math.Clamp(widget.Int("TotalDisplayed", count), 1, Math.Max(1, count));
 
     // The n-th art a row names as a strip; arrows and radios carry their frame count in the row,
     // the dropdown arrows are the same four-frame strips the page buttons draw.
@@ -304,8 +311,7 @@ public sealed partial class OriginalShell
         }
     }
 
-    // The open list's items as the only rows, keyed <key>:<index> under the box; false when no
-    // list of this screen is open.
+    // The open list's windowed items as the only rows; false when no list of this screen is open.
     private bool AddOpenListRows(MenuLayoutScreen screen, List<OriginalRow> rows)
     {
         if (_iaOpen == null || screen.Widget(_iaOpen) is not { } open || DropdownFor(_iaOpen) is not { } list)
@@ -313,14 +319,51 @@ public sealed partial class OriginalShell
             return false;
         }
 
+        BuildOpenList(open, list, rows);
+        return true;
+    }
+
+    // An open list's rows: every item keyed <key>:<index> under the box, so a pose or a walk picks
+    // a row by index whatever the window shows; the ones outside the authored window unseen and
+    // unhit, the window following the focused item, and the list's arrows while there is more.
+    private void BuildOpenList(MenuLayoutWidget open, DropdownList list, List<OriginalRow> rows)
+    {
         var box = DropBox(open);
-        for (int i = 0; i < list.Items.Count; i++)
+        int count = list.Items.Count;
+        int window = OpenListRows(open, count);
+        int focused = _focus[(int)_screen];
+        if (focused >= 0 && focused < count)
         {
-            rows.Add(new OriginalRow($"{_iaOpen}:{i}", list.Items[i], OriginalRowKind.ListRow,
-                box.X, box.Y + (box.Height * (i + 1)), box.Width, box.Height, list.Allowed(i), 0, null));
+            if (focused < _iaListTop)
+            {
+                _iaListTop = focused;
+            }
+            else if (focused >= _iaListTop + window)
+            {
+                _iaListTop = focused - window + 1;
+            }
         }
 
-        return true;
+        _iaListTop = Math.Clamp(_iaListTop, 0, Math.Max(0, count - window));
+        for (int i = 0; i < count; i++)
+        {
+            bool visible = i >= _iaListTop && i < _iaListTop + window;
+            rows.Add(new OriginalRow($"{_iaOpen}:{i}", list.Items[i], OriginalRowKind.ListRow,
+                box.X, box.Y + (box.Height * (i - _iaListTop + 1)), box.Width, box.Height, list.Allowed(i), 0, null, visible));
+        }
+
+        if (window < count)
+        {
+            var up = StripArt(open.Art, 1);
+            var down = StripArt(open.Art, 2);
+            var upSize = StripSize(up, FallbackArrowWidth, FallbackArrowHeight);
+            var downSize = StripSize(down, FallbackArrowWidth, FallbackArrowHeight);
+            rows.Add(new OriginalRow($"{_iaOpen}:up", string.Empty, OriginalRowKind.Button,
+                box.X + box.Width, box.Y + box.Height, upSize.Width, upSize.Height, _iaListTop > 0, 0, up));
+            rows.Add(new OriginalRow($"{_iaOpen}:down", string.Empty, OriginalRowKind.Button,
+                box.X + box.Width, box.Y + (box.Height * (window + 1)) - downSize.Height, downSize.Width, downSize.Height,
+                _iaListTop + window < count, 0, down));
+        }
     }
 
     // The screen's widgets in focus order: the left page (the contents window, its arrows, View
@@ -670,6 +713,16 @@ public sealed partial class OriginalShell
 
             if (DropdownFor(prefix) is { } list)
             {
+                switch (suffix)
+                {
+                    case "up":
+                        ScrollOpenList(_iaListTop - 1);
+                        return null;
+                    case "down":
+                        ScrollOpenList(_iaListTop + 1);
+                        return null;
+                }
+
                 int index = int.Parse(suffix, CultureInfo.InvariantCulture);
                 if (list.Allowed(index))
                 {
@@ -734,10 +787,112 @@ public sealed partial class OriginalShell
         if (row.Kind == OriginalRowKind.Dropdown && DropdownFor(row.Key) is { } open)
         {
             _iaOpen = row.Key;
+            _iaListTop = 0;
             _focus[(int)_screen] = Math.Max(0, open.Current);
         }
 
         return null;
+    }
+
+    // The screen's lists for the pointer: an open dropdown's list alone while one stands (on the
+    // loadout screen too, whose section has no contents window), else the contents window.
+    private void InstantActionLists(List<OriginalList> lists)
+    {
+        var screen = _layout.Screen(_screen == OriginalScreen.InstantActionLoadout ? LoadoutSection : InstantActionSection);
+        if (screen == null)
+        {
+            return;
+        }
+
+        if (_iaOpen != null)
+        {
+            if (OpenListWindow(screen) is { } open)
+            {
+                lists.Add(new OriginalList(_iaOpen, open, ScrollOpenList));
+            }
+
+            return;
+        }
+
+        if (screen.Widget(ContentsKey) is { } list && ContentsWindow(list) is { } contents)
+        {
+            lists.Add(new OriginalList(ContentsKey, contents, top => _iaContentsTop = top));
+        }
+    }
+
+    // The contents list's window, its thumb on the track between the two arrows placed by how far
+    // the window has scrolled; null while the presets fit the window.
+    private ListWindow? ContentsWindow(MenuLayoutWidget list)
+    {
+        int window = Math.Max(1, list.Int("TotalDisplayed", 14));
+        int count = InstantActionFeature.Presets.Count;
+        if (count <= window)
+        {
+            return null;
+        }
+
+        float itemHeight = list.Int("ItemHeight", (int)FallbackItemHeight);
+        float x = list.Int("X");
+        float y = list.Int("Y");
+        float width = list.Int("Width", 277);
+        var arrow = StripSize(StripArt(list.Art, 1), FallbackArrowWidth, FallbackArrowHeight);
+        var thumb = StripSize(StripArt(list.Art, 0, 1), arrow.Width, 11f);
+        float height = window * itemHeight;
+        float trackHeight = height - (2f * arrow.Height);
+        int top = ContentsTopClamped(window);
+        return new ListWindow(
+            x, y, width + arrow.Width, height,
+            x + width, ListWindow.ThumbYFor(y + arrow.Height, trackHeight, thumb.Height, top, count - window), thumb.Width, thumb.Height,
+            y + arrow.Height, trackHeight, count, window, top);
+    }
+
+    // An open dropdown's list window under its box: the authored TotalDisplayed rows, the arrows
+    // on its right edge and the thumb between them; null while the items fit the window.
+    private ListWindow? OpenListWindow(MenuLayoutScreen screen)
+    {
+        if (_iaOpen == null || screen.Widget(_iaOpen) is not { } widget || DropdownFor(_iaOpen) is not { } list)
+        {
+            return null;
+        }
+
+        var box = DropBox(widget);
+        int count = list.Items.Count;
+        int window = OpenListRows(widget, count);
+        if (count <= window)
+        {
+            return null;
+        }
+
+        var arrow = StripSize(StripArt(widget.Art, 1), FallbackArrowWidth, FallbackArrowHeight);
+        var thumb = StripSize(StripArt(widget.Art, 0, 1), arrow.Width, 11f);
+        float top = box.Y + box.Height;
+        float height = window * box.Height;
+        float trackHeight = height - (2f * arrow.Height);
+        int first = Math.Clamp(_iaListTop, 0, count - window);
+        return new ListWindow(
+            box.X, top, box.Width + arrow.Width, height,
+            box.X + box.Width, ListWindow.ThumbYFor(top + arrow.Height, trackHeight, thumb.Height, first, count - window), thumb.Width, thumb.Height,
+            top + arrow.Height, trackHeight, count, window, first);
+    }
+
+    // Puts an open list's window at top; a focused item the move would hide is pulled to the
+    // window's nearer edge, since the window otherwise follows the focus back.
+    private void ScrollOpenList(int top)
+    {
+        var screen = _layout.Screen(InstantActionSection);
+        if (_iaOpen == null || screen?.Widget(_iaOpen) is not { } widget || DropdownFor(_iaOpen) is not { } list)
+        {
+            return;
+        }
+
+        int count = list.Items.Count;
+        int window = OpenListRows(widget, count);
+        _iaListTop = Math.Clamp(top, 0, Math.Max(0, count - window));
+        int focused = _focus[(int)_screen];
+        if (focused >= 0 && focused < count)
+        {
+            _focus[(int)_screen] = Math.Clamp(focused, _iaListTop, _iaListTop + window - 1);
+        }
     }
 
     // The screen as drawn: the background under everything, the text rows, the widgets in their
@@ -818,7 +973,7 @@ public sealed partial class OriginalShell
 
         if (_iaOpen != null)
         {
-            ComposeOpenDropdown(rows, focus, overlays, ItemFont);
+            ComposeOpenList(screen, rows, focus, overlays, ItemFont);
         }
 
         // The seat strip in the same desk-margin band as the campaign boards': the page's own
@@ -829,25 +984,47 @@ public sealed partial class OriginalShell
         }
     }
 
-    // An open list as the overlay over the finished page: a pale panel under its items, the
-    // focused item shaded, a barred item in the detail ink.
-    private void ComposeOpenDropdown(IReadOnlyList<OriginalRow> rows, int focus, List<BoardPanel> overlays, float itemFont)
+    // An open list as the overlay over the finished page: the visible items on a paper panel with
+    // the focused one marked, then the arrows and the thumb once the list outruns its window. The
+    // loadout screen's lists come through here too, in their own item font.
+    private void ComposeOpenList(MenuLayoutScreen screen, IReadOnlyList<OriginalRow> rows, int focus, List<BoardPanel> overlays, float itemFont)
     {
-        if (rows.Count == 0)
-        {
-            return;
-        }
-
         var panelFills = new List<BoardFill>();
         var panelLines = new List<BoardLine>();
-        var first = rows[0];
-        var last = rows[rows.Count - 1];
-        float height = last.Y + last.Height - first.Y;
-        panelFills.Add(new BoardFill(first.X, first.Y, first.Width, height, 255, 255, 255, 0.94f));
-        panelFills.Add(new BoardFill(first.X, first.Y, first.Width, height, 0, 0, 0, 1f, Border: true));
+        var panelPictures = new List<BoardPicture>();
+        float top = float.MaxValue, bottom = float.MinValue, left = 0f, width = 0f;
+        foreach (var row in rows)
+        {
+            if (row.Visible && row.Kind == OriginalRowKind.ListRow)
+            {
+                top = Math.Min(top, row.Y);
+                bottom = Math.Max(bottom, row.Y + row.Height);
+                left = row.X;
+                width = row.Width;
+            }
+        }
+
+        if (top < bottom)
+        {
+            panelFills.Add(new BoardFill(left, top, width, bottom - top, 255, 255, 255, 0.94f));
+            panelFills.Add(new BoardFill(left, top, width, bottom - top, 0, 0, 0, 1f, Border: true));
+        }
+
         for (int i = 0; i < rows.Count; i++)
         {
             var item = rows[i];
+            if (!item.Visible)
+            {
+                continue;
+            }
+
+            if (item.Kind == OriginalRowKind.Button && item.Art != null)
+            {
+                int frame = item.Enabled ? ComposedBoard.PlaqueFrame(item.Art.Frames, i == focus, i == _pressed) : 0;
+                panelPictures.Add(new BoardPicture(item.Art, item.X, item.Y, frame));
+                continue;
+            }
+
             if (i == focus)
             {
                 panelFills.Add(new BoardFill(item.X, item.Y, item.Width, item.Height, 0, 0, 0, 0.12f));
@@ -857,7 +1034,13 @@ public sealed partial class OriginalShell
                 item.Enabled ? (i == focus ? BoardInk.RowFocused : BoardInk.Row) : BoardInk.Detail, i));
         }
 
-        overlays.Add(new BoardPanel(panelFills, Array.Empty<BoardPicture>(), panelLines));
+        if (OpenListWindow(screen) is { } window && _iaOpen != null && screen.Widget(_iaOpen) is { } widget
+            && StripArt(widget.Art, 0, 1) is { } thumb)
+        {
+            panelPictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY));
+        }
+
+        overlays.Add(new BoardPanel(panelFills, panelPictures, panelLines));
     }
 
     private void ComposeInstantActionRow(
@@ -924,25 +1107,10 @@ public sealed partial class OriginalShell
     // the window has scrolled.
     private void ComposeContentsThumb(MenuLayoutScreen screen, List<BoardPicture> pictures)
     {
-        if (screen.Widget(ContentsKey) is not { } list || StripArt(list.Art, 0, 1) is not { } thumb)
+        if (screen.Widget(ContentsKey) is { } list && StripArt(list.Art, 0, 1) is { } thumb && ContentsWindow(list) is { } window)
         {
-            return;
+            pictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY));
         }
-
-        int window = Math.Max(1, list.Int("TotalDisplayed", 14));
-        int count = InstantActionFeature.Presets.Count;
-        if (count <= window)
-        {
-            return;
-        }
-
-        float itemHeight = list.Int("ItemHeight", (int)FallbackItemHeight);
-        var arrow = StripSize(StripArt(list.Art, 1), FallbackArrowWidth, FallbackArrowHeight);
-        var size = StripSize(thumb, arrow.Width, 11f);
-        float trackTop = list.Int("Y") + arrow.Height;
-        float track = (window * itemHeight) - (2f * arrow.Height) - size.Height;
-        float y = trackTop + (track * ContentsTopClamped(window) / (count - window));
-        pictures.Add(new BoardPicture(thumb, list.Int("X") + list.Int("Width", 277), y));
     }
 
     private void AddText(MenuLayoutScreen screen, List<BoardLine> lines, string key, float size, string? text = null)

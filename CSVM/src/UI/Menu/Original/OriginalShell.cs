@@ -134,6 +134,12 @@ public sealed record OriginalRow(
 /// the picture changed.</summary>
 public sealed record OriginalStep(IReadOnlyList<string> Cues, MenuExit? Exit, bool Changed);
 
+/// <summary>One scrolling list on the screen showing, for the pointer's wheel and thumb drag:
+/// its window as the list widget describes it and the write that puts the window's first row
+/// somewhere else, which also pulls the focus inside the window when it stood on a row the move
+/// would hide. The arrows and the keyboard never go through this.</summary>
+public sealed record OriginalList(string Key, ListWindow Window, Action<int> ScrollTo);
+
 /// <summary>The colours the shell writes in, read off the layout: the file-wide four state
 /// colours and the paper plaque's own label tail.</summary>
 public sealed record OriginalInks(
@@ -241,6 +247,8 @@ public sealed partial class OriginalShell
     private int _hover = -1;
     private int _pressed = -1;
     private (float X, float Y)? _pointer;
+    // A thumb drag in progress: which list, where the pointer took hold and where the window stood.
+    private (string Key, float StartY, int StartTop)? _drag;
     private int _pickedChapter = -1;
     private string _choice = PresentationId.Original.Value;
     private string _graphics = CSVM.Utils.GraphicsMode.Default;
@@ -329,6 +337,44 @@ public sealed partial class OriginalShell
     /// <summary>The row under the pointer, or -1.</summary>
     public int Hover => _hover;
 
+    /// <summary>The screen's scrolling lists as the pointer sees them, the topmost first: none
+    /// under a dialog, an open dropdown's list alone while one stands, else the screen's own.</summary>
+    public IReadOnlyList<OriginalList> Lists
+    {
+        get
+        {
+            var lists = new List<OriginalList>();
+            if (_dialog != null)
+            {
+                return lists;
+            }
+
+            switch (_screen)
+            {
+                case OriginalScreen.FreeFlight:
+                case OriginalScreen.Dogfight:
+                    SortieLists(lists);
+                    break;
+                case OriginalScreen.InstantAction:
+                case OriginalScreen.InstantActionLoadout:
+                    InstantActionLists(lists);
+                    break;
+                case OriginalScreen.SeatPlane:
+                case var _ when IsCampaignScreen:
+                    CampaignLists(lists);
+                    break;
+                case var _ when IsHangarScreen:
+                    HangarLists(lists);
+                    break;
+            }
+
+            return lists;
+        }
+    }
+
+    /// <summary>The list whose thumb the pointer is dragging, or null.</summary>
+    public string? Dragging => _drag?.Key;
+
     /// <summary>The picked chapter's code, or null.</summary>
     public string? PickedChapter => _pickedChapter >= 0 ? _chapters[_pickedChapter].Code : null;
 
@@ -369,6 +415,7 @@ public sealed partial class OriginalShell
             _seatPage = null;
         }
 
+        _drag = null;
         if (screen == OriginalScreen.GameOptions)
         {
             ReadSavedOptions();
@@ -398,7 +445,17 @@ public sealed partial class OriginalShell
         {
             changed |= _pointer != (pointer.X, pointer.Y);
             _pointer = (pointer.X, pointer.Y);
-            int over = HitTest(rows, pointer.X, pointer.Y);
+            // The thumb and the wheel come before the rows: a held thumb owns the pointer until
+            // it is let go, and a wheel step moves the rows the hit test then reads.
+            bool dragging = DragThumb(pointer, ref changed);
+            if (!dragging && pointer.Wheel != 0)
+            {
+                changed |= WheelList(pointer);
+            }
+
+            rows = Rows;
+            focus = EnsureFocus(rows);
+            int over = dragging ? -1 : HitTest(rows, pointer.X, pointer.Y);
             if (over != _hover)
             {
                 _hover = over;
@@ -426,7 +483,11 @@ public sealed partial class OriginalShell
             int pressed = pointer.Pressed && over >= 0 && rows[over].Enabled ? over : -1;
             changed |= pressed != _pressed;
             _pressed = pressed;
-            if (pointer.Clicked && over >= 0 && rows[over].Enabled)
+            if (dragging)
+            {
+                // A drag's click was spent on the thumb; nothing under the pointer is activated.
+            }
+            else if (pointer.Clicked && over >= 0 && rows[over].Enabled)
             {
                 if (!HoverOnly(rows[over]))
                 {
@@ -565,7 +626,7 @@ public sealed partial class OriginalShell
                 break;
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:
-                ComposeSortie(lines);
+                ComposeSortie(rows, lines, overlays);
                 break;
             case OriginalScreen.Options:
                 ComposeOptions(pictures, lines);
@@ -726,10 +787,89 @@ public sealed partial class OriginalShell
         return ordinal;
     }
 
+    // A thumb drag: a click on a list's thumb takes hold of it, and while the button stays down
+    // the window follows the pointer down the track; letting go ends it. True while one holds.
+    private bool DragThumb(MenuPointer pointer, ref bool changed)
+    {
+        if (_drag is { } drag)
+        {
+            if (!pointer.Pressed)
+            {
+                _drag = null;
+                changed = true;
+                return false;
+            }
+
+            foreach (var list in Lists)
+            {
+                if (list.Key != drag.Key)
+                {
+                    continue;
+                }
+
+                int top = list.Window.TopAfterDrag(drag.StartTop, pointer.Y - drag.StartY);
+                if (top != list.Window.Top)
+                {
+                    list.ScrollTo(top);
+                    changed = true;
+                }
+
+                return true;
+            }
+
+            // The list the drag began on is gone with its screen.
+            _drag = null;
+            return false;
+        }
+
+        if (!pointer.Clicked)
+        {
+            return false;
+        }
+
+        foreach (var list in Lists)
+        {
+            if (list.Window.OnThumb(pointer.X, pointer.Y))
+            {
+                _drag = (list.Key, pointer.Y, list.Window.Top);
+                _hover = -1;
+                changed = true;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // A wheel step over a list moves its window by that many rows; the first list containing the
+    // pointer takes it, and a list that fits its window ignores it.
+    private bool WheelList(MenuPointer pointer)
+    {
+        foreach (var list in Lists)
+        {
+            if (!list.Window.Contains(pointer.X, pointer.Y))
+            {
+                continue;
+            }
+
+            int top = list.Window.TopAfterWheel(pointer.Wheel);
+            if (top == list.Window.Top)
+            {
+                return false;
+            }
+
+            list.ScrollTo(top);
+            return true;
+        }
+
+        return false;
+    }
+
     // The rows of a screen that has no page of its own (the top level, the sortie screens, the
     // Options screen): a decoded strip in its state frame, a paper plaque with its label (an
     // outlined label where the plaque art is missing), and list text. Nothing is focused or
-    // pressed while a dialog stands over the screen.
+    // pressed while a dialog stands over the screen. A row outside its list's window draws
+    // nothing, since the window is what the pointer scrolls.
     private void ComposeRows(IReadOnlyList<OriginalRow> rows, int focus, List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques)
     {
         for (int i = 0; i < rows.Count; i++)

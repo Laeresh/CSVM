@@ -43,9 +43,12 @@ internal static class MenuOriginalCampaignSuites
         + "guests and FLY MISSION leaves as one CampaignMissionExit with three seats, the debrief "
         + "return lands on the book with RETURN TO CABIN focused and starts no narration, the cabin "
         + "return lands on the cabin, ammo selection and plane selection write their picks through "
-        + "the feature, PLANE CONSTRUCTION opens the hangar over the wallet and Back resumes the "
-        + "cabin, a plane built over the campaign's wallet is absent from the sortie roster until one "
-        + "EXPORT press crosses it, and Deactivate leaves no open campaign")]
+        + "the feature, a wheel step over the scrapbook's contents page and over Plane Construction's "
+        + "decal list moves each window one row and clamps at the head while a drag down each thumb's "
+        + "track lands it on the last row and opens nothing, PLANE CONSTRUCTION opens the hangar over "
+        + "the wallet and Back resumes the cabin, a plane built over the campaign's wallet is absent "
+        + "from the sortie roster until one EXPORT press crosses it, and Deactivate leaves no open "
+        + "campaign")]
     internal static void MenuOriginalCampaign(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -97,6 +100,7 @@ internal static class MenuOriginalCampaignSuites
             FlightCheckAndLaunch(ctx, host, seat, shell, fit, campaign, store, exits, audio);
             Returns(ctx, host, shell, campaign, store, audio);
             AmmoAndPlanes(ctx, host, seat, shell, fit, campaign, store);
+            Scrolling(ctx, host, seat, shell, fit, store);
             HangarRoundTrip(ctx, host, seat, shell, fit);
             ExportGate(ctx, host, seat, shell, fit, campaign, root);
         }
@@ -401,7 +405,68 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin, $"RETURN TO BRIEFING then RETURN TO CABIN land on the cabin ({shell.Screen})");
     }
 
-    // PLANE CONSTRUCTION opens the hangar over the profile's wallet; Back resumes the cabin.
+    // The pointer's wheel and thumb over the scrapbook's contents page: six flown missions in a
+    // four-row window, wheeled a row, dragged to the foot and left where it started.
+    private static void Scrolling(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell,
+        BoardFit fit, CampaignProfileStore store)
+    {
+        var profile = store.Load(Pilot)!;
+        for (int seq = 0; seq < 6; seq++)
+        {
+            CampaignProgression.Record(profile, new MissionAttempt(
+                seq, CampaignProgression.PrimaryObjectiveMask, 300_000 + (seq * 20_000), 200, 90,
+                profile.Planes[0].Airframe, profile.Planes[0].Name));
+        }
+
+        store.Save(profile);
+        host.Show(new CabinReturn(Pilot));
+        shell.ShowMissionScreen(OriginalScreen.CampaignPreviousMissions);
+        ctx.Check(shell.Screen == OriginalScreen.CampaignPreviousMissions,
+            $"PREVIOUS MISSIONS opens the contents page over six flown missions ({shell.Screen})");
+        WheelAndDrag(ctx, host, seat, shell, fit, "CONTENTS", "the scrapbook's contents page");
+        Press(host, seat, Back);
+        ctx.Check(shell.Screen == OriginalScreen.CampaignCabin, $"Back leaves the contents page for the cabin ({shell.Screen})");
+    }
+
+    // One list under the pointer: a wheel step moves its window by exactly one row, a step past the
+    // head clamps there, and a thumb taken and dragged the length of its track lands the window on
+    // its last row without activating whatever the click stood over.
+    private static void WheelAndDrag(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell,
+        BoardFit fit, string key, string what)
+    {
+        var list = List(shell, key);
+        ctx.Check(list is { Window.Scrolls: true },
+            $"{what} is a scrolling list the pointer can see ({list?.Window.Count ?? -1} rows in a window of {list?.Window.Rows ?? -1})");
+        if (list is not { Window.Scrolls: true })
+        {
+            return;
+        }
+
+        var window = list.Window;
+        var screen = shell.Screen;
+        float x = window.X + (window.Width / 2f);
+        float y = window.Y + (window.Height / 2f);
+        Press(host, seat, Pointer(fit, x, y, wheel: 1));
+        ctx.Check(List(shell, key)?.Window.Top == window.Top + 1,
+            $"a wheel step over it moves the window one row ({window.Top} -> {List(shell, key)?.Window.Top})");
+        Press(host, seat, Pointer(fit, x, y, wheel: -3));
+        ctx.Check(List(shell, key)?.Window.Top == 0, $"and three steps back up clamp at the head ({List(shell, key)?.Window.Top})");
+
+        var head = List(shell, key)!.Window;
+        Press(host, seat, Pointer(fit, head.ThumbX + 1f, head.ThumbY + 1f, pressed: true, clicked: true));
+        ctx.Check(shell.Dragging == key, $"a click on its thumb takes hold of it ({shell.Dragging ?? "nothing"})");
+        Press(host, seat, Pointer(fit, head.ThumbX + 1f, head.ThumbY + 1f + head.TrackHeight - head.ThumbHeight, pressed: true));
+        ctx.Check(List(shell, key)?.Window.Top == head.LastTop,
+            $"and dragging it the length of its track lands the window on its last row ({List(shell, key)?.Window.Top} of {head.LastTop})");
+        Press(host, seat, Pointer(fit, head.ThumbX + 1f, head.ThumbY + 1f));
+        ctx.Check(shell.Dragging == null && shell.Screen == screen,
+            $"letting the button go ends the drag, the click having opened nothing ({shell.Dragging ?? "nothing"}, {shell.Screen})");
+        Press(host, seat, Pointer(fit, x, y, wheel: -head.Count));
+        ctx.Check(List(shell, key)?.Window.Top == 0, $"and the wheel brings it home ({List(shell, key)?.Window.Top})");
+    }
+
+    // PLANE CONSTRUCTION opens the hangar over the profile's wallet, its decal list is windowed to
+    // the authored two rows and takes the wheel, and Back resumes the cabin.
     private static void HangarRoundTrip(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
     {
         var door = Row(shell, "PlaneConstruction");
@@ -415,6 +480,23 @@ internal static class MenuOriginalCampaignSuites
         Press(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.PlaneName && hangar.IsOpen && hangar.Wallet != null,
             $"PLANE CONSTRUCTION opens the name screen over the profile's wallet ({shell.Screen}, wallet {hangar.Wallet != null})");
+
+        Press(host, seat, new MenuCommands { Typed = "Decalled" });
+        var ok = Row(shell, OriginalShell.NameOkKey)!;
+        Press(host, seat, Pointer(fit, ok.X + 5f, ok.Y + 5f, pressed: true, clicked: true));
+        var paint = Row(shell, "PX_B_PAINT")!;
+        Press(host, seat, Pointer(fit, paint.X + 5f, paint.Y + 5f, pressed: true, clicked: true));
+        var decals = Row(shell, "PT_D_DECALS0");
+        ctx.Check(shell.Screen == OriginalScreen.HangarPaint && decals != null,
+            $"the Paint tab carries the first decal box ({shell.Screen})");
+        if (decals != null)
+        {
+            Press(host, seat, Pointer(fit, decals.X + 5f, decals.Y + 5f, pressed: true, clicked: true));
+            ctx.Check(shell.OpenHangarDropdown == "PT_D_DECALS0", $"a click opens its list ({shell.OpenHangarDropdown ?? "none"})");
+            WheelAndDrag(ctx, host, seat, shell, fit, "PT_D_DECALS0", "Plane Construction's decal list");
+            Press(host, seat, Back);
+        }
+
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && !hangar.IsOpen && shell.FocusedKey == "PlaneConstruction",
             $"Back cancels the build and resumes the cabin on the row that opened it ({shell.Screen}, {shell.FocusedKey})");
@@ -509,8 +591,23 @@ internal static class MenuOriginalCampaignSuites
         return null;
     }
 
-    private static MenuCommands Pointer(BoardFit fit, float authoredX, float authoredY, bool pressed = false, bool clicked = false) =>
-        new() { Pointer = new MenuPointer(fit.X(authoredX), fit.Y(authoredY), pressed, clicked) };
+    private static MenuCommands Pointer(BoardFit fit, float authoredX, float authoredY, bool pressed = false, bool clicked = false, int wheel = 0) =>
+        new() { Pointer = new MenuPointer(fit.X(authoredX), fit.Y(authoredY), pressed, clicked, wheel) };
+
+    // The screen's list under that key, or null. Read fresh after every frame, since a window that
+    // moved is a new record.
+    private static OriginalList? List(OriginalShell shell, string key)
+    {
+        foreach (var list in shell.Lists)
+        {
+            if (list.Key == key)
+            {
+                return list;
+            }
+        }
+
+        return null;
+    }
 
     private static void Press(MenuHost host, ScriptedSeat seat, MenuCommands frame)
     {

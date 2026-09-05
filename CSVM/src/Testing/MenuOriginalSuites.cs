@@ -34,7 +34,10 @@ internal static class MenuOriginalSuites
         + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
         + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
-        + "three rows take every choice and whose CANCEL CHANGES drops them, seat 0 steering with a "
+        + "three rows take every choice and whose CANCEL CHANGES drops them, a wheel step over the "
+        + "aircraft column and over Instant Action's contents window moves each one row and clamps "
+        + "at the head, a drag down each thumb's track lands the window on its last row without "
+        + "activating what the click stood over, and the contents arrows still step it, seat 0 steering with a "
         + "pad claims it so it can never join as another seat, joining is open on the Instant Action "
         + "screen and a second seat joined there stays seated, the campaign flight check carries the "
         + "seat strip with two seats and none with one, a switch to Built-in "
@@ -83,6 +86,7 @@ internal static class MenuOriginalSuites
             Pointer(ctx, host, seat, shell, audio);
             Fly(ctx, host, seat, shell, exits);
             Return(ctx, host, shell, exits);
+            Lists(ctx, host, seat, shell);
             Seats(ctx, host, seat, shell, player1);
             OriginalOptionsRoute(ctx, host, seat, shell, exits);
             SwitchToBuiltIn(ctx, host, seat, shell);
@@ -219,6 +223,77 @@ internal static class MenuOriginalSuites
     // Seats and joining. A scripted run has no pad, so the claim is driven through the poller's
     // own record of the pad seat 0 last steered with, and the join through the feature, which is
     // where a pad's Start lands; the per-screen rule itself is read off the shell.
+    // The pointer's wheel and thumb over the two lists this screen graph reaches: the sortie
+    // screens' aircraft column and Instant Action's contents window, each wheeled a row, dragged
+    // down its track and left back at its head, with the list's own arrows still stepping it.
+    private static void Lists(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
+    {
+        var size = ctx.Host.GetViewport().GetVisibleRect().Size;
+        var fit = BoardFit.For(size.X, size.Y);
+        WalkTo(host, seat, shell, OriginalShell.FreeFlightKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.FreeFlight, $"the Free Flight door opens the aircraft column again ({shell.Screen})");
+        WheelAndDrag(ctx, host, seat, shell, fit, "AIRFRAMES", "the sortie screens' aircraft column");
+        ctx.Check(shell.PickedAirframe == null && shell.Screen == OriginalScreen.FreeFlight,
+            $"and the wheel and the drag picked nothing and left no screen ({shell.PickedAirframe ?? "none"}, {shell.Screen})");
+        Press(host, seat, Back);
+
+        WalkTo(host, seat, shell, "MM_B_INSTANTACTION");
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction, $"Instant Action opens its contents window ({shell.Screen})");
+        WheelAndDrag(ctx, host, seat, shell, fit, OriginalShell.ContentsKey, "Instant Action's contents window");
+        var down = Row(shell, OriginalShell.ContentsDownKey);
+        ctx.Check(down != null, $"the contents window carries its authored down arrow");
+        if (down != null)
+        {
+            int top = shell.ContentsTop;
+            Press(host, seat, Pointer(fit, down.X + 2f, down.Y + 2f, pressed: true, clicked: true));
+            ctx.Check(shell.ContentsTop == top + 1,
+                $"and the arrow still steps the window one row, the wheel having changed nothing about it ({top} -> {shell.ContentsTop})");
+            var up = Row(shell, OriginalShell.ContentsUpKey)!;
+            Press(host, seat, Pointer(fit, up.X + 2f, up.Y + 2f, pressed: true, clicked: true));
+            ctx.Check(shell.ContentsTop == top, $"and the up arrow steps it back ({shell.ContentsTop})");
+        }
+
+        Press(host, seat, Back);
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel, $"Back leaves Instant Action for the top level ({shell.Screen})");
+    }
+
+    // One list under the pointer: a wheel step down moves its window by exactly one row, a step
+    // past the head clamps there, and a thumb taken at the top of its track and dragged to the
+    // foot lands the window on its last row without activating whatever the click stood over.
+    private static void WheelAndDrag(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell,
+        BoardFit fit, string key, string what)
+    {
+        var list = List(shell, key);
+        ctx.Check(list is { Window.Scrolls: true },
+            $"{what} is a scrolling list the pointer can see ({list?.Window.Count ?? -1} rows in a window of {list?.Window.Rows ?? -1})");
+        if (list is not { Window.Scrolls: true })
+        {
+            return;
+        }
+
+        var window = list.Window;
+        float x = window.X + (window.Width / 2f);
+        float y = window.Y + (window.Height / 2f);
+        Press(host, seat, Pointer(fit, x, y, wheel: 1));
+        ctx.Check(List(shell, key)?.Window.Top == window.Top + 1,
+            $"a wheel step over it moves the window one row ({window.Top} -> {List(shell, key)?.Window.Top})");
+        Press(host, seat, Pointer(fit, x, y, wheel: -3));
+        ctx.Check(List(shell, key)?.Window.Top == 0, $"and three steps back up clamp at the head ({List(shell, key)?.Window.Top})");
+
+        var head = List(shell, key)!.Window;
+        Press(host, seat, Pointer(fit, head.ThumbX + 1f, head.ThumbY + 1f, pressed: true, clicked: true));
+        ctx.Check(shell.Dragging == key, $"a click on its thumb takes hold of it ({shell.Dragging ?? "nothing"})");
+        Press(host, seat, Pointer(fit, head.ThumbX + 1f, head.ThumbY + 1f + head.TrackHeight - head.ThumbHeight, pressed: true));
+        ctx.Check(List(shell, key)?.Window.Top == head.LastTop,
+            $"and dragging it the length of its track lands the window on its last row ({List(shell, key)?.Window.Top} of {head.LastTop})");
+        Press(host, seat, Pointer(fit, head.ThumbX + 1f, head.ThumbY + 1f));
+        ctx.Check(shell.Dragging == null, $"letting the button go ends the drag ({shell.Dragging ?? "nothing"})");
+        Press(host, seat, Pointer(fit, x, y, wheel: -head.Count));
+        ctx.Check(List(shell, key)?.Window.Top == 0, $"and the wheel brings it home ({List(shell, key)?.Window.Top})");
+    }
+
     private static void Seats(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, MenuInput player1)
     {
         var original = host.Active as OriginalPresentation;
@@ -467,8 +542,23 @@ internal static class MenuOriginalSuites
         return null;
     }
 
-    private static MenuCommands Pointer(BoardFit fit, float authoredX, float authoredY, bool pressed = false, bool clicked = false) =>
-        new() { Pointer = new MenuPointer(fit.X(authoredX), fit.Y(authoredY), pressed, clicked) };
+    private static MenuCommands Pointer(BoardFit fit, float authoredX, float authoredY, bool pressed = false, bool clicked = false, int wheel = 0) =>
+        new() { Pointer = new MenuPointer(fit.X(authoredX), fit.Y(authoredY), pressed, clicked, wheel) };
+
+    // The screen's list under that key, or null. Read fresh after every frame, since a window that
+    // moved is a new record.
+    private static OriginalList? List(OriginalShell shell, string key)
+    {
+        foreach (var list in shell.Lists)
+        {
+            if (list.Key == key)
+            {
+                return list;
+            }
+        }
+
+        return null;
+    }
 
     private static void Press(MenuHost host, ScriptedSeat seat, MenuCommands frame)
     {

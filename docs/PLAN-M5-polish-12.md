@@ -117,7 +117,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — The pointer
 
-31. ☐ `BL-707` Nothing in Original scrolls with the wheel, and no scrollbar thumb can be dragged
+31. ☑ `BL-707` Nothing in Original scrolls with the wheel, and no scrollbar thumb can be dragged
 32. ☑ `BL-654` Built-in takes no mouse input
 
 ### Wave E — At the controls
@@ -632,7 +632,7 @@ updated for the new first row.
 
 # Wave D — The pointer
 
-## D31 ☐ `BL-707` Nothing in Original scrolls with the wheel, and no scrollbar thumb can be dragged
+## D31 ☑ `BL-707` Nothing in Original scrolls with the wheel, and no scrollbar thumb can be dragged
 
 **Goal.** Every list under Original scrolls with the mouse wheel and its thumb can be dragged; the
 arrows keep doing what they do.
@@ -659,6 +659,37 @@ the arrows' behaviour is unchanged. At the controls in `E41`.
 **⚠ Traps.** The wheel is a comfort the original never had, so it is an addition on top of the
 decoded screens and must not change what the arrows do. A wheel that works on one screen and not the
 next reads as broken. Built-in's wheel is `D32`'s, not this item's.
+
+**Verified.** <pending orchestrator run>
+
+**Outcome.** `MenuPointer` carries a `Wheel` count of the steps turned since the last poll, positive
+toward a list's foot; `PointerSeat` takes it as a third injected read and drains it every frame,
+pointer or none, and `Launcher` counts it in `_Input` because the wheel is an event rather than a
+held state. `ListWindow` (`CSVM/src/UI/ListWindow.cs`) is the new shared record: a list's box, its
+thumb on its track, and the arithmetic for a wheel step, a proportional drag and where a thumb
+stands, so every list draws its thumb by the one rule. `OriginalShell.Lists` answers the screen's
+scrolling lists as `OriginalList` records, each a key, a window its own widget built, and the write
+that moves it; the shell takes a held thumb first (its click activating nothing under it), then a
+wheel step over the list the pointer stands in, then re-reads the rows and hit-tests. A move that
+would hide the focused row pulls the focus to the window's nearer edge, since the window otherwise
+follows the focus straight back. The lists covered are the scrapbook's contents page, an open
+drop-down on any campaign board, every hangar dropdown including Plane Construction's decals,
+Instant Action's dropdowns and its contents window, and the aircraft column on Free Flight and
+Dogfight, which gains a drawn scrollbar. Nothing the arrows or the keyboard do changed; a list that
+fits its window ignores the wheel.
+`BL-743` is closed with it: an Instant Action dropdown's open list is now windowed to the layout's
+authored `TotalDisplayed`, the window following the focused row, with the list's own arrow pair on
+its right edge. Every item stays a row keyed `<key>:<index>`, drawn and hit only inside the window,
+so a scripted pose and the `MenuInstantActionSuites` walks still pick by index. ⚠ For the user's
+eyes: the Pilot Plane list's authored window is 20 rows from the dropdown's line, which reaches the
+page foot over BUILD CUSTOM PLANE the way an open drop-down covers what is under it. The window is
+what stops a longer store from running off the page; if the authored 20 reads as too tall at the
+controls, that is a separate reading of the layout, not this fix.
+New coverage: `ListWindowTests`, `CampaignComboTests`'s two scroll cases,
+`CampaignPreviousMissionsPageTests`'s pointer-window cases, and a wheel-and-drag walk in both
+`menu-original-tracer` (the aircraft column, Instant Action's contents window, and its arrows still
+stepping) and `menu-original-campaign` (the contents page and the decal list). No new suite, so no
+registration count or weight moved.
 
 ## D32 ☑ `BL-654` Built-in takes no mouse input
 

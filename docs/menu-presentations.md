@@ -122,12 +122,13 @@ showed is not a fresh press, `CapturingText` says whether typed characters feed 
 `DeviceLabel` names the device for a join strip. `MenuCommands` is already device-neutral: `MoveY`
 and `MoveX` with auto-repeat applied, the edges `Accept`, `Back`, `Join`, `Loadout`, `Contents`,
 `Erase`, the `Typed` characters, and an optional `MenuPointer` (window pixels, `Pressed`, `Clicked`
-on the press edge; null when the seat's devices have none). A presentation reads meaning and never a
-key, button or axis.
+on the press edge, `Wheel` as the steps turned since the last poll and positive toward a list's
+foot; null when the seat's devices have none). A presentation reads meaning and never a key, button
+or axis.
 
 The shipped sources: `BuiltInSeat` wraps one `MenuInput` (seat 0's reads the keyboard plus every
 unclaimed pad; a joined seat's reads its one pad); `PointerSeat` wraps a seat and adds the mouse as
-its pointer through two injected delegates; `MenuIdleSource` is a seat with no device, what the
+its pointer through three injected delegates; `MenuIdleSource` is a seat with no device, what the
 `--debug-join=` aid seats. A source is not synonymous with a pad, and a later flight-control binding
 plugs in as another `IMenuInputSource` with no change to any presentation.
 
@@ -160,6 +161,26 @@ the selection or unjoins. Joining stays closed on that screen. The walk ends on 
 with FLY live, or as the Instant Action launch, and FLY goes live only when every joined seat is
 Confirmed. Seat 0's own controller drives the screen too, so one pad at the desk can walk it, and
 seat 0's Back there cancels the walk with every seat kept. Nothing on that screen is decoded.
+
+The wheel and the thumb reach the lists through one seam. `OriginalShell.Lists` answers the screen's
+scrolling lists as `OriginalList` records, topmost first, each a key, a `ListWindow`
+(`CSVM/src/UI/ListWindow.cs`) the list widget built from its own geometry, and the write that puts
+the window's first row somewhere else. Nothing is listed under a dialog, and while a drop-down is
+open its list is the only one, since it hangs over the screen. Per frame the shell takes the thumb
+first (a held thumb owns the pointer until it is let go, and the click that took hold activates
+nothing under it), then a wheel step over the list the pointer stands in, then re-reads the rows and
+hit-tests. A write that moves a window also pulls the focus to the window's nearer edge when it
+stood on a row the move would hide, because the window otherwise follows the focus straight back.
+The arrows and the keyboard do not go through any of this, so the wheel is an addition on top of the
+decoded screens rather than a change to them. Original's mouse is the only one today; Built-in's is
+`BL-654`.
+
+The windows themselves are the list widgets': `CampaignBoards.ComboWindow` for an open campaign
+drop-down, `CampaignPreviousMissionsPage.PointerWindow` for the scrapbook's contents page, and
+Original's own for the hangar's dropdowns, Instant Action's dropdowns and contents window, and the
+sortie screens' aircraft column. An open dropdown on Instant Action shows at most the authored
+`TotalDisplayed` rows and keeps every item as a row keyed `<key>:<index>`, drawn and hit only inside
+the window, so a scripted pose and a suite walk still pick by index whatever the window shows.
 
 ## Options, selection and availability
 
