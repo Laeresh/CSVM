@@ -111,7 +111,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — The campaign boards and Game Options
 
-21. ☐ `BL-712` A briefing re-entered from the cabin resumes its reveal mid-way
+21. ☑ `BL-712` A briefing re-entered from the cabin resumes its reveal mid-way
 22. ☐ `BL-655` The campaign hangar never shows the wallet while a plane is being built
 23. ☐ `BL-570` The difficulty setting has no menu row
 
@@ -352,7 +352,7 @@ for an original layout to copy.
 
 # Wave C — The campaign boards and Game Options
 
-## C21 ☐ `BL-712` A briefing re-entered from the cabin resumes its reveal mid-way
+## C21 ☑ `BL-712` A briefing re-entered from the cabin resumes its reveal mid-way
 
 **Goal.** Entering the briefing screen plays its reveal from the start, as the narration already
 does, without reloading the briefing from disk.
@@ -378,6 +378,22 @@ before and after and compare.
 **⚠ Traps.** The aid depends on a reveal that can be advanced from zero, so it must still land on
 the same frame or every briefing shot moves. Do not reset by clearing the cache on `MissionSeq`;
 reset the script, not the load.
+
+**Verified.** <pending orchestrator run>
+
+**Outcome.** Landed one seam up from the Approach, in `CampaignFlow.GoTo`, which every entry of
+the briefing screen in both presentations passes through (Original's `ShowCampaign` walks its
+mirrored flow through it; Built-in's cabin, flight-check, contents and scrapbook pages call it
+directly): opening the briefing restarts a reveal whose clock has moved and leaves a fresh one
+alone, so the load stays cached on the feature, a first entry still reads one narration start, and
+the `--menu=campaign-briefing:24` aid lands on the same frame (raw-pixel md5 identical before and
+after under Original and under Built-in, one narration start each). REPLAY BRIEFING keeps its own
+`Restart` call, since it is a press on the screen rather than an entry. `menu-original-campaign`
+and `menu-campaign-journey` each drive the reveal past its first placed element after REPLAY,
+return to the cabin, re-enter, and read a clock under a second, the fresh element count, no
+revealed objective and a narration count of three, where the unchanged build read ten seconds and
+two. The Original suite's earlier assertion that the re-entry "reopens the briefing where REPLAY
+left it" was the defect pinned as expected behaviour and is replaced.
 
 ## C22 ☐ `BL-655` The campaign hangar never shows the wallet while a plane is being built
 

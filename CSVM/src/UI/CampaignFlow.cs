@@ -459,10 +459,18 @@ public sealed class CampaignFlow
     }
 
     /// <summary>Opens a screen. One already open is returned to, closing everything entered after
-    /// it, so RETURN TO CABIN from a briefing leaves no second cabin behind the first.</summary>
+    /// it, so RETURN TO CABIN from a briefing leaves no second cabin behind the first. Entering the
+    /// briefing plays its reveal from the start, as its narration does; the load is kept.</summary>
     public void GoTo(CampaignScreen screen)
     {
         Message = string.Empty;
+        // A reveal never advanced is left alone: the aid drives one from zero, and the script's
+        // narration count stays what a first entry reads.
+        if (screen == CampaignScreen.Briefing && Feature.Briefing is { Reveal.Clock: > 0 } briefing)
+        {
+            briefing.Restart();
+        }
+
         int at = _stack.IndexOf(screen);
         if (at >= 0)
         {

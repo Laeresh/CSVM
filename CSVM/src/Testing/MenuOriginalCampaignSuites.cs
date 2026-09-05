@@ -37,7 +37,8 @@ internal static class MenuOriginalCampaignSuites
         + "a scratch profile store: the Campaign row opens the profile screen, typed frames name a "
         + "player and Enter seats them on the cabin, the briefing runs its reveal on the presentation's "
         + "clock and starts its narration through the host's audio once, REPLAY BRIEFING starts it "
-        + "again, RETURN TO CABIN ends it and lifts the duck, the flight check walks two debug-joined "
+        + "again, RETURN TO CABIN ends it and lifts the duck, NEXT MISSION again reopens the briefing "
+        + "from a blank map with the narration starting over, the flight check walks two debug-joined "
         + "guests and FLY MISSION leaves as one CampaignMissionExit with three seats, the debrief "
         + "return lands on the book with RETURN TO CABIN focused and starts no narration, the cabin "
         + "return lands on the cabin, ammo selection and plane selection write their picks through "
@@ -170,6 +171,7 @@ internal static class MenuOriginalCampaignSuites
         }
 
         int pictures = shell.Compose().Pictures.Count;
+        int freshElements = briefing.Reveal.Elements.Count;
         for (int frame = 0; frame < 600; frame++)
         {
             host.Tick(Dt);
@@ -187,6 +189,17 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(briefing.Reveal.Clock < 1.0 && briefing.NarrationStarts == 2 && audio.Begins == 2,
             $"REPLAY BRIEFING restarts the reveal and the narration begins again ({briefing.Reveal.Clock:0.0}s, {briefing.NarrationStarts}, begins {audio.Begins})");
 
+        // The reveal is driven on until the map is no longer blank, so the return below has
+        // something to start over from; the first beat's time is the mission's own.
+        int frames = 0;
+        while (frames++ < 3600 && briefing.Reveal.Elements.Count == freshElements && briefing.Reveal.RevealedObjectives.Count == 0)
+        {
+            host.Tick(Dt);
+        }
+
+        ctx.Check(briefing.Reveal.Elements.Count > freshElements || briefing.Reveal.RevealedObjectives.Count > 0,
+            $"a minute after REPLAY at most places more on the map than a fresh reveal or reveals an objective ({briefing.Reveal.Clock:0.0}s, {freshElements} to {briefing.Reveal.Elements.Count} elements, {briefing.Reveal.RevealedObjectives.Count} objectives)");
+
         Press(host, seat, Down);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && audio.Ends == 1,
@@ -196,8 +209,10 @@ internal static class MenuOriginalCampaignSuites
 
         Press(host, seat, Accept);
         host.Tick(Dt);
-        ctx.Check(shell.Screen == OriginalScreen.CampaignBriefing && briefing.Reveal.Clock < 1.5 && audio.Begins == 3,
-            $"NEXT MISSION on the same mission reopens the briefing where REPLAY left it and the voice begins again ({briefing.Reveal.Clock:0.0}s, begins {audio.Begins})");
+        ctx.Check(shell.Screen == OriginalScreen.CampaignBriefing && briefing.Reveal.Clock < 1.0
+            && briefing.Reveal.Elements.Count == freshElements && briefing.Reveal.RevealedObjectives.Count == 0
+            && briefing.NarrationStarts == 3 && audio.Begins == 3,
+            $"NEXT MISSION on the same mission reopens the briefing from a blank map, the script asking for its narration again and the voice beginning again ({briefing.Reveal.Clock:0.0}s, {briefing.Reveal.Elements.Count} elements, {briefing.Reveal.RevealedObjectives.Count} objectives, {briefing.NarrationStarts}, begins {audio.Begins})");
     }
 
     // GO TO FLIGHT CHECK ends the narration; two device-less guests join, FLY MISSION walks their
