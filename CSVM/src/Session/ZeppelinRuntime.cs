@@ -494,6 +494,19 @@ public sealed partial class ZeppelinRuntime : Node
     private static Node3D? ZoneNode(AnimRuntime runtime, Node3D host, string nodeName) =>
         runtime.FindNodes(nodeName, host) is { Count: > 0 } hits ? hits[0] : null;
 
+    // The team the healthy entry's flagged state child carries, or null where the zone group
+    // is missing, has no such child, or the child authors no owner for this mission.
+    private static int? StateChildTeam(AnimRuntime runtime, Node3D host, ZeppelinHealthyZone zone)
+    {
+        var group = ZoneNode(runtime, host, zone.Node);
+        if (group == null)
+        {
+            return null;
+        }
+        var child = ZoneNode(runtime, group, zone.Kind);
+        return child == null ? null : DestructibleRegistry.MissionStructureTeamOf(child);
+    }
+
     private static void AddPart(List<AimCandidate> into, DestructibleRegistry.Instance? inst,
         int team, Vector3 velocity)
     {
@@ -587,6 +600,12 @@ public sealed partial class ZeppelinRuntime : Node
                 // meta, so the registry cannot stamp it and the record's healthy list is the source.
                 inst.Gasbag = true;
                 zep.GasbagInstances.Add(inst);
+                // The pool stands on the zone group (gasbag1), but the flagged mission structure
+                // is the state child the entry names (gasbag1/panels), and that child's own slot
+                // is the team the original builds the structure with (docs/org/targeting.md
+                // "What a mission structure's team is"). Without it C4/M03's Pandora offers its
+                // engines as the player's and its gasbags as nobody's.
+                inst.Team ??= StateChildTeam(runtime, zep.Host, zone);
             }
             else
             {
