@@ -600,11 +600,9 @@ public sealed partial class ZeppelinRuntime : Node
                 // meta, so the registry cannot stamp it and the record's healthy list is the source.
                 inst.Gasbag = true;
                 zep.GasbagInstances.Add(inst);
-                // The pool stands on the zone group (gasbag1), but the flagged mission structure
-                // is the state child the entry names (gasbag1/panels), and that child's own slot
-                // is the team the original builds the structure with (docs/org/targeting.md
-                // "What a mission structure's team is"). Without it C4/M03's Pandora offers its
-                // engines as the player's and its gasbags as nobody's.
+                // The pool stands on the zone group, but the flagged mission structure is the
+                // state child the entry names (gasbag1/panels), whose own slot is the team the
+                // original builds it with (targeting.md "What a mission structure's team is").
                 inst.Team ??= StateChildTeam(runtime, zep.Host, zone);
             }
             else

@@ -122,6 +122,11 @@ public sealed class AiRocketeer
     /// <summary>Seconds until ordnance may fire again — the lockout, for tests and breadcrumbs.</summary>
     public float LockoutRemaining => _lockout;
 
+    /// <summary>What the last unlocked <see cref="Solve"/> decided, for the host's breadcrumb:
+    /// the pylon it took and the dice, or why every candidate pylon was passed over. A locked-out
+    /// tick leaves the previous verdict standing.</summary>
+    public string LastVerdict { get; private set; } = string.Empty;
+
     /// <summary>Whether both timers a launch stamps have run out for this pylon, the vehicle-wide
     /// lockout and the slot's own: the acquisition's gasbag gate reads it (<c>FUN_00420070</c>),
     /// since a gasbag is offered only to a pilot whose gasbag ordnance can fire NOW.</summary>
@@ -165,9 +170,13 @@ public sealed class AiRocketeer
         if (_lockout > 0f)
             return;
         if (!AiGunner.QuickDrawAccepts(ownPos, targetPos, targetForward, QuickDrawAngleDeg))
+        {
+            LastVerdict = "quick draw refuses the aspect";
             return; // too oblique an attack for this pilot's quick draw
+        }
         var basis = ownBasis.Orthonormalized();
         var toLocal = basis.Transposed();
+        string passedOver = "no pylon offered";
         foreach (var p in pylons)
         {
             if (!p.Armed)
@@ -186,7 +195,10 @@ public sealed class AiRocketeer
             float maxRange = p.MaxRangeM > 0f ? p.MaxRangeM : MaxRangeM;
             float sep2 = p.MountPos.DistanceSquaredTo(targetPos);
             if (sep2 < minRange * minRange || sep2 > maxRange * maxRange)
+            {
+                passedOver = $"pylon{p.Index} out of its {minRange:0}-{maxRange:0} m band at {Mathf.Sqrt(sep2):0} m";
                 continue;
+            }
             // The original leads each round in the frame it flies in (FUN_0041afe0): a motor round
             // in the launcher's, on the ramp it climbs, and one without a motor at VELOCITY against
             // the target's world velocity, since it carries nothing of its launcher's.
@@ -197,14 +209,21 @@ public sealed class AiRocketeer
                 : AimAssist.TryIntercept(p.MountPos, p.RoundSpeed, targetPos, targetVelocity,
                     out aim, out _);
             if (!solved)
-                continue; // a target outrunning the round is simply not shot at
+            {
+                passedOver = $"pylon{p.Index} has no intercept"; // a target outrunning the round is simply not shot at
+                continue;
+            }
             var local = (toLocal * aim).Normalized();
             var (yawDeg, pitchDeg) = TurretController.AnglesOfLocal(local);
             var clamped = TurretController.LocalDir(
                 Mathf.Clamp(yawDeg, -PylonYawLimitDeg, PylonYawLimitDeg),
                 Mathf.Clamp(pitchDeg, -PylonPitchLimitDeg, PylonPitchLimitDeg));
             if (clamped.Dot(local) < AimQualityCos)
-                continue; // the mount cannot be brought close enough: keep maneuvering
+            {
+                // the mount cannot be brought close enough: keep maneuvering
+                passedOver = $"pylon{p.Index} lead {yawDeg:0}° yaw {pitchDeg:0}° pitch off the mount";
+                continue;
+            }
             SelectedPylon = p.Index;
             LaunchDirWorld = (basis * clamped).Normalized();
             float refire = p.RefireSeconds > 0f ? p.RefireSeconds : RefireSeconds;
@@ -212,8 +231,10 @@ public sealed class AiRocketeer
             _slotLockouts[p.Index] = refire;
             // The dice, last and only here. Inclusive, as the original's compare is.
             WantsFire = _roll() <= QuickDrawChance;
+            LastVerdict = $"pylon{p.Index} taken, dice {(WantsFire ? "pass" : "fail")}, next in {refire:0} s";
             return;
         }
+        LastVerdict = passedOver;
     }
 
     // The accelerating intercept the original solves for a weapon authoring ACCELERATION
