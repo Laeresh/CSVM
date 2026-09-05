@@ -12,16 +12,15 @@ public sealed record OriginalInstantActionInks(
 
 /// <summary>
 /// The Original Instant Action screen, composed from the decoded <c>[@InstantAction@]</c> rows over
-/// the shared <see cref="InstantActionFeature"/>: the Table of Contents window with its scroll
-/// arrows, the dropdowns at their authored lines, the enemy rows paged by the up and down buttons,
-/// the radio pair and the five buttons. Decoded rules bound here: a contents row applies its
-/// preset, View Story writes the preset's name, the ace duel hides every enemy control, the
+/// the shared <see cref="InstantActionFeature"/>: the contents window and its arrows, the dropdowns,
+/// the paged enemy rows, the radio pair and the five buttons. Decoded rules bound here: a contents
+/// row applies its preset, View Story writes its name, the ace duel hides every enemy control, the
 /// wingman plane hides at zero wingmen, a changed militia resets its aircraft, stunt flying bars
-/// the clouds. The Pilot Plane list is the sortie screens' roster, rows named <c>Stock Fury</c> and
-/// <c>&lt;build name&gt; Fury</c>; the wingman list stays stock. Build opens the hangar wallet-free
-/// and returns here with the list re-read; Weapon Loadout opens the loadout screen for the seat
-/// the radio names; with a second seat joined the strip names it and FLY MISSION walks each seat
-/// through its own aircraft screen. Remake-only readings: docs/org/menu-inventory.md.
+/// the clouds. The Pilot Plane list is the sortie screens' roster (<c>Stock Fury</c>, <c>&lt;build
+/// name&gt; Fury</c>); the wingman list stays stock. Build opens the hangar wallet-free and returns
+/// here with the list re-read; Weapon Loadout opens the loadout screen for the seat the radio
+/// names; a joined second seat is named by the strip and walked through its own aircraft screen
+/// by FLY MISSION. Remake-only readings: docs/org/menu-inventory.md.
 /// </summary>
 public sealed partial class OriginalShell
 {
