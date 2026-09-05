@@ -98,6 +98,7 @@ specified in [`cli.md`](cli.md).
 | `F11` | | print the mode's subject placement as ready-to-paste `--pos=` / `--direction=` (in `--viewer`: `--pos=` / `--lookat=`, the orbit pivot) |
 | `F10` | | export the plane on screen (current livery + damage) to a timestamped `.glb` under `Exports/` — the `--export-gltf=` twin |
 | `Esc` | | at the launchscreen: back, and quit from the Mode screen. In flight it opens the pause board instead — a board menu's Exit item is what leaves a session, so a pad can reach it too |
+| mouse | | at the launchscreen (Built-in): the pointer over a row moves the cursor onto it, a press and release on the same row confirms it (letting go elsewhere confirms nothing), and the wheel steps the cursor over a list. Player 1's device, so on a split aircraft screen only player 1's pane takes it; the campaign boards under Built-in stay on the keys. Original's own pointer is described in `docs/menu-presentations.md` |
 
 ## `--viewer`
 

@@ -118,7 +118,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — The pointer
 
 31. ☐ `BL-707` Nothing in Original scrolls with the wheel, and no scrollbar thumb can be dragged
-32. ☐ `BL-654` Built-in takes no mouse input
+32. ☑ `BL-654` Built-in takes no mouse input
 
 ### Wave E — At the controls
 
@@ -608,7 +608,7 @@ the arrows' behaviour is unchanged. At the controls in `E41`.
 decoded screens and must not change what the arrows do. A wheel that works on one screen and not the
 next reads as broken. Built-in's wheel is `D32`'s, not this item's.
 
-## D32 ☐ `BL-654` Built-in takes no mouse input
+## D32 ☑ `BL-654` Built-in takes no mouse input
 
 **Goal.** Built-in's launchscreen takes the mouse: a pointer over a row focuses it, a press and
 release on the same row confirms, a wheel over a list scrolls it. Original is unchanged (it already
@@ -626,8 +626,10 @@ is Godot's own: switch the row controls to `MouseFilterEnum.Stop`, route their `
 same `MenuCommands` the keyboard produces (a hover is a focus move to that row, a click is Accept,
 a wheel is a cursor step), and keep focus one thing so a pointer move and a pad press cannot each
 own a different row. Reuse `PointerSeat` for the read where the seat model allows it.
-`<TODO: whether Built-in's rows are reachable as individual Controls on every screen, or some
-screens draw rows as one label block; the Approach assumes per-row Controls.>`
+Every centred-layout screen (Mode, Chapter, the wizard, Options, Controls, the hangar pages, a
+lone pilot's aircraft list and loadout) draws one `CursorRow` control per row, and the split
+aircraft screen one per roster row per pane; only the campaign screens draw no row controls, being
+one `ComposedBoardView` surface.
 
 **Model recommendation.** high. An `[L]` item over the largest UI file in the repo, with every
 menu suite's walk as its regression surface.
@@ -639,6 +641,26 @@ menu suite's walk as its regression surface.
 **⚠ Traps.** Focus must stay one thing. A `MouseFilter` change on a container can swallow input
 meant for the panes behind it (the splitscreen rig sits under the same layer set); check
 `SplitScreen.cs:197-270`'s `Ignore` controls stay ignored. Do not add mouse to the flight HUD.
+
+**Verified.** <pending orchestrator run>
+
+**Outcome.** Landed as Godot's own hit test, no `MenuPointer` read: `LaunchMenu.Pointable` sets
+player 1's row controls to `MouseFilterEnum.Stop` and connects their `gui_input` and mouse-enter
+and mouse-exit signals to `PointerEvent`, which holds the mouse's commands for the frame
+(`WithPointer` folds them into player 1's frame in `_Process` and `Drive`) because `Rebuild` frees
+the very control an event is dispatched through. A motion is the cursor step onto the row, a press
+and release on one row is that step plus Accept in the same frame (the release rule is
+`BaseButton`'s: it confirms only while the pointer is still inside the pressed control, so a drag
+off cancels), a wheel notch is a step, with the list column passing the wheel between rows. The
+frame's own step outranks a hover, so a pad and the mouse cannot each own a row; a click off a
+locked airframe is refused rather than confirming the locked one. The campaign boards under
+Built-in stay on the keys (no row controls; the TODO's answer above); the split aircraft screen
+takes the mouse in player 1's pane alone, the mouse being seat 0's device. `SplitScreen.cs` and
+`PointerSeat` are untouched; the containers under the rows keep their filters. New suite
+`menu-host-pointer` in `MenuHostSuites.cs` injects the events through the row controls' signals
+(`LaunchMenu.RowControl`), red with the wiring off, green with it on. A hover cannot be posed
+headless (the aid cannot move the mouse, and the focused row is the one cursor either device
+moves), so `.scratch/bl654_hover.png` shows the aircraft list as the row controls now draw it.
 
 ---
 

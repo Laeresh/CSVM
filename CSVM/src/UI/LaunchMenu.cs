@@ -13,15 +13,15 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The in-game launchscreen shown on a bare launch. Free Flight and Dogfight go straight to
-/// Chapter then Plane; Instant Action opens its own five-step wizard (Environment, MissionType,
-/// Waves, Wingmen, Plane). Dogfight withholds the launch gesture until two players have joined;
-/// see <see cref="CanLaunch"/>. Input is polled per player through <see cref="MenuInput"/> rather
-/// than Godot's input map, since the join flow needs a named device. More than one player splits
-/// the Plane screen into <see cref="SplitScreen.PaneRect"/> panes. Re-entrant on return from
-/// flight; see <see cref="ShowMenu"/>. The Built-in presentation's screen graph: player 1's
-/// commands arrive through the host's first seat, every launch and the quit leave through
-/// <see cref="IMenuHost.Exit"/>, and narration plays through the host's audio service. Module
-/// map: docs/architecture.md. Wizard decode: docs/formats/instant-action.md.
+/// Chapter then Plane; Instant Action opens its own five-step wizard. Dogfight withholds the
+/// launch until two players have joined; see <see cref="CanLaunch"/>. Input is polled per player
+/// through <see cref="MenuInput"/>, not Godot's input map, since the join flow needs a named
+/// device; the mouse through the rows' own <c>gui_input</c> (<see cref="PointerEvent"/>). More
+/// than one player splits the Plane screen into <see cref="SplitScreen.PaneRect"/> panes.
+/// Re-entrant on return from flight; see <see cref="ShowMenu"/>. The Built-in presentation's
+/// screen graph: player 1's commands arrive through the host's first seat, every launch and the
+/// quit leave through <see cref="IMenuHost.Exit"/>, and narration plays through the host's audio
+/// service. Module map: docs/architecture.md. Wizard decode: docs/formats/instant-action.md.
 /// </summary>
 public sealed partial class LaunchMenu : CanvasLayer
 {
@@ -151,6 +151,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     // This screen's view of the shared setup's seats, player 1 first, one wrapper per seat with
     // the poller behind it and its last frame; SyncSlots keeps it in step with the feature.
     private readonly List<Slot> _slots = new();
+    // Player 1's row controls by absolute row index, as last built, for RowControl.
+    private readonly Dictionary<int, Control> _rowControls = new();
     private int _slotsRevision = -1;
     // The menu host: its first seat is player 1's commands, its feature set holds Free Flight's and
     // Instant Action's state and launch rules and the shared player setup, its audio service plays
@@ -274,6 +276,17 @@ public sealed partial class LaunchMenu : CanvasLayer
     // frame, and a confirm that changes nothing on screen reads as a dead button on a pad.
     private int _pressFrames;
 
+    // The mouse's commands since the last frame, folded into player 1's next frame by WithPointer:
+    // a hover is a cursor step onto its row, a click is Accept, a wheel notch a step. Held for the
+    // frame rather than applied in the event, since Rebuild replaces the very controls the event
+    // is dispatched through.
+    private MenuCommands _pointer = MenuCommands.None;
+    // The row the left button went down on and whether the pointer is still over it, Godot's own
+    // button rule: a release confirms only inside the control that took the press. Null between
+    // clicks, and cleared by Rebuild, which frees the control the press landed on.
+    private int? _pressRow;
+    private bool _pressInside;
+
     private enum Screen { Mode, Chapter, Presets, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout, Hangar, Campaign, Options, Controls }
 
     // What a fit row edits. The reset row carries no slot of its own and is the only one Accept
@@ -379,6 +392,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Controls => _controlsIndex,
         _ => _slots.Count == 1 && _slots[0].InLoadout ? _slots[0].FitRow : _slots[0].PlaneIndex,
     };
+
+    // The row player 1's mouse steps from: the cursor of the list its rows were built from, which
+    // on a split aircraft screen is pane 1's fit row while that pane is in its loadout.
+    private int PointerIndex =>
+        _screen == Screen.Plane && _slots[0].InLoadout ? _slots[0].FitRow : CurrentIndex;
 
     // The font the bands and the fit columns are measured in, or null before the theme has one.
     private Font? MenuFont => _zones.GetThemeDefaultFont();
@@ -652,6 +670,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>Hide the menu (the host is about to build a session).</summary>
     public void HideMenu() => Visible = false;
 
+    /// <summary>The control drawing player 1's row <paramref name="index"/>, or null when that row
+    /// is not drawn (outside a list's window, or a composed campaign board). A check injects the
+    /// mouse events Godot would dispatch through its <c>gui_input</c> and mouse-exit signals.</summary>
+    public Control? RowControl(int index) => _rowControls.TryGetValue(index, out var row) ? row : null;
+
     /// <summary>Applies one frame of player 1's semantic commands in place of a device poll, then
     /// redraws if anything changed. The scripted journey suites drive the real screens through
     /// this, and the frame shape is the one a menu input source hands a presentation. Needs
@@ -662,7 +685,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // Player 1's frame alone: the other seats read idle, not whatever their last poll held.
         for (int i = 1; i < _slots.Count; i++)
             _slots[i].Frame = MenuCommands.None;
-        Apply(frame);
+        Apply(WithPointer(frame));
         bool dirty;
         try
         {
@@ -828,7 +851,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // poll: the PLANENAME screen's letter aliases must be dead for the frame that reads them.
         var seat = _host.Seats[0];
         seat.CapturingText = NamePage() != null;
-        Apply(seat.Poll((float)delta));
+        Apply(WithPointer(seat.Poll((float)delta)));
         for (int i = 1; i < _slots.Count; i++)
             _slots[i].Frame = _slots[i].Seat.Source.Poll((float)delta);
         dirty |= HandleInput();
@@ -1015,6 +1038,77 @@ public sealed partial class LaunchMenu : CanvasLayer
         p1.Loadout = frame.Loadout;
         p1.Presets = frame.Contents;
         _slots[0].Frame = frame;
+    }
+
+    // The mouse's pending commands folded into player 1's frame, then dropped. The frame's own
+    // step wins over a hover, so a pad press and a pointer move in one frame cannot each take
+    // the cursor to a different row; focus stays one thing.
+    private MenuCommands WithPointer(MenuCommands frame)
+    {
+        var pointer = _pointer;
+        _pointer = MenuCommands.None;
+        if (ReferenceEquals(pointer, MenuCommands.None))
+            return frame;
+        return frame with
+        {
+            MoveY = frame.MoveY != 0 ? frame.MoveY : pointer.MoveY,
+            Accept = frame.Accept || pointer.Accept,
+        };
+    }
+
+    // Puts one of player 1's rows under the mouse. The control takes Godot's own hit test (its
+    // labels stay Ignore, so the row is hit as a whole) and routes its events into the frame.
+    private void Pointable(Control row, int index)
+    {
+        row.MouseFilter = Control.MouseFilterEnum.Stop;
+        row.GuiInput += ev => PointerEvent(index, ev);
+        row.MouseEntered += () => { if (_pressRow == index) _pressInside = true; };
+        row.MouseExited += () => { if (_pressRow == index) _pressInside = false; };
+        _rowControls[index] = row;
+    }
+
+    // One mouse event over a row, or over the list between rows (row null, the wheel alone). A
+    // motion focuses the row, a wheel notch steps the cursor, and the left button confirms on the
+    // release when it went down on this row and the pointer never left it.
+    private void PointerEvent(int? row, InputEvent ev)
+    {
+        switch (ev)
+        {
+            case InputEventMouseMotion when row is { } hovered:
+                _pointer = _pointer with { MoveY = hovered - PointerIndex };
+                break;
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp }:
+                _pointer = _pointer with { MoveY = _pointer.MoveY - 1 };
+                break;
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelDown }:
+                _pointer = _pointer with { MoveY = _pointer.MoveY + 1 };
+                break;
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left } button when row is { } pressed:
+                if (button.Pressed)
+                {
+                    _pressRow = pressed;
+                    _pressInside = true;
+                }
+                else
+                {
+                    if (_pressRow == pressed && _pressInside)
+                        Click(pressed);
+                    _pressRow = null;
+                }
+
+                break;
+        }
+    }
+
+    // A press and release on one row: the cursor steps onto it and Accept lands there in the same
+    // frame, so no redraw can come between the two. A locked aircraft pick cannot move its cursor,
+    // so a click on any other row is refused rather than confirming the locked one under it.
+    private void Click(int row)
+    {
+        int delta = row - PointerIndex;
+        if (delta != 0 && _screen == Screen.Plane && _slots[0].Locked && !_slots[0].InLoadout)
+            return;
+        _pointer = _pointer with { MoveY = delta, Accept = true };
     }
 
     // Start on an unclaimed pad joins a new player on the Plane or Campaign screen; the scan
@@ -2198,6 +2292,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     private void Rebuild()
     {
         _viewSize = GetViewport().GetVisibleRect().Size;
+        // Every layout below frees the row controls, so a press on one of them cannot complete.
+        _rowControls.Clear();
+        _pressRow = null;
 
         // A campaign screen is a composed board at authored pixel positions, not a row list, so it
         // takes the whole window and neither of the other two layouts draws behind it.
@@ -2287,7 +2384,14 @@ public sealed partial class LaunchMenu : CanvasLayer
             : _screen == Screen.Controls ? Math.Min(count, _controlsTop + ControlsWindow)
             : count;
         for (int i = first; i < last; i++)
-            content.AddChild(Row(i, s));
+        {
+            var row = Row(i, s);
+            Pointable(row, i);
+            content.AddChild(row);
+        }
+
+        // The wheel between the rows: the column passes what no row took.
+        content.GuiInput += ev => PointerEvent(null, ev);
 
         // C22's art seam: a hangar page may hand the shell one decoded TGA with a caption
         // (blueprint, icon, paint preview), plus a second one for the focused row (E48's decal
@@ -2875,8 +2979,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             for (int i = 0; i < fitRows.Count; i++)
             {
                 bool selected = i == slot.FitRow;
-                box.AddChild(FitRowControl(fitRows, i, (int)(RowFont * paneScale),
-                    selected ? color : RowColor, selected));
+                var fitRow = FitRowControl(fitRows, i, (int)(RowFont * paneScale),
+                    selected ? color : RowColor, selected);
+                if (player == 0)
+                    Pointable(fitRow, i);
+                box.AddChild(fitRow);
             }
 
             box.AddChild(Label(_roster[slot.PlaneIndex].Name, (int)(DetailFont * paneScale),
@@ -2886,12 +2993,18 @@ public sealed partial class LaunchMenu : CanvasLayer
             return box;
         }
 
+        // The mouse is seat 0's device, so only player 1's pane takes it.
         for (int i = 0; i < _roster.Count; i++)
         {
             bool sel = i == slot.PlaneIndex;
-            box.AddChild(CursorRow.Build(_roster[i].Name, (int)(RowFont * paneScale),
-                sel ? color : RowColor, sel));
+            var row = CursorRow.Build(_roster[i].Name, (int)(RowFont * paneScale), sel ? color : RowColor, sel);
+            if (player == 0)
+                Pointable(row, i);
+            box.AddChild(row);
         }
+
+        if (player == 0)
+            box.GuiInput += ev => PointerEvent(null, ev);
 
         box.AddChild(Label(PlaneStat(_roster[slot.PlaneIndex].Node), (int)(DetailFont * paneScale),
             DetailColor, HorizontalAlignment.Center));

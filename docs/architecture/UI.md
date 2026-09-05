@@ -9,12 +9,12 @@ Traps do not live here; the rule is in `docs/architecture.md`.
 ## src/UI/LaunchMenu.cs
 The Built-in presentation's launchscreen: one CanvasLayer holding the whole screen graph and every
 Godot control behind it. Mode leads to Chapter and Plane for Free Flight and Dogfight, and to
-Instant Action's own environment, mission type, waves and wingmen wizard; the Options and Controls
-doors, the hangar's two doors and the campaign's one hang off the same graph. It owns the drawing,
-the per-seat `MenuInput` polling, the join scan and the screenshot key, and nothing else: rosters,
-seats, picks, gates and the typed exit are the host's shared features (`Menu/MenuHost.cs`), the
-centred three-band layout is `MenuZones`, and the hangar and campaign screens are `HangarFlow` and
-`CampaignFlow` drawn through `ComposedBoardView`. Contract: [../menu-presentations.md](../menu-presentations.md).
+Instant Action's own wizard; the Options, Controls, hangar and campaign doors hang off the same
+graph. It owns the drawing, the per-seat `MenuInput` polling, the join scan, the screenshot key and
+the mouse (player 1's rows take Godot's hit test through `gui_input`, folded into the next frame's
+step and Accept), and nothing else: rosters, seats, picks, gates and the typed exit are the host's
+features (`Menu/MenuHost.cs`), the layout is `MenuZones`, and the hangar and campaign screens are
+`HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`. Contract: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/MenuZones.cs
 How the launchscreen's three bands divide a window: a header and a footer held at the heights their
@@ -751,8 +751,9 @@ mouse as the frame's `MenuPointer` in window pixels, `Pressed` while the left bu
 `Clicked` on the press edge; `Prime` reads the button so a click held through a screen change is
 not a fresh click. The two device reads are injected delegates, so the seat is engine-free and
 `Launcher` supplies the viewport's mouse position and `Input.IsMouseButtonPressed`. Built-in
-ignores the pointer; Original maps it into its authored space. Later seats are pads and carry no
-pointer; a source that wants one wraps itself the same way.
+reads no `MenuPointer` (its row controls take the mouse through their own `gui_input`); Original
+maps it into its authored space. Later seats are pads and carry no pointer; a source that wants
+one wraps itself the same way.
 
 ## src/UI/Menu/MenuReturnDestination.cs
 Where the menu stands when it comes back, said semantically: `TopLevel`, `CabinReturn(profile)`

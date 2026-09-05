@@ -144,7 +144,13 @@ never join as a further seat. Original opens joining on the four screens that la
 joined, draws the sortie screens' seat strip over every campaign board as an overlay in the desk
 margin above the clipboard; a solo campaign shows the authored board alone. A presentation with a
 pointer maps the window-pixel pointer into its own space; Original does it through the same
-`BoardFit` its board view draws with.
+`BoardFit` its board view draws with. Built-in reads no `MenuPointer` at all: its rows are Godot
+`Control`s, so player 1's rows take Godot's own hit test through `gui_input` (`LaunchMenu.Pointable`)
+and fold the mouse into the next frame's commands (a hover is the cursor step onto that row, a
+press and release on one row is that step plus Accept in one frame, a wheel notch is a step; the
+frame's own step outranks a hover, so a pad and the mouse cannot each own a row). The centred
+layout's lists, the hangar pages and player 1's pane on a split aircraft screen are pointable;
+the campaign boards under Built-in are one composed surface and stay on the keys and pads.
 
 ## Options, selection and availability
 
