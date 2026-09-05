@@ -3420,15 +3420,19 @@ usual.
   on one side. *Fix shape:* a `team=<id>` token on `--ai=` entries; a `--zep=<chapter>/<mission>:<record>[:team=<id>][:pos=x,y,z]` flag for the empty stage that slices the record's hull subtree
   out of that chapter's gamez the way the `--node=` inspection stage slices one, registers its
   destructibles, and hands the borrowed record with the team override to `ZeppelinRuntime`, so
-  gasbags, engines and cannons wire as in a mission; then one in-engine suite that spawns a
-  torpedo-armed Warhawk against a hostile zeppelin on the stage and asserts an acquisition and a
-  launch. *⚠ Traps:* a record's team fans onto every zone, so the override must go through
+  gasbags, engines and cannons wire as in a mission; a built-in net on the stage, a circular ring
+  of nodes above the grid origin at patrol altitude, that `--ai=<plane>:<net>` and `--zep=` can
+  name the way a chapter's `neindex` net is named (the `AiNet` shape is just nodes and edges, so a
+  synthetic one needs no file), so net patrol, the net's own volumes and the netted-versus-netless
+  fork of `AiPilot` are testable there too; then one in-engine suite that spawns a torpedo-armed
+  Warhawk against a hostile zeppelin on the stage and asserts an acquisition and a launch. *⚠
+  Traps:* a record's team fans onto every zone, so the override must go through
   `AuthoredTeam`'s path rather than a stamp on the pools, or the state-child rule BL-740 added is
   bypassed; the stage has no `AnimProgram`, so the gasbag destroy anims resolve to nothing and the
   pools register without choreography, which is fine for a targeting probe and wrong for a damage
   one. *Playtest after fix:*
-  `.\RunGame.ps1 --stage=empty --zep=C4/M03:piratezep:team=1 --ai=player_warhawk:def=bhatwarhawk:team=2 --ai-attack --frames=3600 --det`
-  and read the `ai gunner`/`ai rocketeer` lines. *Cross-refs:* BL-740 (the hunt this shortens),
+  `.\RunGame.ps1 --stage=empty --zep=C4/M03:piratezep:team=1 --ai=player_warhawk:ring:def=bhatwarhawk:team=2 --ai-attack --frames=3600 --det`
+  and read the `ai gunner`/`ai rocketeer` lines; without `:ring` the same planes fly netless. *Cross-refs:* BL-740 (the hunt this shortens),
   BL-741 (the cargozep case wants the same rig with a mission structure instead of a record).
 
 ## Misc
