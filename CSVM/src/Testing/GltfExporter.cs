@@ -34,7 +34,8 @@ public sealed class GltfExporter
             return Error.InvalidParameter;
         }
         // Duplicate so material overrides and node pruning below never touch the live tree. The
-        // ArrayMesh resources are shared, which is fine — surfaces are overridden on the NODE.
+        // ArrayMesh resources are shared with it, so the winding fix below builds a new mesh rather
+        // than editing one, and skins are overridden on the NODE.
         var copy = (Node3D)plane.Duplicate();
         BakeAndConvert(copy);
         path = ResolvePath(NormalizeExtension(path));
@@ -91,7 +92,7 @@ public sealed class GltfExporter
     // Bake the current damage/flare state and drop non-geometry: free every hidden
     // `Node3D` (torn/healthy panel twins and off wing-flares are toggled purely by
     // `Visible`) and every point-sprite `"lights"` instance, then convert each surviving
-    // mesh's shader skins to a double-sided `StandardMaterial3D` glTF can serialize.
+    // mesh's shader skins to a `StandardMaterial3D` glTF can serialize.
     private static void BakeAndConvert(Node copy)
     {
         var toFree = new List<Node>();
@@ -118,7 +119,7 @@ public sealed class GltfExporter
                 toFree.Add(mesh);
                 return;
             }
-            ConvertMaterials(mesh);
+            ConvertMesh(mesh);
         }
         foreach (var child in node.GetChildren())
         {
@@ -126,38 +127,92 @@ public sealed class GltfExporter
         }
     }
 
-    // Replace each surface's custom `ShaderMaterial` skin with a double-sided
-    // `StandardMaterial3D` glTF understands. Duplicate an existing base material before changing
-    // its culling, because resources are shared with the live tree.
-    private static void ConvertMaterials(MeshInstance3D mesh)
+    /// <summary>Convert one mesh instance for export: every surface skinned with one of the
+    /// world/plane <c>ShaderMaterial</c>s is re-emitted with reversed triangle winding and takes a
+    /// <see cref="StandardMaterial3D"/> glTF can serialize. A surface skinned with a plain
+    /// <see cref="BaseMaterial3D"/> was built to Godot's own convention and is left alone.
+    /// ⚠ Never trade the reversal for two-sided materials: glTF has no winding switch, and
+    /// disabling culling hides an inside-out export behind z-fighting (docs/formats/gotchas.md).</summary>
+    private static void ConvertMesh(MeshInstance3D instance)
     {
-        int surfaces = mesh.GetSurfaceOverrideMaterialCount();
+        var source = instance.Mesh!;
+        int surfaces = source.GetSurfaceCount();
+        var skins = new ShaderMaterial?[surfaces];
+        var reversed = new bool[surfaces];
         for (int i = 0; i < surfaces; i++)
         {
-            if (mesh.GetActiveMaterial(i) is ShaderMaterial shader)
-            {
-                var std = new StandardMaterial3D
-                {
-                    AlbedoTexture = shader.GetShaderParameter("albedo_tex").As<Texture2D>(),
-                    VertexColorUseAsAlbedo = true,
-                    CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-                };
-                var tint = shader.GetShaderParameter("albedo_color");
-                if (tint.VariantType == Variant.Type.Color)
-                {
-                    std.AlbedoColor = tint.As<Color>();
-                }
-                mesh.SetSurfaceOverrideMaterial(i, std);
-                continue;
-            }
-            if (mesh.GetActiveMaterial(i) is not BaseMaterial3D source)
-            {
-                continue;
-            }
-            var copy = (BaseMaterial3D)source.Duplicate();
-            copy.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
-            mesh.SetSurfaceOverrideMaterial(i, copy);
+            skins[i] = instance.GetActiveMaterial(i) as ShaderMaterial;
+            reversed[i] = skins[i] != null;
         }
+        if (Array.IndexOf(reversed, true) >= 0)
+        {
+            instance.Mesh = Reversed(source, reversed);
+        }
+        for (int i = 0; i < surfaces; i++)
+        {
+            if (skins[i] is not { } shader)
+            {
+                continue;
+            }
+            // Two-sided source polygons keep their disabled culling; so does a surface whose
+            // winding could not be reversed, where two-sided is still the lesser wrong.
+            bool twoSided = !reversed[i] || (shader.Shader?.Code ?? string.Empty).Contains("cull_disabled");
+            var std = new StandardMaterial3D
+            {
+                AlbedoTexture = shader.GetShaderParameter("albedo_tex").As<Texture2D>(),
+                VertexColorUseAsAlbedo = true,
+                CullMode = twoSided ? BaseMaterial3D.CullModeEnum.Disabled : BaseMaterial3D.CullModeEnum.Back,
+            };
+            var tint = shader.GetShaderParameter("albedo_color");
+            if (tint.VariantType == Variant.Type.Color)
+            {
+                std.AlbedoColor = tint.As<Color>();
+            }
+            instance.SetSurfaceOverrideMaterial(i, std);
+        }
+    }
+
+    // Re-emit `source` as a fresh mesh with the triangle winding of every surface flagged in
+    // `reverse` flipped, carrying each surface's own material across. A surface that cannot be
+    // flipped (not a triangle list, or unindexed) is emitted untouched and its flag cleared, so the
+    // caller can fall back to a two-sided skin for it.
+    private static ArrayMesh Reversed(Mesh source, bool[] reverse)
+    {
+        var result = new ArrayMesh();
+        for (int i = 0; i < source.GetSurfaceCount(); i++)
+        {
+            var arrays = source.SurfaceGetArrays(i);
+            var primitive = source is ArrayMesh mesh
+                ? mesh.SurfaceGetPrimitiveType(i)
+                : Mesh.PrimitiveType.Triangles;
+            var indices = arrays[(int)Mesh.ArrayType.Index].As<int[]>();
+            if (indices.Length == 0)
+            {
+                // An unindexed surface (what SurfaceTool commits unless the builder called
+                // `Index()`, which nothing here does) winds in vertex order; the identity index
+                // list gives the swap below something to act on, leaving the vertex data alone.
+                indices = new int[arrays[(int)Mesh.ArrayType.Vertex].As<Vector3[]>().Length];
+                for (int v = 0; v < indices.Length; v++)
+                {
+                    indices[v] = v;
+                }
+            }
+            if (reverse[i] && primitive == Mesh.PrimitiveType.Triangles && indices.Length >= 3)
+            {
+                for (int t = 0; t + 2 < indices.Length; t += 3)
+                {
+                    (indices[t], indices[t + 2]) = (indices[t + 2], indices[t]);
+                }
+                arrays[(int)Mesh.ArrayType.Index] = indices;
+            }
+            else
+            {
+                reverse[i] = false;
+            }
+            result.AddSurfaceFromArrays(primitive, arrays);
+            result.SurfaceSetMaterial(i, source.SurfaceGetMaterial(i));
+        }
+        return result;
     }
 
     // Force the path to a glTF extension the writer recognizes: keep an explicit

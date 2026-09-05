@@ -26,9 +26,9 @@ internal static class WorldAndToolSuites
         ("cblock1", false), ("bldg1", false), ("wtr00000", false),
     };
 
-    // Exports a built plane to a temp .glb and asserts the file lands and re-imports with textured,
-    // double-sided meshes: the round trip the viewer's export paths rely on.
-    [Suite("gltf-export", "the viewer plane exports to glTF with textured, double-sided meshes")]
+    // Exports a built plane to a temp .glb and asserts the file lands and re-imports textured, the
+    // right way out: the round trip the viewer's export paths rely on.
+    [Suite("gltf-export", "the viewer plane exports to glTF textured and wound the right way out")]
     internal static void GltfExport(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -62,8 +62,17 @@ internal static class WorldAndToolSuites
                 ctx.Check(scene != null, $"re-imported scene has a Node3D root");
                 int textured = scene == null ? 0 : CountTexturedMeshes(scene);
                 ctx.Check(textured >= 1, $"re-imported textured meshes count={textured}");
-                int doubleSided = scene == null ? 0 : CountMeshesWithCullMode(scene, BaseMaterial3D.CullModeEnum.Disabled);
-                ctx.Check(doubleSided >= 1, $"re-imported double-sided meshes count={doubleSided}");
+
+                // The round trip through glTF is winding-neutral, so the re-imported model must
+                // come back wound the way a Godot-built box is, and the opposite way from the live
+                // plane it was exported from (docs/formats/gotchas.md).
+                double box = WindingSense(new BoxMesh());
+                double live = WindingSense(plane);
+                double exported = scene == null ? 0 : WindingSense(scene);
+                ctx.Check(live * box < 0, $"the live plane is wound inside out vs Godot ({live:0.###e+0})");
+                ctx.Check(exported * box > 0, $"re-imported plane is wound outward ({exported:0.###e+0})");
+                int culled = scene == null ? 0 : CountMeshesWithCullMode(scene, BaseMaterial3D.CullModeEnum.Back);
+                ctx.Check(culled >= 1, $"re-imported single-sided meshes count={culled}");
                 scene?.Free();
             }
         }
@@ -645,6 +654,67 @@ internal static class WorldAndToolSuites
             count += CountTexturedMeshes(child);
         }
         return count;
+    }
+
+    /// <summary>Which way the triangles in a subtree are wound, as one number: every surface's
+    /// signed volume about its own centroid, summed, so an off-origin part cannot swamp the sum.
+    /// ⚠ Only the SIGN carries meaning, and only against another mesh's: it is positive for one
+    /// winding and negative for the other, with the sense of "positive" left to the caller's
+    /// reference (a Godot <c>BoxMesh</c> is the convenient one). The magnitude is an artefact of
+    /// how large the parts are.</summary>
+    internal static double WindingSense(Node node)
+    {
+        double sense = node is MeshInstance3D { Mesh: { } mesh } ? WindingSense(mesh) : 0.0;
+        foreach (var child in node.GetChildren())
+        {
+            sense += WindingSense(child);
+        }
+        return sense;
+    }
+
+    /// <summary>One mesh's contribution to <see cref="WindingSense(Node)"/>, over its triangle
+    /// surfaces; a surface that is not an indexed triangle list contributes nothing.</summary>
+    internal static double WindingSense(Mesh mesh)
+    {
+        double sense = 0.0;
+        for (int surface = 0; surface < mesh.GetSurfaceCount(); surface++)
+        {
+            if (mesh is ArrayMesh array && array.SurfaceGetPrimitiveType(surface) != Mesh.PrimitiveType.Triangles)
+            {
+                continue;
+            }
+            var arrays = mesh.SurfaceGetArrays(surface);
+            var vertices = arrays[(int)Mesh.ArrayType.Vertex].As<Vector3[]>();
+            var indices = arrays[(int)Mesh.ArrayType.Index].As<int[]>();
+            if (indices.Length == 0)
+            {
+                // An unindexed surface winds in vertex order; the identity index list reads it the
+                // same way as an indexed one.
+                indices = new int[vertices.Length];
+                for (int v = 0; v < indices.Length; v++)
+                {
+                    indices[v] = v;
+                }
+            }
+            if (vertices.Length == 0 || indices.Length < 3)
+            {
+                continue;
+            }
+            var centre = Vector3.Zero;
+            foreach (var vertex in vertices)
+            {
+                centre += vertex;
+            }
+            centre /= vertices.Length;
+            for (int t = 0; t + 2 < indices.Length; t += 3)
+            {
+                var a = vertices[indices[t]] - centre;
+                var b = vertices[indices[t + 1]] - centre;
+                var c = vertices[indices[t + 2]] - centre;
+                sense += a.Dot(b.Cross(c));
+            }
+        }
+        return sense;
     }
 
     internal static int CountMeshesWithCullMode(Node node, BaseMaterial3D.CullModeEnum cullMode)
